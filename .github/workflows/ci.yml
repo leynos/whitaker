@@ -2,37 +2,92 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
-      BUILD_PROFILE: debug
+      CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+      CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
+      RUSTFLAGS: -D warnings
+      RUSTDOCFLAGS: -D warnings
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@v1.1.0
-      - name: Format
+        uses: leynos/shared-actions/.github/actions/setup-rust@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2
+        with:
+          bun-version: '1.2.21'
+
+      - name: Check formatting
         run: make check-fmt
+
+      - name: Install Mermaid CLI
+        run: |
+          set -euxo pipefail
+          bun install --no-progress --global @mermaid-js/mermaid-cli@11.9.0
+          bun x @puppeteer/browsers browsers install chrome-headless-shell
+          mmdc --version
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@9e3559f5c6d1922b77a10af6d8a1a88e5c8ea1a4 # v6
+        with:
+          version: 'latest'
+
+      - name: Install Nixie
+        run: uv tool install --from git+https://github.com/leynos/nixie nixie
+
+      - name: Nixie
+        run: make nixie
+
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20
+        with:
+          globs: '**/*.md'
+
       - name: Lint
         run: make lint
-      - name: Test
-        run: make test
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-      - name: Run coverage
-        run: cargo tarpaulin --out lcov
+
+      - name: Test and Measure Coverage (with features)
+        if: ${{ matrix.coverage && matrix.features != '' }}
+        uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
+        with:
+          output-path: lcov.info
+          format: lcov
+          features: rstest-bdd/diagnostics ${{ matrix.features }}
+          with-default-features: ${{ matrix.with-default-features }}
+
+      - name: Test and Measure Coverage (no features)
+        if: ${{ matrix.coverage && matrix.features == '' }}
+        uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
+        with:
+          output-path: lcov.info
+          format: lcov
+          features: rstest-bdd/diagnostics
+          with-default-features: ${{ matrix.with-default-features }}
+
+      - name: Publish dry run
+        run: make publish-check
+
       - name: Upload coverage data to CodeScene
-        if: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@v1.1.0
+        if: ${{ matrix.coverage && env.CS_ACCESS_TOKEN && vars.CODESCENE_CLI_SHA256 }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           format: lcov
-          access-token: ${{ secrets.CS_ACCESS_TOKEN }}
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
-
