@@ -82,19 +82,19 @@ Utilities shared by lints:
 
 ## 3) Seven core lints (specs + sketches)
 
-| Crate                           | Kind            | Summary                                                                                                                 | Level |
-|---------------------------------|-----------------|-------------------------------------------------------------------------------------------------------------------------|-------|
-| `function_attrs_follow_docs`    | style           | Outer doc comments on functions must precede other outer attributes.                                                   | warn  |
-| `no_expect_outside_tests`       | restriction     | Ban `.expect(..)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item). | deny  |
-| `public_fn_must_have_docs`      | pedantic        | Publicly exported functions require at least one outer doc comment.                                                    | warn  |
-| `module_must_have_inner_docs`   | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
-| `test_must_not_have_example`    | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
-| `module_max_400_lines`          | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                      | warn  |
+| Crate                         | Kind            | Summary                                                                                                                | Level |
+| ----------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- | ----- |
+| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                   | warn  |
+| `no_expect_outside_tests`     | restriction     | Ban `.expect(..)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item). | deny  |
+| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                    | warn  |
+| `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                 | warn  |
+| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.       | warn  |
+| `module_max_400_lines`        | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                      | warn  |
 
 ### Per-lint crate scaffolding
 
-Each lint crate is a `cdylib` exposing a single lint. The shared structure keeps
-dependencies aligned and ensures UI tests run uniformly.
+Each lint crate is a `cdylib` exposing a single lint. The shared structure
+keeps dependencies aligned and ensures UI tests run uniformly.
 
 ```toml
 [package]
@@ -192,18 +192,21 @@ Reinterpreted as a **complex conditional detector**. The crate name remains
 (`decompose_complex_conditional`) under consideration.
 
 **Intent.** Discourage complex boolean predicates inside `if`, `while`, and
-match guard conditions. Inline expressions such as `if x.started() &&
-y.running()` obscure the business rule and contribute to the Complex Method
-smell. Encourage encapsulation via a well-named helper or a local variable.
+match guard conditions. Inline expressions such as
+`if x.started() && y.running()` obscure the business rule and contribute to the
+Complex Method smell. Encourage encapsulation via a well-named helper or a
+local variable.
 
 **Rationale.** Teams often accumulate guard clauses over time by bolting
-additional `&&`/`||`/`!` terms into the conditional. The logic becomes entangled
-with control-flow, harming readability and reuse. Extracting the predicate makes
-the rule explicit, improves testability, and reduces accidental duplication.
+additional `&&`/`||`/`!` terms into the conditional. The logic becomes
+entangled with control-flow, harming readability and reuse. Extracting the
+predicate makes the rule explicit, improves testability, and reduces accidental
+duplication.
 
-**How to fix.** Apply the *Decompose Conditional* refactoring. Prefer extracting
-the predicate into a function with a domain-flavoured name. When a function is
-overkill, bind the expression to a local variable and branch on that name.
+**How to fix.** Apply the *Decompose Conditional* refactoring. Prefer
+extracting the predicate into a function with a domain-flavoured name. When a
+function is overkill, bind the expression to a local variable and branch on
+that name.
 
 **Lint metadata.**
 
@@ -212,8 +215,8 @@ overkill, bind the expression to a local variable and branch on that name.
 - Default level: `warn`.
 - Escape hatch: `#[allow(conditional_max_two_branches)]`.
 
-**Detection model.** A *complex conditional* is any boolean-valued expression in
-a branching position that contains two or more predicate atoms. An atom is a
+**Detection model.** A *complex conditional* is any boolean-valued expression
+in a branching position that contains two or more predicate atoms. An atom is a
 boolean leaf (comparisons, boolean-returning calls, boolean identifiers, etc.).
 Logical connectives (`&&`, `||`, `!`) form the internal nodes of the predicate
 tree.
@@ -234,8 +237,8 @@ atoms(e) =
   else:                              1
 ```
 
-Emit a diagnostic when `atoms(e) >= max_atoms`, where the default `max_atoms` is
-`1` (flag any conjunction/disjunction).
+Emit a diagnostic when `atoms(e) >= max_atoms`, where the default `max_atoms`
+is `1` (flag any conjunction/disjunction).
 
 **Implementation sketch (`src/lib.rs`).**
 
@@ -311,8 +314,8 @@ fn atoms(e: &Expr<'_>) -> usize {
 ```
 
 **Notes.** Parentheses are normalised away by HIR, so grouping does not affect
-the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed a
-boolean context via casts. `if let`/`while let` are intentionally excluded
+the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed
+a boolean context via casts. `if let`/`while let` are intentionally excluded
 because they are matching patterns, not boolean predicates.
 
 **Diagnostics.**
@@ -338,8 +341,8 @@ struct Config {
 }
 ```
 
-Read via `dylint_linting::config_or_default` and honour crate-level overrides in
-`dylint.toml`.
+Read via `dylint_linting::config_or_default` and honour crate-level overrides
+in `dylint.toml`.
 
 **False positives / limitations.**
 
@@ -601,16 +604,15 @@ libraries = [
 - Indirect panics invoked through helper functions are not flagged by
   default; the UI test documents this behaviour.
 - Consider a `detect_indirect` configuration knob backed by MIR analysis for
-  closures that always diverge (`!` type), albeit at higher maintenance
-  cost.
+  closures that always diverge (`!` type), albeit at higher maintenance cost.
 - Allow a module allowlist, mirroring `no_expect_outside_tests`, if teams
   need targeted exemptions.
 
 ## 5) Aggregated library (`suite`) — optional
 
-Bundle all lint crates for users who prefer a single dynamic library. Enable the
-`constituent` feature in each lint dependency to prevent them from exporting
-their own `register_lints` symbol.
+Bundle all lint crates for users who prefer a single dynamic library. Enable
+the `constituent` feature in each lint dependency to prevent them from
+exporting their own `register_lints` symbol.
 
 ```toml
 [package]
@@ -776,10 +778,10 @@ Split oversized modules into submodules.
 
 ## 12) Advanced lint feasibility: **Bumpy Road**
 
-The “Bumpy Road” smell captures functions that contain several distinct clusters
-of nested branching and complex predicates. The lint is practical to implement
-with a Dylint `LateLintPass`: model a per-line complexity signal, smooth it, and
-flag functions exhibiting two or more peaks (“bumps”).
+The “Bumpy Road” smell captures functions that contain several distinct
+clusters of nested branching and complex predicates. The lint is practical to
+implement with a Dylint `LateLintPass`: model a per-line complexity signal,
+smooth it, and flag functions exhibiting two or more peaks (“bumps”).
 
 **Lint contract.**
 
@@ -791,8 +793,8 @@ flag functions exhibiting two or more peaks (“bumps”).
 - Message: “Multiple clusters of nested conditional logic; extract smaller
   functions to smooth this ‘bumpy road’.”
 
-**Signal construction.** Traverse each function body, tracking nesting depth and
-predicate complexity.
+**Signal construction.** Traverse each function body, tracking nesting depth
+and predicate complexity.
 
 - Maintain a depth counter for entering/leaving `if`/`else`, `match`, loops.
 - Count predicate atoms with `atoms(expr)` where `&&`/`||` add, `!` recurses,
@@ -841,8 +843,8 @@ highlight the top two intervals in the diagnostic.
    window.
 3. Detect bumps where the smoothed value meets or exceeds `threshold`.
 4. Emit a diagnostic on the function name span when bumps ≥ 2, attaching labels
-   on the largest intervals and explaining that distribution (multiple peaks) is
-   the issue.
+   on the largest intervals and explaining that distribution (multiple peaks)
+   is the issue.
 
 **Configuration** (via `dylint.toml`).
 
@@ -855,10 +857,10 @@ include_closures = false
 weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
 ```
 
-**Diagnostics and guidance.** The lint recommends extracting helper functions or
-refactoring highlighted sections. Secondary labels point to the top bumps, and a
-note clarifies that the smell concerns several peaks rather than a single deep
-nest.
+**Diagnostics and guidance.** The lint recommends extracting helper functions
+or refactoring highlighted sections. Secondary labels point to the top bumps,
+and a note clarifies that the smell concerns several peaks rather than a single
+deep nest.
 
 **Precision considerations.** Ignore spans from external macro expansions or
 `#[automatically_derived]` contexts to avoid noise. Guard-clause heavy
@@ -869,15 +871,16 @@ nests fall under other lints such as `excessive_nesting`.
 rasterisation touches at most the number of lines in the function, keeping the
 overhead negligible for typical Rust code.
 
-**Test plan.** Provide UI cases covering two separated nested blocks, distributed
-complex predicates, guarded matches, and negative examples (single peak, guard
-clauses, macro-heavy code from external crates).
+**Test plan.** Provide UI cases covering two separated nested blocks,
+distributed complex predicates, guarded matches, and negative examples (single
+peak, guard clauses, macro-heavy code from external crates).
 
 **Implementation notes.** Use `SourceMap` for line mapping and `span` hygiene
 checks (`span.from_expansion()`, `span.source_callee()`) to decide when to skip
-data. Consider extracting the signal/bump detector into an internal helper crate
-for unit tests. The approach dovetails with `conditional_max_two_branches` and
-other maintainability lints for a complementary suite.
+data. Consider extracting the signal/bump detector into an internal helper
+crate for unit tests. The approach dovetails with
+`conditional_max_two_branches` and other maintainability lints for a
+complementary suite.
 
 **Verdict.** The Bumpy Road lint is realistic and actionable. It approximates
 CodeScene’s smell by emphasising the distribution of complexity within a single
