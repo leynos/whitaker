@@ -1,4 +1,4 @@
-# Rust Dylint Workspace — Lint Suite Design and Roadmap
+# Whitaker Rust Dylint Workspace — Lint Suite Design and Roadmap
 
 This single document consolidates the workspace design, the seven core lints
 (with the **revised conditional rule**), the separate `no_unwrap_or_else_panic`
