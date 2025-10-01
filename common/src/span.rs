@@ -1,4 +1,5 @@
 //! Utilities for working with source locations and spans.
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use std::ops::RangeInclusive;
 

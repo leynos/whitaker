@@ -1,6 +1,5 @@
 //! Shared lint infrastructure providing attribute helpers, context tracking,
 //! path, expression, span, and diagnostic utilities for Whitaker lints.
-#![deny(clippy::expect_used, clippy::unwrap_used)]
 
 pub mod attributes;
 pub mod context;

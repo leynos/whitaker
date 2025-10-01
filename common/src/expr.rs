@@ -1,4 +1,5 @@
 //! Lightweight expression helpers for lint analysis.
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use crate::path::SimplePath;
 

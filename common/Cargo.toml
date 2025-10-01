@@ -9,3 +9,7 @@ edition = "2024"
 rstest = "0.26.1"
 rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
+
+[lints.clippy]
+expect_used = "deny"
+unwrap_used = "deny"
