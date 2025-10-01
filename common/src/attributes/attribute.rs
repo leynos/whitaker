@@ -1,4 +1,4 @@
-//! Representation of Rust attributes.
+//! Attribute metadata helpers for lint analysis.
 
 use super::{AttributeKind, AttributePath, TEST_LIKE_PATHS};
 
