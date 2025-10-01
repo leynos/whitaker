@@ -8,12 +8,12 @@
   - [ ] Establish Makefile or justfile targets for fmt, lint, test, and UI test
         orchestration.
 
-- [ ] Phase 1 — Common infrastructure
-  - [ ] Implement the `common` crate helpers for attributes, context detection,
+- [x] Phase 1 — Common infrastructure
+  - [x] Implement the `common` crate helpers for attributes, context detection,
         spans, and diagnostics.
-  - [ ] Wire shared configuration loading with
+  - [x] Wire shared configuration loading with
         `dylint_linting::config_or_default` and serde structs.
-  - [ ] Integrate `dylint_testing` harness boilerplate for UI tests across all
+  - [x] Integrate `dylint_testing` harness boilerplate for UI tests across all
         lint crates.
 
 - [ ] Phase 2 — Core lint delivery
