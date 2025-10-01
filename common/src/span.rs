@@ -60,7 +60,7 @@ impl SourceSpan {
     /// ```
     /// use common::span::{SourceLocation, SourceSpan};
     ///
-    /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2)).unwrap();
+    /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2)).expect("valid span for example");
     /// assert_eq!(span.start().line(), 1);
     /// ```
     #[must_use]
@@ -92,7 +92,7 @@ impl SourceSpan {
 /// ```
 /// use common::span::{SourceLocation, SourceSpan, span_to_lines};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(4, 0), SourceLocation::new(6, 5)).unwrap();
+/// let span = SourceSpan::new(SourceLocation::new(4, 0), SourceLocation::new(6, 5)).expect("valid span for example");
 /// assert_eq!(span_to_lines(span), 4..=6);
 /// ```
 #[must_use]
@@ -107,7 +107,7 @@ pub fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
 /// ```
 /// use common::span::{SourceLocation, SourceSpan, module_line_count};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1)).unwrap();
+/// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1)).expect("valid span for example");
 /// assert_eq!(module_line_count(span), 4);
 /// ```
 #[must_use]
@@ -128,7 +128,8 @@ mod tests {
 
     #[rstest]
     fn calculates_line_ranges() {
-        let span = SourceSpan::new(SourceLocation::new(5, 0), SourceLocation::new(7, 3)).unwrap();
+        let span = SourceSpan::new(SourceLocation::new(5, 0), SourceLocation::new(7, 3))
+            .expect("valid span for line range test");
         assert_eq!(span_to_lines(span), 5..=7);
         assert_eq!(module_line_count(span), 3);
     }

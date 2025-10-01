@@ -170,7 +170,7 @@ impl DiagnosticBuilder {
 /// use common::diagnostics::{span_lint, Applicability, Suggestion};
 /// use common::span::{SourceLocation, SourceSpan};
 ///
-/// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4)).unwrap();
+/// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4)).expect("valid span for example");
 /// let diagnostic = span_lint("demo", "Example", span)
 ///     .help("Consider refactoring")
 ///     .suggestion(Suggestion::new("Use helper", "helper()".into(), Applicability::MaybeIncorrect))
@@ -194,7 +194,8 @@ mod tests {
 
     #[rstest]
     fn builds_diagnostic() {
-        let span = SourceSpan::new(SourceLocation::new(2, 1), SourceLocation::new(2, 5)).unwrap();
+        let span = SourceSpan::new(SourceLocation::new(2, 1), SourceLocation::new(2, 5))
+            .expect("valid span for diagnostic test");
         let diagnostic = span_lint("lint", "Message", span)
             .note("Note")
             .help("Help")

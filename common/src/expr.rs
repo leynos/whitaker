@@ -23,7 +23,7 @@ pub enum Expr {
 ///
 /// let expr = Expr::Call { callee: SimplePath::from("std::mem::drop") };
 /// assert_eq!(
-///     def_id_of_expr_callee(&expr).unwrap().segments(),
+///     def_id_of_expr_callee(&expr).expect("call expression has callee path").segments(),
 ///     &["std", "mem", "drop"]
 /// );
 /// ```
