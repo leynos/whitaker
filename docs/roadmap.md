@@ -9,7 +9,7 @@
         orchestration.
 
 - [ ] Phase 1 — Common infrastructure
-  - [ ] Implement the `common` crate helpers for attributes, context detection,
+  - [x] Implement the `common` crate helpers for attributes, context detection,
         spans, and diagnostics.
   - [ ] Wire shared configuration loading with
         `dylint_linting::config_or_default` and serde structs.
