@@ -1,0 +1,25 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+dylint_linting = { workspace = true }
+camino = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+dylint_testing = { workspace = true, optional = true }
+
+[features]
+dylint = ["dep:dylint_testing"]
+
+[dev-dependencies]
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
+serde_json = { workspace = true }
+dylint_testing = { workspace = true }

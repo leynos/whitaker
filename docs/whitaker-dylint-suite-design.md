@@ -80,6 +80,10 @@ Utilities shared by lints:
 - **Visibility:** effective export check via `cx.tcx`/`effective_visibilities`.
 - **Diagnostics:** `span_lint`, formatting helpers, suggestion utilities.
 
+> **Design note:** Attribute fixtures create HIR attributes via `rustc_ast` helpers inside a `with_session_globals` harness. Tests
+> wrap both construction and assertions in the same session to mirror rustc's symbol interner behaviour and avoid spurious
+> mismatches when comparing attribute names across runs.
+
 ## 3) Seven core lints (specs + sketches)
 
 | Crate                         | Kind            | Summary                                                                                                                | Level |
