@@ -100,6 +100,9 @@ Utilities shared by lints:
   help messages, and suggestions before emitting a concrete `Diagnostic`. The
   structure mirrors `rustc` concepts but keeps the surface area simple for unit
   and behaviour tests.
+- Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
+  scenarios (v0.1.0-alpha4) to exercise happy, unhappy, and edge cases without
+  duplicating setup logic.
 
 ## 3) Seven core lints (specs + sketches)
 

@@ -38,6 +38,7 @@ jobs:
         run: make check-fmt
 
       - name: Install Mermaid CLI
+        shell: bash
         run: |
           set -euxo pipefail
           bun install --no-progress --global @mermaid-js/mermaid-cli@11.9.0
