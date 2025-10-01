@@ -20,18 +20,7 @@ use super::Attribute;
 pub fn split_doc_attributes<'a>(
     attrs: &'a [Attribute],
 ) -> (Vec<&'a Attribute>, Vec<&'a Attribute>) {
-    let mut docs = Vec::new();
-    let mut others = Vec::new();
-
-    for attr in attrs {
-        if attr.is_doc() {
-            docs.push(attr);
-        } else {
-            others.push(attr);
-        }
-    }
-
-    (docs, others)
+    attrs.iter().partition(|attr| attr.is_doc())
 }
 
 /// Returns the subset of attributes that apply as outer attributes.

@@ -43,6 +43,12 @@ impl SourceLocation {
     pub const fn column(self) -> usize {
         self.column
     }
+
+    /// Returns true when this location is positioned after other.
+    #[must_use]
+    pub const fn is_after(self, other: SourceLocation) -> bool {
+        self.line > other.line || (self.line == other.line && self.column > other.column)
+    }
 }
 
 /// Represents a span of source code.
@@ -65,7 +71,7 @@ impl SourceSpan {
     /// ```
     #[must_use]
     pub fn new(start: SourceLocation, end: SourceLocation) -> Result<Self, SpanError> {
-        if start.line > end.line || (start.line == end.line && start.column > end.column) {
+        if start.is_after(end) {
             Err(SpanError::StartAfterEnd)
         } else {
             Ok(Self { start, end })

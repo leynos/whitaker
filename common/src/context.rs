@@ -158,7 +158,7 @@ pub fn is_in_main_fn(stack: &[ContextEntry]) -> bool {
     stack
         .iter()
         .rev()
-        .any(|entry| entry.kind.matches_function() && entry.name == "main")
+        .any(|entry| entry.kind.matches_function() && entry.name() == "main")
 }
 
 #[cfg(test)]
