@@ -1,3 +1,5 @@
+//! Representation of Rust attributes.
+
 use super::{AttributeKind, AttributePath, TEST_LIKE_PATHS};
 
 /// Represents a Rust attribute, tracking its path and attachment style.

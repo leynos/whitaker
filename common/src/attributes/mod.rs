@@ -1,3 +1,5 @@
+//! Helpers for reasoning about Rust attributes.
+
 pub(super) const TEST_LIKE_PATHS: &[&[&str]] = &[
     &["test"],
     &["tokio", "test"],

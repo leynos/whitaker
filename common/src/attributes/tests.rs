@@ -1,3 +1,5 @@
+//! Tests for attribute helpers.
+
 use super::*;
 use rstest::rstest;
 

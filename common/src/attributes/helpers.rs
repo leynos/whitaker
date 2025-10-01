@@ -1,3 +1,5 @@
+//! Helpers for working with attribute collections.
+
 use super::Attribute;
 
 /// Splits a slice of attributes into doc and non-doc groups.

@@ -1,3 +1,5 @@
+//! Attribute classification helpers.
+
 /// Describes whether an attribute is written as `#![...]` or `#[...]`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AttributeKind {

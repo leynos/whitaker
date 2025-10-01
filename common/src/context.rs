@@ -1,3 +1,5 @@
+//! Context tracking utilities for analysing traversal stacks.
+
 use crate::attributes::{Attribute, has_test_like_attribute};
 
 /// Categorises a frame within the traversal stack.
@@ -139,6 +141,9 @@ pub fn in_test_like_context(stack: &[ContextEntry]) -> bool {
 }
 
 /// Detects whether the current traversal stack is inside a `main` function.
+///
+/// This treats any function named `main` as an entry point. Module-qualified
+/// helper functions with the same name therefore satisfy the predicate.
 ///
 /// # Examples
 ///

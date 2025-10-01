@@ -1,3 +1,5 @@
+//! Ergonomic builders for lint diagnostics and suggestions.
+
 use crate::span::SourceSpan;
 
 /// Applicability of a suggestion, mirroring rustc semantics.
