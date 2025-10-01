@@ -16,7 +16,7 @@ impl<T> Path<T> {
     /// ```
     /// use common::path::Path;
     ///
-    /// let path = Path::new(["tokio", "test"]);
+    /// let path = Path::<String>::new(["tokio", "test"]);
     /// assert_eq!(path.segments(), &["tokio", "test"]);
     /// ```
     #[must_use]
@@ -38,13 +38,13 @@ impl<T> Path<T> {
 
     /// Returns `true` when this path matches the provided sequence exactly.
     #[must_use]
-    pub fn matches<'a, I, U>(&self, candidate: I) -> bool
+    pub fn matches<I, U>(&self, candidate: I) -> bool
     where
         I: IntoIterator<Item = U>,
-        T: PartialEq<U>,
-        U: PartialEq<T>,
+        for<'a> &'a T: PartialEq<U>,
+        for<'a> U: PartialEq<&'a T>,
     {
-        self.segments.iter().cloned().eq(candidate)
+        self.segments.iter().eq(candidate.into_iter())
     }
 }
 
