@@ -54,6 +54,7 @@ jobs:
         run: uv tool install --from git+https://github.com/leynos/nixie nixie
 
       - name: Nixie
+        shell: bash
         run: make nixie
 
       - name: Markdown lint
@@ -62,6 +63,7 @@ jobs:
           globs: '**/*.md'
 
       - name: Lint
+        shell: bash
         run: make lint
 
       - name: Test and Measure Coverage (with features)
