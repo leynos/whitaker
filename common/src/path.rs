@@ -2,53 +2,34 @@
 
 use std::fmt;
 
-/// Generic helper for representing syntactic paths.
+/// Represents a syntactic path composed of `::`-separated segments.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Path<T> {
-    segments: Vec<T>,
+pub struct SimplePath {
+    segments: Vec<String>,
 }
 
-impl<T> Path<T> {
+impl SimplePath {
     /// Builds a path from iterator segments.
     ///
     /// # Examples
     ///
     /// ```
-    /// use common::path::Path;
+    /// use common::path::SimplePath;
     ///
-    /// let path = Path::<String>::new(["tokio", "test"]);
+    /// let path = SimplePath::new(["tokio", "test"]);
     /// assert_eq!(path.segments(), &["tokio", "test"]);
     /// ```
     #[must_use]
     pub fn new<I, S>(segments: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<T>,
+        S: Into<String>,
     {
         Self {
             segments: segments.into_iter().map(Into::into).collect(),
         }
     }
 
-    /// Returns the path segments as a slice.
-    #[must_use]
-    pub fn segments(&self) -> &[T] {
-        &self.segments
-    }
-
-    /// Returns `true` when this path matches the provided sequence exactly.
-    #[must_use]
-    pub fn matches<I, U>(&self, candidate: I) -> bool
-    where
-        I: IntoIterator<Item = U>,
-        for<'a> &'a T: PartialEq<U>,
-        for<'a> U: PartialEq<&'a T>,
-    {
-        self.segments.iter().eq(candidate.into_iter())
-    }
-}
-
-impl Path<String> {
     /// Parses a Rust path from its textual representation.
     ///
     /// Empty segments produced by leading, trailing, or repeated separators are
@@ -57,7 +38,7 @@ impl Path<String> {
     /// # Examples
     ///
     /// ```
-    /// use common::path::{Path, SimplePath};
+    /// use common::path::SimplePath;
     ///
     /// let parsed = SimplePath::from("tokio::test");
     /// assert_eq!(parsed.segments(), &["tokio", "test"]);
@@ -69,10 +50,28 @@ impl Path<String> {
         Self::new(path.split("::").filter(|segment| !segment.is_empty()))
     }
 
+    /// Returns the path segments as a slice.
+    #[must_use]
+    pub fn segments(&self) -> &[String] {
+        &self.segments
+    }
+
     /// Returns the final path segment when present.
     #[must_use]
     pub fn last(&self) -> Option<&str> {
         self.segments.last().map(String::as_str)
+    }
+
+    /// Returns `true` when this path matches the provided sequence exactly.
+    #[must_use]
+    pub fn matches<I, S>(&self, candidate: I) -> bool
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let ours = self.segments.iter().map(String::as_str);
+        let theirs = candidate.into_iter().map(|segment| segment.as_ref());
+        ours.eq(theirs)
     }
 
     /// Returns `true` when the path denotes a doc comment (`doc`).
@@ -82,14 +81,11 @@ impl Path<String> {
     }
 }
 
-impl fmt::Display for Path<String> {
+impl fmt::Display for SimplePath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.segments.join("::"))
     }
 }
-
-/// Convenience alias for paths composed of text segments.
-pub type SimplePath = Path<String>;
 
 #[cfg(test)]
 mod tests {

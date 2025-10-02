@@ -4,6 +4,39 @@ use super::*;
 use rstest::rstest;
 
 #[rstest]
+#[case::empty(Vec::<String>::new())]
+#[case::single(vec!["dead_code".to_string()])]
+#[case::complex(vec!["cfg(feature = \"test\")".to_string(), "path(\"std::io\")".to_string()])]
+fn attribute_with_arguments_preserves_inputs(#[case] arguments: Vec<String>) {
+    let attribute = Attribute::with_arguments(
+        AttributePath::from("allow"),
+        AttributeKind::Outer,
+        arguments.clone(),
+    );
+
+    assert_eq!(attribute.arguments(), arguments);
+}
+
+#[rstest]
+fn attribute_with_str_arguments_converts() {
+    let attribute = Attribute::with_str_arguments(
+        AttributePath::from("allow"),
+        AttributeKind::Outer,
+        &["dead_code", "unused_variables"],
+    );
+
+    assert_eq!(attribute.arguments(), &["dead_code", "unused_variables"]);
+}
+
+#[rstest]
+fn attribute_with_str_arguments_handles_empty() {
+    let attribute =
+        Attribute::with_str_arguments(AttributePath::from("allow"), AttributeKind::Outer, &[]);
+
+    assert!(attribute.arguments().is_empty());
+}
+
+#[rstest]
 #[case::outer(AttributeKind::Outer, true)]
 #[case::inner(AttributeKind::Inner, false)]
 fn attribute_kind_is_outer(#[case] kind: AttributeKind, #[case] expected: bool) {

@@ -112,13 +112,13 @@ pub fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
 /// # Examples
 ///
 /// ```
-/// use common::span::{SourceLocation, SourceSpan, module_line_count};
+/// use common::span::{SourceLocation, SourceSpan, span_line_count};
 ///
 /// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1)).expect("valid span for example");
-/// assert_eq!(module_line_count(span), 4);
+/// assert_eq!(span_line_count(span), 4);
 /// ```
 #[must_use]
-pub fn module_line_count(span: SourceSpan) -> usize {
+pub fn span_line_count(span: SourceSpan) -> usize {
     span.end.line() - span.start.line() + 1
 }
 
@@ -138,6 +138,6 @@ mod tests {
         let span = SourceSpan::new(SourceLocation::new(5, 0), SourceLocation::new(7, 3))
             .expect("valid span for line range test");
         assert_eq!(span_to_lines(span), 5..=7);
-        assert_eq!(module_line_count(span), 3);
+        assert_eq!(span_line_count(span), 3);
     }
 }

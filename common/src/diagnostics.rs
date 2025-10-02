@@ -38,12 +38,12 @@ impl Suggestion {
     #[must_use]
     pub fn new(
         message: impl Into<String>,
-        replacement: String,
+        replacement: impl Into<String>,
         applicability: Applicability,
     ) -> Self {
         Self {
             message: message.into(),
-            replacement,
+            replacement: replacement.into(),
             applicability,
         }
     }

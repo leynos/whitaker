@@ -40,20 +40,44 @@ impl Attribute {
     /// let attribute = Attribute::with_arguments(
     ///     AttributePath::from("allow"),
     ///     AttributeKind::Outer,
-    ///     ["clippy::needless_bool"],
+    ///     vec!["clippy::needless_bool".to_string()],
     /// );
     /// assert_eq!(attribute.arguments(), &["clippy::needless_bool"]);
     /// ```
     #[must_use]
-    pub fn with_arguments<I, S>(path: AttributePath, kind: AttributeKind, arguments: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
+    pub fn with_arguments(
+        path: AttributePath,
+        kind: AttributeKind,
+        arguments: Vec<String>,
+    ) -> Self {
         Self {
             path,
             kind,
-            arguments: arguments.into_iter().map(Into::into).collect(),
+            arguments,
+        }
+    }
+
+    /// Creates an attribute with borrowed string arguments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    ///
+    /// let attribute = Attribute::with_str_arguments(
+    ///     AttributePath::from("allow"),
+    ///     AttributeKind::Outer,
+    ///     &["clippy::needless_bool"],
+    /// );
+    /// assert_eq!(attribute.arguments(), &["clippy::needless_bool"]);
+    /// ```
+    #[must_use]
+    pub fn with_str_arguments(path: AttributePath, kind: AttributeKind, args: &[&str]) -> Self {
+        let arguments = args.iter().map(|segment| segment.to_string()).collect();
+        Self {
+            path,
+            kind,
+            arguments,
         }
     }
 
@@ -94,10 +118,10 @@ impl Attribute {
     /// ```
     /// use common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
-    /// let attribute = Attribute::with_arguments(
+    /// let attribute = Attribute::with_str_arguments(
     ///     AttributePath::from("allow"),
     ///     AttributeKind::Outer,
-    ///     ["dead_code"],
+    ///     &["dead_code"],
     /// );
     /// assert_eq!(attribute.arguments(), &["dead_code"]);
     /// ```

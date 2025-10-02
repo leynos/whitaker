@@ -15,5 +15,5 @@ pub use attributes::{
 pub use context::{ContextEntry, ContextKind, in_test_like_context, is_in_main_fn, is_test_fn};
 pub use diagnostics::{Applicability, Diagnostic, DiagnosticBuilder, Suggestion, span_lint};
 pub use expr::{Expr, def_id_of_expr_callee, is_path_to, recv_is_option_or_result};
-pub use path::{Path, SimplePath};
-pub use span::{SourceLocation, SourceSpan, SpanError, module_line_count, span_to_lines};
+pub use path::SimplePath;
+pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};
