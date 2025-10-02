@@ -1,3 +1,7 @@
+[workspace]
+members = ["common"]
+resolver = "2"
+
 [package]
 name = "whitaker"
 version = "0.1.0"

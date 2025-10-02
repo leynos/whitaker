@@ -80,6 +80,30 @@ Utilities shared by lints:
 - **Visibility:** effective export check via `cx.tcx`/`effective_visibilities`.
 - **Diagnostics:** `span_lint`, formatting helpers, suggestion utilities.
 
+### Implementation notes — Phase 1 delivery
+
+- Adopted lightweight domain models rather than compiling against the unstable
+  `rustc_*` crates. `Attribute`, `ContextEntry`, `SimplePath`, and `Expr`
+  encode the data needed by early lints without tying the helpers to a specific
+  compiler snapshot.
+- Attribute helpers normalize paths into `Vec<String>` segments, allowing
+  reusable matching logic for doc comments and test-like markers. This ensures
+  future lints can extend the recognized attribute set without restructuring
+  the API.
+- Context detection operates on an explicit stack of `ContextEntry` frames. The
+  helpers analyze the recorded attributes so callers can reason about ambient
+  test contexts without leaking traversal state.
+- Span utilities introduce `SourceLocation`/`SourceSpan` wrappers with
+  validation, providing deterministic line counting and range projection for
+  diagnostics while flagging inverted spans early.
+- Diagnostics are constructed via a builder (`span_lint`) that gathers notes,
+  help messages, and suggestions before emitting a concrete `Diagnostic`. The
+  structure mirrors `rustc` concepts but keeps the surface area simple for unit
+  and behaviour tests.
+- Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
+  scenarios (v0.1.0-alpha4) to exercise happy, unhappy, and edge cases without
+  duplicating setup logic.
+
 ## 3) Seven core lints (specs + sketches)
 
 | Crate                         | Kind            | Summary                                                                                                                | Level |

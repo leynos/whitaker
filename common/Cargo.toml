@@ -1,0 +1,20 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[dev-dependencies]
+# Testing: Behavioural specs pin rstest-bdd crates to 0.1.0-alpha4 while we
+# await a stable release. These alpha builds may regress; capture any failures
+# with `make test` and report them via the troubleshooting guidance in
+# `docs/rstest-bdd-users-guide.md`. Where blockers arise, coordinate with the
+# maintainers to backport fixes or temporarily gate the affected feature tests.
+rstest = "0.26.1"
+rstest-bdd = "0.1.0-alpha4"
+rstest-bdd-macros = "0.1.0-alpha4"
+
+[lints.clippy]
+expect_used = "deny"
+unwrap_used = "deny"
