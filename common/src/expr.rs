@@ -87,7 +87,7 @@ mod tests {
     }
 
     #[rstest]
-    fn recognises_option_like_receivers() {
+    fn recognizes_option_like_receivers() {
         let option_path = SimplePath::from("std::option::Option");
         let result_path = SimplePath::from("Result");
         let custom_path = SimplePath::from("crate::Thing");

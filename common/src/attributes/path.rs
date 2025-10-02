@@ -17,7 +17,7 @@ mod tests {
     }
 
     #[rstest]
-    fn recognises_doc_paths() {
+    fn recognizes_doc_paths() {
         assert!(AttributePath::from("doc").is_doc());
         assert!(!AttributePath::from("allow").is_doc());
     }
