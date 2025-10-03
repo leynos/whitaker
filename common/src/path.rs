@@ -52,15 +52,13 @@ impl SimplePath {
 
     /// Returns the path segments as a slice.
     #[must_use]
-    pub fn segments(&self) -> &[String] {
-        &self.segments
-    }
+    #[rustfmt::skip]
+    pub fn segments(&self) -> &[String] { &self.segments }
 
     /// Returns the final path segment when present.
     #[must_use]
-    pub fn last(&self) -> Option<&str> {
-        self.segments.last().map(String::as_str)
-    }
+    #[rustfmt::skip]
+    pub fn last(&self) -> Option<&str> { self.segments.last().map(String::as_str) }
 
     /// Returns `true` when this path matches the provided sequence exactly.
     #[must_use]
@@ -76,9 +74,8 @@ impl SimplePath {
 
     /// Returns `true` when the path denotes a doc comment (`doc`).
     #[must_use]
-    pub fn is_doc(&self) -> bool {
-        self.matches(["doc"])
-    }
+    #[rustfmt::skip]
+    pub fn is_doc(&self) -> bool { self.matches(["doc"]) }
 }
 
 impl From<&str> for SimplePath {
