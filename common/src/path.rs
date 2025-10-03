@@ -100,11 +100,12 @@ impl fmt::Display for SimplePath {
 mod tests {
     use super::*;
     use rstest::rstest;
+    use std::collections::VecDeque;
 
     #[rstest]
     fn filters_empty_segments() {
         let path = SimplePath::from("::crate::::Item::");
-        assert_eq!(path.segments(), &["crate", "Item"]);
+        assert!(path.matches(["crate", "Item"]));
     }
 
     #[rstest]
@@ -139,7 +140,7 @@ mod tests {
     fn from_string_parses_owned_values() {
         let owned = String::from("test::path");
         let path = SimplePath::from(owned);
-        assert_eq!(path.segments(), &["test", "path"]);
+        assert!(path.matches(["test", "path"]));
     }
 
     #[rstest]
@@ -148,8 +149,17 @@ mod tests {
         let from_array = SimplePath::new(["a", "b"]);
         let from_owned = SimplePath::new(vec![String::from("a"), String::from("b")]);
 
-        assert_eq!(from_vec.segments(), &["a", "b"]);
-        assert_eq!(from_array.segments(), &["a", "b"]);
-        assert_eq!(from_owned.segments(), &["a", "b"]);
+        assert!(from_vec.matches(["a", "b"]));
+        assert!(from_array.matches(["a", "b"]));
+        assert!(from_owned.matches(["a", "b"]));
+    }
+
+    #[rstest]
+    fn new_accepts_iterator_inputs_beyond_vectors() {
+        let deque_path = SimplePath::new(VecDeque::from(["module", "Item"]));
+        assert!(deque_path.matches(["module", "Item"]));
+
+        let once_path = SimplePath::new(std::iter::once("solo"));
+        assert!(once_path.matches(["solo"]));
     }
 }
