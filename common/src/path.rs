@@ -42,11 +42,11 @@ impl SimplePath {
     ///
     /// let parsed = SimplePath::from("tokio::test");
     /// assert_eq!(parsed.segments(), &["tokio", "test"]);
-    /// let compact = SimplePath::from("::test::");
+    /// let compact = SimplePath::parse("::test::");
     /// assert_eq!(compact.segments(), &["test"]);
     /// ```
     #[must_use]
-    pub fn from(path: &str) -> Self {
+    pub fn parse(path: &str) -> Self {
         Self::new(path.split("::").filter(|segment| !segment.is_empty()))
     }
 
@@ -78,6 +78,18 @@ impl SimplePath {
     #[must_use]
     pub fn is_doc(&self) -> bool {
         self.matches(["doc"])
+    }
+}
+
+impl From<&str> for SimplePath {
+    fn from(path: &str) -> Self {
+        Self::parse(path)
+    }
+}
+
+impl From<String> for SimplePath {
+    fn from(path: String) -> Self {
+        Self::parse(&path)
     }
 }
 

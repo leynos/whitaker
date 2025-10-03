@@ -40,20 +40,20 @@ impl Attribute {
     /// let attribute = Attribute::with_arguments(
     ///     AttributePath::from("allow"),
     ///     AttributeKind::Outer,
-    ///     vec!["clippy::needless_bool".to_string()],
+    ///     ["clippy::needless_bool"],
     /// );
     /// assert_eq!(attribute.arguments(), &["clippy::needless_bool"]);
     /// ```
     #[must_use]
-    pub fn with_arguments(
-        path: AttributePath,
-        kind: AttributeKind,
-        arguments: Vec<String>,
-    ) -> Self {
+    pub fn with_arguments<I, S>(path: AttributePath, kind: AttributeKind, arguments: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         Self {
             path,
             kind,
-            arguments,
+            arguments: arguments.into_iter().map(Into::into).collect(),
         }
     }
 
@@ -73,12 +73,7 @@ impl Attribute {
     /// ```
     #[must_use]
     pub fn with_str_arguments(path: AttributePath, kind: AttributeKind, args: &[&str]) -> Self {
-        let arguments = args.iter().map(|segment| segment.to_string()).collect();
-        Self {
-            path,
-            kind,
-            arguments,
-        }
+        Self::with_arguments(path, kind, args.iter().copied())
     }
 
     /// Returns the underlying attribute path.
