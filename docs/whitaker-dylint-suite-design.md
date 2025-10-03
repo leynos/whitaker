@@ -75,7 +75,7 @@ Utilities shared by lints:
   attributes (`test`, `tokio::test`, `rstest`).
 - **Context:** `in_test_like_context`, `is_test_fn`, `is_in_main_fn`.
 - **Types:** `recv_is_option_or_result`.
-- **Spans:** `span_to_lines`, `module_line_count`, `def_id_of_expr_callee`,
+- **Spans:** `span_to_lines`, `span_line_count`, `def_id_of_expr_callee`,
   `is_path_to`.
 - **Visibility:** effective export check via `cx.tcx`/`effective_visibilities`.
 - **Diagnostics:** `span_lint`, formatting helpers, suggestion utilities.

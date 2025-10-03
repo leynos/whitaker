@@ -1,9 +1,9 @@
 //! Attribute-specific conveniences built atop the shared path helper.
 
-use crate::path::Path;
+use crate::path::SimplePath;
 
 /// Structured representation of an attribute path such as `tokio::test`.
-pub type AttributePath = Path<String>;
+pub type AttributePath = SimplePath;
 
 #[cfg(test)]
 mod tests {

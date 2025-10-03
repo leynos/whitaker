@@ -57,6 +57,25 @@ impl Attribute {
         }
     }
 
+    /// Creates an attribute with borrowed string arguments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    ///
+    /// let attribute = Attribute::with_str_arguments(
+    ///     AttributePath::from("allow"),
+    ///     AttributeKind::Outer,
+    ///     &["clippy::needless_bool"],
+    /// );
+    /// assert_eq!(attribute.arguments(), &["clippy::needless_bool"]);
+    /// ```
+    #[must_use]
+    pub fn with_str_arguments(path: AttributePath, kind: AttributeKind, args: &[&str]) -> Self {
+        Self::with_arguments(path, kind, args.iter().copied())
+    }
+
     /// Returns the underlying attribute path.
     ///
     /// # Examples
@@ -94,10 +113,10 @@ impl Attribute {
     /// ```
     /// use common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
-    /// let attribute = Attribute::with_arguments(
+    /// let attribute = Attribute::with_str_arguments(
     ///     AttributePath::from("allow"),
     ///     AttributeKind::Outer,
-    ///     ["dead_code"],
+    ///     &["dead_code"],
     /// );
     /// assert_eq!(attribute.arguments(), &["dead_code"]);
     /// ```
