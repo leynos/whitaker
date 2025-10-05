@@ -1,3 +1,4 @@
+//! Core Whitaker library surfaces shared configuration and helpers for lint crates.
 #![feature(rustc_private)]
 
 pub mod config;

@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 /// Shared configuration for the workspace-level crate.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SharedConfig {
     /// Overrides for the `module_max_400_lines` lint. Keeping the field optional
     /// allows the lint to be configured without duplicating the default value in
@@ -48,7 +48,7 @@ impl SharedConfig {
 
 /// Settings that influence the forthcoming `module_max_400_lines` lint.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ModuleMax400LinesConfig {
     /// Maximum number of lines permitted per module before the lint fires.
     #[serde(default = "ModuleMax400LinesConfig::default_max_lines")]

@@ -105,7 +105,8 @@ Utilities shared by lints:
   read their matching tables in `dylint.toml`, while `load()` remains a
   convenience alias for Whitaker itself. `serde` defaults keep fields optional
   so teams can override only the `module_max_400_lines.max_lines` threshold
-  (default 400) without rewriting the table.
+  (default 400) without rewriting the table. Unknown fields are rejected via
+  `deny_unknown_fields` so configuration typos fail fast during deserialisation.
 - Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
   scenarios (v0.1.0-alpha4) to exercise happy, unhappy, and edge cases without
   duplicating setup logic.

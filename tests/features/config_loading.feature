@@ -17,3 +17,8 @@ Feature: Shared configuration loading
     Given the workspace config sets the module max line limit to an invalid value
     When the shared configuration is loaded
     Then a configuration error is reported
+
+  Scenario: reject configuration with unknown fields
+    Given the workspace config includes unknown fields
+    When the shared configuration is loaded
+    Then a configuration error is reported

@@ -44,6 +44,18 @@ fn invalid_override(config_source: &RefCell<Option<String>>) {
         .replace("[module_max_400_lines]\nmax_lines = \"invalid\"\n".to_string());
 }
 
+#[given("the workspace config includes unknown fields")]
+fn unknown_fields(config_source: &RefCell<Option<String>>) {
+    config_source.borrow_mut().replace(
+        concat!(
+            "[module_max_400_lines]\n",
+            "max_lines = 120\n",
+            "unexpected = true\n",
+        )
+        .to_string(),
+    );
+}
+
 #[when("the shared configuration is loaded")]
 fn load_config(
     config_source: &RefCell<Option<String>>,
@@ -102,6 +114,14 @@ fn scenario_override(
 
 #[scenario("tests/features/config_loading.feature", index = 2)]
 fn scenario_errors(
+    config_source: RefCell<Option<String>>,
+    load_result: RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+) {
+    let _ = (config_source, load_result);
+}
+
+#[scenario("tests/features/config_loading.feature", index = 3)]
+fn scenario_unknown_fields(
     config_source: RefCell<Option<String>>,
     load_result: RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
 ) {
