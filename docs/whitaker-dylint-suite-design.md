@@ -100,12 +100,12 @@ Utilities shared by lints:
   help messages, and suggestions before emitting a concrete `Diagnostic`. The
   structure mirrors `rustc` concepts but keeps the surface area simple for unit
   and behaviour tests.
-- Shared configuration lives in `whitaker::config::SharedConfig`, which reads
-  `dylint.toml` via
-  `dylint_linting::config_or_default(env!("CARGO_PKG_NAME"))`. `serde` defaults
-  keep fields optional so teams can override only the
-  `module_max_400_lines.max_lines` threshold (default 400) without rewriting
-  the table.
+- Shared configuration lives in `whitaker::config::SharedConfig`. The
+  `load_for` helper accepts the caller's crate name so individual lint crates
+  read their matching tables in `dylint.toml`, while `load()` remains a
+  convenience alias for Whitaker itself. `serde` defaults keep fields optional
+  so teams can override only the `module_max_400_lines.max_lines` threshold
+  (default 400) without rewriting the table.
 - Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
   scenarios (v0.1.0-alpha4) to exercise happy, unhappy, and edge cases without
   duplicating setup logic.

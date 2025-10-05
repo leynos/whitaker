@@ -20,16 +20,29 @@ pub struct SharedConfig {
 }
 
 impl SharedConfig {
-    /// Loads the configuration for the Whitaker suite.
+    /// Loads the configuration for the Whitaker suite crate.
     ///
-    /// The key matches the crate name so that per-crate overrides in
-    /// `dylint.toml` Just Work™ for both the aggregated suite and individual
-    /// lint crates. `dylint_linting::config_or_default` panics when the stored
-    /// data cannot be deserialised, mirroring Dylint's behaviour and surfacing
-    /// misconfigured projects eagerly.
+    /// This convenience method keeps the existing call sites simple while the
+    /// [`Self::load_for`] variant allows downstream lint crates to resolve their own
+    /// configuration namespace explicitly.
     #[must_use]
     pub fn load() -> Self {
-        dylint_linting::config_or_default(env!("CARGO_PKG_NAME"))
+        Self::load_for(env!("CARGO_PKG_NAME"))
+    }
+
+    /// Loads the configuration associated with the provided crate name.
+    ///
+    /// Each lint crate is expected to store its overrides under a matching
+    /// table in `dylint.toml` (for example `[module_max_400_lines]`). Passing
+    /// the crate name explicitly ensures the caller's settings are respected
+    /// rather than defaulting to Whitaker's own section.
+    #[must_use]
+    pub fn load_for(crate_name: &str) -> Self {
+        Self::load_with(crate_name, dylint_linting::config_or_default)
+    }
+
+    fn load_with(crate_name: &str, loader: fn(&str) -> Self) -> Self {
+        loader(crate_name)
     }
 }
 
@@ -90,5 +103,19 @@ mod tests {
             outcome.is_err(),
             "expected a parse error when max_lines is not numeric"
         );
+    }
+
+    #[rstest]
+    fn load_for_passes_through_the_requested_crate() {
+        fn stub_loader(crate_name: &str) -> SharedConfig {
+            assert_eq!(crate_name, "module_max_400_lines");
+            SharedConfig {
+                module_max_400_lines: ModuleMax400LinesConfig { max_lines: 123 },
+            }
+        }
+
+        let config = SharedConfig::load_with("module_max_400_lines", stub_loader);
+
+        assert_eq!(config.module_max_400_lines.max_lines, 123);
     }
 }
