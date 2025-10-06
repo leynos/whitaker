@@ -80,9 +80,10 @@ fn load_config(
             maybe_source
                 .as_ref()
                 .map_or_else(SharedConfig::default, |input| {
-                    toml::from_str::<SharedConfig>(input).unwrap_or_else(|error| {
-                        panic!("Could not parse shared configuration: {error}")
-                    })
+                    match toml::from_str::<SharedConfig>(input) {
+                        Ok(config) => config,
+                        Err(error) => panic!("Could not parse shared configuration: {error}"),
+                    }
                 })
         })
     }));
