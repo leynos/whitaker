@@ -122,6 +122,22 @@ mod tests {
     }
 
     #[rstest]
+    fn rejects_unknown_fields() {
+        let source = concat!(
+            "unexpected = true\n",
+            "[module_max_400_lines]\n",
+            "max_lines = 120\n",
+        );
+
+        let outcome: Result<SharedConfig, _> = toml::from_str(source);
+
+        assert!(
+            outcome.is_err(),
+            "expected a parse error when unknown fields are present"
+        );
+    }
+
+    #[rstest]
     fn load_for_passes_through_the_requested_crate() {
         fn stub_loader(crate_name: &str) -> SharedConfig {
             assert_eq!(crate_name, "module_max_400_lines");

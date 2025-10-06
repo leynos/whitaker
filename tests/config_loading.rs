@@ -60,9 +60,9 @@ fn invalid_override(config_source: &RefCell<Option<String>>) {
 fn unknown_fields(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().replace(
         concat!(
+            "unexpected = true\n",
             "[module_max_400_lines]\n",
             "max_lines = 120\n",
-            "unexpected = true\n",
         )
         .to_string(),
     );
