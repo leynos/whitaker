@@ -1,6 +1,8 @@
 #![feature(rustc_private)]
 
+use std::any::Any;
 use std::cell::RefCell;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -12,14 +14,24 @@ fn config_source() -> RefCell<Option<String>> {
 }
 
 #[fixture]
-fn load_result() -> RefCell<Option<Result<SharedConfig, toml::de::Error>>> {
+fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> {
     RefCell::new(None)
+}
+
+fn panic_message(payload: Box<dyn Any + Send>) -> String {
+    match payload.downcast::<String>() {
+        Ok(message) => *message,
+        Err(payload) => payload.downcast::<&'static str>().map_or_else(
+            |_| "configuration loading panicked with a non-string payload".to_string(),
+            |message| (*message).to_string(),
+        ),
+    }
 }
 
 #[given("no configuration state has been prepared")]
 fn reset_state(
     config_source: &RefCell<Option<String>>,
-    load_result: &RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+    load_result: &RefCell<Option<Result<SharedConfig, String>>>,
 ) {
     config_source.borrow_mut().take();
     load_result.borrow_mut().take();
@@ -59,21 +71,29 @@ fn unknown_fields(config_source: &RefCell<Option<String>>) {
 #[when("the shared configuration is loaded")]
 fn load_config(
     config_source: &RefCell<Option<String>>,
-    load_result: &RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+    load_result: &RefCell<Option<Result<SharedConfig, String>>>,
 ) {
-    let result = config_source.borrow().as_ref().map_or_else(
-        || Ok(SharedConfig::default()),
-        |input| toml::from_str::<SharedConfig>(input),
-    );
+    let maybe_source = config_source.borrow().clone();
+    let outcome = catch_unwind(AssertUnwindSafe(|| {
+        SharedConfig::load_with("module_max_400_lines", |crate_name| {
+            assert_eq!(crate_name, "module_max_400_lines");
+            maybe_source
+                .as_ref()
+                .map_or_else(SharedConfig::default, |input| {
+                    toml::from_str::<SharedConfig>(input).unwrap_or_else(|error| {
+                        panic!("Could not parse shared configuration: {error}")
+                    })
+                })
+        })
+    }));
 
-    load_result.borrow_mut().replace(result);
+    load_result
+        .borrow_mut()
+        .replace(outcome.map_err(panic_message));
 }
 
 #[then("the module max line limit is {expected}")]
-fn assert_max_lines(
-    load_result: &RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
-    expected: usize,
-) {
+fn assert_max_lines(load_result: &RefCell<Option<Result<SharedConfig, String>>>, expected: usize) {
     let borrow = load_result.borrow();
     let config = match borrow.as_ref() {
         Some(Ok(config)) => config,
@@ -85,7 +105,7 @@ fn assert_max_lines(
 }
 
 #[then("a configuration error is reported")]
-fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, toml::de::Error>>>) {
+fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
     let borrow = load_result.borrow();
     match borrow.as_ref() {
         Some(Err(_)) => {}
@@ -99,7 +119,7 @@ fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, toml::de::Erro
 #[scenario("tests/features/config_loading.feature", index = 0)]
 fn scenario_defaults(
     config_source: RefCell<Option<String>>,
-    load_result: RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+    load_result: RefCell<Option<Result<SharedConfig, String>>>,
 ) {
     let _ = (config_source, load_result);
 }
@@ -107,7 +127,7 @@ fn scenario_defaults(
 #[scenario("tests/features/config_loading.feature", index = 1)]
 fn scenario_override(
     config_source: RefCell<Option<String>>,
-    load_result: RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+    load_result: RefCell<Option<Result<SharedConfig, String>>>,
 ) {
     let _ = (config_source, load_result);
 }
@@ -115,7 +135,7 @@ fn scenario_override(
 #[scenario("tests/features/config_loading.feature", index = 2)]
 fn scenario_errors(
     config_source: RefCell<Option<String>>,
-    load_result: RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+    load_result: RefCell<Option<Result<SharedConfig, String>>>,
 ) {
     let _ = (config_source, load_result);
 }
@@ -123,7 +143,7 @@ fn scenario_errors(
 #[scenario("tests/features/config_loading.feature", index = 3)]
 fn scenario_unknown_fields(
     config_source: RefCell<Option<String>>,
-    load_result: RefCell<Option<Result<SharedConfig, toml::de::Error>>>,
+    load_result: RefCell<Option<Result<SharedConfig, String>>>,
 ) {
     let _ = (config_source, load_result);
 }

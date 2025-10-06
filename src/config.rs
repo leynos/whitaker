@@ -13,9 +13,9 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct SharedConfig {
-    /// Overrides for the `module_max_400_lines` lint. Keeping the field optional
-    /// allows the lint to be configured without duplicating the default value in
-    /// every `dylint.toml`.
+    /// Overrides for the `module_max_400_lines` lint. This field falls back to
+    /// its default when omitted from `dylint.toml`, which avoids duplicating the
+    /// baseline settings in every workspace.
     pub module_max_400_lines: ModuleMax400LinesConfig,
 }
 
@@ -41,7 +41,24 @@ impl SharedConfig {
         Self::load_with(crate_name, dylint_linting::config_or_default)
     }
 
-    fn load_with(crate_name: &str, loader: fn(&str) -> Self) -> Self {
+    /// Loads configuration using the supplied loader.
+    ///
+    /// This helper exists to support dependency injection in tests so that the
+    /// behaviour of `dylint_linting::config_or_default` can be simulated without
+    /// touching the file system.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::SharedConfig;
+    ///
+    /// let config = SharedConfig::load_with("whitaker", |_| SharedConfig::default());
+    /// assert_eq!(config.module_max_400_lines.max_lines, 400);
+    /// ```
+    pub fn load_with<F>(crate_name: &str, loader: F) -> Self
+    where
+        F: FnOnce(&str) -> Self,
+    {
         loader(crate_name)
     }
 }
@@ -85,10 +102,9 @@ mod tests {
     fn deserialises_overrides_from_toml() {
         let source = "[module_max_400_lines]\nmax_lines = 120\n";
 
-        let config = match toml::from_str::<SharedConfig>(source) {
-            Ok(value) => value,
-            Err(error) => panic!("expected configuration to parse successfully: {error}"),
-        };
+        let config = toml::from_str::<SharedConfig>(source).unwrap_or_else(|error| {
+            panic!("expected configuration to parse successfully: {error}")
+        });
 
         assert_eq!(config.module_max_400_lines.max_lines, 120);
     }
