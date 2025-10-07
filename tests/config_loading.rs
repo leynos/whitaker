@@ -2,7 +2,9 @@
 
 use std::any::Any;
 use std::cell::RefCell;
+use std::convert::Infallible;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::str::FromStr;
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -25,6 +27,33 @@ fn panic_message(payload: Box<dyn Any + Send>) -> String {
             |_| "configuration loading panicked with a non-string payload".to_string(),
             |message| (*message).to_string(),
         ),
+    }
+}
+
+#[derive(Debug)]
+struct ErrorSnippet(String);
+
+impl FromStr for ErrorSnippet {
+    type Err = Infallible;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let trimmed = input
+            .trim()
+            .trim_matches(|candidate| matches!(candidate, '"' | '\''));
+
+        Ok(Self(trimmed.to_string()))
+    }
+}
+
+impl AsRef<str> for ErrorSnippet {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl ErrorSnippet {
+    fn into_inner(self) -> String {
+        self.0
     }
 }
 
@@ -110,6 +139,27 @@ fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
     let borrow = load_result.borrow();
     match borrow.as_ref() {
         Some(Err(_)) => {}
+        Some(Ok(config)) => {
+            panic!("expected configuration loading to fail but succeeded with {config:?}")
+        }
+        None => panic!("configuration should be loaded"),
+    }
+}
+
+#[then("a configuration error mentioning {snippet} is reported")]
+fn assert_error_with_snippet(
+    load_result: &RefCell<Option<Result<SharedConfig, String>>>,
+    snippet: ErrorSnippet,
+) {
+    let snippet = snippet.into_inner();
+    let borrow = load_result.borrow();
+    match borrow.as_ref() {
+        Some(Err(error)) => {
+            assert!(
+                error.contains(snippet.as_str()),
+                "expected error '{error}' to mention '{snippet}'",
+            );
+        }
         Some(Ok(config)) => {
             panic!("expected configuration loading to fail but succeeded with {config:?}")
         }

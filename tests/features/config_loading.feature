@@ -21,4 +21,4 @@ Feature: Shared configuration loading
   Scenario: reject configuration with unknown fields
     Given the workspace config includes unknown fields
     When the shared configuration is loaded
-    Then a configuration error is reported
+    Then a configuration error mentioning "unknown field" is reported
