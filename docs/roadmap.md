@@ -11,7 +11,7 @@
 - [ ] Phase 1 — Common infrastructure
   - [x] Implement the `common` crate helpers for attributes, context detection,
         spans, and diagnostics.
-  - [ ] Wire shared configuration loading with
+  - [x] Wire shared configuration loading with
         `dylint_linting::config_or_default` and serde structs.
   - [ ] Integrate `dylint_testing` harness boilerplate for UI tests across all
         lint crates.
