@@ -9,18 +9,6 @@
 
 use serde::Deserialize;
 
-#[cfg(feature = "dylint-driver")]
-fn default_loader(crate_name: &str) -> SharedConfig {
-    dylint_linting::config_or_default(crate_name)
-}
-
-#[cfg(not(feature = "dylint-driver"))]
-fn default_loader(crate_name: &str) -> SharedConfig {
-    panic!(
-        "`SharedConfig::load_for` uses the Dylint loader; inject a stub with `load_with` when testing {crate_name}"
-    );
-}
-
 /// Shared configuration for the workspace-level crate.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
@@ -35,7 +23,7 @@ impl SharedConfig {
     /// Loads the configuration for the Whitaker suite crate.
     ///
     /// This convenience method keeps the existing call sites simple while the
-    /// [`Self::load_for`] variant allows downstream lint crates to resolve their own
+    /// [`Self::load_with`] variant allows downstream lint crates to resolve their own
     /// configuration namespace explicitly.
     ///
     /// # Examples
@@ -51,39 +39,25 @@ impl SharedConfig {
     /// ```
     #[must_use]
     pub fn load() -> Self {
-        Self::load_for(env!("CARGO_PKG_NAME"))
-    }
+        #[cfg(feature = "dylint-driver")]
+        {
+            dylint_linting::config_or_default(env!("CARGO_PKG_NAME"))
+        }
 
-    /// Loads the configuration associated with the provided crate name.
-    ///
-    /// Each lint crate is expected to store its overrides under a matching
-    /// table in `dylint.toml` (for example `[module_max_400_lines]`). Passing
-    /// the crate name explicitly ensures the caller's settings are respected
-    /// rather than defaulting to Whitaker's own section.
-    ///
-    /// When the `dylint-driver` feature is disabled (for example in tests)
-    /// this helper panics. Use [`Self::load_with`] to inject a stub loader in
-    /// those environments.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "dylint-driver")]
-    /// # {
-    /// use whitaker::SharedConfig;
-    ///
-    /// let config = SharedConfig::load_for("module_max_400_lines");
-    /// assert_eq!(config.module_max_400_lines.max_lines, 400);
-    /// # }
-    /// ```
-    #[must_use]
-    pub fn load_for(crate_name: &str) -> Self {
-        Self::load_with(crate_name, default_loader)
+        #[cfg(not(feature = "dylint-driver"))]
+        {
+            panic!(
+                "`SharedConfig::load` uses the Dylint loader; use `SharedConfig::load_with` to inject a stub when testing"
+            );
+        }
     }
 
     /// Loads configuration using the supplied loader.
     ///
-    /// This helper exists to support dependency injection in tests so that the
+    /// Each lint crate stores its overrides under a table matching its crate
+    /// name (for example `[module_max_400_lines]`). The `crate_name` parameter
+    /// ensures the loader resolves the caller's namespace explicitly. This
+    /// helper also exists to support dependency injection in tests so that the
     /// behaviour of `dylint_linting::config_or_default` can be simulated without
     /// touching the file system.
     ///
@@ -183,7 +157,7 @@ mod tests {
     }
 
     #[rstest]
-    fn load_for_passes_through_the_requested_crate() {
+    fn load_with_passes_through_the_requested_crate() {
         fn stub_loader(crate_name: &str) -> SharedConfig {
             assert_eq!(crate_name, "module_max_400_lines");
             SharedConfig {
