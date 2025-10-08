@@ -1,5 +1,4 @@
 //! Behaviour-driven tests for shared configuration loading.
-#![feature(rustc_private)]
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -99,6 +98,10 @@ fn unknown_fields(config_source: &RefCell<Option<String>>) {
 }
 
 #[when("the shared configuration is loaded")]
+#[expect(
+    clippy::expect_used,
+    reason = "`expect` keeps the panic message concise per review guidance"
+)]
 fn load_config(
     config_source: &RefCell<Option<String>>,
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
@@ -110,10 +113,8 @@ fn load_config(
             maybe_source
                 .as_ref()
                 .map_or_else(SharedConfig::default, |input| {
-                    match toml::from_str::<SharedConfig>(input) {
-                        Ok(config) => config,
-                        Err(error) => panic!("Could not parse shared configuration: {error}"),
-                    }
+                    toml::from_str::<SharedConfig>(input)
+                        .expect("Could not parse shared configuration")
                 })
         })
     }));

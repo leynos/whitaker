@@ -7,10 +7,15 @@ name = "whitaker"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["dylint-driver"]
+dylint-driver = ["dep:dylint_linting"]
+
 [dependencies]
 
-dylint_linting = "4.1.2"
 serde = { version = "1.0", features = ["derive"] }
+
+dylint_linting = { version = "4.1.2", optional = true }
 
 [dev-dependencies]
 rstest = "0.26.1"

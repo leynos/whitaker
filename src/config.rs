@@ -9,6 +9,18 @@
 
 use serde::Deserialize;
 
+#[cfg(feature = "dylint-driver")]
+fn default_loader(crate_name: &str) -> SharedConfig {
+    dylint_linting::config_or_default(crate_name)
+}
+
+#[cfg(not(feature = "dylint-driver"))]
+fn default_loader(crate_name: &str) -> SharedConfig {
+    panic!(
+        "`SharedConfig::load_for` uses the Dylint loader; inject a stub with `load_with` when testing {crate_name}"
+    );
+}
+
 /// Shared configuration for the workspace-level crate.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
@@ -36,9 +48,13 @@ impl SharedConfig {
     /// table in `dylint.toml` (for example `[module_max_400_lines]`). Passing
     /// the crate name explicitly ensures the caller's settings are respected
     /// rather than defaulting to Whitaker's own section.
+    ///
+    /// When the `dylint-driver` feature is disabled (for example in tests)
+    /// this helper panics. Use [`Self::load_with`] to inject a stub loader in
+    /// those environments.
     #[must_use]
     pub fn load_for(crate_name: &str) -> Self {
-        Self::load_with(crate_name, dylint_linting::config_or_default)
+        Self::load_with(crate_name, default_loader)
     }
 
     /// Loads configuration using the supplied loader.
@@ -55,6 +71,7 @@ impl SharedConfig {
     /// let config = SharedConfig::load_with("whitaker", |_| SharedConfig::default());
     /// assert_eq!(config.module_max_400_lines.max_lines, 400);
     /// ```
+    #[must_use]
     pub fn load_with<F>(crate_name: &str, loader: F) -> Self
     where
         F: FnOnce(&str) -> Self,
@@ -99,13 +116,16 @@ mod tests {
     }
 
     #[rstest]
+    #[expect(
+        clippy::expect_used,
+        reason = "`expect` keeps the panic terse as requested in review"
+    )]
     fn deserialises_overrides_from_toml() {
         let source = "[module_max_400_lines]\nmax_lines = 120\n";
 
         // Panic with the TOML parser's message so broken overrides are easy to debug.
-        let config = toml::from_str::<SharedConfig>(source).unwrap_or_else(|error| {
-            panic!("expected configuration to parse successfully: {error}")
-        });
+        let config = toml::from_str::<SharedConfig>(source)
+            .expect("expected configuration to parse successfully");
 
         assert_eq!(config.module_max_400_lines.max_lines, 120);
     }
