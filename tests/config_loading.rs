@@ -1,3 +1,4 @@
+//! Behaviour-driven tests for shared configuration loading.
 #![feature(rustc_private)]
 
 use std::any::Any;
