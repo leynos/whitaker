@@ -102,10 +102,8 @@ mod tests {
     fn deserialises_overrides_from_toml() {
         let source = "[module_max_400_lines]\nmax_lines = 120\n";
 
-        let config = match toml::from_str::<SharedConfig>(source) {
-            Ok(config) => config,
-            Err(error) => panic!("expected configuration to parse successfully: {error}"),
-        };
+        let config = toml::from_str::<SharedConfig>(source)
+            .expect("expected configuration to parse successfully");
 
         assert_eq!(config.module_max_400_lines.max_lines, 120);
     }
