@@ -102,6 +102,7 @@ mod tests {
     fn deserialises_overrides_from_toml() {
         let source = "[module_max_400_lines]\nmax_lines = 120\n";
 
+        // Panic with the TOML parser's message so broken overrides are easy to debug.
         let config = toml::from_str::<SharedConfig>(source)
             .expect("expected configuration to parse successfully");
 
