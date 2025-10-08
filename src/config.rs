@@ -37,6 +37,18 @@ impl SharedConfig {
     /// This convenience method keeps the existing call sites simple while the
     /// [`Self::load_for`] variant allows downstream lint crates to resolve their own
     /// configuration namespace explicitly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "dylint-driver")]
+    /// # {
+    /// use whitaker::SharedConfig;
+    ///
+    /// let config = SharedConfig::load();
+    /// assert_eq!(config.module_max_400_lines.max_lines, 400);
+    /// # }
+    /// ```
     #[must_use]
     pub fn load() -> Self {
         Self::load_for(env!("CARGO_PKG_NAME"))
@@ -52,6 +64,18 @@ impl SharedConfig {
     /// When the `dylint-driver` feature is disabled (for example in tests)
     /// this helper panics. Use [`Self::load_with`] to inject a stub loader in
     /// those environments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "dylint-driver")]
+    /// # {
+    /// use whitaker::SharedConfig;
+    ///
+    /// let config = SharedConfig::load_for("module_max_400_lines");
+    /// assert_eq!(config.module_max_400_lines.max_lines, 400);
+    /// # }
+    /// ```
     #[must_use]
     pub fn load_for(crate_name: &str) -> Self {
         Self::load_with(crate_name, default_loader)
