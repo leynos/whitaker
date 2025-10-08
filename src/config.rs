@@ -103,8 +103,9 @@ mod tests {
         let source = "[module_max_400_lines]\nmax_lines = 120\n";
 
         // Panic with the TOML parser's message so broken overrides are easy to debug.
-        let config = toml::from_str::<SharedConfig>(source)
-            .expect("expected configuration to parse successfully");
+        let config = toml::from_str::<SharedConfig>(source).unwrap_or_else(|error| {
+            panic!("expected configuration to parse successfully: {error}")
+        });
 
         assert_eq!(config.module_max_400_lines.max_lines, 120);
     }
