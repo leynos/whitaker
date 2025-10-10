@@ -172,6 +172,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo_metadata"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "981a6f317983eec002839b90fae7411a85621410ae591a9cab2ecf5cb5744873"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -282,8 +296,8 @@ checksum = "26f70d7a1a956d6929f53984ed20e9b30e013ad23b49a6953d82453a81f7f16f"
 dependencies = [
  "anstyle",
  "anyhow",
- "cargo_metadata",
- "dylint_internal",
+ "cargo_metadata 0.22.0",
+ "dylint_internal 4.1.2",
  "log",
  "once_cell",
  "semver",
@@ -301,7 +315,7 @@ dependencies = [
  "anstyle",
  "anyhow",
  "bitflags",
- "cargo_metadata",
+ "cargo_metadata 0.22.0",
  "git2",
  "home",
  "if_chain",
@@ -316,13 +330,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "dylint_linting"
-version = "4.1.2"
+name = "dylint_internal"
+version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d98709cb4588cf5dbe2825032da4288ae14a4680ac0d8e1b726425ce3698434"
+checksum = "2e11f358a59510be7fa5c4f412729fabbe31a3587a342e4241a6a72020a2a0c5"
 dependencies = [
- "cargo_metadata",
- "dylint_internal",
+ "anyhow",
+ "cargo_metadata 0.23.0",
+ "log",
+ "regex",
+ "serde",
+ "thiserror 2.0.17",
+ "toml 0.9.7",
+]
+
+[[package]]
+name = "dylint_linting"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4588b33aafbd472a6468ad1521d74094faa2bbdb53d534c2d24320300ea94135"
+dependencies = [
+ "cargo_metadata 0.23.0",
+ "dylint_internal 5.0.0",
  "paste",
  "rustversion",
  "serde",
@@ -337,10 +366,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e00c1e69d6e770abe124eb3b3a3642bceb8867ad56de976686b2b5fda0582d4d"
 dependencies = [
  "anyhow",
- "cargo_metadata",
+ "cargo_metadata 0.22.0",
  "compiletest_rs",
  "dylint",
- "dylint_internal",
+ "dylint_internal 4.1.2",
  "env_logger",
  "once_cell",
  "regex",
