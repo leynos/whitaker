@@ -55,25 +55,6 @@ impl fmt::Display for HarnessError {
 
 impl std::error::Error for HarnessError {}
 
-/// Run UI tests for the current crate.
-///
-/// # Examples
-///
-/// ```ignore
-/// #[test]
-/// fn ui() {
-///     whitaker::testing::ui::run("ui").expect("UI tests should succeed");
-/// }
-/// ```
-///
-/// # Errors
-///
-/// Returns [`HarnessError`] when the crate name or UI directory are invalid or
-/// when the underlying runner reports a failure.
-pub fn run(ui_directory: impl Into<Utf8PathBuf>) -> Result<(), HarnessError> {
-    run_for(env!("CARGO_PKG_NAME"), ui_directory)
-}
-
 /// Run UI tests for an explicit crate name.
 ///
 /// This is primarily useful for meta-crates that host several lint libraries in
@@ -153,6 +134,26 @@ fn panic_message(payload: Box<dyn Any + Send>) -> String {
     )
 }
 
+/// Run UI tests for the crate that invokes the macro.
+///
+/// # Examples
+///
+/// ```ignore
+/// whitaker::run_ui_tests!("ui").expect("UI tests should succeed");
+/// ```
+///
+/// # Errors
+///
+/// Returns [`HarnessError`] when the UI directory is invalid or when the
+/// underlying runner reports a failure.
+#[macro_export]
+macro_rules! run_ui_tests {
+    ($directory:expr $(,)?) => {{
+        let crate_name = env!("CARGO_PKG_NAME");
+        $crate::testing::ui::run_for(crate_name, $directory)
+    }};
+}
+
 /// Declare a canonical Dylint UI test for the current crate.
 ///
 /// # Examples
@@ -165,7 +166,7 @@ macro_rules! declare_ui_tests {
     ($directory:expr $(,)?) => {
         #[test]
         fn ui() {
-            $crate::testing::ui::run($directory).expect("UI tests should execute without diffs");
+            $crate::run_ui_tests!($directory).expect("UI tests should execute without diffs");
         }
     };
 }

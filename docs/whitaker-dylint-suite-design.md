@@ -102,10 +102,11 @@ Utilities shared by lints:
   and behaviour tests.
 - UI test harness helpers live in `whitaker::testing::ui`. The helpers validate
   crate names and UI directories before invoking `dylint_testing::ui_test`, and
-  expose a `declare_ui_tests!` macro so lint crates can publish the canonical
-  `ui` test without copying boilerplate. Tests inject stub runners via
-  `run_with_runner` to cover happy and unhappy paths without touching the real
-  filesystem.
+  expose `run_ui_tests!` plus `declare_ui_tests!` macros. The macros expand
+  `env!("CARGO_PKG_NAME")` in the caller so dependent lint crates always pass
+  their own names to the harness while publishing the canonical `ui` test
+  without copying boilerplate. Tests inject stub runners via `run_with_runner`
+  to cover happy and unhappy paths without touching the real filesystem.
 - Shared configuration lives in `whitaker::config::SharedConfig`. The
   `load()` helper uses the Dylint loader for Whitaker itself, while
   `load_with()` accepts the caller's crate name plus an injectable loader so
