@@ -13,7 +13,7 @@
         spans, and diagnostics.
   - [x] Wire shared configuration loading with
         `dylint_linting::config_or_default` and serde structs.
-  - [ ] Integrate `dylint_testing` harness boilerplate for UI tests across all
+  - [x] Integrate `dylint_testing` harness boilerplate for UI tests across all
         lint crates.
 
 - [ ] Phase 2 — Core lint delivery
