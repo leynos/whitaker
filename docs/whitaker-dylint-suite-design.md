@@ -108,9 +108,9 @@ Utilities shared by lints:
   without copying boilerplate. Tests inject stub runners via `run_with_runner`
   to cover happy and unhappy paths without touching the real filesystem.
 - Path handling standardises on a caret requirement anchored at `camino`
-  v1.1.10. Transitive constraints currently resolve this to 1.2.1. That keeps
-  us benefiting from the maintenance fixes delivered since 1.1.6, including the
-  `unexpected_cfgs`-warning resolution needed for lint workspaces.
+  v1.1.10. Transitive constraints currently resolve this to 1.2.1. This keeps
+  the workspace benefiting from the maintenance fixes delivered since 1.1.6,
+  including the `unexpected_cfgs`-warning resolution needed for lint workspaces.
 - Shared configuration lives in `whitaker::config::SharedConfig`. The
   `load()` helper uses the Dylint loader for Whitaker itself, while
   `load_with()` accepts the caller's crate name plus an injectable loader so
