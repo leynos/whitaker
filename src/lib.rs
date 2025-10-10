@@ -2,6 +2,7 @@
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 pub mod config;
+pub mod testing;
 
 pub use config::{ModuleMax400LinesConfig, SharedConfig};
 
