@@ -17,7 +17,7 @@
         lint crates.
 
 - [ ] Phase 2 — Core lint delivery
-  - [ ] Establish the lint crate template with shared dependencies and UI test
+  - [x] Establish the lint crate template with shared dependencies and UI test
         harness boilerplate.
   - [ ] Implement `function_attrs_follow_docs` with targeted UI scenarios.
   - [ ] Implement `no_expect_outside_tests` with context-aware diagnostics.
