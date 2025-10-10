@@ -23,7 +23,7 @@ dylint_testing = "4.1.0"
 rstest = "0.26.1"
 rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
-toml = "0.8"
+toml = "0.9"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
