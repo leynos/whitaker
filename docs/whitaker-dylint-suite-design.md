@@ -74,6 +74,9 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
 - The helper enforces crate-name hygiene, requires relative UI directories,
   and emits a default `whitaker::declare_ui_tests!` invocation to wire shared
   UI tests.
+- Crate-name validation now rejects trailing separators, normalises
+  Windows-style separators to forward slashes, and refuses parent directory
+  traversal so template consumers stay within their crate boundaries.
 - Workspace dependencies now surface `dylint_linting`, `dylint_testing`,
   `camino`, `serde`, and `toml` so lint crates can opt into shared versions via
   `workspace = true`.

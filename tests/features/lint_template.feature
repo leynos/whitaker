@@ -11,16 +11,46 @@ Feature: Lint crate template
     And the library includes UI test harness boilerplate for directory ui
     And the lint constant is named FUNCTION_ATTRS_FOLLOW_DOCS
 
+  Scenario: Rendering a template with nested UI directories
+    Given the lint crate name is lint_nested_ui
+    And the UI tests directory is ui/lints/cases
+    When I render the lint crate template
+    Then the manifest reuses shared dependencies
+    And the library includes UI test harness boilerplate for directory ui/lints/cases
+
+  Scenario: Rendering a template with Windows separators in the UI directory
+    Given the lint crate name is lint_windows_path
+    And the UI tests directory is ui\windows\cases
+    When I render the lint crate template
+    Then the manifest reuses shared dependencies
+    And the library includes UI test harness boilerplate for directory ui/windows/cases
+
   Scenario: Rejecting blank crate names
     Given the lint crate name is blank
     When I render the lint crate template
     Then template creation fails with an empty crate name error
+
+  Scenario: Rejecting crate names starting with digits
+    Given the lint crate name is 1foo
+    When I render the lint crate template
+    Then template creation fails with a crate name starting with a non-letter
+
+  Scenario: Rejecting crate names with trailing separators
+    Given the lint crate name is lint-
+    When I render the lint crate template
+    Then template creation fails due to a trailing separator -
 
   Scenario: Rejecting absolute UI directories
     Given the lint crate name is module_max_400_lines
     And the UI tests directory is /tmp/ui
     When I render the lint crate template
     Then template creation fails with an absolute UI directory error pointing to /tmp/ui
+
+  Scenario: Rejecting parent directory segments in the UI directory
+    Given the lint crate name is module_max_400_lines
+    And the UI tests directory is ui/../secrets
+    When I render the lint crate template
+    Then template creation fails because the UI directory traverses upwards
 
   Scenario: Rejecting invalid crate name characters
     Given the lint crate name is noUnwrapOrElsePanic

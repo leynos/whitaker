@@ -32,10 +32,12 @@ while the library source wires in Whitaker's UI harness.
 3. Populate `ui/` fixtures for the lint. The generated `lib.rs` already declares
    the canonical `whitaker::declare_ui_tests!("ui")` test.
 
-`LintCrateTemplate::with_ui_tests_directory` can target alternative directories
-provided the path is relative. Template construction fails fast on empty crate
-names, uppercase characters, or absolute paths so mistakes are surfaced before
-any files are written.
+`LintCrateTemplate::with_ui_tests_directory` targets alternative directories
+provided the path is relative. The helper normalises Windows-style separators
+to forward slashes and rejects traversal via `..` so test harnesses stay within
+the crate. Template construction fails fast on empty crate names, uppercase
+characters, trailing separators, or absolute paths so mistakes are surfaced
+before any files are written.
 
 ## Running lint UI tests
 
