@@ -19,12 +19,36 @@ pub struct TemplateFiles {
 
 impl TemplateFiles {
     /// Returns the generated `Cargo.toml` manifest.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::lints::LintCrateTemplate;
+    ///
+    /// let files = LintCrateTemplate::new("demo_lint")
+    ///     .expect("valid crate name")
+    ///     .render();
+    ///
+    /// assert!(files.manifest().contains("name = \"demo_lint\""));
+    /// ```
     #[must_use]
     pub fn manifest(&self) -> &str {
         &self.manifest
     }
 
     /// Returns the generated `src/lib.rs` source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::lints::LintCrateTemplate;
+    ///
+    /// let files = LintCrateTemplate::new("demo_lint")
+    ///     .expect("valid crate name")
+    ///     .render();
+    ///
+    /// assert!(files.lib_rs().contains("pub struct DemoLint"));
+    /// ```
     #[must_use]
     pub fn lib_rs(&self) -> &str {
         &self.lib_rs
@@ -35,6 +59,24 @@ impl TemplateFiles {
     /// # Errors
     ///
     /// Returns the parse error when the generated manifest is not valid TOML.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker::lints::LintCrateTemplate;
+    ///
+    /// let files = LintCrateTemplate::new("demo_lint")
+    ///     .expect("valid crate name")
+    ///     .render();
+    /// let manifest = files
+    ///     .manifest_document()
+    ///     .expect("generated manifest parses");
+    ///
+    /// assert_eq!(
+    ///     manifest["package"]["name"].as_str(),
+    ///     Some("demo_lint")
+    /// );
+    /// ```
     pub fn manifest_document(&self) -> Result<Value, toml::de::Error> {
         toml::from_str(self.manifest())
     }
