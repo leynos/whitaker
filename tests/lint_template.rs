@@ -11,7 +11,7 @@ use whitaker::lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 struct TemplateWorld {
     crate_name: RefCell<String>,
     ui_directory: RefCell<String>,
-    template: RefCell<Option<LintCrateTemplate>>,
+    lint_constant: RefCell<Option<String>>,
     outcome: RefCell<Option<Result<TemplateFiles, TemplateError>>>,
 }
 
@@ -29,7 +29,9 @@ impl TemplateWorld {
         let ui_directory = self.ui_directory.borrow().clone();
         let result =
             LintCrateTemplate::with_ui_tests_directory(crate_name, ui_directory).map(|template| {
-                self.template.borrow_mut().replace(template.clone());
+                self.lint_constant
+                    .borrow_mut()
+                    .replace(template.lint_constant().to_string());
                 template.render()
             });
         self.outcome.borrow_mut().replace(result);
@@ -186,10 +188,10 @@ fn then_library_includes_harness(world: &TemplateWorld, directory: StepString) {
 
 #[then("the lint constant is named {expected}")]
 fn then_lint_constant(world: &TemplateWorld, expected: StepString) {
-    let Some(template) = world.template.borrow().clone() else {
-        panic!("template should be stored on success");
+    let Some(lint_constant) = world.lint_constant.borrow().clone() else {
+        panic!("lint constant should be stored on success");
     };
-    assert_eq!(template.lint_constant(), expected.into_inner());
+    assert_eq!(lint_constant, expected.into_inner());
 }
 
 #[then("template creation fails with an empty crate name error")]
