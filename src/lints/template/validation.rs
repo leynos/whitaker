@@ -1,3 +1,5 @@
+//! Validates inputs for lint crate scaffolding.
+
 use camino::{Utf8Component, Utf8Path};
 
 use super::TemplateError;

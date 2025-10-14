@@ -52,7 +52,7 @@ impl TemplateWorld {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct StepString(String);
 
 impl StepString {
@@ -61,8 +61,8 @@ impl StepString {
     }
 }
 
-impl From<std::string::String> for StepString {
-    fn from(value: std::string::String) -> Self {
+impl From<String> for StepString {
+    fn from(value: String) -> Self {
         Self(value)
     }
 }
@@ -295,11 +295,16 @@ fn scenario_rejects_absolute_directory(world: TemplateWorld) {
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 7)]
-fn scenario_rejects_parent_directory(world: TemplateWorld) {
+fn scenario_rejects_absolute_windows_directory(world: TemplateWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 8)]
+fn scenario_rejects_parent_directory(world: TemplateWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/lint_template.feature", index = 9)]
 fn scenario_rejects_invalid_character(world: TemplateWorld) {
     let _ = world;
 }
