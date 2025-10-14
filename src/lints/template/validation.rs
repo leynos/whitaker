@@ -2,6 +2,10 @@ use camino::{Utf8Component, Utf8Path};
 
 use super::TemplateError;
 
+fn is_valid_crate_name_character(character: char) -> bool {
+    character.is_ascii_lowercase() || character.is_ascii_digit() || matches!(character, '-' | '_')
+}
+
 pub(crate) fn normalise_crate_name(input: &str) -> Result<String, TemplateError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -18,10 +22,7 @@ pub(crate) fn normalise_crate_name(input: &str) -> Result<String, TemplateError>
     }
 
     for character in characters {
-        if !(character.is_ascii_lowercase()
-            || character.is_ascii_digit()
-            || matches!(character, '-' | '_'))
-        {
+        if !is_valid_crate_name_character(character) {
             return Err(TemplateError::InvalidCrateNameCharacter { character });
         }
     }
