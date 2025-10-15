@@ -75,10 +75,8 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
         }
     }
 
-    let last = trimmed
-        .chars()
-        .last()
-        .ok_or(TemplateError::EmptyCrateName)?;
+    // Safe: non-empty and ASCII-only by earlier validation checks.
+    let last = trimmed.as_bytes()[trimmed.len() - 1] as char;
     if matches!(last, '-' | '_') {
         return Err(TemplateError::CrateNameTrailingSeparator { character: last });
     }

@@ -45,7 +45,7 @@ members = ["crates/*", "suite", "installer", "common"]
 resolver = "2"
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 
 [workspace.lints.rust.unexpected_cfgs]
 level = "warn"
@@ -156,19 +156,28 @@ keeps dependencies aligned and ensures UI tests run uniformly.
 [package]
 name = "function_attrs_follow_docs"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
+rustc_hir = { workspace = true }
+rustc_lint = { workspace = true }
+rustc_middle = { workspace = true }
+rustc_session = { workspace = true }
+rustc_span = { workspace = true }
 common = { path = "../../common" }
 
 [dev-dependencies]
 dylint_testing = { workspace = true }
 whitaker = { path = "../../" }
 ```
+
+Whitaker's workspace includes thin `rustc_*` proxy crates so generated lint
+crates can depend on `rustc_private` APIs via `workspace = true` without
+repeating the re-export boilerplate in each project.
 
 > Swap the `name` per crate. Tests live under `tests/ui` with `dylint_testing`
 > providing the harness.
@@ -468,7 +477,7 @@ crates/no_unwrap_or_else_panic/tests/ui/
 [package]
 name = "no_unwrap_or_else_panic"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
@@ -665,7 +674,7 @@ exporting their own `register_lints` symbol.
 [package]
 name = "suite"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]

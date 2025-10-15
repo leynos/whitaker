@@ -9,6 +9,11 @@ dylint_testing = "5"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 thiserror = "2"
+rustc_hir = { path = "crates/rustc_hir", version = "0.1.0" }
+rustc_lint = { path = "crates/rustc_lint", version = "0.1.0" }
+rustc_middle = { path = "crates/rustc_middle", version = "0.1.0" }
+rustc_session = { path = "crates/rustc_session", version = "0.1.0" }
+rustc_span = { path = "crates/rustc_span", version = "0.1.0" }
 
 [package]
 name = "whitaker"
@@ -34,37 +39,27 @@ rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
 dylint_testing = { workspace = true }
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
-
-# 1. hygiene
-allow_attributes                    = "deny"
-allow_attributes_without_reason     = "deny"
-blanket_clippy_restriction_lints    = "deny"
-
-# 2. debugging leftovers
-dbg_macro       = "deny"
-print_stdout    = "deny"
-print_stderr    = "deny"
-
-# 3. panic-prone operations
-unwrap_used                     = "deny"
-expect_used                     = "deny"
-indexing_slicing                = "deny"
-string_slice                    = "deny"
-integer_division                = "deny"
-integer_division_remainder_used = "deny"
-
-# 4. portability
-host_endian_bytes   = "deny"
-little_endian_bytes = "deny"
-big_endian_bytes    = "deny"
-
-# 5. nursery idiom polish
-or_fun_call            = "deny"
-option_if_let_else     = "deny"
-use_self               = "deny"
-string_lit_as_bytes    = "deny"
-
-# 6. numerical foot-guns
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+or_fun_call = "deny"
+option_if_let_else = "deny"
+use_self = "deny"
+string_lit_as_bytes = "deny"
 float_arithmetic = "deny"
+
+[workspace.lints.rust]
+blanket_clippy_restriction_lints = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+host_endian_bytes = "deny"
+little_endian_bytes = "deny"
+big_endian_bytes = "deny"
+integer_division = "deny"
+integer_division_remainder_used = "deny"

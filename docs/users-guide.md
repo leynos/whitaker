@@ -7,7 +7,8 @@ to run the accompanying UI tests.
 ## Generating a lint crate from the template
 
 The `whitaker::LintCrateTemplate` helper emits both a `Cargo.toml` manifest and
-a baseline `src/lib.rs`. The manifest reuses the workspace dependency versions
+a baseline `src/lib.rs`. The manifest reuses the workspace dependency versions,
+including the `rustc_*` proxy crates that re-export nightly compiler APIs,
 whilst the library source wires in Whitaker's UI harness.
 
 1. Create a directory for the lint under `crates/`.

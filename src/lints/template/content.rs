@@ -3,13 +3,18 @@
 const MANIFEST_TEMPLATE: &str = r#"[package]
 name = "{crate_name}"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
+rustc_hir = { workspace = true }
+rustc_lint = { workspace = true }
+rustc_middle = { workspace = true }
+rustc_session = { workspace = true }
+rustc_span = { workspace = true }
 common = { path = "../../common" }
 
 [dev-dependencies]

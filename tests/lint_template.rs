@@ -163,19 +163,15 @@ fn then_manifest_reuses_shared_dependencies(world: &TemplateWorld) {
         assert!(uses_workspace, "{name} should use the workspace dependency");
     };
 
-    assert_workspace("dylint_linting");
-
-    for extraneous in [
+    for dependency in [
+        "dylint_linting",
         "rustc_hir",
         "rustc_lint",
         "rustc_middle",
         "rustc_session",
         "rustc_span",
     ] {
-        assert!(
-            !dependencies.contains_key(extraneous),
-            "{extraneous} should not be listed as a direct dependency"
-        );
+        assert_workspace(dependency);
     }
 
     let common = dependencies

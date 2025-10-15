@@ -1171,6 +1171,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_hir"
+version = "0.1.0"
+
+[[package]]
+name = "rustc_lint"
+version = "0.1.0"
+
+[[package]]
+name = "rustc_middle"
+version = "0.1.0"
+
+[[package]]
+name = "rustc_session"
+version = "0.1.0"
+
+[[package]]
+name = "rustc_span"
+version = "0.1.0"
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
