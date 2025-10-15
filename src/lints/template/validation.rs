@@ -8,14 +8,14 @@ fn is_valid_crate_name_character(character: char) -> bool {
     character.is_ascii_lowercase() || character.is_ascii_digit() || matches!(character, '-' | '_')
 }
 
-fn is_absolute_path(normalised: &str, original: &str) -> Result<(), TemplateError> {
-    if normalised.starts_with("//") {
+fn is_absolute_path(normalized: &str, original: &str) -> Result<(), TemplateError> {
+    if normalized.starts_with("//") {
         return Err(TemplateError::AbsoluteUiDirectory {
             directory: original.to_string(),
         });
     }
 
-    if normalised.split_once(':').is_some_and(|(prefix, rest)| {
+    if normalized.split_once(':').is_some_and(|(prefix, rest)| {
         prefix.len() == 1
             && prefix
                 .chars()
@@ -27,7 +27,7 @@ fn is_absolute_path(normalised: &str, original: &str) -> Result<(), TemplateErro
         });
     }
 
-    let path = Utf8Path::new(normalised);
+    let path = Utf8Path::new(normalized);
     if path.is_absolute() {
         return Err(TemplateError::AbsoluteUiDirectory {
             directory: original.to_string(),
@@ -61,7 +61,7 @@ fn process_path_component<'a>(
     }
 }
 
-pub(crate) fn normalise_crate_name(input: &str) -> Result<String, TemplateError> {
+pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err(TemplateError::EmptyCrateName);
@@ -123,16 +123,16 @@ pub(crate) fn pass_struct_name(crate_name: &str) -> String {
         .collect()
 }
 
-pub(crate) fn normalise_ui_directory(input: &str) -> Result<String, TemplateError> {
+pub(crate) fn normalize_ui_directory(input: &str) -> Result<String, TemplateError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err(TemplateError::EmptyUiDirectory);
     }
 
-    let normalised = trimmed.replace('\\', "/");
-    is_absolute_path(&normalised, trimmed)?;
+    let normalized = trimmed.replace('\\', "/");
+    is_absolute_path(&normalized, trimmed)?;
 
-    let path = Utf8Path::new(&normalised);
+    let path = Utf8Path::new(&normalized);
     let mut segments = Vec::new();
 
     for component in path.components() {
@@ -175,22 +175,22 @@ mod tests {
     }
 
     #[test]
-    fn normalises_nested_ui_directory() {
-        let directory = normalise_ui_directory("ui/lints/expr")
+    fn normalizes_nested_ui_directory() {
+        let directory = normalize_ui_directory("ui/lints/expr")
             .unwrap_or_else(|error| panic!("valid path expected: {error}"));
         assert_eq!(directory, "ui/lints/expr");
     }
 
     #[test]
-    fn normalises_windows_separators() {
-        let directory = normalise_ui_directory(r"ui\nested\cases")
+    fn normalizes_windows_separators() {
+        let directory = normalize_ui_directory(r"ui\nested\cases")
             .unwrap_or_else(|error| panic!("valid path expected: {error}"));
         assert_eq!(directory, "ui/nested/cases");
     }
 
     #[test]
     fn rejects_parent_directory_in_ui_path() {
-        let Err(error) = normalise_ui_directory("ui/../secrets") else {
+        let Err(error) = normalize_ui_directory("ui/../secrets") else {
             panic!("parent directory traversal should be rejected");
         };
         assert_eq!(
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn rejects_absolute_windows_path() {
-        let Err(error) = normalise_ui_directory(r"C:\\ui") else {
+        let Err(error) = normalize_ui_directory(r"C:\\ui") else {
             panic!("absolute windows paths should be rejected");
         };
         assert_eq!(

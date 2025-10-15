@@ -370,7 +370,7 @@ fn atoms(e: &Expr<'_>) -> usize {
 }
 ```
 
-**Notes.** Parentheses are normalised away by HIR, so grouping does not affect
+**Notes.** Parentheses are normalized away by HIR, so grouping does not affect
 the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed
 a boolean context via casts. `if let`/`while let` are intentionally excluded
 because they are matching patterns, not boolean predicates.
