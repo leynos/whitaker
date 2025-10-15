@@ -52,6 +52,12 @@ Feature: Lint crate template
     When I render the lint crate template
     Then template creation fails with an absolute UI directory error pointing to C:\\temp\\ui
 
+  Scenario: Rejecting UNC absolute UI directories
+    Given the lint crate name is function_attrs_follow_docs
+    And the UI tests directory is //server/share/ui
+    When I render the lint crate template
+    Then template creation fails with an absolute UI directory error pointing to //server/share/ui
+
   Scenario: Rejecting parent directory segments in the UI directory
     Given the lint crate name is module_max_400_lines
     And the UI tests directory is ui/../secrets

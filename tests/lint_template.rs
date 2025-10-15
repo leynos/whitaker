@@ -311,11 +311,16 @@ fn scenario_rejects_absolute_windows_directory(world: TemplateWorld) {
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 8)]
-fn scenario_rejects_parent_directory(world: TemplateWorld) {
+fn scenario_rejects_unc_directory(world: TemplateWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 9)]
+fn scenario_rejects_parent_directory(world: TemplateWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/lint_template.feature", index = 10)]
 fn scenario_rejects_invalid_character(world: TemplateWorld) {
     let _ = world;
 }

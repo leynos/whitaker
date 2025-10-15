@@ -145,28 +145,20 @@ pub(crate) fn normalize_ui_directory(input: &str) -> Result<String, TemplateErro
 mod tests {
     use super::*;
 
-    #[test]
-    fn constant_from_crate_name() {
-        assert_eq!(
-            lint_constant("module_max_400_lines"),
-            "MODULE_MAX_400_LINES"
-        );
-        assert_eq!(
-            lint_constant("no-expect-outside-tests"),
-            "NO_EXPECT_OUTSIDE_TESTS"
-        );
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("module_max_400_lines", "MODULE_MAX_400_LINES")]
+    #[case("no-expect-outside-tests", "NO_EXPECT_OUTSIDE_TESTS")]
+    fn constant_from_crate_name(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(lint_constant(input), expected);
     }
 
-    #[test]
-    fn pass_struct_from_crate_name() {
-        assert_eq!(
-            pass_struct_name("module_max_400_lines"),
-            "ModuleMax400Lines"
-        );
-        assert_eq!(
-            pass_struct_name("no-expect-outside-tests"),
-            "NoExpectOutsideTests"
-        );
+    #[rstest]
+    #[case("module_max_400_lines", "ModuleMax400Lines")]
+    #[case("no-expect-outside-tests", "NoExpectOutsideTests")]
+    fn pass_struct_from_crate_name(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(pass_struct_name(input), expected);
     }
 
     #[test]
