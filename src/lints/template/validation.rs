@@ -63,7 +63,9 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
     }
 
     let mut characters = trimmed.chars();
-    let first = characters.next().ok_or(TemplateError::EmptyCrateName)?;
+    let first = characters
+        .next()
+        .expect("crate name is non-empty after trim");
 
     if !first.is_ascii_lowercase() {
         return Err(TemplateError::InvalidCrateNameStart { character: first });
@@ -99,15 +101,17 @@ pub(crate) fn pass_struct_name(crate_name: &str) -> String {
     crate_name
         .split(['-', '_'])
         .filter(|segment| !segment.is_empty())
-        .filter_map(|segment| {
+        .map(|segment| {
             let mut characters = segment.chars();
-            let first = characters.next()?;
-            let mut capitalised = String::new();
+            let first = characters
+                .next()
+                .expect("non-empty segments remain after filtering");
+            let mut capitalised = String::with_capacity(segment.len());
             capitalised.push(first.to_ascii_uppercase());
             for character in characters {
                 capitalised.push(character.to_ascii_lowercase());
             }
-            Some(capitalised)
+            capitalised
         })
         .collect()
 }

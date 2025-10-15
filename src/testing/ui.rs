@@ -143,23 +143,32 @@ macro_rules! declare_ui_tests {
 mod tests {
     use super::{HarnessError, run_with_runner};
     use camino::{Utf8Path, Utf8PathBuf};
+    use rstest::rstest;
 
-    #[test]
-    fn rejects_empty_crate_names() {
-        let Err(error) = run_with_runner("  ", "ui", |_, _| Ok(())) else {
-            panic!("crate name validation should fail");
+    #[rstest]
+    #[case(
+        "  ",
+        "ui",
+        HarnessError::EmptyCrateName,
+        "crate name validation should fail"
+    )]
+    #[case(
+        "lint",
+        "   ",
+        HarnessError::EmptyDirectory,
+        "empty directories should be rejected"
+    )]
+    fn rejects_invalid_inputs(
+        #[case] crate_name: &str,
+        #[case] directory: &str,
+        #[case] expected: HarnessError,
+        #[case] panic_message: &str,
+    ) {
+        let Err(error) = run_with_runner(crate_name, directory, |_, _| Ok(())) else {
+            panic!("{panic_message}");
         };
 
-        assert_eq!(error, HarnessError::EmptyCrateName);
-    }
-
-    #[test]
-    fn rejects_empty_directories() {
-        let Err(error) = run_with_runner("lint", "   ", |_, _| Ok(())) else {
-            panic!("empty directories should be rejected");
-        };
-
-        assert_eq!(error, HarnessError::EmptyDirectory);
+        assert_eq!(error, expected);
     }
 
     #[test]
