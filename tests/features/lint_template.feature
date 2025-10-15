@@ -68,3 +68,14 @@ Feature: Lint crate template
     Given the lint crate name is noUnwrapOrElsePanic
     When I render the lint crate template
     Then template creation fails with an invalid crate name character U
+
+  Scenario: Rejecting blank UI test directories
+    Given the lint crate name is module_max_400_lines
+    And the UI tests directory is blank
+    When I render the lint crate template
+    Then template creation fails with an empty UI directory error
+
+  Scenario: Rejecting crate names with trailing underscores
+    Given the lint crate name is lint_
+    When I render the lint crate template
+    Then template creation fails due to a trailing separator _

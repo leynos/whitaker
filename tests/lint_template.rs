@@ -110,6 +110,11 @@ fn given_ui_directory(world: &TemplateWorld, directory: StepString) {
     world.set_ui_directory(directory.into_inner());
 }
 
+#[given("the UI tests directory is blank")]
+fn given_blank_ui_directory(world: &TemplateWorld) {
+    world.set_ui_directory(String::new());
+}
+
 #[when("I render the lint crate template")]
 fn when_render(world: &TemplateWorld) {
     world.render();
@@ -267,6 +272,12 @@ fn then_absolute_directory_error(world: &TemplateWorld, path: StepString) {
     );
 }
 
+#[then("template creation fails with an empty UI directory error")]
+fn then_empty_ui_directory_error(world: &TemplateWorld) {
+    let error = world.error();
+    assert_eq!(error, TemplateError::EmptyUiDirectory);
+}
+
 #[then("template creation fails because the UI directory traverses upwards")]
 fn then_parent_directory_error(world: &TemplateWorld) {
     let error = world.error();
@@ -330,5 +341,15 @@ fn scenario_rejects_parent_directory(world: TemplateWorld) {
 
 #[scenario(path = "tests/features/lint_template.feature", index = 10)]
 fn scenario_rejects_invalid_character(world: TemplateWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/lint_template.feature", index = 11)]
+fn scenario_rejects_blank_ui_directory(world: TemplateWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/lint_template.feature", index = 12)]
+fn scenario_rejects_trailing_underscore(world: TemplateWorld) {
     let _ = world;
 }

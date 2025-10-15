@@ -4,8 +4,8 @@ resolver = "2"
 
 [workspace.dependencies]
 camino = "1.2.1"
-dylint_linting = "4.1.0"
-dylint_testing = "4.1.0"
+dylint_linting = "5"
+dylint_testing = "5"
 rustc_hir = { package = "rustc-hir", version = "*" }
 rustc_lint = { package = "rustc-lint", version = "*" }
 rustc_middle = { package = "rustc-middle", version = "*" }
@@ -13,7 +13,7 @@ rustc_session = { package = "rustc-session", version = "*" }
 rustc_span = { package = "rustc-span", version = "*" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
-thiserror = "1"
+thiserror = "2"
 
 [package]
 name = "whitaker"
@@ -32,12 +32,12 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 
 dylint_linting = { workspace = true, optional = true }
-dylint_testing = { workspace = true }
 
 [dev-dependencies]
 rstest = "0.26.1"
 rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
+dylint_testing = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

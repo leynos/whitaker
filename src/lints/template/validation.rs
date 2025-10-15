@@ -64,7 +64,7 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
 
     let mut characters = trimmed.chars();
     let Some(first) = characters.next() else {
-        return Err(TemplateError::EmptyCrateName);
+        unreachable!("non-empty crate names always yield a first character");
     };
 
     if !first.is_ascii_lowercase() {
@@ -78,7 +78,7 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
     }
 
     let Some(last) = trimmed.chars().last() else {
-        return Err(TemplateError::EmptyCrateName);
+        unreachable!("non-empty crate names always yield a last character");
     };
     if matches!(last, '-' | '_') {
         return Err(TemplateError::CrateNameTrailingSeparator { character: last });
@@ -105,9 +105,8 @@ pub(crate) fn pass_struct_name(crate_name: &str) -> String {
         .map(|segment| {
             let mut characters = segment.chars();
             let Some(first) = characters.next() else {
-                return String::new();
+                unreachable!("empty segments were filtered out");
             };
-
             let mut capitalised = String::new();
             capitalised.push(first.to_ascii_uppercase());
             for character in characters {
