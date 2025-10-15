@@ -1794,6 +1794,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "serde",
+ "thiserror 1.0.69",
  "toml 0.9.8",
 ]
 

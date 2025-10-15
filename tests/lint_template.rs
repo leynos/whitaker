@@ -20,6 +20,10 @@ impl TemplateWorld {
         *self.crate_name.borrow_mut() = value;
     }
 
+    fn crate_name(&self) -> String {
+        self.crate_name.borrow().clone()
+    }
+
     fn set_ui_directory(&self, value: String) {
         *self.ui_directory.borrow_mut() = value;
     }
@@ -218,9 +222,14 @@ fn then_invalid_character_error(world: &TemplateWorld, character: StepString) {
 #[then("template creation fails with a crate name starting with a non-letter")]
 fn then_non_letter_start_error(world: &TemplateWorld) {
     let error = world.error();
+    let Some(first_character) = world.crate_name().chars().next() else {
+        panic!("crate name must include a starting character");
+    };
     assert_eq!(
         error,
-        TemplateError::InvalidCrateNameStart { character: '1' }
+        TemplateError::InvalidCrateNameStart {
+            character: first_character,
+        }
     );
 }
 

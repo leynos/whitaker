@@ -15,13 +15,8 @@ fn is_absolute_path(normalized: &str, original: &str) -> Result<(), TemplateErro
         });
     }
 
-    if normalized.split_once(':').is_some_and(|(prefix, rest)| {
-        prefix.len() == 1
-            && prefix
-                .chars()
-                .all(|character| character.is_ascii_alphabetic())
-            && (rest.is_empty() || rest.starts_with('/'))
-    }) {
+    let bytes = normalized.as_bytes();
+    if matches!(bytes, [drive, b':', ..] if drive.is_ascii_alphabetic()) {
         return Err(TemplateError::AbsoluteUiDirectory {
             directory: original.to_string(),
         });
@@ -224,6 +219,19 @@ mod tests {
             error,
             TemplateError::AbsoluteUiDirectory {
                 directory: String::from(r"C:\\ui"),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_drive_relative_windows_prefix() {
+        let Err(error) = normalize_ui_directory("C:ui") else {
+            panic!("drive-letter prefixes must be rejected");
+        };
+        assert_eq!(
+            error,
+            TemplateError::AbsoluteUiDirectory {
+                directory: String::from("C:ui"),
             }
         );
     }
