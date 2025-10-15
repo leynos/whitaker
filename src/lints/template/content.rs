@@ -143,4 +143,10 @@ mod tests {
         );
         assert!(rendered.contains(r#"whitaker::declare_ui_tests!("ui/wave\\multiline\ncase");"#));
     }
+
+    #[test]
+    fn render_lib_rs_handles_empty_ui_directory() {
+        let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", "");
+        assert!(rendered.contains(r#"whitaker::declare_ui_tests!("");"#));
+    }
 }
