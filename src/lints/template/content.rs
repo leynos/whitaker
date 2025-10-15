@@ -10,6 +10,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
+rustc_hir = { workspace = true }
+rustc_lint = { workspace = true }
+rustc_middle = { workspace = true }
+rustc_session = { workspace = true }
+rustc_span = { workspace = true }
 common = { path = "../../common" }
 
 [dev-dependencies]
@@ -142,6 +147,17 @@ mod tests {
             "ui/wave\\multiline\ncase",
         );
         assert!(rendered.contains(r#"whitaker::declare_ui_tests!("ui/wave\\multiline\ncase");"#));
+    }
+
+    #[test]
+    fn render_lib_rs_escapes_nested_quotes() {
+        let directory = "ui/\"outer 'inner'\"";
+        let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", directory);
+        let expected = format!(
+            "whitaker::declare_ui_tests!(\"{}\");",
+            escape_rust_string_literal(directory)
+        );
+        assert!(rendered.contains(expected.as_str()));
     }
 
     #[test]

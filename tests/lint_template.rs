@@ -148,14 +148,22 @@ fn then_manifest_reuses_shared_dependencies(world: &TemplateWorld) {
         panic!("dependencies table should exist");
     };
 
-    let dylint = dependencies
-        .get("dylint_linting")
-        .and_then(Value::as_table)
-        .and_then(|table| table.get("workspace"))
-        .and_then(Value::as_bool)
-        .unwrap_or_default();
+    let assert_workspace = |name: &str| {
+        let uses_workspace = dependencies
+            .get(name)
+            .and_then(Value::as_table)
+            .and_then(|table| table.get("workspace"))
+            .and_then(Value::as_bool)
+            .unwrap_or_default();
+        assert!(uses_workspace, "{name} should use the workspace dependency");
+    };
 
-    assert!(dylint, "dylint_linting should use the workspace dependency");
+    assert_workspace("dylint_linting");
+    assert_workspace("rustc_hir");
+    assert_workspace("rustc_lint");
+    assert_workspace("rustc_middle");
+    assert_workspace("rustc_session");
+    assert_workspace("rustc_span");
 
     let common = dependencies
         .get("common")

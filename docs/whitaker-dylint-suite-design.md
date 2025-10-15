@@ -76,7 +76,7 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   UI tests.
 - Crate-name validation now rejects trailing separators, normalizes
   Windows-style separators to forward slashes, and refuses parent directory
-  traversal so template consumers stay within their crate boundaries.
+  traversal, so template consumers stay within their crate boundaries.
 - Workspace dependencies now surface `dylint_linting`, `dylint_testing`,
   `camino`, `serde`, and `toml` so lint crates can opt into shared versions via
   `workspace = true`.

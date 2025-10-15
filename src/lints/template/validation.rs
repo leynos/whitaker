@@ -198,6 +198,13 @@ mod tests {
         "parent directory traversal should be rejected"
     )]
     #[case(
+        "//server/share/ui",
+        TemplateError::AbsoluteUiDirectory {
+            directory: String::from("//server/share/ui"),
+        },
+        "UNC paths should be rejected"
+    )]
+    #[case(
         r"C:\\ui",
         TemplateError::AbsoluteUiDirectory {
             directory: String::from(r"C:\\ui"),
