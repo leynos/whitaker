@@ -111,16 +111,12 @@ macro_rules! run_ui_tests {
             ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
                 ::dylint_testing::ui_test(crate_name, directory);
             }))
-            .map_err(|payload| {
-                if let Ok(message) = payload.downcast::<String>() {
-                    return *message;
-                }
-
-                if let Ok(message) = payload.downcast::<&'static str>() {
-                    return (*message).to_string();
-                }
-
-                String::from("dylint UI tests panicked without a message")
+            .map_err(|payload| match payload.downcast::<String>() {
+                Ok(message) => *message,
+                Err(payload) => match payload.downcast::<&'static str>() {
+                    Ok(message) => (*message).to_string(),
+                    Err(_) => String::from("dylint UI tests panicked without a message"),
+                },
             })
         })
     }};

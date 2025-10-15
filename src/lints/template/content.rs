@@ -10,11 +10,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
-rustc_hir = { workspace = true }
-rustc_lint = { workspace = true }
-rustc_middle = { workspace = true }
-rustc_session = { workspace = true }
-rustc_span = { workspace = true }
 common = { path = "../../common" }
 
 [dev-dependencies]

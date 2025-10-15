@@ -58,6 +58,12 @@ Feature: Lint crate template
     When I render the lint crate template
     Then template creation fails with an absolute UI directory error pointing to //server/share/ui
 
+  Scenario: Rejecting drive-relative Windows UI directories
+    Given the lint crate name is module_max_400_lines
+    And the UI tests directory is C:ui
+    When I render the lint crate template
+    Then template creation fails with an absolute UI directory error pointing to C:ui
+
   Scenario: Rejecting parent directory segments in the UI directory
     Given the lint crate name is module_max_400_lines
     And the UI tests directory is ui/../secrets

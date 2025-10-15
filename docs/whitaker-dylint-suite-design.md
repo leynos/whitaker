@@ -52,13 +52,12 @@ level = "warn"
 check-cfg = ["cfg(dylint_lib, values(any()))"]
 
 [workspace.dependencies]
-dylint_linting = "4"
-rustc_hir = { package = "rustc-hir", version = "*" }
-rustc_lint = { package = "rustc-lint", version = "*" }
-rustc_middle = { package = "rustc-middle", version = "*" }
-rustc_session = { package = "rustc-session", version = "*" }
-rustc_span = { package = "rustc-span", version = "*" }
-clippy_utils = { version = "*", optional = true }
+camino = "1"
+dylint_linting = "5"
+dylint_testing = "5"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.9"
 
 [workspace.metadata.dylint]
 libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" } ]
@@ -78,8 +77,8 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   Windows-style separators to forward slashes, and refuses parent directory
   traversal, so template consumers stay within their crate boundaries.
 - Workspace dependencies now surface `dylint_linting`, `dylint_testing`,
-  `camino`, `serde`, and `toml` so lint crates can opt into shared versions via
-  `workspace = true`.
+  `camino`, `serde`, `thiserror`, and `toml` so lint crates can opt into shared
+  versions via `workspace = true`.
 
 ## 2) Common crate (`common`)
 
@@ -164,15 +163,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
-rustc_hir = { workspace = true }
-rustc_lint = { workspace = true }
-rustc_middle = { workspace = true }
-rustc_session = { workspace = true }
-rustc_span = { workspace = true }
 common = { path = "../../common" }
 
 [dev-dependencies]
-dylint_testing = "4"
+dylint_testing = { workspace = true }
+whitaker = { path = "../../" }
 ```
 
 > Swap the `name` per crate. Tests live under `tests/ui` with `dylint_testing`
@@ -480,11 +475,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
-rustc_hir       = { workspace = true }
-rustc_lint      = { workspace = true }
-rustc_middle    = { workspace = true }
-rustc_session   = { workspace = true }
-rustc_span      = { workspace = true }
 common          = { path = "../../common" }
 serde           = { version = "1", features = ["derive"] }
 
@@ -494,7 +484,7 @@ clippy_utils    = { workspace = true, optional = true }
 clippy = ["dep:clippy_utils"]
 
 [dev-dependencies]
-dylint_testing = "4"
+dylint_testing = { workspace = true }
 ```
 
 > The optional `clippy` feature plugs into `clippy_utils::macros::is_panic`
