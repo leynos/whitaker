@@ -1,3 +1,5 @@
+//! Renders lint crate manifest and source templates.
+
 const MANIFEST_TEMPLATE: &str = r#"[package]
 name = "{crate_name}"
 version = "0.1.0"
