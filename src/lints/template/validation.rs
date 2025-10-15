@@ -189,42 +189,36 @@ mod tests {
         assert_eq!(directory, "ui/nested/cases/more");
     }
 
-    #[test]
-    fn rejects_parent_directory_in_ui_path() {
-        let Err(error) = normalize_ui_directory("ui/../secrets") else {
-            panic!("parent directory traversal should be rejected");
+    #[rstest]
+    #[case(
+        "ui/../secrets",
+        TemplateError::ParentUiDirectory {
+            directory: "ui/../secrets".to_string(),
+        },
+        "parent directory traversal should be rejected"
+    )]
+    #[case(
+        r"C:\\ui",
+        TemplateError::AbsoluteUiDirectory {
+            directory: String::from(r"C:\\ui"),
+        },
+        "absolute windows paths should be rejected"
+    )]
+    #[case(
+        "C:ui",
+        TemplateError::AbsoluteUiDirectory {
+            directory: String::from("C:ui"),
+        },
+        "drive-letter prefixes must be rejected"
+    )]
+    fn rejects_invalid_ui_directory(
+        #[case] input: &str,
+        #[case] expected_error: TemplateError,
+        #[case] panic_message: &str,
+    ) {
+        let Err(error) = normalize_ui_directory(input) else {
+            panic!("{panic_message}");
         };
-        assert_eq!(
-            error,
-            TemplateError::ParentUiDirectory {
-                directory: "ui/../secrets".to_string(),
-            }
-        );
-    }
-
-    #[test]
-    fn rejects_absolute_windows_path() {
-        let Err(error) = normalize_ui_directory(r"C:\\ui") else {
-            panic!("absolute windows paths should be rejected");
-        };
-        assert_eq!(
-            error,
-            TemplateError::AbsoluteUiDirectory {
-                directory: String::from(r"C:\\ui"),
-            }
-        );
-    }
-
-    #[test]
-    fn rejects_drive_relative_windows_prefix() {
-        let Err(error) = normalize_ui_directory("C:ui") else {
-            panic!("drive-letter prefixes must be rejected");
-        };
-        assert_eq!(
-            error,
-            TemplateError::AbsoluteUiDirectory {
-                directory: String::from("C:ui"),
-            }
-        );
+        assert_eq!(error, expected_error);
     }
 }
