@@ -132,4 +132,15 @@ mod tests {
         let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", "ui/space \"quote\"");
         assert!(rendered.contains(r#"whitaker::declare_ui_tests!("ui/space \"quote\"");"#));
     }
+
+    #[test]
+    fn render_lib_rs_escapes_backslashes_and_newlines() {
+        let rendered = render_lib_rs(
+            "demo_lint",
+            "DEMO_LINT",
+            "DemoLint",
+            "ui/wave\\multiline\ncase",
+        );
+        assert!(rendered.contains(r#"whitaker::declare_ui_tests!("ui/wave\\multiline\ncase");"#));
+    }
 }
