@@ -8,6 +8,59 @@ fn is_valid_crate_name_character(character: char) -> bool {
     character.is_ascii_lowercase() || character.is_ascii_digit() || matches!(character, '-' | '_')
 }
 
+fn is_absolute_path(normalised: &str, original: &str) -> Result<(), TemplateError> {
+    if normalised.starts_with("//") {
+        return Err(TemplateError::AbsoluteUiDirectory {
+            directory: original.to_string(),
+        });
+    }
+
+    if normalised.split_once(':').is_some_and(|(prefix, rest)| {
+        prefix.len() == 1
+            && prefix
+                .chars()
+                .all(|character| character.is_ascii_alphabetic())
+            && (rest.is_empty() || rest.starts_with('/'))
+    }) {
+        return Err(TemplateError::AbsoluteUiDirectory {
+            directory: original.to_string(),
+        });
+    }
+
+    let path = Utf8Path::new(normalised);
+    if path.is_absolute() {
+        return Err(TemplateError::AbsoluteUiDirectory {
+            directory: original.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn process_path_component<'a>(
+    component: Utf8Component<'a>,
+    segments: &mut Vec<&'a str>,
+    original: &str,
+) -> Result<(), TemplateError> {
+    match component {
+        Utf8Component::CurDir => Ok(()),
+        Utf8Component::ParentDir => Err(TemplateError::ParentUiDirectory {
+            directory: original.to_string(),
+        }),
+        Utf8Component::Normal(segment) => {
+            if !segment.is_empty() {
+                segments.push(segment);
+            }
+            Ok(())
+        }
+        Utf8Component::RootDir | Utf8Component::Prefix(_) => {
+            Err(TemplateError::AbsoluteUiDirectory {
+                directory: original.to_string(),
+            })
+        }
+    }
+}
+
 pub(crate) fn normalise_crate_name(input: &str) -> Result<String, TemplateError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -77,52 +130,13 @@ pub(crate) fn normalise_ui_directory(input: &str) -> Result<String, TemplateErro
     }
 
     let normalised = trimmed.replace('\\', "/");
-
-    if normalised.starts_with("//") {
-        return Err(TemplateError::AbsoluteUiDirectory {
-            directory: trimmed.to_string(),
-        });
-    }
-
-    if normalised.split_once(':').is_some_and(|(prefix, rest)| {
-        prefix.len() == 1
-            && prefix
-                .chars()
-                .all(|character| character.is_ascii_alphabetic())
-            && (rest.is_empty() || rest.starts_with('/'))
-    }) {
-        return Err(TemplateError::AbsoluteUiDirectory {
-            directory: trimmed.to_string(),
-        });
-    }
+    is_absolute_path(&normalised, trimmed)?;
 
     let path = Utf8Path::new(&normalised);
-    if path.is_absolute() {
-        return Err(TemplateError::AbsoluteUiDirectory {
-            directory: trimmed.to_string(),
-        });
-    }
-
     let mut segments = Vec::new();
+
     for component in path.components() {
-        match component {
-            Utf8Component::CurDir => {}
-            Utf8Component::ParentDir => {
-                return Err(TemplateError::ParentUiDirectory {
-                    directory: trimmed.to_string(),
-                });
-            }
-            Utf8Component::Normal(segment) => {
-                if !segment.is_empty() {
-                    segments.push(segment);
-                }
-            }
-            Utf8Component::RootDir | Utf8Component::Prefix(_) => {
-                return Err(TemplateError::AbsoluteUiDirectory {
-                    directory: trimmed.to_string(),
-                });
-            }
-        }
+        process_path_component(component, &mut segments, trimmed)?;
     }
 
     if segments.is_empty() {
