@@ -52,7 +52,7 @@ mod tests {
 "#;
 
 pub(crate) fn render_manifest(crate_name: &str) -> String {
-    MANIFEST_TEMPLATE.replace("{crate_name}", crate_name)
+    render_template(MANIFEST_TEMPLATE, &[("crate_name", crate_name)])
 }
 
 pub(crate) fn render_lib_rs(
@@ -61,13 +61,56 @@ pub(crate) fn render_lib_rs(
     pass_struct: &str,
     ui_tests_directory: &str,
 ) -> String {
-    let mut output = LIB_RS_TEMPLATE.replace("{crate_name}", crate_name);
-    output = output.replace("{lint_constant}", lint_constant);
-    output = output.replace("{pass_struct}", pass_struct);
-    output.replace(
-        "{ui_tests_directory}",
-        &escape_rust_string_literal(ui_tests_directory),
+    let escaped_ui = escape_rust_string_literal(ui_tests_directory);
+    render_template(
+        LIB_RS_TEMPLATE,
+        &[
+            ("crate_name", crate_name),
+            ("lint_constant", lint_constant),
+            ("pass_struct", pass_struct),
+            ("ui_tests_directory", escaped_ui.as_str()),
+        ],
     )
+}
+
+fn render_template(template: &str, replacements: &[(&str, &str)]) -> String {
+    let mut output = String::with_capacity(template.len());
+    let mut remainder = template;
+
+    while let Some((before, after_open)) = remainder.split_once('{') {
+        output.push_str(before);
+
+        let Some(first) = after_open.as_bytes().first().copied() else {
+            output.push('{');
+            remainder = "";
+            break;
+        };
+
+        if !first.is_ascii_alphabetic() && first != b'_' {
+            output.push('{');
+            remainder = after_open;
+            continue;
+        }
+
+        if let Some((key, rest)) = after_open.split_once('}') {
+            if let Some((_, value)) = replacements.iter().find(|(name, _)| *name == key) {
+                output.push_str(value);
+            } else {
+                output.push('{');
+                output.push_str(key);
+                output.push('}');
+            }
+            remainder = rest;
+        } else {
+            output.push('{');
+            output.push_str(after_open);
+            remainder = "";
+            break;
+        }
+    }
+
+    output.push_str(remainder);
+    output
 }
 
 fn escape_rust_string_literal(value: &str) -> String {

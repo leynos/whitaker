@@ -189,6 +189,20 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_consecutive_separators() {
+        let directory = normalize_ui_directory("ui//nested///cases")
+            .unwrap_or_else(|error| panic!("valid path expected: {error}"));
+        assert_eq!(directory, "ui/nested/cases");
+    }
+
+    #[test]
+    fn normalizes_mixed_separators() {
+        let directory = normalize_ui_directory(r"ui\nested//cases\more")
+            .unwrap_or_else(|error| panic!("valid path expected: {error}"));
+        assert_eq!(directory, "ui/nested/cases/more");
+    }
+
+    #[test]
     fn rejects_parent_directory_in_ui_path() {
         let Err(error) = normalize_ui_directory("ui/../secrets") else {
             panic!("parent directory traversal should be rejected");
