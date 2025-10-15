@@ -343,21 +343,26 @@ fn scenario_rejects_unc_directory(world: TemplateWorld) {
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 9)]
-fn scenario_rejects_parent_directory(world: TemplateWorld) {
+fn scenario_rejects_drive_relative_windows_ui_directory(world: TemplateWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 10)]
-fn scenario_rejects_invalid_character(world: TemplateWorld) {
+fn scenario_rejects_parent_directory(world: TemplateWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 11)]
-fn scenario_rejects_blank_ui_directory(world: TemplateWorld) {
+fn scenario_rejects_invalid_character(world: TemplateWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/lint_template.feature", index = 12)]
+fn scenario_rejects_blank_ui_directory(world: TemplateWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/lint_template.feature", index = 13)]
 fn scenario_rejects_trailing_underscore(world: TemplateWorld) {
     let _ = world;
 }

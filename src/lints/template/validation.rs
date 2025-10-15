@@ -63,9 +63,7 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
     }
 
     let mut characters = trimmed.chars();
-    let first = characters
-        .next()
-        .ok_or(TemplateError::EmptyCrateName)?;
+    let first = characters.next().ok_or(TemplateError::EmptyCrateName)?;
 
     if !first.is_ascii_lowercase() {
         return Err(TemplateError::InvalidCrateNameStart { character: first });

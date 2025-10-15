@@ -3,7 +3,7 @@
 //! Dylint UI tests follow a consistent shape across all lint crates: a single
 //! `ui` test invokes `dylint_testing::ui_test` with the crate name and the
 //! directory containing `.rs` source files plus their expected diagnostics.
-//! This module centralises input validation so lint crates can depend on a
+//! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
 use std::fmt;

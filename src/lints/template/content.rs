@@ -19,10 +19,13 @@ whitaker = { path = "../../" }
 const LIB_RS_TEMPLATE: &str = r#"//! Lint crate for `{crate_name}`.
 //!
 //! Replace the placeholder implementation with crate-specific logic before shipping.
-#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![cfg_attr(dylint_lib = "{crate_name}", feature(rustc_private))]
 
 use dylint_linting::{declare_late_lint, impl_late_lint};
 use rustc_lint::{LateContext, LateLintPass};
+
+// Required for Dylint to discover and version-check this lint library.
+dylint_linting::dylint_library!();
 
 declare_late_lint!(
     pub {lint_constant},
@@ -125,6 +128,15 @@ mod tests {
     fn render_manifest_injects_crate_name() {
         let rendered = render_manifest("demo_lint");
         assert!(rendered.contains(r#"name = "demo_lint""#));
+    }
+
+    #[test]
+    fn render_lib_rs_exports_dylint_metadata() {
+        let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", "ui");
+        assert!(
+            rendered.contains("#![cfg_attr(dylint_lib = \"demo_lint\", feature(rustc_private))]")
+        );
+        assert!(rendered.contains("dylint_linting::dylint_library!();"));
     }
 
     #[test]
