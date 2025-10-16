@@ -77,8 +77,11 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
         }
     }
 
-    // Safe: non-empty and ASCII-only by earlier validation checks.
-    let last = trimmed.as_bytes()[trimmed.len() - 1] as char;
+    // Safe: we returned early for empty input, so a last character must exist.
+    let last = trimmed
+        .chars()
+        .last()
+        .expect("crate name is non-empty after trim");
     if matches!(last, '-' | '_') {
         return Err(TemplateError::CrateNameTrailingSeparator { character: last });
     }
