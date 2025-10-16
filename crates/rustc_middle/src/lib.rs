@@ -1,5 +1,10 @@
 #![feature(rustc_private)]
-#![doc = "Re-exports the compiler crate from the nightly toolchain for lint scaffolding."]
+
+//! Re-exports the nightly `rustc_middle` crate for lint scaffolding.
+//!
+//! This crate provides access to the compiler's middle layer so template code
+//! and generated lint crates can reason about MIR structures without declaring
+//! unstable upstream dependencies themselves.
 
 extern crate rustc_middle as upstream;
 

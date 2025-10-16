@@ -1,5 +1,10 @@
 #![feature(rustc_private)]
-#![doc = "Re-exports the compiler crate from the nightly toolchain for lint scaffolding."]
+
+//! Re-exports the nightly `rustc_span` crate for lint scaffolding.
+//!
+//! Generated lint crates consume span utilities for diagnostics and reporting.
+//! This wrapper forwards the entire upstream API through a workspace crate so
+//! projects keep a consistent dependency surface.
 
 extern crate rustc_span as upstream;
 
