@@ -45,20 +45,19 @@ members = ["crates/*", "suite", "installer", "common"]
 resolver = "2"
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 
 [workspace.lints.rust.unexpected_cfgs]
 level = "warn"
 check-cfg = ["cfg(dylint_lib, values(any()))"]
 
 [workspace.dependencies]
-dylint_linting = "4"
-rustc_hir = { package = "rustc-hir", version = "*" }
-rustc_lint = { package = "rustc-lint", version = "*" }
-rustc_middle = { package = "rustc-middle", version = "*" }
-rustc_session = { package = "rustc-session", version = "*" }
-rustc_span = { package = "rustc-span", version = "*" }
-clippy_utils = { version = "*", optional = true }
+camino = "1"
+dylint_linting = "5"
+dylint_testing = "5"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.9"
 
 [workspace.metadata.dylint]
 libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" } ]
@@ -66,6 +65,20 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
 
 > Pin a nightly in `rust-toolchain.toml` aligned with the targeted
 > `dylint_linting` version.
+
+### Phase 2 scaffolding
+
+- Introduced `whitaker::lints::LintCrateTemplate`, generating canonical
+  manifests and `lib.rs` boilerplate for new lint crates.
+- The helper enforces crate-name hygiene, requires relative UI directories,
+  and emits a default `whitaker::declare_ui_tests!` invocation to wire shared
+  UI tests.
+- Crate-name validation now rejects trailing separators, normalizes
+  Windows-style separators to forward slashes, and refuses parent directory
+  traversal, so template consumers stay within their crate boundaries.
+- Workspace dependencies now surface `dylint_linting`, `dylint_testing`,
+  `camino`, `serde`, `thiserror`, and `toml` so lint crates can opt into shared
+  versions via `workspace = true`.
 
 ## 2) Common crate (`common`)
 
@@ -143,7 +156,7 @@ keeps dependencies aligned and ensures UI tests run uniformly.
 [package]
 name = "function_attrs_follow_docs"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
@@ -158,8 +171,13 @@ rustc_span = { workspace = true }
 common = { path = "../../common" }
 
 [dev-dependencies]
-dylint_testing = "4"
+dylint_testing = { workspace = true }
+whitaker = { path = "../../" }
 ```
+
+Whitaker's workspace includes thin `rustc_*` proxy crates so generated lint
+crates can depend on `rustc_private` APIs via `workspace = true` without
+repeating the re-export boilerplate in each project.
 
 > Swap the `name` per crate. Tests live under `tests/ui` with `dylint_testing`
 > providing the harness.
@@ -356,7 +374,7 @@ fn atoms(e: &Expr<'_>) -> usize {
 }
 ```
 
-**Notes.** Parentheses are normalised away by HIR, so grouping does not affect
+**Notes.** Parentheses are normalized away by HIR, so grouping does not affect
 the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed
 a boolean context via casts. `if let`/`while let` are intentionally excluded
 because they are matching patterns, not boolean predicates.
@@ -459,18 +477,13 @@ crates/no_unwrap_or_else_panic/tests/ui/
 [package]
 name = "no_unwrap_or_else_panic"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
-rustc_hir       = { workspace = true }
-rustc_lint      = { workspace = true }
-rustc_middle    = { workspace = true }
-rustc_session   = { workspace = true }
-rustc_span      = { workspace = true }
 common          = { path = "../../common" }
 serde           = { version = "1", features = ["derive"] }
 
@@ -480,7 +493,7 @@ clippy_utils    = { workspace = true, optional = true }
 clippy = ["dep:clippy_utils"]
 
 [dev-dependencies]
-dylint_testing = "4"
+dylint_testing = { workspace = true }
 ```
 
 > The optional `clippy` feature plugs into `clippy_utils::macros::is_panic`
@@ -661,7 +674,7 @@ exporting their own `register_lints` symbol.
 [package]
 name = "suite"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]

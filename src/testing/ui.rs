@@ -3,14 +3,10 @@
 //! Dylint UI tests follow a consistent shape across all lint crates: a single
 //! `ui` test invokes `dylint_testing::ui_test` with the crate name and the
 //! directory containing `.rs` source files plus their expected diagnostics.
-//! This module centralises that boilerplate so each lint crate can depend on a
-//! small helper rather than repeat the same function and validation logic.
+//! This module centralizes input validation so lint crates can depend on a
+//! small helper rather than repeat the same checks.
 
-use std::{
-    any::Any,
-    fmt,
-    panic::{AssertUnwindSafe, catch_unwind},
-};
+use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -57,26 +53,6 @@ impl std::error::Error for HarnessError {}
 
 /// Run UI tests for an explicit crate name.
 ///
-/// This is primarily useful for meta-crates that host several lint libraries in
-/// a workspace yet share a single test harness.
-///
-/// # Examples
-///
-/// ```ignore
-/// fn run_suite_tests() {
-///     whitaker::testing::ui::run_for("suite", "tests/ui")
-///         .expect("suite UI tests should succeed");
-/// }
-/// ```
-///
-/// # Errors
-///
-/// Returns [`HarnessError`] when the crate name or UI directory are invalid or
-/// when the supplied runner reports a failure while executing Dylint UI tests.
-pub fn run_for(crate_name: &str, ui_directory: impl Into<Utf8PathBuf>) -> Result<(), HarnessError> {
-    run_with_runner(crate_name, ui_directory, default_runner)
-}
-
 /// Run UI tests using a custom runner.
 ///
 /// The caller supplies the runner so tests can replace the default implementation
@@ -115,25 +91,6 @@ pub fn run_with_runner(
     }
 }
 
-fn default_runner(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
-    catch_unwind(AssertUnwindSafe(|| {
-        dylint_testing::ui_test(crate_name, directory);
-    }))
-    .map_err(panic_message)
-}
-
-fn panic_message(payload: Box<dyn Any + Send>) -> String {
-    payload.downcast::<String>().map_or_else(
-        |payload| {
-            payload.downcast::<&'static str>().map_or_else(
-                |_| "dylint UI tests panicked without a message".to_string(),
-                |message| (*message).to_string(),
-            )
-        },
-        |message| *message,
-    )
-}
-
 /// Run UI tests for the crate that invokes the macro.
 ///
 /// # Examples
@@ -150,7 +107,18 @@ fn panic_message(payload: Box<dyn Any + Send>) -> String {
 macro_rules! run_ui_tests {
     ($directory:expr $(,)?) => {{
         let crate_name = env!("CARGO_PKG_NAME");
-        $crate::testing::ui::run_for(crate_name, $directory)
+        $crate::testing::ui::run_with_runner(crate_name, $directory, |crate_name, directory| {
+            ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
+                ::dylint_testing::ui_test(crate_name, directory);
+            }))
+            .map_err(|payload| match payload.downcast::<String>() {
+                Ok(message) => *message,
+                Err(payload) => match payload.downcast::<&'static str>() {
+                    Ok(message) => (*message).to_string(),
+                    Err(_) => String::from("dylint UI tests panicked without a message"),
+                },
+            })
+        })
     }};
 }
 
@@ -175,23 +143,32 @@ macro_rules! declare_ui_tests {
 mod tests {
     use super::{HarnessError, run_with_runner};
     use camino::{Utf8Path, Utf8PathBuf};
+    use rstest::rstest;
 
-    #[test]
-    fn rejects_empty_crate_names() {
-        let Err(error) = run_with_runner("  ", "ui", |_, _| Ok(())) else {
-            panic!("crate name validation should fail");
+    #[rstest]
+    #[case(
+        "  ",
+        "ui",
+        HarnessError::EmptyCrateName,
+        "crate name validation should fail"
+    )]
+    #[case(
+        "lint",
+        "   ",
+        HarnessError::EmptyDirectory,
+        "empty directories should be rejected"
+    )]
+    fn rejects_invalid_inputs(
+        #[case] crate_name: &str,
+        #[case] directory: &str,
+        #[case] expected: HarnessError,
+        #[case] panic_message: &str,
+    ) {
+        let Err(error) = run_with_runner(crate_name, directory, |_, _| Ok(())) else {
+            panic!("{panic_message}");
         };
 
-        assert_eq!(error, HarnessError::EmptyCrateName);
-    }
-
-    #[test]
-    fn rejects_empty_directories() {
-        let Err(error) = run_with_runner("lint", "   ", |_, _| Ok(())) else {
-            panic!("empty directories should be rejected");
-        };
-
-        assert_eq!(error, HarnessError::EmptyDirectory);
+        assert_eq!(error, expected);
     }
 
     #[test]
