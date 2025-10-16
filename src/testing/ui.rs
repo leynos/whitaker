@@ -176,10 +176,7 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
     );
     let target = profile_dir.join(&target_name);
 
-    if target.exists() {
-        return Ok(());
-    }
-
+    // Always refresh the toolchain-qualified artefact so UI tests exercise the latest build.
     fs::copy(&source, &target).map_err(|error| HarnessError::LibraryCopyFailed {
         source: source.to_string_lossy().into_owned(),
         target: target.to_string_lossy().into_owned(),
