@@ -141,12 +141,10 @@ where
             continue;
         }
 
-        if attribute.is_doc() {
-            if let Some(non_doc_index) = first_non_doc_outer {
-                return Some((index, non_doc_index));
-            }
-        } else if first_non_doc_outer.is_none() {
-            first_non_doc_outer = Some(index);
+        match (attribute.is_doc(), first_non_doc_outer) {
+            (true, Some(non_doc_index)) => return Some((index, non_doc_index)),
+            (false, None) => first_non_doc_outer = Some(index),
+            _ => {}
         }
     }
 
