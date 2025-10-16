@@ -414,6 +414,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "function_attrs_follow_docs"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_attr_data_structures",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_middle",
+ "rustc_session",
+ "rustc_span",
+ "whitaker",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1171,6 +1191,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_ast"
+version = "0.1.0"
+
+[[package]]
+name = "rustc_attr_data_structures"
+version = "0.1.0"
+
+[[package]]
 name = "rustc_hir"
 version = "0.1.0"
 
@@ -1671,6 +1699,7 @@ name = "whitaker"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "cargo_metadata",
  "dylint_linting",
  "dylint_testing",
  "rstest",

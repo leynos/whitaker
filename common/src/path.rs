@@ -67,9 +67,16 @@ impl SimplePath {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let ours = self.segments.iter().map(String::as_str);
-        let theirs = candidate.into_iter().map(|segment| segment.as_ref());
-        ours.eq(theirs)
+        let mut theirs = candidate.into_iter();
+
+        for ours in self.segments.iter().map(String::as_str) {
+            match theirs.next() {
+                Some(segment) if ours == segment.as_ref() => continue,
+                _ => return false,
+            }
+        }
+
+        theirs.next().is_none()
     }
 
     /// Returns `true` when the path denotes a doc comment (`doc`).

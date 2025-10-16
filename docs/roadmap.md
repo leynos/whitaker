@@ -19,7 +19,7 @@
 - [ ] Phase 2 — Core lint delivery
   - [x] Establish the lint crate template with shared dependencies and UI test
         harness boilerplate.
-  - [ ] Implement `function_attrs_follow_docs` with targeted UI scenarios.
+  - [x] Implement `function_attrs_follow_docs` with targeted UI scenarios.
   - [ ] Implement `no_expect_outside_tests` with context-aware diagnostics.
   - [ ] Implement `public_fn_must_have_docs` using effective visibility data.
   - [ ] Implement `module_must_have_inner_docs` with inner doc detection.

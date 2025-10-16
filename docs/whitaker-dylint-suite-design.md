@@ -77,8 +77,19 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   Windows-style separators to forward slashes, and refuses parent directory
   traversal, so template consumers stay within their crate boundaries.
 - Workspace dependencies now surface `dylint_linting`, `dylint_testing`,
-  `camino`, `serde`, `thiserror`, and `toml` so lint crates can opt into shared
-  versions via `workspace = true`.
+  `camino`, `serde`, `thiserror`, `toml`, and proxy crates such as
+  `rustc_attr_data_structures` so lint crates can opt into shared versions via
+  `workspace = true`.
+- The workspace pins `nightly-2025-05-05` in `rust-toolchain.toml`. Later
+  nightlies embed the "extra symbols" patch used by `dylint_driver` which
+  conflicts with the driver copies bundled with Dylint 5.0.0. Dropping back to
+  the 5 May toolchain side-steps the duplicate symbol panic whilst matching the
+  compiler version against which the proxies were tested.
+- UI harness helpers now prepare the cdylib expected by the driver. Before each
+  run the harness copies `lib<crate>.so` to the
+  `lib<crate>@<toolchain>.so` name derived from `RUSTUP_TOOLCHAIN`. The copy is
+  skipped for synthetic crate names used by tests so unit coverage can continue
+  to inject stub runners without touching the filesystem.
 
 ## 2) Common crate (`common`)
 
@@ -210,6 +221,28 @@ impl_late_lint! { FUNCTION_ATTRS_FOLLOW_DOCS, Pass,
   }
 }
 ```
+
+Implementation details:
+
+- The lint now maps `rustc_hir::Attribute` values into a small
+  `OrderedAttribute` abstraction so the ordering logic can be unit-tested
+  without depending on compiler types. `AttrInfo::from_hir` records the span,
+  whether the attribute is a doc comment (via `doc_str`), and whether it is
+  outer. Parsed attributes that do not expose a style in HIR default to outer;
+  this mirrors the compiler behaviour observed for function attributes today
+  and keeps inner attributes excluded from the ordering check.
+- `FunctionKind` labels free functions, inherent methods, and trait methods so
+  diagnostics mention the affected item type explicitly.
+- Diagnostics now rely on `LateContext::emit_spanned_lint`, highlighting the
+  misplaced doc comment and adding a note on the attribute that must move
+  behind it. The help message guides the developer to reposition the comment
+  before other outer attributes.
+- Behaviour-driven tests cover doc comments that already appear first, cases
+  where they are misplaced, functions with no docs, and scenarios where inner
+  attributes precede the docs. UI fixtures exercise free functions, methods,
+  and trait methods to ensure the lint surfaces in each context, including
+  explicit `#[doc = "..."]` attributes so attribute-based documentation is
+  linted consistently.
 
 ### 3.2 `no_expect_outside_tests` (restriction, deny)
 

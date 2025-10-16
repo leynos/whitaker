@@ -45,3 +45,16 @@ before any files are written.
 Run `make test` from the workspace root to execute unit, behaviour, and UI
 harness tests. The shared target enables `rstest` fixtures and `rstest-bdd`
 scenarios, ensuring each lint crate benefits from the consistent test harness.
+
+## `function_attrs_follow_docs`
+
+Whitaker's first lint checks that doc comments sit in front of all other outer
+attributes on functions, inherent methods, and trait methods. Attribute-based
+documentation (`#[doc = "..."]`) is treated identically to `///` comments. When
+the docs slip behind `#[inline]` or `#[allow]`, the lint emits a warning that
+highlights both the misplaced comment and the attribute it should precede.
+
+The UI fixtures demonstrate accepted and rejected layouts across the three
+function kinds, while behaviour tests walk through happy, unhappy, and edge
+cases. To fix the warning, move the doc comment so it appears before every
+other outer attribute.

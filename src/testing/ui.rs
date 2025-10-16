@@ -6,9 +6,10 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::fmt;
+use std::{env, fmt, fs, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use cargo_metadata::MetadataCommand;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,6 +26,16 @@ pub enum HarnessError {
         directory: Utf8PathBuf,
         message: String,
     },
+    /// The compiled lint library was not present in the expected location.
+    LibraryMissing { path: String },
+    /// Copying the compiled library to the toolchain-qualified name failed.
+    LibraryCopyFailed {
+        source: String,
+        target: String,
+        message: String,
+    },
+    /// Building the lint library failed before the UI runner executed.
+    LibraryBuildFailed { crate_name: String, message: String },
 }
 
 impl fmt::Display for HarnessError {
@@ -43,6 +54,28 @@ impl fmt::Display for HarnessError {
                 write!(
                     formatter,
                     "running UI tests for {crate_name} in {directory} failed: {message}",
+                )
+            }
+            Self::LibraryMissing { path } => {
+                write!(formatter, "lint library missing: {path}")
+            }
+            Self::LibraryCopyFailed {
+                source,
+                target,
+                message,
+            } => {
+                write!(
+                    formatter,
+                    "failed to prepare lint library {target} from {source}: {message}",
+                )
+            }
+            Self::LibraryBuildFailed {
+                crate_name,
+                message,
+            } => {
+                write!(
+                    formatter,
+                    "failed to build lint library for {crate_name}: {message}",
                 )
             }
         }
@@ -81,12 +114,115 @@ pub fn run_with_runner(
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
+    ensure_toolchain_library(trimmed)?;
+
     match runner(trimmed, directory.as_ref()) {
         Ok(()) => Ok(()),
         Err(message) => Err(HarnessError::RunnerFailure {
             crate_name: trimmed.to_string(),
             directory,
             message,
+        }),
+    }
+}
+
+fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
+    let metadata = MetadataCommand::new().no_deps().exec().map_err(|error| {
+        HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: error.to_string(),
+        }
+    })?;
+
+    if metadata
+        .packages
+        .iter()
+        .all(|package| package.name != crate_name)
+    {
+        // The harness is being exercised with a synthetic crate name. In that case the caller
+        // controls the build and we should not attempt to prepare artifacts.
+        return Ok(());
+    }
+
+    let profile_dir = metadata.target_directory.join("debug").into_std_path_buf();
+    let crate_basename = crate_name.replace('-', "_");
+
+    let base_name = format!(
+        "{}{}{}",
+        env::consts::DLL_PREFIX,
+        crate_basename,
+        env::consts::DLL_SUFFIX
+    );
+    let source = profile_dir.join(&base_name);
+
+    if !source.exists() {
+        build_library(crate_name)?;
+    }
+
+    if !source.exists() {
+        return Err(HarnessError::LibraryMissing {
+            path: source.to_string_lossy().into_owned(),
+        });
+    }
+
+    let toolchain =
+        env::var("RUSTUP_TOOLCHAIN").unwrap_or_else(|_| env!("RUSTUP_TOOLCHAIN").to_string());
+    let target_name = format!(
+        "{}{}@{}{}",
+        env::consts::DLL_PREFIX,
+        crate_basename,
+        toolchain,
+        env::consts::DLL_SUFFIX
+    );
+    let target = profile_dir.join(&target_name);
+
+    if target.exists() {
+        return Ok(());
+    }
+
+    fs::copy(&source, &target).map_err(|error| HarnessError::LibraryCopyFailed {
+        source: source.to_string_lossy().into_owned(),
+        target: target.to_string_lossy().into_owned(),
+        message: error.to_string(),
+    })?;
+
+    Ok(())
+}
+
+fn build_library(crate_name: &str) -> Result<(), HarnessError> {
+    let metadata = MetadataCommand::new().no_deps().exec().map_err(|error| {
+        HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: error.to_string(),
+        }
+    })?;
+
+    if metadata
+        .packages
+        .iter()
+        .all(|package| package.name != crate_name)
+    {
+        return Ok(());
+    }
+
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--lib")
+        .arg("--quiet")
+        .arg("--package")
+        .arg(crate_name)
+        .current_dir(metadata.workspace_root.as_std_path())
+        .status();
+
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: status.to_string(),
+        }),
+        Err(error) => Err(HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: error.to_string(),
         }),
     }
 }
