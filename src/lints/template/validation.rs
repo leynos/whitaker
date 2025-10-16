@@ -162,6 +162,42 @@ mod tests {
         assert_eq!(pass_struct_name(input), expected);
     }
 
+    #[rstest]
+    #[case("foo_bar", "foo_bar")]
+    #[case("my-lint", "my-lint")]
+    #[case("simple", "simple")]
+    #[case("  trimmed  ", "trimmed")]
+    fn normalizes_valid_crate_name(#[case] input: &str, #[case] expected: &str) {
+        let result = normalize_crate_name(input)
+            .unwrap_or_else(|error| panic!("valid crate name expected: {error}"));
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case("", TemplateError::EmptyCrateName, "empty string should be rejected")]
+    #[case(
+        "   ",
+        TemplateError::EmptyCrateName,
+        "whitespace-only should be rejected"
+    )]
+    #[case("Foo", TemplateError::InvalidCrateNameStart { character: 'F' }, "uppercase first character should be rejected")]
+    #[case("9foo", TemplateError::InvalidCrateNameStart { character: '9' }, "digit first character should be rejected")]
+    #[case("-foo", TemplateError::InvalidCrateNameStart { character: '-' }, "separator first character should be rejected")]
+    #[case("foo bar", TemplateError::InvalidCrateNameCharacter { character: ' ' }, "space should be rejected")]
+    #[case("foo@bar", TemplateError::InvalidCrateNameCharacter { character: '@' }, "special character should be rejected")]
+    #[case("foo-", TemplateError::CrateNameTrailingSeparator { character: '-' }, "trailing hyphen should be rejected")]
+    #[case("foo_", TemplateError::CrateNameTrailingSeparator { character: '_' }, "trailing underscore should be rejected")]
+    fn rejects_invalid_crate_name(
+        #[case] input: &str,
+        #[case] expected_error: TemplateError,
+        #[case] panic_message: &str,
+    ) {
+        let Err(error) = normalize_crate_name(input) else {
+            panic!("{panic_message}");
+        };
+        assert_eq!(error, expected_error);
+    }
+
     #[test]
     fn normalizes_nested_ui_directory() {
         let directory = normalize_ui_directory("ui/lints/expr")
