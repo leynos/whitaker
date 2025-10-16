@@ -77,7 +77,7 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
         }
     }
 
-    // Safe: we returned early for empty input, so a last character must exist.
+    // Safe: we return early when `trimmed` is empty, so a last character must exist.
     let last = trimmed
         .chars()
         .last()
