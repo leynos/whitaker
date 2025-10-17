@@ -228,9 +228,9 @@ Implementation details:
   `OrderedAttribute` abstraction, so the ordering logic can be unit-tested
   without depending on compiler types. `AttrInfo::from_hir` records the span,
   whether the attribute is a doc comment (via `doc_str`), and whether it is
-  outer. Parsed attributes that do not expose a style in HIR default to outer;
-  this mirrors the compiler behaviour observed for function attributes today
-  and keeps inner attributes excluded from the ordering check.
+  outer by reading the attribute style (`AttrStyle`). Inner attributes
+  therefore remain excluded from the ordering check in line with the
+  implementation.
 - `FunctionKind` labels free functions, inherent methods, and trait methods so
   diagnostics mention the affected item type explicitly.
 - Diagnostics now rely on `LateContext::emit_spanned_lint`, highlighting the

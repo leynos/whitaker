@@ -157,8 +157,10 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
         });
     }
 
-    let toolchain =
-        env::var("RUSTUP_TOOLCHAIN").unwrap_or_else(|_| env!("RUSTUP_TOOLCHAIN").to_string());
+    let toolchain = env::var("RUSTUP_TOOLCHAIN")
+        .ok()
+        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(str::to_string))
+        .unwrap_or_else(|| "unknown-toolchain".to_string());
     let target_name = format!(
         "{}{}@{}{}",
         env::consts::DLL_PREFIX,
@@ -183,25 +185,25 @@ fn build_library(crate_name: &str, metadata: &Metadata) -> Result<(), HarnessErr
         return Ok(());
     }
 
-    let status = Command::new("cargo")
+    let output = Command::new("cargo")
         .arg("build")
         .arg("--lib")
         .arg("--quiet")
         .arg("--package")
         .arg(crate_name)
         .current_dir(metadata.workspace_root.as_std_path())
-        .status()
+        .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
             message: error.to_string(),
         })?;
 
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
         Err(HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
-            message: status.to_string(),
+            message: String::from_utf8_lossy(&output.stderr).into_owned(),
         })
     }
 }
