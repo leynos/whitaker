@@ -86,10 +86,10 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   the 5 May toolchain side-steps the duplicate symbol panic whilst matching the
   compiler version against which the proxies were tested.
 - UI harness helpers now prepare the cdylib expected by the driver. Before each
-  run the harness copies `lib<crate>.so` to the
-  `lib<crate>@<toolchain>.so` name derived from `RUSTUP_TOOLCHAIN`. The copy is
-  skipped for synthetic crate names used by tests so unit coverage can continue
-  to inject stub runners without touching the filesystem.
+  run, the harness copies `lib<crate>.so` to the `lib<crate>@<toolchain>.so`
+  name derived from `RUSTUP_TOOLCHAIN`. The copy is skipped for synthetic crate
+  names used by tests, so unit coverage can continue to inject stub runners
+  without touching the filesystem.
 
 ## 2) Common crate (`common`)
 
@@ -225,7 +225,7 @@ impl_late_lint! { FUNCTION_ATTRS_FOLLOW_DOCS, Pass,
 Implementation details:
 
 - The lint now maps `rustc_hir::Attribute` values into a small
-  `OrderedAttribute` abstraction so the ordering logic can be unit-tested
+  `OrderedAttribute` abstraction, so the ordering logic can be unit-tested
   without depending on compiler types. `AttrInfo::from_hir` records the span,
   whether the attribute is a doc comment (via `doc_str`), and whether it is
   outer. Parsed attributes that do not expose a style in HIR default to outer;

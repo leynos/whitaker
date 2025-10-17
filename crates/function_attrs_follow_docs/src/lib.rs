@@ -7,7 +7,6 @@
 #![feature(rustc_private)]
 
 use rustc_ast::AttrStyle;
-use rustc_attr_data_structures::AttributeKind;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
@@ -74,13 +73,7 @@ impl AttrInfo {
     fn from_hir(attr: &Attribute) -> Self {
         let span = attr.span();
         let is_doc = attr.doc_str().is_some();
-        let is_outer = match attr {
-            Attribute::Parsed(AttributeKind::DocComment { style, .. }) => {
-                matches!(style, AttrStyle::Outer)
-            }
-            Attribute::Parsed(_) => true,
-            Attribute::Unparsed(item) => matches!(item.style, AttrStyle::Outer),
-        };
+        let is_outer = matches!(attr.style(), AttrStyle::Outer);
 
         Self {
             span,

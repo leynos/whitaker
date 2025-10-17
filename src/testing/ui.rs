@@ -9,7 +9,7 @@
 use std::{env, fmt, fs, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cargo_metadata::MetadataCommand;
+use cargo_metadata::{Metadata, MetadataCommand};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -127,18 +127,9 @@ pub fn run_with_runner(
 }
 
 fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
-    let metadata = MetadataCommand::new().no_deps().exec().map_err(|error| {
-        HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
-            message: error.to_string(),
-        }
-    })?;
+    let metadata = fetch_metadata(crate_name)?;
 
-    if metadata
-        .packages
-        .iter()
-        .all(|package| package.name != crate_name)
-    {
+    if !workspace_has_package(&metadata, crate_name) {
         // The harness is being exercised with a synthetic crate name. In that case the caller
         // controls the build and we should not attempt to prepare artifacts.
         return Ok(());
@@ -153,10 +144,11 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
         crate_basename,
         env::consts::DLL_SUFFIX
     );
-    let source = profile_dir.join(&base_name);
+    let mut source = profile_dir.join(&base_name);
 
     if !source.exists() {
-        build_library(crate_name)?;
+        build_library(crate_name, &metadata)?;
+        source = profile_dir.join(&base_name);
     }
 
     if !source.exists() {
@@ -186,19 +178,8 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
     Ok(())
 }
 
-fn build_library(crate_name: &str) -> Result<(), HarnessError> {
-    let metadata = MetadataCommand::new().no_deps().exec().map_err(|error| {
-        HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
-            message: error.to_string(),
-        }
-    })?;
-
-    if metadata
-        .packages
-        .iter()
-        .all(|package| package.name != crate_name)
-    {
+fn build_library(crate_name: &str, metadata: &Metadata) -> Result<(), HarnessError> {
+    if !workspace_has_package(metadata, crate_name) {
         return Ok(());
     }
 
@@ -209,19 +190,37 @@ fn build_library(crate_name: &str) -> Result<(), HarnessError> {
         .arg("--package")
         .arg(crate_name)
         .current_dir(metadata.workspace_root.as_std_path())
-        .status();
-
-    match status {
-        Ok(status) if status.success() => Ok(()),
-        Ok(status) => Err(HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
-            message: status.to_string(),
-        }),
-        Err(error) => Err(HarnessError::LibraryBuildFailed {
+        .status()
+        .map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
             message: error.to_string(),
-        }),
+        })?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: status.to_string(),
+        })
     }
+}
+
+fn fetch_metadata(crate_name: &str) -> Result<Metadata, HarnessError> {
+    MetadataCommand::new()
+        .no_deps()
+        .exec()
+        .map_err(|error| HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: error.to_string(),
+        })
+}
+
+fn workspace_has_package(metadata: &Metadata, crate_name: &str) -> bool {
+    metadata
+        .packages
+        .iter()
+        .any(|package| package.name == crate_name)
 }
 
 /// Run UI tests for the crate that invokes the macro.
