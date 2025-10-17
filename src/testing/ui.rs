@@ -176,6 +176,15 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
 }
 
 fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<PathBuf, HarnessError> {
+    let output = execute_build_command(crate_name, metadata)?;
+    let package_id = find_package_id(crate_name, metadata)?;
+    find_cdylib_in_artifacts(&output.stdout, &package_id, crate_name)
+}
+
+fn execute_build_command(
+    crate_name: &str,
+    metadata: &Metadata,
+) -> Result<std::process::Output, HarnessError> {
     let mut command = Command::new("cargo");
     command
         .arg("build")
@@ -200,7 +209,14 @@ fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<Path
         });
     }
 
-    let package_id = metadata
+    Ok(output)
+}
+
+fn find_package_id(
+    crate_name: &str,
+    metadata: &Metadata,
+) -> Result<cargo_metadata::PackageId, HarnessError> {
+    metadata
         .packages
         .iter()
         .find(|package| {
@@ -216,47 +232,55 @@ fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<Path
             message: format!(
                 "package metadata missing for {crate_name}; unable to locate cdylib artefact"
             ),
-        })?;
+        })
+}
 
-    let stdout = output.stdout;
-    let mut cdylib_path: Option<PathBuf> = None;
-
+fn find_cdylib_in_artifacts(
+    stdout: &[u8],
+    package_id: &cargo_metadata::PackageId,
+    crate_name: &str,
+) -> Result<PathBuf, HarnessError> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
         let message = message.map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
             message: error.to_string(),
         })?;
 
-        let Message::CompilerArtifact(artifact) = message else {
-            continue;
-        };
-
-        if artifact.package_id != package_id {
-            continue;
-        }
-
-        if !artifact
-            .target
-            .kind
-            .iter()
-            .any(|kind| matches!(kind, TargetKind::CDyLib))
-        {
-            continue;
-        }
-
-        if let Some(path) = artifact
-            .filenames
-            .into_iter()
-            .find(|candidate| candidate.to_string().ends_with(env::consts::DLL_SUFFIX))
-        {
-            cdylib_path = Some(path.into_std_path_buf());
-            break;
+        if let Message::CompilerArtifact(artifact) = message {
+            if let Some(path) = extract_cdylib_path(&artifact, package_id) {
+                return Ok(path);
+            }
         }
     }
 
-    cdylib_path.ok_or_else(|| HarnessError::LibraryMissing {
+    Err(HarnessError::LibraryMissing {
         path: format!("cdylib for {crate_name} not reported by cargo"),
     })
+}
+
+fn extract_cdylib_path(
+    artifact: &cargo_metadata::Artifact,
+    package_id: &cargo_metadata::PackageId,
+) -> Option<PathBuf> {
+    if artifact.package_id != *package_id {
+        return None;
+    }
+
+    let is_cdylib = artifact
+        .target
+        .kind
+        .iter()
+        .any(|kind| matches!(kind, TargetKind::CDyLib));
+
+    if !is_cdylib {
+        return None;
+    }
+
+    artifact
+        .filenames
+        .iter()
+        .find(|candidate| candidate.to_string().ends_with(env::consts::DLL_SUFFIX))
+        .map(|path| path.clone().into_std_path_buf())
 }
 
 fn fetch_metadata() -> Result<Metadata, HarnessError> {
