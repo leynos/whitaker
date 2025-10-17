@@ -36,6 +36,8 @@ pub enum HarnessError {
     },
     /// Building the lint library failed before the UI runner executed.
     LibraryBuildFailed { crate_name: String, message: String },
+    /// Retrieving Cargo workspace metadata failed.
+    MetadataFailed { message: String },
 }
 
 impl fmt::Display for HarnessError {
@@ -77,6 +79,9 @@ impl fmt::Display for HarnessError {
                     formatter,
                     "failed to build lint library for {crate_name}: {message}",
                 )
+            }
+            Self::MetadataFailed { message } => {
+                write!(formatter, "failed to retrieve Cargo metadata: {message}")
             }
         }
     }
@@ -127,11 +132,11 @@ pub fn run_with_runner(
 }
 
 fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
-    let metadata = fetch_metadata(crate_name)?;
+    let metadata = fetch_metadata()?;
 
     if !workspace_has_package(&metadata, crate_name) {
         // The harness is being exercised with a synthetic crate name. In that case the caller
-        // controls the build and we should not attempt to prepare artifacts.
+        // controls the build and we should not attempt to prepare artefacts.
         return Ok(());
     }
 
@@ -198,12 +203,18 @@ fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<Path
     let package_id = metadata
         .packages
         .iter()
-        .find(|package| package.name == crate_name)
+        .find(|package| {
+            package.name == crate_name
+                && metadata
+                    .workspace_members
+                    .iter()
+                    .any(|member| member == &package.id)
+        })
         .map(|package| package.id.clone())
         .ok_or_else(|| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
             message: format!(
-                "package metadata missing for {crate_name}; unable to locate cdylib artifact"
+                "package metadata missing for {crate_name}; unable to locate cdylib artefact"
             ),
         })?;
 
@@ -248,21 +259,23 @@ fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<Path
     })
 }
 
-fn fetch_metadata(crate_name: &str) -> Result<Metadata, HarnessError> {
+fn fetch_metadata() -> Result<Metadata, HarnessError> {
     MetadataCommand::new()
         .no_deps()
         .exec()
-        .map_err(|error| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
+        .map_err(|error| HarnessError::MetadataFailed {
             message: error.to_string(),
         })
 }
 
 fn workspace_has_package(metadata: &Metadata, crate_name: &str) -> bool {
-    metadata
-        .packages
-        .iter()
-        .any(|package| package.name == crate_name)
+    metadata.packages.iter().any(|package| {
+        package.name == crate_name
+            && metadata
+                .workspace_members
+                .iter()
+                .any(|member| member == &package.id)
+    })
 }
 
 /// Run UI tests for the crate that invokes the macro.
