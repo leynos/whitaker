@@ -6,10 +6,10 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::{env, fmt, fs, process::Command};
+use std::{env, fmt, fs, io::Cursor, path::PathBuf, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cargo_metadata::{Metadata, MetadataCommand};
+use cargo_metadata::{Message, Metadata, MetadataCommand, TargetKind};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -135,77 +135,117 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
         return Ok(());
     }
 
-    let profile_dir = metadata.target_directory.join("debug").into_std_path_buf();
-    let crate_basename = crate_name.replace('-', "_");
-
-    let base_name = format!(
-        "{}{}{}",
-        env::consts::DLL_PREFIX,
-        crate_basename,
-        env::consts::DLL_SUFFIX
-    );
-    let mut source = profile_dir.join(&base_name);
-
-    if !source.exists() {
-        build_library(crate_name, &metadata)?;
-        source = profile_dir.join(&base_name);
-    }
-
-    if !source.exists() {
-        return Err(HarnessError::LibraryMissing {
-            path: source.to_string_lossy().into_owned(),
-        });
-    }
+    let source = build_and_locate_cdylib(crate_name, &metadata)?;
+    let parent = source
+        .parent()
+        .ok_or_else(|| HarnessError::LibraryMissing {
+            path: source.display().to_string(),
+        })?;
 
     let toolchain = env::var("RUSTUP_TOOLCHAIN")
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(str::to_string))
         .unwrap_or_else(|| "unknown-toolchain".to_string());
-    let target_name = format!(
-        "{}{}@{}{}",
-        env::consts::DLL_PREFIX,
-        crate_basename,
-        toolchain,
-        env::consts::DLL_SUFFIX
-    );
-    let target = profile_dir.join(&target_name);
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| HarnessError::LibraryMissing {
+            path: source.display().to_string(),
+        })?
+        .to_string_lossy()
+        .into_owned();
+    let suffix = env::consts::DLL_SUFFIX;
+    let target_name = match file_name.as_str().strip_suffix(suffix) {
+        Some(stripped) => format!("{stripped}@{toolchain}{suffix}"),
+        None => format!("{file_name}@{toolchain}"),
+    };
+    let target = parent.join(&target_name);
 
     // Always refresh the toolchain-qualified artefact so UI tests exercise the latest build.
     fs::copy(&source, &target).map_err(|error| HarnessError::LibraryCopyFailed {
-        source: source.to_string_lossy().into_owned(),
-        target: target.to_string_lossy().into_owned(),
+        source: source.display().to_string(),
+        target: target.display().to_string(),
         message: error.to_string(),
     })?;
 
     Ok(())
 }
 
-fn build_library(crate_name: &str, metadata: &Metadata) -> Result<(), HarnessError> {
-    if !workspace_has_package(metadata, crate_name) {
-        return Ok(());
-    }
-
-    let output = Command::new("cargo")
+fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<PathBuf, HarnessError> {
+    let mut command = Command::new("cargo");
+    command
         .arg("build")
         .arg("--lib")
         .arg("--quiet")
+        .arg("--message-format=json")
         .arg("--package")
         .arg(crate_name)
-        .current_dir(metadata.workspace_root.as_std_path())
+        .current_dir(metadata.workspace_root.as_std_path());
+
+    let output = command
         .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
             message: error.to_string(),
         })?;
 
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(HarnessError::LibraryBuildFailed {
+    if !output.status.success() {
+        return Err(HarnessError::LibraryBuildFailed {
             crate_name: crate_name.to_string(),
             message: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        });
     }
+
+    let package_id = metadata
+        .packages
+        .iter()
+        .find(|package| package.name == crate_name)
+        .map(|package| package.id.clone())
+        .ok_or_else(|| HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: format!(
+                "package metadata missing for {crate_name}; unable to locate cdylib artifact"
+            ),
+        })?;
+
+    let stdout = output.stdout;
+    let mut cdylib_path: Option<PathBuf> = None;
+
+    for message in Message::parse_stream(Cursor::new(stdout)) {
+        let message = message.map_err(|error| HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: error.to_string(),
+        })?;
+
+        let Message::CompilerArtifact(artifact) = message else {
+            continue;
+        };
+
+        if artifact.package_id != package_id {
+            continue;
+        }
+
+        if !artifact
+            .target
+            .kind
+            .iter()
+            .any(|kind| matches!(kind, TargetKind::CDyLib))
+        {
+            continue;
+        }
+
+        if let Some(path) = artifact
+            .filenames
+            .into_iter()
+            .find(|candidate| candidate.to_string().ends_with(env::consts::DLL_SUFFIX))
+        {
+            cdylib_path = Some(path.into_std_path_buf());
+            break;
+        }
+    }
+
+    cdylib_path.ok_or_else(|| HarnessError::LibraryMissing {
+        path: format!("cdylib for {crate_name} not reported by cargo"),
+    })
 }
 
 fn fetch_metadata(crate_name: &str) -> Result<Metadata, HarnessError> {
