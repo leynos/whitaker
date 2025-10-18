@@ -11,6 +11,8 @@ struct ContextWorld {
     cfg_test: RefCell<bool>,
     summary: RefCell<ContextSummary>,
     additional: RefCell<Vec<AttributePath>>,
+    is_doctest: RefCell<bool>,
+    skip_lint: RefCell<bool>,
 }
 
 impl ContextWorld {
@@ -44,6 +46,10 @@ impl ContextWorld {
         self.additional.borrow_mut().push(AttributePath::from(path));
     }
 
+    fn mark_doctest(&self) {
+        *self.is_doctest.borrow_mut() = true;
+    }
+
     fn evaluate(&self) {
         let entries = self.entries.borrow();
         let summary = summarise_context(
@@ -51,11 +57,16 @@ impl ContextWorld {
             *self.cfg_test.borrow(),
             self.additional.borrow().as_slice(),
         );
+        *self.skip_lint.borrow_mut() = *self.is_doctest.borrow() || summary.is_test;
         *self.summary.borrow_mut() = summary;
     }
 
     fn summary(&self) -> ContextSummary {
         self.summary.borrow().clone()
+    }
+
+    fn should_skip_lint(&self) -> bool {
+        *self.skip_lint.borrow()
     }
 }
 
@@ -96,6 +107,11 @@ fn given_function_with_additional_attribute(world: &ContextWorld, path: String) 
     ));
 }
 
+#[given("the lint is running within a doctest")]
+fn given_doctest(world: &ContextWorld) {
+    world.mark_doctest();
+}
+
 #[when("I summarise the context")]
 fn when_summarise(world: &ContextWorld) {
     world.evaluate();
@@ -122,6 +138,11 @@ fn then_function(world: &ContextWorld, expected: String) {
 #[then("no function name is recorded")]
 fn then_no_function(world: &ContextWorld) {
     assert!(world.summary().function_name.is_none());
+}
+
+#[then("the lint is skipped")]
+fn then_lint_skipped(world: &ContextWorld) {
+    assert!(world.should_skip_lint());
 }
 
 #[scenario(path = "tests/features/context_summary.feature", index = 0)]
@@ -162,4 +183,13 @@ fn scenario_additional_attribute(world: ContextWorld) {
     world.evaluate();
     assert!(world.summary().is_test);
     assert_eq!(world.summary().function_name.as_deref(), Some("custom"));
+}
+
+#[scenario(path = "tests/features/context_summary.feature", index = 4)]
+fn scenario_doctest(world: ContextWorld) {
+    world.push_function("handler");
+    world.mark_doctest();
+    world.evaluate();
+    assert!(world.should_skip_lint());
+    assert_eq!(world.summary().function_name.as_deref(), Some("handler"));
 }

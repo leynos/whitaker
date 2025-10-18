@@ -24,3 +24,10 @@ Feature: Summarise traversal context for `.expect(..)` linting
     When I summarise the context
     Then the context is marked as test
     And the function name is custom
+
+  Scenario: Doctest crate bypasses linting
+    Given a non-test function named handler
+    And the lint is running within a doctest
+    When I summarise the context
+    Then the lint is skipped
+    And the function name is handler
