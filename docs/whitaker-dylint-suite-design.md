@@ -265,6 +265,20 @@ impl_late_lint! { NO_EXPECT_OUTSIDE_TESTS, Pass,
     }
   }
 }
+The implementation interrogates typeck results to confirm the method
+receiver resolves to `Option` or `Result` by walking the ADT definition. A
+context summariser climbs the HIR parent stack collecting function, module,
+and impl entries, then flags test scenarios when a recognised attribute or a
+`cfg(test)` guard appears. Diagnostics lean on that summary: the primary
+message is accompanied by notes that echo the enclosing function name and the
+receiver type, plus a help hint that nudges developers toward explicit error
+handling.
+
+Behaviour-driven unit tests exercise the summariser in isolation, covering
+plain functions, explicit test attributes, and modules guarded by `cfg(test)`.
+UI fixtures demonstrate the denial emitted for ordinary functions and the
+absence of findings inside `#[test]` contexts.
+
 ```
 
 ### 3.3 `public_fn_must_have_docs` (pedantic, warn)

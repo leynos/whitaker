@@ -58,3 +58,18 @@ The UI fixtures demonstrate accepted and rejected layouts across the three
 function kinds, while behaviour tests walk through happy, unhappy, and edge
 cases. To fix the warning, move the doc comment so it appears before every
 other outer attribute.
+
+## `no_expect_outside_tests`
+
+Whitaker's restriction lint forbids calling `.expect(..)` on `Option` or
+`Result` receivers outside test contexts. The analysis inspects method calls,
+confirms the receiver resolves to one of the two panic-producing types, and
+walks the HIR ancestor chain to detect enclosing test attributes or `cfg(test)`
+modules. When the call occurs in production code the diagnostic explains which
+function triggered the lint and echoes the receiver type, helping teams decide
+where error handling should live.
+
+The UI fixtures demonstrate accepted usage inside a `#[test]` function and the
+failures emitted for ordinary functions. Behaviour-driven tests cover context
+summaries for non-test functions, explicit test attributes, and modules guarded
+by `cfg(test)`.
