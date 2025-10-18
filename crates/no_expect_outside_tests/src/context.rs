@@ -2,7 +2,7 @@ use common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context_with,
 };
 use rustc_ast::AttrStyle;
-use rustc_ast::ast::MetaItemInner;
+use rustc_ast::ast::{MetaItem, MetaItemInner};
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_lint::LateContext;
@@ -124,28 +124,75 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     if attr.has_name(sym::cfg) {
         return attr
             .meta_item_list()
-            .map(|items| {
-                items.into_iter().any(|item| match item {
-                    MetaItemInner::MetaItem(meta) => meta.path.is_ident(sym::test),
-                    MetaItemInner::Lit(_) => false,
-                })
-            })
+            .map(|items| items.into_iter().any(meta_item_inner_contains_test))
             .unwrap_or(false);
     }
 
-    if attr.has_name(sym::cfg_attr) {
-        let Some(items) = attr.meta_item_list() else {
-            return false;
-        };
-        return items
-            .into_iter()
-            .next()
-            .and_then(|item| match item {
-                MetaItemInner::MetaItem(meta) => Some(meta.path.is_ident(sym::test)),
-                MetaItemInner::Lit(_) => None,
-            })
+    if !attr.has_name(sym::cfg_attr) {
+        return false;
+    }
+
+    let Some(mut items) = attr.meta_item_list() else {
+        return false;
+    };
+    let mut iter = items.into_iter();
+    let Some(condition) = iter.next() else {
+        return false;
+    };
+
+    if !meta_item_inner_contains_test(condition) {
+        return false;
+    }
+
+    iter.any(|item| match item {
+        MetaItemInner::MetaItem(meta) => meta_contains_test_cfg(&meta),
+        MetaItemInner::Lit(_) => false,
+    })
+}
+
+fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
+    match item {
+        MetaItemInner::MetaItem(meta) => meta_contains_test(&meta),
+        MetaItemInner::Lit(_) => false,
+    }
+}
+
+fn meta_contains_test(meta: &MetaItem) -> bool {
+    if meta.path.is_ident(sym::test) {
+        return true;
+    }
+
+    meta.meta_item_list()
+        .map(|items| items.into_iter().any(meta_item_inner_contains_test))
+        .unwrap_or(false)
+}
+
+fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
+    if meta.path.is_ident(sym::cfg) {
+        return meta
+            .meta_item_list()
+            .map(|items| items.into_iter().any(meta_item_inner_contains_test))
             .unwrap_or(false);
     }
 
-    false
+    if !meta.path.is_ident(sym::cfg_attr) {
+        return false;
+    }
+
+    let Some(mut items) = meta.meta_item_list() else {
+        return false;
+    };
+    let mut iter = items.into_iter();
+    let Some(condition) = iter.next() else {
+        return false;
+    };
+
+    if !meta_item_inner_contains_test(condition) {
+        return false;
+    }
+
+    iter.any(|item| match item {
+        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
+        MetaItemInner::Lit(_) => false,
+    })
 }

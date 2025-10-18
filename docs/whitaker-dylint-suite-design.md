@@ -284,6 +284,12 @@ message is accompanied by notes that echo the enclosing function name and the
 receiver type, plus a help hint that nudges developers toward explicit error
 handling.
 
+`cfg_attr(test, ..)` annotations are ignored unless they inject a `cfg(test)`
+gate (for example, `cfg_attr(test, cfg(test))`). This distinction prevents
+production-only functions that merely relax warnings or lints under test builds
+from being misclassified as test code, eliminating a class of false negatives
+observed during feature rollout.
+
 Behaviour-driven unit tests exercise the summariser in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
 paths added via configuration. UI fixtures demonstrate the denial emitted for

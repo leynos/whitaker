@@ -69,6 +69,12 @@ modules. When the call occurs in production code the diagnostic explains which
 function triggered the lint and echoes the receiver type, helping teams decide
 where error handling should live.
 
+Attributes that merely add metadata under `cfg_attr(test, ..)` do not mark an
+item as test-only: the lint only treats the code as guarded when the attribute
+directly applies a `cfg(test)` gate (for example, via
+`cfg_attr(test, cfg(test))`). This prevents production functions that enable
+extra warnings or allowances in tests from slipping past the check.
+
 The UI fixtures demonstrate accepted usage inside a `#[test]` function and the
 failures emitted for ordinary functions. Behaviour-driven tests cover context
 summaries for non-test functions, explicit test attributes, and modules guarded
