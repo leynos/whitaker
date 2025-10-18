@@ -1,3 +1,5 @@
+//! Tests that verify the UI harness runner validates inputs and propagates
+//! errors from custom runners.
 use super::{HarnessError, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
