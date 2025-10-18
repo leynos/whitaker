@@ -147,6 +147,37 @@ Utilities shared by lints:
   scenarios (v0.1.0-alpha4) to exercise happy, unhappy, and edge cases without
   duplicating setup logic.
 
+### Localisation infrastructure
+
+- Adopt `fluent-templates` and `once_cell` as workspace dependencies so each
+  lint crate can load translated diagnostics without manual resource
+  management. Both crates live in `[workspace.dependencies]` to keep versions
+  aligned and to simplify adoption across current and future lints.
+- Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
+  `fluent_templates::static_loader!`. The loader resides in `common::i18n` and
+  exposes a `FluentBundle` facade that lint crates invoke through helper
+  functions (`message`, `note`, `help`). Embedding avoids runtime I/O and keeps
+  CI deterministic.
+- Provide an `en-GB` fallback bundle that always loads. Additional locales live
+  alongside it and are discovered dynamically when the loader initialises.
+  Messages use stable slugs such as `function_attrs_follow_docs.primary` and
+  `.help` attributes to mirror the structure used by `rustc`.
+- Honour a `DYLINT_LOCALE` environment variable and a `dylint.toml` override in
+  `SharedConfig`. The helper resolves the caller locale in the order: explicit
+  argument, `DYLINT_LOCALE`, configuration entry, and finally the fallback.
+  This keeps command-line, CI, and editor integrations predictable while
+  enabling non-English smoke tests.
+- Emit structured diagnostics by formatting all human-facing text through the
+  bundle before calling `span_lint`. Primary messages, labels, notes, and help
+  text each source their own Fluent attribute so translators do not wrestle
+  with concatenated phrases. Suggestion titles and placeholders pass concrete
+  arguments (`{ flag }`, `{ subject }`) rather than interpolated strings to
+  maintain parity with `rustc`'s diagnostic pipeline.
+- Extend the UI harness so locale-specific fixtures run under both the fallback
+  and at least one secondary locale. The tests assert on rendered strings and
+  continue to execute via `dylint_testing`'s JSON output to ensure machine
+  readability remains intact.
+
 ## 3) Seven core lints (specs + sketches)
 
 | Crate                         | Kind            | Summary                                                                                                                | Level |
