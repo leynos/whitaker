@@ -6,9 +6,10 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::fmt;
+use std::{env, fmt, fs, io::Cursor, path::PathBuf, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use cargo_metadata::{Message, Metadata, MetadataCommand};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,6 +26,18 @@ pub enum HarnessError {
         directory: Utf8PathBuf,
         message: String,
     },
+    /// The compiled lint library was not present in the expected location.
+    LibraryMissing { path: String },
+    /// Copying the compiled library to the toolchain-qualified name failed.
+    LibraryCopyFailed {
+        source: String,
+        target: String,
+        message: String,
+    },
+    /// Building the lint library failed before the UI runner executed.
+    LibraryBuildFailed { crate_name: String, message: String },
+    /// Retrieving Cargo workspace metadata failed.
+    MetadataFailed { message: String },
 }
 
 impl fmt::Display for HarnessError {
@@ -45,6 +58,31 @@ impl fmt::Display for HarnessError {
                     "running UI tests for {crate_name} in {directory} failed: {message}",
                 )
             }
+            Self::LibraryMissing { path } => {
+                write!(formatter, "lint library missing: {path}")
+            }
+            Self::LibraryCopyFailed {
+                source,
+                target,
+                message,
+            } => {
+                write!(
+                    formatter,
+                    "failed to prepare lint library {target} from {source}: {message}",
+                )
+            }
+            Self::LibraryBuildFailed {
+                crate_name,
+                message,
+            } => {
+                write!(
+                    formatter,
+                    "failed to build lint library for {crate_name}: {message}",
+                )
+            }
+            Self::MetadataFailed { message } => {
+                write!(formatter, "failed to retrieve Cargo metadata: {message}")
+            }
         }
     }
 }
@@ -62,6 +100,20 @@ impl std::error::Error for HarnessError {}
 ///
 /// Returns [`HarnessError`] when either input validation fails or the provided
 /// runner reports a failure.
+///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+/// use whitaker::testing::ui::run_with_runner;
+///
+/// fn main() -> Result<(), whitaker::testing::ui::HarnessError> {
+///     run_with_runner("my_lint", "ui", |crate_name, dir: &Utf8Path| {
+///         ::dylint_testing::ui_test(crate_name, dir);
+///         Ok(())
+///     })
+/// }
+/// ```
 pub fn run_with_runner(
     crate_name: &str,
     ui_directory: impl Into<Utf8PathBuf>,
@@ -81,6 +133,8 @@ pub fn run_with_runner(
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
+    ensure_toolchain_library(trimmed)?;
+
     match runner(trimmed, directory.as_ref()) {
         Ok(()) => Ok(()),
         Err(message) => Err(HarnessError::RunnerFailure {
@@ -89,6 +143,170 @@ pub fn run_with_runner(
             message,
         }),
     }
+}
+
+fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
+    let metadata = fetch_metadata()?;
+
+    if !workspace_has_package(&metadata, crate_name) {
+        // The harness is being exercised with a synthetic crate name. In that case the caller
+        // controls the build and we should not attempt to prepare artefacts.
+        return Ok(());
+    }
+
+    let source = build_and_locate_cdylib(crate_name, &metadata)?;
+    let parent = source
+        .parent()
+        .ok_or_else(|| HarnessError::LibraryMissing {
+            path: source.display().to_string(),
+        })?;
+
+    let toolchain = env::var("RUSTUP_TOOLCHAIN")
+        .ok()
+        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(str::to_string))
+        .unwrap_or_else(|| "unknown-toolchain".to_string());
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| HarnessError::LibraryMissing {
+            path: source.display().to_string(),
+        })?
+        .to_string_lossy()
+        .into_owned();
+    let suffix = env::consts::DLL_SUFFIX;
+    let target_name = match file_name.as_str().strip_suffix(suffix) {
+        Some(stripped) => format!("{stripped}@{toolchain}{suffix}"),
+        None => format!("{file_name}@{toolchain}"),
+    };
+    let target = parent.join(&target_name);
+
+    // Always refresh the toolchain-qualified artefact so UI tests exercise the latest build.
+    fs::copy(&source, &target).map_err(|error| HarnessError::LibraryCopyFailed {
+        source: source.display().to_string(),
+        target: target.display().to_string(),
+        message: error.to_string(),
+    })?;
+
+    Ok(())
+}
+
+fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<PathBuf, HarnessError> {
+    let output = execute_build_command(crate_name, metadata)?;
+    let package_id = find_package_id(crate_name, metadata)?;
+    find_cdylib_in_artifacts(&output.stdout, &package_id, crate_name)
+}
+
+fn execute_build_command(
+    crate_name: &str,
+    metadata: &Metadata,
+) -> Result<std::process::Output, HarnessError> {
+    let mut command = Command::new("cargo");
+    command
+        .arg("build")
+        .arg("--lib")
+        .arg("--quiet")
+        .arg("--message-format=json")
+        .arg("--package")
+        .arg(crate_name)
+        .current_dir(metadata.workspace_root.as_std_path());
+
+    let output = command
+        .output()
+        .map_err(|error| HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: error.to_string(),
+        })?;
+
+    if !output.status.success() {
+        return Err(HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: String::from_utf8_lossy(&output.stderr).into_owned(),
+        });
+    }
+
+    Ok(output)
+}
+
+fn find_package_id(
+    crate_name: &str,
+    metadata: &Metadata,
+) -> Result<cargo_metadata::PackageId, HarnessError> {
+    metadata
+        .packages
+        .iter()
+        .find(|package| {
+            package.name == crate_name
+                && metadata
+                    .workspace_members
+                    .iter()
+                    .any(|member| member == &package.id)
+        })
+        .map(|package| package.id.clone())
+        .ok_or_else(|| HarnessError::LibraryBuildFailed {
+            crate_name: crate_name.to_string(),
+            message: format!(
+                "package metadata missing for {crate_name}; unable to locate cdylib artefact"
+            ),
+        })
+}
+
+fn find_cdylib_in_artifacts(
+    stdout: &[u8],
+    package_id: &cargo_metadata::PackageId,
+    crate_name: &str,
+) -> Result<PathBuf, HarnessError> {
+    for message in Message::parse_stream(Cursor::new(stdout)) {
+        let Ok(Message::CompilerArtifact(artifact)) = message else {
+            // Ignore unrelated output and parse errors; the build succeeded so any
+            // remaining noise should not block locating the compiled artefact.
+            continue;
+        };
+
+        if let Some(path) = extract_cdylib_path(&artifact, package_id) {
+            return Ok(path);
+        }
+    }
+
+    Err(HarnessError::LibraryMissing {
+        path: format!("cdylib for {crate_name} not reported by cargo"),
+    })
+}
+
+fn extract_cdylib_path(
+    artifact: &cargo_metadata::Artifact,
+    package_id: &cargo_metadata::PackageId,
+) -> Option<PathBuf> {
+    if artifact.package_id != *package_id {
+        return None;
+    }
+
+    if !artifact.target.is_cdylib() {
+        return None;
+    }
+
+    artifact
+        .filenames
+        .iter()
+        .find(|candidate| candidate.to_string().ends_with(env::consts::DLL_SUFFIX))
+        .map(|path| path.clone().into_std_path_buf())
+}
+
+fn fetch_metadata() -> Result<Metadata, HarnessError> {
+    MetadataCommand::new()
+        .no_deps()
+        .exec()
+        .map_err(|error| HarnessError::MetadataFailed {
+            message: error.to_string(),
+        })
+}
+
+fn workspace_has_package(metadata: &Metadata, crate_name: &str) -> bool {
+    metadata.packages.iter().any(|package| {
+        package.name == crate_name
+            && metadata
+                .workspace_members
+                .iter()
+                .any(|member| member == &package.id)
+    })
 }
 
 /// Run UI tests for the crate that invokes the macro.
@@ -140,64 +358,4 @@ macro_rules! declare_ui_tests {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{HarnessError, run_with_runner};
-    use camino::{Utf8Path, Utf8PathBuf};
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(
-        "  ",
-        "ui",
-        HarnessError::EmptyCrateName,
-        "crate name validation should fail"
-    )]
-    #[case(
-        "lint",
-        "   ",
-        HarnessError::EmptyDirectory,
-        "empty directories should be rejected"
-    )]
-    fn rejects_invalid_inputs(
-        #[case] crate_name: &str,
-        #[case] directory: &str,
-        #[case] expected: HarnessError,
-        #[case] panic_message: &str,
-    ) {
-        let Err(error) = run_with_runner(crate_name, directory, |_, _| Ok(())) else {
-            panic!("{panic_message}");
-        };
-
-        assert_eq!(error, expected);
-    }
-
-    #[test]
-    fn rejects_absolute_directories() {
-        let path = Utf8PathBuf::from("/tmp/ui");
-        let Err(error) = run_with_runner("lint", path.clone(), |_, _| Ok(())) else {
-            panic!("absolute directories should be rejected");
-        };
-
-        assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
-    }
-
-    #[test]
-    fn propagates_runner_failures() {
-        let Err(error) = run_with_runner("lint", "ui", |crate_name, directory| {
-            assert_eq!(crate_name, "lint");
-            assert_eq!(directory, Utf8Path::new("ui"));
-            Err("diff mismatch".to_string())
-        }) else {
-            panic!("runner failures should bubble up");
-        };
-
-        assert_eq!(
-            error,
-            HarnessError::RunnerFailure {
-                crate_name: "lint".to_string(),
-                directory: Utf8PathBuf::from("ui"),
-                message: "diff mismatch".to_string(),
-            },
-        );
-    }
-}
+mod tests;

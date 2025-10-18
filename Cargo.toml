@@ -4,11 +4,14 @@ resolver = "2"
 
 [workspace.dependencies]
 camino = "1.2.1"
+cargo_metadata = "0.23.0"
 dylint_linting = "5"
 dylint_testing = "5"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 thiserror = "2"
+rustc_ast = { path = "crates/rustc_ast", version = "0.1.0" }
+rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.1.0" }
 rustc_hir = { path = "crates/rustc_hir", version = "0.1.0" }
 rustc_lint = { path = "crates/rustc_lint", version = "0.1.0" }
 rustc_middle = { path = "crates/rustc_middle", version = "0.1.0" }
@@ -27,6 +30,7 @@ dylint-driver = ["dep:dylint_linting"]
 [dependencies]
 
 camino = { workspace = true }
+cargo_metadata = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
