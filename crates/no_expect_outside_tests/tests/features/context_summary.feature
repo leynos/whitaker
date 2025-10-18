@@ -17,3 +17,10 @@ Feature: Summarise traversal context for `.expect(..)` linting
     When I summarise the context
     Then the context is marked as test
     And no function name is recorded
+
+  Scenario: Function recognised via configured attribute
+    Given an additional test attribute custom::test is configured
+    And a function annotated with the additional attribute custom::test
+    When I summarise the context
+    Then the context is marked as test
+    And the function name is custom

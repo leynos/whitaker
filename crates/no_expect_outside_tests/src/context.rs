@@ -1,5 +1,5 @@
 use common::{
-    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context,
+    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context_with,
 };
 use rustc_ast::AttrStyle;
 use rustc_ast::ast::MetaItemInner;
@@ -17,6 +17,7 @@ pub(crate) struct ContextSummary {
 pub(crate) fn collect_context<'tcx>(
     cx: &LateContext<'tcx>,
     hir_id: hir::HirId,
+    _additional_test_attributes: &[AttributePath],
 ) -> (Vec<ContextEntry>, bool) {
     let mut entries = Vec::new();
     let mut has_cfg_test = false;
@@ -35,8 +36,12 @@ pub(crate) fn collect_context<'tcx>(
     (entries, has_cfg_test)
 }
 
-pub(crate) fn summarise_context(entries: &[ContextEntry], has_cfg_test: bool) -> ContextSummary {
-    let is_test = has_cfg_test || in_test_like_context(entries);
+pub(crate) fn summarise_context(
+    entries: &[ContextEntry],
+    has_cfg_test: bool,
+    additional_test_attributes: &[AttributePath],
+) -> ContextSummary {
+    let is_test = has_cfg_test || in_test_like_context_with(entries, additional_test_attributes);
     let function_name = entries.iter().find_map(|entry| {
         entry
             .kind()

@@ -1,6 +1,6 @@
 //! Helpers for working with attribute collections.
 
-use super::Attribute;
+use super::{Attribute, AttributePath};
 
 /// Splits a slice of attributes into doc and non-doc groups.
 ///
@@ -53,5 +53,12 @@ pub fn outer_attributes<'a>(attrs: &'a [Attribute]) -> Vec<&'a Attribute> {
 /// ```
 #[must_use]
 pub fn has_test_like_attribute(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(Attribute::is_test_like)
+    has_test_like_attribute_with(attrs, &[])
+}
+
+#[must_use]
+pub fn has_test_like_attribute_with(attrs: &[Attribute], additional: &[AttributePath]) -> bool {
+    attrs
+        .iter()
+        .any(|attribute| attribute.is_test_like_with(additional))
 }

@@ -248,6 +248,16 @@ Implementation details:
 
 Forbid `.expect(..)` on `Option`/`Result` outside tests/doctests.
 
+The lint inspects the crate-wide `Crate::is_doctest` flag so doctest harnesses
+produced by `rustdoc` bypass the check entirely. This keeps documentation
+examples ergonomic while leaving the runtime lint strict.
+
+Recognised test attributes now combine the built-in shortlist with an
+`additional_test_attributes` array loaded from `dylint.toml`. The values are
+stored as fully qualified paths (for example `my_framework::test`) and threaded
+through the context collector so custom harness macros are treated like
+first-party attributes when summarising the traversal stack.
+
 Sketch:
 
 ```rust
@@ -275,9 +285,9 @@ receiver type, plus a help hint that nudges developers toward explicit error
 handling.
 
 Behaviour-driven unit tests exercise the summariser in isolation, covering
-plain functions, explicit test attributes, and modules guarded by `cfg(test)`.
-UI fixtures demonstrate the denial emitted for ordinary functions and the
-absence of findings inside `#[test]` contexts.
+plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
+paths added via configuration. UI fixtures demonstrate the denial emitted for
+ordinary functions and the absence of findings inside `#[test]` contexts.
 
 ```
 

@@ -10,6 +10,7 @@ struct ContextWorld {
     entries: RefCell<Vec<ContextEntry>>,
     cfg_test: RefCell<bool>,
     summary: RefCell<ContextSummary>,
+    additional: RefCell<Vec<AttributePath>>,
 }
 
 impl ContextWorld {
@@ -39,9 +40,17 @@ impl ContextWorld {
         *self.cfg_test.borrow_mut() = true;
     }
 
+    fn register_additional_attribute(&self, path: &str) {
+        self.additional.borrow_mut().push(AttributePath::from(path));
+    }
+
     fn evaluate(&self) {
         let entries = self.entries.borrow();
-        let summary = summarise_context(entries.as_slice(), *self.cfg_test.borrow());
+        let summary = summarise_context(
+            entries.as_slice(),
+            *self.cfg_test.borrow(),
+            self.additional.borrow().as_slice(),
+        );
         *self.summary.borrow_mut() = summary;
     }
 
@@ -69,6 +78,22 @@ fn given_test_function(world: &ContextWorld, name: String) {
 fn given_cfg_test_module(world: &ContextWorld) {
     world.push_module("tests");
     world.enable_cfg_test();
+}
+
+#[given("an additional test attribute {path} is configured")]
+fn given_additional_attribute(world: &ContextWorld, path: String) {
+    world.register_additional_attribute(&path);
+}
+
+#[given("a function annotated with the additional attribute {path}")]
+fn given_function_with_additional_attribute(world: &ContextWorld, path: String) {
+    world.entries.borrow_mut().push(ContextEntry::function(
+        "custom",
+        vec![Attribute::new(
+            AttributePath::from(path),
+            AttributeKind::Outer,
+        )],
+    ));
 }
 
 #[when("I summarise the context")]
@@ -122,4 +147,19 @@ fn scenario_cfg_test(world: ContextWorld) {
     world.evaluate();
     assert!(world.summary().is_test);
     assert!(world.summary().function_name.is_none());
+}
+
+#[scenario(path = "tests/features/context_summary.feature", index = 3)]
+fn scenario_additional_attribute(world: ContextWorld) {
+    world.register_additional_attribute("custom::test");
+    world.entries.borrow_mut().push(ContextEntry::function(
+        "custom",
+        vec![Attribute::new(
+            AttributePath::from("custom::test"),
+            AttributeKind::Outer,
+        )],
+    ));
+    world.evaluate();
+    assert!(world.summary().is_test);
+    assert_eq!(world.summary().function_name.as_deref(), Some("custom"));
 }

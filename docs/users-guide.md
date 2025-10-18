@@ -73,3 +73,21 @@ The UI fixtures demonstrate accepted usage inside a `#[test]` function and the
 failures emitted for ordinary functions. Behaviour-driven tests cover context
 summaries for non-test functions, explicit test attributes, and modules guarded
 by `cfg(test)`.
+
+Doctests compiled by `rustdoc` are detected via the compiler-provided
+`Crate::is_doctest` flag. When that flag is set the lint pass skips all checks,
+allowing documentation examples to continue using `.expect(..)` while keeping
+production code guarded.
+
+The recognised test attributes can be extended through `dylint.toml` when teams
+rely on bespoke harness macros. Add the fully qualified attribute paths under
+the lint's configuration namespace:
+
+```toml
+[tool.dylint.libraries.no_expect_outside_tests]
+additional_test_attributes = ["my_framework::test"]
+```
+
+Any functions annotated with those attributes are treated as tests for the
+purpose of this lint, matching the behaviour of built-in markers such as
+`#[test]` and `#[rstest]`.

@@ -1,7 +1,7 @@
 //! Behaviour-driven tests for context detection and test-like attribute recognition.
 
 use common::attributes::{Attribute, AttributeKind, AttributePath};
-use common::context::{ContextEntry, in_test_like_context, is_test_fn};
+use common::context::{ContextEntry, in_test_like_context_with, is_test_fn_with};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
@@ -10,6 +10,7 @@ use std::cell::RefCell;
 struct FunctionFixture {
     attributes: RefCell<Vec<Attribute>>,
     context: RefCell<Vec<ContextEntry>>,
+    additional: RefCell<Vec<AttributePath>>,
 }
 
 impl FunctionFixture {
@@ -17,6 +18,7 @@ impl FunctionFixture {
         Self {
             attributes: RefCell::new(Vec::new()),
             context: RefCell::new(vec![ContextEntry::function("demo", Vec::new())]),
+            additional: RefCell::new(Vec::new()),
         }
     }
 
@@ -32,6 +34,7 @@ impl FunctionFixture {
         if let Some(entry) = self.context.borrow_mut().last_mut() {
             entry.attributes_mut().clear();
         }
+        self.additional.borrow_mut().clear();
     }
 
     fn attributes(&self) -> std::cell::Ref<'_, Vec<Attribute>> {
@@ -40,6 +43,14 @@ impl FunctionFixture {
 
     fn context(&self) -> std::cell::Ref<'_, Vec<ContextEntry>> {
         self.context.borrow()
+    }
+
+    fn additional(&self) -> std::cell::Ref<'_, Vec<AttributePath>> {
+        self.additional.borrow()
+    }
+
+    fn configure_additional(&self, path: &str) {
+        self.additional.borrow_mut().push(AttributePath::from(path));
     }
 }
 
@@ -69,13 +80,25 @@ fn given_plain(function: &FunctionFixture) {
     function.clear();
 }
 
+#[given("the lint recognises {path} as a test attribute")]
+fn given_custom_attribute(function: &FunctionFixture, path: String) {
+    function.configure_additional(&path);
+}
+
+#[given("a function annotated with the custom test attribute {path}")]
+fn given_function_with_custom_attribute(function: &FunctionFixture, path: String) {
+    let attribute = Attribute::new(AttributePath::from(path), AttributeKind::Outer);
+    function.push_attribute(attribute);
+}
+
 #[when("I check whether the function is test-like")]
 fn when_check(function: &FunctionFixture) -> Evaluation {
     let attributes = function.attributes();
     let context = function.context();
+    let additional = function.additional();
     Evaluation {
-        is_test: is_test_fn(attributes.as_slice()),
-        in_context: in_test_like_context(context.as_slice()),
+        is_test: is_test_fn_with(attributes.as_slice(), additional.as_slice()),
+        in_context: in_test_like_context_with(context.as_slice(), additional.as_slice()),
     }
 }
 

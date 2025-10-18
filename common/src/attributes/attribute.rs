@@ -155,9 +155,22 @@ impl Attribute {
     /// ```
     #[must_use]
     pub fn is_test_like(&self) -> bool {
-        TEST_LIKE_PATHS
+        self.is_test_like_with(&[])
+    }
+
+    #[must_use]
+    pub fn is_test_like_with(&self, additional: &[AttributePath]) -> bool {
+        if TEST_LIKE_PATHS
             .iter()
             .any(|candidate| self.path.matches(candidate.iter().copied()))
+        {
+            return true;
+        }
+
+        additional.iter().any(|path| {
+            let segments: Vec<&str> = path.segments().iter().map(String::as_str).collect();
+            self.path.matches(segments)
+        })
     }
 
     /// Returns `true` when the attribute is an inner attribute.
