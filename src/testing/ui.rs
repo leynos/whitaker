@@ -9,7 +9,7 @@
 use std::{env, fmt, fs, io::Cursor, path::PathBuf, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cargo_metadata::{Message, Metadata, MetadataCommand, TargetKind};
+use cargo_metadata::{Message, Metadata, MetadataCommand};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,6 +100,20 @@ impl std::error::Error for HarnessError {}
 ///
 /// Returns [`HarnessError`] when either input validation fails or the provided
 /// runner reports a failure.
+///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+/// use whitaker::testing::ui::run_with_runner;
+///
+/// fn main() -> Result<(), whitaker::testing::ui::HarnessError> {
+///     run_with_runner("my_lint", "ui", |crate_name, dir: &Utf8Path| {
+///         ::dylint_testing::ui_test(crate_name, dir);
+///         Ok(())
+///     })
+/// }
+/// ```
 pub fn run_with_runner(
     crate_name: &str,
     ui_directory: impl Into<Utf8PathBuf>,
@@ -241,15 +255,14 @@ fn find_cdylib_in_artifacts(
     crate_name: &str,
 ) -> Result<PathBuf, HarnessError> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
-        let message = message.map_err(|error| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
-            message: error.to_string(),
-        })?;
+        let Ok(Message::CompilerArtifact(artifact)) = message else {
+            // Ignore unrelated output and parse errors; the build succeeded so any
+            // remaining noise should not block locating the compiled artefact.
+            continue;
+        };
 
-        if let Message::CompilerArtifact(artifact) = message {
-            if let Some(path) = extract_cdylib_path(&artifact, package_id) {
-                return Ok(path);
-            }
+        if let Some(path) = extract_cdylib_path(&artifact, package_id) {
+            return Ok(path);
         }
     }
 
@@ -266,13 +279,7 @@ fn extract_cdylib_path(
         return None;
     }
 
-    let is_cdylib = artifact
-        .target
-        .kind
-        .iter()
-        .any(|kind| matches!(kind, TargetKind::CDyLib));
-
-    if !is_cdylib {
+    if !artifact.target.is_cdylib() {
         return None;
     }
 
@@ -351,64 +358,4 @@ macro_rules! declare_ui_tests {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{HarnessError, run_with_runner};
-    use camino::{Utf8Path, Utf8PathBuf};
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(
-        "  ",
-        "ui",
-        HarnessError::EmptyCrateName,
-        "crate name validation should fail"
-    )]
-    #[case(
-        "lint",
-        "   ",
-        HarnessError::EmptyDirectory,
-        "empty directories should be rejected"
-    )]
-    fn rejects_invalid_inputs(
-        #[case] crate_name: &str,
-        #[case] directory: &str,
-        #[case] expected: HarnessError,
-        #[case] panic_message: &str,
-    ) {
-        let Err(error) = run_with_runner(crate_name, directory, |_, _| Ok(())) else {
-            panic!("{panic_message}");
-        };
-
-        assert_eq!(error, expected);
-    }
-
-    #[test]
-    fn rejects_absolute_directories() {
-        let path = Utf8PathBuf::from("/tmp/ui");
-        let Err(error) = run_with_runner("lint", path.clone(), |_, _| Ok(())) else {
-            panic!("absolute directories should be rejected");
-        };
-
-        assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
-    }
-
-    #[test]
-    fn propagates_runner_failures() {
-        let Err(error) = run_with_runner("lint", "ui", |crate_name, directory| {
-            assert_eq!(crate_name, "lint");
-            assert_eq!(directory, Utf8Path::new("ui"));
-            Err("diff mismatch".to_string())
-        }) else {
-            panic!("runner failures should bubble up");
-        };
-
-        assert_eq!(
-            error,
-            HarnessError::RunnerFailure {
-                crate_name: "lint".to_string(),
-                directory: Utf8PathBuf::from("ui"),
-                message: "diff mismatch".to_string(),
-            },
-        );
-    }
-}
+mod tests;
