@@ -1,6 +1,7 @@
 use super::{HarnessError, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
+use std::env;
 
 #[rstest]
 #[case(
@@ -30,7 +31,10 @@ fn rejects_invalid_inputs(
 
 #[test]
 fn rejects_absolute_directories() {
-    let path = Utf8PathBuf::from("/tmp/ui");
+    let current_dir = env::current_dir().expect("determine current directory");
+    let absolute_directory = current_dir.join("ui");
+    let path = Utf8PathBuf::from_path_buf(absolute_directory)
+        .expect("workspace paths should be valid UTF-8");
     let Err(error) = run_with_runner("lint", path.clone(), |_, _| Ok(())) else {
         panic!("absolute directories should be rejected");
     };
