@@ -116,6 +116,67 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     Attribute::new(path, kind)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::convert_attribute;
+    use common::AttributeKind;
+    use rstest::rstest;
+    use rustc_ast::attr::{AttrArgs, AttrId, AttrItem, AttrKind, NormalAttr};
+    use rustc_ast::ptr::P;
+    use rustc_ast::{Path, PathSegment};
+    use rustc_hir as hir;
+    use rustc_span::symbol::Ident;
+    use rustc_span::{DUMMY_SP, create_default_session_globals_then};
+
+    fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
+        create_default_session_globals_then(|| {
+            let path_segments = segments
+                .iter()
+                .map(|segment| PathSegment::from_ident(Ident::from_str(segment)))
+                .collect::<Vec<_>>();
+
+            let path = Path {
+                span: DUMMY_SP,
+                segments: path_segments,
+                tokens: None,
+            };
+
+            let item = AttrItem {
+                path,
+                args: AttrArgs::Empty,
+                tokens: None,
+            };
+
+            hir::Attribute {
+                kind: AttrKind::Normal(NormalAttr {
+                    item: P(item),
+                    tokens: None,
+                }),
+                id: AttrId::new(0),
+                style: rustc_ast::AttrStyle::Outer,
+                span: DUMMY_SP,
+            }
+        })
+    }
+
+    #[rstest]
+    #[case(&["tokio", "test"])]
+    #[case(&["rstest"])]
+    fn convert_attribute_preserves_segments(#[case] segments: &[&str]) {
+        let hir_attr = hir_attribute_from_segments(segments);
+        let attribute = convert_attribute(&hir_attr);
+
+        assert_eq!(attribute.kind(), AttributeKind::Outer);
+        let converted_segments = attribute
+            .path()
+            .segments()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        assert_eq!(converted_segments.as_slice(), segments);
+    }
+}
+
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     if let Some(meta) = attr.meta() {
         return meta_contains_test_cfg(&meta);
