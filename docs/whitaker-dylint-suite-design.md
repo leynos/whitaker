@@ -149,8 +149,8 @@ Utilities shared by lints:
 
 ### Localisation infrastructure
 
-- Adopt `fluent-templates` and `once_cell` as workspace dependencies so each
-  lint crate can load translated diagnostics without manual resource
+- Adopt `fluent-templates` and `once_cell` as workspace dependencies,
+  so each lint crate can load translated diagnostics without manual resource
   management. Both crates live in `[workspace.dependencies]` to keep versions
   aligned and to simplify adoption across current and future lints.
 - Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
@@ -169,14 +169,14 @@ Utilities shared by lints:
   enabling non-English smoke tests.
 - Emit structured diagnostics by formatting all human-facing text through the
   bundle before calling `span_lint`. Primary messages, labels, notes, and help
-  text each source their own Fluent attribute so translators do not wrestle
+  text each source their own Fluent attribute, so translators do not wrestle
   with concatenated phrases. Suggestion titles and placeholders pass concrete
   arguments (`{ flag }`, `{ subject }`) rather than interpolated strings to
   maintain parity with `rustc`'s diagnostic pipeline.
-- Extend the UI harness so locale-specific fixtures run under both the fallback
-  and at least one secondary locale. The tests assert on rendered strings and
-  continue to execute via `dylint_testing`'s JSON output to ensure machine
-  readability remains intact.
+- Extend the UI harness, so locale-specific fixtures run under the fallback
+  locale and at least one secondary locale. The tests assert on rendered
+  strings and continue to execute via `dylint_testing`'s JSON output to ensure
+  machine readability remains intact.
 
 ## 3) Seven core lints (specs + sketches)
 
