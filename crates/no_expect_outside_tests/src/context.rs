@@ -117,33 +117,18 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    if attr.has_name(sym::cfg) {
-        return attr
-            .meta_item_list()
-            .map(|items| items.into_iter().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+    if let Some(meta) = attr.meta() {
+        return meta_contains_test_cfg(&meta);
     }
 
-    if !attr.has_name(sym::cfg_attr) {
-        return false;
-    }
-
-    let Some(mut items) = attr.meta_item_list() else {
-        return false;
-    };
-    let mut iter = items.into_iter();
-    let Some(condition) = iter.next() else {
-        return false;
-    };
-
-    if !meta_item_inner_contains_test(condition) {
-        return false;
-    }
-
-    iter.any(|item| match item {
-        MetaItemInner::MetaItem(meta) => meta_contains_test_cfg(&meta),
-        MetaItemInner::Lit(_) => false,
-    })
+    attr.meta_item_list()
+        .map(|items| {
+            items.into_iter().any(|item| match item {
+                MetaItemInner::MetaItem(meta) => meta_contains_test_cfg(&meta),
+                MetaItemInner::Lit(_) => false,
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
