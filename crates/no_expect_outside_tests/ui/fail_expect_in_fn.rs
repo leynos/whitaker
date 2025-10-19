@@ -1,3 +1,4 @@
+//! Negative UI fixture: `.expect(...)` outside tests must be denied.
 #![deny(no_expect_outside_tests)]
 
 fn process() {

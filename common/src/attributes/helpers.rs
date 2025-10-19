@@ -56,6 +56,18 @@ pub fn has_test_like_attribute(attrs: &[Attribute]) -> bool {
     has_test_like_attribute_with(attrs, &[])
 }
 
+/// Returns `true` when any attribute marks the item as test-like, accounting
+/// for custom attribute paths supplied at runtime.
+///
+/// # Examples
+///
+/// ```
+/// use common::attributes::{has_test_like_attribute_with, Attribute, AttributeKind, AttributePath};
+///
+/// let attr = Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer);
+/// let additional = vec![AttributePath::from("custom::test")];
+/// assert!(has_test_like_attribute_with(&[attr], &additional));
+/// ```
 #[must_use]
 pub fn has_test_like_attribute_with(attrs: &[Attribute], additional: &[AttributePath]) -> bool {
     attrs

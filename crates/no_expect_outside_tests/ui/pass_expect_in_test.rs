@@ -1,3 +1,4 @@
+//! Positive UI fixture: allow `.expect(...)` in `#[test]` contexts.
 #![deny(no_expect_outside_tests)]
 
 #[test]

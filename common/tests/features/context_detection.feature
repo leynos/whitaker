@@ -6,6 +6,12 @@ Feature: Context detection
     Then the function is recognised as test-like
     And its context is marked as test-like
 
+  Scenario: Recognise tokio::test decorated functions
+    Given a function annotated with tokio::test
+    When I check whether the function is test-like
+    Then the function is recognised as test-like
+    And its context is marked as test-like
+
   Scenario: Ignore plain functions
     Given a function without test attributes
     When I check whether the function is test-like

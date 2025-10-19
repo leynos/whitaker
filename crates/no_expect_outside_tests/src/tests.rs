@@ -1,3 +1,5 @@
+//! Unit tests validating context summarisation outcomes.
+
 use crate::context::summarise_context;
 use common::attributes::{Attribute, AttributeKind, AttributePath};
 use common::{ContextEntry, ContextKind};

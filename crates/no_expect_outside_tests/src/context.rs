@@ -58,12 +58,12 @@ pub(crate) fn summarise_context(
 fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
     match node {
         Node::Item(item) => match &item.kind {
-            hir::ItemKind::Fn { ident, .. } => Some(ContextEntry::function(
-                ident.name.to_string(),
+            hir::ItemKind::Fn(..) => Some(ContextEntry::function(
+                item.ident.name.to_string(),
                 convert_attributes(attrs),
             )),
-            hir::ItemKind::Mod(ident, ..) => Some(ContextEntry::new(
-                ident.name.to_string(),
+            hir::ItemKind::Mod(..) => Some(ContextEntry::new(
+                item.ident.name.to_string(),
                 ContextKind::Module,
                 convert_attributes(attrs),
             )),
@@ -108,13 +108,9 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     };
     let path = if attr.doc_str().is_some() {
         AttributePath::from("doc")
-    } else if let Some(segments) = attr.ident_path() {
-        let names = segments.into_iter().map(|ident| ident.name.to_string());
-        AttributePath::new(names)
-    } else if let Some(name) = attr.name() {
-        AttributePath::from(name.to_string())
     } else {
-        AttributePath::from("unknown")
+        let names = attr.path().into_iter().map(|symbol| symbol.to_string());
+        AttributePath::new(names)
     };
 
     Attribute::new(path, kind)

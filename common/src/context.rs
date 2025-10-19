@@ -123,6 +123,19 @@ pub fn is_test_fn(attrs: &[Attribute]) -> bool {
     has_test_like_attribute(attrs)
 }
 
+/// Tests whether a slice of attributes marks an item as a test function while
+/// honouring custom attribute paths.
+///
+/// # Examples
+///
+/// ```
+/// use common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use common::context::is_test_fn_with;
+///
+/// let attrs = vec![Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer)];
+/// let additional = vec![AttributePath::from("custom::test")];
+/// assert!(is_test_fn_with(&attrs, &additional));
+/// ```
 #[must_use]
 pub fn is_test_fn_with(attrs: &[Attribute], additional: &[AttributePath]) -> bool {
     has_test_like_attribute_with(attrs, additional)
@@ -145,6 +158,20 @@ pub fn in_test_like_context(stack: &[ContextEntry]) -> bool {
     in_test_like_context_with(stack, &[])
 }
 
+/// Returns `true` when any entry in the stack participates in a test-like
+/// context, including those provided via the `additional` attribute paths.
+///
+/// # Examples
+///
+/// ```
+/// use common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use common::context::{in_test_like_context_with, ContextEntry};
+///
+/// let mut entry = ContextEntry::function("demo", Vec::new());
+/// entry.push_attribute(Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer));
+/// let additional = vec![AttributePath::from("custom::test")];
+/// assert!(in_test_like_context_with(&[entry], &additional));
+/// ```
 #[must_use]
 pub fn in_test_like_context_with(stack: &[ContextEntry], additional: &[AttributePath]) -> bool {
     stack

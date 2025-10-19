@@ -1,3 +1,5 @@
+//! Behaviour-driven tests covering context summarisation for the lint.
+
 use crate::context::{ContextSummary, summarise_context};
 use common::attributes::{Attribute, AttributeKind, AttributePath};
 use common::{ContextEntry, ContextKind};

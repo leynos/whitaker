@@ -61,11 +61,11 @@ other outer attribute.
 
 ## `no_expect_outside_tests`
 
-Whitaker's restriction lint forbids calling `.expect(..)` on `Option` or
+Whitaker's restriction lint forbids calling `.expect(...)` on `Option` or
 `Result` receivers outside test contexts. The analysis inspects method calls,
 confirms the receiver resolves to one of the two panic-producing types, and
 walks the HIR ancestor chain to detect enclosing test attributes or `cfg(test)`
-modules. When the call occurs in production code the diagnostic explains which
+modules. When the call occurs in production code, the diagnostic explains which
 function triggered the lint and echoes the receiver type, helping teams decide
 where error handling should live.
 

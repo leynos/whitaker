@@ -1,5 +1,4 @@
 #![feature(rustc_private)]
-#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 //! Lint crate forbidding `.expect(..)` outside test and doctest contexts.
 //!
@@ -105,9 +104,19 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "tests assert panic paths to validate lint behaviour"
+)]
 mod tests;
 
 #[cfg(test)]
+#[expect(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "behaviour tests exercise panic workflows intentionally"
+)]
 mod behaviour;
 
 #[cfg(test)]

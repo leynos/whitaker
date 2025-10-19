@@ -75,6 +75,12 @@ fn given_rstest(function: &FunctionFixture) {
     function.push_attribute(attribute);
 }
 
+#[given("a function annotated with tokio::test")]
+fn given_tokio(function: &FunctionFixture) {
+    let attribute = Attribute::new(AttributePath::from("tokio::test"), AttributeKind::Outer);
+    function.push_attribute(attribute);
+}
+
 #[given("a function without test attributes")]
 fn given_plain(function: &FunctionFixture) {
     function.clear();
@@ -128,6 +134,16 @@ fn scenario_detects_rstest(function: FunctionFixture, evaluation: Evaluation) {
 }
 
 #[scenario(path = "tests/features/context_detection.feature", index = 1)]
+fn scenario_detects_tokio(function: FunctionFixture, evaluation: Evaluation) {
+    let _ = (function, evaluation);
+}
+
+#[scenario(path = "tests/features/context_detection.feature", index = 2)]
 fn scenario_ignores_plain(function: FunctionFixture, evaluation: Evaluation) {
+    let _ = (function, evaluation);
+}
+
+#[scenario(path = "tests/features/context_detection.feature", index = 3)]
+fn scenario_recognises_custom(function: FunctionFixture, evaluation: Evaluation) {
     let _ = (function, evaluation);
 }

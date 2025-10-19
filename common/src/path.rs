@@ -67,15 +67,10 @@ impl SimplePath {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let candidate_segments: Vec<String> = candidate
-            .into_iter()
-            .map(|segment| segment.as_ref().to_owned())
-            .collect();
-
         self.segments
             .iter()
             .map(String::as_str)
-            .eq(candidate_segments.iter().map(String::as_str))
+            .eq(candidate.into_iter().map(|segment| segment.as_ref()))
     }
 
     /// Returns `true` when the path denotes a doc comment (`doc`).
