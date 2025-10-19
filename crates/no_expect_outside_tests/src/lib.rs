@@ -12,6 +12,7 @@
 //! macros are in play.
 
 use common::AttributePath;
+use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::Ty;
@@ -45,10 +46,27 @@ pub struct NoExpectOutsideTests {
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>, krate: &'tcx hir::Crate<'tcx>) {
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>, krate: &'tcx hir::Crate<'tcx>) {
         self.is_doctest = krate.is_doctest;
+        let config_name = "no_expect_outside_tests";
+        let config = match dylint_linting::config::<Config>(config_name) {
+            Ok(Some(config)) => config,
+            Ok(None) => {
+                debug!(
+                    target: config_name,
+                    "no configuration found for `{config_name}`; using defaults"
+                );
+                Config::default()
+            }
+            Err(error) => {
+                debug!(
+                    target: config_name,
+                    "failed to parse `{config_name}` configuration: {error}; using defaults"
+                );
+                Config::default()
+            }
+        };
 
-        let config: Config = dylint_linting::config_or_default(cx, "no_expect_outside_tests");
         self.additional_test_attributes = config
             .additional_test_attributes
             .iter()
@@ -95,6 +113,11 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
+    let ty = cx
+        .tcx
+        .normalize_erasing_regions(cx.param_env, ty)
+        .peel_refs();
+
     let Some(adt) = ty.ty_adt_def() else {
         return false;
     };

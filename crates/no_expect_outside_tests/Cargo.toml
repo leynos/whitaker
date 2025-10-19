@@ -16,6 +16,7 @@ rustc_session = { workspace = true }
 rustc_span = { workspace = true }
 common = { path = "../../common" }
 serde = { version = "1.0", features = ["derive"] }
+log = "0.4.28"
 
 [dev-dependencies]
 whitaker = { path = "../../" }

@@ -1,4 +1,5 @@
-//! Behaviour-driven tests for context detection and test-like attribute recognition.
+//! Behaviour-driven tests for context detection and test-like attribute recognition,
+//! including configured additions to the recognised attribute set.
 
 use common::attributes::{Attribute, AttributeKind, AttributePath};
 use common::context::{ContextEntry, in_test_like_context_with, is_test_fn_with};

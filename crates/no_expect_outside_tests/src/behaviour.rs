@@ -1,4 +1,5 @@
-//! Behaviour-driven tests covering context summarisation for the lint.
+//! Behaviour-driven tests covering context summarisation for the lint's context
+//! world and BDD steps.
 
 use crate::context::{ContextSummary, summarise_context};
 use common::attributes::{Attribute, AttributeKind, AttributePath};
@@ -63,8 +64,8 @@ impl ContextWorld {
         *self.summary.borrow_mut() = summary;
     }
 
-    fn summary(&self) -> ContextSummary {
-        self.summary.borrow().clone()
+    fn summary_ref(&self) -> std::cell::Ref<'_, ContextSummary> {
+        self.summary.borrow()
     }
 
     fn should_skip_lint(&self) -> bool {
@@ -121,25 +122,23 @@ fn when_summarise(world: &ContextWorld) {
 
 #[then("the context is marked as production")]
 fn then_production(world: &ContextWorld) {
-    assert!(!world.summary().is_test);
+    assert!(!world.summary_ref().is_test);
 }
 
 #[then("the context is marked as test")]
 fn then_test(world: &ContextWorld) {
-    assert!(world.summary().is_test);
+    assert!(world.summary_ref().is_test);
 }
 
 #[then("the function name is {expected}")]
 fn then_function(world: &ContextWorld, expected: String) {
-    assert_eq!(
-        world.summary().function_name.as_deref(),
-        Some(expected.as_str())
-    );
+    let summary = world.summary_ref();
+    assert_eq!(summary.function_name.as_deref(), Some(expected.as_str()));
 }
 
 #[then("no function name is recorded")]
 fn then_no_function(world: &ContextWorld) {
-    assert!(world.summary().function_name.is_none());
+    assert!(world.summary_ref().function_name.is_none());
 }
 
 #[then("the lint is skipped")]
@@ -151,16 +150,18 @@ fn then_lint_skipped(world: &ContextWorld) {
 fn scenario_production(world: ContextWorld) {
     world.push_function("handler");
     world.evaluate();
-    assert!(!world.summary().is_test);
-    assert_eq!(world.summary().function_name.as_deref(), Some("handler"));
+    let summary = world.summary_ref();
+    assert!(!summary.is_test);
+    assert_eq!(summary.function_name.as_deref(), Some("handler"));
 }
 
 #[scenario(path = "tests/features/context_summary.feature", index = 1)]
 fn scenario_test(world: ContextWorld) {
     world.push_test_function("works");
     world.evaluate();
-    assert!(world.summary().is_test);
-    assert_eq!(world.summary().function_name.as_deref(), Some("works"));
+    let summary = world.summary_ref();
+    assert!(summary.is_test);
+    assert_eq!(summary.function_name.as_deref(), Some("works"));
 }
 
 #[scenario(path = "tests/features/context_summary.feature", index = 2)]
@@ -168,8 +169,9 @@ fn scenario_cfg_test(world: ContextWorld) {
     world.push_module("tests");
     world.enable_cfg_test();
     world.evaluate();
-    assert!(world.summary().is_test);
-    assert!(world.summary().function_name.is_none());
+    let summary = world.summary_ref();
+    assert!(summary.is_test);
+    assert!(summary.function_name.is_none());
 }
 
 #[scenario(path = "tests/features/context_summary.feature", index = 3)]
@@ -183,8 +185,9 @@ fn scenario_additional_attribute(world: ContextWorld) {
         )],
     ));
     world.evaluate();
-    assert!(world.summary().is_test);
-    assert_eq!(world.summary().function_name.as_deref(), Some("custom"));
+    let summary = world.summary_ref();
+    assert!(summary.is_test);
+    assert_eq!(summary.function_name.as_deref(), Some("custom"));
 }
 
 #[scenario(path = "tests/features/context_summary.feature", index = 4)]
@@ -193,5 +196,8 @@ fn scenario_doctest(world: ContextWorld) {
     world.mark_doctest();
     world.evaluate();
     assert!(world.should_skip_lint());
-    assert_eq!(world.summary().function_name.as_deref(), Some("handler"));
+    assert_eq!(
+        world.summary_ref().function_name.as_deref(),
+        Some("handler")
+    );
 }

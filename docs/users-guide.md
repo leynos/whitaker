@@ -69,7 +69,7 @@ modules. When the call occurs in production code, the diagnostic explains which
 function triggered the lint and echoes the receiver type, helping teams decide
 where error handling should live.
 
-Attributes that merely add metadata under `cfg_attr(test, ..)` do not mark an
+Attributes that merely add metadata under `cfg_attr(test, ...)` do not mark an
 item as test-only: the lint only treats the code as guarded when the attribute
 directly applies a `cfg(test)` gate (for example, via
 `cfg_attr(test, cfg(test))`). This prevents production functions that enable
@@ -81,9 +81,9 @@ summaries for non-test functions, explicit test attributes, and modules guarded
 by `cfg(test)`.
 
 Doctests compiled by `rustdoc` are detected via the compiler-provided
-`Crate::is_doctest` flag. When that flag is set the lint pass skips all checks,
-allowing documentation examples to continue using `.expect(..)` while keeping
-production code guarded.
+`Crate::is_doctest` flag. When that flag is set, the lint pass skips all
+checks, allowing documentation examples to continue using `.expect(...)` while
+keeping production code guarded.
 
 The recognised test attributes can be extended through `dylint.toml` when teams
 rely on bespoke harness macros. Add the fully qualified attribute paths under

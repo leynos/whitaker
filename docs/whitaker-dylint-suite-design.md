@@ -149,14 +149,14 @@ Utilities shared by lints:
 
 ## 3) Seven core lints (specs + sketches)
 
-| Crate                         | Kind            | Summary                                                                                                                | Level |
-| ----------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- | ----- |
-| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                   | warn  |
-| `no_expect_outside_tests`     | restriction     | Ban `.expect(..)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item). | deny  |
-| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                    | warn  |
-| `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                 | warn  |
-| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.       | warn  |
-| `module_max_400_lines`        | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                      | warn  |
+| Crate                         | Kind            | Summary                                                                                                                 | Level |
+| ----------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- | ----- |
+| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                    | warn  |
+| `no_expect_outside_tests`     | restriction     | Ban `.expect(...)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item). | deny  |
+| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
+| `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
+| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
+| `module_max_400_lines`        | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
 
 ### Per-lint crate scaffolding
 
@@ -246,7 +246,7 @@ Implementation details:
 
 ### 3.2 `no_expect_outside_tests` (restriction, deny)
 
-Forbid `.expect(..)` on `Option`/`Result` outside tests/doctests.
+Forbid `.expect(...)` on `Option`/`Result` outside tests/doctests.
 
 The lint inspects the crate-wide `Crate::is_doctest` flag so doctest harnesses
 produced by `rustdoc` bypass the check entirely. This keeps documentation
@@ -270,7 +270,7 @@ impl_late_lint! { NO_EXPECT_OUTSIDE_TESTS, Pass,
       if seg.ident.name.as_str() == "expect"
         && common::recv_is_option_or_result(cx, recv)
         && !common::in_test_like_context(cx, e.hir_id) {
-        common::span_lint(cx, NO_EXPECT_OUTSIDE_TESTS, e.span, "`.expect(..)` outside tests");
+        common::span_lint(cx, NO_EXPECT_OUTSIDE_TESTS, e.span, "`.expect(...)` outside tests");
       }
     }
   }
@@ -849,7 +849,7 @@ pub fn frob() {}
 pub fn frob() {}
 ```
 
-- **`.expect(..)` outside tests**
+- **`.expect(...)` outside tests**
 
 ```rust
 // bad
