@@ -5,6 +5,10 @@ edition = "2024"
 
 [dependencies]
 
+fluent-templates = { workspace = true }
+once_cell = { workspace = true }
+thiserror = { workspace = true }
+
 [dev-dependencies]
 # Testing: Behavioural specs pin rstest-bdd crates to 0.1.0-alpha4 while we
 # await a stable release. These alpha builds may regress; capture any failures
@@ -14,6 +18,7 @@ edition = "2024"
 rstest = "0.26.1"
 rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
+regex = "1.10.4"
 
 [lints.clippy]
 expect_used = "deny"

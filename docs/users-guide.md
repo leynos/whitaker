@@ -46,6 +46,20 @@ Run `make test` from the workspace root to execute unit, behaviour, and UI
 harness tests. The shared target enables `rstest` fixtures and `rstest-bdd`
 scenarios, ensuring each lint crate benefits from the consistent test harness.
 
+## Localised diagnostics
+
+Whitaker bundles Fluent resources under `locales/` so every lint can present
+messages in multiple languages. The `common::i18n::Localiser` helper resolves
+message strings and attributes, reporting when the fallback `en-GB` bundle is
+used. Secondary `cy` (Welsh) and `gd` (Scottish Gaelic) locales demonstrate how
+to translate each lint slug and drive behaviour tests that exercise non-English
+lookups, including plural handling for languages with richer category sets.
+
+Call `common::i18n::available_locales()` to enumerate the compiled locales when
+selecting a language. If an unsupported locale is requested, the loader falls
+back to the bundled `en-GB` strings and surfaces a missing message error if a
+slug is not translated.
+
 ## `function_attrs_follow_docs`
 
 Whitaker's first lint checks that doc comments sit in front of all other outer

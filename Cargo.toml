@@ -7,6 +7,8 @@ camino = "1.2.1"
 cargo_metadata = "0.23.0"
 dylint_linting = "5"
 dylint_testing = "5"
+fluent-templates = "0.13.1"
+once_cell = "1.21.3"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 thiserror = "2"
