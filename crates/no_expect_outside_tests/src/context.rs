@@ -225,6 +225,13 @@ mod tests {
         ))],
     ), true)]
     #[case(meta_list(
+        &["cfg"],
+        vec![meta_inner(meta_list(
+            &["not"],
+            vec![meta_inner(meta_word(&["test"]))],
+        ))],
+    ), false)]
+    #[case(meta_list(
         &["cfg_attr"],
         vec![
             meta_inner(meta_word(&["test"])),
@@ -250,19 +257,42 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
+    meta_item_inner_contains_test_with_polarity(item, true)
+}
+
+fn meta_item_inner_contains_test_with_polarity(item: MetaItemInner, is_positive: bool) -> bool {
     match item {
-        MetaItemInner::MetaItem(meta) => meta_contains_test(&meta),
+        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(&meta, is_positive),
         MetaItemInner::Lit(_) => false,
     }
 }
 
 fn meta_contains_test(meta: &MetaItem) -> bool {
+    meta_contains_test_with_polarity(meta, true)
+}
+
+fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
     if meta.path.is_ident(sym::test) || meta.path.is_ident(sym::doctest) {
-        return true;
+        return is_positive;
+    }
+
+    if meta.path.is_ident(sym::not) {
+        return meta
+            .meta_item_list()
+            .map(|items| {
+                items
+                    .into_iter()
+                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+            })
+            .unwrap_or(false);
     }
 
     meta.meta_item_list()
-        .map(|items| items.into_iter().any(meta_item_inner_contains_test))
+        .map(|items| {
+            items
+                .into_iter()
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+        })
         .unwrap_or(false)
 }
 

@@ -107,7 +107,7 @@ fn receiver_is_option_or_result<'tcx>(
     cx: &LateContext<'tcx>,
     receiver: &'tcx hir::Expr<'tcx>,
 ) -> bool {
-    let ty = cx.typeck_results().expr_ty(receiver).peel_refs();
+    let ty = cx.typeck_results().expr_ty(receiver);
 
     ty_is_option_or_result(cx, ty)
 }
