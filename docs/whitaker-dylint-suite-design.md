@@ -248,15 +248,15 @@ Implementation details:
 
 Forbid `.expect(...)` on `Option`/`Result` outside tests/doctests.
 
-The lint inspects the crate-wide `Crate::is_doctest` flag so doctest harnesses
+The lint inspects the crate-wide `Crate::is_doctest` flag, so doctest harnesses
 produced by `rustdoc` bypass the check entirely. This keeps documentation
 examples ergonomic while leaving the runtime lint strict.
 
-Recognised test attributes now combine the built-in shortlist with an
+Recognized test attributes now combine the built-in shortlist with an
 `additional_test_attributes` array loaded from `dylint.toml`. The values are
 stored as fully qualified paths (for example `my_framework::test`) and threaded
 through the context collector so custom harness macros are treated like
-first-party attributes when summarising the traversal stack.
+first-party attributes when summarizing the traversal stack.
 
 Sketch:
 
@@ -275,10 +275,10 @@ impl_late_lint! { NO_EXPECT_OUTSIDE_TESTS, Pass,
     }
   }
 }
-The implementation interrogates typeck results to confirm the method
-receiver resolves to `Option` or `Result` by walking the ADT definition. A
-context summariser climbs the HIR parent stack collecting function, module,
-and impl entries, then flags test scenarios when a recognised attribute or a
+The implementation interrogates typeck results to confirm the method receiver
+resolves to `Option` or `Result` by walking the ADT definition. A context
+summarizer climbs the HIR parent stack collecting function, module, and impl
+entries, then flags test scenarios when a recognized attribute or a
 `cfg(test)` guard appears. Diagnostics lean on that summary: the primary
 message is accompanied by notes that echo the enclosing function name and the
 receiver type, plus a help hint that nudges developers toward explicit error
@@ -290,7 +290,7 @@ production-only functions that merely relax warnings or lints under test builds
 from being misclassified as test code, eliminating a class of false negatives
 observed during feature rollout.
 
-Behaviour-driven unit tests exercise the summariser in isolation, covering
+Behaviour-driven unit tests exercise the summarizer in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
 paths added via configuration. UI fixtures demonstrate the denial emitted for
 ordinary functions and the absence of findings inside `#[test]` contexts.
