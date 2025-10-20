@@ -37,10 +37,6 @@ impl FunctionFixture {
         if let Some(entry) = self.context.borrow_mut().last_mut() {
             entry.attributes_mut().clear();
         }
-        self.reset_additional();
-    }
-
-    fn reset_additional(&self) {
         self.additional.borrow_mut().clear();
     }
 
