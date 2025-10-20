@@ -106,7 +106,7 @@ fn then_contains(fixture: &I18nFixture, snippet: String) {
 fn then_missing(fixture: &I18nFixture) {
     match fixture.result() {
         Err(I18nError::MissingMessage { .. }) => {}
-        other => panic!("unexpected result: {other:?}"),
+        other => panic!("unexpected result: {other:?}", other = other),
     }
 }
 
