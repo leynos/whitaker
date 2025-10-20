@@ -253,7 +253,7 @@ produced by `rustdoc` bypass the check entirely. This keeps documentation
 examples ergonomic while leaving the runtime lint strict.
 
 Recognized test attributes now combine the built-in shortlist with an
-`additional_test_attributes` array loaded from `dylint.toml`. The values are
+`additional_test_attributes` array loaded from `dylint.toml`. These values are
 stored as fully qualified paths (for example `my_framework::test`) and threaded
 through the context collector so custom harness macros are treated like
 first-party attributes when summarizing the traversal stack.
