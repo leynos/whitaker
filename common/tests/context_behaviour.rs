@@ -1,7 +1,10 @@
 //! Behaviour-driven tests for context detection and test-like attribute recognition.
+//!
+//! Validates detection of standard test attributes (`#[rstest]`, `#[tokio::test]`)
+//! and custom attributes configured via the additional attribute set.
 
 use common::attributes::{Attribute, AttributeKind, AttributePath};
-use common::context::{ContextEntry, in_test_like_context, is_test_fn};
+use common::context::{ContextEntry, in_test_like_context_with, is_test_fn_with};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
@@ -10,6 +13,7 @@ use std::cell::RefCell;
 struct FunctionFixture {
     attributes: RefCell<Vec<Attribute>>,
     context: RefCell<Vec<ContextEntry>>,
+    additional: RefCell<Vec<AttributePath>>,
 }
 
 impl FunctionFixture {
@@ -17,6 +21,7 @@ impl FunctionFixture {
         Self {
             attributes: RefCell::new(Vec::new()),
             context: RefCell::new(vec![ContextEntry::function("demo", Vec::new())]),
+            additional: RefCell::new(Vec::new()),
         }
     }
 
@@ -32,6 +37,11 @@ impl FunctionFixture {
         if let Some(entry) = self.context.borrow_mut().last_mut() {
             entry.attributes_mut().clear();
         }
+        self.reset_additional();
+    }
+
+    fn reset_additional(&self) {
+        self.additional.borrow_mut().clear();
     }
 
     fn attributes(&self) -> std::cell::Ref<'_, Vec<Attribute>> {
@@ -40,6 +50,14 @@ impl FunctionFixture {
 
     fn context(&self) -> std::cell::Ref<'_, Vec<ContextEntry>> {
         self.context.borrow()
+    }
+
+    fn additional(&self) -> std::cell::Ref<'_, Vec<AttributePath>> {
+        self.additional.borrow()
+    }
+
+    fn configure_additional(&self, path: &str) {
+        self.additional.borrow_mut().push(AttributePath::from(path));
     }
 }
 
@@ -64,18 +82,36 @@ fn given_rstest(function: &FunctionFixture) {
     function.push_attribute(attribute);
 }
 
+#[given("a function annotated with tokio::test")]
+fn given_tokio(function: &FunctionFixture) {
+    let attribute = Attribute::new(AttributePath::from("tokio::test"), AttributeKind::Outer);
+    function.push_attribute(attribute);
+}
+
 #[given("a function without test attributes")]
 fn given_plain(function: &FunctionFixture) {
     function.clear();
+}
+
+#[given("the lint recognises {path} as a test attribute")]
+fn given_custom_attribute(function: &FunctionFixture, path: String) {
+    function.configure_additional(&path);
+}
+
+#[given("a function annotated with the custom test attribute {path}")]
+fn given_function_with_custom_attribute(function: &FunctionFixture, path: String) {
+    let attribute = Attribute::new(AttributePath::from(path), AttributeKind::Outer);
+    function.push_attribute(attribute);
 }
 
 #[when("I check whether the function is test-like")]
 fn when_check(function: &FunctionFixture) -> Evaluation {
     let attributes = function.attributes();
     let context = function.context();
+    let additional = function.additional();
     Evaluation {
-        is_test: is_test_fn(attributes.as_slice()),
-        in_context: in_test_like_context(context.as_slice()),
+        is_test: is_test_fn_with(attributes.as_slice(), additional.as_slice()),
+        in_context: in_test_like_context_with(context.as_slice(), additional.as_slice()),
     }
 }
 
@@ -105,6 +141,16 @@ fn scenario_detects_rstest(function: FunctionFixture, evaluation: Evaluation) {
 }
 
 #[scenario(path = "tests/features/context_detection.feature", index = 1)]
+fn scenario_detects_tokio(function: FunctionFixture, evaluation: Evaluation) {
+    let _ = (function, evaluation);
+}
+
+#[scenario(path = "tests/features/context_detection.feature", index = 2)]
 fn scenario_ignores_plain(function: FunctionFixture, evaluation: Evaluation) {
+    let _ = (function, evaluation);
+}
+
+#[scenario(path = "tests/features/context_detection.feature", index = 3)]
+fn scenario_recognises_custom(function: FunctionFixture, evaluation: Evaluation) {
     let _ = (function, evaluation);
 }

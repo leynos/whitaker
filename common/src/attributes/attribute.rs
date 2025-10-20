@@ -155,9 +155,37 @@ impl Attribute {
     /// ```
     #[must_use]
     pub fn is_test_like(&self) -> bool {
-        TEST_LIKE_PATHS
+        self.is_test_like_with(&[])
+    }
+
+    /// Indicates whether the attribute marks a test-like context when supplied
+    /// with additional recognised paths.
+    ///
+    /// Test-like attributes include `test`, `tokio::test`, `async_std::test`,
+    /// `rstest`, and any entries provided via the `additional` parameter.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    ///
+    /// let attr = Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer);
+    /// let additional = vec![AttributePath::from("custom::test")];
+    /// assert!(attr.is_test_like_with(&additional));
+    /// ```
+    #[must_use]
+    pub fn is_test_like_with(&self, additional: &[AttributePath]) -> bool {
+        if TEST_LIKE_PATHS
             .iter()
             .any(|candidate| self.path.matches(candidate.iter().copied()))
+        {
+            return true;
+        }
+
+        additional.iter().any(|path| {
+            self.path
+                .matches(path.segments().iter().map(String::as_str))
+        })
     }
 
     /// Returns `true` when the attribute is an inner attribute.

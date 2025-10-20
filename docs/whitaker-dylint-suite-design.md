@@ -180,14 +180,14 @@ Utilities shared by lints:
 
 ## 3) Seven core lints (specs + sketches)
 
-| Crate                         | Kind            | Summary                                                                                                                | Level |
-| ----------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- | ----- |
-| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                   | warn  |
-| `no_expect_outside_tests`     | restriction     | Ban `.expect(..)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item). | deny  |
-| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                    | warn  |
-| `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                 | warn  |
-| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.       | warn  |
-| `module_max_400_lines`        | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                      | warn  |
+| Crate                         | Kind            | Summary                                                                                                                 | Level |
+| ----------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- | ----- |
+| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                    | warn  |
+| `no_expect_outside_tests`     | restriction     | Ban `.expect(…)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item).   | deny  |
+| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
+| `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
+| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
+| `module_max_400_lines`        | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
 
 ### Per-lint crate scaffolding
 
@@ -277,7 +277,17 @@ Implementation details:
 
 ### 3.2 `no_expect_outside_tests` (restriction, deny)
 
-Forbid `.expect(..)` on `Option`/`Result` outside tests/doctests.
+Forbid `.expect(…)` on `Option`/`Result` outside tests/doctests.
+
+The lint inspects the crate-wide `Crate::is_doctest` flag, so doctest harnesses
+produced by `rustdoc` bypass the check entirely. This keeps documentation
+examples ergonomic while leaving the runtime lint strict.
+
+Recognized test attributes now combine the built-in shortlist with an
+`additional_test_attributes` array loaded from `dylint.toml`. These values are
+stored as fully qualified paths (for example `my_framework::test`) and threaded
+through the context collector so custom harness macros are treated like
+first-party attributes when summarizing the traversal stack.
 
 Sketch:
 
@@ -291,11 +301,31 @@ impl_late_lint! { NO_EXPECT_OUTSIDE_TESTS, Pass,
       if seg.ident.name.as_str() == "expect"
         && common::recv_is_option_or_result(cx, recv)
         && !common::in_test_like_context(cx, e.hir_id) {
-        common::span_lint(cx, NO_EXPECT_OUTSIDE_TESTS, e.span, "`.expect(..)` outside tests");
+        common::span_lint(cx, NO_EXPECT_OUTSIDE_TESTS, e.span, "`.expect(…)` outside tests");
       }
     }
   }
 }
+The implementation interrogates typeck results to confirm the method receiver
+resolves to `Option` or `Result` by walking the ADT definition. A context
+summarizer climbs the HIR parent stack collecting function, module, and impl
+entries, then flags test scenarios when a recognized attribute or a
+`cfg(test)` guard appears. Diagnostics lean on that summary: the primary
+message is accompanied by notes that echo the enclosing function name and the
+receiver type, plus a help hint that nudges developers toward explicit error
+handling.
+
+`cfg_attr(test, ..)` annotations are ignored unless they inject a `cfg(test)`
+gate (for example, `cfg_attr(test, cfg(test))`). This distinction prevents
+production-only functions that merely relax warnings or lints under test builds
+from being misclassified as test code, eliminating a class of false negatives
+observed during feature rollout.
+
+Behaviour-driven unit tests exercise the summarizer in isolation, covering
+plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
+paths added via configuration. UI fixtures demonstrate the denial emitted for
+ordinary functions and the absence of findings inside `#[test]` contexts.
+
 ```
 
 ### 3.3 `public_fn_must_have_docs` (pedantic, warn)
@@ -850,7 +880,7 @@ pub fn frob() {}
 pub fn frob() {}
 ```
 
-- **`.expect(..)` outside tests**
+- **`.expect(…)` outside tests**
 
 ```rust
 // bad

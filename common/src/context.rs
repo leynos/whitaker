@@ -1,6 +1,8 @@
 //! Context tracking utilities for analysing traversal stacks.
 
-use crate::attributes::{Attribute, has_test_like_attribute};
+use crate::attributes::{
+    Attribute, AttributeKind, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
+};
 
 /// Categorises a frame within the traversal stack.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,6 +123,24 @@ pub fn is_test_fn(attrs: &[Attribute]) -> bool {
     has_test_like_attribute(attrs)
 }
 
+/// Tests whether a slice of attributes marks an item as a test function while
+/// honouring custom attribute paths.
+///
+/// # Examples
+///
+/// ```
+/// use common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use common::context::is_test_fn_with;
+///
+/// let attrs = vec![Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer)];
+/// let additional = vec![AttributePath::from("custom::test")];
+/// assert!(is_test_fn_with(&attrs, &additional));
+/// ```
+#[must_use]
+pub fn is_test_fn_with(attrs: &[Attribute], additional: &[AttributePath]) -> bool {
+    has_test_like_attribute_with(attrs, additional)
+}
+
 /// Returns `true` when any entry in the stack participates in a test-like context.
 ///
 /// # Examples
@@ -135,9 +155,28 @@ pub fn is_test_fn(attrs: &[Attribute]) -> bool {
 /// ```
 #[must_use]
 pub fn in_test_like_context(stack: &[ContextEntry]) -> bool {
+    in_test_like_context_with(stack, &[])
+}
+
+/// Returns `true` when any entry in the stack participates in a test-like
+/// context, including those provided via the `additional` attribute paths.
+///
+/// # Examples
+///
+/// ```
+/// use common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use common::context::{in_test_like_context_with, ContextEntry};
+///
+/// let mut entry = ContextEntry::function("demo", Vec::new());
+/// entry.push_attribute(Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer));
+/// let additional = vec![AttributePath::from("custom::test")];
+/// assert!(in_test_like_context_with(&[entry], &additional));
+/// ```
+#[must_use]
+pub fn in_test_like_context_with(stack: &[ContextEntry], additional: &[AttributePath]) -> bool {
     stack
         .iter()
-        .any(|entry| has_test_like_attribute(entry.attributes()))
+        .any(|entry| has_test_like_attribute_with(entry.attributes(), additional))
 }
 
 /// Detects whether the current traversal stack is inside a `main` function.
@@ -195,5 +234,19 @@ mod tests {
     fn rejects_non_main() {
         let stack = vec![ContextEntry::function("helper", Vec::new())];
         assert!(!is_in_main_fn(&stack));
+    }
+
+    #[rstest]
+    fn honours_additional_attributes() {
+        let additional = vec![AttributePath::from("custom::test")];
+        let attrs = vec![Attribute::new(
+            AttributePath::from("custom::test"),
+            AttributeKind::Outer,
+        )];
+
+        assert!(is_test_fn_with(&attrs, additional.as_slice()));
+
+        let entry = ContextEntry::function("demo", attrs);
+        assert!(in_test_like_context_with(&[entry], additional.as_slice()));
     }
 }

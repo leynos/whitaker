@@ -58,3 +58,42 @@ The UI fixtures demonstrate accepted and rejected layouts across the three
 function kinds, while behaviour tests walk through happy, unhappy, and edge
 cases. To fix the warning, move the doc comment so it appears before every
 other outer attribute.
+
+## `no_expect_outside_tests`
+
+Whitaker's restriction lint forbids calling `.expect(...)` on `Option` or
+`Result` receivers outside test contexts. The analysis inspects method calls,
+confirms the receiver resolves to one of the two panic-producing types, and
+walks the HIR ancestor chain to detect enclosing test attributes or `cfg(test)`
+modules. When the call occurs in production code, the diagnostic explains which
+function triggered the lint and echoes the receiver type, helping teams decide
+where error handling should live.
+
+Attributes that merely add metadata under `cfg_attr(test, ...)` do not mark an
+item as test-only: the lint only treats the code as guarded when the attribute
+directly applies a `cfg(test)` gate (for example, via
+`cfg_attr(test, cfg(test))`). This prevents production functions that enable
+extra warnings or allowances in tests from slipping past the check.
+
+The UI fixtures demonstrate accepted usage inside a `#[test]` function and the
+failures emitted for ordinary functions. Behaviour-driven tests cover context
+summaries for non-test functions, explicit test attributes, and modules guarded
+by `cfg(test)`.
+
+Doctests compiled by `rustdoc` are detected via the compiler-provided
+`Crate::is_doctest` flag. When that flag is set, the lint pass skips all
+checks, allowing documentation examples to continue using `.expect(...)` while
+keeping production code guarded.
+
+The recognised test attributes can be extended through `dylint.toml` when teams
+rely on bespoke harness macros. Add the fully qualified attribute paths under
+the lint's configuration namespace:
+
+```toml
+[tool.dylint.libraries.no_expect_outside_tests]
+additional_test_attributes = ["my_framework::test"]
+```
+
+Any functions annotated with those attributes are treated as tests for the
+purpose of this lint, matching the behaviour of built-in markers such as
+`#[test]` and `#[rstest]`.
