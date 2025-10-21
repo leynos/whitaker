@@ -136,6 +136,72 @@ fn file_pairs() -> Vec<(String, PathBuf, PathBuf)> {
     pairs
 }
 
+fn validate_message_placeables(
+    locale: &str,
+    message_id: &str,
+    en_entry: &FtlEntry,
+    locale_entry: &FtlEntry,
+    locale_path: &Path,
+) {
+    let en_placeables = extract_placeables(&en_entry.value);
+    let locale_placeables = extract_placeables(&locale_entry.value);
+    assert_eq!(
+        en_placeables,
+        locale_placeables,
+        "placeables diverged for `{message_id}` in {locale} ({})",
+        locale_path.display()
+    );
+}
+
+fn validate_attribute_placeables(
+    locale: &str,
+    message_id: &str,
+    en_entry: &FtlEntry,
+    locale_entry: &FtlEntry,
+    locale_path: &Path,
+) {
+    let attribute_names: BTreeSet<_> = en_entry
+        .attributes
+        .keys()
+        .chain(locale_entry.attributes.keys())
+        .cloned()
+        .collect();
+
+    for attribute in attribute_names {
+        if let (Some(en_value), Some(locale_value)) = (
+            en_entry.attributes.get(&attribute),
+            locale_entry.attributes.get(&attribute),
+        ) {
+            let en_placeables = extract_placeables(en_value);
+            let locale_placeables = extract_placeables(locale_value);
+            assert_eq!(
+                en_placeables,
+                locale_placeables,
+                "placeables diverged for `{message_id}.{attribute}` in {locale} ({})",
+                locale_path.display()
+            );
+        }
+    }
+}
+
+fn validate_entry_placeables(
+    locale: &str,
+    message_id: &str,
+    en_entry: &FtlEntry,
+    locale_entries: &BTreeMap<String, FtlEntry>,
+    locale_path: &Path,
+) {
+    let locale_entry = locale_entries.get(message_id).unwrap_or_else(|| {
+        panic!(
+            "{locale} locale missing message `{message_id}` in {}",
+            locale_path.display()
+        )
+    });
+
+    validate_message_placeables(locale, message_id, en_entry, locale_entry, locale_path);
+    validate_attribute_placeables(locale, message_id, en_entry, locale_entry, locale_path);
+}
+
 #[test]
 fn fluent_placeables_remain_in_sync() {
     for (locale, en_path, locale_path) in file_pairs() {
@@ -143,44 +209,7 @@ fn fluent_placeables_remain_in_sync() {
         let locale_entries = parse_ftl(&locale_path);
 
         for (message_id, en_entry) in &en_entries {
-            let locale_entry = locale_entries.get(message_id).unwrap_or_else(|| {
-                panic!(
-                    "{locale} locale missing message `{message_id}` in {}",
-                    locale_path.display()
-                )
-            });
-
-            let en_placeables = extract_placeables(&en_entry.value);
-            let locale_placeables = extract_placeables(&locale_entry.value);
-            assert_eq!(
-                en_placeables,
-                locale_placeables,
-                "placeables diverged for `{message_id}` in {locale} ({})",
-                locale_path.display()
-            );
-
-            let attribute_names: BTreeSet<_> = en_entry
-                .attributes
-                .keys()
-                .chain(locale_entry.attributes.keys())
-                .cloned()
-                .collect();
-
-            for attribute in attribute_names {
-                if let (Some(en_value), Some(locale_value)) = (
-                    en_entry.attributes.get(&attribute),
-                    locale_entry.attributes.get(&attribute),
-                ) {
-                    let en_placeables = extract_placeables(en_value);
-                    let locale_placeables = extract_placeables(locale_value);
-                    assert_eq!(
-                        en_placeables,
-                        locale_placeables,
-                        "placeables diverged for `{message_id}.{attribute}` in {locale} ({})",
-                        locale_path.display()
-                    );
-                }
-            }
+            validate_entry_placeables(&locale, message_id, en_entry, &locale_entries, &locale_path);
         }
     }
 }
