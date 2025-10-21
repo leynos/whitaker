@@ -33,53 +33,123 @@ fn parse_ftl(path: &Path) -> BTreeMap<String, FtlEntry> {
     let mut current_attribute: Option<String> = None;
 
     for line in content.lines() {
-        if let Some(captures) = message_re.captures(line) {
-            let id = captures[1].to_string();
-            let value = captures[2].to_string();
-            let entry = entries.entry(id.clone()).or_default();
-            entry.value = value;
-            current_id = Some(id);
-            current_attribute = None;
+        if process_message_line(
+            line,
+            &message_re,
+            &mut entries,
+            &mut current_id,
+            &mut current_attribute,
+        ) {
             continue;
         }
 
-        if let Some(captures) = attribute_re.captures(line) {
-            if let Some(current) = current_id.clone() {
-                let name = captures[1].to_string();
-                let value = captures[2].to_string();
-                entries
-                    .entry(current)
-                    .or_default()
-                    .attributes
-                    .insert(name.clone(), value);
-                current_attribute = Some(name);
-            }
+        if process_attribute_line(
+            line,
+            &attribute_re,
+            &mut entries,
+            &current_id,
+            &mut current_attribute,
+        ) {
             continue;
         }
 
-        if line.trim().is_empty() || line.trim_start().starts_with("##") {
+        if is_ignorable_line(line) {
             continue;
         }
 
-        if let Some(current) = current_id.clone() {
-            if let Some(attribute) = current_attribute.clone() {
-                entries
-                    .get_mut(&current)
-                    .and_then(|entry| entry.attributes.get_mut(&attribute))
-                    .map(|text| {
-                        text.push('\n');
-                        text.push_str(line.trim());
-                    });
-            } else {
-                entries.get_mut(&current).map(|entry| {
-                    entry.value.push('\n');
-                    entry.value.push_str(line.trim());
-                });
-            }
-        }
+        process_continuation_line(
+            line,
+            current_id.as_deref(),
+            current_attribute.as_deref(),
+            &mut entries,
+        );
     }
 
     entries
+}
+
+fn process_message_line(
+    line: &str,
+    message_re: &Regex,
+    entries: &mut BTreeMap<String, FtlEntry>,
+    current_id: &mut Option<String>,
+    current_attribute: &mut Option<String>,
+) -> bool {
+    if let Some(captures) = message_re.captures(line) {
+        let id = captures[1].to_string();
+        let value = captures[2].to_string();
+        let entry = entries.entry(id.clone()).or_default();
+        entry.value = value;
+        *current_id = Some(id);
+        *current_attribute = None;
+        return true;
+    }
+
+    false
+}
+
+fn process_attribute_line(
+    line: &str,
+    attribute_re: &Regex,
+    entries: &mut BTreeMap<String, FtlEntry>,
+    current_id: &Option<String>,
+    current_attribute: &mut Option<String>,
+) -> bool {
+    if let Some(captures) = attribute_re.captures(line) {
+        if let Some(current) = current_id.as_ref() {
+            let name = captures[1].to_string();
+            let value = captures[2].to_string();
+            entries
+                .entry(current.clone())
+                .or_default()
+                .attributes
+                .insert(name.clone(), value);
+            *current_attribute = Some(name);
+        }
+        return true;
+    }
+
+    false
+}
+
+fn is_ignorable_line(line: &str) -> bool {
+    line.trim().is_empty() || line.trim_start().starts_with("##")
+}
+
+fn process_continuation_line(
+    line: &str,
+    current_id: Option<&str>,
+    current_attribute: Option<&str>,
+    entries: &mut BTreeMap<String, FtlEntry>,
+) {
+    if let Some(id) = current_id {
+        if let Some(attribute) = current_attribute {
+            append_to_attribute(entries, id, attribute, line);
+        } else {
+            append_to_message(entries, id, line);
+        }
+    }
+}
+
+fn append_to_attribute(
+    entries: &mut BTreeMap<String, FtlEntry>,
+    message_id: &str,
+    attribute: &str,
+    line: &str,
+) {
+    if let Some(entry) = entries.get_mut(message_id) {
+        if let Some(text) = entry.attributes.get_mut(attribute) {
+            text.push('\n');
+            text.push_str(line.trim());
+        }
+    }
+}
+
+fn append_to_message(entries: &mut BTreeMap<String, FtlEntry>, message_id: &str, line: &str) {
+    if let Some(entry) = entries.get_mut(message_id) {
+        entry.value.push('\n');
+        entry.value.push_str(line.trim());
+    }
 }
 
 fn extract_placeables(text: &str) -> BTreeSet<String> {
