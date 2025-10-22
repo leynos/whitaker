@@ -59,8 +59,6 @@ option_if_let_else = "deny"
 use_self = "deny"
 string_lit_as_bytes = "deny"
 float_arithmetic = "deny"
-
-[workspace.lints.rust]
 blanket_clippy_restriction_lints = "deny"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
@@ -69,5 +67,7 @@ little_endian_bytes = "deny"
 big_endian_bytes = "deny"
 integer_division = "deny"
 integer_division_remainder_used = "deny"
+
+[workspace.lints.rust]
 missing_docs = "deny"
 missing_crate_level_docs = "deny"
