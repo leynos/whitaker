@@ -252,8 +252,7 @@ mod tests {
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     attr.meta()
-        .map(|meta| meta_contains_test_cfg(&meta))
-        .unwrap_or(false)
+        .is_some_and(|meta| meta_contains_test_cfg(&meta))
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
