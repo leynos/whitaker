@@ -9,6 +9,7 @@ use fluent_bundle::FluentValue;
 use regex::Regex;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +17,87 @@ use std::path::{Path, PathBuf};
 struct FtlEntry {
     value: String,
     attributes: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LocaleCode(String);
+
+impl LocaleCode {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for LocaleCode {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl AsRef<str> for LocaleCode {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for LocaleCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MessageId(String);
+
+impl MessageId {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for MessageId {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl AsRef<str> for MessageId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for MessageId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AttributeName(String);
+
+impl AttributeName {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for AttributeName {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl AsRef<str> for AttributeName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for AttributeName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
 }
 
 fn locales_root() -> PathBuf {
@@ -123,30 +205,32 @@ fn process_continuation_line(
     entries: &mut BTreeMap<String, FtlEntry>,
 ) {
     if let Some(id) = current_id {
+        let message_id = MessageId::from(id);
         if let Some(attribute) = current_attribute {
-            append_to_attribute(entries, id, attribute, line);
+            let attribute = AttributeName::from(attribute);
+            append_to_attribute(entries, &message_id, &attribute, line);
         } else {
-            append_to_message(entries, id, line);
+            append_to_message(entries, &message_id, line);
         }
     }
 }
 
 fn append_to_attribute(
     entries: &mut BTreeMap<String, FtlEntry>,
-    message_id: &str,
-    attribute: &str,
+    message_id: &MessageId,
+    attribute: &AttributeName,
     line: &str,
 ) {
-    if let Some(entry) = entries.get_mut(message_id) {
-        if let Some(text) = entry.attributes.get_mut(attribute) {
+    if let Some(entry) = entries.get_mut(message_id.as_str()) {
+        if let Some(text) = entry.attributes.get_mut(attribute.as_str()) {
             text.push('\n');
             text.push_str(line.trim());
         }
     }
 }
 
-fn append_to_message(entries: &mut BTreeMap<String, FtlEntry>, message_id: &str, line: &str) {
-    if let Some(entry) = entries.get_mut(message_id) {
+fn append_to_message(entries: &mut BTreeMap<String, FtlEntry>, message_id: &MessageId, line: &str) {
+    if let Some(entry) = entries.get_mut(message_id.as_str()) {
         entry.value.push('\n');
         entry.value.push_str(line.trim());
     }
@@ -207,8 +291,8 @@ fn file_pairs() -> Vec<(String, PathBuf, PathBuf)> {
 }
 
 fn validate_message_placeables(
-    locale: &str,
-    message_id: &str,
+    locale: &LocaleCode,
+    message_id: &MessageId,
     en_entry: &FtlEntry,
     locale_entry: &FtlEntry,
     locale_path: &Path,
@@ -224,8 +308,8 @@ fn validate_message_placeables(
 }
 
 fn validate_attribute_placeables(
-    locale: &str,
-    message_id: &str,
+    locale: &LocaleCode,
+    message_id: &MessageId,
     en_entry: &FtlEntry,
     locale_entry: &FtlEntry,
     locale_path: &Path,
@@ -255,13 +339,13 @@ fn validate_attribute_placeables(
 }
 
 fn validate_entry_placeables(
-    locale: &str,
-    message_id: &str,
+    locale: &LocaleCode,
+    message_id: &MessageId,
     en_entry: &FtlEntry,
     locale_entries: &BTreeMap<String, FtlEntry>,
     locale_path: &Path,
 ) {
-    let locale_entry = locale_entries.get(message_id).unwrap_or_else(|| {
+    let locale_entry = locale_entries.get(message_id.as_str()).unwrap_or_else(|| {
         panic!(
             "{locale} locale missing message `{message_id}` in {}",
             locale_path.display()
@@ -275,11 +359,19 @@ fn validate_entry_placeables(
 #[test]
 fn fluent_placeables_remain_in_sync() {
     for (locale, en_path, locale_path) in file_pairs() {
+        let locale_code = LocaleCode::from(locale.as_str());
         let en_entries = parse_ftl(&en_path);
         let locale_entries = parse_ftl(&locale_path);
 
         for (message_id, en_entry) in &en_entries {
-            validate_entry_placeables(&locale, message_id, en_entry, &locale_entries, &locale_path);
+            let message_id = MessageId::from(message_id.as_str());
+            validate_entry_placeables(
+                &locale_code,
+                &message_id,
+                en_entry,
+                &locale_entries,
+                &locale_path,
+            );
         }
     }
 }
@@ -287,20 +379,22 @@ fn fluent_placeables_remain_in_sync() {
 #[test]
 fn localised_help_attributes_are_complete() {
     for (locale, en_path, locale_path) in file_pairs() {
+        let locale_code = LocaleCode::from(locale.as_str());
         let en_entries = parse_ftl(&en_path);
         let locale_entries = parse_ftl(&locale_path);
 
         for (message_id, en_entry) in &en_entries {
             if en_entry.attributes.contains_key("help") {
-                let locale_entry = locale_entries.get(message_id).unwrap_or_else(|| {
+                let message_id = MessageId::from(message_id.as_str());
+                let locale_entry = locale_entries.get(message_id.as_str()).unwrap_or_else(|| {
                     panic!(
-                        "{locale} locale missing message `{message_id}` in {}",
+                        "{locale_code} locale missing message `{message_id}` in {}",
                         locale_path.display()
                     )
                 });
                 let help = locale_entry.attributes.get("help").unwrap_or_else(|| {
                     panic!(
-                        "{locale} locale missing `.help` for `{message_id}` in {}",
+                        "{locale_code} locale missing `.help` for `{message_id}` in {}",
                         locale_path.display()
                     )
                 });
