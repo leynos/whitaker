@@ -356,6 +356,25 @@ fn validate_entry_placeables(
     validate_attribute_placeables(locale, message_id, en_entry, locale_entry, locale_path);
 }
 
+fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
+    let mut localiser = Localiser::new(Some(locale));
+    let mut args = Arguments::new();
+
+    for branches in 0..=max_branches {
+        args.insert(
+            Cow::Borrowed("branches"),
+            FluentValue::from(branches as i64),
+        );
+        let note = localiser
+            .attribute_with_args("conditional_max_two_branches", "note", &args)
+            .expect("conditional note should resolve");
+        assert!(
+            !note.contains('{'),
+            "formatted note should not expose raw placeables: `{note}`"
+        );
+    }
+}
+
 #[test]
 fn fluent_placeables_remain_in_sync() {
     for (locale, en_path, locale_path) in file_pairs() {
@@ -410,42 +429,12 @@ fn localised_help_attributes_are_complete() {
 
 #[test]
 fn welsh_pluralisation_covers_sample_range() {
-    let mut localiser = Localiser::new(Some("cy"));
-    let mut args = Arguments::new();
-
-    for branches in 0..=12 {
-        args.insert(
-            Cow::Borrowed("branches"),
-            FluentValue::from(branches as i64),
-        );
-        let note = localiser
-            .attribute_with_args("conditional_max_two_branches", "note", &args)
-            .expect("conditional note should resolve");
-        assert!(
-            !note.contains('{'),
-            "formatted note should not expose raw placeables: `{note}`"
-        );
-    }
+    validate_pluralisation_coverage("cy", 12);
 }
 
 #[test]
 fn gaelic_pluralisation_covers_sample_range() {
-    let mut localiser = Localiser::new(Some("gd"));
-    let mut args = Arguments::new();
-
-    for branches in 0..=25 {
-        args.insert(
-            Cow::Borrowed("branches"),
-            FluentValue::from(branches as i64),
-        );
-        let note = localiser
-            .attribute_with_args("conditional_max_two_branches", "note", &args)
-            .expect("conditional note should resolve");
-        assert!(
-            !note.contains('{'),
-            "formatted note should not expose raw placeables: `{note}`"
-        );
-    }
+    validate_pluralisation_coverage("gd", 25);
 }
 
 #[test]
