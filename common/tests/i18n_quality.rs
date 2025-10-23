@@ -19,6 +19,11 @@ struct FtlEntry {
     attributes: HashMap<String, String>,
 }
 
+struct LocaleContext<'a> {
+    locale: &'a str,
+    path: &'a Path,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocaleCode(String);
 
@@ -291,28 +296,27 @@ fn file_pairs() -> Vec<(String, PathBuf, PathBuf)> {
 }
 
 fn validate_message_placeables(
-    locale: &LocaleCode,
+    context: &LocaleContext<'_>,
     message_id: &MessageId,
     en_entry: &FtlEntry,
     locale_entry: &FtlEntry,
-    locale_path: &Path,
 ) {
     let en_placeables = extract_placeables(&en_entry.value);
     let locale_placeables = extract_placeables(&locale_entry.value);
+    let locale = context.locale;
     assert_eq!(
         en_placeables,
         locale_placeables,
         "placeables diverged for `{message_id}` in {locale} ({})",
-        locale_path.display()
+        context.path.display()
     );
 }
 
 fn validate_attribute_placeables(
-    locale: &LocaleCode,
+    context: &LocaleContext<'_>,
     message_id: &MessageId,
     en_entry: &FtlEntry,
     locale_entry: &FtlEntry,
-    locale_path: &Path,
 ) {
     let attribute_names: BTreeSet<_> = en_entry
         .attributes
@@ -328,11 +332,12 @@ fn validate_attribute_placeables(
         ) {
             let en_placeables = extract_placeables(en_value);
             let locale_placeables = extract_placeables(locale_value);
+            let locale = context.locale;
             assert_eq!(
                 en_placeables,
                 locale_placeables,
                 "placeables diverged for `{message_id}.{attribute}` in {locale} ({})",
-                locale_path.display()
+                context.path.display()
             );
         }
     }
@@ -352,8 +357,13 @@ fn validate_entry_placeables(
         )
     });
 
-    validate_message_placeables(locale, message_id, en_entry, locale_entry, locale_path);
-    validate_attribute_placeables(locale, message_id, en_entry, locale_entry, locale_path);
+    let context = LocaleContext {
+        locale: locale.as_str(),
+        path: locale_path,
+    };
+
+    validate_message_placeables(&context, message_id, en_entry, locale_entry);
+    validate_attribute_placeables(&context, message_id, en_entry, locale_entry);
 }
 
 fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
