@@ -193,6 +193,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "thiserror 2.0.17",
+ "unic-langid",
 ]
 
 [[package]]

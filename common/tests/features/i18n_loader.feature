@@ -20,6 +20,36 @@ Feature: Localisation loader
     Then the resolved locale is gd
     And the message contains meuran
 
+  Scenario: Welsh lint count handles zero
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 0
+    Then the message contains dim lint
+
+  Scenario: Welsh lint count handles one
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 1
+    Then the message contains 1 lint
+
+  Scenario: Welsh lint count handles two
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 2
+    Then the message contains dau lint
+
+  Scenario: Welsh lint count handles three
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 3
+    Then the message contains 3 lint
+
+  Scenario: Welsh lint count handles six
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 6
+    Then the message contains 6 lint
+
+  Scenario: Welsh lint count handles eleven
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 11
+    Then the message contains 11 lint
+
   Scenario: Falling back to English for untranslated attributes
     Given the locale preference cy
     When I request the attribute fallback-note on common-lint-count

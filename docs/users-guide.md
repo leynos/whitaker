@@ -60,6 +60,33 @@ selecting a language. If an unsupported locale is requested, the loader falls
 back to the bundled `en-GB` strings and surfaces a missing message error if a
 slug is not translated.
 
+```rust
+use common::i18n::{
+    available_locales, Arguments, Localiser, FALLBACK_LOCALE,
+};
+use fluent_bundle::FluentValue;
+use std::borrow::Cow;
+use std::collections::HashMap;
+
+let preferred = "gd";
+assert!(available_locales().contains(&preferred.to_string()));
+
+let localiser = Localiser::new(Some(preferred));
+
+let mut args: Arguments<'static> = HashMap::new();
+args.insert(Cow::Borrowed("name"), FluentValue::from("match on Foo"));
+args.insert(Cow::Borrowed("branches"), FluentValue::from(3));
+
+let message = localiser
+    .message_with_args("conditional_max_two_branches", &args)?;
+let note = localiser
+    .attribute_with_args("conditional_max_two_branches", "note", &args)?;
+
+if localiser.used_fallback() {
+    eprintln!("Fell back to {FALLBACK_LOCALE}");
+}
+```
+
 ## `function_attrs_follow_docs`
 
 Whitaker's first lint checks that doc comments sit in front of all other outer

@@ -10,6 +10,7 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
 struct I18nFixture {
@@ -42,7 +43,7 @@ impl I18nFixture {
         self.outcome
             .borrow()
             .clone()
-            .expect("lookup should have been performed")
+            .unwrap_or_else(|| panic!("lookup should have been performed"))
     }
 }
 
@@ -78,9 +79,18 @@ fn when_attribute(fixture: &I18nFixture, key: String, attribute: String) {
 #[when("I request the attribute {attribute} on {key} with branches {count}")]
 fn when_attribute_with_branches(fixture: &I18nFixture, key: String, attribute: String, count: u32) {
     let localiser = fixture.ensure_localiser();
-    let mut args = Arguments::new();
+    let mut args: Arguments<'static> = HashMap::new();
     args.insert(Cow::Borrowed("branches"), FluentValue::from(count as i64));
     let result = localiser.attribute_with_args(&key, &attribute, &args);
+    fixture.store_message(result);
+}
+
+#[when("I request the attribute note on common-lint-count with lint count {count}")]
+fn when_common_lint_count_note(fixture: &I18nFixture, count: u32) {
+    let localiser = fixture.ensure_localiser();
+    let mut args: Arguments<'static> = HashMap::new();
+    args.insert(Cow::Borrowed("lint"), FluentValue::from(count as i64));
+    let result = localiser.attribute_with_args("common-lint-count", "note", &args);
     fixture.store_message(result);
 }
 
@@ -126,11 +136,41 @@ fn scenario_gaelic_plural(fixture: I18nFixture) {
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 3)]
-fn scenario_attribute_falls_back(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_zero(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 4)]
+fn scenario_welsh_lint_count_one(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 5)]
+fn scenario_welsh_lint_count_two(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 6)]
+fn scenario_welsh_lint_count_three(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 7)]
+fn scenario_welsh_lint_count_six(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 8)]
+fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 9)]
+fn scenario_attribute_falls_back(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 10)]
 fn scenario_missing_message(fixture: I18nFixture) {
     let _ = fixture;
 }

@@ -4,11 +4,12 @@
 //! text remains complete, and exercise language-specific plural forms so we can
 //! catch regressions before they reach users.
 
-use common::i18n::{Arguments, Localiser};
+use common::i18n::Localiser;
 use fluent_bundle::FluentValue;
 use regex::Regex;
+use rstest::rstest;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
 #[path = "support/mod.rs"]
@@ -95,7 +96,7 @@ fn validate_entry_placeables(
 
 fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
     let mut localiser = Localiser::new(Some(locale));
-    let mut args = Arguments::new();
+    let mut args = HashMap::new();
 
     for branches in 0..=max_branches {
         args.insert(
@@ -164,14 +165,11 @@ fn localised_help_attributes_are_complete() {
     }
 }
 
-#[test]
-fn welsh_pluralisation_covers_sample_range() {
-    validate_pluralisation_coverage("cy", 12);
-}
-
-#[test]
-fn gaelic_pluralisation_covers_sample_range() {
-    validate_pluralisation_coverage("gd", 25);
+#[rstest]
+#[case("cy", 12)]
+#[case("gd", 25)]
+fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches: i64) {
+    validate_pluralisation_coverage(locale, max_branches);
 }
 
 #[test]

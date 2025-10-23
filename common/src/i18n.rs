@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
+use unic_langid::langid;
 
 /// Root directory containing the Fluent resources for all supported locales.
 const LOCALES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../locales");
@@ -25,21 +26,20 @@ static_loader! {
     static LOADER = {
         locales: LOCALES_DIR,
         fallback_language: FALLBACK_LITERAL,
-        customise: |bundle| bundle.set_use_isolating(false),
+        // Retain Fluent's default Unicode isolating marks for bidi safety.
     };
 }
 
 /// The fallback locale bundled with every Whitaker build.
 pub const FALLBACK_LOCALE: &str = FALLBACK_LITERAL;
 
-static FALLBACK_LANGUAGE: Lazy<LanguageIdentifier> =
-    Lazy::new(|| LanguageIdentifier::from_str(FALLBACK_LOCALE).expect("valid fallback locale"));
+const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 
 static SUPPORTED: Lazy<Vec<LanguageIdentifier>> = Lazy::new(|| LOADER.locales().cloned().collect());
 
 static SUPPORTED_STRINGS: Lazy<Vec<String>> = Lazy::new(|| {
     let mut locales: Vec<String> = SUPPORTED.iter().map(ToString::to_string).collect();
-    locales.sort();
+    locales.sort_unstable();
     locales
 });
 
@@ -52,7 +52,7 @@ pub enum I18nError {
 }
 
 /// HashMap wrapper used when passing Fluent arguments to lookups.
-pub type Arguments = HashMap<Cow<'static, str>, fluent_bundle::FluentValue<'static>>;
+pub type Arguments<'a> = HashMap<Cow<'a, str>, fluent_bundle::FluentValue<'a>>;
 
 /// Resolve localisation messages for a specific locale.
 ///
@@ -120,16 +120,13 @@ impl Localiser {
     }
 
     /// Fetch the translated message with Fluent arguments.
-    pub fn message_with_args(&self, key: &str, args: &Arguments) -> Result<String, I18nError> {
+    pub fn message_with_args(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError> {
         self.lookup(key, Some(args))
     }
 
     /// Fetch a translated attribute, e.g. `function.primary`.
     pub fn attribute(&self, key: &str, attribute: &str) -> Result<String, I18nError> {
-        let mut composed = String::with_capacity(key.len() + attribute.len() + 1);
-        fmt::write(&mut composed, format_args!("{key}.{attribute}"))
-            .expect("writing to string cannot fail");
-        self.message(&composed)
+        self.message(&compose_attribute_key(key, attribute))
     }
 
     /// Fetch a translated attribute with Fluent arguments.
@@ -137,15 +134,12 @@ impl Localiser {
         &self,
         key: &str,
         attribute: &str,
-        args: &Arguments,
+        args: &Arguments<'_>,
     ) -> Result<String, I18nError> {
-        let mut composed = String::with_capacity(key.len() + attribute.len() + 1);
-        fmt::write(&mut composed, format_args!("{key}.{attribute}"))
-            .expect("writing to string cannot fail");
-        self.message_with_args(&composed, args)
+        self.message_with_args(&compose_attribute_key(key, attribute), args)
     }
 
-    fn lookup(&self, key: &str, args: Option<&Arguments>) -> Result<String, I18nError> {
+    fn lookup(&self, key: &str, args: Option<&Arguments<'_>>) -> Result<String, I18nError> {
         let maybe_value = match args {
             Some(arguments) => LOADER.try_lookup_with_args(&self.language, key, arguments),
             None => LOADER.try_lookup(&self.language, key),
@@ -156,6 +150,13 @@ impl Localiser {
             locale: self.language.to_string(),
         })
     }
+}
+
+fn compose_attribute_key(key: &str, attribute: &str) -> String {
+    let mut composed = String::with_capacity(key.len() + attribute.len() + 1);
+    fmt::write(&mut composed, format_args!("{key}.{attribute}"))
+        .expect("writing to string cannot fail");
+    composed
 }
 
 fn is_supported(locale: &LanguageIdentifier) -> bool {
