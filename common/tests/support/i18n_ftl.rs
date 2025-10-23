@@ -191,7 +191,7 @@ fn process_attribute_line(
 }
 
 fn is_ignorable_line(line: &str) -> bool {
-    line.trim().is_empty() || line.trim_start().starts_with("##")
+    line.trim().is_empty() || line.trim_start().starts_with('#')
 }
 
 fn process_continuation_line(
