@@ -4,28 +4,28 @@ use camino::{Utf8Component, Utf8Path};
 
 use super::TemplateError;
 
-fn is_valid_crate_name_character(character: char) -> bool {
+const fn is_valid_crate_name_character(character: char) -> bool {
     character.is_ascii_lowercase() || character.is_ascii_digit() || matches!(character, '-' | '_')
 }
 
 fn is_absolute_path(normalized: &str, original: &str) -> Result<(), TemplateError> {
     if normalized.starts_with("//") {
         return Err(TemplateError::AbsoluteUiDirectory {
-            directory: original.to_string(),
+            directory: original.to_owned(),
         });
     }
 
     let bytes = normalized.as_bytes();
     if matches!(bytes, [drive, b':', ..] if drive.is_ascii_alphabetic()) {
         return Err(TemplateError::AbsoluteUiDirectory {
-            directory: original.to_string(),
+            directory: original.to_owned(),
         });
     }
 
     let path = Utf8Path::new(normalized);
     if path.is_absolute() {
         return Err(TemplateError::AbsoluteUiDirectory {
-            directory: original.to_string(),
+            directory: original.to_owned(),
         });
     }
 
@@ -40,7 +40,7 @@ fn process_path_component<'a>(
     match component {
         Utf8Component::CurDir => Ok(()),
         Utf8Component::ParentDir => Err(TemplateError::ParentUiDirectory {
-            directory: original.to_string(),
+            directory: original.to_owned(),
         }),
         Utf8Component::Normal(segment) => {
             if !segment.is_empty() {
@@ -50,7 +50,7 @@ fn process_path_component<'a>(
         }
         Utf8Component::RootDir | Utf8Component::Prefix(_) => {
             Err(TemplateError::AbsoluteUiDirectory {
-                directory: original.to_string(),
+                directory: original.to_owned(),
             })
         }
     }
@@ -63,9 +63,9 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
     }
 
     let mut characters = trimmed.chars();
-    let first = characters
-        .next()
-        .expect("crate name is non-empty after trim");
+    let Some(first) = characters.next() else {
+        return Err(TemplateError::EmptyCrateName);
+    };
 
     if !first.is_ascii_lowercase() {
         return Err(TemplateError::InvalidCrateNameStart { character: first });
@@ -77,16 +77,14 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
         }
     }
 
-    // Safe: we return early when `trimmed` is empty, so a last character must exist.
-    let last = trimmed
-        .chars()
-        .last()
-        .expect("crate name is non-empty after trim");
+    let Some(last) = trimmed.chars().last() else {
+        return Err(TemplateError::EmptyCrateName);
+    };
     if matches!(last, '-' | '_') {
         return Err(TemplateError::CrateNameTrailingSeparator { character: last });
     }
 
-    Ok(trimmed.to_string())
+    Ok(trimmed.to_owned())
 }
 
 pub(crate) fn lint_constant(crate_name: &str) -> String {
@@ -100,22 +98,23 @@ pub(crate) fn lint_constant(crate_name: &str) -> String {
         .collect()
 }
 
+fn capitalise_segment(segment: &str) -> Option<String> {
+    let mut characters = segment.chars();
+    let first = characters.next()?;
+
+    let mut capitalised = String::with_capacity(segment.len());
+    capitalised.push(first.to_ascii_uppercase());
+    for character in characters {
+        capitalised.push(character.to_ascii_lowercase());
+    }
+
+    Some(capitalised)
+}
+
 pub(crate) fn pass_struct_name(crate_name: &str) -> String {
     crate_name
         .split(['-', '_'])
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| {
-            let mut characters = segment.chars();
-            let first = characters
-                .next()
-                .expect("non-empty segments remain after filtering");
-            let mut capitalised = String::with_capacity(segment.len());
-            capitalised.push(first.to_ascii_uppercase());
-            for character in characters {
-                capitalised.push(character.to_ascii_lowercase());
-            }
-            capitalised
-        })
+        .filter_map(capitalise_segment)
         .collect()
 }
 
@@ -230,7 +229,7 @@ mod tests {
     #[case(
         "ui/../secrets",
         TemplateError::ParentUiDirectory {
-            directory: "ui/../secrets".to_string(),
+            directory: "ui/../secrets".to_owned(),
         },
         "parent directory traversal should be rejected"
     )]

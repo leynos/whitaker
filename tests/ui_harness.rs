@@ -32,98 +32,112 @@ impl std::str::FromStr for StepString {
     type Err = Infallible;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(input.to_string()))
+        Ok(Self(input.to_owned()))
+    }
+}
+
+#[derive(Debug)]
+struct HarnessWorld {
+    crate_name: RefCell<String>,
+    directory: RefCell<Utf8PathBuf>,
+    runner_failure: RefCell<Option<String>>,
+    runner_invocations: RefCell<Vec<(String, Utf8PathBuf)>>,
+    harness_result: RefCell<Option<Result<(), HarnessError>>>,
+}
+
+impl Default for HarnessWorld {
+    fn default() -> Self {
+        Self {
+            crate_name: RefCell::new(String::from("demo")),
+            directory: RefCell::new(Utf8PathBuf::from("ui")),
+            runner_failure: RefCell::new(None),
+            runner_invocations: RefCell::new(Vec::new()),
+            harness_result: RefCell::new(None),
+        }
+    }
+}
+
+impl HarnessWorld {
+    const fn crate_name(&self) -> &RefCell<String> {
+        &self.crate_name
+    }
+
+    const fn directory(&self) -> &RefCell<Utf8PathBuf> {
+        &self.directory
+    }
+
+    const fn runner_failure(&self) -> &RefCell<Option<String>> {
+        &self.runner_failure
+    }
+
+    const fn runner_invocations(&self) -> &RefCell<Vec<(String, Utf8PathBuf)>> {
+        &self.runner_invocations
+    }
+
+    const fn harness_result(&self) -> &RefCell<Option<Result<(), HarnessError>>> {
+        &self.harness_result
     }
 }
 
 #[fixture]
-fn crate_name() -> RefCell<String> {
-    RefCell::new("demo".to_string())
-}
-
-#[fixture]
-fn directory() -> RefCell<Utf8PathBuf> {
-    RefCell::new(Utf8PathBuf::from("ui"))
-}
-
-#[fixture]
-fn runner_failure() -> RefCell<Option<String>> {
-    RefCell::new(None)
-}
-
-#[fixture]
-fn runner_invocations() -> RefCell<Vec<(String, Utf8PathBuf)>> {
-    RefCell::new(Vec::new())
-}
-
-#[fixture]
-fn harness_result() -> RefCell<Option<Result<(), HarnessError>>> {
-    RefCell::new(None)
+fn harness_world() -> HarnessWorld {
+    HarnessWorld::default()
 }
 
 #[given("the harness has no crate name")]
-fn clear_crate(crate_name: &RefCell<String>) {
-    crate_name.borrow_mut().clear();
+fn clear_crate(harness_world: &HarnessWorld) {
+    harness_world.crate_name().borrow_mut().clear();
 }
 
 #[given("the harness is prepared for crate {name}")]
-fn prepare_crate(crate_name: &RefCell<String>, name: String) {
-    *crate_name.borrow_mut() = name;
+fn prepare_crate(harness_world: &HarnessWorld, name: String) {
+    *harness_world.crate_name().borrow_mut() = name;
 }
 
 #[given("the UI directory is {path}")]
-fn prepare_directory(directory: &RefCell<Utf8PathBuf>, path: String) {
-    *directory.borrow_mut() = Utf8PathBuf::from(path);
+fn prepare_directory(harness_world: &HarnessWorld, path: String) {
+    *harness_world.directory().borrow_mut() = Utf8PathBuf::from(path);
 }
 
 #[given("the runner will fail with message {message}")]
-fn configure_failure(runner_failure: &RefCell<Option<String>>, message: String) {
-    runner_failure.borrow_mut().replace(message);
+fn configure_failure(harness_world: &HarnessWorld, message: String) {
+    harness_world.runner_failure().borrow_mut().replace(message);
 }
 
 #[when("the harness is executed")]
-fn execute_harness(
-    crate_name: &RefCell<String>,
-    directory: &RefCell<Utf8PathBuf>,
-    runner_failure: &RefCell<Option<String>>,
-    runner_invocations: &RefCell<Vec<(String, Utf8PathBuf)>>,
-    harness_result: &RefCell<Option<Result<(), HarnessError>>>,
-) {
-    let crate_name_value = crate_name.borrow().clone();
-    let directory_value = directory.borrow().clone();
-    let failure = runner_failure.borrow().clone();
+fn execute_harness(harness_world: &HarnessWorld) {
+    let crate_name_value = harness_world.crate_name().borrow().clone();
+    let directory_value = harness_world.directory().borrow().clone();
+    let failure = harness_world.runner_failure().borrow().clone();
 
     let outcome = run_with_runner(&crate_name_value, directory_value, |name, path| {
-        runner_invocations
+        harness_world
+            .runner_invocations()
             .borrow_mut()
-            .push((name.to_string(), path.to_owned()));
+            .push((name.to_owned(), path.to_owned()));
         failure.clone().map_or(Ok(()), Err)
     });
 
-    harness_result.borrow_mut().replace(outcome);
+    harness_world.harness_result().borrow_mut().replace(outcome);
 }
 
 #[then("the runner is invoked with crate {expected} and directory {path}")]
-fn assert_runner_invocation(
-    runner_invocations: &RefCell<Vec<(String, Utf8PathBuf)>>,
-    expected: StepString,
-    path: StepString,
-) {
-    let borrow = runner_invocations.borrow();
+fn assert_runner_invocation(harness_world: &HarnessWorld, expected: StepString, path: StepString) {
+    let borrow = harness_world.runner_invocations().borrow();
     let Some(last) = borrow.last() else {
         panic!("the runner should be invoked");
     };
 
-    let expected = expected.into_inner();
-    let path = path.into_inner();
+    let expected_value = expected.into_inner();
+    let path_value = path.into_inner();
 
-    assert_eq!(last.0.as_str(), expected.as_str());
-    assert_eq!(last.1.as_str(), path.as_str());
+    assert_eq!(last.0.as_str(), expected_value.as_str());
+    assert_eq!(last.1.as_str(), path_value.as_str());
 }
 
 #[then("the harness succeeds")]
-fn assert_success(harness_result: &RefCell<Option<Result<(), HarnessError>>>) {
-    let borrow = harness_result.borrow();
+fn assert_success(harness_world: &HarnessWorld) {
+    let borrow = harness_world.harness_result().borrow();
     match borrow.as_ref() {
         Some(Ok(())) => {}
         Some(Err(error)) => panic!("expected success but received {error}"),
@@ -132,8 +146,8 @@ fn assert_success(harness_result: &RefCell<Option<Result<(), HarnessError>>>) {
 }
 
 #[then("the harness reports an empty crate name error")]
-fn assert_empty_crate_error(harness_result: &RefCell<Option<Result<(), HarnessError>>>) {
-    let borrow = harness_result.borrow();
+fn assert_empty_crate_error(harness_world: &HarnessWorld) {
+    let borrow = harness_world.harness_result().borrow();
     match borrow.as_ref() {
         Some(Err(HarnessError::EmptyCrateName)) => {}
         Some(Ok(())) => panic!("expected an error but harness succeeded"),
@@ -143,8 +157,8 @@ fn assert_empty_crate_error(harness_result: &RefCell<Option<Result<(), HarnessEr
 }
 
 #[then("the harness reports an absolute directory error containing {path}")]
-fn assert_absolute_error(harness_result: &RefCell<Option<Result<(), HarnessError>>>, path: String) {
-    let borrow = harness_result.borrow();
+fn assert_absolute_error(harness_world: &HarnessWorld, path: String) {
+    let borrow = harness_world.harness_result().borrow();
     match borrow.as_ref() {
         Some(Err(HarnessError::AbsoluteDirectory { directory })) => {
             assert_eq!(directory, &Utf8PathBuf::from(path));
@@ -156,15 +170,12 @@ fn assert_absolute_error(harness_result: &RefCell<Option<Result<(), HarnessError
 }
 
 #[then("the harness reports a runner failure mentioning {snippet}")]
-fn assert_runner_failure(
-    harness_result: &RefCell<Option<Result<(), HarnessError>>>,
-    snippet: StepString,
-) {
-    let borrow = harness_result.borrow();
-    let snippet = snippet.into_inner();
+fn assert_runner_failure(harness_world: &HarnessWorld, snippet: StepString) {
+    let borrow = harness_world.harness_result().borrow();
+    let snippet_value = snippet.into_inner();
     match borrow.as_ref() {
         Some(Err(HarnessError::RunnerFailure { message, .. })) => {
-            assert!(message.contains(snippet.as_str()));
+            assert!(message.contains(snippet_value.as_str()));
         }
         Some(Ok(())) => panic!("expected an error but harness succeeded"),
         Some(Err(error)) => panic!("expected a runner failure error, found {error}"),
@@ -173,69 +184,21 @@ fn assert_runner_failure(
 }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 0)]
-fn scenario_runs_successfully(
-    crate_name: RefCell<String>,
-    directory: RefCell<Utf8PathBuf>,
-    runner_failure: RefCell<Option<String>>,
-    runner_invocations: RefCell<Vec<(String, Utf8PathBuf)>>,
-    harness_result: RefCell<Option<Result<(), HarnessError>>>,
-) {
-    let _ = (
-        crate_name,
-        directory,
-        runner_failure,
-        runner_invocations,
-        harness_result,
-    );
+fn scenario_runs_successfully(harness_world: HarnessWorld) {
+    let _ = harness_world;
 }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 1)]
-fn scenario_rejects_empty_crate(
-    crate_name: RefCell<String>,
-    directory: RefCell<Utf8PathBuf>,
-    runner_failure: RefCell<Option<String>>,
-    runner_invocations: RefCell<Vec<(String, Utf8PathBuf)>>,
-    harness_result: RefCell<Option<Result<(), HarnessError>>>,
-) {
-    let _ = (
-        crate_name,
-        directory,
-        runner_failure,
-        runner_invocations,
-        harness_result,
-    );
+fn scenario_rejects_empty_crate(harness_world: HarnessWorld) {
+    let _ = harness_world;
 }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 2)]
-fn scenario_rejects_absolute_directory(
-    crate_name: RefCell<String>,
-    directory: RefCell<Utf8PathBuf>,
-    runner_failure: RefCell<Option<String>>,
-    runner_invocations: RefCell<Vec<(String, Utf8PathBuf)>>,
-    harness_result: RefCell<Option<Result<(), HarnessError>>>,
-) {
-    let _ = (
-        crate_name,
-        directory,
-        runner_failure,
-        runner_invocations,
-        harness_result,
-    );
+fn scenario_rejects_absolute_directory(harness_world: HarnessWorld) {
+    let _ = harness_world;
 }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 3)]
-fn scenario_propagates_runner_failure(
-    crate_name: RefCell<String>,
-    directory: RefCell<Utf8PathBuf>,
-    runner_failure: RefCell<Option<String>>,
-    runner_invocations: RefCell<Vec<(String, Utf8PathBuf)>>,
-    harness_result: RefCell<Option<Result<(), HarnessError>>>,
-) {
-    let _ = (
-        crate_name,
-        directory,
-        runner_failure,
-        runner_invocations,
-        harness_result,
-    );
+fn scenario_propagates_runner_failure(harness_world: HarnessWorld) {
+    let _ = harness_world;
 }

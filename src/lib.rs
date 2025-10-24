@@ -10,6 +10,6 @@ pub use lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 
 /// Returns a greeting for the library.
 #[must_use]
-pub fn greet() -> &'static str {
+pub const fn greet() -> &'static str {
     "Hello from Whitaker!"
 }
