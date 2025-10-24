@@ -25,6 +25,11 @@ Feature: Localisation loader
     When I request the attribute note on common-lint-count with lint count 0
     Then the message contains dim lint
 
+  Scenario: Welsh lint count handles large values
+    Given the locale preference cy
+    When I request the attribute note on common-lint-count with lint count 2048
+    Then the message contains 2048 lint
+
   Scenario: Welsh lint count handles one
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 1

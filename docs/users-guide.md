@@ -55,8 +55,8 @@ used. Secondary `cy` (Welsh) and `gd` (Scottish Gaelic) locales demonstrate how
 to translate each lint slug and drive behaviour tests that exercise non-English
 lookups, including plural handling for languages with richer category sets.
 
-Call `common::i18n::available_locales()` to enumerate the compiled locales when
-selecting a language. If an unsupported locale is requested, the loader falls
+Language selection should use `common::i18n::available_locales()` to enumerate
+the compiled locales. When an unsupported locale is requested, the loader falls
 back to the bundled `en-GB` strings and surfaces a missing message error if a
 slug is not translated.
 

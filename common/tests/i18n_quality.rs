@@ -166,6 +166,7 @@ fn localised_help_attributes_are_complete() {
 }
 
 #[rstest]
+#[case("en-GB", 12)]
 #[case("cy", 12)]
 #[case("gd", 25)]
 fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches: i64) {

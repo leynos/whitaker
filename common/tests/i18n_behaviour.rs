@@ -141,36 +141,41 @@ fn scenario_welsh_lint_count_zero(fixture: I18nFixture) {
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 4)]
-fn scenario_welsh_lint_count_one(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_large(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 5)]
-fn scenario_welsh_lint_count_two(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_one(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 6)]
-fn scenario_welsh_lint_count_three(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_two(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 7)]
-fn scenario_welsh_lint_count_six(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_three(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 8)]
-fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_six(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 9)]
-fn scenario_attribute_falls_back(fixture: I18nFixture) {
+fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) {
     let _ = fixture;
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 10)]
+fn scenario_attribute_falls_back(fixture: I18nFixture) {
+    let _ = fixture;
+}
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 11)]
 fn scenario_missing_message(fixture: I18nFixture) {
     let _ = fixture;
 }
