@@ -54,6 +54,66 @@ pub enum I18nError {
 /// HashMap wrapper used when passing Fluent arguments to lookups.
 pub type Arguments<'a> = HashMap<Cow<'a, str>, fluent_bundle::FluentValue<'a>>;
 
+/// Fluent message identifier wrapper to avoid stringly typed lookups.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MessageKey(String);
+
+impl MessageKey {
+    /// Return the underlying message identifier as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<&str> for MessageKey {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl AsRef<str> for MessageKey {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for MessageKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Fluent attribute identifier wrapper.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AttributeName(String);
+
+impl AttributeName {
+    /// Return the underlying attribute identifier as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<&str> for AttributeName {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl AsRef<str> for AttributeName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for AttributeName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Resolve localisation messages for a specific locale.
 ///
 /// The loader eagerly falls back to `en-GB` when the requested locale is not
@@ -116,17 +176,22 @@ impl Localiser {
 
     /// Fetch the translated message for `key`.
     pub fn message(&self, key: &str) -> Result<String, I18nError> {
-        self.lookup(key, None)
+        let key = MessageKey::from(key);
+        self.lookup(&key, None)
     }
 
     /// Fetch the translated message with Fluent arguments.
     pub fn message_with_args(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError> {
-        self.lookup(key, Some(args))
+        let key = MessageKey::from(key);
+        self.lookup(&key, Some(args))
     }
 
     /// Fetch a translated attribute, e.g. `function.primary`.
     pub fn attribute(&self, key: &str, attribute: &str) -> Result<String, I18nError> {
-        self.message(&compose_attribute_key(key, attribute))
+        let key = MessageKey::from(key);
+        let attribute = AttributeName::from(attribute);
+        let composed = compose_attribute_key(&key, &attribute);
+        self.lookup(&composed, None)
     }
 
     /// Fetch a translated attribute with Fluent arguments.
@@ -136,27 +201,32 @@ impl Localiser {
         attribute: &str,
         args: &Arguments<'_>,
     ) -> Result<String, I18nError> {
-        self.message_with_args(&compose_attribute_key(key, attribute), args)
+        let key = MessageKey::from(key);
+        let attribute = AttributeName::from(attribute);
+        let composed = compose_attribute_key(&key, &attribute);
+        self.lookup(&composed, Some(args))
     }
 
-    fn lookup(&self, key: &str, args: Option<&Arguments<'_>>) -> Result<String, I18nError> {
+    fn lookup(&self, key: &MessageKey, args: Option<&Arguments<'_>>) -> Result<String, I18nError> {
         let maybe_value = match args {
-            Some(arguments) => LOADER.try_lookup_with_args(&self.language, key, arguments),
-            None => LOADER.try_lookup(&self.language, key),
+            Some(arguments) => LOADER.try_lookup_with_args(&self.language, key.as_str(), arguments),
+            None => LOADER.try_lookup(&self.language, key.as_str()),
         };
 
         maybe_value.ok_or_else(|| I18nError::MissingMessage {
-            key: key.to_owned(),
+            key: key.to_string(),
             locale: self.language.to_string(),
         })
     }
 }
 
-fn compose_attribute_key(key: &str, attribute: &str) -> String {
-    let mut composed = String::with_capacity(key.len() + attribute.len() + 1);
-    fmt::write(&mut composed, format_args!("{key}.{attribute}"))
+fn compose_attribute_key(key: &MessageKey, attribute: &AttributeName) -> MessageKey {
+    let key_str = key.as_str();
+    let attribute_str = attribute.as_str();
+    let mut composed = String::with_capacity(key_str.len() + attribute_str.len() + 1);
+    fmt::write(&mut composed, format_args!("{key_str}.{attribute_str}"))
         .expect("writing to string cannot fail");
-    composed
+    MessageKey(composed)
 }
 
 fn is_supported(locale: &LanguageIdentifier) -> bool {
