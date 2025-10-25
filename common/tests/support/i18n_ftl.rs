@@ -1,3 +1,8 @@
+//! Fluent resource parsing helpers for localisation test suites.
+//! Provides lightweight newtypes and parsing utilities reused across quality
+//! and behaviour assertions.
+
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -112,12 +117,15 @@ fn locales_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales")
 }
 
+static MESSAGE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^([A-Za-z0-9_-]+)\\s*=\\s*(.*)$").expect("valid message regex"));
+static ATTRIBUTE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^\\s+\\.([A-Za-z0-9_-]+)\\s*=\\s*(.*)$").expect("valid attribute regex")
+});
+
 pub fn parse_ftl(path: &Path) -> BTreeMap<String, FtlEntry> {
     let mut entries: BTreeMap<String, FtlEntry> = BTreeMap::new();
     let content = fs::read_to_string(path).expect("ftl file should be readable");
-    let message_re = Regex::new(r"^([A-Za-z0-9_-]+)\\s*=\\s*(.*)$").expect("valid message regex");
-    let attribute_re =
-        Regex::new(r"^\\s+\\.([A-Za-z0-9_-]+)\\s*=\\s*(.*)$").expect("valid attribute regex");
 
     let mut current_id: Option<String> = None;
     let mut current_attribute: Option<String> = None;
@@ -125,7 +133,7 @@ pub fn parse_ftl(path: &Path) -> BTreeMap<String, FtlEntry> {
     for line in content.lines() {
         if process_message_line(
             line,
-            &message_re,
+            &MESSAGE_RE,
             &mut entries,
             &mut current_id,
             &mut current_attribute,
@@ -135,7 +143,7 @@ pub fn parse_ftl(path: &Path) -> BTreeMap<String, FtlEntry> {
 
         if process_attribute_line(
             line,
-            &attribute_re,
+            &ATTRIBUTE_RE,
             &mut entries,
             &current_id,
             &mut current_attribute,

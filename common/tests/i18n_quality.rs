@@ -173,6 +173,30 @@ fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches:
     validate_pluralisation_coverage(locale, max_branches);
 }
 
+#[rstest]
+#[case(0, "dim cangen")]
+#[case(1, "1 cangen")]
+#[case(2, "dwy gangen")]
+#[case(3, "3 changen")]
+#[case(6, "6 changen")]
+#[case(11, "11 cangen")]
+fn welsh_branch_term_declensions(#[case] branches: i64, #[case] expected: &str) {
+    let localiser = Localiser::new(Some("cy"));
+    let mut args = HashMap::new();
+    args.insert(Cow::Borrowed("branches"), FluentValue::from(branches));
+
+    let rendered_term = localiser
+        .message_with_args("-branches-count", &args)
+        .expect("branches term should resolve");
+    assert_eq!(rendered_term, expected);
+
+    let note = localiser
+        .attribute_with_args("conditional_max_two_branches", "note", &args)
+        .expect("conditional note should resolve");
+    let expected_note = format!("Ar hyn o bryd mae {expected} yn y rheol.");
+    assert_eq!(note, expected_note);
+}
+
 #[test]
 fn secondary_locales_fall_back_to_english_for_missing_attribute() {
     for locale in ["cy", "gd"] {
