@@ -108,6 +108,16 @@ missing_panics_doc = "deny"
 error_impl_error = "deny"
 result_large_err = "deny"
 
-[lints.rust]
+[workspace.lints.rust]
+unknown_lints = "deny"
+renamed_and_removed_lints = "deny"
 missing_docs = "deny"
+
+[workspace.lints.rustdoc]
 missing_crate_level_docs = "deny"
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+bare_urls = "deny"
+invalid_html_tags = "deny"
+invalid_codeblock_attributes = "deny"
+unescaped_backticks = "deny"

@@ -2,11 +2,11 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use fluent_bundle::FluentValue;
+use fluent_templates::{Loader, fluent_bundle::FluentValue};
 use thiserror::Error;
 
 use super::locales::supports_locale;
-use super::{FALLBACK_LANGUAGE, LOADER, LanguageIdentifier};
+use super::{FALLBACK_LANGUAGE, FALLBACK_LITERAL, LOADER, LanguageIdentifier};
 
 /// HashMap wrapper used when passing Fluent arguments to lookups.
 pub type Arguments<'a> = HashMap<Cow<'a, str>, FluentValue<'a>>;
@@ -27,11 +27,12 @@ pub enum I18nError {
 #[derive(Clone, Debug)]
 pub struct Localiser {
     language: LanguageIdentifier,
+    language_tag: String,
     fallback_used: bool,
 }
 
 impl Localiser {
-    /// Create a localiser for `locale`, falling back to [`FALLBACK_LOCALE`].
+    /// Create a localiser for `locale`, falling back to [`crate::i18n::FALLBACK_LOCALE`].
     ///
     /// ```
     /// use common::i18n::{available_locales, Localiser};
@@ -49,10 +50,15 @@ impl Localiser {
     pub fn new(locale: Option<&str>) -> Self {
         match locale {
             Some(value) if supports_locale(value) => match LanguageIdentifier::from_str(value) {
-                Ok(identifier) => Self {
-                    language: identifier,
-                    fallback_used: false,
-                },
+                Ok(identifier) => {
+                    let language_tag = identifier.to_string();
+
+                    Self {
+                        language: identifier,
+                        language_tag,
+                        fallback_used: false,
+                    }
+                }
                 Err(_) => Self::fallback(),
             },
             _ => Self::fallback(),
@@ -68,7 +74,7 @@ impl Localiser {
     /// Return the resolved locale as a string slice.
     #[must_use]
     pub fn locale(&self) -> &str {
-        self.language.as_ref()
+        &self.language_tag
     }
 
     /// Whether the fallback locale was used.
@@ -114,21 +120,42 @@ impl Localiser {
 
         let maybe_value = match args {
             Some(arguments) => {
-                LOADER.try_lookup_with_args(&self.language, lookup_key.as_str(), arguments)
+                let owned_arguments = promote_arguments(arguments);
+                LOADER.try_lookup_with_args(&self.language, lookup_key.as_str(), &owned_arguments)
             }
             None => LOADER.try_lookup(&self.language, lookup_key.as_str()),
         };
 
         maybe_value.ok_or_else(|| I18nError::MissingMessage {
             key: lookup_key,
-            locale: self.language.to_string(),
+            locale: self.language_tag.clone(),
         })
     }
 
     fn fallback() -> Self {
         Self {
             language: FALLBACK_LANGUAGE.clone(),
+            language_tag: FALLBACK_LITERAL.to_string(),
             fallback_used: true,
         }
+    }
+}
+
+fn promote_arguments(
+    arguments: &Arguments<'_>,
+) -> HashMap<Cow<'static, str>, FluentValue<'static>> {
+    arguments
+        .iter()
+        .map(|(key, value)| (Cow::Owned(key.as_ref().to_string()), promote_value(value)))
+        .collect()
+}
+
+fn promote_value(value: &FluentValue<'_>) -> FluentValue<'static> {
+    match value {
+        FluentValue::String(text) => FluentValue::String(Cow::Owned(text.as_ref().to_string())),
+        FluentValue::Number(number) => FluentValue::Number(number.clone()),
+        FluentValue::Custom(custom) => FluentValue::Custom(custom.duplicate()),
+        FluentValue::None => FluentValue::None,
+        FluentValue::Error => FluentValue::Error,
     }
 }

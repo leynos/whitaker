@@ -1,7 +1,7 @@
 //! Context tracking utilities for analysing traversal stacks.
 
 use crate::attributes::{
-    Attribute, AttributeKind, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
+    Attribute, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
 };
 
 /// Categorises a frame within the traversal stack.

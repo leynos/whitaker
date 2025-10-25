@@ -1,6 +1,6 @@
 use once_cell::sync::Lazy;
 
-use fluent_templates::loader::LanguageIdentifier;
+use fluent_templates::{Loader, loader::LanguageIdentifier};
 
 use super::LOADER;
 

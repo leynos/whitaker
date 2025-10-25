@@ -5,18 +5,17 @@
 //! API exposes a thin wrapper around `fluent-templates` that tracks whether the
 //! fallback bundle was used and surfaces missing message errors eagerly.
 
-use fluent_templates::{loader::Loader, static_loader};
+use fluent_templates::static_loader;
 use unic_langid::langid;
 
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
 
-const LOCALES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../locales");
 const FALLBACK_LITERAL: &str = "en-GB";
 
 static_loader! {
     pub(crate) static LOADER = {
-        locales: LOCALES_DIR,
-        fallback_language: FALLBACK_LITERAL,
+        locales: "../locales",
+        fallback_language: "en-GB",
         // Retain Fluent's default Unicode isolating marks for bidi safety.
     };
 }
