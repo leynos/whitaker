@@ -1,6 +1,10 @@
-//! Fluent resource parsing helpers for localisation test suites.
-//! Provides lightweight newtypes and parsing utilities reused across quality
-//! and behaviour assertions.
+//! Fluent Translation List (FTL) parsing and locale discovery for localisation
+//! test suites.
+//!
+//! This module exposes lightweight newtypes and parsing utilities reused across
+//! the localisation quality and behaviour assertions. It understands message
+//! declarations, attribute lines, and multi-line continuations so tests can
+//! inspect Fluent resources without depending on the runtime loader.
 
 use once_cell::sync::Lazy;
 use regex::Regex;

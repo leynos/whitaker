@@ -41,8 +41,9 @@ impl I18nFixture {
 
     fn result(&self) -> Result<String, I18nError> {
         self.outcome
-            .borrow_mut()
-            .take()
+            .borrow()
+            .as_ref()
+            .cloned()
             .unwrap_or_else(|| panic!("lookup should have been performed"))
     }
 }

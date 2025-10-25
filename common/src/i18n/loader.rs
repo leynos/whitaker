@@ -12,7 +12,7 @@ use super::{FALLBACK_LANGUAGE, LOADER, LanguageIdentifier};
 pub type Arguments<'a> = HashMap<Cow<'a, str>, FluentValue<'a>>;
 
 /// Error raised when localisation data cannot satisfy a caller request.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum I18nError {
     /// Raised when the requested message slug is missing for the resolved locale.
     #[error("message `{key}` missing for locale `{locale}`")]
