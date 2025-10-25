@@ -25,14 +25,14 @@ impl I18nFixture {
     }
 
     fn ensure_localiser(&self) -> Localiser {
-        if let Some(localiser) = self.localiser.borrow().clone() {
-            return localiser;
-        }
-
-        let locale = self.locale.borrow().clone();
-        let localiser = Localiser::new(locale.as_deref());
-        *self.localiser.borrow_mut() = Some(localiser.clone());
-        localiser
+        self.localiser
+            .borrow_mut()
+            .get_or_insert_with(|| {
+                let locale = self.locale.borrow();
+                let locale_clone = locale.clone();
+                Localiser::new(locale_clone.as_deref())
+            })
+            .clone()
     }
 
     fn store_message(&self, result: Result<String, I18nError>) {
