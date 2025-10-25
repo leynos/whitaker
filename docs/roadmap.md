@@ -28,10 +28,10 @@
   - [ ] Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
 
 - [ ] Phase 2a — Localisation enablement
-  - [ ] Add `fluent-templates` and `once_cell` to the workspace dependencies
+  - [x] Add `fluent-templates` and `once_cell` to the workspace dependencies
         and expose a shared `common::i18n` loader.
-  - [ ] Create the `locales/` resource tree with an `en-GB` fallback and a
-        secondary language sample covering every lint slug.
+  - [x] Create the `locales/` resource tree with an `en-GB` fallback and
+        secondary `cy`/`gd` language samples covering every lint slug.
   - [ ] Refactor lint diagnostics to source primary messages, notes, and help
         text from Fluent bundles with structured arguments.
   - [ ] Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and add UI

@@ -114,10 +114,6 @@ mod tests {
     }
 
     #[rstest]
-    #[expect(
-        clippy::expect_used,
-        reason = "`expect` keeps the panic terse as requested in review"
-    )]
     fn deserialises_overrides_from_toml() {
         let source = "[module_max_400_lines]\nmax_lines = 120\n";
 

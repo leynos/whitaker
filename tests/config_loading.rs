@@ -23,9 +23,9 @@ fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> {
 fn panic_message(payload: Box<dyn Any + Send>) -> String {
     match payload.downcast::<String>() {
         Ok(message) => *message,
-        Err(payload) => payload.downcast::<&'static str>().map_or_else(
-            |_| "configuration loading panicked with a non-string payload".to_string(),
-            |message| (*message).to_string(),
+        Err(non_string) => non_string.downcast::<&'static str>().map_or_else(
+            |_| "configuration loading panicked with a non-string payload".to_owned(),
+            |message| (*message).to_owned(),
         ),
     }
 }
@@ -41,7 +41,7 @@ impl FromStr for ErrorSnippet {
             .trim()
             .trim_matches(|candidate| matches!(candidate, '"' | '\''));
 
-        Ok(Self(trimmed.to_string()))
+        Ok(Self(trimmed.to_owned()))
     }
 }
 
@@ -80,9 +80,9 @@ fn override_max_lines(config_source: &RefCell<Option<String>>, value: usize) {
 
 #[given("the workspace config sets the module max line limit to an invalid value")]
 fn invalid_override(config_source: &RefCell<Option<String>>) {
-    config_source
-        .borrow_mut()
-        .replace("[module_max_400_lines]\nmax_lines = \"invalid\"\n".to_string());
+    config_source.borrow_mut().replace(String::from(
+        "[module_max_400_lines]\nmax_lines = \"invalid\"\n",
+    ));
 }
 
 #[given("the workspace config includes unknown fields")]
@@ -93,7 +93,7 @@ fn unknown_fields(config_source: &RefCell<Option<String>>) {
             "[module_max_400_lines]\n",
             "max_lines = 120\n",
         )
-        .to_string(),
+        .to_owned(),
     );
 }
 
@@ -153,13 +153,13 @@ fn assert_error_with_snippet(
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
     snippet: ErrorSnippet,
 ) {
-    let snippet = snippet.into_inner();
+    let snippet_value = snippet.into_inner();
     let borrow = load_result.borrow();
     match borrow.as_ref() {
         Some(Err(error)) => {
             assert!(
-                error.contains(snippet.as_str()),
-                "expected error '{error}' to mention '{snippet}'",
+                error.contains(snippet_value.as_str()),
+                "expected error '{error}' to mention '{snippet_value}'",
             );
         }
         Some(Ok(config)) => {

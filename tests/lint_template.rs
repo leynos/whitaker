@@ -35,7 +35,7 @@ impl TemplateWorld {
             LintCrateTemplate::with_ui_tests_directory(crate_name, ui_directory).map(|template| {
                 self.lint_constant
                     .borrow_mut()
-                    .replace(template.lint_constant().to_string());
+                    .replace(template.lint_constant().to_owned());
                 template.render()
             });
         self.outcome.borrow_mut().replace(result);
@@ -83,15 +83,15 @@ impl std::str::FromStr for StepString {
     type Err = std::convert::Infallible;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(input.to_string()))
+        Ok(Self(input.to_owned()))
     }
 }
 
 #[fixture]
 fn world() -> TemplateWorld {
     let world = TemplateWorld::default();
-    world.set_crate_name("function_attrs_follow_docs".to_string());
-    world.set_ui_directory("ui".to_string());
+    world.set_crate_name(String::from("function_attrs_follow_docs"));
+    world.set_ui_directory(String::from("ui"));
     world
 }
 
@@ -202,8 +202,8 @@ fn then_manifest_reuses_shared_dependencies(world: &TemplateWorld) {
 #[then("the library includes UI test harness boilerplate for directory {directory}")]
 fn then_library_includes_harness(world: &TemplateWorld, directory: StepString) {
     let files = world.files();
-    let directory = directory.into_inner();
-    let expected = format!("whitaker::declare_ui_tests!(\"{directory}\");");
+    let directory_value = directory.into_inner();
+    let expected = format!("whitaker::declare_ui_tests!(\"{directory_value}\");");
     assert!(files.lib_rs().contains(expected.as_str()));
 }
 
@@ -224,8 +224,8 @@ fn then_empty_name_error(world: &TemplateWorld) {
 #[then("template creation fails with an invalid crate name character {character}")]
 fn then_invalid_character_error(world: &TemplateWorld, character: StepString) {
     let error = world.error();
-    let StepString(character) = character;
-    let Some(char_value) = character.chars().next() else {
+    let StepString(character_value) = character;
+    let Some(char_value) = character_value.chars().next() else {
         panic!("character step should supply a char");
     };
     assert_eq!(
@@ -253,8 +253,8 @@ fn then_non_letter_start_error(world: &TemplateWorld) {
 #[then("template creation fails due to a trailing separator {separator}")]
 fn then_trailing_separator_error(world: &TemplateWorld, separator: StepString) {
     let error = world.error();
-    let StepString(separator) = separator;
-    let Some(char_value) = separator.chars().next() else {
+    let StepString(separator_value) = separator;
+    let Some(char_value) = separator_value.chars().next() else {
         panic!("separator step should supply a char");
     };
     assert_eq!(
@@ -288,7 +288,7 @@ fn then_parent_directory_error(world: &TemplateWorld) {
     assert_eq!(
         error,
         TemplateError::ParentUiDirectory {
-            directory: "ui/../secrets".to_string(),
+            directory: String::from("ui/../secrets"),
         }
     );
 }

@@ -153,11 +153,20 @@ Utilities shared by lints:
   so each lint crate can load translated diagnostics without manual resource
   management. Both crates live in `[workspace.dependencies]` to keep versions
   aligned and to simplify adoption across current and future lints.
+- Provide `common::i18n::Localiser`, a wrapper around the static loader that
+  records when the fallback locale is used and surfaces missing message errors
+  eagerly. The helper exposes convenience accessors for direct messages and
+  Fluent attributes while supporting argument interpolation.
 - Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
   `fluent_templates::static_loader!`. The loader resides in `common::i18n` and
   exposes a `FluentBundle` facade that lint crates invoke through helper
   functions (`message`, `note`, `help`). Embedding avoids runtime I/O and keeps
   CI deterministic.
+- Ship an `en-GB` fallback plus `cy` and `gd` secondary locales that translate
+  every lint slug. The additional bundles act as reference implementations for
+  translators and drive behavioural coverage that exercises non-English
+  lookups, including languages with richer plural categories, alongside
+  fallback resolution.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
   Messages use stable slugs such as `function_attrs_follow_docs.primary` and
