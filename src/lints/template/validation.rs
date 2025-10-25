@@ -71,15 +71,14 @@ pub(crate) fn normalize_crate_name(input: &str) -> Result<String, TemplateError>
         return Err(TemplateError::InvalidCrateNameStart { character: first });
     }
 
+    let mut last = first;
     for character in characters {
+        last = character;
         if !is_valid_crate_name_character(character) {
             return Err(TemplateError::InvalidCrateNameCharacter { character });
         }
     }
-
-    let Some(last) = trimmed.chars().last() else {
-        return Err(TemplateError::EmptyCrateName);
-    };
+    // `last` always reflects the final character thanks to the initial `first`.
     if matches!(last, '-' | '_') {
         return Err(TemplateError::CrateNameTrailingSeparator { character: last });
     }

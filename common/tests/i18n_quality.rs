@@ -6,6 +6,7 @@
 
 use common::i18n::Localiser;
 use fluent_bundle::FluentValue;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rstest::rstest;
 use std::borrow::Cow;
@@ -16,9 +17,12 @@ use std::path::Path;
 mod support;
 use support::{FtlEntry, LocaleCode, LocaleContext, MessageId, file_pairs, parse_ftl};
 
+static PLACEABLE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\{\s*\$([A-Za-z0-9_]+)").expect("valid placeable regex"));
+
 fn extract_placeables(text: &str) -> BTreeSet<String> {
-    let re = Regex::new(r"\{\s*\$([A-Za-z0-9_]+)").expect("valid placeable regex");
-    re.captures_iter(text)
+    PLACEABLE_RE
+        .captures_iter(text)
         .map(|captures| captures[1].to_string())
         .collect()
 }
@@ -95,7 +99,7 @@ fn validate_entry_placeables(
 }
 
 fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
-    let mut localiser = Localiser::new(Some(locale));
+    let localiser = Localiser::new(Some(locale));
     let mut args = HashMap::new();
 
     for branches in 0..=max_branches {
