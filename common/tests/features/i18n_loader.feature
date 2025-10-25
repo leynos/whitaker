@@ -60,7 +60,12 @@ Feature: Localisation loader
     When I request the attribute fallback-note on common-lint-count
     Then the message contains Fallback diagnostics default to English
 
-  Scenario: Surfacing a missing message error for unknown keys
-    Given the locale preference en-GB
-    When I request the message for imaginary.lint
-    Then localisation fails with a missing message error
+    Scenario: Surfacing a missing message error for unknown keys
+      Given the locale preference en-GB
+      When I request the message for imaginary.lint
+      Then localisation fails with a missing message error
+
+    Scenario: Welsh conditional note applies lenition
+      Given the locale preference cy
+      When I request the attribute note on conditional_max_two_branches with branches 3
+      Then the message contains 3 changen

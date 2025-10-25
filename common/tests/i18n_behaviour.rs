@@ -180,3 +180,8 @@ fn scenario_attribute_falls_back(fixture: I18nFixture) {
 fn scenario_missing_message(fixture: I18nFixture) {
     let _ = fixture;
 }
+
+#[scenario(path = "tests/features/i18n_loader.feature", index = 12)]
+fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
+    let _ = fixture;
+}
