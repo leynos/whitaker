@@ -57,6 +57,12 @@ impl From<&str> for MessageId {
     }
 }
 
+impl From<String> for MessageId {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
 impl AsRef<str> for MessageId {
     fn as_ref(&self) -> &str {
         self.as_str()
@@ -81,6 +87,12 @@ impl AttributeName {
 impl From<&str> for AttributeName {
     fn from(value: &str) -> Self {
         Self(value.to_string())
+    }
+}
+
+impl From<String> for AttributeName {
+    fn from(value: String) -> Self {
+        Self(value)
     }
 }
 
@@ -277,4 +289,33 @@ pub fn file_pairs() -> Vec<(String, PathBuf, PathBuf)> {
     }
 
     pairs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_id_from_string_reuses_allocation() {
+        let original = String::from("message-key");
+        let ptr = original.as_ptr();
+        let len = original.len();
+
+        let message_id = MessageId::from(original);
+
+        assert!(std::ptr::eq(message_id.as_str().as_ptr(), ptr));
+        assert_eq!(message_id.as_str().len(), len);
+    }
+
+    #[test]
+    fn attribute_name_from_string_reuses_allocation() {
+        let original = String::from("attribute-name");
+        let ptr = original.as_ptr();
+        let len = original.len();
+
+        let attribute_name = AttributeName::from(original);
+
+        assert!(std::ptr::eq(attribute_name.as_str().as_ptr(), ptr));
+        assert_eq!(attribute_name.as_str().len(), len);
+    }
 }
