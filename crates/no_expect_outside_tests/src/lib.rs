@@ -23,7 +23,7 @@ mod context;
 mod diagnostics;
 
 use context::{collect_context, summarise_context};
-use diagnostics::emit_diagnostic;
+use diagnostics::{DiagnosticContext, emit_diagnostic};
 
 dylint_linting::impl_late_lint! {
     pub NO_EXPECT_OUTSIDE_TESTS,
@@ -113,7 +113,8 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             return;
         }
 
-        emit_diagnostic(cx, expr, receiver, &summary, &self.localiser);
+        let diagnostic_context = DiagnosticContext::new(&summary, &self.localiser);
+        emit_diagnostic(cx, expr, receiver, &diagnostic_context);
     }
 }
 

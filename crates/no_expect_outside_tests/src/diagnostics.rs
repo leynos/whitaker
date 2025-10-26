@@ -7,25 +7,86 @@ use common::i18n::{
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
 use std::borrow::Cow;
+use std::fmt;
+
+/// A formatted label for the receiver type (e.g., "`Result<T, E>`").
+#[derive(Debug, Clone)]
+pub(crate) struct ReceiverLabel(String);
+
+impl ReceiverLabel {
+    pub(crate) fn new(label: impl Into<String>) -> Self {
+        Self(label.into())
+    }
+}
+
+impl Default for ReceiverLabel {
+    fn default() -> Self {
+        Self::new(String::new())
+    }
+}
+
+impl AsRef<str> for ReceiverLabel {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ReceiverLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A formatted label for the call context (e.g., "function `handler`" or "the surrounding scope").
+#[derive(Debug, Clone)]
+pub(crate) struct ContextLabel(String);
+
+impl ContextLabel {
+    pub(crate) fn new(label: impl Into<String>) -> Self {
+        Self(label.into())
+    }
+}
+
+impl AsRef<str> for ContextLabel {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ContextLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub(crate) struct DiagnosticContext<'a> {
+    pub(crate) summary: &'a ContextSummary,
+    pub(crate) localiser: &'a Localiser,
+}
+
+impl<'a> DiagnosticContext<'a> {
+    pub(crate) fn new(summary: &'a ContextSummary, localiser: &'a Localiser) -> Self {
+        Self { summary, localiser }
+    }
+}
 
 pub(crate) fn emit_diagnostic(
     cx: &LateContext<'_>,
     expr: &hir::Expr<'_>,
     receiver: &hir::Expr<'_>,
-    summary: &ContextSummary,
-    localiser: &Localiser,
+    context: &DiagnosticContext<'_>,
 ) {
     let receiver_ty = cx.typeck_results().expr_ty(receiver).peel_refs();
-    let receiver_label = format!("`{}`", receiver_ty);
-    let context = context_label(summary);
+    let receiver_label = ReceiverLabel::new(format!("`{}`", receiver_ty));
+    let call_context = context_label(context.summary);
 
-    let messages = localised_messages(localiser, receiver_label.as_str(), context.as_str())
+    let messages = localised_messages(context.localiser, &receiver_label, &call_context)
         .unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
                 expr.span,
                 format!("missing localisation for `no_expect_outside_tests`: {error}"),
             );
-            fallback_messages(receiver_label.as_str(), context.as_str())
+            fallback_messages(&receiver_label, &call_context)
         });
 
     cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, |lint| {
@@ -47,23 +108,23 @@ type NoExpectMessages = DiagnosticMessageSet;
 
 fn localised_messages(
     lookup: &impl BundleLookup,
-    receiver: &str,
-    context: &str,
+    receiver: &ReceiverLabel,
+    context: &ContextLabel,
 ) -> Result<NoExpectMessages, I18nError> {
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("receiver"),
-        FluentValue::from(receiver.to_string()),
+        FluentValue::from(receiver.as_ref().to_string()),
     );
     args.insert(
         Cow::Borrowed("context"),
-        FluentValue::from(context.to_string()),
+        FluentValue::from(context.as_ref().to_string()),
     );
 
     resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
 
-fn fallback_messages(receiver: &str, context: &str) -> NoExpectMessages {
+fn fallback_messages(receiver: &ReceiverLabel, context: &ContextLabel) -> NoExpectMessages {
     let primary = format!("Avoid calling expect on {receiver} outside test-only code.");
     let note = format!("The call originates within {context} which is not recognised as a test.",);
     let help = format!("Handle the error returned by {receiver} or move the code into a test.",);
@@ -71,19 +132,21 @@ fn fallback_messages(receiver: &str, context: &str) -> NoExpectMessages {
     NoExpectMessages::new(primary, note, help)
 }
 
-fn context_label(summary: &ContextSummary) -> String {
-    summary
+fn context_label(summary: &ContextSummary) -> ContextLabel {
+    let label = summary
         .function_name
         .as_ref()
         .map(|name| format!("function `{name}`"))
-        .unwrap_or_else(|| "the surrounding scope".to_string())
+        .unwrap_or_else(|| "the surrounding scope".to_string());
+
+    ContextLabel::new(label)
 }
 
 #[cfg(test)]
 mod localisation {
     use super::{
-        Arguments, BundleLookup, I18nError, Localiser, MESSAGE_KEY, NoExpectMessages,
-        context_label, fallback_messages, localised_messages,
+        Arguments, BundleLookup, ContextLabel, I18nError, Localiser, MESSAGE_KEY, NoExpectMessages,
+        ReceiverLabel, context_label, fallback_messages, localised_messages,
     };
     use crate::context::ContextSummary;
     use rstest::fixture;
@@ -93,7 +156,7 @@ mod localisation {
     #[derive(Default)]
     struct LocalisationWorld {
         localiser: RefCell<Option<Localiser>>,
-        receiver: RefCell<String>,
+        receiver: RefCell<ReceiverLabel>,
         summary: RefCell<ContextSummary>,
         failing: RefCell<bool>,
         result: RefCell<Option<Result<NoExpectMessages, I18nError>>>,
@@ -106,7 +169,7 @@ mod localisation {
         }
 
         fn set_receiver_type(&self, receiver: &str) {
-            *self.receiver.borrow_mut() = receiver.to_string();
+            *self.receiver.borrow_mut() = ReceiverLabel::new(receiver);
         }
 
         fn set_receiver(&self, receiver: &str) {
@@ -118,11 +181,11 @@ mod localisation {
             summary.function_name = name.map(ToString::to_string);
         }
 
-        fn get_receiver_type(&self) -> String {
+        fn get_receiver_type(&self) -> ReceiverLabel {
             self.receiver.borrow().clone()
         }
 
-        fn get_function_context(&self) -> String {
+        fn get_function_context(&self) -> ContextLabel {
             let summary = self.summary.borrow();
             context_label(&summary)
         }
@@ -215,14 +278,14 @@ mod localisation {
         let context = context_label(&summary);
 
         let result = if *world.failing.borrow() {
-            localised_messages(&FailingLookup, receiver.as_str(), context.as_str())
+            localised_messages(&FailingLookup, &receiver, &context)
         } else {
             let localiser = world
                 .localiser
                 .borrow()
                 .as_ref()
                 .expect("a locale must be selected");
-            localised_messages(localiser, receiver.as_str(), context.as_str())
+            localised_messages(localiser, &receiver, &context)
         };
 
         world.record_result(result);
@@ -249,7 +312,7 @@ mod localisation {
         let context = world.get_function_context();
         let receiver = world.get_receiver_type();
 
-        let result = localised_messages(&lookup, receiver.as_str(), context.as_str());
+        let result = localised_messages(&lookup, &receiver, &context);
         assert!(
             result.is_ok(),
             "localisation should succeed for edge case receiver types"
@@ -308,7 +371,8 @@ mod localisation {
     fn then_fallback(world: &LocalisationWorld, snippet: String) {
         let summary = world.summary.borrow().clone();
         let context = context_label(&summary);
-        let fallback = fallback_messages(world.receiver.borrow().as_str(), context.as_str());
+        let receiver = world.receiver.borrow();
+        let fallback = fallback_messages(&receiver, &context);
         assert!(fallback.primary().contains(&snippet));
     }
 
@@ -338,33 +402,35 @@ mod localisation {
 
 #[cfg(test)]
 mod receiver_type_edge_cases {
-    use super::{Localiser, localised_messages};
+    use super::{ContextLabel, Localiser, ReceiverLabel, localised_messages};
 
     #[test]
     fn handles_empty_receiver_type() {
         let lookup = Localiser::new(Some("en-GB"));
-        let messages = localised_messages(&lookup, "", "the surrounding scope")
-            .expect("localisation succeeds");
+        let receiver = ReceiverLabel::new("");
+        let context = ContextLabel::new("the surrounding scope");
+        let messages =
+            localised_messages(&lookup, &receiver, &context).expect("localisation succeeds");
         assert!(!messages.primary().is_empty());
     }
 
     #[test]
     fn handles_malformed_receiver_type() {
         let lookup = Localiser::new(Some("en-GB"));
-        let messages = localised_messages(&lookup, "!!!not_a_type", "function `worker`")
-            .expect("localisation succeeds");
+        let receiver = ReceiverLabel::new("!!!not_a_type");
+        let context = ContextLabel::new("function `worker`");
+        let messages =
+            localised_messages(&lookup, &receiver, &context).expect("localisation succeeds");
         assert!(!messages.note().is_empty());
     }
 
     #[test]
     fn handles_unexpected_receiver_type() {
         let lookup = Localiser::new(Some("en-GB"));
-        let messages = localised_messages(
-            &lookup,
-            "SomeCompletelyUnexpectedType123",
-            "function `processor`",
-        )
-        .expect("localisation succeeds");
+        let receiver = ReceiverLabel::new("SomeCompletelyUnexpectedType123");
+        let context = ContextLabel::new("function `processor`");
+        let messages =
+            localised_messages(&lookup, &receiver, &context).expect("localisation succeeds");
         assert!(!messages.help().is_empty());
     }
 }

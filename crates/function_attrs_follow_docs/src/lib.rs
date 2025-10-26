@@ -125,27 +125,32 @@ fn check_function_attributes(
 
     let doc = &infos[doc_index];
     let offending = &infos[offending_index];
-    emit_diagnostic(cx, doc.span(), offending.span(), kind, localiser);
+    let context = DiagnosticContext {
+        doc_span: doc.span(),
+        offending_span: offending.span(),
+        kind,
+    };
+    emit_diagnostic(cx, context, localiser);
 }
 
-fn emit_diagnostic(
-    cx: &LateContext<'_>,
+struct DiagnosticContext {
     doc_span: Span,
     offending_span: Span,
     kind: FunctionKind,
-    localiser: &Localiser,
-) {
-    let attribute = attribute_label(cx, offending_span, localiser);
+}
+
+fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localiser: &Localiser) {
+    let attribute = attribute_label(cx, context.offending_span, localiser);
     let messages =
-        localised_messages(localiser, kind, attribute.as_str()).unwrap_or_else(|error| {
+        localised_messages(localiser, context.kind, attribute.as_str()).unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
-                doc_span,
+                context.doc_span,
                 format!("missing localisation for `function_attrs_follow_docs`: {error}"),
             );
-            fallback_messages(kind, attribute.as_str())
+            fallback_messages(context.kind, attribute.as_str())
         });
 
-    cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, doc_span, |lint| {
+    cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
         let FunctionAttrsMessages {
             primary,
             note,
@@ -153,7 +158,7 @@ fn emit_diagnostic(
         } = messages;
 
         lint.primary_message(primary);
-        lint.span_note(offending_span, note);
+        lint.span_note(context.offending_span, note);
         lint.help(help);
     });
 }
