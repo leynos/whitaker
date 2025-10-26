@@ -6,7 +6,10 @@
 //! by implementation details such as `#[inline]` or `#[allow]` attributes.
 #![feature(rustc_private)]
 
-use common::i18n::{Arguments, FluentValue, I18nError, Localiser};
+use common::i18n::{
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser,
+    resolve_message_set,
+};
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
@@ -132,7 +135,7 @@ fn emit_diagnostic(
     kind: FunctionKind,
     localiser: &Localiser,
 ) {
-    let attribute = attribute_label(cx, offending_span);
+    let attribute = attribute_label(cx, offending_span, localiser);
     let messages =
         localised_messages(localiser, kind, attribute.as_str()).unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
@@ -157,6 +160,8 @@ fn emit_diagnostic(
 
 const MESSAGE_KEY: &str = "function_attrs_follow_docs";
 
+type FunctionAttrsMessages = DiagnosticMessageSet;
+
 fn localised_messages(
     lookup: &impl BundleLookup,
     kind: FunctionKind,
@@ -169,11 +174,7 @@ fn localised_messages(
         FluentValue::from(attribute.to_string()),
     );
 
-    let primary = lookup.message(MESSAGE_KEY, &args)?;
-    let note = lookup.attribute(MESSAGE_KEY, "note", &args)?;
-    let help = lookup.attribute(MESSAGE_KEY, "help", &args)?;
-
-    Ok(FunctionAttrsMessages::new(primary, note, help))
+    resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
 
 fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessages {
@@ -187,64 +188,19 @@ fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessag
     FunctionAttrsMessages::new(primary, note, help)
 }
 
-fn attribute_label(cx: &LateContext<'_>, span: Span) -> String {
+fn attribute_label(cx: &LateContext<'_>, span: Span, localiser: &Localiser) -> String {
     match cx.sess().source_map().span_to_snippet(span) {
         Ok(snippet) => snippet.trim().to_string(),
-        Err(_) => "the preceding attribute".to_string(),
+        Err(_) => attribute_fallback(localiser),
     }
 }
 
-struct FunctionAttrsMessages {
-    primary: String,
-    note: String,
-    help: String,
-}
+fn attribute_fallback(lookup: &impl BundleLookup) -> String {
+    let args: Arguments<'static> = Arguments::default();
 
-impl FunctionAttrsMessages {
-    fn new(primary: String, note: String, help: String) -> Self {
-        Self {
-            primary,
-            note,
-            help,
-        }
-    }
-
-    fn primary(&self) -> &str {
-        &self.primary
-    }
-
-    fn note(&self) -> &str {
-        &self.note
-    }
-
-    fn help(&self) -> &str {
-        &self.help
-    }
-}
-
-trait BundleLookup {
-    fn message(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError>;
-    fn attribute(
-        &self,
-        key: &str,
-        attribute: &str,
-        args: &Arguments<'_>,
-    ) -> Result<String, I18nError>;
-}
-
-impl BundleLookup for Localiser {
-    fn message(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError> {
-        self.message_with_args(key, args)
-    }
-
-    fn attribute(
-        &self,
-        key: &str,
-        attribute: &str,
-        args: &Arguments<'_>,
-    ) -> Result<String, I18nError> {
-        self.attribute_with_args(key, attribute, args)
-    }
+    lookup
+        .message("common-attribute-fallback", &args)
+        .unwrap_or_else(|_| "the preceding attribute".to_string())
 }
 
 fn detect_misordered_doc<A>(attrs: &[A]) -> Option<(usize, usize)>

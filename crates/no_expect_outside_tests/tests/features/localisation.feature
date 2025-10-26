@@ -24,6 +24,27 @@ Feature: Localised diagnostics for expect usage
     Then the diagnostic mentions "expect on `Result<i32, i32>`"
     And the fallback helper mentions "Result<i32, i32>"
 
+  Scenario: Receiver type is empty
+    Given the locale "en-GB" is selected
+    And the receiver type is empty
+    And the function context is ""
+    When I localise the expect diagnostic
+    Then the fallback and localisation logic should handle the receiver type robustly
+
+  Scenario: Receiver type is malformed
+    Given the locale "en-GB" is selected
+    And the receiver type is malformed
+    And the function context is "worker"
+    When I localise the expect diagnostic
+    Then the fallback and localisation logic should handle the receiver type robustly
+
+  Scenario: Receiver type is unexpected
+    Given the locale "en-GB" is selected
+    And the receiver type is unexpected
+    And the function context is "handler"
+    When I localise the expect diagnostic
+    Then the fallback and localisation logic should handle the receiver type robustly
+
   Scenario: Localisation failure surfaces missing message
     Given localisation fails
     And the receiver type is "Result<(), ()>"

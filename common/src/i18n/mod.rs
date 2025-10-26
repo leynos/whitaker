@@ -24,9 +24,11 @@ static_loader! {
 pub const FALLBACK_LOCALE: &str = FALLBACK_LITERAL;
 pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 
+mod diagnostics;
 mod loader;
 mod locales;
 
+pub use diagnostics::{BundleLookup, DiagnosticMessageSet, resolve_message_set};
 pub use loader::{Arguments, I18nError, Localiser};
 pub use locales::{available_locales, supports_locale};
 

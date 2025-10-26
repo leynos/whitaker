@@ -10,3 +10,5 @@ common-lint-count = Count your lints: { $lint }.
     .note = Messages for { $lint } are available in this locale.
     .help = Add translations for every lint slug to keep test coverage intact.
     .fallback-note = Fallback diagnostics default to English.
+
+common-attribute-fallback = the preceding attribute

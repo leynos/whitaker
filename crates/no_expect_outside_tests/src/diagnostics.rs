@@ -1,6 +1,9 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
-use common::i18n::{Arguments, FluentValue, I18nError, Localiser};
+use common::i18n::{
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser,
+    resolve_message_set,
+};
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
 use std::borrow::Cow;
@@ -40,6 +43,8 @@ pub(crate) fn emit_diagnostic(
 
 const MESSAGE_KEY: &str = "no_expect_outside_tests";
 
+type NoExpectMessages = DiagnosticMessageSet;
+
 fn localised_messages(
     lookup: &impl BundleLookup,
     receiver: &str,
@@ -55,11 +60,7 @@ fn localised_messages(
         FluentValue::from(context.to_string()),
     );
 
-    let primary = lookup.message(MESSAGE_KEY, &args)?;
-    let note = lookup.attribute(MESSAGE_KEY, "note", &args)?;
-    let help = lookup.attribute(MESSAGE_KEY, "help", &args)?;
-
-    Ok(NoExpectMessages::new(primary, note, help))
+    resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
 
 fn fallback_messages(receiver: &str, context: &str) -> NoExpectMessages {
@@ -76,59 +77,6 @@ fn context_label(summary: &ContextSummary) -> String {
         .as_ref()
         .map(|name| format!("function `{name}`"))
         .unwrap_or_else(|| "the surrounding scope".to_string())
-}
-
-struct NoExpectMessages {
-    primary: String,
-    note: String,
-    help: String,
-}
-
-impl NoExpectMessages {
-    fn new(primary: String, note: String, help: String) -> Self {
-        Self {
-            primary,
-            note,
-            help,
-        }
-    }
-
-    fn primary(&self) -> &str {
-        &self.primary
-    }
-
-    fn note(&self) -> &str {
-        &self.note
-    }
-
-    fn help(&self) -> &str {
-        &self.help
-    }
-}
-
-trait BundleLookup {
-    fn message(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError>;
-    fn attribute(
-        &self,
-        key: &str,
-        attribute: &str,
-        args: &Arguments<'_>,
-    ) -> Result<String, I18nError>;
-}
-
-impl BundleLookup for Localiser {
-    fn message(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError> {
-        self.message_with_args(key, args)
-    }
-
-    fn attribute(
-        &self,
-        key: &str,
-        attribute: &str,
-        args: &Arguments<'_>,
-    ) -> Result<String, I18nError> {
-        self.attribute_with_args(key, attribute, args)
-    }
 }
 
 #[cfg(test)]
@@ -157,13 +105,34 @@ mod localisation {
             *self.localiser.borrow_mut() = Some(localiser);
         }
 
-        fn set_receiver(&self, receiver: &str) {
+        fn set_receiver_type(&self, receiver: &str) {
             *self.receiver.borrow_mut() = receiver.to_string();
+        }
+
+        fn set_receiver(&self, receiver: &str) {
+            self.set_receiver_type(receiver);
         }
 
         fn set_function(&self, name: Option<&str>) {
             let mut summary = self.summary.borrow_mut();
             summary.function_name = name.map(ToString::to_string);
+        }
+
+        fn get_receiver_type(&self) -> String {
+            self.receiver.borrow().clone()
+        }
+
+        fn get_function_context(&self) -> String {
+            let summary = self.summary.borrow();
+            context_label(&summary)
+        }
+
+        fn get_bundle_lookup(&self) -> Localiser {
+            self.localiser
+                .borrow()
+                .as_ref()
+                .expect("a locale must be selected")
+                .clone()
         }
 
         fn record_result(&self, value: Result<NoExpectMessages, I18nError>) {
@@ -214,6 +183,21 @@ mod localisation {
         world.set_function(value);
     }
 
+    #[given("the receiver type is empty")]
+    fn given_receiver_type_empty(world: &LocalisationWorld) {
+        world.set_receiver_type("");
+    }
+
+    #[given("the receiver type is malformed")]
+    fn given_receiver_type_malformed(world: &LocalisationWorld) {
+        world.set_receiver_type("!!!not_a_type");
+    }
+
+    #[given("the receiver type is unexpected")]
+    fn given_receiver_type_unexpected(world: &LocalisationWorld) {
+        world.set_receiver_type("SomeCompletelyUnexpectedType123");
+    }
+
     #[given("the call occurs outside any function")]
     fn given_no_function(world: &LocalisationWorld) {
         world.set_function(None);
@@ -259,6 +243,24 @@ mod localisation {
         assert!(world.messages().help().contains(&snippet));
     }
 
+    #[then("the fallback and localisation logic should handle the receiver type robustly")]
+    fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
+        let lookup = world.get_bundle_lookup();
+        let context = world.get_function_context();
+        let receiver = world.get_receiver_type();
+
+        let result = localised_messages(&lookup, receiver.as_str(), context.as_str());
+        assert!(
+            result.is_ok(),
+            "localisation should succeed for edge case receiver types"
+        );
+        let messages = result.expect("localisation should succeed");
+        assert!(
+            !messages.primary().is_empty(),
+            "localised message title should never be empty"
+        );
+    }
+
     #[then("localisation fails for {key}")]
     fn then_failure(world: &LocalisationWorld, key: String) {
         let error = world.error();
@@ -283,6 +285,21 @@ mod localisation {
     }
 
     #[scenario(path = "tests/features/localisation.feature", index = 3)]
+    fn scenario_receiver_empty(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    #[scenario(path = "tests/features/localisation.feature", index = 4)]
+    fn scenario_receiver_malformed(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    #[scenario(path = "tests/features/localisation.feature", index = 5)]
+    fn scenario_receiver_unexpected(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    #[scenario(path = "tests/features/localisation.feature", index = 6)]
     fn scenario_failure(world: LocalisationWorld) {
         let _ = world;
     }
@@ -316,5 +333,38 @@ mod localisation {
                 locale: "test".to_string(),
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod receiver_type_edge_cases {
+    use super::{Localiser, localised_messages};
+
+    #[test]
+    fn handles_empty_receiver_type() {
+        let lookup = Localiser::new(Some("en-GB"));
+        let messages = localised_messages(&lookup, "", "the surrounding scope")
+            .expect("localisation succeeds");
+        assert!(!messages.primary().is_empty());
+    }
+
+    #[test]
+    fn handles_malformed_receiver_type() {
+        let lookup = Localiser::new(Some("en-GB"));
+        let messages = localised_messages(&lookup, "!!!not_a_type", "function `worker`")
+            .expect("localisation succeeds");
+        assert!(!messages.note().is_empty());
+    }
+
+    #[test]
+    fn handles_unexpected_receiver_type() {
+        let lookup = Localiser::new(Some("en-GB"));
+        let messages = localised_messages(
+            &lookup,
+            "SomeCompletelyUnexpectedType123",
+            "function `processor`",
+        )
+        .expect("localisation succeeds");
+        assert!(!messages.help().is_empty());
     }
 }
