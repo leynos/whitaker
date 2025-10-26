@@ -1,12 +1,11 @@
-error: `.expect(..)` is not allowed outside tests or doctests
+error: Avoid calling expect on `std::option::Option<i32>` outside test-only code.
   --> $DIR/fail_expect_with_cfg_attr.rs:6:13
    |
 LL |     let _ = value.expect("handler should not ignore errors");
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: Function `handler` is not annotated with a recognised test attribute.
-   = note: Receiver type: `std::option::Option<i32>`.
-   = help: Propagate the error or handle the `None`/`Err` case explicitly.
+   = note: The call originates within function `handler` which is not recognised as a test.
+   = help: Handle the error returned by `std::option::Option<i32>` or move the code into a test.
 note: the lint level is defined here
   --> $DIR/fail_expect_with_cfg_attr.rs:1:9
    |
