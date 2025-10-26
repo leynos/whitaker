@@ -22,7 +22,7 @@ Feature: Localised diagnostics for expect usage
     And the call occurs outside any function
     When I localise the expect diagnostic
     Then the diagnostic mentions "expect on `Result<i32, i32>`"
-    And the fallback helper mentions "Result<i32, i32>"
+    And the fallback help mentions "Result<i32, i32>"
 
   Scenario: Receiver type is empty
     Given the locale "en-GB" is selected

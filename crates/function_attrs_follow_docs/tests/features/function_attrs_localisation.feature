@@ -16,6 +16,14 @@ Feature: Localised diagnostics for function attribute ordering
     Then the primary message contains "sylwadau doc"
     And the note mentions "#[allow(clippy::bool_comparison)]"
 
+  Scenario: Attribute snippet fallback uses the translated label
+    Given the locale "en-GB" is selected
+    And the subject kind is "trait method"
+    And the attribute snippet cannot be retrieved
+    When I localise the diagnostic
+    Then the note mentions "the preceding attribute"
+    And the help mentions "the preceding attribute"
+
   Scenario: Unsupported locale falls back to English
     Given the locale "zz" is selected
     And the subject kind is "trait method"

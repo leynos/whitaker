@@ -10,4 +10,5 @@ common-lint-count = Cunntas nan lints: { $lint }.
     .note = Tha teachdaireachdan airson { $lint } ri fhaighinn ann an Gàidhlig.
     .help = Cuir barrachd eadar-theangachaidhean ris airson gach lint gus còmhdach dheuchainnean a chumail slàn.
 
+#. Air a shealltainn ann an breithneachaidhean nuair a tha e a’ toirt iomradh air am buadh roimhe.
 common-attribute-fallback = am buadh roimhe

@@ -157,12 +157,12 @@ Utilities shared by lints:
   records when the fallback locale is used and surfaces missing message errors
   eagerly. The helper exposes convenience accessors for direct messages and
   Fluent attributes while supporting argument interpolation.
-- Cache a `Localiser` inside each lint pass so diagnostics can resolve
+- Cache a `Localiser` inside each lint pass, so diagnostics can resolve
   translations at emission time without repeatedly negotiating locales. The
   lints supply structured arguments such as the offending attribute snippet or
   receiver type, keeping Fluent bundles free from ad hoc string formatting.
 - When lookups fail, report the missing message via `delay_span_bug` and fall
-  back to deterministic English strings so the lint still emits actionable
+  back to deterministic English strings, so the lint still emits actionable
   output whilst flagging the translation defect for developers.
 - Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
   `fluent_templates::static_loader!`. The loader resides in `common::i18n` and

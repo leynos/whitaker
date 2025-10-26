@@ -1,7 +1,7 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
     resolve_message_set,
 };
 use rustc_hir as hir;
@@ -102,7 +102,7 @@ pub(crate) fn emit_diagnostic(
     });
 }
 
-const MESSAGE_KEY: &str = "no_expect_outside_tests";
+const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_expect_outside_tests");
 
 type NoExpectMessages = DiagnosticMessageSet;
 
@@ -367,19 +367,23 @@ mod localisation {
         let _ = world;
     }
 
-    #[then("the fallback helper mentions {snippet}")]
+    #[then("the fallback help mentions {snippet}")]
     fn then_fallback(world: &LocalisationWorld, snippet: String) {
         let summary = world.summary.borrow().clone();
         let context = context_label(&summary);
         let receiver = world.receiver.borrow();
         let fallback = fallback_messages(&receiver, &context);
-        assert!(fallback.primary().contains(&snippet));
+        assert!(fallback.help().contains(&snippet));
     }
 
     struct FailingLookup;
 
     impl BundleLookup for FailingLookup {
-        fn message(&self, _key: &str, _args: &Arguments<'_>) -> Result<String, I18nError> {
+        fn message(
+            &self,
+            _key: MessageKey<'_>,
+            _args: &Arguments<'_>,
+        ) -> Result<String, I18nError> {
             Err(I18nError::MissingMessage {
                 key: MESSAGE_KEY.to_string(),
                 locale: "test".to_string(),
@@ -388,8 +392,8 @@ mod localisation {
 
         fn attribute(
             &self,
-            _key: &str,
-            _attribute: &str,
+            _key: MessageKey<'_>,
+            _attribute: common::i18n::AttrKey<'_>,
             _args: &Arguments<'_>,
         ) -> Result<String, I18nError> {
             Err(I18nError::MissingMessage {

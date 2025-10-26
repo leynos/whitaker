@@ -13,6 +13,7 @@ unic-langid = "^0.9.4"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 thiserror = "2"
+log = "0.4.28"
 rustc_ast = { path = "crates/rustc_ast", version = "0.1.0" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.1.0" }
 rustc_hir = { path = "crates/rustc_hir", version = "0.1.0" }

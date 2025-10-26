@@ -7,9 +7,10 @@
 #![feature(rustc_private)]
 
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser,
-    resolve_message_set,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
+    resolve_message_set, supports_locale,
 };
+use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
@@ -38,6 +39,26 @@ dylint_linting::impl_late_lint! {
 }
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+        self.localiser = cx
+            .tcx
+            .sess
+            .env_var_os("DYLINT_LOCALE".as_ref())
+            .and_then(|value| value.into_string().ok())
+            .map(|tag| {
+                if supports_locale(&tag) {
+                    Localiser::new(Some(&tag))
+                } else {
+                    debug!(
+                        target: "function_attrs_follow_docs",
+                        "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
+                    );
+                    Localiser::new(None)
+                }
+            })
+            .unwrap_or_else(|| Localiser::new(None));
+    }
+
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
@@ -163,7 +184,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localiser: 
     });
 }
 
-const MESSAGE_KEY: &str = "function_attrs_follow_docs";
+const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("function_attrs_follow_docs");
 
 type FunctionAttrsMessages = DiagnosticMessageSet;
 
@@ -204,7 +225,7 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
     let args: Arguments<'static> = Arguments::default();
 
     lookup
-        .message("common-attribute-fallback", &args)
+        .message(MessageKey::new("common-attribute-fallback"), &args)
         .unwrap_or_else(|_| "the preceding attribute".to_string())
 }
 
@@ -236,169 +257,8 @@ trait OrderedAttribute {
 }
 
 #[cfg(test)]
-mod localisation {
-    use super::{
-        Arguments, BundleLookup, FunctionAttrsMessages, FunctionKind, Localiser, MESSAGE_KEY,
-        localised_messages,
-    };
-    use common::i18n::I18nError;
-    use rstest::fixture;
-    use rstest_bdd_macros::{given, scenario, then, when};
-    use std::cell::RefCell;
-
-    #[derive(Default)]
-    struct LocalisationWorld {
-        localiser: RefCell<Option<Localiser>>,
-        subject: RefCell<FunctionKind>,
-        attribute: RefCell<String>,
-        failing: RefCell<bool>,
-        result: RefCell<Option<Result<FunctionAttrsMessages, I18nError>>>,
-    }
-
-    impl LocalisationWorld {
-        fn use_localiser(&self, locale: &str) {
-            let localiser = Localiser::new(Some(locale));
-            *self.localiser.borrow_mut() = Some(localiser);
-        }
-
-        fn record_result(&self, value: Result<FunctionAttrsMessages, I18nError>) {
-            *self.result.borrow_mut() = Some(value);
-        }
-
-        fn messages(&self) -> &FunctionAttrsMessages {
-            self.result
-                .borrow()
-                .as_ref()
-                .expect("result recorded")
-                .as_ref()
-                .expect("expected localisation to succeed")
-        }
-
-        fn error(&self) -> &I18nError {
-            self.result
-                .borrow()
-                .as_ref()
-                .expect("result recorded")
-                .as_ref()
-                .expect_err("expected localisation to fail")
-        }
-    }
-
-    #[fixture]
-    fn world() -> LocalisationWorld {
-        LocalisationWorld::default()
-    }
-
-    #[given("the locale {locale} is selected")]
-    fn given_locale(world: &LocalisationWorld, locale: String) {
-        world.use_localiser(&locale);
-    }
-
-    #[given("the subject kind is {kind}")]
-    fn given_subject(world: &LocalisationWorld, kind: String) {
-        *world.subject.borrow_mut() = match kind.as_str() {
-            "function" => FunctionKind::Function,
-            "method" => FunctionKind::Method,
-            "trait method" => FunctionKind::TraitMethod,
-            other => panic!("unknown subject kind: {other}"),
-        };
-    }
-
-    #[given("the attribute label is {label}")]
-    fn given_attribute(world: &LocalisationWorld, label: String) {
-        *world.attribute.borrow_mut() = label;
-    }
-
-    #[given("localisation fails")]
-    fn given_failure(world: &LocalisationWorld) {
-        *world.failing.borrow_mut() = true;
-    }
-
-    #[when("I localise the diagnostic")]
-    fn when_localise(world: &LocalisationWorld) {
-        let attribute = world.attribute.borrow().clone();
-        let kind = *world.subject.borrow();
-
-        let result = if *world.failing.borrow() {
-            localised_messages(&FailingLookup, kind, attribute.as_str())
-        } else {
-            let localiser = world
-                .localiser
-                .borrow()
-                .as_ref()
-                .expect("a locale must be selected");
-            localised_messages(localiser, kind, attribute.as_str())
-        };
-
-        world.record_result(result);
-    }
-
-    #[then("the primary message contains {snippet}")]
-    fn then_primary(world: &LocalisationWorld, snippet: String) {
-        assert!(world.messages().primary().contains(&snippet));
-    }
-
-    #[then("the note mentions {snippet}")]
-    fn then_note(world: &LocalisationWorld, snippet: String) {
-        assert!(world.messages().note().contains(&snippet));
-    }
-
-    #[then("the help mentions {snippet}")]
-    fn then_help(world: &LocalisationWorld, snippet: String) {
-        assert!(world.messages().help().contains(&snippet));
-    }
-
-    #[then("localisation fails for {key}")]
-    fn then_failure(world: &LocalisationWorld, key: String) {
-        let error = world.error();
-        match error {
-            I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
-        }
-    }
-
-    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 0)]
-    fn scenario_fallback(world: LocalisationWorld) {
-        let _ = world;
-    }
-
-    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 1)]
-    fn scenario_welsh(world: LocalisationWorld) {
-        let _ = world;
-    }
-
-    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 2)]
-    fn scenario_unknown_locale(world: LocalisationWorld) {
-        let _ = world;
-    }
-
-    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 3)]
-    fn scenario_failure(world: LocalisationWorld) {
-        let _ = world;
-    }
-
-    struct FailingLookup;
-
-    impl BundleLookup for FailingLookup {
-        fn message(&self, _key: &str, _args: &Arguments<'_>) -> Result<String, I18nError> {
-            Err(I18nError::MissingMessage {
-                key: MESSAGE_KEY.to_string(),
-                locale: "test".to_string(),
-            })
-        }
-
-        fn attribute(
-            &self,
-            _key: &str,
-            _attribute: &str,
-            _args: &Arguments<'_>,
-        ) -> Result<String, I18nError> {
-            Err(I18nError::MissingMessage {
-                key: MESSAGE_KEY.to_string(),
-                locale: "test".to_string(),
-            })
-        }
-    }
-}
+#[path = "tests/localisation.rs"]
+mod localisation;
 
 #[cfg(test)]
 mod tests {

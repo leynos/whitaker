@@ -16,6 +16,7 @@ rustc_middle = { workspace = true }
 rustc_session = { workspace = true }
 rustc_span = { workspace = true }
 common = { path = "../../common" }
+log = { workspace = true }
 
 [dev-dependencies]
 whitaker = { path = "../../" }

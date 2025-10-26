@@ -72,7 +72,7 @@ update.
 use common::i18n::{
     available_locales, Arguments, Localiser, FALLBACK_LOCALE,
 };
-use fluent_bundle::FluentValue;
+use common::i18n::FluentValue;
 use std::borrow::Cow;
 use std::collections::HashMap;
 

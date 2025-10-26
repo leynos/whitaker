@@ -19,4 +19,5 @@ common-lint-count = Cyfrif { -term-lint-count(lint: $lint) }.
     .note = Mae negeseuon ar gael yn Gymraeg ar gyfer { -term-lint-count(lint: $lint) }.
     .help = Ychwanegu cyfieithiadau ar gyfer pob { -term-lint-count(lint: $lint) } i gadw cwmpas profion yn gyflawn.
 
+#. Shown in diagnostics when referring to the preceding attribute name.
 common-attribute-fallback = y briodoledd flaenorol

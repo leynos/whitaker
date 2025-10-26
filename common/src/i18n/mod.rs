@@ -4,6 +4,9 @@
 //! resolve translated strings without touching the filesystem at runtime. The
 //! API exposes a thin wrapper around `fluent-templates` that tracks whether the
 //! fallback bundle was used and surfaces missing message errors eagerly.
+//!
+//! See [`resolve_message_set`] for fetching a lint's primary, note, and help
+//! diagnostics in one call.
 
 use fluent_templates::static_loader;
 use unic_langid::langid;
@@ -28,7 +31,9 @@ mod diagnostics;
 mod loader;
 mod locales;
 
-pub use diagnostics::{BundleLookup, DiagnosticMessageSet, resolve_message_set};
+pub use diagnostics::{
+    AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
+};
 pub use loader::{Arguments, I18nError, Localiser};
 pub use locales::{available_locales, supports_locale};
 
