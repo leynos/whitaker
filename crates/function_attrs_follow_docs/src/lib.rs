@@ -6,15 +6,26 @@
 //! by implementation details such as `#[inline]` or `#[allow]` attributes.
 #![feature(rustc_private)]
 
+use common::i18n::{Arguments, FluentValue, I18nError, Localiser};
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
+use std::borrow::Cow;
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
-#[derive(Default)]
-pub struct FunctionAttrsFollowDocs;
+pub struct FunctionAttrsFollowDocs {
+    localiser: Localiser,
+}
+
+impl Default for FunctionAttrsFollowDocs {
+    fn default() -> Self {
+        Self {
+            localiser: Localiser::new(None),
+        }
+    }
+}
 
 dylint_linting::impl_late_lint! {
     pub FUNCTION_ATTRS_FOLLOW_DOCS,
@@ -27,21 +38,21 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Function);
+            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localiser);
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Method);
+            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localiser);
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::TraitMethod);
+            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localiser);
         }
     }
 }
@@ -97,7 +108,12 @@ impl OrderedAttribute for AttrInfo {
     }
 }
 
-fn check_function_attributes(cx: &LateContext<'_>, attrs: &[Attribute], kind: FunctionKind) {
+fn check_function_attributes(
+    cx: &LateContext<'_>,
+    attrs: &[Attribute],
+    kind: FunctionKind,
+    localiser: &Localiser,
+) {
     let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
@@ -106,21 +122,129 @@ fn check_function_attributes(cx: &LateContext<'_>, attrs: &[Attribute], kind: Fu
 
     let doc = &infos[doc_index];
     let offending = &infos[offending_index];
-    emit_diagnostic(cx, doc.span(), offending.span(), kind);
+    emit_diagnostic(cx, doc.span(), offending.span(), kind, localiser);
 }
 
-fn emit_diagnostic(cx: &LateContext<'_>, doc_span: Span, offending_span: Span, kind: FunctionKind) {
+fn emit_diagnostic(
+    cx: &LateContext<'_>,
+    doc_span: Span,
+    offending_span: Span,
+    kind: FunctionKind,
+    localiser: &Localiser,
+) {
+    let attribute = attribute_label(cx, offending_span);
+    let messages =
+        localised_messages(localiser, kind, attribute.as_str()).unwrap_or_else(|error| {
+            cx.sess().delay_span_bug(
+                doc_span,
+                format!("missing localisation for `function_attrs_follow_docs`: {error}"),
+            );
+            fallback_messages(kind, attribute.as_str())
+        });
+
     cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, doc_span, |lint| {
-        lint.primary_message(format!(
-            "doc comments on {} must precede other outer attributes",
-            kind.subject()
-        ));
-        lint.span_note(
-            offending_span,
-            "an outer attribute appears before the doc comment",
-        );
-        lint.help("Move the doc comment before other outer attributes.");
+        let FunctionAttrsMessages {
+            primary,
+            note,
+            help,
+        } = messages;
+
+        lint.primary_message(primary);
+        lint.span_note(offending_span, note);
+        lint.help(help);
     });
+}
+
+const MESSAGE_KEY: &str = "function_attrs_follow_docs";
+
+fn localised_messages(
+    lookup: &impl BundleLookup,
+    kind: FunctionKind,
+    attribute: &str,
+) -> Result<FunctionAttrsMessages, I18nError> {
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(Cow::Borrowed("subject"), FluentValue::from(kind.subject()));
+    args.insert(
+        Cow::Borrowed("attribute"),
+        FluentValue::from(attribute.to_string()),
+    );
+
+    let primary = lookup.message(MESSAGE_KEY, &args)?;
+    let note = lookup.attribute(MESSAGE_KEY, "note", &args)?;
+    let help = lookup.attribute(MESSAGE_KEY, "help", &args)?;
+
+    Ok(FunctionAttrsMessages::new(primary, note, help))
+}
+
+fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessages {
+    let primary = format!(
+        "Doc comments on {} must precede other outer attributes.",
+        kind.subject()
+    );
+    let note = format!("The outer attribute {attribute} appears before the doc comment.",);
+    let help = format!("Move the doc comment so it appears before {attribute} on the item.",);
+
+    FunctionAttrsMessages::new(primary, note, help)
+}
+
+fn attribute_label(cx: &LateContext<'_>, span: Span) -> String {
+    match cx.sess().source_map().span_to_snippet(span) {
+        Ok(snippet) => snippet.trim().to_string(),
+        Err(_) => "the preceding attribute".to_string(),
+    }
+}
+
+struct FunctionAttrsMessages {
+    primary: String,
+    note: String,
+    help: String,
+}
+
+impl FunctionAttrsMessages {
+    fn new(primary: String, note: String, help: String) -> Self {
+        Self {
+            primary,
+            note,
+            help,
+        }
+    }
+
+    fn primary(&self) -> &str {
+        &self.primary
+    }
+
+    fn note(&self) -> &str {
+        &self.note
+    }
+
+    fn help(&self) -> &str {
+        &self.help
+    }
+}
+
+trait BundleLookup {
+    fn message(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError>;
+    fn attribute(
+        &self,
+        key: &str,
+        attribute: &str,
+        args: &Arguments<'_>,
+    ) -> Result<String, I18nError>;
+}
+
+impl BundleLookup for Localiser {
+    fn message(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError> {
+        self.message_with_args(key, args)
+    }
+
+    fn attribute(
+        &self,
+        key: &str,
+        attribute: &str,
+        args: &Arguments<'_>,
+    ) -> Result<String, I18nError> {
+        self.attribute_with_args(key, attribute, args)
+    }
 }
 
 fn detect_misordered_doc<A>(attrs: &[A]) -> Option<(usize, usize)>
@@ -148,6 +272,171 @@ trait OrderedAttribute {
     fn is_outer(&self) -> bool;
     fn is_doc(&self) -> bool;
     fn span(&self) -> Span;
+}
+
+#[cfg(test)]
+mod localisation {
+    use super::{
+        Arguments, BundleLookup, FunctionAttrsMessages, FunctionKind, Localiser, MESSAGE_KEY,
+        localised_messages,
+    };
+    use common::i18n::I18nError;
+    use rstest::fixture;
+    use rstest_bdd_macros::{given, scenario, then, when};
+    use std::cell::RefCell;
+
+    #[derive(Default)]
+    struct LocalisationWorld {
+        localiser: RefCell<Option<Localiser>>,
+        subject: RefCell<FunctionKind>,
+        attribute: RefCell<String>,
+        failing: RefCell<bool>,
+        result: RefCell<Option<Result<FunctionAttrsMessages, I18nError>>>,
+    }
+
+    impl LocalisationWorld {
+        fn use_localiser(&self, locale: &str) {
+            let localiser = Localiser::new(Some(locale));
+            *self.localiser.borrow_mut() = Some(localiser);
+        }
+
+        fn record_result(&self, value: Result<FunctionAttrsMessages, I18nError>) {
+            *self.result.borrow_mut() = Some(value);
+        }
+
+        fn messages(&self) -> &FunctionAttrsMessages {
+            self.result
+                .borrow()
+                .as_ref()
+                .expect("result recorded")
+                .as_ref()
+                .expect("expected localisation to succeed")
+        }
+
+        fn error(&self) -> &I18nError {
+            self.result
+                .borrow()
+                .as_ref()
+                .expect("result recorded")
+                .as_ref()
+                .expect_err("expected localisation to fail")
+        }
+    }
+
+    #[fixture]
+    fn world() -> LocalisationWorld {
+        LocalisationWorld::default()
+    }
+
+    #[given("the locale {locale} is selected")]
+    fn given_locale(world: &LocalisationWorld, locale: String) {
+        world.use_localiser(&locale);
+    }
+
+    #[given("the subject kind is {kind}")]
+    fn given_subject(world: &LocalisationWorld, kind: String) {
+        *world.subject.borrow_mut() = match kind.as_str() {
+            "function" => FunctionKind::Function,
+            "method" => FunctionKind::Method,
+            "trait method" => FunctionKind::TraitMethod,
+            other => panic!("unknown subject kind: {other}"),
+        };
+    }
+
+    #[given("the attribute label is {label}")]
+    fn given_attribute(world: &LocalisationWorld, label: String) {
+        *world.attribute.borrow_mut() = label;
+    }
+
+    #[given("localisation fails")]
+    fn given_failure(world: &LocalisationWorld) {
+        *world.failing.borrow_mut() = true;
+    }
+
+    #[when("I localise the diagnostic")]
+    fn when_localise(world: &LocalisationWorld) {
+        let attribute = world.attribute.borrow().clone();
+        let kind = *world.subject.borrow();
+
+        let result = if *world.failing.borrow() {
+            localised_messages(&FailingLookup, kind, attribute.as_str())
+        } else {
+            let localiser = world
+                .localiser
+                .borrow()
+                .as_ref()
+                .expect("a locale must be selected");
+            localised_messages(localiser, kind, attribute.as_str())
+        };
+
+        world.record_result(result);
+    }
+
+    #[then("the primary message contains {snippet}")]
+    fn then_primary(world: &LocalisationWorld, snippet: String) {
+        assert!(world.messages().primary().contains(&snippet));
+    }
+
+    #[then("the note mentions {snippet}")]
+    fn then_note(world: &LocalisationWorld, snippet: String) {
+        assert!(world.messages().note().contains(&snippet));
+    }
+
+    #[then("the help mentions {snippet}")]
+    fn then_help(world: &LocalisationWorld, snippet: String) {
+        assert!(world.messages().help().contains(&snippet));
+    }
+
+    #[then("localisation fails for {key}")]
+    fn then_failure(world: &LocalisationWorld, key: String) {
+        let error = world.error();
+        match error {
+            I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
+        }
+    }
+
+    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 0)]
+    fn scenario_fallback(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 1)]
+    fn scenario_welsh(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 2)]
+    fn scenario_unknown_locale(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    #[scenario(path = "tests/features/function_attrs_localisation.feature", index = 3)]
+    fn scenario_failure(world: LocalisationWorld) {
+        let _ = world;
+    }
+
+    struct FailingLookup;
+
+    impl BundleLookup for FailingLookup {
+        fn message(&self, _key: &str, _args: &Arguments<'_>) -> Result<String, I18nError> {
+            Err(I18nError::MissingMessage {
+                key: MESSAGE_KEY.to_string(),
+                locale: "test".to_string(),
+            })
+        }
+
+        fn attribute(
+            &self,
+            _key: &str,
+            _attribute: &str,
+            _args: &Arguments<'_>,
+        ) -> Result<String, I18nError> {
+            Err(I18nError::MissingMessage {
+                key: MESSAGE_KEY.to_string(),
+                locale: "test".to_string(),
+            })
+        }
+    }
 }
 
 #[cfg(test)]

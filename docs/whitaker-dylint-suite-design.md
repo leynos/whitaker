@@ -157,6 +157,13 @@ Utilities shared by lints:
   records when the fallback locale is used and surfaces missing message errors
   eagerly. The helper exposes convenience accessors for direct messages and
   Fluent attributes while supporting argument interpolation.
+- Cache a `Localiser` inside each lint pass so diagnostics can resolve
+  translations at emission time without repeatedly negotiating locales. The
+  lints supply structured arguments such as the offending attribute snippet or
+  receiver type, keeping Fluent bundles free from ad hoc string formatting.
+- When lookups fail, report the missing message via `delay_span_bug` and fall
+  back to deterministic English strings so the lint still emits actionable
+  output whilst flagging the translation defect for developers.
 - Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
   `fluent_templates::static_loader!`. The loader resides in `common::i18n` and
   exposes a `FluentBundle` facade that lint crates invoke through helper
@@ -186,6 +193,10 @@ Utilities shared by lints:
   locale and at least one secondary locale. The tests assert on rendered
   strings and continue to execute via `dylint_testing`'s JSON output to ensure
   machine readability remains intact.
+- Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
+  lookups to simulate missing translations alongside happy paths in English,
+  Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
+  protects the fallback code paths from regression.
 
 ## 3) Seven core lints (specs + sketches)
 

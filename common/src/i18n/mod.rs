@@ -8,6 +8,7 @@
 use fluent_templates::static_loader;
 use unic_langid::langid;
 
+pub use fluent_templates::fluent_bundle::FluentValue;
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
 
 const FALLBACK_LITERAL: &str = "en-GB";

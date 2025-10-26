@@ -11,7 +11,7 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use common::AttributePath;
+use common::{AttributePath, Localiser};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
@@ -39,10 +39,20 @@ struct Config {
 }
 
 /// Lint pass that tracks contexts while checking method calls.
-#[derive(Default)]
 pub struct NoExpectOutsideTests {
     is_doctest: bool,
     additional_test_attributes: Vec<AttributePath>,
+    localiser: Localiser,
+}
+
+impl Default for NoExpectOutsideTests {
+    fn default() -> Self {
+        Self {
+            is_doctest: false,
+            additional_test_attributes: Vec::new(),
+            localiser: Localiser::new(None),
+        }
+    }
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
@@ -103,7 +113,7 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             return;
         }
 
-        emit_diagnostic(cx, expr, receiver, &summary);
+        emit_diagnostic(cx, expr, receiver, &summary, &self.localiser);
     }
 }
 
