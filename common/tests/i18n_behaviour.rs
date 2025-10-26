@@ -25,13 +25,10 @@ impl I18nFixture {
     }
 
     fn ensure_localiser(&self) -> Localiser {
+        let locale = self.locale.borrow().clone();
         self.localiser
             .borrow_mut()
-            .get_or_insert_with(|| {
-                let locale = self.locale.borrow();
-                let locale_clone = locale.clone();
-                Localiser::new(locale_clone.as_deref())
-            })
+            .get_or_insert_with(|| Localiser::new(locale.as_deref()))
             .clone()
     }
 
