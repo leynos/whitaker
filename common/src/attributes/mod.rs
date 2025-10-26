@@ -14,7 +14,9 @@ mod kind;
 mod path;
 
 pub use attribute::Attribute;
-pub use helpers::{has_test_like_attribute, outer_attributes, split_doc_attributes};
+pub use helpers::{
+    has_test_like_attribute, has_test_like_attribute_with, outer_attributes, split_doc_attributes,
+};
 pub use kind::AttributeKind;
 pub use path::AttributePath;
 

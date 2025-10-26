@@ -46,8 +46,12 @@ pub struct NoExpectOutsideTests {
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
-    fn check_crate(&mut self, _cx: &LateContext<'tcx>, krate: &'tcx hir::Crate<'tcx>) {
-        self.is_doctest = krate.is_doctest;
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+        self.is_doctest = cx
+            .tcx
+            .sess
+            .env_var_os("UNSTABLE_RUSTDOC_TEST_PATH".as_ref())
+            .is_some();
         let config_name = "no_expect_outside_tests";
         let config = match dylint_linting::config::<Config>(config_name) {
             Ok(Some(config)) => config,

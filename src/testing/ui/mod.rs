@@ -19,25 +19,45 @@ pub enum HarnessError {
     /// The harness requires the UI test directory to be provided.
     EmptyDirectory,
     /// UI tests must live within the crate so the path may not be absolute.
-    AbsoluteDirectory { directory: Utf8PathBuf },
+    AbsoluteDirectory {
+        /// Directory provided by the caller.
+        directory: Utf8PathBuf,
+    },
     /// The underlying runner reported a failure (for example, a diff mismatch).
     RunnerFailure {
+        /// Lint crate whose tests failed.
         crate_name: String,
+        /// Directory containing the failing UI tests.
         directory: Utf8PathBuf,
+        /// Failure reported by the runner.
         message: String,
     },
     /// The compiled lint library was not present in the expected location.
-    LibraryMissing { path: String },
+    LibraryMissing {
+        /// Path that should have contained the compiled library.
+        path: String,
+    },
     /// Copying the compiled library to the toolchain-qualified name failed.
     LibraryCopyFailed {
+        /// Location of the compiled library artefact.
         source: String,
+        /// Target path for the toolchain-qualified copy.
         target: String,
+        /// Error produced while copying the artefact.
         message: String,
     },
     /// Building the lint library failed before the UI runner executed.
-    LibraryBuildFailed { crate_name: String, message: String },
+    LibraryBuildFailed {
+        /// Lint crate whose build failed.
+        crate_name: String,
+        /// Error emitted by the build command.
+        message: String,
+    },
     /// Retrieving Cargo workspace metadata failed.
-    MetadataFailed { message: String },
+    MetadataFailed {
+        /// Error emitted while loading metadata.
+        message: String,
+    },
 }
 
 impl fmt::Display for HarnessError {
@@ -138,7 +158,7 @@ pub fn run_with_runner(
     match runner(trimmed, directory.as_ref()) {
         Ok(()) => Ok(()),
         Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: trimmed.to_string(),
+            crate_name: trimmed.to_owned(),
             directory,
             message,
         }),
@@ -163,8 +183,8 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
 
     let toolchain = env::var("RUSTUP_TOOLCHAIN")
         .ok()
-        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(str::to_string))
-        .unwrap_or_else(|| "unknown-toolchain".to_string());
+        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
+        .unwrap_or_else(|| "unknown-toolchain".to_owned());
     let file_name = source
         .file_name()
         .ok_or_else(|| HarnessError::LibraryMissing {
@@ -173,10 +193,10 @@ fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
         .to_string_lossy()
         .into_owned();
     let suffix = env::consts::DLL_SUFFIX;
-    let target_name = match file_name.as_str().strip_suffix(suffix) {
-        Some(stripped) => format!("{stripped}@{toolchain}{suffix}"),
-        None => format!("{file_name}@{toolchain}"),
-    };
+    let target_name = file_name.as_str().strip_suffix(suffix).map_or_else(
+        || format!("{file_name}@{toolchain}"),
+        |stripped| format!("{stripped}@{toolchain}{suffix}"),
+    );
     let target = parent.join(&target_name);
 
     // Always refresh the toolchain-qualified artefact so UI tests exercise the latest build.
@@ -212,13 +232,13 @@ fn execute_build_command(
     let output = command
         .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
+            crate_name: crate_name.to_owned(),
             message: error.to_string(),
         })?;
 
     if !output.status.success() {
         return Err(HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
+            crate_name: crate_name.to_owned(),
             message: String::from_utf8_lossy(&output.stderr).into_owned(),
         });
     }
@@ -242,7 +262,7 @@ fn find_package_id(
         })
         .map(|package| package.id.clone())
         .ok_or_else(|| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_string(),
+            crate_name: crate_name.to_owned(),
             message: format!(
                 "package metadata missing for {crate_name}; unable to locate cdylib artefact"
             ),
@@ -286,7 +306,7 @@ fn extract_cdylib_path(
     artifact
         .filenames
         .iter()
-        .find(|candidate| candidate.to_string().ends_with(env::consts::DLL_SUFFIX))
+        .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
         .map(|path| path.clone().into_std_path_buf())
 }
 
@@ -332,7 +352,7 @@ macro_rules! run_ui_tests {
             .map_err(|payload| match payload.downcast::<String>() {
                 Ok(message) => *message,
                 Err(payload) => match payload.downcast::<&'static str>() {
-                    Ok(message) => (*message).to_string(),
+                    Ok(message) => (*message).to_owned(),
                     Err(_) => String::from("dylint UI tests panicked without a message"),
                 },
             })

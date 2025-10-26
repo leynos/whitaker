@@ -1,4 +1,5 @@
 #![feature(rustc_private)]
+#![recursion_limit = "512"]
 
 //! Re-exports the nightly `rustc_hir` crate for lint scaffolding.
 //!

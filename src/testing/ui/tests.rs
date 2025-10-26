@@ -24,9 +24,7 @@ fn rejects_invalid_inputs(
     #[case] expected: HarnessError,
     #[case] panic_message: &str,
 ) {
-    let Err(error) = run_with_runner(crate_name, directory, |_, _| Ok(())) else {
-        panic!("{panic_message}");
-    };
+    let error = run_with_runner(crate_name, directory, |_, _| Ok(())).expect_err(panic_message);
 
     assert_eq!(error, expected);
 }
@@ -37,29 +35,27 @@ fn rejects_absolute_directories() {
     let absolute_directory = current_dir.join("ui");
     let path = Utf8PathBuf::from_path_buf(absolute_directory)
         .expect("workspace paths should be valid UTF-8");
-    let Err(error) = run_with_runner("lint", path.clone(), |_, _| Ok(())) else {
-        panic!("absolute directories should be rejected");
-    };
+    let error = run_with_runner("lint", path.clone(), |_, _| Ok(()))
+        .expect_err("absolute directories should be rejected");
 
     assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
 }
 
 #[test]
 fn propagates_runner_failures() {
-    let Err(error) = run_with_runner("lint", "ui", |crate_name, directory| {
+    let error = run_with_runner("lint", "ui", |crate_name, directory| {
         assert_eq!(crate_name, "lint");
         assert_eq!(directory, Utf8Path::new("ui"));
-        Err("diff mismatch".to_string())
-    }) else {
-        panic!("runner failures should bubble up");
-    };
+        Err(String::from("diff mismatch"))
+    })
+    .expect_err("runner failures should bubble up");
 
     assert_eq!(
         error,
         HarnessError::RunnerFailure {
-            crate_name: "lint".to_string(),
+            crate_name: String::from("lint"),
             directory: Utf8PathBuf::from("ui"),
-            message: "diff mismatch".to_string(),
+            message: String::from("diff mismatch"),
         },
     );
 }

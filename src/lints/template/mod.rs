@@ -92,24 +92,39 @@ pub enum TemplateError {
     EmptyCrateName,
     /// Crate names must begin with an ASCII lowercase letter.
     #[error("crate name must begin with a lowercase ASCII letter (invalid `{character}`)")]
-    InvalidCrateNameStart { character: char },
+    InvalidCrateNameStart {
+        /// First character provided by the caller.
+        character: char,
+    },
     /// Crate names may contain only ASCII lowercase letters, digits, `-`, or `_`.
     #[error(
         "crate name may only contain lowercase ASCII letters, digits, '-' or '_' (invalid `{character}`)"
     )]
-    InvalidCrateNameCharacter { character: char },
+    InvalidCrateNameCharacter {
+        /// Character that violated the allowed set.
+        character: char,
+    },
     /// Crate names must not end with a separator (`-` or `_`).
     #[error("crate name must not end with '-' or '_' (invalid trailing `{character}`)")]
-    CrateNameTrailingSeparator { character: char },
+    CrateNameTrailingSeparator {
+        /// Separator that appeared at the end of the crate name.
+        character: char,
+    },
     /// UI test directories must be provided.
     #[error("UI test directory must not be empty")]
     EmptyUiDirectory,
     /// UI test directories must be relative paths.
     #[error("UI test directory must be relative: {directory}")]
-    AbsoluteUiDirectory { directory: String },
+    AbsoluteUiDirectory {
+        /// Directory path provided by the caller.
+        directory: String,
+    },
     /// UI test directories must not traverse upwards.
     #[error("UI test directory must not contain '..': {directory}")]
-    ParentUiDirectory { directory: String },
+    ParentUiDirectory {
+        /// Directory path that traversed above the workspace root.
+        directory: String,
+    },
 }
 
 /// Template metadata for constructing a lint crate.
@@ -230,7 +245,7 @@ mod tests {
         assert_eq!(
             error,
             TemplateError::AbsoluteUiDirectory {
-                directory: "/tmp/ui".to_string(),
+                directory: "/tmp/ui".to_owned(),
             }
         );
     }
@@ -245,7 +260,7 @@ mod tests {
         assert_eq!(
             error,
             TemplateError::ParentUiDirectory {
-                directory: "ui/../secrets".to_string(),
+                directory: "ui/../secrets".to_owned(),
             }
         );
     }
