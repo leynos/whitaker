@@ -7,6 +7,7 @@ Feature: Localised diagnostics for expect usage
     Then the diagnostic mentions "expect on `Result<T, E>`"
     And the note references "function `handler`"
     And the help references "`Result<T, E>`"
+    And the help references "`Err` variant"
 
   Scenario: Welsh messaging
     Given the locale "cy" is selected
@@ -23,6 +24,7 @@ Feature: Localised diagnostics for expect usage
     When I localise the expect diagnostic
     Then the diagnostic mentions "expect on `Result<i32, i32>`"
     And the fallback help mentions "Result<i32, i32>"
+    And the fallback help mentions "`Err` variant"
 
   Scenario: Receiver type is empty
     Given the locale "en-GB" is selected

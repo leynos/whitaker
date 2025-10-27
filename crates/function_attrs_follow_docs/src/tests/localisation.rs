@@ -1,3 +1,8 @@
+//! BDD-style localisation tests for function attribute diagnostic messages.
+//!
+//! Exercises locale selection, attribute fallback, and missing-message paths via
+//! `rstest-bdd` scenarios and a custom failing lookup to validate fallbacks.
+
 use super::{
     Arguments, BundleLookup, FunctionAttrsMessages, FunctionKind, Localiser, MESSAGE_KEY,
     attribute_fallback, localised_messages,

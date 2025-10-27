@@ -11,6 +11,9 @@
 use fluent_templates::static_loader;
 use unic_langid::langid;
 
+/// Re-export the Fluent value type for constructing diagnostic arguments.
+/// See [`crate::i18n::resolve_message_set`] for loading messages that consume
+/// these arguments.
 pub use fluent_templates::fluent_bundle::FluentValue;
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
 
