@@ -1,6 +1,7 @@
 use super::{
     Arguments, AttrKey, BundleLookup, ContextLabel, I18nError, Localiser, MESSAGE_KEY,
-    NoExpectMessages, ReceiverLabel, context_label, fallback_messages, localised_messages,
+    NoExpectMessages, ReceiverCategory, ReceiverLabel, context_label, fallback_messages,
+    localised_messages,
 };
 use crate::context::ContextSummary;
 use rstest::fixture;
@@ -18,8 +19,7 @@ struct LocalisationWorld {
 
 impl LocalisationWorld {
     fn use_localiser(&self, locale: &str) {
-        let localiser = Localiser::new(Some(locale));
-        *self.localiser.borrow_mut() = Some(localiser);
+        *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
     }
 
     fn set_receiver_type(&self, receiver: &str) {
@@ -130,16 +130,17 @@ fn when_localise(world: &LocalisationWorld) {
     let receiver = world.receiver.borrow().clone();
     let summary = world.summary.borrow().clone();
     let context = context_label(&summary);
+    let category = ReceiverCategory::for_label(&receiver);
 
     let result = if *world.failing.borrow() {
-        localised_messages(&FailingLookup, &receiver, &context)
+        localised_messages(&FailingLookup, &receiver, &context, category)
     } else {
         let localiser = world
             .localiser
             .borrow()
             .as_ref()
             .expect("a locale must be selected");
-        localised_messages(localiser, &receiver, &context)
+        localised_messages(localiser, &receiver, &context, category)
     };
 
     world.record_result(result);
@@ -165,8 +166,9 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
     let lookup = world.get_bundle_lookup();
     let context = world.get_function_context();
     let receiver = world.get_receiver_type();
+    let category = ReceiverCategory::for_label(&receiver);
 
-    let result = localised_messages(&lookup, &receiver, &context);
+    let result = localised_messages(&lookup, &receiver, &context, category);
     assert!(
         result.is_ok(),
         "localisation should succeed for edge case receiver types"
@@ -226,7 +228,8 @@ fn then_fallback(world: &LocalisationWorld, snippet: String) {
     let summary = world.summary.borrow().clone();
     let context = context_label(&summary);
     let receiver = world.receiver.borrow();
-    let fallback = fallback_messages(&receiver, &context);
+    let category = ReceiverCategory::for_label(receiver.as_ref());
+    let fallback = fallback_messages(receiver.as_ref(), &context, category);
     assert!(fallback.help().contains(&snippet));
 }
 

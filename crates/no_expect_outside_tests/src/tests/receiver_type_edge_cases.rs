@@ -1,6 +1,8 @@
 //! Edge-case localisation tests covering unusual receiver labels.
 
-use super::{ContextLabel, Localiser, NoExpectMessages, ReceiverLabel, localised_messages};
+use super::{
+    ContextLabel, Localiser, NoExpectMessages, ReceiverCategory, ReceiverLabel, localised_messages,
+};
 use rstest::rstest;
 
 #[rstest]
@@ -23,7 +25,8 @@ fn handles_receiver_type_edge_cases(
     let lookup = Localiser::new(Some("en-GB"));
     let receiver_label = ReceiverLabel::new(receiver);
     let context_label = ContextLabel::new(context);
-    let messages = localised_messages(&lookup, &receiver_label, &context_label)
+    let category = ReceiverCategory::for_label(&receiver_label);
+    let messages = localised_messages(&lookup, &receiver_label, &context_label, category)
         .expect("localisation succeeds");
     assert!(
         assertion(&messages),

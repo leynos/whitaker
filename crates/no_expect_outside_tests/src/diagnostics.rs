@@ -6,6 +6,8 @@ use common::i18n::{
 };
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
+use rustc_middle::ty;
+use rustc_span::sym;
 use std::borrow::Cow;
 use std::fmt;
 
@@ -45,7 +47,24 @@ enum ReceiverCategory {
 }
 
 impl ReceiverCategory {
-    fn classify(receiver: &ReceiverLabel) -> Self {
+    fn classify_ty(cx: &LateContext<'_>, ty: ty::Ty<'_>) -> Self {
+        match ty.kind() {
+            ty::Adt(adt, _) => {
+                let did = adt.did();
+                if cx.tcx.is_diagnostic_item(sym::Option, did) {
+                    Self::Option
+                } else if cx.tcx.is_diagnostic_item(sym::Result, did) {
+                    Self::Result
+                } else {
+                    Self::Other
+                }
+            }
+            _ => Self::Other,
+        }
+    }
+
+    #[cfg(test)]
+    fn for_label(receiver: &ReceiverLabel) -> Self {
         let value = receiver.as_ref();
         if value.contains("Option") {
             Self::Option
@@ -122,13 +141,15 @@ pub(crate) fn emit_diagnostic(
     let receiver_label = ReceiverLabel::new(format!("`{}`", receiver_ty));
     let call_context = context_label(context.summary);
 
-    let messages = localised_messages(context.localiser, &receiver_label, &call_context)
+    let category = ReceiverCategory::classify_ty(cx, receiver_ty);
+
+    let messages = localised_messages(context.localiser, &receiver_label, &call_context, category)
         .unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
                 expr.span,
                 format!("missing localisation for `no_expect_outside_tests`: {error}"),
             );
-            fallback_messages(&receiver_label, &call_context)
+            fallback_messages(&receiver_label, &call_context, category)
         });
 
     cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, |lint| {
@@ -152,8 +173,8 @@ fn localised_messages(
     lookup: &impl BundleLookup,
     receiver: &ReceiverLabel,
     context: &ContextLabel,
+    category: ReceiverCategory,
 ) -> Result<NoExpectMessages, I18nError> {
-    let category = ReceiverCategory::classify(receiver);
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("receiver"),
@@ -171,10 +192,13 @@ fn localised_messages(
     resolve_message_set(lookup, MESSAGE_KEY, &args)
 }
 
-fn fallback_messages(receiver: &ReceiverLabel, context: &ContextLabel) -> NoExpectMessages {
+fn fallback_messages(
+    receiver: &ReceiverLabel,
+    context: &ContextLabel,
+    category: ReceiverCategory,
+) -> NoExpectMessages {
     let primary = format!("Avoid calling expect on {receiver} outside test-only code.");
     let note = format!("The call originates within {context} which is not recognised as a test.",);
-    let category = ReceiverCategory::classify(receiver);
     let help = category.fallback_help(receiver);
 
     NoExpectMessages::new(primary, note, help)
