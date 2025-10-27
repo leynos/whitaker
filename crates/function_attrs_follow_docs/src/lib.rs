@@ -154,6 +154,7 @@ fn check_function_attributes(
     emit_diagnostic(cx, context, localiser);
 }
 
+#[derive(Copy, Clone)]
 struct DiagnosticContext {
     doc_span: Span,
     offending_span: Span,
