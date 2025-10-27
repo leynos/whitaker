@@ -24,8 +24,7 @@ struct LocalisationWorld {
 
 impl LocalisationWorld {
     fn use_localiser(&self, locale: &str) {
-        let localiser = Localiser::new(Some(locale));
-        *self.localiser.borrow_mut() = Some(localiser);
+        *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
     }
 
     fn trigger_attribute_fallback(&self) {

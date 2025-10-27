@@ -1,6 +1,6 @@
 use super::{
-    Arguments, BundleLookup, ContextLabel, I18nError, Localiser, MESSAGE_KEY, NoExpectMessages,
-    ReceiverLabel, context_label, fallback_messages, localised_messages,
+    Arguments, AttrKey, BundleLookup, ContextLabel, I18nError, Localiser, MESSAGE_KEY,
+    NoExpectMessages, ReceiverLabel, context_label, fallback_messages, localised_messages,
 };
 use crate::context::ContextSummary;
 use rstest::fixture;
@@ -243,7 +243,7 @@ impl BundleLookup for FailingLookup {
     fn attribute(
         &self,
         _key: MessageKey<'_>,
-        _attribute: common::i18n::AttrKey<'_>,
+        _attribute: AttrKey<'_>,
         _args: &Arguments<'_>,
     ) -> Result<String, I18nError> {
         Err(I18nError::MissingMessage {

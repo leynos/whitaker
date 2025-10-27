@@ -1,28 +1,32 @@
-use super::{ContextLabel, Localiser, ReceiverLabel, localised_messages};
+//! Edge-case localisation tests covering unusual receiver labels.
 
-#[test]
-fn handles_empty_receiver_type() {
-    let lookup = Localiser::new(Some("en-GB"));
-    let receiver = ReceiverLabel::new("");
-    let context = ContextLabel::new("the surrounding scope");
-    let messages = localised_messages(&lookup, &receiver, &context).expect("localisation succeeds");
-    assert!(!messages.primary().is_empty());
-}
+use super::{ContextLabel, Localiser, NoExpectMessages, ReceiverLabel, localised_messages};
+use rstest::rstest;
 
-#[test]
-fn handles_malformed_receiver_type() {
+#[rstest]
+#[case("", "the surrounding scope", |messages: &NoExpectMessages| !messages.primary().is_empty())]
+#[case(
+    "!!!not_a_type",
+    "function `worker`",
+    |messages: &NoExpectMessages| !messages.note().is_empty(),
+)]
+#[case(
+    "SomeCompletelyUnexpectedType123",
+    "function `processor`",
+    |messages: &NoExpectMessages| !messages.help().is_empty(),
+)]
+fn handles_receiver_type_edge_cases(
+    #[case] receiver: &str,
+    #[case] context: &str,
+    #[case] assertion: fn(&NoExpectMessages) -> bool,
+) {
     let lookup = Localiser::new(Some("en-GB"));
-    let receiver = ReceiverLabel::new("!!!not_a_type");
-    let context = ContextLabel::new("function `worker`");
-    let messages = localised_messages(&lookup, &receiver, &context).expect("localisation succeeds");
-    assert!(!messages.note().is_empty());
-}
-
-#[test]
-fn handles_unexpected_receiver_type() {
-    let lookup = Localiser::new(Some("en-GB"));
-    let receiver = ReceiverLabel::new("SomeCompletelyUnexpectedType123");
-    let context = ContextLabel::new("function `processor`");
-    let messages = localised_messages(&lookup, &receiver, &context).expect("localisation succeeds");
-    assert!(!messages.help().is_empty());
+    let receiver_label = ReceiverLabel::new(receiver);
+    let context_label = ContextLabel::new(context);
+    let messages = localised_messages(&lookup, &receiver_label, &context_label)
+        .expect("localisation succeeds");
+    assert!(
+        assertion(&messages),
+        "Edge case assertion failed for receiver: {receiver}"
+    );
 }
