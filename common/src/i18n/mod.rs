@@ -5,15 +5,14 @@
 //! API exposes a thin wrapper around `fluent-templates` that tracks whether the
 //! fallback bundle was used and surfaces missing message errors eagerly.
 //!
-//! See [`diagnostics::resolve_message_set`] for fetching a lint's primary,
-//! note, and help diagnostics in one call.
+//! See [`resolve_message_set`] for fetching a lint’s primary/note/help trio.
 
 use fluent_templates::static_loader;
 use unic_langid::langid;
 
 /// Re-export the Fluent value type for constructing diagnostic arguments.
-/// See [`diagnostics::resolve_message_set`] for loading messages that consume
-/// these arguments.
+/// See [`resolve_message_set`] for loading messages that consume these
+/// arguments.
 pub use fluent_templates::fluent_bundle::FluentValue;
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
 

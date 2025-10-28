@@ -1,7 +1,9 @@
-//! BDD-style localisation tests for `no_expect_outside_tests` diagnostics.
+//! BDD-style localisation tests for no_expect_outside_tests diagnostic
+//! messages.
 //!
-//! Validates locale handling, receiver classification, context labelling, and
-//! fallback behaviour using `rstest-bdd` scenarios backed by helper fixtures.
+//! Exercises localisation scenarios including locale selection, receiver type
+//! handling, context label generation, and error paths using `rstest-bdd` and a
+//! `FailingLookup` test double.
 
 use super::{
     Arguments, AttrKey, BundleLookup, ContextLabel, I18nError, Localiser, MESSAGE_KEY,

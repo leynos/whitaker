@@ -5,7 +5,7 @@ LL |     let _result = value.expect("value should exist");
    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: The call originates within function `process` which is not recognised as a test.
-   = help: Handle the `None` case for `std::option::Option<i32>` or move the code into a test.
+   = help: Handle the error returned by `std::option::Option<i32>` or move the code into a test.
 note: the lint level is defined here
   --> $DIR/fail_expect_in_fn.rs:1:9
    |
