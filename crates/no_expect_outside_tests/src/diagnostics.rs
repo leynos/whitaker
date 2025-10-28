@@ -1,8 +1,10 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
+#[cfg(test)]
+use common::i18n::AttrKey;
 use common::i18n::{
-    Arguments, AttrKey, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser,
-    MessageKey, resolve_message_set,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
+    resolve_message_set,
 };
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
