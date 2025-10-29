@@ -27,6 +27,12 @@ impl LocalisationWorld {
         *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
     }
 
+    fn with_localiser<T>(&self, f: impl FnOnce(&Localiser) -> T) -> T {
+        let borrow = self.localiser.borrow();
+        let localiser = borrow.as_ref().expect("a locale must be selected");
+        f(localiser)
+    }
+
     fn messages(&self) -> Ref<'_, FunctionAttrsMessages> {
         Ref::map(
             Ref::map(self.result.borrow(), |opt| {
@@ -84,30 +90,17 @@ fn given_failure(world: &LocalisationWorld) {
 #[when("I localise the diagnostic")]
 fn when_localise(world: &LocalisationWorld) {
     let kind = *world.subject.borrow();
-    let attribute = if world.use_attribute_fallback.get() {
-        if world.failing.get() {
-            attribute_fallback(&FailingLookup)
-        } else {
-            let localiser = world
-                .localiser
-                .borrow()
-                .as_ref()
-                .expect("a locale must be selected");
-            attribute_fallback(localiser)
-        }
-    } else {
-        world.attribute.borrow().clone()
+    let failing = world.failing.get();
+    let attribute = match (world.use_attribute_fallback.get(), failing) {
+        (true, true) => attribute_fallback(&FailingLookup),
+        (true, false) => world.with_localiser(attribute_fallback),
+        (false, _) => world.attribute.borrow().clone(),
     };
 
-    let result = if world.failing.get() {
+    let result = if failing {
         localised_messages(&FailingLookup, kind, attribute.as_str())
     } else {
-        let localiser = world
-            .localiser
-            .borrow()
-            .as_ref()
-            .expect("a locale must be selected");
-        localised_messages(localiser, kind, attribute.as_str())
+        world.with_localiser(|localiser| localised_messages(localiser, kind, attribute.as_str()))
     };
 
     world.result.replace(Some(result));
