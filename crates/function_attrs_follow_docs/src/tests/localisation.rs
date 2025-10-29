@@ -10,15 +10,15 @@ use super::{
 use common::i18n::{AttrKey, I18nError, MessageKey};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
+use std::cell::{Cell, Ref, RefCell};
 
 #[derive(Default)]
 struct LocalisationWorld {
     localiser: RefCell<Option<Localiser>>,
     subject: RefCell<FunctionKind>,
     attribute: RefCell<String>,
-    use_attribute_fallback: RefCell<bool>,
-    failing: RefCell<bool>,
+    use_attribute_fallback: Cell<bool>,
+    failing: Cell<bool>,
     result: RefCell<Option<Result<FunctionAttrsMessages, I18nError>>>,
 }
 
@@ -27,30 +27,22 @@ impl LocalisationWorld {
         *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
     }
 
-    fn trigger_attribute_fallback(&self) {
-        *self.use_attribute_fallback.borrow_mut() = true;
+    fn messages(&self) -> Ref<'_, FunctionAttrsMessages> {
+        Ref::map(
+            Ref::map(self.result.borrow(), |opt| {
+                opt.as_ref().expect("result recorded")
+            }),
+            |res| res.as_ref().expect("expected localisation to succeed"),
+        )
     }
 
-    fn record_result(&self, value: Result<FunctionAttrsMessages, I18nError>) {
-        *self.result.borrow_mut() = Some(value);
-    }
-
-    fn messages(&self) -> &FunctionAttrsMessages {
-        self.result
-            .borrow()
-            .as_ref()
-            .expect("result recorded")
-            .as_ref()
-            .expect("expected localisation to succeed")
-    }
-
-    fn error(&self) -> &I18nError {
-        self.result
-            .borrow()
-            .as_ref()
-            .expect("result recorded")
-            .as_ref()
-            .expect_err("expected localisation to fail")
+    fn error(&self) -> Ref<'_, I18nError> {
+        Ref::map(
+            Ref::map(self.result.borrow(), |opt| {
+                opt.as_ref().expect("result recorded")
+            }),
+            |res| res.as_ref().expect_err("expected localisation to fail"),
+        )
     }
 }
 
@@ -81,19 +73,19 @@ fn given_attribute(world: &LocalisationWorld, label: String) {
 
 #[given("the attribute snippet cannot be retrieved")]
 fn given_attribute_fallback(world: &LocalisationWorld) {
-    world.trigger_attribute_fallback();
+    world.use_attribute_fallback.set(true);
 }
 
 #[given("localisation fails")]
 fn given_failure(world: &LocalisationWorld) {
-    *world.failing.borrow_mut() = true;
+    world.failing.set(true);
 }
 
 #[when("I localise the diagnostic")]
 fn when_localise(world: &LocalisationWorld) {
     let kind = *world.subject.borrow();
-    let attribute = if *world.use_attribute_fallback.borrow() {
-        if *world.failing.borrow() {
+    let attribute = if world.use_attribute_fallback.get() {
+        if world.failing.get() {
             attribute_fallback(&FailingLookup)
         } else {
             let localiser = world
@@ -107,7 +99,7 @@ fn when_localise(world: &LocalisationWorld) {
         world.attribute.borrow().clone()
     };
 
-    let result = if *world.failing.borrow() {
+    let result = if world.failing.get() {
         localised_messages(&FailingLookup, kind, attribute.as_str())
     } else {
         let localiser = world
@@ -118,7 +110,7 @@ fn when_localise(world: &LocalisationWorld) {
         localised_messages(localiser, kind, attribute.as_str())
     };
 
-    world.record_result(result);
+    world.result.replace(Some(result));
 }
 
 #[then("the primary message contains {snippet}")]
@@ -139,7 +131,7 @@ fn then_help(world: &LocalisationWorld, snippet: String) {
 #[then("localisation fails for {key}")]
 fn then_failure(world: &LocalisationWorld, key: String) {
     let error = world.error();
-    match error {
+    match &*error {
         I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
     }
 }

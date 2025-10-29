@@ -13,14 +13,14 @@ use super::{
 use crate::context::ContextSummary;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
+use std::cell::{Cell, Ref, RefCell};
 
 #[derive(Default)]
 struct LocalisationWorld {
     localiser: RefCell<Option<Localiser>>,
     receiver: RefCell<ReceiverLabel>,
     summary: RefCell<ContextSummary>,
-    failing: RefCell<bool>,
+    failing: Cell<bool>,
     result: RefCell<Option<Result<NoExpectMessages, I18nError>>>,
 }
 
@@ -63,22 +63,22 @@ impl LocalisationWorld {
         *self.result.borrow_mut() = Some(value);
     }
 
-    fn messages(&self) -> &NoExpectMessages {
-        self.result
-            .borrow()
-            .as_ref()
-            .expect("result recorded")
-            .as_ref()
-            .expect("expected localisation to succeed")
+    fn messages(&self) -> Ref<'_, NoExpectMessages> {
+        Ref::map(
+            Ref::map(self.result.borrow(), |opt| {
+                opt.as_ref().expect("result recorded")
+            }),
+            |res| res.as_ref().expect("expected localisation to succeed"),
+        )
     }
 
-    fn error(&self) -> &I18nError {
-        self.result
-            .borrow()
-            .as_ref()
-            .expect("result recorded")
-            .as_ref()
-            .expect_err("expected localisation to fail")
+    fn error(&self) -> Ref<'_, I18nError> {
+        Ref::map(
+            Ref::map(self.result.borrow(), |opt| {
+                opt.as_ref().expect("result recorded")
+            }),
+            |res| res.as_ref().expect_err("expected localisation to fail"),
+        )
     }
 }
 
@@ -129,7 +129,7 @@ fn given_no_function(world: &LocalisationWorld) {
 
 #[given("localisation fails")]
 fn given_failure(world: &LocalisationWorld) {
-    *world.failing.borrow_mut() = true;
+    world.failing.set(true);
 }
 
 #[when("I localise the expect diagnostic")]
@@ -139,7 +139,7 @@ fn when_localise(world: &LocalisationWorld) {
     let context = context_label(&summary);
     let category = ReceiverCategory::for_label(&receiver);
 
-    let result = if *world.failing.borrow() {
+    let result = if world.failing.get() {
         localised_messages(&FailingLookup, &receiver, &context, category)
     } else {
         let localiser = world
@@ -190,7 +190,7 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
 #[then("localisation fails for {key}")]
 fn then_failure(world: &LocalisationWorld, key: String) {
     let error = world.error();
-    match error {
+    match &*error {
         I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
     }
 }
