@@ -33,6 +33,8 @@ mod diagnostics;
 mod loader;
 mod locales;
 
+/// Diagnostic localisation helpers.
+/// See [`resolve_message_set`] for fetching primary, note, and help strings.
 pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
 };
