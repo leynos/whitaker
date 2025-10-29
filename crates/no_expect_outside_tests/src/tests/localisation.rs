@@ -171,16 +171,12 @@ fn then_help(world: &LocalisationWorld, snippet: String) {
 #[then("the fallback and localisation logic should handle the receiver type robustly")]
 fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
     let lookup = world.get_bundle_lookup();
-    let context = world.get_function_context();
-    let receiver = world.get_receiver_type();
-    let category = ReceiverCategory::for_label(&receiver);
+    let context_label = world.get_function_context();
+    let receiver_label = world.get_receiver_type();
+    let category = ReceiverCategory::for_label(&receiver_label);
 
-    let result = localised_messages(&lookup, &receiver, &context, category);
-    assert!(
-        result.is_ok(),
-        "localisation should succeed for edge case receiver types"
-    );
-    let messages = result.expect("localisation should succeed");
+    let messages = localised_messages(&lookup, &receiver_label, &context_label, category)
+        .expect("localisation should succeed");
     assert!(
         !messages.primary().is_empty(),
         "localised message title should never be empty"
