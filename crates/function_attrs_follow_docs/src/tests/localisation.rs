@@ -91,19 +91,31 @@ fn given_failure(world: &LocalisationWorld) {
 fn when_localise(world: &LocalisationWorld) {
     let kind = *world.subject.borrow();
     let failing = world.failing.get();
-    let attribute = match (world.use_attribute_fallback.get(), failing) {
+    let attribute = resolve_attribute(world, failing);
+    let result = resolve_localisation(world, kind, attribute.as_str(), failing);
+
+    world.result.replace(Some(result));
+}
+
+fn resolve_attribute(world: &LocalisationWorld, failing: bool) -> String {
+    match (world.use_attribute_fallback.get(), failing) {
         (true, true) => attribute_fallback(&FailingLookup),
         (true, false) => world.with_localiser(attribute_fallback),
         (false, _) => world.attribute.borrow().clone(),
-    };
+    }
+}
 
-    let result = if failing {
-        localised_messages(&FailingLookup, kind, attribute.as_str())
+fn resolve_localisation(
+    world: &LocalisationWorld,
+    kind: FunctionKind,
+    attribute: &str,
+    failing: bool,
+) -> Result<FunctionAttrsMessages, I18nError> {
+    if failing {
+        localised_messages(&FailingLookup, kind, attribute)
     } else {
-        world.with_localiser(|localiser| localised_messages(localiser, kind, attribute.as_str()))
-    };
-
-    world.result.replace(Some(result));
+        world.with_localiser(|localiser| localised_messages(localiser, kind, attribute))
+    }
 }
 
 #[then("the primary message contains {snippet}")]
