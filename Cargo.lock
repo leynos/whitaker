@@ -536,6 +536,7 @@ dependencies = [
  "common",
  "dylint_linting",
  "dylint_testing",
+ "log",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",

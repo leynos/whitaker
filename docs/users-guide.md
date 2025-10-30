@@ -60,11 +60,19 @@ the compiled locales. When an unsupported locale is requested, the loader falls
 back to the bundled `en-GB` strings and surfaces a missing message error if a
 slug is not translated.
 
+Whitaker lints source their primary messages, notes, and help text directly
+from Fluent bundles at emission time. Each diagnostic assembles structured
+arguments—such as the offending attribute snippet or the receiver type—so
+translations never depend on hand-built strings. If a lookup fails, the lint
+records a delayed span bug and falls back to deterministic English text, which
+keeps builds actionable while signalling that the localisation bundle needs an
+update.
+
 ```rust
 use common::i18n::{
     available_locales, Arguments, Localiser, FALLBACK_LOCALE,
 };
-use fluent_bundle::FluentValue;
+use common::i18n::FluentValue;
 use std::borrow::Cow;
 use std::collections::HashMap;
 

@@ -6,15 +6,30 @@
 //! by implementation details such as `#[inline]` or `#[allow]` attributes.
 #![feature(rustc_private)]
 
+use common::i18n::{
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
+    resolve_message_set, supports_locale,
+};
+use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
+use std::borrow::Cow;
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
-#[derive(Default)]
-pub struct FunctionAttrsFollowDocs;
+pub struct FunctionAttrsFollowDocs {
+    localiser: Localiser,
+}
+
+impl Default for FunctionAttrsFollowDocs {
+    fn default() -> Self {
+        Self {
+            localiser: Localiser::new(None),
+        }
+    }
+}
 
 dylint_linting::impl_late_lint! {
     pub FUNCTION_ATTRS_FOLLOW_DOCS,
@@ -24,24 +39,44 @@ dylint_linting::impl_late_lint! {
 }
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+        self.localiser = cx
+            .tcx
+            .sess
+            .env_var_os("DYLINT_LOCALE".as_ref())
+            .and_then(|value| value.into_string().ok())
+            .map(|tag| {
+                if supports_locale(&tag) {
+                    Localiser::new(Some(&tag))
+                } else {
+                    debug!(
+                        target: "function_attrs_follow_docs",
+                        "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
+                    );
+                    Localiser::new(None)
+                }
+            })
+            .unwrap_or_else(|| Localiser::new(None));
+    }
+
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Function);
+            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localiser);
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Method);
+            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localiser);
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::TraitMethod);
+            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localiser);
         }
     }
 }
@@ -97,7 +132,12 @@ impl OrderedAttribute for AttrInfo {
     }
 }
 
-fn check_function_attributes(cx: &LateContext<'_>, attrs: &[Attribute], kind: FunctionKind) {
+fn check_function_attributes(
+    cx: &LateContext<'_>,
+    attrs: &[Attribute],
+    kind: FunctionKind,
+    localiser: &Localiser,
+) {
     let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
@@ -106,21 +146,88 @@ fn check_function_attributes(cx: &LateContext<'_>, attrs: &[Attribute], kind: Fu
 
     let doc = &infos[doc_index];
     let offending = &infos[offending_index];
-    emit_diagnostic(cx, doc.span(), offending.span(), kind);
+    let context = DiagnosticContext {
+        doc_span: doc.span(),
+        offending_span: offending.span(),
+        kind,
+    };
+    emit_diagnostic(cx, context, localiser);
 }
 
-fn emit_diagnostic(cx: &LateContext<'_>, doc_span: Span, offending_span: Span, kind: FunctionKind) {
-    cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, doc_span, |lint| {
-        lint.primary_message(format!(
-            "doc comments on {} must precede other outer attributes",
-            kind.subject()
-        ));
-        lint.span_note(
-            offending_span,
-            "an outer attribute appears before the doc comment",
-        );
-        lint.help("Move the doc comment before other outer attributes.");
+#[derive(Copy, Clone)]
+struct DiagnosticContext {
+    doc_span: Span,
+    offending_span: Span,
+    kind: FunctionKind,
+}
+
+fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localiser: &Localiser) {
+    let attribute = attribute_label(cx, context.offending_span, localiser);
+    let messages =
+        localised_messages(localiser, context.kind, attribute.as_str()).unwrap_or_else(|error| {
+            cx.sess().delay_span_bug(
+                context.doc_span,
+                format!("missing localisation for `function_attrs_follow_docs`: {error}"),
+            );
+            fallback_messages(context.kind, attribute.as_str())
+        });
+
+    cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
+        let FunctionAttrsMessages {
+            primary,
+            note,
+            help,
+        } = messages;
+
+        lint.primary_message(primary);
+        lint.span_note(context.offending_span, note);
+        lint.help(help);
     });
+}
+
+const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("function_attrs_follow_docs");
+
+type FunctionAttrsMessages = DiagnosticMessageSet;
+
+fn localised_messages(
+    lookup: &impl BundleLookup,
+    kind: FunctionKind,
+    attribute: &str,
+) -> Result<FunctionAttrsMessages, I18nError> {
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(Cow::Borrowed("subject"), FluentValue::from(kind.subject()));
+    args.insert(
+        Cow::Borrowed("attribute"),
+        FluentValue::from(attribute.to_string()),
+    );
+
+    resolve_message_set(lookup, MESSAGE_KEY, &args)
+}
+
+fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessages {
+    let primary = format!(
+        "Doc comments on {} must precede other outer attributes.",
+        kind.subject()
+    );
+    let note = format!("The outer attribute {attribute} appears before the doc comment.",);
+    let help = format!("Move the doc comment so it appears before {attribute} on the item.",);
+
+    FunctionAttrsMessages::new(primary, note, help)
+}
+
+fn attribute_label(cx: &LateContext<'_>, span: Span, localiser: &Localiser) -> String {
+    match cx.sess().source_map().span_to_snippet(span) {
+        Ok(snippet) => snippet.trim().to_string(),
+        Err(_) => attribute_fallback(localiser),
+    }
+}
+
+fn attribute_fallback(lookup: &impl BundleLookup) -> String {
+    let args: Arguments<'static> = Arguments::default();
+
+    lookup
+        .message(MessageKey::new("common-attribute-fallback"), &args)
+        .unwrap_or_else(|_| "the preceding attribute".to_string())
 }
 
 fn detect_misordered_doc<A>(attrs: &[A]) -> Option<(usize, usize)>
@@ -149,6 +256,10 @@ trait OrderedAttribute {
     fn is_doc(&self) -> bool;
     fn span(&self) -> Span;
 }
+
+#[cfg(test)]
+#[path = "tests/localisation.rs"]
+mod localisation;
 
 #[cfg(test)]
 mod tests {

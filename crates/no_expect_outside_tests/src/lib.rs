@@ -11,7 +11,8 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use common::AttributePath;
+use common::i18n::supports_locale;
+use common::{AttributePath, Localiser};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
@@ -23,7 +24,7 @@ mod context;
 mod diagnostics;
 
 use context::{collect_context, summarise_context};
-use diagnostics::emit_diagnostic;
+use diagnostics::{DiagnosticContext, emit_diagnostic};
 
 dylint_linting::impl_late_lint! {
     pub NO_EXPECT_OUTSIDE_TESTS,
@@ -39,10 +40,20 @@ struct Config {
 }
 
 /// Lint pass that tracks contexts while checking method calls.
-#[derive(Default)]
 pub struct NoExpectOutsideTests {
     is_doctest: bool,
     additional_test_attributes: Vec<AttributePath>,
+    localiser: Localiser,
+}
+
+impl Default for NoExpectOutsideTests {
+    fn default() -> Self {
+        Self {
+            is_doctest: false,
+            additional_test_attributes: Vec::new(),
+            localiser: Localiser::new(None),
+        }
+    }
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
@@ -76,6 +87,26 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .iter()
             .map(|path| AttributePath::from(path.as_str()))
             .collect();
+
+        // Initialise localisation once per crate execution from the environment.
+        // TODO: extend with SharedConfig overrides when the configuration schema lands.
+        self.localiser = cx
+            .tcx
+            .sess
+            .env_var_os("DYLINT_LOCALE".as_ref())
+            .and_then(|value| value.into_string().ok())
+            .map(|tag| {
+                if supports_locale(&tag) {
+                    Localiser::new(Some(&tag))
+                } else {
+                    debug!(
+                        target: "no_expect_outside_tests",
+                        "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
+                    );
+                    Localiser::new(None)
+                }
+            })
+            .unwrap_or_else(|| Localiser::new(None));
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -103,7 +134,8 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             return;
         }
 
-        emit_diagnostic(cx, expr, receiver, &summary);
+        let diagnostic_context = DiagnosticContext::new(&summary, &self.localiser);
+        emit_diagnostic(cx, expr, receiver, &diagnostic_context);
     }
 }
 
