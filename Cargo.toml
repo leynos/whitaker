@@ -42,6 +42,7 @@ thiserror = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]
+common = { path = "common" }
 rstest = "0.26.1"
 rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"

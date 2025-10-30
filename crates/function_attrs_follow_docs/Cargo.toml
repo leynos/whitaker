@@ -17,9 +17,9 @@ rustc_session = { workspace = true }
 rustc_span = { workspace = true }
 common = { path = "../../common" }
 log = { workspace = true }
+whitaker = { path = "../../" }
 
 [dev-dependencies]
-whitaker = { path = "../../" }
 rstest = { version = "0.26.1" }
 rstest-bdd = { version = "0.1.0-alpha4" }
 rstest-bdd-macros = { version = "0.1.0-alpha4" }

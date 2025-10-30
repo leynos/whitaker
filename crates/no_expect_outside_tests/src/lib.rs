@@ -11,14 +11,14 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use common::i18n::supports_locale;
-use common::{AttributePath, Localiser};
+use common::{AttributePath, LocaleResolution, Localiser, resolve_localiser};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::Ty;
 use rustc_span::sym;
 use serde::Deserialize;
+use whitaker::SharedConfig;
 
 mod context;
 mod diagnostics;
@@ -88,25 +88,16 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .map(|path| AttributePath::from(path.as_str()))
             .collect();
 
-        // Initialise localisation once per crate execution from the environment.
-        // TODO: extend with SharedConfig overrides when the configuration schema lands.
-        self.localiser = cx
+        let environment_locale = cx
             .tcx
             .sess
             .env_var_os("DYLINT_LOCALE".as_ref())
-            .and_then(|value| value.into_string().ok())
-            .map(|tag| {
-                if supports_locale(&tag) {
-                    Localiser::new(Some(&tag))
-                } else {
-                    debug!(
-                        target: "no_expect_outside_tests",
-                        "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
-                    );
-                    Localiser::new(None)
-                }
-            })
-            .unwrap_or_else(|| Localiser::new(None));
+            .and_then(|value| value.into_string().ok());
+        let shared_config = SharedConfig::load();
+        let resolution = resolve_localiser(None, environment_locale, shared_config.locale());
+
+        log_locale_resolution("no_expect_outside_tests", &resolution);
+        self.localiser = resolution.into_localiser();
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -146,6 +137,24 @@ fn receiver_is_option_or_result<'tcx>(
     let ty = cx.typeck_results().expr_ty(receiver);
 
     ty_is_option_or_result(cx, ty)
+}
+
+fn log_locale_resolution(target: &str, resolution: &LocaleResolution) {
+    for rejection in resolution.rejections() {
+        debug!(
+            target: target,
+            "unsupported {} `{}`; falling back to en-GB",
+            rejection.source(),
+            rejection.value(),
+        );
+    }
+
+    debug!(
+        target: target,
+        "resolved {} to `{}`",
+        resolution.source(),
+        resolution.locale(),
+    );
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {

@@ -188,7 +188,7 @@ impl DiagnosticMessageSet {
 const NOTE_ATTR: AttrKey<'static> = AttrKey::new("note");
 const HELP_ATTR: AttrKey<'static> = AttrKey::new("help");
 
-#[must_use]
+#[must_use = "Use the resolved localisation messages when emitting diagnostics"]
 pub fn resolve_message_set(
     lookup: &impl BundleLookup,
     key: MessageKey<'_>,

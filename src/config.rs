@@ -13,6 +13,14 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct SharedConfig {
+    /// Preferred locale for Whitaker lints when the environment is silent.
+    ///
+    /// This optional override allows CI and editor integrations to pin a
+    /// deterministic locale without relying on process-level environment
+    /// variables. The resolver trims whitespace and ignores blank values, so
+    /// configuration such as `locale = ""` falls back cleanly to the bundled
+    /// default.
+    pub locale: Option<String>,
     /// Overrides for the `module_max_lines` lint. This field falls back to
     /// its default when omitted from `dylint.toml`, which avoids duplicating the
     /// baseline settings in every workspace.
@@ -76,6 +84,18 @@ impl SharedConfig {
     {
         loader(crate_name)
     }
+
+    /// Returns the configured locale override, if present.
+    ///
+    /// Whitespace-only values are treated as absent to avoid surprising
+    /// behaviour when `dylint.toml` is templated or patched.
+    #[must_use]
+    pub fn locale(&self) -> Option<&str> {
+        self.locale
+            .as_deref()
+            .map(str::trim)
+            .and_then(|value| if value.is_empty() { None } else { Some(value) })
+    }
 }
 
 /// Settings that influence the forthcoming `module_max_lines` lint.
@@ -111,6 +131,7 @@ mod tests {
         let config = SharedConfig::default();
 
         assert_eq!(config.module_max_lines.max_lines, 400);
+        assert!(config.locale().is_none());
     }
 
     #[rstest]
@@ -122,6 +143,26 @@ mod tests {
             .expect("expected configuration to parse successfully");
 
         assert_eq!(config.module_max_lines.max_lines, 120);
+    }
+
+    #[rstest]
+    fn deserialises_locale_override() {
+        let source = "locale = \"cy\"\n";
+
+        let config = toml::from_str::<SharedConfig>(source)
+            .expect("expected configuration to parse successfully");
+
+        assert_eq!(config.locale(), Some("cy"));
+    }
+
+    #[rstest]
+    fn trims_whitespace_only_locale_entries() {
+        let source = "locale = \"  \"\n";
+
+        let config = toml::from_str::<SharedConfig>(source)
+            .expect("expected configuration to parse successfully");
+
+        assert!(config.locale().is_none());
     }
 
     #[rstest]
@@ -157,6 +198,7 @@ mod tests {
         fn stub_loader(crate_name: &str) -> SharedConfig {
             assert_eq!(crate_name, "module_max_lines");
             SharedConfig {
+                locale: None,
                 module_max_lines: ModuleMaxLinesConfig { max_lines: 123 },
             }
         }

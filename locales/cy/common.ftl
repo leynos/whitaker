@@ -16,7 +16,7 @@ common-lint-count =
     }
     .note = Mae negeseuon ar gael yn Gymraeg ar gyfer { $lint }.
     .help = Ychwanegu cyfieithiadau ar gyfer pob lint i gadw cwmpas profion yn gyflawn.
-    .fallback-note = Mae'r negeseuon wrth gefn yn parhau yn Saesneg.
+    .fallback-note = Mae diagnosteg wrth gefn yn ddiofyn i'r Saesneg.
 
 #. Shown in diagnostics when referring to the preceding attribute name.
 common-attribute-fallback = y briodoledd flaenorol

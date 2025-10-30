@@ -8,7 +8,7 @@
 
 use common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
-    resolve_message_set, supports_locale,
+    resolve_localiser, resolve_message_set,
 };
 use log::debug;
 use rustc_ast::AttrStyle;
@@ -17,6 +17,7 @@ use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
+use whitaker::SharedConfig;
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
 pub struct FunctionAttrsFollowDocs {
@@ -40,23 +41,31 @@ dylint_linting::impl_late_lint! {
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.localiser = cx
+        let environment_locale = cx
             .tcx
             .sess
             .env_var_os("DYLINT_LOCALE".as_ref())
-            .and_then(|value| value.into_string().ok())
-            .map(|tag| {
-                if supports_locale(&tag) {
-                    Localiser::new(Some(&tag))
-                } else {
-                    debug!(
-                        target: "function_attrs_follow_docs",
-                        "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
-                    );
-                    Localiser::new(None)
-                }
-            })
-            .unwrap_or_else(|| Localiser::new(None));
+            .and_then(|value| value.into_string().ok());
+        let shared_config = SharedConfig::load();
+        let resolution = resolve_localiser(None, environment_locale, shared_config.locale());
+
+        for rejection in resolution.rejections() {
+            debug!(
+                target: "function_attrs_follow_docs",
+                "unsupported {} `{}`; falling back to en-GB",
+                rejection.source(),
+                rejection.value(),
+            );
+        }
+
+        debug!(
+            target: "function_attrs_follow_docs",
+            "resolved {} to `{}`",
+            resolution.source(),
+            resolution.locale(),
+        );
+
+        self.localiser = resolution.into_localiser();
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -374,5 +383,36 @@ mod tests {
 
 #[cfg(test)]
 mod ui {
+    use std::sync::{Mutex, OnceLock};
+
     whitaker::declare_ui_tests!("ui");
+
+    static LOCALE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[test]
+    fn ui_runs_in_welsh_locale() {
+        run_ui_with_locale("ui-cy", "cy");
+    }
+
+    fn run_ui_with_locale(directory: &str, locale: &str) {
+        let guard = LOCALE_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("locale guard should not be poisoned");
+
+        let previous = std::env::var_os("DYLINT_LOCALE");
+        std::env::set_var("DYLINT_LOCALE", locale);
+
+        let outcome = whitaker::run_ui_tests!(directory);
+
+        if let Some(value) = previous {
+            std::env::set_var("DYLINT_LOCALE", value);
+        } else {
+            std::env::remove_var("DYLINT_LOCALE");
+        }
+
+        drop(guard);
+
+        outcome.expect("UI tests should execute without diffs");
+    }
 }
