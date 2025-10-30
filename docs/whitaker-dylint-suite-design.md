@@ -29,7 +29,7 @@ lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
 │  ├─ module_must_have_inner_docs/
 │  ├─ conditional_max_two_branches/   # revised: complex conditional detection
 │  ├─ test_must_not_have_example/
-│  ├─ module_max_400_lines/
+│  ├─ module_max_lines/
 │  └─ no_unwrap_or_else_panic/        # separate crate
 ├─ suite/                         # aggregated dylint library (optional)
 ├─ installer/                     # optional convenience binary
@@ -140,7 +140,7 @@ Utilities shared by lints:
   `load_with()` accepts the caller's crate name plus an injectable loader so
   individual lint crates can read their matching tables in `dylint.toml` or
   tests can stub the source. `serde` defaults keep fields optional so teams can
-  override only the `module_max_400_lines.max_lines` threshold (default 400)
+  override only the `module_max_lines.max_lines` threshold (default 400)
   without rewriting the table. Unknown fields are rejected via
   `deny_unknown_fields` so configuration typos fail fast during deserialization.
 - Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
@@ -207,7 +207,7 @@ Utilities shared by lints:
 | `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
 | `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
 | `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
-| `module_max_400_lines`        | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
+| `module_max_lines`            | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
 
 ### Per-lint crate scaffolding
 
@@ -553,7 +553,7 @@ Forbid examples or fenced code blocks in `#[test]` docs.
 Heuristic: detect Markdown `# Examples` heading or fenced code (``` / ```rust)
 in collected doc text.
 
-### 3.7 `module_max_400_lines` (maintainability, warn)
+### 3.7 `module_max_lines` (maintainability, warn)
 
 Lint when module span exceeds 400 lines. Configurable via `max_lines`.
 
@@ -800,7 +800,7 @@ no_expect_outside_tests = { path = "../crates/no_expect_outside_tests", features
 public_fn_must_have_docs = { path = "../crates/public_fn_must_have_docs", features = ["constituent"] }
 module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs", features = ["constituent"] }
 test_must_not_have_example = { path = "../crates/test_must_not_have_example", features = ["constituent"] }
-module_max_400_lines = { path = "../crates/module_max_400_lines", features = ["constituent"] }
+module_max_lines = { path = "../crates/module_max_lines", features = ["constituent"] }
 ```
 
 ```rust
@@ -816,7 +816,7 @@ declare_combined_late_lint_pass!(CombinedPass => [
     public_fn_must_have_docs::Pass,
     module_must_have_inner_docs::Pass,
     test_must_not_have_example::Pass,
-    module_max_400_lines::Pass,
+    module_max_lines::Pass,
 ]);
 
 #[no_mangle]
@@ -828,7 +828,7 @@ pub fn register_lints(sess: &Session, store: &mut LintStore) {
         public_fn_must_have_docs::PUBLIC_FN_MUST_HAVE_DOCS,
         module_must_have_inner_docs::MODULE_MUST_HAVE_INNER_DOCS,
         test_must_not_have_example::TEST_MUST_NOT_HAVE_EXAMPLE,
-        module_max_400_lines::MODULE_MAX_400_LINES,
+        module_max_lines::MODULE_MAX_LINES,
     ]);
     store.register_late_pass(|_| Box::new(CombinedPass));
 }
@@ -880,7 +880,7 @@ VS Code rust-analyser integration uses `cargo dylint` as the check command.
 
 ## 10) Configuration knobs (examples)
 
-- `module_max_400_lines.max_lines = 400`
+- `module_max_lines.max_lines = 400`
 - `conditional_max_two_branches.max_atoms = 1`
 - `no_expect_outside_tests` allowlist of modules (regex)
 - `no_unwrap_or_else_panic.allow_in_main = false`
@@ -1106,7 +1106,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
   - Count predicate atoms; config `max_atoms`; examples in diagnostics; UI
     tests for `if`/`while`/guards.
 - `test_must_not_have_example` (doc text scan + UI tests)
-- `module_max_400_lines` (line counting + config + UI tests)
+- `module_max_lines` (line counting + config + UI tests)
 
 ### Phase 3 — Additional restriction lint (separate crate)
 

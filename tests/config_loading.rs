@@ -75,13 +75,13 @@ fn no_overrides(config_source: &RefCell<Option<String>>) {
 fn override_max_lines(config_source: &RefCell<Option<String>>, value: usize) {
     config_source
         .borrow_mut()
-        .replace(format!("[module_max_400_lines]\nmax_lines = {value}\n"));
+        .replace(format!("[module_max_lines]\nmax_lines = {value}\n"));
 }
 
 #[given("the workspace config sets the module max line limit to an invalid value")]
 fn invalid_override(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().replace(String::from(
-        "[module_max_400_lines]\nmax_lines = \"invalid\"\n",
+        "[module_max_lines]\nmax_lines = \"invalid\"\n",
     ));
 }
 
@@ -90,7 +90,7 @@ fn unknown_fields(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().replace(
         concat!(
             "unexpected = true\n",
-            "[module_max_400_lines]\n",
+            "[module_max_lines]\n",
             "max_lines = 120\n",
         )
         .to_owned(),
@@ -108,8 +108,8 @@ fn load_config(
 ) {
     let maybe_source = config_source.borrow().clone();
     let outcome = catch_unwind(AssertUnwindSafe(|| {
-        SharedConfig::load_with("module_max_400_lines", |crate_name| {
-            assert_eq!(crate_name, "module_max_400_lines");
+        SharedConfig::load_with("module_max_lines", |crate_name| {
+            assert_eq!(crate_name, "module_max_lines");
             maybe_source
                 .as_ref()
                 .map_or_else(SharedConfig::default, |input| {
@@ -133,7 +133,7 @@ fn assert_max_lines(load_result: &RefCell<Option<Result<SharedConfig, String>>>,
         None => panic!("configuration should be loaded"),
     };
 
-    assert_eq!(config.module_max_400_lines.max_lines, expected);
+    assert_eq!(config.module_max_lines.max_lines, expected);
 }
 
 #[then("a configuration error is reported")]

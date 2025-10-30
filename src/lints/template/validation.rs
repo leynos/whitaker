@@ -147,14 +147,14 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("module_max_400_lines", "MODULE_MAX_400_LINES")]
+    #[case("module_max_lines", "MODULE_MAX_LINES")]
     #[case("no-expect-outside-tests", "NO_EXPECT_OUTSIDE_TESTS")]
     fn constant_from_crate_name(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(lint_constant(input), expected);
     }
 
     #[rstest]
-    #[case("module_max_400_lines", "ModuleMax400Lines")]
+    #[case("module_max_lines", "ModuleMaxLines")]
     #[case("no-expect-outside-tests", "NoExpectOutsideTests")]
     fn pass_struct_from_crate_name(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(pass_struct_name(input), expected);

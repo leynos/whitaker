@@ -13,10 +13,10 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct SharedConfig {
-    /// Overrides for the `module_max_400_lines` lint. This field falls back to
-    /// its default when omitted from `dylint.toml`, which avoids duplicating the
+    /// Overrides for the `module_max_lines` lint. This field falls back to its
+    /// default when omitted from `dylint.toml`, which avoids duplicating the
     /// baseline settings in every workspace.
-    pub module_max_400_lines: ModuleMax400LinesConfig,
+    pub module_max_lines: ModuleMaxLinesConfig,
 }
 
 impl SharedConfig {
@@ -34,7 +34,7 @@ impl SharedConfig {
     /// use whitaker::SharedConfig;
     ///
     /// let config = SharedConfig::load();
-    /// assert_eq!(config.module_max_400_lines.max_lines, 400);
+    /// assert_eq!(config.module_max_lines.max_lines, 400);
     /// # }
     /// ```
     #[must_use]
@@ -55,7 +55,7 @@ impl SharedConfig {
     /// Loads configuration using the supplied loader.
     ///
     /// Each lint crate stores its overrides under a table matching its crate
-    /// name (for example `[module_max_400_lines]`). The `crate_name` parameter
+    /// name (for example `[module_max_lines]`). The `crate_name` parameter
     /// ensures the loader resolves the caller's namespace explicitly. This
     /// helper also exists to support dependency injection in tests so that the
     /// behaviour of `dylint_linting::config_or_default` can be simulated without
@@ -67,7 +67,7 @@ impl SharedConfig {
     /// use whitaker::SharedConfig;
     ///
     /// let config = SharedConfig::load_with("whitaker", |_| SharedConfig::default());
-    /// assert_eq!(config.module_max_400_lines.max_lines, 400);
+    /// assert_eq!(config.module_max_lines.max_lines, 400);
     /// ```
     #[must_use]
     pub fn load_with<F>(crate_name: &str, loader: F) -> Self
@@ -78,22 +78,22 @@ impl SharedConfig {
     }
 }
 
-/// Settings that influence the forthcoming `module_max_400_lines` lint.
+/// Settings that influence the forthcoming `module_max_lines` lint.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(default, deny_unknown_fields)]
-pub struct ModuleMax400LinesConfig {
+pub struct ModuleMaxLinesConfig {
     /// Maximum number of lines permitted per module before the lint fires.
-    #[serde(default = "ModuleMax400LinesConfig::default_max_lines")]
+    #[serde(default = "ModuleMaxLinesConfig::default_max_lines")]
     pub max_lines: usize,
 }
 
-impl ModuleMax400LinesConfig {
+impl ModuleMaxLinesConfig {
     const fn default_max_lines() -> usize {
         400
     }
 }
 
-impl Default for ModuleMax400LinesConfig {
+impl Default for ModuleMaxLinesConfig {
     fn default() -> Self {
         Self {
             max_lines: Self::default_max_lines(),
@@ -110,23 +110,23 @@ mod tests {
     fn defaults_match_the_suite_baseline() {
         let config = SharedConfig::default();
 
-        assert_eq!(config.module_max_400_lines.max_lines, 400);
+        assert_eq!(config.module_max_lines.max_lines, 400);
     }
 
     #[rstest]
     fn deserialises_overrides_from_toml() {
-        let source = "[module_max_400_lines]\nmax_lines = 120\n";
+        let source = "[module_max_lines]\nmax_lines = 120\n";
 
         // Panic with the TOML parser's message so broken overrides are easy to debug.
         let config = toml::from_str::<SharedConfig>(source)
             .expect("expected configuration to parse successfully");
 
-        assert_eq!(config.module_max_400_lines.max_lines, 120);
+        assert_eq!(config.module_max_lines.max_lines, 120);
     }
 
     #[rstest]
     fn propagates_deserialisation_failures() {
-        let source = "[module_max_400_lines]\nmax_lines = \"a lot\"\n";
+        let source = "[module_max_lines]\nmax_lines = \"a lot\"\n";
 
         let outcome: Result<SharedConfig, _> = toml::from_str(source);
 
@@ -140,7 +140,7 @@ mod tests {
     fn rejects_unknown_fields() {
         let source = concat!(
             "unexpected = true\n",
-            "[module_max_400_lines]\n",
+            "[module_max_lines]\n",
             "max_lines = 120\n",
         );
 
@@ -155,14 +155,14 @@ mod tests {
     #[rstest]
     fn load_with_passes_through_the_requested_crate() {
         fn stub_loader(crate_name: &str) -> SharedConfig {
-            assert_eq!(crate_name, "module_max_400_lines");
+            assert_eq!(crate_name, "module_max_lines");
             SharedConfig {
-                module_max_400_lines: ModuleMax400LinesConfig { max_lines: 123 },
+                module_max_lines: ModuleMaxLinesConfig { max_lines: 123 },
             }
         }
 
-        let config = SharedConfig::load_with("module_max_400_lines", stub_loader);
+        let config = SharedConfig::load_with("module_max_lines", stub_loader);
 
-        assert_eq!(config.module_max_400_lines.max_lines, 123);
+        assert_eq!(config.module_max_lines.max_lines, 123);
     }
 }

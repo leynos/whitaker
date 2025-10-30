@@ -237,8 +237,7 @@ mod tests {
 
     #[test]
     fn template_rejects_absolute_ui_directory() {
-        let Err(error) =
-            LintCrateTemplate::with_ui_tests_directory("module_max_400_lines", "/tmp/ui")
+        let Err(error) = LintCrateTemplate::with_ui_tests_directory("module_max_lines", "/tmp/ui")
         else {
             panic!("absolute UI directories should be rejected");
         };
@@ -253,7 +252,7 @@ mod tests {
     #[test]
     fn template_rejects_parent_directory_in_ui_directory() {
         let Err(error) =
-            LintCrateTemplate::with_ui_tests_directory("module_max_400_lines", "ui/../secrets")
+            LintCrateTemplate::with_ui_tests_directory("module_max_lines", "ui/../secrets")
         else {
             panic!("parent directory traversal should be rejected");
         };
