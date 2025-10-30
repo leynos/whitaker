@@ -17,9 +17,7 @@ use super::{Attribute, AttributePath};
 /// assert_eq!(rest.len(), 1);
 /// ```
 #[must_use]
-pub fn split_doc_attributes<'a>(
-    attrs: &'a [Attribute],
-) -> (Vec<&'a Attribute>, Vec<&'a Attribute>) {
+pub fn split_doc_attributes(attrs: &[Attribute]) -> (Vec<&Attribute>, Vec<&Attribute>) {
     attrs.iter().partition(|attr| attr.is_doc())
 }
 
@@ -37,7 +35,7 @@ pub fn split_doc_attributes<'a>(
 /// assert_eq!(outer_only, vec![&outer]);
 /// ```
 #[must_use]
-pub fn outer_attributes<'a>(attrs: &'a [Attribute]) -> Vec<&'a Attribute> {
+pub fn outer_attributes(attrs: &[Attribute]) -> Vec<&Attribute> {
     attrs.iter().filter(|attr| attr.is_outer()).collect()
 }
 

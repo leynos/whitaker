@@ -70,7 +70,7 @@ impl SourceSpan {
     /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2)).expect("valid span for example");
     /// assert_eq!(span.start().line(), 1);
     /// ```
-    #[must_use]
+    #[must_use = "Inspect the span creation result to handle invalid ranges"]
     pub fn new(start: SourceLocation, end: SourceLocation) -> Result<Self, SpanError> {
         if start.is_after(end) {
             Err(SpanError::StartAfterEnd)

@@ -1980,6 +1980,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "cargo_metadata",
+ "common",
  "dylint_linting",
  "dylint_testing",
  "rstest",

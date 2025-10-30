@@ -7,6 +7,7 @@ Feature: Shared configuration loading
     Given no workspace configuration overrides are provided
     When the shared configuration is loaded
     Then the module max line limit is 400
+    And no locale override is configured
 
   Scenario: override module max line limit
     Given the workspace config sets the module max line limit to 120
@@ -22,3 +23,8 @@ Feature: Shared configuration loading
     Given the workspace config includes unknown fields
     When the shared configuration is loaded
     Then a configuration error mentioning "unknown field" is reported
+
+  Scenario: load a locale override
+    Given the workspace config sets the locale to cy
+    When the shared configuration is loaded
+    Then the locale override is cy
