@@ -41,13 +41,13 @@ Feature: Lint crate template
     Then template creation fails due to a trailing separator -
 
   Scenario: Rejecting absolute UI directories
-    Given the lint crate name is module_max_400_lines
+    Given the lint crate name is module_max_lines
     And the UI tests directory is /tmp/ui
     When I render the lint crate template
     Then template creation fails with an absolute UI directory error pointing to /tmp/ui
 
   Scenario: Rejecting absolute Windows UI directories
-    Given the lint crate name is module_max_400_lines
+    Given the lint crate name is module_max_lines
     And the UI tests directory is C:\\temp\\ui
     When I render the lint crate template
     Then template creation fails with an absolute UI directory error pointing to C:\\temp\\ui
@@ -59,13 +59,13 @@ Feature: Lint crate template
     Then template creation fails with an absolute UI directory error pointing to //server/share/ui
 
   Scenario: Rejecting drive-relative Windows UI directories
-    Given the lint crate name is module_max_400_lines
+    Given the lint crate name is module_max_lines
     And the UI tests directory is C:ui
     When I render the lint crate template
     Then template creation fails with an absolute UI directory error pointing to C:ui
 
   Scenario: Rejecting parent directory segments in the UI directory
-    Given the lint crate name is module_max_400_lines
+    Given the lint crate name is module_max_lines
     And the UI tests directory is ui/../secrets
     When I render the lint crate template
     Then template creation fails because the UI directory traverses upwards
@@ -76,7 +76,7 @@ Feature: Lint crate template
     Then template creation fails with an invalid crate name character U
 
   Scenario: Rejecting blank UI test directories
-    Given the lint crate name is module_max_400_lines
+    Given the lint crate name is module_max_lines
     And the UI tests directory is blank
     When I render the lint crate template
     Then template creation fails with an empty UI directory error
