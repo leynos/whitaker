@@ -5,7 +5,7 @@ pub mod config;
 pub mod lints;
 pub mod testing;
 
-pub use config::{ModuleMax400LinesConfig, SharedConfig};
+pub use config::{ModuleMaxLinesConfig, SharedConfig};
 pub use lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 
 /// Returns a greeting for the library.
