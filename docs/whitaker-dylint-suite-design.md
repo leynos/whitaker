@@ -174,6 +174,11 @@ Utilities shared by lints:
   translators and drive behavioural coverage that exercises non-English
   lookups, including languages with richer plural categories, alongside
   fallback resolution.
+- Keep Fluent resources compatible with the `fluent-syntax 0.12` parser shipped
+  by `fluent-templates 0.13`. Named term arguments triggered parser failures in
+  the Welsh bundles, so the `cy` resources now inline select expressions and
+  avoid helper terms when plural logic is required. This keeps localisation
+  coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
   Messages use stable slugs such as `function_attrs_follow_docs.primary` and
@@ -556,6 +561,23 @@ in collected doc text.
 ### 3.7 `module_max_lines` (maintainability, warn)
 
 Lint when module span exceeds 400 lines. Configurable via `max_lines`.
+
+**Implementation notes (2025-03-17).**
+
+- Module spans are measured using `hir::Mod::spans.inner_span` so only the
+  module body contributes to the line count. When the compiler cannot provide
+  an inner span (for example, in external modules), the lint falls back to the
+  item span, mirroring how the UI expectations are derived.
+- Line counts use `SourceMap::span_to_lines`; failures log at debug level and
+  skip the module instead of emitting a partially formed diagnostic. This keeps
+  the lint resilient when expansion hygiene obscures the original source.
+- Macro expansions are ignored. The call site is often a single `mod` block in
+  a macro definition and warning there would not guide the developer who wrote
+  the expanded code.
+- Diagnostics are localised via the shared `Localiser`, with fallback strings
+  matching the bundled Fluent resources. The module ident span is highlighted
+  while an additional note points to the declaration header to minimise visual
+  noise in long files.
 
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 

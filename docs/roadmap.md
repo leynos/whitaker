@@ -23,7 +23,7 @@
   - [x] Implement `no_expect_outside_tests` with context-aware diagnostics.
   - [ ] Implement `public_fn_must_have_docs` using effective visibility data.
   - [ ] Implement `test_must_not_have_example` covering code-fence heuristics.
-  - [ ] Implement `module_max_lines` with configurable thresholds.
+  - [x] Implement `module_max_lines` with configurable thresholds.
   - [ ] Implement `conditional_max_two_branches` for complex predicates.
   - [ ] Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
 
