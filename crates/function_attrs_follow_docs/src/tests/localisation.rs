@@ -166,6 +166,9 @@ fn scenario_failure(world: LocalisationWorld) {
     let _ = world;
 }
 
+/// Test double that always returns `MissingMessage` errors for message lookups.
+///
+/// Used to exercise error-handling paths when bundles fail to resolve.
 struct FailingLookup;
 
 impl BundleLookup for FailingLookup {

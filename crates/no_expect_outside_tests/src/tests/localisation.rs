@@ -33,10 +33,6 @@ impl LocalisationWorld {
         *self.receiver.borrow_mut() = ReceiverLabel::new(receiver);
     }
 
-    fn set_receiver(&self, receiver: &str) {
-        self.set_receiver_type(receiver);
-    }
-
     fn set_function(&self, name: Option<&str>) {
         let mut summary = self.summary.borrow_mut();
         summary.function_name = name.map(ToString::to_string);
@@ -94,7 +90,7 @@ fn given_locale(world: &LocalisationWorld, locale: String) {
 
 #[given("the receiver type is {receiver}")]
 fn given_receiver(world: &LocalisationWorld, receiver: String) {
-    world.set_receiver(&receiver);
+    world.set_receiver_type(&receiver);
 }
 
 #[given("the function context is {name}")]
@@ -236,6 +232,10 @@ fn then_fallback(world: &LocalisationWorld, snippet: String) {
     assert!(fallback.help().contains(&snippet));
 }
 
+/// Test double that always returns `MissingMessage` errors for message lookups.
+///
+/// Validates that localisation gracefully falls back when bundle resolution
+/// fails.
 struct FailingLookup;
 
 impl BundleLookup for FailingLookup {
