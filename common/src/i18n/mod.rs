@@ -32,6 +32,7 @@ pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 mod diagnostics;
 mod loader;
 mod locales;
+pub mod testing;
 
 /// Diagnostic localisation helpers.
 /// See [`resolve_message_set`] for fetching primary, note, and help strings.

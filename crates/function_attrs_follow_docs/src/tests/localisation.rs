@@ -4,10 +4,11 @@
 //! `rstest-bdd` scenarios and a custom failing lookup to validate fallbacks.
 
 use super::{
-    Arguments, BundleLookup, FunctionAttrsMessages, FunctionKind, Localiser, MESSAGE_KEY,
-    attribute_fallback, localised_messages,
+    FunctionAttrsMessages, FunctionKind, Localiser, MESSAGE_KEY, attribute_fallback,
+    localised_messages,
 };
-use common::i18n::{AttrKey, I18nError, MessageKey};
+use common::i18n::I18nError;
+use common::i18n::testing::FailingLookup;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, Ref, RefCell};
@@ -99,7 +100,10 @@ fn when_localise(world: &LocalisationWorld) {
 
 fn resolve_attribute(world: &LocalisationWorld, failing: bool) -> String {
     match (world.use_attribute_fallback.get(), failing) {
-        (true, true) => attribute_fallback(&FailingLookup),
+        (true, true) => {
+            let lookup = failing_lookup();
+            attribute_fallback(&lookup)
+        }
         (true, false) => world.with_localiser(attribute_fallback),
         (false, _) => world.attribute.borrow().clone(),
     }
@@ -112,7 +116,8 @@ fn resolve_localisation(
     failing: bool,
 ) -> Result<FunctionAttrsMessages, I18nError> {
     if failing {
-        localised_messages(&FailingLookup, kind, attribute)
+        let lookup = failing_lookup();
+        localised_messages(&lookup, kind, attribute)
     } else {
         world.with_localiser(|localiser| localised_messages(localiser, kind, attribute))
     }
@@ -166,28 +171,6 @@ fn scenario_failure(world: LocalisationWorld) {
     let _ = world;
 }
 
-/// Test double that always returns `MissingMessage` errors for message lookups.
-///
-/// Used to exercise error-handling paths when bundles fail to resolve.
-struct FailingLookup;
-
-impl BundleLookup for FailingLookup {
-    fn message(&self, _key: MessageKey<'_>, _args: &Arguments<'_>) -> Result<String, I18nError> {
-        Err(I18nError::MissingMessage {
-            key: MESSAGE_KEY.to_string(),
-            locale: "test".to_string(),
-        })
-    }
-
-    fn attribute(
-        &self,
-        _key: MessageKey<'_>,
-        _attribute: AttrKey<'_>,
-        _args: &Arguments<'_>,
-    ) -> Result<String, I18nError> {
-        Err(I18nError::MissingMessage {
-            key: MESSAGE_KEY.to_string(),
-            locale: "test".to_string(),
-        })
-    }
+fn failing_lookup() -> FailingLookup {
+    FailingLookup::new(MESSAGE_KEY.as_ref())
 }

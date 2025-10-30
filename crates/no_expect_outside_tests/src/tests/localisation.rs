@@ -6,11 +6,12 @@
 //! `FailingLookup` test double.
 
 use super::{
-    Arguments, AttrKey, BundleLookup, ContextLabel, I18nError, Localiser, MESSAGE_KEY,
-    NoExpectMessages, ReceiverCategory, ReceiverLabel, context_label, fallback_messages,
-    localised_messages,
+    I18nError, Localiser, MESSAGE_KEY, NoExpectMessages, ReceiverCategory, ReceiverLabel,
+    context_label, fallback_messages, localised_messages,
 };
 use crate::context::ContextSummary;
+use common::i18n::BundleLookup;
+use common::i18n::testing::FailingLookup;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, Ref, RefCell};
@@ -29,6 +30,12 @@ impl LocalisationWorld {
         *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
     }
 
+    fn with_localiser<T>(&self, f: impl FnOnce(&Localiser) -> T) -> T {
+        let borrow = self.localiser.borrow();
+        let localiser = borrow.as_ref().expect("a locale must be selected");
+        f(localiser)
+    }
+
     fn set_receiver_type(&self, receiver: &str) {
         *self.receiver.borrow_mut() = ReceiverLabel::new(receiver);
     }
@@ -40,19 +47,6 @@ impl LocalisationWorld {
 
     fn get_receiver_type(&self) -> ReceiverLabel {
         self.receiver.borrow().clone()
-    }
-
-    fn get_function_context(&self) -> ContextLabel {
-        let summary = self.summary.borrow();
-        context_label(&summary)
-    }
-
-    fn get_bundle_lookup(&self) -> Localiser {
-        self.localiser
-            .borrow()
-            .as_ref()
-            .expect("a locale must be selected")
-            .clone()
     }
 
     fn record_result(&self, value: Result<NoExpectMessages, I18nError>) {
@@ -132,18 +126,12 @@ fn given_failure(world: &LocalisationWorld) {
 fn when_localise(world: &LocalisationWorld) {
     let receiver = world.receiver.borrow().clone();
     let summary = world.summary.borrow().clone();
-    let context = context_label(&summary);
-    let category = ReceiverCategory::for_label(&receiver);
 
     let result = if world.failing.get() {
-        localised_messages(&FailingLookup, &receiver, &context, category)
+        let lookup = failing_lookup();
+        execute_localisation(&lookup, &receiver, &summary)
     } else {
-        let localiser = world
-            .localiser
-            .borrow()
-            .as_ref()
-            .expect("a locale must be selected");
-        localised_messages(localiser, &receiver, &context, category)
+        world.with_localiser(|localiser| execute_localisation(localiser, &receiver, &summary))
     };
 
     world.record_result(result);
@@ -166,12 +154,11 @@ fn then_help(world: &LocalisationWorld, snippet: String) {
 
 #[then("the fallback and localisation logic should handle the receiver type robustly")]
 fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
-    let lookup = world.get_bundle_lookup();
-    let context_label = world.get_function_context();
     let receiver_label = world.get_receiver_type();
-    let category = ReceiverCategory::for_label(&receiver_label);
+    let summary = world.summary.borrow().clone();
 
-    let messages = localised_messages(&lookup, &receiver_label, &context_label, category)
+    let messages = world
+        .with_localiser(|localiser| execute_localisation(localiser, &receiver_label, &summary))
         .expect("localisation should succeed");
     assert!(
         !messages.primary().is_empty(),
@@ -226,35 +213,22 @@ fn scenario_failure(world: LocalisationWorld) {
 fn then_fallback(world: &LocalisationWorld, snippet: String) {
     let summary = world.summary.borrow().clone();
     let context = context_label(&summary);
-    let receiver = world.receiver.borrow();
-    let category = ReceiverCategory::for_label(receiver.as_ref());
-    let fallback = fallback_messages(receiver.as_ref(), &context, category);
+    let receiver = world.receiver.borrow().clone();
+    let category = ReceiverCategory::for_label(&receiver);
+    let fallback = fallback_messages(&receiver, &context, category);
     assert!(fallback.help().contains(&snippet));
 }
 
-/// Test double that always returns `MissingMessage` errors for message lookups.
-///
-/// Validates that localisation gracefully falls back when bundle resolution
-/// fails.
-struct FailingLookup;
+fn execute_localisation(
+    lookup: &impl BundleLookup,
+    receiver: &ReceiverLabel,
+    summary: &ContextSummary,
+) -> Result<NoExpectMessages, I18nError> {
+    let context = context_label(summary);
+    let category = ReceiverCategory::for_label(receiver);
+    localised_messages(lookup, receiver, &context, category)
+}
 
-impl BundleLookup for FailingLookup {
-    fn message(&self, _key: MessageKey<'_>, _args: &Arguments<'_>) -> Result<String, I18nError> {
-        Err(I18nError::MissingMessage {
-            key: MESSAGE_KEY.to_string(),
-            locale: "test".to_string(),
-        })
-    }
-
-    fn attribute(
-        &self,
-        _key: MessageKey<'_>,
-        _attribute: AttrKey<'_>,
-        _args: &Arguments<'_>,
-    ) -> Result<String, I18nError> {
-        Err(I18nError::MissingMessage {
-            key: MESSAGE_KEY.to_string(),
-            locale: "test".to_string(),
-        })
-    }
+fn failing_lookup() -> FailingLookup {
+    FailingLookup::new(MESSAGE_KEY.as_ref())
 }
