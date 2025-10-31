@@ -564,20 +564,20 @@ Lint when module span exceeds 400 lines. Configurable via `max_lines`.
 
 **Implementation notes (2025-03-17).**
 
-- Module spans are measured using `hir::Mod::spans.inner_span` so only the
-  module body contributes to the line count. When the compiler cannot provide
-  an inner span (for example, in external modules), the lint falls back to the
-  item span, mirroring how the UI expectations are derived.
+- Module spans are measured using `hir::Mod::spans.inner_span` to count only the
+  module body. When the compiler cannot provide an inner span (for example, in
+  external modules), the lint falls back to the item span, mirroring how the UI
+  expectations are derived.
 - Line counts use `SourceMap::span_to_lines`; failures log at debug level and
   skip the module instead of emitting a partially formed diagnostic. This keeps
   the lint resilient when expansion hygiene obscures the original source.
-- Macro expansions are ignored. The call site is often a single `mod` block in
-  a macro definition and warning there would not guide the developer who wrote
+- Macro expansions are ignored. The call site is often a single `mod` block in a
+  macro definition and warning there would not guide the developer who wrote
   the expanded code.
-- Diagnostics are localised via the shared `Localiser`, with fallback strings
-  matching the bundled Fluent resources. The module ident span is highlighted
-  while an additional note points to the declaration header to minimise visual
-  noise in long files.
+- Diagnostics are localised via the shared `Localiser`,
+  with fallback strings matching the bundled Fluent resources. The module ident
+  span is highlighted whilst an additional note points to the declaration
+  header to minimise visual noise in long files.
 
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 

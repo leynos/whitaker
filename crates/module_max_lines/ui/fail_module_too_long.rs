@@ -1,17 +1,22 @@
+#[expect(dead_code, reason = "test fixture only")]
 mod long_module {
+    #[expect(dead_code, reason = "test fixture only")]
     pub fn one() {}
+
+    #[expect(dead_code, reason = "test fixture only")]
     pub fn two() {}
+
+    #[expect(dead_code, reason = "test fixture only")]
     pub fn three() {}
+
+    #[expect(dead_code, reason = "test fixture only")]
     pub fn four() {}
+
+    #[expect(dead_code, reason = "test fixture only")]
     pub fn five() {}
+
+    #[expect(dead_code, reason = "test fixture only")]
     pub fn six() {}
 }
 
-fn main() {
-    long_module::one();
-    long_module::two();
-    long_module::three();
-    long_module::four();
-    long_module::five();
-    long_module::six();
-}
+fn main() {}
