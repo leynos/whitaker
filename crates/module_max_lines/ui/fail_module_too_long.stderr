@@ -1,0 +1,16 @@
+warning: Module �long_module� spans �7� lines which exceeds the �5� line limit.
+  --> $DIR/fail_module_too_long.rs:3:5
+   |
+LL | mod long_module {
+   |     ^^^^^^^^^^^
+   |
+note: Large modules are harder to navigate and review.
+  --> $DIR/fail_module_too_long.rs:3:1
+   |
+LL | mod long_module {
+   | ^^^^^^^^^^^^^^^
+   = help: Split �long_module� into smaller modules or reduce its responsibilities.
+   = note: `#[warn(module_max_lines)]` on by default
+
+warning: 1 warning emitted
+

@@ -5,19 +5,18 @@
 -term-module = modiwl
 -term-branch = cangen
 -term-test-coverage = cwmpas profion
--term-lint-count =
-    { $lint ->
-        [zero] dim { -term-lint }
-        [one] { $lint } { -term-lint }
-        [two] dau { -term-lint }
-        [few] { $lint } { -term-lint }
-        [many] { $lint } { -term-lint }
-       *[other] { $lint } { -term-lint }
-    }
 
-common-lint-count = Cyfrif { -term-lint-count(lint: $lint) }.
-    .note = Mae negeseuon ar gael yn Gymraeg ar gyfer { -term-lint-count(lint: $lint) }.
-    .help = Ychwanegu cyfieithiadau ar gyfer pob { -term-lint-count(lint: $lint) } i gadw cwmpas profion yn gyflawn.
+common-lint-count =
+    { $lint ->
+        [0] Cyfrif { -term-lint }: dim lint.
+        [1] Cyfrif { -term-lint }: un lint.
+        [2] Cyfrif { -term-lint }: dau lint.
+        [3] Cyfrif { -term-lint }: tri lint.
+       *[other] Cyfrif { -term-lint }: { $lint } lint.
+    }
+    .note = Mae negeseuon ar gael yn Gymraeg ar gyfer { $lint }.
+    .help = Ychwanegu cyfieithiadau ar gyfer pob lint i gadw cwmpas profion yn gyflawn.
+    .fallback-note = Mae'r negeseuon wrth gefn yn parhau yn Saesneg.
 
 #. Shown in diagnostics when referring to the preceding attribute name.
 common-attribute-fallback = y briodoledd flaenorol
