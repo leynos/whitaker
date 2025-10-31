@@ -385,30 +385,34 @@ mod tests {
 mod ui {
     use std::sync::{Mutex, OnceLock};
 
-    whitaker::declare_ui_tests!("ui");
-
     static LOCALE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     #[test]
-    fn ui_runs_in_welsh_locale() {
-        run_ui_with_locale("ui-cy", "cy");
+    fn ui() {
+        run_ui_with_locale("ui", None);
     }
 
-    fn run_ui_with_locale(directory: &str, locale: &str) {
+    #[test]
+    fn ui_runs_in_welsh_locale() {
+        run_ui_with_locale("ui-cy", Some("cy"));
+    }
+
+    fn run_ui_with_locale(directory: &str, locale: Option<&str>) {
         let guard = LOCALE_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
             .expect("locale guard should not be poisoned");
 
         let previous = std::env::var_os("DYLINT_LOCALE");
-        std::env::set_var("DYLINT_LOCALE", locale);
+        if let Some(selected) = locale {
+            std::env::set_var("DYLINT_LOCALE", selected);
+        }
 
         let outcome = whitaker::run_ui_tests!(directory);
 
-        if let Some(value) = previous {
-            std::env::set_var("DYLINT_LOCALE", value);
-        } else {
-            std::env::remove_var("DYLINT_LOCALE");
+        match previous {
+            Some(value) => std::env::set_var("DYLINT_LOCALE", value),
+            None => std::env::remove_var("DYLINT_LOCALE"),
         }
 
         drop(guard);
