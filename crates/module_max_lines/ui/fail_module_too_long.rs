@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod long_module {
     pub fn one() {}
     pub fn two() {}
@@ -9,4 +7,11 @@ mod long_module {
     pub fn six() {}
 }
 
-fn main() {}
+fn main() {
+    long_module::one();
+    long_module::two();
+    long_module::three();
+    long_module::four();
+    long_module::five();
+    long_module::six();
+}
