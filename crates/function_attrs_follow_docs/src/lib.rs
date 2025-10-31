@@ -10,7 +10,6 @@ use common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
     resolve_localiser, resolve_message_set,
 };
-use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
@@ -47,25 +46,10 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
             .env_var_os("DYLINT_LOCALE".as_ref())
             .and_then(|value| value.into_string().ok());
         let shared_config = SharedConfig::load();
-        let resolution = resolve_localiser(None, environment_locale, shared_config.locale());
+        let selection = resolve_localiser(None, environment_locale, shared_config.locale());
 
-        for rejection in resolution.rejections() {
-            debug!(
-                target: "function_attrs_follow_docs",
-                "unsupported {} `{}`; falling back to en-GB",
-                rejection.source(),
-                rejection.value(),
-            );
-        }
-
-        debug!(
-            target: "function_attrs_follow_docs",
-            "resolved {} to `{}`",
-            resolution.source(),
-            resolution.locale(),
-        );
-
-        self.localiser = resolution.into_localiser();
+        selection.log_outcome("function_attrs_follow_docs");
+        self.localiser = selection.into_localiser();
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -383,40 +367,45 @@ mod tests {
 
 #[cfg(test)]
 mod ui {
-    use std::sync::{Mutex, OnceLock};
-
-    static LOCALE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    use serial_test::serial;
+    use std::ffi::OsString;
 
     #[test]
+    #[serial]
     fn ui() {
         run_ui_with_locale("ui", None);
     }
 
     #[test]
+    #[serial]
     fn ui_runs_in_welsh_locale() {
         run_ui_with_locale("ui-cy", Some("cy"));
     }
 
     fn run_ui_with_locale(directory: &str, locale: Option<&str>) {
-        let guard = LOCALE_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("locale guard should not be poisoned");
+        let _guard = locale.map(LocaleOverride::set);
+        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    }
 
-        let previous = std::env::var_os("DYLINT_LOCALE");
-        if let Some(selected) = locale {
-            std::env::set_var("DYLINT_LOCALE", selected);
+    struct LocaleOverride {
+        previous: Option<OsString>,
+    }
+
+    impl LocaleOverride {
+        fn set(locale: &str) -> Self {
+            let previous = std::env::var_os("DYLINT_LOCALE");
+            std::env::set_var("DYLINT_LOCALE", locale);
+            Self { previous }
         }
+    }
 
-        let outcome = whitaker::run_ui_tests!(directory);
-
-        match previous {
-            Some(value) => std::env::set_var("DYLINT_LOCALE", value),
-            None => std::env::remove_var("DYLINT_LOCALE"),
+    impl Drop for LocaleOverride {
+        fn drop(&mut self) {
+            if let Some(value) = &self.previous {
+                std::env::set_var("DYLINT_LOCALE", value);
+            } else {
+                std::env::remove_var("DYLINT_LOCALE");
+            }
         }
-
-        drop(guard);
-
-        outcome.expect("UI tests should execute without diffs");
     }
 }
