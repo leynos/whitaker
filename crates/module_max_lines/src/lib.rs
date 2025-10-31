@@ -83,7 +83,13 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             return;
         }
 
-        emit_diagnostic(cx, ident, item.span, lines, self.max_lines, &self.localiser);
+        let info = ModuleDiagnosticInfo {
+            ident,
+            item_span: item.span,
+            lines,
+            limit: self.max_lines,
+        };
+        emit_diagnostic(cx, &info, &self.localiser);
     }
 }
 
@@ -143,22 +149,23 @@ fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
     Some(info.lines.len())
 }
 
-fn emit_diagnostic(
-    cx: &LateContext<'_>,
+/// Diagnostic information for a module that exceeds line limits.
+struct ModuleDiagnosticInfo {
     ident: Ident,
     item_span: Span,
     lines: usize,
     limit: usize,
-    localiser: &Localiser,
-) {
+}
+
+fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localiser: &Localiser) {
     use fluent_templates::fluent_bundle::FluentValue;
     use std::borrow::Cow;
 
     let mut args: Arguments<'_> = Arguments::default();
-    let module_name = ident.name.as_str();
+    let module_name = info.ident.name.as_str();
     args.insert(Cow::Borrowed("module"), FluentValue::from(module_name));
-    args.insert(Cow::Borrowed("lines"), FluentValue::from(lines as i64));
-    args.insert(Cow::Borrowed("limit"), FluentValue::from(limit as i64));
+    args.insert(Cow::Borrowed("lines"), FluentValue::from(info.lines as i64));
+    args.insert(Cow::Borrowed("limit"), FluentValue::from(info.limit as i64));
 
     let (primary, note, help) = localised_messages(localiser, &args).unwrap_or_else(|error| {
         debug!(
@@ -166,12 +173,12 @@ fn emit_diagnostic(
             "missing localisation for `{}`: {error}; using fallback strings",
             LINT_NAME
         );
-        fallback_messages(module_name, lines, limit)
+        fallback_messages(module_name, info.lines, info.limit)
     });
 
-    cx.span_lint(MODULE_MAX_LINES, ident.span, |lint| {
+    cx.span_lint(MODULE_MAX_LINES, info.ident.span, |lint| {
         lint.primary_message(primary);
-        lint.span_note(module_header_span(item_span, ident.span), note);
+        lint.span_note(module_header_span(info.item_span, info.ident.span), note);
         lint.help(help);
     });
 }
