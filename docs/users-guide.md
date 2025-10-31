@@ -63,9 +63,10 @@ slug is not translated.
 Workspaces can pin the active locale through either the `DYLINT_LOCALE`
 environment variable or the `locale` entry in `dylint.toml`. The
 `common::i18n::resolve_localiser` helper combines explicit overrides, the
-environment, and configuration—logging any rejected candidates—before falling
-back to the bundled English strings. This ordering keeps CI deterministic while
-still allowing developers to override the locale for ad hoc smoke tests.
+environment, and configuration, trimming whitespace and warning about
+unsupported locales before falling back to the bundled English strings. This
+ordering keeps CI deterministic while still allowing developers to override the
+locale for ad hoc smoke tests.
 
 Whitaker lints source their primary messages, notes, and help text directly
 from Fluent bundles at emission time. Each diagnostic assembles structured

@@ -7,6 +7,7 @@
 //! semantics match what Dylint expects: values are deserialised from
 //! `dylint.toml` when present and fall back to sensible defaults otherwise.
 
+use common::i18n::normalise_locale;
 use serde::Deserialize;
 
 /// Shared configuration for the workspace-level crate.
@@ -91,10 +92,7 @@ impl SharedConfig {
     /// behaviour when `dylint.toml` is templated or patched.
     #[must_use]
     pub fn locale(&self) -> Option<&str> {
-        self.locale
-            .as_deref()
-            .map(str::trim)
-            .and_then(|value| if value.is_empty() { None } else { Some(value) })
+        normalise_locale(self.locale.as_deref())
     }
 }
 

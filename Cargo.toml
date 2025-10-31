@@ -38,6 +38,7 @@ cargo_metadata = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
+common = { path = "common" }
 
 dylint_linting = { workspace = true, optional = true }
 

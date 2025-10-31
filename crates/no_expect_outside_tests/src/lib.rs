@@ -11,7 +11,7 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use common::{AttributePath, LocaleResolution, Localiser, resolve_localiser};
+use common::{AttributePath, LocaleSelection, Localiser, resolve_localiser};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
@@ -94,10 +94,10 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .env_var_os("DYLINT_LOCALE".as_ref())
             .and_then(|value| value.into_string().ok());
         let shared_config = SharedConfig::load();
-        let resolution = resolve_localiser(None, environment_locale, shared_config.locale());
+        let selection = resolve_localiser(None, environment_locale, shared_config.locale());
 
-        log_locale_resolution("no_expect_outside_tests", &resolution);
-        self.localiser = resolution.into_localiser();
+        selection.log_outcome("no_expect_outside_tests");
+        self.localiser = selection.into_localiser();
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -137,24 +137,6 @@ fn receiver_is_option_or_result<'tcx>(
     let ty = cx.typeck_results().expr_ty(receiver);
 
     ty_is_option_or_result(cx, ty)
-}
-
-fn log_locale_resolution(target: &str, resolution: &LocaleResolution) {
-    for rejection in resolution.rejections() {
-        debug!(
-            target: target,
-            "unsupported {} `{}`; falling back to en-GB",
-            rejection.source(),
-            rejection.value(),
-        );
-    }
-
-    debug!(
-        target: target,
-        "resolved {} to `{}`",
-        resolution.source(),
-        resolution.locale(),
-    );
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {

@@ -1,45 +1,26 @@
 //! Behaviour-driven tests covering locale resolution semantics.
 
 use std::cell::RefCell;
-use std::convert::Infallible;
 use std::str::FromStr;
 
-use common::i18n::{LocaleResolution, LocaleSource, resolve_localiser};
+mod support;
+
+use common::i18n::{LocaleSelection, LocaleSource, normalise_locale, resolve_localiser};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
+use support::locale::StepLocale;
 
 #[derive(Default)]
 struct LocaleWorld {
     explicit: RefCell<Option<String>>,
     environment: RefCell<Option<String>>,
     configuration: RefCell<Option<String>>,
-    resolution: RefCell<Option<LocaleResolution>>,
+    resolution: RefCell<Option<LocaleSelection>>,
 }
 
 #[fixture]
 fn world() -> LocaleWorld {
     LocaleWorld::default()
-}
-
-#[derive(Debug)]
-struct StepLocale(String);
-
-impl FromStr for StepLocale {
-    type Err = Infallible;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let trimmed = input
-            .trim()
-            .trim_matches(|candidate| matches!(candidate, '"' | '\''));
-
-        Ok(Self(trimmed.to_owned()))
-    }
-}
-
-impl StepLocale {
-    fn into_inner(self) -> String {
-        self.0
-    }
 }
 
 #[derive(Debug)]
@@ -65,11 +46,11 @@ impl StepSource {
     }
 }
 
-fn resolved(world: &LocaleWorld) -> LocaleResolution {
+fn resolved(world: &LocaleWorld) -> LocaleSelection {
     let borrow = world.resolution.borrow();
     borrow.as_ref().map_or_else(
         || panic!("the locale should have been resolved"),
-        LocaleResolution::clone,
+        LocaleSelection::clone,
     )
 }
 
@@ -123,8 +104,11 @@ fn assert_source(world: &LocaleWorld, source: StepSource) {
 #[then("the resolved locale is {value}")]
 fn assert_locale(world: &LocaleWorld, value: StepLocale) {
     let resolution = resolved(world);
+    let raw = value.into_inner();
+    let expected = normalise_locale(Some(raw.as_str()))
+        .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
 
-    assert_eq!(resolution.locale(), value.into_inner());
+    assert_eq!(resolution.locale(), expected);
 }
 
 #[then("the fallback locale is used")]
@@ -139,24 +123,6 @@ fn assert_fallback_not_used(world: &LocaleWorld) {
     let resolution = resolved(world);
 
     assert!(!resolution.used_fallback());
-}
-
-#[then("no locale rejections are recorded")]
-fn assert_no_rejections(world: &LocaleWorld) {
-    let resolution = resolved(world);
-
-    assert!(resolution.rejections().is_empty());
-}
-
-#[then("the locale rejections include {source} {value}")]
-fn assert_rejection(world: &LocaleWorld, source: StepSource, value: StepLocale) {
-    let resolution = resolved(world);
-    let expected_source = source.into_inner();
-    let expected_value = value.into_inner();
-
-    assert!(resolution.rejections().iter().any(|rejection| {
-        rejection.source() == expected_source && rejection.value() == expected_value
-    }));
 }
 
 #[scenario("tests/features/locale_resolution.feature", index = 0)]

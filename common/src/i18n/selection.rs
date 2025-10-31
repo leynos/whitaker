@@ -1,5 +1,7 @@
 use std::fmt;
 
+use log::{debug, warn};
+
 use super::{Localiser, supports_locale};
 
 /// Source for a resolved locale.
@@ -26,63 +28,26 @@ impl fmt::Display for LocaleSource {
     }
 }
 
-/// A locale candidate that failed validation.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LocaleRejection {
-    source: LocaleSource,
-    value: String,
-}
-
-impl LocaleRejection {
-    /// Construct a new rejection for the provided `source` and `value`.
-    #[must_use]
-    pub fn new(source: LocaleSource, value: impl Into<String>) -> Self {
-        Self {
-            source,
-            value: value.into(),
-        }
-    }
-
-    /// Returns the source that provided the rejected locale.
-    #[must_use]
-    pub fn source(&self) -> LocaleSource {
-        self.source
-    }
-
-    /// Returns the rejected locale value.
-    #[must_use]
-    pub fn value(&self) -> &str {
-        self.value.as_str()
-    }
-}
-
 /// Outcome of locale resolution including the effective localiser and provenance.
 #[derive(Clone, Debug)]
-pub struct LocaleResolution {
+pub struct LocaleSelection {
     localiser: Localiser,
     source: LocaleSource,
     requested: Option<String>,
-    rejections: Vec<LocaleRejection>,
 }
 
-impl LocaleResolution {
-    fn new(
-        localiser: Localiser,
-        source: LocaleSource,
-        requested: Option<String>,
-        rejections: Vec<LocaleRejection>,
-    ) -> Self {
+impl LocaleSelection {
+    const fn new(localiser: Localiser, source: LocaleSource, requested: Option<String>) -> Self {
         Self {
             localiser,
             source,
             requested,
-            rejections,
         }
     }
 
     /// Returns the effective locale source.
     #[must_use]
-    pub fn source(&self) -> LocaleSource {
+    pub const fn source(&self) -> LocaleSource {
         self.source
     }
 
@@ -110,16 +75,20 @@ impl LocaleResolution {
         &self.localiser
     }
 
-    /// Consumes the resolution, yielding the [`Localiser`].
+    /// Consumes the selection, yielding the [`Localiser`].
     #[must_use]
     pub fn into_localiser(self) -> Localiser {
         self.localiser
     }
 
-    /// Returns rejected candidates encountered while resolving the locale.
-    #[must_use]
-    pub fn rejections(&self) -> &[LocaleRejection] {
-        self.rejections.as_slice()
+    /// Emit a debug log summarising the resolved locale.
+    pub fn log_outcome(&self, target: &str) {
+        debug!(
+            target: target,
+            "resolved {} to `{}`",
+            self.source(),
+            self.locale(),
+        );
     }
 }
 
@@ -136,70 +105,41 @@ pub fn resolve_localiser(
     explicit: Option<&str>,
     environment: Option<String>,
     configuration: Option<&str>,
-) -> LocaleResolution {
-    let mut rejections = Vec::new();
+) -> LocaleSelection {
+    let candidates = [
+        (LocaleSource::ExplicitArgument, explicit),
+        (LocaleSource::EnvironmentVariable, environment.as_deref()),
+        (LocaleSource::Configuration, configuration),
+    ];
 
-    if let Some(candidate) = normalise(explicit) {
-        if supports_locale(candidate.as_str()) {
-            return LocaleResolution::new(
-                Localiser::new(Some(candidate.as_str())),
-                LocaleSource::ExplicitArgument,
-                Some(candidate),
-                rejections,
+    for (source, raw) in candidates {
+        let Some(candidate) = normalise_locale(raw) else {
+            continue;
+        };
+
+        if supports_locale(candidate) {
+            return LocaleSelection::new(
+                Localiser::new(Some(candidate)),
+                source,
+                Some(candidate.to_owned()),
             );
         }
 
-        rejections.push(LocaleRejection::new(
-            LocaleSource::ExplicitArgument,
-            candidate,
-        ));
+        warn!(
+            target: "i18n::selection",
+            "skipping unsupported {source} `{candidate}`; falling back to en-GB",
+        );
     }
 
-    if let Some(candidate) = normalise(environment.as_deref()) {
-        if supports_locale(candidate.as_str()) {
-            return LocaleResolution::new(
-                Localiser::new(Some(candidate.as_str())),
-                LocaleSource::EnvironmentVariable,
-                Some(candidate),
-                rejections,
-            );
-        }
-
-        rejections.push(LocaleRejection::new(
-            LocaleSource::EnvironmentVariable,
-            candidate,
-        ));
-    }
-
-    if let Some(candidate) = normalise(configuration) {
-        if supports_locale(candidate.as_str()) {
-            return LocaleResolution::new(
-                Localiser::new(Some(candidate.as_str())),
-                LocaleSource::Configuration,
-                Some(candidate),
-                rejections,
-            );
-        }
-
-        rejections.push(LocaleRejection::new(LocaleSource::Configuration, candidate));
-    }
-
-    LocaleResolution::new(
-        Localiser::new(None),
-        LocaleSource::Fallback,
-        None,
-        rejections,
-    )
+    LocaleSelection::new(Localiser::new(None), LocaleSource::Fallback, None)
 }
 
-fn normalise(input: Option<&str>) -> Option<String> {
-    input.map(str::trim).and_then(|value| {
-        if value.is_empty() {
-            None
-        } else {
-            Some(value.to_string())
-        }
-    })
+/// Trim whitespace and discard empty locale candidates.
+#[must_use]
+pub fn normalise_locale(input: Option<&str>) -> Option<&str> {
+    input
+        .map(str::trim)
+        .and_then(|value| if value.is_empty() { None } else { Some(value) })
 }
 
 #[cfg(test)]
@@ -219,6 +159,14 @@ mod tests {
         false
     )]
     #[case(None, None, Some("cy"), LocaleSource::Configuration, "cy", false)]
+    #[case(
+        Some("zz"),
+        Some(String::from("yy")),
+        Some("cy"),
+        LocaleSource::Configuration,
+        "cy",
+        false
+    )]
     fn resolves_sources(
         #[case] explicit: Option<&str>,
         #[case] environment: Option<String>,
@@ -227,33 +175,20 @@ mod tests {
         #[case] expected_locale: &str,
         #[case] expected_fallback: bool,
     ) {
-        let resolution = resolve_localiser(explicit, environment, configuration);
+        let selection = resolve_localiser(explicit, environment, configuration);
 
-        assert_eq!(resolution.source(), expected_source);
-        assert_eq!(resolution.locale(), expected_locale);
-        assert_eq!(resolution.used_fallback(), expected_fallback);
+        assert_eq!(selection.source(), expected_source);
+        assert_eq!(selection.locale(), expected_locale);
+        assert_eq!(selection.used_fallback(), expected_fallback);
     }
 
     #[rstest]
-    fn records_rejections_for_invalid_candidates() {
-        let resolution = resolve_localiser(Some("zz"), Some(String::from("yy")), Some("xx"));
-
-        let rejections = resolution.rejections();
-        assert_eq!(rejections.len(), 3);
-        assert!(
-            rejections
-                .iter()
-                .any(|rejection| rejection.source() == LocaleSource::ExplicitArgument)
-        );
-        assert!(
-            rejections
-                .iter()
-                .any(|rejection| rejection.source() == LocaleSource::EnvironmentVariable)
-        );
-        assert!(
-            rejections
-                .iter()
-                .any(|rejection| rejection.source() == LocaleSource::Configuration)
-        );
+    #[case(None, None)]
+    #[case(Some(""), None)]
+    #[case(Some("  "), None)]
+    #[case(Some("cy"), Some("cy"))]
+    #[case(Some(" cy "), Some("cy"))]
+    fn normalises_candidates(#[case] input: Option<&str>, #[case] expected: Option<&str>) {
+        assert_eq!(normalise_locale(input), expected);
     }
 }

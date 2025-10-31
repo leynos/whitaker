@@ -42,7 +42,7 @@ pub use diagnostics::{
 };
 pub use loader::{Arguments, I18nError, Localiser};
 pub use locales::{available_locales, supports_locale};
-pub use selection::{LocaleRejection, LocaleResolution, LocaleSource, resolve_localiser};
+pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localiser};
 
 #[cfg(test)]
 mod tests;

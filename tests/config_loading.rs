@@ -6,8 +6,12 @@ use std::convert::Infallible;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::str::FromStr;
 
+mod support;
+
+use common::i18n::normalise_locale;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
+use support::locale::StepLocale;
 use whitaker::SharedConfig;
 
 #[fixture]
@@ -52,27 +56,6 @@ impl AsRef<str> for ErrorSnippet {
 }
 
 impl ErrorSnippet {
-    fn into_inner(self) -> String {
-        self.0
-    }
-}
-
-#[derive(Debug)]
-struct StepLocale(String);
-
-impl FromStr for StepLocale {
-    type Err = Infallible;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let trimmed = input
-            .trim()
-            .trim_matches(|candidate| matches!(candidate, '"' | '\''));
-
-        Ok(Self(trimmed.to_owned()))
-    }
-}
-
-impl StepLocale {
     fn into_inner(self) -> String {
         self.0
     }
@@ -170,7 +153,9 @@ fn assert_locale(
     load_result: &RefCell<Option<Result<SharedConfig, String>>>,
     expected: StepLocale,
 ) {
-    let expected_value = expected.into_inner();
+    let raw = expected.into_inner();
+    let expected_value = normalise_locale(Some(raw.as_str()))
+        .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
     let borrow = load_result.borrow();
     let config = match borrow.as_ref() {
         Some(Ok(config)) => config,
@@ -178,7 +163,7 @@ fn assert_locale(
         None => panic!("configuration should be loaded"),
     };
 
-    assert_eq!(config.locale(), Some(expected_value.as_str()));
+    assert_eq!(config.locale(), Some(expected_value));
 }
 
 #[then("no locale override is configured")]

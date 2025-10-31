@@ -188,15 +188,14 @@ Utilities shared by lints:
   argument, `DYLINT_LOCALE`, configuration entry, and finally the fallback.
   This keeps command-line, CI, and editor integrations predictable while
   enabling non-English smoke tests.
-- Provide `common::i18n::resolve_localiser`, which returns a
-  `LocaleResolution` capturing the chosen locale, the source that supplied it,
-  and any rejected candidates. Lints log the rejected values to explain why the
-  fallback engaged while tests can assert on provenance without reimplementing
-  the lookup order.
+- Provide `common::i18n::resolve_localiser`, which returns a `LocaleSelection`
+  capturing the chosen locale and its provenance. The resolver trims
+  whitespace, skips empty candidates, and logs unsupported locales before
+  falling back so precedence remains observable without duplicating the lookup
+  order.
 - Exercise locale selection through `rstest-bdd` scenarios so explicit,
   environment, configuration, and fallback branches stay documented. The tests
-  assert both the resolution source and the rejection list, preventing silent
-  precedence regressions.
+  assert the resolved source to prevent precedence regressions.
 - Emit structured diagnostics by formatting all human-facing text through the
   bundle before calling `span_lint`. Primary messages, labels, notes, and help
   text each source their own Fluent attribute, so translators do not wrestle
@@ -205,9 +204,8 @@ Utilities shared by lints:
   maintain parity with `rustc`'s diagnostic pipeline.
 - Extend the UI harness with a Welsh smoke test that exercises the
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
-  continues to execute via `dylint_testing`'s JSON output to keep the
-  diagnostics machine readable while proving non-English locales work end to
-  end.
+  continues to execute via `dylint_testing`'s JSON output to keep diagnostics
+  machine readable while proving non-English locales work end to end.
 - Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and

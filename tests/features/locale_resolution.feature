@@ -13,7 +13,6 @@ Feature: Locale resolution
     Then the locale source is fallback
     And the resolved locale is en-GB
     And the fallback locale is used
-    And no locale rejections are recorded
 
   Scenario: Use the environment locale when available
     Given DYLINT_LOCALE is gd
@@ -22,7 +21,6 @@ Feature: Locale resolution
     Then the locale source is environment
     And the resolved locale is gd
     And the fallback locale is not used
-    And no locale rejections are recorded
 
   Scenario: Prefer configuration after rejecting the environment
     Given DYLINT_LOCALE is zz
@@ -31,7 +29,6 @@ Feature: Locale resolution
     Then the locale source is configuration
     And the resolved locale is cy
     And the fallback locale is not used
-    And the locale rejections include environment zz
 
   Scenario: Prefer the explicit override over other sources
     Given the explicit locale override is gd
@@ -41,7 +38,6 @@ Feature: Locale resolution
     Then the locale source is explicit
     And the resolved locale is gd
     And the fallback locale is not used
-    And no locale rejections are recorded
 
   Scenario: Ignore explicit whitespace and fall back to configuration
     Given the explicit locale override is "  "
@@ -50,4 +46,3 @@ Feature: Locale resolution
     Then the locale source is configuration
     And the resolved locale is gd
     And the fallback locale is not used
-    And no locale rejections are recorded
