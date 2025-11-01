@@ -394,7 +394,12 @@ mod ui {
     impl LocaleOverride {
         fn set(locale: &str) -> Self {
             let previous = std::env::var_os("DYLINT_LOCALE");
-            std::env::set_var("DYLINT_LOCALE", locale);
+            // SAFETY: Both UI tests are marked with `serial_test::serial`, so the
+            // harness executes them one at a time. The guard returned from this
+            // function also keeps the mutation scoped to the current thread.
+            unsafe {
+                std::env::set_var("DYLINT_LOCALE", locale);
+            }
             Self { previous }
         }
     }
@@ -402,9 +407,19 @@ mod ui {
     impl Drop for LocaleOverride {
         fn drop(&mut self) {
             if let Some(value) = &self.previous {
-                std::env::set_var("DYLINT_LOCALE", value);
+                // SAFETY: Locale mutations remain serialised by the
+                // `serial_test::serial` attribute and the guard instance, so
+                // restoring the previous value cannot race with another test.
+                unsafe {
+                    std::env::set_var("DYLINT_LOCALE", value);
+                }
             } else {
-                std::env::remove_var("DYLINT_LOCALE");
+                // SAFETY: The serialised execution guarantees no concurrent
+                // access, making removal race-free for the same reason as the
+                // setter above.
+                unsafe {
+                    std::env::remove_var("DYLINT_LOCALE");
+                }
             }
         }
     }
