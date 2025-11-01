@@ -1,3 +1,6 @@
+//! Locale resolver wiring explicit overrides, environment variables, and
+//! configuration before falling back to the bundled localizer.
+
 use std::fmt;
 
 use log::{debug, warn};
@@ -106,7 +109,7 @@ fn try_resolve_candidate(source: LocaleSource, raw: Option<&str>) -> Option<Loca
 
     warn!(
         target: "i18n::selection",
-        "skipping unsupported {source} `{candidate}`; falling back to en-GB",
+        "skipping unsupported {source} `{candidate}`; continuing locale resolution",
     );
 
     None

@@ -1,14 +1,8 @@
 ## Cadwch amodau’n fyr.
 
+# `branch_phrase` should contain the rendered count and the correctly mutated
+# noun (e.g. "3 changen", "5 cangen").
 conditional_max_two_branches =
     Symleiddiwch { $name } i ddwy gangen neu lai.
-    .note =
-        { $branches ->
-            [zero] Ar hyn o bryd mae { $branches } canghennau yn y rheol.
-            [one] Ar hyn o bryd mae { $branches } gangen yn y rheol.
-            [two] Ar hyn o bryd mae { $branches } gangen yn y rheol.
-            [few] Ar hyn o bryd mae { $branches } changen yn y rheol.
-            [many] Ar hyn o bryd mae { $branches } changen yn y rheol.
-            *[other] Ar hyn o bryd mae { $branches } canghennau yn y rheol.
-        }
+    .note = Ar hyn o bryd mae { $branch_phrase } yn y rheol.
     .help = Tynnwch god cymorth neu ailstrwythurwch { $name } i ostwng y canghennau.

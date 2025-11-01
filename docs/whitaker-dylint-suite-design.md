@@ -205,7 +205,7 @@ Utilities shared by lints:
 - Extend the UI harness with a Welsh smoke test that exercises the
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
   continues to execute via `dylint_testing`'s JSON output to keep diagnostics
-  machine readable while proving non-English locales work end to end.
+  machine-readable while proving non-English locales work end to end.
 - Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
