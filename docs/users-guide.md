@@ -90,8 +90,17 @@ assert!(available_locales().contains(&preferred.to_string()));
 let localizer = Localizer::new(Some(preferred));
 
 let mut args: Arguments<'static> = HashMap::new();
+let branch_count = 3;
 args.insert(Cow::Borrowed("name"), FluentValue::from("match on Foo"));
-args.insert(Cow::Borrowed("branches"), FluentValue::from(3));
+args.insert(Cow::Borrowed("branches"), FluentValue::from(branch_count));
+let branch_phrase = match branch_count {
+    1 => "1 branch".to_string(),
+    _ => format!("{branch_count} branches"),
+};
+args.insert(
+    Cow::Borrowed("branch_phrase"),
+    FluentValue::from(branch_phrase.as_str()),
+);
 
 let message = localizer
     .message_with_args("conditional_max_two_branches", &args)?;
