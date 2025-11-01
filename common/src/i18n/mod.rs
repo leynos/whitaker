@@ -5,6 +5,10 @@
 //! API exposes a thin wrapper around `fluent-templates` that tracks whether the
 //! fallback bundle was used and surfaces missing message errors eagerly.
 //!
+//! Locale resolution is handled by [`resolve_localiser`], which evaluates
+//! explicit overrides, environment variables, and configuration settings in
+//! priority order before falling back to the bundled locale.
+//!
 //! See [`resolve_message_set`] for fetching a lint’s primary/note/help trio.
 
 use fluent_templates::static_loader;

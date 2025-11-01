@@ -188,11 +188,11 @@ Utilities shared by lints:
   argument, `DYLINT_LOCALE`, configuration entry, and finally the fallback.
   This keeps command-line, CI, and editor integrations predictable while
   enabling non-English smoke tests.
-- Provide `common::i18n::resolve_localiser`, which returns a `LocaleSelection`
-  capturing the chosen locale and its provenance. The resolver trims
-  whitespace, skips empty candidates, and logs unsupported locales before
-  falling back so precedence remains observable without duplicating the lookup
-  order.
+- Provide `common::i18n::resolve_localiser`, which returns a
+  `LocaleSelection` capturing the chosen locale and its provenance. The
+  resolver trims whitespace, skips empty candidates, and logs unsupported
+  locales before falling back so precedence remains observable without
+  duplicating the lookup order.
 - Exercise locale selection through `rstest-bdd` scenarios so explicit,
   environment, configuration, and fallback branches stay documented. The tests
   assert the resolved source to prevent precedence regressions.
