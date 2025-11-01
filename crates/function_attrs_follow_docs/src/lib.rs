@@ -7,8 +7,8 @@
 #![feature(rustc_private)]
 
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
-    resolve_localiser, resolve_message_set,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localizer, MessageKey,
+    resolve_localizer, resolve_message_set,
 };
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
@@ -20,13 +20,13 @@ use whitaker::SharedConfig;
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
 pub struct FunctionAttrsFollowDocs {
-    localiser: Localiser,
+    localizer: Localizer,
 }
 
 impl Default for FunctionAttrsFollowDocs {
     fn default() -> Self {
         Self {
-            localiser: Localiser::new(None),
+            localizer: Localizer::new(None),
         }
     }
 }
@@ -46,30 +46,30 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
             .env_var_os("DYLINT_LOCALE".as_ref())
             .and_then(|value| value.into_string().ok());
         let shared_config = SharedConfig::load();
-        let selection = resolve_localiser(None, environment_locale, shared_config.locale());
+        let selection = resolve_localizer(None, environment_locale, shared_config.locale());
 
         selection.log_outcome("function_attrs_follow_docs");
-        self.localiser = selection.into_localiser();
+        self.localizer = selection.into_localizer();
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localiser);
+            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localizer);
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localiser);
+            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localizer);
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localiser);
+            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localizer);
         }
     }
 }
@@ -129,7 +129,7 @@ fn check_function_attributes(
     cx: &LateContext<'_>,
     attrs: &[Attribute],
     kind: FunctionKind,
-    localiser: &Localiser,
+    localizer: &Localizer,
 ) {
     let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
 
@@ -144,7 +144,7 @@ fn check_function_attributes(
         offending_span: offending.span(),
         kind,
     };
-    emit_diagnostic(cx, context, localiser);
+    emit_diagnostic(cx, context, localizer);
 }
 
 #[derive(Copy, Clone)]
@@ -154,10 +154,10 @@ struct DiagnosticContext {
     kind: FunctionKind,
 }
 
-fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localiser: &Localiser) {
-    let attribute = attribute_label(cx, context.offending_span, localiser);
+fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: &Localizer) {
+    let attribute = attribute_label(cx, context.offending_span, localizer);
     let messages =
-        localised_messages(localiser, context.kind, attribute.as_str()).unwrap_or_else(|error| {
+        localised_messages(localizer, context.kind, attribute.as_str()).unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
                 context.doc_span,
                 format!("missing localisation for `function_attrs_follow_docs`: {error}"),
@@ -208,10 +208,10 @@ fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessag
     FunctionAttrsMessages::new(primary, note, help)
 }
 
-fn attribute_label(cx: &LateContext<'_>, span: Span, localiser: &Localiser) -> String {
+fn attribute_label(cx: &LateContext<'_>, span: Span, localizer: &Localizer) -> String {
     match cx.sess().source_map().span_to_snippet(span) {
         Ok(snippet) => snippet.trim().to_string(),
-        Err(_) => attribute_fallback(localiser),
+        Err(_) => attribute_fallback(localizer),
     }
 }
 

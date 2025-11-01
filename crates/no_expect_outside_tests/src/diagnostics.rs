@@ -3,7 +3,7 @@ use crate::context::ContextSummary;
 #[cfg(test)]
 use common::i18n::AttrKey;
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localizer, MessageKey,
     resolve_message_set,
 };
 use rustc_hir as hir;
@@ -124,12 +124,12 @@ impl fmt::Display for ContextLabel {
 
 pub(crate) struct DiagnosticContext<'a> {
     pub(crate) summary: &'a ContextSummary,
-    pub(crate) localiser: &'a Localiser,
+    pub(crate) localizer: &'a Localizer,
 }
 
 impl<'a> DiagnosticContext<'a> {
-    pub(crate) fn new(summary: &'a ContextSummary, localiser: &'a Localiser) -> Self {
-        Self { summary, localiser }
+    pub(crate) fn new(summary: &'a ContextSummary, localizer: &'a Localizer) -> Self {
+        Self { summary, localizer }
     }
 }
 
@@ -145,7 +145,7 @@ pub(crate) fn emit_diagnostic(
 
     let category = ReceiverCategory::classify_ty(cx, receiver_ty);
 
-    let messages = localised_messages(context.localiser, &receiver_label, &call_context, category)
+    let messages = localised_messages(context.localizer, &receiver_label, &call_context, category)
         .unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
                 expr.span,

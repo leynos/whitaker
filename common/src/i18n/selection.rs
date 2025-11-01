@@ -2,7 +2,7 @@ use std::fmt;
 
 use log::{debug, warn};
 
-use super::{Localiser, supports_locale};
+use super::{Localizer, supports_locale};
 
 /// Source for a resolved locale.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,18 +28,18 @@ impl fmt::Display for LocaleSource {
     }
 }
 
-/// Outcome of locale resolution including the effective localiser and provenance.
+/// Outcome of locale resolution including the effective localizer and provenance.
 #[derive(Clone, Debug)]
 pub struct LocaleSelection {
-    localiser: Localiser,
+    localizer: Localizer,
     source: LocaleSource,
     requested: Option<String>,
 }
 
 impl LocaleSelection {
-    const fn new(localiser: Localiser, source: LocaleSource, requested: Option<String>) -> Self {
+    const fn new(localizer: Localizer, source: LocaleSource, requested: Option<String>) -> Self {
         Self {
-            localiser,
+            localizer,
             source,
             requested,
         }
@@ -60,25 +60,25 @@ impl LocaleSelection {
     /// Returns the resolved locale tag.
     #[must_use]
     pub fn locale(&self) -> &str {
-        self.localiser.locale()
+        self.localizer.locale()
     }
 
     /// Whether the fallback locale was used.
     #[must_use]
     pub fn used_fallback(&self) -> bool {
-        self.localiser.used_fallback()
+        self.localizer.used_fallback()
     }
 
-    /// Returns the resolved [`Localiser`].
+    /// Returns the resolved [`Localizer`].
     #[must_use]
-    pub fn localiser(&self) -> &Localiser {
-        &self.localiser
+    pub fn localizer(&self) -> &Localizer {
+        &self.localizer
     }
 
-    /// Consumes the selection, yielding the [`Localiser`].
+    /// Consumes the selection, yielding the [`Localizer`].
     #[must_use]
-    pub fn into_localiser(self) -> Localiser {
-        self.localiser
+    pub fn into_localizer(self) -> Localizer {
+        self.localizer
     }
 
     /// Emit a debug log summarising the resolved locale.
@@ -98,7 +98,7 @@ fn try_resolve_candidate(source: LocaleSource, raw: Option<&str>) -> Option<Loca
 
     if supports_locale(candidate) {
         return Some(LocaleSelection::new(
-            Localiser::new(Some(candidate)),
+            Localizer::new(Some(candidate)),
             source,
             Some(candidate.to_owned()),
         ));
@@ -121,7 +121,7 @@ fn try_resolve_candidate(source: LocaleSource, raw: Option<&str>) -> Option<Loca
 /// 3. The workspace configuration (`dylint.toml`).
 /// 4. The embedded fallback when no candidate is valid.
 #[must_use]
-pub fn resolve_localiser(
+pub fn resolve_localizer(
     explicit: Option<&str>,
     environment: Option<String>,
     configuration: Option<&str>,
@@ -135,7 +135,7 @@ pub fn resolve_localiser(
     candidates
         .into_iter()
         .find_map(|(source, raw)| try_resolve_candidate(source, raw))
-        .unwrap_or_else(|| LocaleSelection::new(Localiser::new(None), LocaleSource::Fallback, None))
+        .unwrap_or_else(|| LocaleSelection::new(Localizer::new(None), LocaleSource::Fallback, None))
 }
 
 /// Trim whitespace and discard empty locale candidates.
@@ -179,7 +179,7 @@ mod tests {
         #[case] expected_locale: &str,
         #[case] expected_fallback: bool,
     ) {
-        let selection = resolve_localiser(explicit, environment, configuration);
+        let selection = resolve_localizer(explicit, environment, configuration);
 
         assert_eq!(selection.source(), expected_source);
         assert_eq!(selection.locale(), expected_locale);

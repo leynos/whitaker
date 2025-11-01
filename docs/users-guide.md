@@ -49,7 +49,7 @@ scenarios, ensuring each lint crate benefits from the consistent test harness.
 ## Localised diagnostics
 
 Whitaker bundles Fluent resources under `locales/` so every lint can present
-messages in multiple languages. The `common::i18n::Localiser` helper resolves
+messages in multiple languages. The `common::i18n::Localizer` helper resolves
 message strings and attributes, reporting when the fallback `en-GB` bundle is
 used. Secondary `cy` (Welsh) and `gd` (Scottish Gaelic) locales demonstrate how
 to translate each lint slug and drive behaviour tests that exercise non-English
@@ -62,7 +62,7 @@ slug is not translated.
 
 Workspaces can pin the active locale through the `DYLINT_LOCALE` environment
 variable or the `locale` entry in `dylint.toml`. The
-`common::i18n::resolve_localiser` helper combines explicit overrides with the
+`common::i18n::resolve_localizer` helper combines explicit overrides with the
 environment and configuration, trimming whitespace and warning about
 unsupported locales before falling back to the bundled English strings. This
 ordering keeps CI deterministic while still allowing developers to override the
@@ -78,7 +78,7 @@ update.
 
 ```rust
 use common::i18n::{
-    available_locales, Arguments, Localiser, FALLBACK_LOCALE,
+    available_locales, Arguments, Localizer, FALLBACK_LOCALE,
 };
 use common::i18n::FluentValue;
 use std::borrow::Cow;
@@ -87,18 +87,18 @@ use std::collections::HashMap;
 let preferred = "gd";
 assert!(available_locales().contains(&preferred.to_string()));
 
-let localiser = Localiser::new(Some(preferred));
+let localizer = Localizer::new(Some(preferred));
 
 let mut args: Arguments<'static> = HashMap::new();
 args.insert(Cow::Borrowed("name"), FluentValue::from("match on Foo"));
 args.insert(Cow::Borrowed("branches"), FluentValue::from(3));
 
-let message = localiser
+let message = localizer
     .message_with_args("conditional_max_two_branches", &args)?;
-let note = localiser
+let note = localizer
     .attribute_with_args("conditional_max_two_branches", "note", &args)?;
 
-if localiser.used_fallback() {
+if localizer.used_fallback() {
     eprintln!("Fell back to {FALLBACK_LOCALE}");
 }
 ```

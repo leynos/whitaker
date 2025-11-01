@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use fluent_bundle::FluentValue;
 use rstest::rstest;
 
-use super::{Arguments, FALLBACK_LOCALE, Localiser, available_locales, supports_locale};
+use super::{Arguments, FALLBACK_LOCALE, Localizer, available_locales, supports_locale};
 
 #[rstest]
 #[case(None, FALLBACK_LOCALE, true)]
@@ -12,9 +12,9 @@ use super::{Arguments, FALLBACK_LOCALE, Localiser, available_locales, supports_l
 #[case(Some("gd"), "gd", false)]
 #[case(Some("zz"), FALLBACK_LOCALE, true)]
 fn resolves_locales(#[case] input: Option<&str>, #[case] expected: &str, #[case] fallback: bool) {
-    let localiser = Localiser::new(input);
-    assert_eq!(localiser.locale(), expected);
-    assert_eq!(localiser.used_fallback(), fallback);
+    let localizer = Localizer::new(input);
+    assert_eq!(localizer.locale(), expected);
+    assert_eq!(localizer.used_fallback(), fallback);
 }
 
 #[test]
@@ -35,13 +35,13 @@ fn supports_locale_reports_known_languages() {
 
 #[test]
 fn message_lookup_with_arguments_interpolates_values() {
-    let localiser = Localiser::new(Some("gd"));
+    let localizer = Localizer::new(Some("gd"));
     let mut args = Arguments::new();
     args.insert(
         Cow::Borrowed("lint"),
         FluentValue::from("function_attrs_follow_docs"),
     );
-    let message = localiser
+    let message = localizer
         .message_with_args("common-lint-count", &args)
         .expect("message should exist");
     assert!(message.contains("function_attrs_follow_docs"));

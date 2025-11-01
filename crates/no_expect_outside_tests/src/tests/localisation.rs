@@ -6,7 +6,7 @@
 //! `FailingLookup` test double.
 
 use super::{
-    I18nError, Localiser, MESSAGE_KEY, NoExpectMessages, ReceiverCategory, ReceiverLabel,
+    I18nError, Localizer, MESSAGE_KEY, NoExpectMessages, ReceiverCategory, ReceiverLabel,
     context_label, fallback_messages, localised_messages,
 };
 use crate::context::ContextSummary;
@@ -18,7 +18,7 @@ use std::cell::{Cell, Ref, RefCell};
 
 #[derive(Default)]
 struct LocalisationWorld {
-    localiser: RefCell<Option<Localiser>>,
+    localizer: RefCell<Option<Localizer>>,
     receiver: RefCell<ReceiverLabel>,
     summary: RefCell<ContextSummary>,
     failing: Cell<bool>,
@@ -26,14 +26,14 @@ struct LocalisationWorld {
 }
 
 impl LocalisationWorld {
-    fn use_localiser(&self, locale: &str) {
-        *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
+    fn use_localizer(&self, locale: &str) {
+        *self.localizer.borrow_mut() = Some(Localizer::new(Some(locale)));
     }
 
-    fn with_localiser<T>(&self, f: impl FnOnce(&Localiser) -> T) -> T {
-        let borrow = self.localiser.borrow();
-        let localiser = borrow.as_ref().expect("a locale must be selected");
-        f(localiser)
+    fn with_localizer<T>(&self, f: impl FnOnce(&Localizer) -> T) -> T {
+        let borrow = self.localizer.borrow();
+        let localizer = borrow.as_ref().expect("a locale must be selected");
+        f(localizer)
     }
 
     fn set_receiver_type(&self, receiver: &str) {
@@ -79,7 +79,7 @@ fn world() -> LocalisationWorld {
 
 #[given("the locale {locale} is selected")]
 fn given_locale(world: &LocalisationWorld, locale: String) {
-    world.use_localiser(&locale);
+    world.use_localizer(&locale);
 }
 
 #[given("the receiver type is {receiver}")]
@@ -131,7 +131,7 @@ fn when_localise(world: &LocalisationWorld) {
         let lookup = failing_lookup();
         execute_localisation(&lookup, &receiver, &summary)
     } else {
-        world.with_localiser(|localiser| execute_localisation(localiser, &receiver, &summary))
+        world.with_localizer(|localizer| execute_localisation(localizer, &receiver, &summary))
     };
 
     world.record_result(result);
@@ -158,7 +158,7 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
     let summary = world.summary.borrow().clone();
 
     let messages = world
-        .with_localiser(|localiser| execute_localisation(localiser, &receiver_label, &summary))
+        .with_localizer(|localizer| execute_localisation(localizer, &receiver_label, &summary))
         .expect("localisation should succeed");
     assert!(
         !messages.primary().is_empty(),

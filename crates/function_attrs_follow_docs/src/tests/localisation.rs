@@ -4,7 +4,7 @@
 //! `rstest-bdd` scenarios and a custom failing lookup to validate fallbacks.
 
 use super::{
-    FunctionAttrsMessages, FunctionKind, Localiser, MESSAGE_KEY, attribute_fallback,
+    FunctionAttrsMessages, FunctionKind, Localizer, MESSAGE_KEY, attribute_fallback,
     localised_messages,
 };
 use common::i18n::I18nError;
@@ -15,7 +15,7 @@ use std::cell::{Cell, Ref, RefCell};
 
 #[derive(Default)]
 struct LocalisationWorld {
-    localiser: RefCell<Option<Localiser>>,
+    localizer: RefCell<Option<Localizer>>,
     subject: RefCell<FunctionKind>,
     attribute: RefCell<String>,
     use_attribute_fallback: Cell<bool>,
@@ -24,14 +24,14 @@ struct LocalisationWorld {
 }
 
 impl LocalisationWorld {
-    fn use_localiser(&self, locale: &str) {
-        *self.localiser.borrow_mut() = Some(Localiser::new(Some(locale)));
+    fn use_localizer(&self, locale: &str) {
+        *self.localizer.borrow_mut() = Some(Localizer::new(Some(locale)));
     }
 
-    fn with_localiser<T>(&self, f: impl FnOnce(&Localiser) -> T) -> T {
-        let borrow = self.localiser.borrow();
-        let localiser = borrow.as_ref().expect("a locale must be selected");
-        f(localiser)
+    fn with_localizer<T>(&self, f: impl FnOnce(&Localizer) -> T) -> T {
+        let borrow = self.localizer.borrow();
+        let localizer = borrow.as_ref().expect("a locale must be selected");
+        f(localizer)
     }
 
     fn messages(&self) -> Ref<'_, FunctionAttrsMessages> {
@@ -60,7 +60,7 @@ fn world() -> LocalisationWorld {
 
 #[given("the locale {locale} is selected")]
 fn given_locale(world: &LocalisationWorld, locale: String) {
-    world.use_localiser(&locale);
+    world.use_localizer(&locale);
 }
 
 #[given("the subject kind is {kind}")]
@@ -104,7 +104,7 @@ fn resolve_attribute(world: &LocalisationWorld, failing: bool) -> String {
             let lookup = failing_lookup();
             attribute_fallback(&lookup)
         }
-        (true, false) => world.with_localiser(attribute_fallback),
+        (true, false) => world.with_localizer(attribute_fallback),
         (false, _) => world.attribute.borrow().clone(),
     }
 }
@@ -119,7 +119,7 @@ fn resolve_localisation(
         let lookup = failing_lookup();
         localised_messages(&lookup, kind, attribute)
     } else {
-        world.with_localiser(|localiser| localised_messages(localiser, kind, attribute))
+        world.with_localizer(|localizer| localised_messages(localizer, kind, attribute))
     }
 }
 
