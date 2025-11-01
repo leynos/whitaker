@@ -191,7 +191,7 @@ Utilities shared by lints:
 - Provide `common::i18n::resolve_localizer`, which returns a
   `LocaleSelection` capturing the chosen locale and its provenance. The
   resolver trims whitespace, skips empty candidates, and logs unsupported
-  locales before falling back so precedence remains observable without
+  locales before falling back, so precedence remains observable without
   duplicating the lookup order.
 - Exercise locale selection through `rstest-bdd` scenarios so explicit,
   environment, configuration, and fallback branches stay documented. The tests
