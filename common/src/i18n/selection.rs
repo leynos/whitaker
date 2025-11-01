@@ -92,6 +92,26 @@ impl LocaleSelection {
     }
 }
 
+/// Attempt to resolve a locale candidate from the given source.
+fn try_resolve_candidate(source: LocaleSource, raw: Option<&str>) -> Option<LocaleSelection> {
+    let candidate = normalise_locale(raw)?;
+
+    if supports_locale(candidate) {
+        return Some(LocaleSelection::new(
+            Localiser::new(Some(candidate)),
+            source,
+            Some(candidate.to_owned()),
+        ));
+    }
+
+    warn!(
+        target: "i18n::selection",
+        "skipping unsupported {source} `{candidate}`; falling back to en-GB",
+    );
+
+    None
+}
+
 /// Resolve a locale using explicit, environment, and configuration overrides.
 ///
 /// The resolver considers candidates in the following order:
@@ -112,26 +132,10 @@ pub fn resolve_localiser(
         (LocaleSource::Configuration, configuration),
     ];
 
-    for (source, raw) in candidates {
-        let Some(candidate) = normalise_locale(raw) else {
-            continue;
-        };
-
-        if supports_locale(candidate) {
-            return LocaleSelection::new(
-                Localiser::new(Some(candidate)),
-                source,
-                Some(candidate.to_owned()),
-            );
-        }
-
-        warn!(
-            target: "i18n::selection",
-            "skipping unsupported {source} `{candidate}`; falling back to en-GB",
-        );
-    }
-
-    LocaleSelection::new(Localiser::new(None), LocaleSource::Fallback, None)
+    candidates
+        .into_iter()
+        .find_map(|(source, raw)| try_resolve_candidate(source, raw))
+        .unwrap_or_else(|| LocaleSelection::new(Localiser::new(None), LocaleSource::Fallback, None))
 }
 
 /// Trim whitespace and discard empty locale candidates.
