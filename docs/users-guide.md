@@ -60,10 +60,10 @@ the compiled locales. When an unsupported locale is requested, the loader falls
 back to the bundled `en-GB` strings and surfaces a missing message error if a
 slug is not translated.
 
-Workspaces can pin the active locale through either the `DYLINT_LOCALE`
-environment variable or the `locale` entry in `dylint.toml`. The
-`common::i18n::resolve_localiser` helper combines explicit overrides, the
-environment, and configuration, trimming whitespace and warning about
+Workspaces can pin the active locale through the `DYLINT_LOCALE` environment
+variable or the `locale` entry in `dylint.toml`. The
+`common::i18n::resolve_localiser` helper combines explicit overrides with the
+environment and configuration, trimming whitespace and warning about
 unsupported locales before falling back to the bundled English strings. This
 ordering keeps CI deterministic while still allowing developers to override the
 locale for ad hoc smoke tests.
