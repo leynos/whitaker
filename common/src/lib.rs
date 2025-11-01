@@ -8,6 +8,7 @@ pub mod expr;
 pub mod i18n;
 pub mod path;
 pub mod span;
+pub mod test_support;
 
 pub use attributes::{
     Attribute, AttributeKind, AttributePath, has_test_like_attribute, has_test_like_attribute_with,

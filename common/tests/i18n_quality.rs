@@ -110,7 +110,7 @@ fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
         let branch_phrase = branch_phrase(locale, branches);
         args.insert(
             Cow::Borrowed("branch_phrase"),
-            FluentValue::from(branch_phrase.as_str()),
+            FluentValue::from(branch_phrase.clone()),
         );
         let note = localizer
             .attribute_with_args("conditional_max_two_branches", "note", &args)
@@ -188,7 +188,7 @@ fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches:
 #[case(2, "dwy gangen")]
 #[case(3, "tri changen")]
 #[case(6, "chwe changen")]
-#[case(11, "11 cangen")]
+#[case(11, "11 canghennau")]
 fn welsh_branch_term_declensions(#[case] branches: i64, #[case] expected: &str) {
     let localizer = Localizer::new(Some("cy"));
     let mut args = HashMap::new();
@@ -197,7 +197,7 @@ fn welsh_branch_term_declensions(#[case] branches: i64, #[case] expected: &str) 
 
     args.insert(
         Cow::Borrowed("branch_phrase"),
-        FluentValue::from(branch_phrase.as_str()),
+        FluentValue::from(branch_phrase.clone()),
     );
     args.insert(
         Cow::Borrowed("branches"),
@@ -240,7 +240,8 @@ fn welsh_branch_phrase(branches: i64) -> String {
         2 => "dwy gangen".to_string(),
         3 => "tri changen".to_string(),
         6 => "chwe changen".to_string(),
-        _ => format!("{branches} cangen"),
+        4 | 5 => format!("{branches} cangen"),
+        _ => format!("{branches} canghennau"),
     }
 }
 
