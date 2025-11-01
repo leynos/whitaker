@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 mod support;
 
-use common::i18n::{LocaleSelection, LocaleSource, normalise_locale, resolve_localiser};
+use common::i18n::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
@@ -90,7 +90,7 @@ fn resolve_locale(world: &LocaleWorld) {
     let environment = world.environment.borrow().clone();
     let configuration = world.configuration.borrow().clone();
 
-    let resolution = resolve_localiser(explicit.as_deref(), environment, configuration.as_deref());
+    let resolution = resolve_localizer(explicit.as_deref(), environment, configuration.as_deref());
     world.resolution.borrow_mut().replace(resolution);
 }
 

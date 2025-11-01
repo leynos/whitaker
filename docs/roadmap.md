@@ -27,7 +27,7 @@
   - [ ] Implement `conditional_max_two_branches` for complex predicates.
   - [ ] Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
 
-- [x] Phase 2a — Localisation enablement
+- [x] Phase 2a — Localization enablement
   - [x] Add `fluent-templates` and `once_cell` to the workspace dependencies
         and expose a shared `common::i18n` loader.
   - [x] Create the `locales/` resource tree with an `en-GB` fallback and

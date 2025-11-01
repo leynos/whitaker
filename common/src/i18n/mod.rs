@@ -5,7 +5,7 @@
 //! API exposes a thin wrapper around `fluent-templates` that tracks whether the
 //! fallback bundle was used and surfaces missing message errors eagerly.
 //!
-//! Locale resolution is handled by [`resolve_localiser`], which evaluates
+//! Locale resolution is handled by [`resolve_localizer`], which evaluates
 //! explicit overrides, environment variables, and configuration settings in
 //! priority order before falling back to the bundled locale.
 //!
@@ -44,9 +44,9 @@ pub mod testing;
 pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
 };
-pub use loader::{Arguments, I18nError, Localiser};
+pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};
-pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localiser};
+pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
 
 #[cfg(test)]
 mod tests;

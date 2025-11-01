@@ -153,11 +153,11 @@ Utilities shared by lints:
   so each lint crate can load translated diagnostics without manual resource
   management. Both crates live in `[workspace.dependencies]` to keep versions
   aligned and to simplify adoption across current and future lints.
-- Provide `common::i18n::Localiser`, a wrapper around the static loader that
+- Provide `common::i18n::Localizer`, a wrapper around the static loader that
   records when the fallback locale is used and surfaces missing message errors
   eagerly. The helper exposes convenience accessors for direct messages and
   Fluent attributes while supporting argument interpolation.
-- Cache a `Localiser` inside each lint pass, so diagnostics can resolve
+- Cache a `Localizer` inside each lint pass, so diagnostics can resolve
   translations at emission time without repeatedly negotiating locales. The
   lints supply structured arguments such as the offending attribute snippet or
   receiver type, keeping Fluent bundles free from ad hoc string formatting.
@@ -188,7 +188,7 @@ Utilities shared by lints:
   argument, `DYLINT_LOCALE`, configuration entry, and finally the fallback.
   This keeps command-line, CI, and editor integrations predictable while
   enabling non-English smoke tests.
-- Provide `common::i18n::resolve_localiser`, which returns a
+- Provide `common::i18n::resolve_localizer`, which returns a
   `LocaleSelection` capturing the chosen locale and its provenance. The
   resolver trims whitespace, skips empty candidates, and logs unsupported
   locales before falling back so precedence remains observable without
