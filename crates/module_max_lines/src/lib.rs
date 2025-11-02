@@ -7,14 +7,14 @@
 //! The lint uses localisation data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
 
-use common::i18n::{Arguments, I18nError, Localizer};
+use common::i18n::{Arguments, I18nError, Localizer, resolve_localizer};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
-use whitaker::ModuleMaxLinesConfig;
+use whitaker::{ModuleMaxLinesConfig, SharedConfig};
 
 const LINT_NAME: &str = "module_max_lines";
 const MESSAGE_KEY: &str = "module_max_lines";
@@ -51,7 +51,13 @@ impl Default for ModuleMaxLines {
 impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         self.max_lines = load_configuration();
-        self.localizer = resolve_localizer();
+        let environment_locale =
+            std::env::var_os("DYLINT_LOCALE").and_then(|value| value.into_string().ok());
+        let shared_config = SharedConfig::load();
+        let selection = resolve_localizer(None, environment_locale, shared_config.locale());
+
+        selection.log_outcome(LINT_NAME);
+        self.localizer = selection.into_localizer();
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -116,23 +122,6 @@ fn load_configuration() -> usize {
             ModuleMaxLinesConfig::default().max_lines
         }
     }
-}
-
-fn resolve_localizer() -> Localizer {
-    std::env::var_os("DYLINT_LOCALE")
-        .and_then(|value| value.into_string().ok())
-        .map(|tag| {
-            if common::i18n::supports_locale(&tag) {
-                Localizer::new(Some(&tag))
-            } else {
-                debug!(
-                    target: LINT_NAME,
-                    "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
-                );
-                Localizer::new(None)
-            }
-        })
-        .unwrap_or_else(|| Localizer::new(None))
 }
 
 fn module_span(module: &hir::Mod<'_>, fallback: Span) -> Span {
