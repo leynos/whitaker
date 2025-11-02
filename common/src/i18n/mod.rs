@@ -5,6 +5,10 @@
 //! API exposes a thin wrapper around `fluent-templates` that tracks whether the
 //! fallback bundle was used and surfaces missing message errors eagerly.
 //!
+//! Locale resolution is handled by [`resolve_localizer`], which evaluates
+//! explicit overrides, environment variables, and configuration settings in
+//! priority order before falling back to the bundled locale.
+//!
 //! See [`resolve_message_set`] for fetching a lint’s primary/note/help trio.
 
 use fluent_templates::static_loader;
@@ -32,6 +36,7 @@ pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 mod diagnostics;
 mod loader;
 mod locales;
+mod selection;
 pub mod testing;
 
 /// Diagnostic localisation helpers.
@@ -39,8 +44,9 @@ pub mod testing;
 pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
 };
-pub use loader::{Arguments, I18nError, Localiser};
+pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};
+pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
 
 #[cfg(test)]
 mod tests;

@@ -27,14 +27,14 @@
   - [ ] Implement `conditional_max_two_branches` for complex predicates.
   - [ ] Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
 
-- [ ] Phase 2a — Localisation enablement
+- [x] Phase 2a — Localization enablement
   - [x] Add `fluent-templates` and `once_cell` to the workspace dependencies
         and expose a shared `common::i18n` loader.
   - [x] Create the `locales/` resource tree with an `en-GB` fallback and
         secondary `cy`/`gd` language samples covering every lint slug.
   - [x] Refactor lint diagnostics to source primary messages, notes, and help
         text from Fluent bundles with structured arguments.
-  - [ ] Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and add UI
+  - [x] Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and add UI
         smoke tests that run under at least one non-English locale.
 
 - [ ] Phase 3 — Aggregated packaging and installer

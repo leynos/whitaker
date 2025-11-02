@@ -4,7 +4,7 @@
 //! missing message handling to ensure lint crates can rely on predictable
 //! diagnostics across locales.
 
-use common::i18n::{Arguments, I18nError, Localiser};
+use common::i18n::{Arguments, I18nError, Localizer};
 use fluent_bundle::FluentValue;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, Default)]
 struct I18nFixture {
     locale: RefCell<Option<String>>,
-    localiser: RefCell<Option<Localiser>>,
+    localizer: RefCell<Option<Localizer>>,
     outcome: RefCell<Option<Result<String, I18nError>>>,
 }
 
@@ -24,11 +24,11 @@ impl I18nFixture {
         *self.locale.borrow_mut() = locale;
     }
 
-    fn ensure_localiser(&self) -> Localiser {
+    fn ensure_localizer(&self) -> Localizer {
         let locale = self.locale.borrow().clone();
-        self.localiser
+        self.localizer
             .borrow_mut()
-            .get_or_insert_with(|| Localiser::new(locale.as_deref()))
+            .get_or_insert_with(|| Localizer::new(locale.as_deref()))
             .clone()
     }
 
@@ -62,46 +62,46 @@ fn given_locale(fixture: &I18nFixture, locale: String) {
 
 #[when("I request the message for {key}")]
 fn when_message(fixture: &I18nFixture, key: String) {
-    let localiser = fixture.ensure_localiser();
-    let result = localiser.message(&key);
+    let localizer = fixture.ensure_localizer();
+    let result = localizer.message(&key);
     fixture.store_message(result);
 }
 
 #[when("I request the attribute {attribute} on {key}")]
 fn when_attribute(fixture: &I18nFixture, key: String, attribute: String) {
-    let localiser = fixture.ensure_localiser();
-    let result = localiser.attribute(&key, &attribute);
+    let localizer = fixture.ensure_localizer();
+    let result = localizer.attribute(&key, &attribute);
     fixture.store_message(result);
 }
 
 #[when("I request the attribute {attribute} on {key} with branches {count}")]
 fn when_attribute_with_branches(fixture: &I18nFixture, key: String, attribute: String, count: u32) {
-    let localiser = fixture.ensure_localiser();
+    let localizer = fixture.ensure_localizer();
     let mut args: Arguments<'static> = HashMap::new();
     args.insert(Cow::Borrowed("branches"), FluentValue::from(count as i64));
-    let result = localiser.attribute_with_args(&key, &attribute, &args);
+    let result = localizer.attribute_with_args(&key, &attribute, &args);
     fixture.store_message(result);
 }
 
 #[when("I request the attribute note on common-lint-count with lint count {count}")]
 fn when_common_lint_count_note(fixture: &I18nFixture, count: u32) {
-    let localiser = fixture.ensure_localiser();
+    let localizer = fixture.ensure_localizer();
     let mut args: Arguments<'static> = HashMap::new();
     args.insert(Cow::Borrowed("lint"), FluentValue::from(count as i64));
-    let result = localiser.attribute_with_args("common-lint-count", "note", &args);
+    let result = localizer.attribute_with_args("common-lint-count", "note", &args);
     fixture.store_message(result);
 }
 
 #[then("the resolved locale is {expected}")]
 fn then_locale(fixture: &I18nFixture, expected: String) {
-    let localiser = fixture.ensure_localiser();
-    assert_eq!(localiser.locale(), expected);
+    let localizer = fixture.ensure_localizer();
+    assert_eq!(localizer.locale(), expected);
 }
 
 #[then("the loader reports fallback usage")]
 fn then_fallback_used(fixture: &I18nFixture) {
-    let localiser = fixture.ensure_localiser();
-    assert!(localiser.used_fallback());
+    let localizer = fixture.ensure_localizer();
+    assert!(localizer.used_fallback());
 }
 
 #[then("the message contains {snippet}")]

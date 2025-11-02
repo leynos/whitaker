@@ -7,26 +7,26 @@
 #![feature(rustc_private)]
 
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localiser, MessageKey,
-    resolve_message_set, supports_locale,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localizer, MessageKey,
+    resolve_localizer, resolve_message_set,
 };
-use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
+use whitaker::SharedConfig;
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
 pub struct FunctionAttrsFollowDocs {
-    localiser: Localiser,
+    localizer: Localizer,
 }
 
 impl Default for FunctionAttrsFollowDocs {
     fn default() -> Self {
         Self {
-            localiser: Localiser::new(None),
+            localizer: Localizer::new(None),
         }
     }
 }
@@ -40,43 +40,36 @@ dylint_linting::impl_late_lint! {
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.localiser = cx
+        let environment_locale = cx
             .tcx
             .sess
             .env_var_os("DYLINT_LOCALE".as_ref())
-            .and_then(|value| value.into_string().ok())
-            .map(|tag| {
-                if supports_locale(&tag) {
-                    Localiser::new(Some(&tag))
-                } else {
-                    debug!(
-                        target: "function_attrs_follow_docs",
-                        "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
-                    );
-                    Localiser::new(None)
-                }
-            })
-            .unwrap_or_else(|| Localiser::new(None));
+            .and_then(|value| value.into_string().ok());
+        let shared_config = SharedConfig::load();
+        let selection = resolve_localizer(None, environment_locale, shared_config.locale());
+
+        selection.log_outcome("function_attrs_follow_docs");
+        self.localizer = selection.into_localizer();
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localiser);
+            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localizer);
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localiser);
+            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localizer);
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localiser);
+            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localizer);
         }
     }
 }
@@ -136,7 +129,7 @@ fn check_function_attributes(
     cx: &LateContext<'_>,
     attrs: &[Attribute],
     kind: FunctionKind,
-    localiser: &Localiser,
+    localizer: &Localizer,
 ) {
     let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
 
@@ -151,7 +144,7 @@ fn check_function_attributes(
         offending_span: offending.span(),
         kind,
     };
-    emit_diagnostic(cx, context, localiser);
+    emit_diagnostic(cx, context, localizer);
 }
 
 #[derive(Copy, Clone)]
@@ -161,10 +154,10 @@ struct DiagnosticContext {
     kind: FunctionKind,
 }
 
-fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localiser: &Localiser) {
-    let attribute = attribute_label(cx, context.offending_span, localiser);
+fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: &Localizer) {
+    let attribute = attribute_label(cx, context.offending_span, localizer);
     let messages =
-        localised_messages(localiser, context.kind, attribute.as_str()).unwrap_or_else(|error| {
+        localised_messages(localizer, context.kind, attribute.as_str()).unwrap_or_else(|error| {
             cx.sess().delay_span_bug(
                 context.doc_span,
                 format!("missing localisation for `function_attrs_follow_docs`: {error}"),
@@ -215,10 +208,10 @@ fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessag
     FunctionAttrsMessages::new(primary, note, help)
 }
 
-fn attribute_label(cx: &LateContext<'_>, span: Span, localiser: &Localiser) -> String {
+fn attribute_label(cx: &LateContext<'_>, span: Span, localizer: &Localizer) -> String {
     match cx.sess().source_map().span_to_snippet(span) {
         Ok(snippet) => snippet.trim().to_string(),
-        Err(_) => attribute_fallback(localiser),
+        Err(_) => attribute_fallback(localizer),
     }
 }
 
@@ -262,117 +255,9 @@ trait OrderedAttribute {
 mod localisation;
 
 #[cfg(test)]
-mod tests {
-    use super::{OrderedAttribute, detect_misordered_doc};
-    use common::attributes::{Attribute, AttributeKind, AttributePath};
-    use rstest::fixture;
-    use rstest_bdd_macros::{given, scenario, then, when};
-    use rustc_span::{DUMMY_SP, Span};
-    use std::cell::RefCell;
-
-    impl OrderedAttribute for Attribute {
-        fn is_outer(&self) -> bool {
-            self.is_outer()
-        }
-
-        fn is_doc(&self) -> bool {
-            self.is_doc()
-        }
-
-        fn span(&self) -> Span {
-            DUMMY_SP
-        }
-    }
-
-    #[derive(Default)]
-    struct AttributeWorld {
-        attributes: RefCell<Vec<Attribute>>,
-    }
-
-    impl AttributeWorld {
-        fn push(&self, path: &str, kind: AttributeKind) {
-            self.attributes
-                .borrow_mut()
-                .push(Attribute::new(AttributePath::from(path), kind));
-        }
-
-        fn result(&self) -> Option<(usize, usize)> {
-            detect_misordered_doc(self.attributes.borrow().as_slice())
-        }
-    }
-
-    #[fixture]
-    fn world() -> AttributeWorld {
-        AttributeWorld::default()
-    }
-
-    #[fixture]
-    fn result() -> Option<(usize, usize)> {
-        None
-    }
-
-    #[given("a doc comment before other attributes")]
-    fn doc_precedes(world: &AttributeWorld) {
-        world.push("doc", AttributeKind::Outer);
-        world.push("inline", AttributeKind::Outer);
-    }
-
-    #[given("a doc comment after an attribute")]
-    fn doc_follows(world: &AttributeWorld) {
-        world.push("inline", AttributeKind::Outer);
-        world.push("doc", AttributeKind::Outer);
-    }
-
-    #[given("attributes without doc comments")]
-    fn no_doc(world: &AttributeWorld) {
-        world.push("inline", AttributeKind::Outer);
-        world.push("allow", AttributeKind::Outer);
-    }
-
-    #[given("a doc comment after an inner attribute")]
-    fn doc_after_inner(world: &AttributeWorld) {
-        world.push("test", AttributeKind::Inner);
-        world.push("doc", AttributeKind::Outer);
-        world.push("inline", AttributeKind::Outer);
-    }
-
-    #[when("I evaluate the attribute order")]
-    fn evaluate(world: &AttributeWorld) -> Option<(usize, usize)> {
-        world.result()
-    }
-
-    #[then("the order is accepted")]
-    fn order_ok(result: &Option<(usize, usize)>) {
-        assert!(result.is_none());
-    }
-
-    #[then("the order is rejected")]
-    fn order_rejected(result: &Option<(usize, usize)>) {
-        assert!(result.is_some());
-    }
-
-    #[scenario(path = "tests/features/function_doc_order.feature", index = 0)]
-    fn scenario_accepts_doc_first(world: AttributeWorld, result: Option<(usize, usize)>) {
-        let _ = (world, result);
-    }
-
-    #[scenario(path = "tests/features/function_doc_order.feature", index = 1)]
-    fn scenario_rejects_doc_last(world: AttributeWorld, result: Option<(usize, usize)>) {
-        let _ = (world, result);
-    }
-
-    #[scenario(path = "tests/features/function_doc_order.feature", index = 2)]
-    fn scenario_handles_no_doc(world: AttributeWorld, result: Option<(usize, usize)>) {
-        let _ = (world, result);
-    }
-
-    #[scenario(path = "tests/features/function_doc_order.feature", index = 3)]
-    fn scenario_ignores_inner_attributes(world: AttributeWorld, result: Option<(usize, usize)>) {
-        let _ = (world, result);
-    }
-}
+#[path = "tests/order_detection.rs"]
+mod tests;
 
 #[cfg(test)]
-mod ui {
-    whitaker::declare_ui_tests!("ui");
-}
+#[path = "tests/ui.rs"]
+mod ui;

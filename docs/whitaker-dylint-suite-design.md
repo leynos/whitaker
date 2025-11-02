@@ -153,11 +153,11 @@ Utilities shared by lints:
   so each lint crate can load translated diagnostics without manual resource
   management. Both crates live in `[workspace.dependencies]` to keep versions
   aligned and to simplify adoption across current and future lints.
-- Provide `common::i18n::Localiser`, a wrapper around the static loader that
+- Provide `common::i18n::Localizer`, a wrapper around the static loader that
   records when the fallback locale is used and surfaces missing message errors
   eagerly. The helper exposes convenience accessors for direct messages and
   Fluent attributes while supporting argument interpolation.
-- Cache a `Localiser` inside each lint pass, so diagnostics can resolve
+- Cache a `Localizer` inside each lint pass, so diagnostics can resolve
   translations at emission time without repeatedly negotiating locales. The
   lints supply structured arguments such as the offending attribute snippet or
   receiver type, keeping Fluent bundles free from ad hoc string formatting.
@@ -188,16 +188,24 @@ Utilities shared by lints:
   argument, `DYLINT_LOCALE`, configuration entry, and finally the fallback.
   This keeps command-line, CI, and editor integrations predictable while
   enabling non-English smoke tests.
+- Provide `common::i18n::resolve_localizer`, which returns a
+  `LocaleSelection` capturing the chosen locale and its provenance. The
+  resolver trims whitespace, skips empty candidates, and logs unsupported
+  locales before falling back, so precedence remains observable without
+  duplicating the lookup order.
+- Exercise locale selection through `rstest-bdd` scenarios so explicit,
+  environment, configuration, and fallback branches stay documented. The tests
+  assert the resolved source to prevent precedence regressions.
 - Emit structured diagnostics by formatting all human-facing text through the
   bundle before calling `span_lint`. Primary messages, labels, notes, and help
   text each source their own Fluent attribute, so translators do not wrestle
   with concatenated phrases. Suggestion titles and placeholders pass concrete
   arguments (`{ flag }`, `{ subject }`) rather than interpolated strings to
   maintain parity with `rustc`'s diagnostic pipeline.
-- Extend the UI harness, so locale-specific fixtures run under the fallback
-  locale and at least one secondary locale. The tests assert on rendered
-  strings and continue to execute via `dylint_testing`'s JSON output to ensure
-  machine readability remains intact.
+- Extend the UI harness with a Welsh smoke test that exercises the
+  `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
+  continues to execute via `dylint_testing`'s JSON output to keep diagnostics
+  machine-readable while proving non-English locales work end to end.
 - Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
@@ -574,7 +582,7 @@ Lint when module span exceeds 400 lines. Configurable via `max_lines`.
 - Macro expansions are ignored. The call site is often a single `mod` block in a
   macro definition and warning there would not guide the developer who wrote
   the expanded code.
-- Diagnostics are localised via the shared `Localiser`,
+- Diagnostics are localised via the shared `Localizer`,
   with fallback strings matching the bundled Fluent resources. The module ident
   span is highlighted whilst an additional note points to the declaration
   header to minimise visual noise in long files.

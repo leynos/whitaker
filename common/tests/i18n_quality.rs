@@ -4,7 +4,7 @@
 //! text remains complete, and exercise language-specific plural forms so we can
 //! catch regressions before they reach users.
 
-use common::i18n::Localiser;
+use common::i18n::Localizer;
 use fluent_bundle::FluentValue;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -99,7 +99,7 @@ fn validate_entry_placeables(
 }
 
 fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
-    let localiser = Localiser::new(Some(locale));
+    let localizer = Localizer::new(Some(locale));
     let mut args = HashMap::new();
 
     for branches in 0..=max_branches {
@@ -107,7 +107,12 @@ fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
             Cow::Borrowed("branches"),
             FluentValue::from(branches as i64),
         );
-        let note = localiser
+        let branch_phrase = branch_phrase(locale, branches);
+        args.insert(
+            Cow::Borrowed("branch_phrase"),
+            FluentValue::from(branch_phrase.clone()),
+        );
+        let note = localizer
             .attribute_with_args("conditional_max_two_branches", "note", &args)
             .expect("conditional note should resolve");
         assert!(
@@ -178,34 +183,73 @@ fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches:
 }
 
 #[rstest]
-#[case(0, "dim cangen")]
-#[case(1, "1 cangen")]
+#[case(0, "dim canghennau")]
+#[case(1, "un gangen")]
 #[case(2, "dwy gangen")]
-#[case(3, "3 changen")]
-#[case(6, "6 changen")]
-#[case(11, "11 cangen")]
+#[case(3, "tri changen")]
+#[case(6, "chwe changen")]
+#[case(11, "11 canghennau")]
 fn welsh_branch_term_declensions(#[case] branches: i64, #[case] expected: &str) {
-    let localiser = Localiser::new(Some("cy"));
+    let localizer = Localizer::new(Some("cy"));
     let mut args = HashMap::new();
-    args.insert(Cow::Borrowed("branches"), FluentValue::from(branches));
+    let branch_phrase = welsh_branch_phrase(branches);
+    assert_eq!(branch_phrase, expected);
 
-    let rendered_term = localiser
-        .message_with_args("-branches-count", &args)
-        .expect("branches term should resolve");
-    assert_eq!(rendered_term, expected);
-
-    let note = localiser
+    args.insert(
+        Cow::Borrowed("branch_phrase"),
+        FluentValue::from(branch_phrase.clone()),
+    );
+    args.insert(
+        Cow::Borrowed("branches"),
+        FluentValue::from(branches as i64),
+    );
+    let note = localizer
         .attribute_with_args("conditional_max_two_branches", "note", &args)
         .expect("conditional note should resolve");
     let expected_note = format!("Ar hyn o bryd mae {expected} yn y rheol.");
     assert_eq!(note, expected_note);
 }
 
+fn branch_phrase(locale: &str, branches: i64) -> String {
+    match locale {
+        "cy" => welsh_branch_phrase(branches),
+        "gd" => gaelic_branch_phrase(branches),
+        _ => english_branch_phrase(branches),
+    }
+}
+
+fn english_branch_phrase(branches: i64) -> String {
+    match branches {
+        1 => "1 branch".to_string(),
+        _ => format!("{branches} branches"),
+    }
+}
+
+fn gaelic_branch_phrase(branches: i64) -> String {
+    match branches {
+        1 | 2 => format!("{branches} mheur"),
+        3 => format!("{branches} meuran"),
+        _ => format!("{branches} meur"),
+    }
+}
+
+fn welsh_branch_phrase(branches: i64) -> String {
+    match branches {
+        0 => "dim canghennau".to_string(),
+        1 => "un gangen".to_string(),
+        2 => "dwy gangen".to_string(),
+        3 => "tri changen".to_string(),
+        6 => "chwe changen".to_string(),
+        4 | 5 => format!("{branches} cangen"),
+        _ => format!("{branches} canghennau"),
+    }
+}
+
 #[test]
 fn secondary_locales_fall_back_to_english_for_missing_attribute() {
     for locale in ["cy", "gd"] {
-        let localiser = Localiser::new(Some(locale));
-        let note = localiser
+        let localizer = Localizer::new(Some(locale));
+        let note = localizer
             .attribute("common-lint-count", "fallback-note")
             .expect("fallback attribute should resolve");
         assert_eq!(note, "Fallback diagnostics default to English.");

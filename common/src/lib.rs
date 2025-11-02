@@ -8,6 +8,7 @@ pub mod expr;
 pub mod i18n;
 pub mod path;
 pub mod span;
+pub mod test_support;
 
 pub use attributes::{
     Attribute, AttributeKind, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
@@ -20,7 +21,8 @@ pub use context::{
 pub use diagnostics::{Applicability, Diagnostic, DiagnosticBuilder, Suggestion, span_lint};
 pub use expr::{Expr, def_id_of_expr_callee, is_path_to, recv_is_option_or_result};
 pub use i18n::{
-    Arguments, FALLBACK_LOCALE, I18nError, Localiser, available_locales, supports_locale,
+    Arguments, FALLBACK_LOCALE, I18nError, LocaleSelection, LocaleSource, Localizer,
+    available_locales, normalise_locale, resolve_localizer, supports_locale,
 };
 pub use path::SimplePath;
 pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};

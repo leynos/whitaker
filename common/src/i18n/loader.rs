@@ -25,24 +25,24 @@ pub enum I18nError {
 /// recognised. This mirrors the planned lookup order that surfaces explicit
 /// configuration, environment overrides, and finally the bundled fallback.
 #[derive(Clone, Debug)]
-pub struct Localiser {
+pub struct Localizer {
     language: LanguageIdentifier,
     language_tag: String,
     fallback_used: bool,
 }
 
-impl Localiser {
-    /// Create a localiser for `locale`, falling back to [`crate::i18n::FALLBACK_LOCALE`].
+impl Localizer {
+    /// Create a localizer for `locale`, falling back to [`crate::i18n::FALLBACK_LOCALE`].
     ///
     /// ```
-    /// use common::i18n::{available_locales, Localiser};
+    /// use common::i18n::{available_locales, Localizer};
     ///
-    /// let locale = Localiser::new(Some("cy"));
+    /// let locale = Localizer::new(Some("cy"));
     /// assert!(available_locales().contains(&"cy".to_string()));
     /// assert_eq!(locale.locale(), "cy");
     /// assert!(!locale.used_fallback());
     ///
-    /// let fallback = Localiser::new(Some("zz"));
+    /// let fallback = Localizer::new(Some("zz"));
     /// assert_eq!(fallback.locale(), "en-GB");
     /// assert!(fallback.used_fallback());
     /// ```

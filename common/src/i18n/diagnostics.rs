@@ -4,12 +4,12 @@
 //!
 //! ```
 //! # use common::i18n::{
-//! #     Arguments, Localiser, MessageKey, resolve_message_set,
+//! #     Arguments, Localizer, MessageKey, resolve_message_set,
 //! # };
-//! # fn demo(localiser: &Localiser) -> Result<(), common::i18n::I18nError> {
+//! # fn demo(localizer: &Localizer) -> Result<(), common::i18n::I18nError> {
 //! #     let args = Arguments::default();
 //! let messages = resolve_message_set(
-//!     localiser,
+//!     localizer,
 //!     MessageKey::new("my-lint.message"),
 //!     &args,
 //! )?;
@@ -18,7 +18,7 @@
 //! # }
 //! ```
 
-use super::{Arguments, I18nError, Localiser};
+use super::{Arguments, I18nError, Localizer};
 use std::fmt;
 
 /// Identifier for a Fluent message within a localisation bundle.
@@ -83,7 +83,7 @@ pub trait BundleLookup {
     ) -> Result<String, I18nError>;
 }
 
-impl BundleLookup for Localiser {
+impl BundleLookup for Localizer {
     fn message(&self, key: MessageKey<'_>, args: &Arguments<'_>) -> Result<String, I18nError> {
         self.message_with_args(key.as_ref(), args)
     }
@@ -188,7 +188,7 @@ impl DiagnosticMessageSet {
 const NOTE_ATTR: AttrKey<'static> = AttrKey::new("note");
 const HELP_ATTR: AttrKey<'static> = AttrKey::new("help");
 
-#[must_use]
+#[must_use = "Use the resolved localisation messages when emitting diagnostics"]
 pub fn resolve_message_set(
     lookup: &impl BundleLookup,
     key: MessageKey<'_>,

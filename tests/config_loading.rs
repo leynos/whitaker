@@ -6,8 +6,12 @@ use std::convert::Infallible;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::str::FromStr;
 
+mod support;
+
+use common::i18n::normalise_locale;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
+use support::locale::StepLocale;
 use whitaker::SharedConfig;
 
 #[fixture]
@@ -85,6 +89,14 @@ fn invalid_override(config_source: &RefCell<Option<String>>) {
     ));
 }
 
+#[given("the workspace config sets the locale to {value}")]
+fn override_locale(config_source: &RefCell<Option<String>>, value: StepLocale) {
+    let locale = value.into_inner();
+    config_source
+        .borrow_mut()
+        .replace(format!("locale = \"{locale}\"\n"));
+}
+
 #[given("the workspace config includes unknown fields")]
 fn unknown_fields(config_source: &RefCell<Option<String>>) {
     config_source.borrow_mut().replace(
@@ -134,6 +146,40 @@ fn assert_max_lines(load_result: &RefCell<Option<Result<SharedConfig, String>>>,
     };
 
     assert_eq!(config.module_max_lines.max_lines, expected);
+}
+
+#[then("the locale override is {expected}")]
+fn assert_locale(
+    load_result: &RefCell<Option<Result<SharedConfig, String>>>,
+    expected: StepLocale,
+) {
+    let raw = expected.into_inner();
+    let expected_value = normalise_locale(Some(raw.as_str()))
+        .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
+    let borrow = load_result.borrow();
+    let config = match borrow.as_ref() {
+        Some(Ok(config)) => config,
+        Some(Err(error)) => panic!("expected configuration loading to succeed: {error}"),
+        None => panic!("configuration should be loaded"),
+    };
+
+    assert_eq!(config.locale(), Some(expected_value));
+}
+
+#[then("no locale override is configured")]
+fn assert_no_locale(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
+    let borrow = load_result.borrow();
+    let config = match borrow.as_ref() {
+        Some(Ok(config)) => config,
+        Some(Err(error)) => panic!("expected configuration loading to succeed: {error}"),
+        None => panic!("configuration should be loaded"),
+    };
+
+    assert!(
+        config.locale().is_none(),
+        "expected no locale override but found {:?}",
+        config.locale(),
+    );
 }
 
 #[then("a configuration error is reported")]
@@ -195,6 +241,14 @@ fn scenario_errors(
 
 #[scenario("tests/features/config_loading.feature", index = 3)]
 fn scenario_unknown_fields(
+    config_source: RefCell<Option<String>>,
+    load_result: RefCell<Option<Result<SharedConfig, String>>>,
+) {
+    let _ = (config_source, load_result);
+}
+
+#[scenario("tests/features/config_loading.feature", index = 4)]
+fn scenario_locale_override(
     config_source: RefCell<Option<String>>,
     load_result: RefCell<Option<Result<SharedConfig, String>>>,
 ) {
