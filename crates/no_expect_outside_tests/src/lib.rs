@@ -11,7 +11,7 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use common::{AttributePath, LocaleSelection, Localizer, resolve_localizer};
+use common::{AttributePath, Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
@@ -88,16 +88,8 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .map(|path| AttributePath::from(path.as_str()))
             .collect();
 
-        let environment_locale = cx
-            .tcx
-            .sess
-            .env_var_os("DYLINT_LOCALE".as_ref())
-            .and_then(|value| value.into_string().ok());
         let shared_config = SharedConfig::load();
-        let selection = resolve_localizer(None, environment_locale, shared_config.locale());
-
-        selection.log_outcome("no_expect_outside_tests");
-        self.localizer = selection.into_localizer();
+        self.localizer = get_localizer_for_lint("no_expect_outside_tests", shared_config.locale());
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {

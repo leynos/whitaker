@@ -157,6 +157,15 @@ Utilities shared by lints:
   records when the fallback locale is used and surfaces missing message errors
   eagerly. The helper exposes convenience accessors for direct messages and
   Fluent attributes while supporting argument interpolation.
+- Introduce `common::i18n::get_localizer_for_lint`, centralising the
+  environment/configuration resolution so lint crates share identical logging
+  and fallback semantics. The helper reads `DYLINT_LOCALE`, applies workspace
+  configuration, emits a debug summary, and returns the resolved `Localizer`.
+- Wrap message resolution with `common::i18n::safe_resolve_message_set`, which
+  delegates to `resolve_message_set` and captures failures in a single place.
+  The wrapper emits a `span_delayed_bug` through the lint context, logs the
+  missing key, and returns deterministic English strings so lints can continue
+  emitting diagnostics without panicking.
 - Cache a `Localizer` inside each lint pass, so diagnostics can resolve
   translations at emission time without repeatedly negotiating locales. The
   lints supply structured arguments such as the offending attribute snippet or
