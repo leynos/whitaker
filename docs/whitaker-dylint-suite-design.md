@@ -582,7 +582,7 @@ Lint when module span exceeds 400 lines. Configurable via `max_lines`.
 - Macro expansions are ignored. The call site is often a single `mod` block in a
   macro definition and warning there would not guide the developer who wrote
   the expanded code.
-- Diagnostics are localised via the shared `Localiser`,
+- Diagnostics are localised via the shared `Localizer`,
   with fallback strings matching the bundled Fluent resources. The module ident
   span is highlighted whilst an additional note points to the declaration
   header to minimise visual noise in long files.

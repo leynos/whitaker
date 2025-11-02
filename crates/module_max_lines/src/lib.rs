@@ -7,7 +7,7 @@
 //! The lint uses localisation data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
 
-use common::i18n::{Arguments, I18nError, Localiser};
+use common::i18n::{Arguments, I18nError, Localizer};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
@@ -36,14 +36,14 @@ dylint_linting::impl_late_lint! {
 /// Lint pass that tracks configuration and localisation state while checking modules.
 pub struct ModuleMaxLines {
     max_lines: usize,
-    localiser: Localiser,
+    localizer: Localizer,
 }
 
 impl Default for ModuleMaxLines {
     fn default() -> Self {
         Self {
             max_lines: ModuleMaxLinesConfig::default().max_lines,
-            localiser: Localiser::new(None),
+            localizer: Localizer::new(None),
         }
     }
 }
@@ -51,7 +51,7 @@ impl Default for ModuleMaxLines {
 impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         self.max_lines = load_configuration();
-        self.localiser = resolve_localiser();
+        self.localizer = resolve_localizer();
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -89,7 +89,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             lines,
             limit: self.max_lines,
         };
-        emit_diagnostic(cx, &info, &self.localiser);
+        emit_diagnostic(cx, &info, &self.localizer);
     }
 }
 
@@ -118,21 +118,21 @@ fn load_configuration() -> usize {
     }
 }
 
-fn resolve_localiser() -> Localiser {
+fn resolve_localizer() -> Localizer {
     std::env::var_os("DYLINT_LOCALE")
         .and_then(|value| value.into_string().ok())
         .map(|tag| {
             if common::i18n::supports_locale(&tag) {
-                Localiser::new(Some(&tag))
+                Localizer::new(Some(&tag))
             } else {
                 debug!(
                     target: LINT_NAME,
                     "unsupported DYLINT_LOCALE `{tag}`; falling back to en-GB"
                 );
-                Localiser::new(None)
+                Localizer::new(None)
             }
         })
-        .unwrap_or_else(|| Localiser::new(None))
+        .unwrap_or_else(|| Localizer::new(None))
 }
 
 fn module_span(module: &hir::Mod<'_>, fallback: Span) -> Span {
@@ -157,7 +157,7 @@ struct ModuleDiagnosticInfo {
     limit: usize,
 }
 
-fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localiser: &Localiser) {
+fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer: &Localizer) {
     use fluent_templates::fluent_bundle::FluentValue;
     use std::borrow::Cow;
 
@@ -167,7 +167,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localiser:
     args.insert(Cow::Borrowed("lines"), FluentValue::from(info.lines as i64));
     args.insert(Cow::Borrowed("limit"), FluentValue::from(info.limit as i64));
 
-    let (primary, note, help) = localised_messages(localiser, &args).unwrap_or_else(|error| {
+    let (primary, note, help) = localised_messages(localizer, &args).unwrap_or_else(|error| {
         debug!(
             target: LINT_NAME,
             "missing localisation for `{}`: {error}; using fallback strings",
@@ -188,12 +188,12 @@ fn module_header_span(item_span: Span, ident_span: Span) -> Span {
 }
 
 fn localised_messages(
-    localiser: &Localiser,
+    localizer: &Localizer,
     args: &Arguments<'_>,
 ) -> Result<(String, String, String), I18nError> {
-    let primary = localiser.message_with_args(MESSAGE_KEY, args)?;
-    let note = localiser.attribute_with_args(MESSAGE_KEY, "note", args)?;
-    let help = localiser.attribute_with_args(MESSAGE_KEY, "help", args)?;
+    let primary = localizer.message_with_args(MESSAGE_KEY, args)?;
+    let note = localizer.attribute_with_args(MESSAGE_KEY, "note", args)?;
+    let help = localizer.attribute_with_args(MESSAGE_KEY, "help", args)?;
 
     Ok((primary, note, help))
 }
