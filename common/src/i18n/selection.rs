@@ -1,5 +1,5 @@
 //! Locale resolver wiring explicit overrides, environment variables, and
-//! configuration before falling back to the bundled localizer.
+//! configuration before falling back to the bundled localiser.
 
 use std::fmt;
 
@@ -31,7 +31,7 @@ impl fmt::Display for LocaleSource {
     }
 }
 
-/// Outcome of locale resolution including the effective localizer and provenance.
+/// Outcome of locale resolution including the effective localiser and provenance.
 #[derive(Clone, Debug)]
 pub struct LocaleSelection {
     localizer: Localizer,
