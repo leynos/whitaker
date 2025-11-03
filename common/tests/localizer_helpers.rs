@@ -8,45 +8,17 @@ use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, safe_resolve_message_set,
 };
+use common::test_support::LocaleOverride;
 use logtest::Logger;
-use once_cell::sync::Lazy;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::env;
-use std::ffi::OsString;
 use std::sync::{Mutex, MutexGuard};
 
-static ENVIRONMENT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-
-struct EnvGuard(Option<OsString>);
-
-impl EnvGuard {
-    fn capture() -> Self {
-        Self(env::var_os("DYLINT_LOCALE"))
-    }
-
-    fn restore(&mut self) {
-        if let Some(value) = &self.0 {
-            // Safety: the environment lock ensures no other threads access the
-            // process environment while tests mutate it.
-            unsafe { env::set_var("DYLINT_LOCALE", value) };
-        } else {
-            // Safety: see rationale above for `set_var`.
-            unsafe { env::remove_var("DYLINT_LOCALE") };
-        }
-    }
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        self.restore();
-    }
-}
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
 struct HelperWorld {
-    _env_guard: EnvGuard,
     configuration: RefCell<Option<String>>,
     localizer: RefCell<Option<Localizer>>,
     arguments: RefCell<Arguments<'static>>,
@@ -54,6 +26,7 @@ struct HelperWorld {
     fallback: RefCell<Option<DiagnosticMessageSet>>,
     result: RefCell<Option<DiagnosticMessageSet>>,
     emitter: RecordingEmitter,
+    environment_override: RefCell<Option<LocaleOverride>>,
     _guard: MutexGuard<'static, ()>,
 }
 
@@ -62,10 +35,8 @@ impl HelperWorld {
         let guard = ENVIRONMENT_LOCK
             .lock()
             .unwrap_or_else(|error| panic!("environment lock poisoned: {error}"));
-        let env_guard = EnvGuard::capture();
 
         Self {
-            _env_guard: env_guard,
             configuration: RefCell::new(None),
             localizer: RefCell::new(None),
             arguments: RefCell::new(Arguments::default()),
@@ -73,15 +44,19 @@ impl HelperWorld {
             fallback: RefCell::new(None),
             result: RefCell::new(None),
             emitter: RecordingEmitter::default(),
+            environment_override: RefCell::new(None),
             _guard: guard,
         }
     }
 
     fn set_environment(&self, value: Option<String>) {
-        match value {
-            Some(locale) => unsafe { env::set_var("DYLINT_LOCALE", locale) },
-            None => unsafe { env::remove_var("DYLINT_LOCALE") },
-        }
+        let mut guard = self.environment_override.borrow_mut();
+        guard.take();
+        let override_guard = match value {
+            Some(locale) => LocaleOverride::set(locale.as_str()),
+            None => LocaleOverride::clear(),
+        };
+        *guard = Some(override_guard);
     }
 
     fn set_configuration(&self, locale: Option<String>) {

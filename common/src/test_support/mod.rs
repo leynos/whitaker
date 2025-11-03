@@ -45,6 +45,20 @@ impl LocaleOverride {
         }
         Self { previous }
     }
+
+    /// Removes `DYLINT_LOCALE`, returning a guard that reinstates the prior
+    /// value (if any) when dropped.
+    pub fn clear() -> Self {
+        let previous = std::env::var_os("DYLINT_LOCALE");
+        // SAFETY: Callers must serialise the surrounding test using a
+        // synchronisation primitive such as the `serial_test::serial`
+        // attribute. Clearing the environment therefore cannot race with other
+        // threads.
+        unsafe {
+            std::env::remove_var("DYLINT_LOCALE");
+        }
+        Self { previous }
+    }
 }
 
 impl Drop for LocaleOverride {
