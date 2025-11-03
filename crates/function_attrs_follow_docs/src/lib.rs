@@ -10,6 +10,8 @@ use common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
     MessageResolution, get_localizer_for_lint, safe_resolve_message_set,
 };
+#[cfg(test)]
+use common::i18n::{I18nError, resolve_message_set};
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
@@ -196,6 +198,22 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("function_attrs_follow_docs");
 
 type FunctionAttrsMessages = DiagnosticMessageSet;
+
+#[cfg(test)]
+fn localised_messages(
+    lookup: &impl BundleLookup,
+    kind: FunctionKind,
+    attribute: &str,
+) -> Result<FunctionAttrsMessages, I18nError> {
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(Cow::Borrowed("subject"), FluentValue::from(kind.subject()));
+    args.insert(
+        Cow::Borrowed("attribute"),
+        FluentValue::from(attribute.to_string()),
+    );
+
+    resolve_message_set(lookup, MESSAGE_KEY, &args)
+}
 
 fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessages {
     let primary = format!(
