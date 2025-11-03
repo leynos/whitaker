@@ -59,7 +59,9 @@ impl LocaleOverride {
     /// #[test]
     /// #[serial]
     /// fn clears_then_restores_locale() {
-    ///     std::env::set_var("DYLINT_LOCALE", "cy");
+    ///     unsafe {
+    ///         std::env::set_var("DYLINT_LOCALE", "cy");
+    ///     }
     ///     {
     ///         let _guard = LocaleOverride::clear();
     ///         assert!(std::env::var_os("DYLINT_LOCALE").is_none());
