@@ -8,6 +8,7 @@ use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, safe_resolve_message_set,
 };
+use logtest::Logger;
 use once_cell::sync::Lazy;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -19,9 +20,33 @@ use std::sync::{Mutex, MutexGuard};
 
 static ENVIRONMENT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
+struct EnvGuard(Option<OsString>);
+
+impl EnvGuard {
+    fn capture() -> Self {
+        Self(env::var_os("DYLINT_LOCALE"))
+    }
+
+    fn restore(&mut self) {
+        if let Some(value) = &self.0 {
+            // Safety: the environment lock ensures no other threads access the
+            // process environment while tests mutate it.
+            unsafe { env::set_var("DYLINT_LOCALE", value) };
+        } else {
+            // Safety: see rationale above for `set_var`.
+            unsafe { env::remove_var("DYLINT_LOCALE") };
+        }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        self.restore();
+    }
+}
+
 struct HelperWorld {
-    _guard: MutexGuard<'static, ()>,
-    original_env: Option<OsString>,
+    _env_guard: EnvGuard,
     configuration: RefCell<Option<String>>,
     localizer: RefCell<Option<Localizer>>,
     arguments: RefCell<Arguments<'static>>,
@@ -29,6 +54,7 @@ struct HelperWorld {
     fallback: RefCell<Option<DiagnosticMessageSet>>,
     result: RefCell<Option<DiagnosticMessageSet>>,
     emitter: RecordingEmitter,
+    _guard: MutexGuard<'static, ()>,
 }
 
 impl HelperWorld {
@@ -36,11 +62,10 @@ impl HelperWorld {
         let guard = ENVIRONMENT_LOCK
             .lock()
             .unwrap_or_else(|error| panic!("environment lock poisoned: {error}"));
-        let original_env = env::var_os("DYLINT_LOCALE");
+        let env_guard = EnvGuard::capture();
 
         Self {
-            _guard: guard,
-            original_env,
+            _env_guard: env_guard,
             configuration: RefCell::new(None),
             localizer: RefCell::new(None),
             arguments: RefCell::new(Arguments::default()),
@@ -48,13 +73,14 @@ impl HelperWorld {
             fallback: RefCell::new(None),
             result: RefCell::new(None),
             emitter: RecordingEmitter::default(),
+            _guard: guard,
         }
     }
 
     fn set_environment(&self, value: Option<String>) {
         match value {
-            Some(locale) => env::set_var("DYLINT_LOCALE", locale),
-            None => env::remove_var("DYLINT_LOCALE"),
+            Some(locale) => unsafe { env::set_var("DYLINT_LOCALE", locale) },
+            None => unsafe { env::remove_var("DYLINT_LOCALE") },
         }
     }
 
@@ -107,6 +133,10 @@ impl HelperWorld {
             .clone()
     }
 
+    fn clear_arguments(&self) {
+        *self.arguments.borrow_mut() = Arguments::default();
+    }
+
     fn prepare_doc_arguments(&self) {
         let mut args: Arguments<'static> = Arguments::default();
         args.insert(Cow::Borrowed("subject"), FluentValue::from("functions"));
@@ -154,16 +184,6 @@ impl HelperWorld {
 
     fn recorded_messages(&self) -> Vec<String> {
         self.emitter.recorded_messages()
-    }
-}
-
-impl Drop for HelperWorld {
-    fn drop(&mut self) {
-        if let Some(value) = &self.original_env {
-            env::set_var("DYLINT_LOCALE", value);
-        } else {
-            env::remove_var("DYLINT_LOCALE");
-        }
     }
 }
 
@@ -223,6 +243,11 @@ fn given_doc_arguments(world: &HelperWorld) {
     world.prepare_doc_arguments();
 }
 
+#[given("I do not prepare arguments for the doc attribute diagnostic")]
+fn given_no_doc_arguments(world: &HelperWorld) {
+    world.clear_arguments();
+}
+
 #[when("I resolve the diagnostic message set")]
 fn when_resolve_messages(world: &HelperWorld) {
     world.resolve_messages();
@@ -270,4 +295,54 @@ fn scenario_localisation_fallback(world: HelperWorld) {
 #[scenario("tests/features/localizer_helpers.feature", index = 3)]
 fn scenario_localisation_success(world: HelperWorld) {
     let _ = world;
+}
+
+#[scenario("tests/features/localizer_helpers.feature", index = 4)]
+fn scenario_interpolation_failure(world: HelperWorld) {
+    let _ = world;
+}
+
+#[test]
+fn invalid_locale_warns_and_falls_back() {
+    let mut logger = Logger::start();
+    let world = HelperWorld::new();
+    world.set_environment(Some(String::from("xx-XX")));
+    world.set_configuration(None);
+    world.request_localizer("function_attrs_follow_docs");
+    world.assert_locale("en-GB");
+
+    let mut warned = false;
+    while let Some(record) = logger.pop() {
+        if record
+            .args()
+            .to_string()
+            .contains("unsupported DYLINT_LOCALE `xx-XX`")
+        {
+            warned = true;
+            break;
+        }
+    }
+
+    assert!(warned, "expected unsupported locale warning to be logged");
+}
+
+#[test]
+fn repeated_failures_record_all_bugs() {
+    let world = HelperWorld::new();
+    world.set_environment(None);
+    world.set_configuration(None);
+    world.request_localizer("no_expect_outside_tests");
+    world.set_fallback_messages();
+    world.set_message_key(String::from("missing-key"));
+
+    world.resolve_messages();
+    world.resolve_messages();
+
+    let recorded = world.recorded_messages();
+    assert_eq!(recorded.len(), 2);
+    assert!(
+        recorded
+            .into_iter()
+            .all(|message| message.contains("missing-key"))
+    );
 }

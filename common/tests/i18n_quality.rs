@@ -4,8 +4,7 @@
 //! text remains complete, and exercise language-specific plural forms so we can
 //! catch regressions before they reach users.
 
-use common::i18n::Localizer;
-use fluent_bundle::FluentValue;
+use common::i18n::{FluentValue, Localizer};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rstest::rstest;

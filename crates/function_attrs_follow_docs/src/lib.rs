@@ -161,7 +161,6 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
         FluentValue::from(attribute.clone()),
     );
 
-    let fallback_attribute = attribute;
     let resolution = MessageResolution {
         lint_name: "function_attrs_follow_docs",
         key: MESSAGE_KEY,
@@ -178,7 +177,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
         },
         {
             let kind = context.kind;
-            move || fallback_messages(kind, fallback_attribute.as_str())
+            move || fallback_messages(kind, attribute.as_str())
         },
     );
 

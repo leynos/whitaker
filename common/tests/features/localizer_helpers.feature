@@ -33,3 +33,14 @@ Feature: Localiser helpers
     When I resolve the diagnostic message set
     Then the resolved primary message contains "Doc comments"
     And no delayed bug is recorded
+
+  Scenario: Message interpolation failures fall back deterministically
+    Given DYLINT_LOCALE is not set
+    And no configuration locale is provided
+    And I have requested the localizer for "function_attrs_follow_docs"
+    And fallback messages are defined
+    And I do not prepare arguments for the doc attribute diagnostic
+    And a message key "function_attrs_follow_docs" is requested
+    When I resolve the diagnostic message set
+    Then the fallback primary message contains "Fallback primary"
+    And a delayed bug is recorded mentioning "function_attrs_follow_docs"

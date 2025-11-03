@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use fluent_bundle::FluentValue;
+use super::FluentValue;
 use rstest::rstest;
 
 use super::{Arguments, FALLBACK_LOCALE, Localizer, available_locales, supports_locale};
