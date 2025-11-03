@@ -48,6 +48,28 @@ impl LocaleOverride {
 
     /// Removes `DYLINT_LOCALE`, returning a guard that reinstates the prior
     /// value (if any) when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use common::test_support::LocaleOverride;
+    /// use serial_test::serial;
+    /// use std::ffi::OsString;
+    ///
+    /// #[test]
+    /// #[serial]
+    /// fn clears_then_restores_locale() {
+    ///     std::env::set_var("DYLINT_LOCALE", "cy");
+    ///     {
+    ///         let _guard = LocaleOverride::clear();
+    ///         assert!(std::env::var_os("DYLINT_LOCALE").is_none());
+    ///     }
+    ///     assert_eq!(
+    ///         std::env::var_os("DYLINT_LOCALE"),
+    ///         Some(OsString::from("cy"))
+    ///     );
+    /// }
+    /// ```
     pub fn clear() -> Self {
         let previous = std::env::var_os("DYLINT_LOCALE");
         // SAFETY: Callers must serialise the surrounding test using a
