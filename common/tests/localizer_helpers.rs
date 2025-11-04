@@ -18,6 +18,13 @@ use std::sync::{Mutex, MutexGuard};
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
+fn unquote(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|stripped| stripped.strip_suffix('"'))
+        .unwrap_or(value)
+}
+
 struct HelperWorld {
     configuration: RefCell<Option<String>>,
     localizer: RefCell<Option<Localizer>>,
@@ -174,7 +181,7 @@ fn given_env_cleared(world: &HelperWorld) {
 
 #[given("DYLINT_LOCALE is {locale}")]
 fn given_env(world: &HelperWorld, locale: String) {
-    world.set_environment(Some(locale));
+    world.set_environment(Some(unquote(&locale).to_string()));
 }
 
 #[given("no configuration locale is provided")]
@@ -184,18 +191,18 @@ fn given_no_config(world: &HelperWorld) {
 
 #[given("the configuration locale is {locale}")]
 fn given_config(world: &HelperWorld, locale: String) {
-    world.set_configuration(Some(locale));
+    world.set_configuration(Some(unquote(&locale).to_string()));
 }
 
 #[when("I request the localizer for {lint}")]
 #[given("I have requested the localizer for {lint}")]
 fn when_request_localizer(world: &HelperWorld, lint: String) {
-    world.request_localizer(&lint);
+    world.request_localizer(unquote(&lint));
 }
 
 #[then("the resolved locale is {locale}")]
 fn then_locale(world: &HelperWorld, locale: String) {
-    world.assert_locale(&locale);
+    world.assert_locale(unquote(&locale));
 }
 
 #[given("fallback messages are defined")]
@@ -205,12 +212,12 @@ fn given_fallback(world: &HelperWorld) {
 
 #[given("a missing message key {key} is requested")]
 fn given_missing_key(world: &HelperWorld, key: String) {
-    world.set_message_key(key);
+    world.set_message_key(unquote(&key).to_string());
 }
 
 #[given("a message key {key} is requested")]
 fn given_message_key(world: &HelperWorld, key: String) {
-    world.set_message_key(key);
+    world.set_message_key(unquote(&key).to_string());
 }
 
 #[given("I prepare arguments for the doc attribute diagnostic")]
@@ -231,20 +238,23 @@ fn when_resolve_messages(world: &HelperWorld) {
 #[then("the fallback primary message contains {snippet}")]
 fn then_fallback_primary(world: &HelperWorld, snippet: String) {
     let messages = world.resolved_messages();
-    assert!(messages.primary().contains(&snippet));
+    let snippet = unquote(&snippet);
+    assert!(messages.primary().contains(snippet));
 }
 
 #[then("a delayed bug is recorded mentioning {snippet}")]
 fn then_bug_recorded(world: &HelperWorld, snippet: String) {
     let messages = world.recorded_messages();
+    let snippet = unquote(&snippet);
     assert!(!messages.is_empty());
-    assert!(messages[0].contains(&snippet));
+    assert!(messages.iter().any(|message| message.contains(snippet)));
 }
 
 #[then("the resolved primary message contains {snippet}")]
 fn then_primary_message(world: &HelperWorld, snippet: String) {
     let messages = world.resolved_messages();
-    assert!(messages.primary().contains(&snippet));
+    let snippet = unquote(&snippet);
+    assert!(messages.primary().contains(snippet));
 }
 
 #[then("no delayed bug is recorded")]

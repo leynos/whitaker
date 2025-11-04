@@ -1126,6 +1126,7 @@ dependencies = [
 name = "module_max_lines"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "common",
  "dylint_linting",
  "dylint_testing",
@@ -1138,6 +1139,7 @@ dependencies = [
  "rustc_lint",
  "rustc_session",
  "rustc_span",
+ "tempfile",
  "whitaker",
 ]
 

@@ -219,6 +219,18 @@ Utilities shared by lints:
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
   protects the fallback code paths from regression.
+- Add a `ftl_bundles_parse_successfully` integration test that iterates over
+  every `.ftl` file with `FluentResource::try_new`. The test collects all
+  bundles via `support::i18n_ftl::file_pairs`, surfaces parser errors alongside
+  duplicate message identifiers, and panics with actionable file paths so
+  malformed resources fail fast.
+- Pair the parser check with a BDD module (`ftl_smoke_behaviour`) and a
+  matching `i18n_ftl_smoke.feature` file. The scenarios assert discovery
+  behaviour, cover representative happy/unhappy parse cases, and keep the smoke
+  fixtures executable via `rstest-bdd`.
+- Normalise Unicode isolation marks (`\u{2068}`/`\u{2069}`) inside behaviour
+  assertions so tests remain readable while still verifying the formatted
+  output that Fluent now emits for bidi safety.
 
 ## 3) Seven core lints (specs + sketches)
 

@@ -66,7 +66,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             _ => return,
         };
 
-        let span = module_span(module, item.span);
+        let span = module_span(cx, item, module);
         let Some(lines) = count_lines(cx.sess().source_map(), span) else {
             debug!(
                 target: LINT_NAME,
@@ -75,7 +75,6 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             );
             return;
         };
-
         debug!(
             target: LINT_NAME,
             "module `{}` spans {lines} lines (limit {limit}, from_macro: {from_macro})",
@@ -124,10 +123,22 @@ fn load_configuration() -> usize {
     }
 }
 
-fn module_span(module: &hir::Mod<'_>, fallback: Span) -> Span {
-    let span = module.spans.inner_span;
+fn module_span<'tcx>(
+    cx: &LateContext<'tcx>,
+    item: &'tcx hir::Item<'tcx>,
+    module: &hir::Mod<'tcx>,
+) -> Span {
+    let inner = module.spans.inner_span;
+    if !inner.is_dummy() {
+        return inner;
+    }
 
-    if span.is_dummy() { fallback } else { span }
+    let def_span = cx.tcx.def_span(item.owner_id.to_def_id());
+    if !def_span.is_dummy() {
+        return def_span;
+    }
+
+    item.span
 }
 
 fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
@@ -135,7 +146,14 @@ fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
         return None;
     };
 
-    Some(info.lines.len())
+    let Some(first) = info.lines.first() else {
+        return None;
+    };
+    let Some(last) = info.lines.last() else {
+        return None;
+    };
+
+    Some(last.line_index.saturating_sub(first.line_index) + 1)
 }
 
 /// Diagnostic information for a module that exceeds line limits.
@@ -322,32 +340,136 @@ mod behaviour {
 
 #[cfg(test)]
 mod ui {
+    use camino::Utf8Path;
     use dylint_testing::ui::Test;
+    use std::fs;
+    use std::io;
+    use std::path::{Path, PathBuf};
+    use tempfile::tempdir;
 
     #[test]
     fn ui() {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "ui";
         whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let mut test = Test::src_base(crate_name, dir);
-                if let Ok(contents) = std::fs::read_to_string(dir.join("dylint.toml")) {
-                    test.dylint_toml(&contents);
-                }
-                test.run();
-            }))
-            .map_err(|payload| match payload.downcast::<String>() {
-                Ok(message) => *message,
-                Err(payload) => match payload.downcast::<&'static str>() {
-                    Ok(message) => (*message).to_owned(),
-                    Err(_) => String::from("dylint UI tests panicked without a message"),
-                },
-            })
+            run_fixtures(crate_name, dir)
         })
         .unwrap_or_else(|error| {
             panic!(
                 "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
             )
         });
+    }
+
+    fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
+        let mut fixtures = discover_fixtures(directory).map_err(|error| error.to_string())?;
+        fixtures.sort();
+
+        for source in fixtures {
+            run_fixture(crate_name, directory, &source)?;
+        }
+
+        Ok(())
+    }
+
+    fn discover_fixtures(directory: &Utf8Path) -> io::Result<Vec<PathBuf>> {
+        let mut fixtures = Vec::new();
+
+        for entry in fs::read_dir(directory.as_std_path())? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                let path = entry.path();
+                if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                    fixtures.push(path);
+                }
+            }
+        }
+
+        Ok(fixtures)
+    }
+
+    fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<(), String> {
+        let fixture_name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("fixture");
+        let tempdir = tempdir().map_err(|error| error.to_string())?;
+        copy_fixture(directory, source, tempdir.path())
+            .map_err(|error| format!("failed to prepare {fixture_name}: {error}"))?;
+
+        let mut test = Test::src_base(crate_name, tempdir.path());
+        if let Some(config) = read_fixture_config(source).map_err(|error| error.to_string())? {
+            test.dylint_toml(config);
+        }
+
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| test.run())).map_err(|payload| {
+            match payload.downcast::<String>() {
+                Ok(message) => format!("{fixture_name}: {message}"),
+                Err(payload) => match payload.downcast::<&'static str>() {
+                    Ok(message) => format!("{fixture_name}: {message}"),
+                    Err(_) => format!("{fixture_name}: dylint UI tests panicked without a message"),
+                },
+            }
+        })
+    }
+
+    fn read_fixture_config(source: &Path) -> io::Result<Option<String>> {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "fixture missing name"))?;
+        let config_path = source.with_file_name(format!("{stem}.dylint.toml"));
+
+        if config_path.exists() {
+            fs::read_to_string(config_path).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn copy_fixture(
+        directory: &Utf8Path,
+        source: &Path,
+        destination_root: &Path,
+    ) -> io::Result<()> {
+        let file_name = source.file_name().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "fixture missing file name")
+        })?;
+        let destination = destination_root.join(file_name);
+        fs::copy(source, &destination)?;
+
+        let stderr_path = source.with_extension("stderr");
+        if stderr_path.exists() {
+            let stderr_name = stderr_path.file_name().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "stderr missing name")
+            })?;
+            fs::copy(&stderr_path, destination_root.join(stderr_name))?;
+        }
+
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "fixture missing name"))?;
+        let support_dir = directory.join(stem);
+        if support_dir.exists() {
+            copy_directory(support_dir.as_std_path(), &destination_root.join(stem))?;
+        }
+
+        Ok(())
+    }
+
+    fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let path = entry.path();
+            let target = destination.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_directory(&path, &target)?;
+            } else {
+                fs::copy(&path, &target)?;
+            }
+        }
+        Ok(())
     }
 }

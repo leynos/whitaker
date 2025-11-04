@@ -18,7 +18,9 @@ whitaker = { path = "../../" }
 fluent-templates = { workspace = true }
 
 [dev-dependencies]
+camino = { workspace = true }
 rstest = { version = "0.26.1" }
 rstest-bdd = { version = "0.1.0-alpha4" }
 rstest-bdd-macros = { version = "0.1.0-alpha4" }
 dylint_testing = { workspace = true }
+tempfile = "3.14.0"
