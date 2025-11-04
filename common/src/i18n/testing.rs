@@ -1,5 +1,7 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 
+pub use super::helpers::{MessageResolution, safe_resolve_message_set};
 use super::{Arguments, AttrKey, BundleLookup, I18nError, MessageKey};
 
 /// Test double that always returns `MissingMessage` errors for message lookups.
@@ -50,5 +52,24 @@ impl BundleLookup for FailingLookup {
             key: self.message_key.clone().into_owned(),
             locale: self.locale.clone().into_owned(),
         })
+    }
+}
+
+/// Test emitter recording delayed bug invocations for assertions.
+#[derive(Debug, Default)]
+pub struct RecordingEmitter {
+    messages: RefCell<Vec<String>>,
+}
+
+impl RecordingEmitter {
+    /// Access the recorded messages emitted during localisation failures.
+    #[must_use]
+    pub fn recorded_messages(&self) -> Vec<String> {
+        self.messages.borrow().clone()
+    }
+
+    /// Record a delayed bug message for later assertions.
+    pub fn record(&self, message: String) {
+        self.messages.borrow_mut().push(message);
     }
 }

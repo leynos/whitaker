@@ -3,9 +3,11 @@ use crate::context::ContextSummary;
 #[cfg(test)]
 use common::i18n::AttrKey;
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localizer, MessageKey,
-    resolve_message_set,
+    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
+    safe_resolve_message_set,
 };
+#[cfg(test)]
+use common::i18n::{BundleLookup, I18nError, resolve_message_set};
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
 use rustc_middle::ty;
@@ -145,14 +147,33 @@ pub(crate) fn emit_diagnostic(
 
     let category = ReceiverCategory::classify_ty(cx, receiver_ty);
 
-    let messages = localised_messages(context.localizer, &receiver_label, &call_context, category)
-        .unwrap_or_else(|error| {
-            cx.sess().delay_span_bug(
-                expr.span,
-                format!("missing localisation for `no_expect_outside_tests`: {error}"),
-            );
-            fallback_messages(&receiver_label, &call_context, category)
-        });
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(
+        Cow::Borrowed("receiver"),
+        FluentValue::from(receiver_label.as_ref().to_string()),
+    );
+    args.insert(
+        Cow::Borrowed("context"),
+        FluentValue::from(call_context.as_ref().to_string()),
+    );
+    args.insert(
+        Cow::Borrowed("handling"),
+        FluentValue::from(category.as_key().to_string()),
+    );
+
+    let fallback_receiver = receiver_label.clone();
+    let fallback_context = call_context.clone();
+    let resolution = MessageResolution {
+        lint_name: "no_expect_outside_tests",
+        key: MESSAGE_KEY,
+        args: &args,
+    };
+    let messages = safe_resolve_message_set(
+        context.localizer,
+        resolution,
+        |message| cx.tcx.sess.dcx().span_delayed_bug(expr.span, message),
+        move || fallback_messages(&fallback_receiver, &fallback_context, category),
+    );
 
     cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, |lint| {
         let NoExpectMessages {
@@ -171,6 +192,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_expect_outside_test
 
 type NoExpectMessages = DiagnosticMessageSet;
 
+#[cfg(test)]
 fn localised_messages(
     lookup: &impl BundleLookup,
     receiver: &ReceiverLabel,

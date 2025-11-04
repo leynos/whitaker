@@ -4,8 +4,7 @@
 //! missing message handling to ensure lint crates can rely on predictable
 //! diagnostics across locales.
 
-use common::i18n::{Arguments, I18nError, Localizer};
-use fluent_bundle::FluentValue;
+use common::i18n::{Arguments, FluentValue, I18nError, Localizer};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;

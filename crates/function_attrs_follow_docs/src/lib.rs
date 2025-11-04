@@ -7,9 +7,11 @@
 #![feature(rustc_private)]
 
 use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, I18nError, Localizer, MessageKey,
-    resolve_localizer, resolve_message_set,
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
+    MessageResolution, get_localizer_for_lint, safe_resolve_message_set,
 };
+#[cfg(test)]
+use common::i18n::{I18nError, resolve_message_set};
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
@@ -40,16 +42,9 @@ dylint_linting::impl_late_lint! {
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        let environment_locale = cx
-            .tcx
-            .sess
-            .env_var_os("DYLINT_LOCALE".as_ref())
-            .and_then(|value| value.into_string().ok());
         let shared_config = SharedConfig::load();
-        let selection = resolve_localizer(None, environment_locale, shared_config.locale());
-
-        selection.log_outcome("function_attrs_follow_docs");
-        self.localizer = selection.into_localizer();
+        self.localizer =
+            get_localizer_for_lint("function_attrs_follow_docs", shared_config.locale());
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -156,14 +151,35 @@ struct DiagnosticContext {
 
 fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: &Localizer) {
     let attribute = attribute_label(cx, context.offending_span, localizer);
-    let messages =
-        localised_messages(localizer, context.kind, attribute.as_str()).unwrap_or_else(|error| {
-            cx.sess().delay_span_bug(
-                context.doc_span,
-                format!("missing localisation for `function_attrs_follow_docs`: {error}"),
-            );
-            fallback_messages(context.kind, attribute.as_str())
-        });
+    let mut args: Arguments<'static> = Arguments::default();
+    args.insert(
+        Cow::Borrowed("subject"),
+        FluentValue::from(context.kind.subject()),
+    );
+    args.insert(
+        Cow::Borrowed("attribute"),
+        FluentValue::from(attribute.clone()),
+    );
+
+    let resolution = MessageResolution {
+        lint_name: "function_attrs_follow_docs",
+        key: MESSAGE_KEY,
+        args: &args,
+    };
+    let messages = safe_resolve_message_set(
+        localizer,
+        resolution,
+        |message| {
+            cx.tcx
+                .sess
+                .dcx()
+                .span_delayed_bug(context.doc_span, message)
+        },
+        {
+            let kind = context.kind;
+            move || fallback_messages(kind, attribute.as_str())
+        },
+    );
 
     cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
         let FunctionAttrsMessages {
@@ -182,6 +198,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("function_attrs_follow_
 
 type FunctionAttrsMessages = DiagnosticMessageSet;
 
+#[cfg(test)]
 fn localised_messages(
     lookup: &impl BundleLookup,
     kind: FunctionKind,

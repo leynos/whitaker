@@ -202,7 +202,7 @@ mod tests {
             .help("Help")
             .suggestion(Suggestion::new(
                 "Fix",
-                "fix()".into(),
+                "fix()",
                 Applicability::MachineApplicable,
             ))
             .build();

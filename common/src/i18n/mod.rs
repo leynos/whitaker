@@ -34,6 +34,7 @@ pub const FALLBACK_LOCALE: &str = FALLBACK_LITERAL;
 pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 
 mod diagnostics;
+mod helpers;
 mod loader;
 mod locales;
 mod selection;
@@ -44,6 +45,7 @@ pub mod testing;
 pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
 };
+pub use helpers::{MessageResolution, get_localizer_for_lint, safe_resolve_message_set};
 pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};
 pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
