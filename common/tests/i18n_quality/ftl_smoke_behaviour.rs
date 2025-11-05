@@ -60,26 +60,33 @@ struct ParsingWorld {
     outcome: RefCell<Option<Result<(), usize>>>,
 }
 
+fn should_skip_line(line: &str) -> bool {
+    matches!(line.as_bytes().first(), Some(b' ' | b'\t'))
+}
+
+fn extract_identifier(line: &str) -> Option<String> {
+    if should_skip_line(line) {
+        return None;
+    }
+    let trimmed = line.trim_start();
+    if trimmed.starts_with('#') || trimmed.is_empty() {
+        return None;
+    }
+    let (identifier, _) = trimmed.split_once('=')?;
+    let id = identifier.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some(id.to_string())
+}
+
 fn duplicate_message_count(source: &str) -> usize {
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut duplicates = 0;
 
-    for line in source.lines() {
-        if line.starts_with(' ') || line.starts_with('\t') {
-            continue;
-        }
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') || trimmed.is_empty() {
-            continue;
-        }
-        if let Some((identifier, _)) = trimmed.split_once('=') {
-            let id = identifier.trim();
-            if id.is_empty() {
-                continue;
-            }
-            if !seen.insert(id.to_string()) {
-                duplicates += 1;
-            }
+    for identifier in source.lines().filter_map(extract_identifier) {
+        if !seen.insert(identifier) {
+            duplicates += 1;
         }
     }
 
