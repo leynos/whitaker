@@ -7,6 +7,7 @@ CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
+PUBLISH_CHECK_FLAGS ?= --access public # Flags passed to Lading publish; override via env or caller.
 LADING ?= uvx --from git+https://github.com/leynos/lading lading
 
 build: target/debug/$(APP) ## Build debug binary
@@ -42,7 +43,7 @@ nixie:
 	# environment variable control for this option
 	nixie --no-sandbox
 
-publish-check: ## Run Lading publish pre-flight checks
+publish-check: ## Run Lading publish pre-flight checks (override flags via PUBLISH_CHECK_FLAGS)
 	$(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
 
 help: ## Show available targets
