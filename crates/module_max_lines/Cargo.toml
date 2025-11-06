@@ -24,3 +24,5 @@ rstest-bdd = { version = "0.1.0-alpha4" }
 rstest-bdd-macros = { version = "0.1.0-alpha4" }
 dylint_testing = { workspace = true }
 tempfile = "3.14.0"
+glob = "0.3"
+fs_extra = "1.2"

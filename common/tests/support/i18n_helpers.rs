@@ -57,3 +57,86 @@ pub fn default_arguments() -> Arguments<'static> {
     );
     args
 }
+
+/// Report whether a Fluent source line should be skipped when scanning for new
+/// message declarations. Lines that begin with whitespace always belong to the
+/// previous declaration (continuations or attributes) so they are ignored.
+///
+/// # Examples
+/// ```ignore
+/// assert!(should_skip_line(" attribute = value"));
+/// assert!(!should_skip_line("identifier = value"));
+/// ```
+pub fn should_skip_line(line: &str) -> bool {
+    matches!(line.as_bytes().first(), Some(b' ' | b'\t'))
+}
+
+/// Extract a valid Fluent identifier from a source line.
+///
+/// Returns `None` for comments, blank lines, whitespace-prefixed attribute
+/// lines, and malformed declarations that lack a non-empty identifier before
+/// the first `=` sign.
+///
+/// # Examples
+/// ```ignore
+/// assert_eq!(extract_identifier("message = Value"), Some("message".into()));
+/// assert_eq!(extract_identifier("  continuation"), None);
+/// assert_eq!(extract_identifier("# comment"), None);
+/// ```
+pub fn extract_identifier(line: &str) -> Option<String> {
+    if should_skip_line(line) {
+        return None;
+    }
+    let trimmed = line.trim_start();
+    if trimmed.starts_with('#') || trimmed.is_empty() {
+        return None;
+    }
+    let (identifier, _) = trimmed.split_once('=')?;
+    let id = identifier.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_skip_line_detects_leading_whitespace() {
+        assert!(should_skip_line(" value"));
+        assert!(should_skip_line("\tvalue"));
+        assert!(!should_skip_line("value"));
+        assert!(!should_skip_line(""));
+    }
+
+    #[test]
+    fn extract_identifier_handles_basic_messages() {
+        assert_eq!(
+            extract_identifier("message-id = Value"),
+            Some("message-id".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_identifier_rejects_whitespace_and_comments() {
+        assert!(extract_identifier(" message = Value").is_none());
+        assert!(extract_identifier("# comment").is_none());
+        assert!(extract_identifier("").is_none());
+    }
+
+    #[test]
+    fn extract_identifier_handles_multiple_equals() {
+        assert_eq!(
+            extract_identifier("message = part = extra"),
+            Some("message".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_identifier_rejects_missing_names() {
+        assert!(extract_identifier("= value").is_none());
+        assert!(extract_identifier("value without equals").is_none());
+    }
+}

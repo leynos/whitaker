@@ -5,6 +5,10 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+#[path = "../support/mod.rs"]
+mod support;
+use support::{extract_identifier, should_skip_line};
+
 #[derive(Default)]
 struct DiscoveryWorld {
     paths: RefCell<Vec<PathBuf>>,
@@ -58,26 +62,6 @@ fn then_contains(discovery_world: &DiscoveryWorld, path: String) {
 struct ParsingWorld {
     content: RefCell<Option<String>>,
     outcome: RefCell<Option<Result<(), usize>>>,
-}
-
-fn should_skip_line(line: &str) -> bool {
-    matches!(line.as_bytes().first(), Some(b' ' | b'\t'))
-}
-
-fn extract_identifier(line: &str) -> Option<String> {
-    if should_skip_line(line) {
-        return None;
-    }
-    let trimmed = line.trim_start();
-    if trimmed.starts_with('#') || trimmed.is_empty() {
-        return None;
-    }
-    let (identifier, _) = trimmed.split_once('=')?;
-    let id = identifier.trim();
-    if id.is_empty() {
-        return None;
-    }
-    Some(id.to_string())
 }
 
 fn duplicate_message_count(source: &str) -> usize {
