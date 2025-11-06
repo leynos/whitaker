@@ -423,7 +423,7 @@ mod ui {
     fn prepare_fixture(directory: &Utf8Path, source: &Path) -> io::Result<FixtureEnvironment> {
         let tempdir = tempdir()?;
         copy_fixture(directory, source, tempdir.path())?;
-        let config = read_fixture_config(source)?;
+        let config = resolve_fixture_config(directory, source)?;
         Ok(FixtureEnvironment {
             workdir: tempdir.path().to_path_buf(),
             tempdir,
@@ -466,6 +466,23 @@ mod ui {
             fs::read_to_string(config_path).map(Some)
         } else {
             Ok(None)
+        }
+    }
+
+    fn read_directory_config(directory: &Utf8Path) -> io::Result<Option<String>> {
+        let path = directory.as_std_path().join("dylint.toml");
+        if path.exists() {
+            fs::read_to_string(path).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn resolve_fixture_config(directory: &Utf8Path, source: &Path) -> io::Result<Option<String>> {
+        if let Some(config) = read_fixture_config(source)? {
+            Ok(Some(config))
+        } else {
+            read_directory_config(directory)
         }
     }
 
@@ -560,6 +577,45 @@ mod ui {
 
             let contents = read_fixture_config(&fixture).unwrap();
             assert_eq!(contents.as_deref(), Some("key = 1"));
+        }
+
+        #[test]
+        fn read_directory_config_loads_global_file() {
+            let dir = tempdir().unwrap();
+            let directory = utf8_path(dir.path());
+            fs::write(directory.as_std_path().join("dylint.toml"), "max_lines = 5").unwrap();
+
+            let contents = read_directory_config(&directory).unwrap();
+            assert_eq!(contents.as_deref(), Some("max_lines = 5"));
+        }
+
+        #[test]
+        fn resolve_fixture_config_prefers_fixture_specific_file() {
+            let dir = tempdir().unwrap();
+            let directory = utf8_path(dir.path());
+            let fixture = directory.as_std_path().join("case.rs");
+            fs::write(&fixture, "").unwrap();
+            fs::write(
+                directory.as_std_path().join("case.dylint.toml"),
+                "fixture = true",
+            )
+            .unwrap();
+            fs::write(directory.as_std_path().join("dylint.toml"), "global = true").unwrap();
+
+            let contents = resolve_fixture_config(&directory, &fixture).unwrap();
+            assert_eq!(contents.as_deref(), Some("fixture = true"));
+        }
+
+        #[test]
+        fn resolve_fixture_config_falls_back_to_directory_file() {
+            let dir = tempdir().unwrap();
+            let directory = utf8_path(dir.path());
+            let fixture = directory.as_std_path().join("case.rs");
+            fs::write(&fixture, "").unwrap();
+            fs::write(directory.as_std_path().join("dylint.toml"), "max_lines = 5").unwrap();
+
+            let contents = resolve_fixture_config(&directory, &fixture).unwrap();
+            assert_eq!(contents.as_deref(), Some("max_lines = 5"));
         }
 
         #[test]
