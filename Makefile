@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check
 
 APP ?= whitaker
 CARGO ?= cargo
@@ -7,6 +7,8 @@ CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
+PUBLISH_CHECK_FLAGS ?= --access public # Flags passed to Lading publish; override via env or caller.
+LADING ?= uvx --from git+https://github.com/leynos/lading lading
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -40,6 +42,9 @@ nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
 	nixie --no-sandbox
+
+publish-check: ## Run Lading publish pre-flight checks (override flags via PUBLISH_CHECK_FLAGS)
+	$(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
