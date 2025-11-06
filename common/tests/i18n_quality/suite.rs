@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 mod support;
 use support::{
     FtlEntry, LocaleCode, LocaleContext, MessageId, file_pairs, parse_ftl, secondary_locales,
+    strip_isolation_marks,
 };
 
 static PLACEABLE_RE: Lazy<Regex> =
@@ -59,23 +60,6 @@ fn parse_ftl_file(path: &Path) -> Result<(), String> {
     FluentResource::try_new(content)
         .map(|_| ())
         .map_err(|(_, errors)| format!("Failed to parse FTL file {}: {errors:?}", path.display()))
-}
-
-const UNICODE_ISOLATION_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
-
-fn strip_isolation_marks<'a>(text: &'a str) -> Cow<'a, str> {
-    if text
-        .chars()
-        .any(|character| UNICODE_ISOLATION_MARKS.contains(&character))
-    {
-        Cow::Owned(
-            text.chars()
-                .filter(|character| !UNICODE_ISOLATION_MARKS.contains(character))
-                .collect(),
-        )
-    } else {
-        Cow::Borrowed(text)
-    }
 }
 
 fn validate_message_placeables(

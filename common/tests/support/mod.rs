@@ -3,5 +3,7 @@
 //! localisation behaviour and quality tests.
 
 pub mod i18n_ftl;
+pub mod i18n_helpers;
 
 pub use i18n_ftl::*;
+pub use i18n_helpers::*;

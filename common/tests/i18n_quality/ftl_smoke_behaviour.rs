@@ -5,6 +5,10 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+#[path = "../support/mod.rs"]
+mod support;
+use support::{extract_identifier, should_skip_line};
+
 #[derive(Default)]
 struct DiscoveryWorld {
     paths: RefCell<Vec<PathBuf>>,
@@ -64,22 +68,9 @@ fn duplicate_message_count(source: &str) -> usize {
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut duplicates = 0;
 
-    for line in source.lines() {
-        if line.starts_with(' ') || line.starts_with('\t') {
-            continue;
-        }
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') || trimmed.is_empty() {
-            continue;
-        }
-        if let Some((identifier, _)) = trimmed.split_once('=') {
-            let id = identifier.trim();
-            if id.is_empty() {
-                continue;
-            }
-            if !seen.insert(id.to_string()) {
-                duplicates += 1;
-            }
+    for identifier in source.lines().filter_map(extract_identifier) {
+        if !seen.insert(identifier) {
+            duplicates += 1;
         }
     }
 

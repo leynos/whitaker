@@ -11,25 +11,9 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-// Fluent inserts First Strong and Pop Directional Isolate runes when formatting
-// arguments. Behaviour tests strip them so snippet assertions stay readable
-// while still verifying the human-facing content.
-const UNICODE_ISOLATION_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
-
-fn strip_isolation_marks<'a>(text: &'a str) -> Cow<'a, str> {
-    if text
-        .chars()
-        .any(|character| UNICODE_ISOLATION_MARKS.contains(&character))
-    {
-        Cow::Owned(
-            text.chars()
-                .filter(|character| !UNICODE_ISOLATION_MARKS.contains(character))
-                .collect(),
-        )
-    } else {
-        Cow::Borrowed(text)
-    }
-}
+#[path = "support/mod.rs"]
+mod support;
+use support::{default_arguments, strip_isolation_marks};
 
 #[derive(Clone, Debug, Default)]
 struct I18nFixture {
@@ -62,28 +46,6 @@ impl I18nFixture {
             .cloned()
             .unwrap_or_else(|| panic!("lookup should have been performed"))
     }
-}
-
-fn default_arguments() -> Arguments<'static> {
-    let mut args: Arguments<'static> = HashMap::new();
-    args.insert(Cow::Borrowed("subject"), FluentValue::from("functions"));
-    args.insert(
-        Cow::Borrowed("attribute"),
-        FluentValue::from("#[warn(example)]"),
-    );
-    args.insert(Cow::Borrowed("lint"), FluentValue::from("module_max_lines"));
-    args.insert(
-        Cow::Borrowed("module"),
-        FluentValue::from("module_max_lines"),
-    );
-    args.insert(Cow::Borrowed("lines"), FluentValue::from(42_i64));
-    args.insert(Cow::Borrowed("limit"), FluentValue::from(12_i64));
-    args.insert(Cow::Borrowed("branches"), FluentValue::from(3_i64));
-    args.insert(
-        Cow::Borrowed("branch_phrase"),
-        FluentValue::from("3 branches"),
-    );
-    args
 }
 
 fn branch_phrase_for(locale: &str, branches: u32) -> String {
