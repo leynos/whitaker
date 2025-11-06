@@ -66,8 +66,19 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Ensure coverage toolchain
+        run: >
+          rustup toolchain install nightly-2025-09-18
+          --component rustfmt
+          --component clippy
+          --component rustc-dev
+          --component llvm-tools-preview
+          --component rust-src
+
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@c366af3e25f7cfb318dccfe58a92d6df5dffdf17
+        env:
+          RUSTUP_TOOLCHAIN: nightly-2025-09-18
         with:
           output-path: lcov.info
           format: lcov
