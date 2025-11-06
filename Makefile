@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check
 
 APP ?= whitaker
 CARGO ?= cargo
