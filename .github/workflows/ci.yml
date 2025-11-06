@@ -79,6 +79,7 @@ jobs:
         uses: leynos/shared-actions/.github/actions/generate-coverage@c366af3e25f7cfb318dccfe58a92d6df5dffdf17
         env:
           RUSTUP_TOOLCHAIN: nightly-2025-09-18
+          RUSTFLAGS: "-Z force-unstable-if-unmarked -D warnings"
         with:
           output-path: lcov.info
           format: lcov
