@@ -124,7 +124,7 @@ fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
 }
 
 fn convert_attribute(attr: &hir::Attribute) -> Attribute {
-    let kind = match attr.style() {
+    let kind = match attr.style {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
     };
@@ -268,7 +268,7 @@ mod tests {
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    if let AttrKind::Normal(normal) = attr.kind() {
+    if let AttrKind::Normal(normal) = attr.kind {
         if let Some(meta) = normal.item.meta(DUMMY_SP) {
             return meta_contains_test_cfg(&meta);
         }
