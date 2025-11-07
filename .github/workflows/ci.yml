@@ -66,11 +66,9 @@ jobs:
       - name: Lint
         run: make lint
 
-      - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@c366af3e25f7cfb318dccfe58a92d6df5dffdf17
-        with:
-          output-path: lcov.info
-          format: lcov
+      - name: Test
+        shell: bash
+        run: make test
 
       - name: Publish dry run
         run: make publish-check
