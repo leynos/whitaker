@@ -5,12 +5,12 @@
 use common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context_with,
 };
-use rustc_ast::AttrStyle;
-use rustc_ast::ast::{MetaItem, MetaItemInner};
+use rustc_ast::ast::{MetaItem, MetaItemInner, Path};
+use rustc_ast::{AttrKind, AttrStyle};
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_lint::LateContext;
-use rustc_span::sym;
+use rustc_span::{DUMMY_SP, sym};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContextSummary {
@@ -35,7 +35,7 @@ pub(crate) fn collect_context<'tcx>(
             has_cfg_test = true;
         }
 
-        if let Some(entry) = context_entry_for(node, attrs) {
+        if let Some(entry) = context_entry_for(cx, node, attrs) {
             entries.push(entry);
         }
     }
@@ -62,18 +62,33 @@ pub(crate) fn summarise_context(
     }
 }
 
-fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
+fn context_entry_for<'tcx>(
+    cx: &LateContext<'tcx>,
+    node: Node<'tcx>,
+    attrs: &[hir::Attribute],
+) -> Option<ContextEntry> {
     match node {
         Node::Item(item) => match &item.kind {
-            hir::ItemKind::Fn(..) => Some(ContextEntry::function(
-                item.ident.name.to_string(),
-                convert_attributes(attrs),
-            )),
-            hir::ItemKind::Mod(..) => Some(ContextEntry::new(
-                item.ident.name.to_string(),
-                ContextKind::Module,
-                convert_attributes(attrs),
-            )),
+            hir::ItemKind::Fn { .. } => {
+                let name = cx
+                    .tcx
+                    .opt_item_ident(item.owner_id.def_id)
+                    .map(|ident| ident.name.to_string())
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                Some(ContextEntry::function(name, convert_attributes(attrs)))
+            }
+            hir::ItemKind::Mod(..) => {
+                let name = cx
+                    .tcx
+                    .opt_item_ident(item.owner_id.def_id)
+                    .map(|ident| ident.name.to_string())
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                Some(ContextEntry::new(
+                    name,
+                    ContextKind::Module,
+                    convert_attributes(attrs),
+                ))
+            }
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
                 "impl".to_string(),
                 ContextKind::Impl,
@@ -109,7 +124,7 @@ fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
 }
 
 fn convert_attribute(attr: &hir::Attribute) -> Attribute {
-    let kind = match attr.style() {
+    let kind = match attr.style {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
     };
@@ -251,17 +266,22 @@ mod tests {
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    attr.meta()
-        .is_some_and(|meta| meta_contains_test_cfg(&meta))
+    if let AttrKind::Normal(normal) = &attr.kind {
+        if let Some(meta) = normal.item.meta(DUMMY_SP) {
+            return meta_contains_test_cfg(&meta);
+        }
+    }
+
+    false
 }
 
-fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
+fn meta_item_inner_contains_test(item: &MetaItemInner) -> bool {
     meta_item_inner_contains_test_with_polarity(item, true)
 }
 
-fn meta_item_inner_contains_test_with_polarity(item: MetaItemInner, is_positive: bool) -> bool {
+fn meta_item_inner_contains_test_with_polarity(item: &MetaItemInner, is_positive: bool) -> bool {
     match item {
-        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(&meta, is_positive),
+        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(meta, is_positive),
         MetaItemInner::Lit(_) => false,
     }
 }
@@ -271,16 +291,16 @@ fn meta_contains_test(meta: &MetaItem) -> bool {
 }
 
 fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
-    if meta.path.is_ident(sym::test) || meta.path.is_ident(sym::doctest) {
+    if path_is_ident(&meta.path, sym::test) || path_is_ident(&meta.path, sym::doctest) {
         return is_positive;
     }
 
-    if meta.path.is_ident(sym::not) {
+    if path_is_ident(&meta.path, sym::not) {
         return meta
             .meta_item_list()
             .map(|items| {
                 items
-                    .into_iter()
+                    .iter()
                     .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
             })
             .unwrap_or(false);
@@ -289,28 +309,28 @@ fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool 
     meta.meta_item_list()
         .map(|items| {
             items
-                .into_iter()
+                .iter()
                 .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
         })
         .unwrap_or(false)
 }
 
 fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
-    if meta.path.is_ident(sym::cfg) {
+    if path_is_ident(&meta.path, sym::cfg) {
         return meta
             .meta_item_list()
-            .map(|items| items.into_iter().any(meta_item_inner_contains_test))
+            .map(|items| items.iter().any(meta_item_inner_contains_test))
             .unwrap_or(false);
     }
 
-    if !meta.path.is_ident(sym::cfg_attr) {
+    if !path_is_ident(&meta.path, sym::cfg_attr) {
         return false;
     }
 
-    let Some(mut items) = meta.meta_item_list() else {
+    let Some(items) = meta.meta_item_list() else {
         return false;
     };
-    let mut iter = items.into_iter();
+    let mut iter = items.iter();
     let Some(condition) = iter.next() else {
         return false;
     };
@@ -320,7 +340,11 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     }
 
     iter.any(|item| match item {
-        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
+        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(inner),
         MetaItemInner::Lit(_) => false,
     })
+}
+
+fn path_is_ident(path: &Path, symbol: rustc_span::Symbol) -> bool {
+    path.segments.len() == 1 && path.segments[0].ident.name == symbol
 }

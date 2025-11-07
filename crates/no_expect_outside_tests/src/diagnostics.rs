@@ -171,7 +171,9 @@ pub(crate) fn emit_diagnostic(
     let messages = safe_resolve_message_set(
         context.localizer,
         resolution,
-        |message| cx.tcx.sess.dcx().span_delayed_bug(expr.span, message),
+        |message| {
+            cx.tcx.sess.dcx().span_delayed_bug(expr.span, message);
+        },
         move || fallback_messages(&fallback_receiver, &fallback_context, category),
     );
 

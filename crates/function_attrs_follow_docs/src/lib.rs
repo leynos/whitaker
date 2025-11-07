@@ -41,7 +41,7 @@ dylint_linting::impl_late_lint! {
 }
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         let shared_config = SharedConfig::load();
         self.localizer =
             get_localizer_for_lint("function_attrs_follow_docs", shared_config.locale());
@@ -76,6 +76,12 @@ enum FunctionKind {
     TraitMethod,
 }
 
+impl Default for FunctionKind {
+    fn default() -> Self {
+        Self::Function
+    }
+}
+
 impl FunctionKind {
     const fn subject(self) -> &'static str {
         match self {
@@ -96,7 +102,7 @@ impl AttrInfo {
     fn from_hir(attr: &Attribute) -> Self {
         let span = attr.span();
         let is_doc = attr.doc_str().is_some();
-        let is_outer = matches!(attr.style(), AttrStyle::Outer);
+        let is_outer = matches!(attr.style, AttrStyle::Outer);
 
         Self {
             span,
@@ -173,7 +179,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
             cx.tcx
                 .sess
                 .dcx()
-                .span_delayed_bug(context.doc_span, message)
+                .span_delayed_bug(context.doc_span, message);
         },
         {
             let kind = context.kind;
