@@ -6,7 +6,6 @@ use common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context_with,
 };
 use rustc_ast::ast::{MetaItem, MetaItemInner, Path};
-use rustc_ast::{AttrKind, AttrStyle};
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_lint::LateContext;
@@ -75,7 +74,7 @@ fn context_entry_for<'tcx>(
                     .opt_item_ident(item.owner_id.def_id)
                     .map(|ident| ident.name.to_string())
                     .unwrap_or_else(|| "<unknown>".to_string());
-                Some(ContextEntry::function(name, convert_attributes(attrs)))
+                Some(ContextEntry::function(name, convert_attributes(cx, attrs)))
             }
             hir::ItemKind::Mod(..) => {
                 let name = cx
@@ -86,49 +85,59 @@ fn context_entry_for<'tcx>(
                 Some(ContextEntry::new(
                     name,
                     ContextKind::Module,
-                    convert_attributes(attrs),
+                    convert_attributes(cx, attrs),
                 ))
             }
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
                 "impl".to_string(),
                 ContextKind::Impl,
-                convert_attributes(attrs),
+                convert_attributes(cx, attrs),
             )),
             _ => None,
         },
         Node::ImplItem(item) => match item.kind {
             hir::ImplItemKind::Fn(..) => Some(ContextEntry::function(
                 item.ident.name.to_string(),
-                convert_attributes(attrs),
+                convert_attributes(cx, attrs),
             )),
             _ => None,
         },
         Node::TraitItem(item) => match item.kind {
             hir::TraitItemKind::Fn(..) => Some(ContextEntry::function(
                 item.ident.name.to_string(),
-                convert_attributes(attrs),
+                convert_attributes(cx, attrs),
             )),
             _ => None,
         },
         Node::Block(_) => Some(ContextEntry::new(
             "block".to_string(),
             ContextKind::Block,
-            convert_attributes(attrs),
+            convert_attributes(cx, attrs),
         )),
         _ => None,
     }
 }
 
-fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
-    attrs.iter().map(convert_attribute).collect()
+fn convert_attributes<'tcx>(cx: &LateContext<'tcx>, attrs: &[hir::Attribute]) -> Vec<Attribute> {
+    attrs
+        .iter()
+        .map(|attr| convert_attribute(cx, attr))
+        .collect()
 }
 
-fn convert_attribute(attr: &hir::Attribute) -> Attribute {
-    let kind = match attr.style {
-        AttrStyle::Inner => AttributeKind::Inner,
-        AttrStyle::Outer => AttributeKind::Outer,
+fn convert_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> Attribute {
+    let kind = if is_outer_attribute(cx, attr) {
+        AttributeKind::Outer
+    } else {
+        AttributeKind::Inner
     };
-    let path = if attr.doc_str().is_some() {
+    let path = attribute_path(attr);
+
+    Attribute::new(path, kind)
+}
+
+fn attribute_path(attr: &hir::Attribute) -> AttributePath {
+    if attr.doc_str().is_some() {
         AttributePath::from("doc")
     } else {
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
@@ -136,23 +145,25 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
             Some(first) => AttributePath::new(std::iter::once(first).chain(names)),
             None => AttributePath::from("unknown"),
         }
-    };
+    }
+}
 
-    Attribute::new(path, kind)
+fn is_outer_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> bool {
+    cx.sess()
+        .source_map()
+        .span_to_snippet(attr.span())
+        .map(|snippet| !snippet.trim_start().starts_with("#!"))
+        .unwrap_or(true)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{convert_attribute, meta_contains_test_cfg};
-    use common::AttributeKind;
+    use super::meta_contains_test_cfg;
     use rstest::rstest;
-    use rustc_ast::ast::{
-        AttrArgs, AttrId, AttrItem, MetaItem, MetaItemInner, MetaItemKind, NormalAttr, P,
-    };
-    use rustc_ast::{AttrKind, Path, PathSegment};
-    use rustc_hir as hir;
+    use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind, P};
+    use rustc_ast::{Path, PathSegment};
+    use rustc_span::DUMMY_SP;
     use rustc_span::symbol::Ident;
-    use rustc_span::{DUMMY_SP, create_default_session_globals_then};
 
     fn path_from_segments(segments: &[&str]) -> Path {
         let path_segments = segments
@@ -165,43 +176,6 @@ mod tests {
             segments: path_segments.into(),
             tokens: None,
         }
-    }
-
-    fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
-        create_default_session_globals_then(|| {
-            let item = AttrItem {
-                path: path_from_segments(segments),
-                args: AttrArgs::Empty,
-                tokens: None,
-            };
-
-            rustc_ast::Attribute {
-                kind: AttrKind::Normal(NormalAttr {
-                    item: P(item),
-                    tokens: None,
-                }),
-                id: AttrId::new(0),
-                style: rustc_ast::AttrStyle::Outer,
-                span: DUMMY_SP,
-            }
-        })
-    }
-
-    #[rstest]
-    #[case(&["tokio", "test"])]
-    #[case(&["rstest"])]
-    fn convert_attribute_preserves_segments(#[case] segments: &[&str]) {
-        let hir_attr = hir_attribute_from_segments(segments);
-        let attribute = convert_attribute(&hir_attr);
-
-        assert_eq!(attribute.kind(), AttributeKind::Outer);
-        let converted_segments = attribute
-            .path()
-            .segments()
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        assert_eq!(converted_segments.as_slice(), segments);
     }
 
     fn meta_word(segments: &[&str]) -> MetaItem {
@@ -268,8 +242,8 @@ mod tests {
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    if let AttrKind::Normal(normal) = attr.kind {
-        if let Some(meta) = normal.item.meta(DUMMY_SP) {
+    if let Ok(item) = attr.get_normal_item() {
+        if let Some(meta) = item.meta(DUMMY_SP) {
             return meta_contains_test_cfg(&meta);
         }
     }

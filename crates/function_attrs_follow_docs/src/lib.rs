@@ -99,10 +99,15 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    fn from_hir(attr: &Attribute) -> Self {
+    fn from_hir(cx: &LateContext<'_>, attr: &Attribute) -> Self {
         let span = attr.span();
         let is_doc = attr.doc_str().is_some();
-        let is_outer = matches!(attr.style, AttrStyle::Outer);
+        let is_outer = cx
+            .sess()
+            .source_map()
+            .span_to_snippet(span)
+            .map(|snippet| !snippet.trim_start().starts_with("#!"))
+            .unwrap_or(true);
 
         Self {
             span,
@@ -132,7 +137,10 @@ fn check_function_attributes(
     kind: FunctionKind,
     localizer: &Localizer,
 ) {
-    let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
+    let infos: Vec<AttrInfo> = attrs
+        .iter()
+        .map(|attr| AttrInfo::from_hir(cx, attr))
+        .collect();
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;
