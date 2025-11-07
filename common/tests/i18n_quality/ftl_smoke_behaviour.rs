@@ -1,13 +1,18 @@
+//! Fluent smoke tests that exercise localisation bundle discovery and parsing
+//! behaviour.
+//!
+//! Scenarios ensure each Fluent file is detected once, parser errors surface,
+//! and duplicate message identifiers are reported via the same code path the
+//! application uses.
+
 use super::{FluentResource, get_all_ftl_files};
+use fluent_templates::fluent_bundle::{EntryKind, FluentBundle, FluentError};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-
-#[path = "../support/mod.rs"]
-mod support;
-use support::{extract_identifier, should_skip_line};
+use unic_langid::langid;
 
 #[derive(Default)]
 struct DiscoveryWorld {
@@ -64,17 +69,32 @@ struct ParsingWorld {
     outcome: RefCell<Option<Result<(), usize>>>,
 }
 
-fn duplicate_message_count(source: &str) -> usize {
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let mut duplicates = 0;
-
-    for identifier in source.lines().filter_map(extract_identifier) {
-        if !seen.insert(identifier) {
-            duplicates += 1;
-        }
+fn count_duplicate_messages(resource: FluentResource) -> usize {
+    let mut bundle = FluentBundle::new(vec![langid!("en-GB")]);
+    match bundle.add_resource(resource) {
+        Ok(_) => 0,
+        Err(errors) => errors
+            .into_iter()
+            .filter(|error| {
+                matches!(
+                    error,
+                    FluentError::Overriding {
+                        kind: EntryKind::Message,
+                        ..
+                    }
+                )
+            })
+            .count(),
     }
+}
 
-    duplicates
+fn bundle_duplicate_result(resource: FluentResource) -> Result<(), usize> {
+    let duplicate_errors = count_duplicate_messages(resource);
+    if duplicate_errors == 0 {
+        Ok(())
+    } else {
+        Err(duplicate_errors)
+    }
 }
 
 impl ParsingWorld {
@@ -95,16 +115,16 @@ impl ParsingWorld {
             .as_ref()
             .cloned()
             .expect("Fluent source should be initialised");
-        let duplicate_errors = duplicate_message_count(&source);
         let result = match FluentResource::try_new(source) {
-            Ok(_) => {
-                if duplicate_errors > 0 {
-                    Err(duplicate_errors)
+            Ok(resource) => bundle_duplicate_result(resource),
+            Err((resource, errors)) => {
+                let error_count = errors.len();
+                if error_count == 0 {
+                    bundle_duplicate_result(resource)
                 } else {
-                    Ok(())
+                    Err(error_count)
                 }
             }
-            Err((_, errors)) => Err(errors.len() + duplicate_errors),
         };
         self.outcome.borrow_mut().replace(result);
     }
@@ -164,4 +184,53 @@ fn scenario_parse_invalid(parsing_world: ParsingWorld) {
 #[scenario(path = "tests/features/i18n_ftl_smoke.feature", index = 3)]
 fn scenario_parse_duplicate(parsing_world: ParsingWorld) {
     let _ = parsing_world;
+}
+
+#[test]
+fn count_duplicate_messages_detects_overrides() {
+    let duplicate_source = String::from("one = First\none = Second");
+    let resource =
+        FluentResource::try_new(duplicate_source.clone()).expect("resource should parse");
+    assert_eq!(count_duplicate_messages(resource), 1);
+    let resource = FluentResource::try_new(duplicate_source).expect("resource should parse");
+    assert_eq!(bundle_duplicate_result(resource), Err(1));
+}
+
+#[test]
+fn count_duplicate_messages_returns_zero_for_unique_resources() {
+    let unique_source = String::from("one = First\ntwo = Second");
+    let resource = FluentResource::try_new(unique_source.clone()).expect("resource should parse");
+    assert_eq!(count_duplicate_messages(resource), 0);
+    let resource = FluentResource::try_new(unique_source).expect("resource should parse");
+    assert_eq!(bundle_duplicate_result(resource), Ok(()));
+}
+
+fn parsing_world_with_source(source: &str) -> ParsingWorld {
+    let world = ParsingWorld::default();
+    world.content.borrow_mut().replace(String::from(source));
+    world
+}
+
+#[test]
+fn parsing_world_reports_duplicate_only_errors() {
+    let world = parsing_world_with_source("one = First\none = Second");
+    world.parse();
+    assert_eq!(world.result(), Err(1));
+}
+
+#[test]
+fn parsing_world_prefers_parser_errors_over_duplicates() {
+    let world = parsing_world_with_source("broken = {");
+    world.parse();
+    match world.result() {
+        Err(count) => assert!(count >= 1, "expected at least one parser error"),
+        Ok(_) => panic!("expected parser failure"),
+    }
+}
+
+#[test]
+fn parsing_world_accepts_valid_resources() {
+    let world = parsing_world_with_source("one = First");
+    world.parse();
+    assert!(world.result().is_ok());
 }

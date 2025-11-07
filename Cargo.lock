@@ -187,6 +187,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "fluent-templates",
+ "fs_extra",
  "log",
  "logtest",
  "once_cell",
@@ -194,6 +195,7 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "tempfile",
  "thiserror 2.0.17",
  "unic-langid",
 ]
@@ -1137,7 +1139,6 @@ dependencies = [
  "dylint_linting",
  "dylint_testing",
  "fluent-templates",
- "fs_extra",
  "glob",
  "log",
  "rstest",

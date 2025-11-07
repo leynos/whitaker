@@ -353,8 +353,8 @@ mod behaviour {
 #[cfg(test)]
 mod ui {
     use camino::{Utf8Path, Utf8PathBuf};
+    use common::test_support::copy_fixture;
     use dylint_testing::ui::Test;
-    use fs_extra::dir::{CopyOptions, copy as copy_dir};
     use glob::glob;
     use std::fs;
     use std::io;
@@ -422,7 +422,7 @@ mod ui {
 
     fn prepare_fixture(directory: &Utf8Path, source: &Path) -> io::Result<FixtureEnvironment> {
         let tempdir = tempdir()?;
-        copy_fixture(directory, source, tempdir.path())?;
+        copy_fixture(directory.as_std_path(), source, tempdir.path())?;
         let config = resolve_fixture_config(directory, source)?;
         Ok(FixtureEnvironment {
             workdir: tempdir.path().to_path_buf(),
@@ -484,47 +484,6 @@ mod ui {
         } else {
             read_directory_config(directory)
         }
-    }
-
-    fn copy_fixture(
-        directory: &Utf8Path,
-        source: &Path,
-        destination_root: &Path,
-    ) -> io::Result<()> {
-        let file_name = source.file_name().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "fixture missing file name")
-        })?;
-        let destination = destination_root.join(file_name);
-        fs::copy(source, &destination)?;
-
-        let stderr_path = source.with_extension("stderr");
-        if stderr_path.exists() {
-            let stderr_name = stderr_path.file_name().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "stderr missing name")
-            })?;
-            fs::copy(&stderr_path, destination_root.join(stderr_name))?;
-        }
-
-        let stem = source
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "fixture missing name"))?;
-        let support_dir = directory.join(stem);
-        if support_dir.exists() {
-            copy_directory(support_dir.as_std_path(), &destination_root.join(stem))?;
-        }
-
-        Ok(())
-    }
-
-    fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
-        fs::create_dir_all(destination)?;
-        let mut options = CopyOptions::new();
-        options.copy_inside = true;
-        options.overwrite = true;
-        copy_dir(source, destination, &options)
-            .map(|_| ())
-            .map_err(|error| io::Error::new(io::ErrorKind::Other, error))
     }
 
     #[cfg(test)]
@@ -616,39 +575,6 @@ mod ui {
 
             let contents = resolve_fixture_config(&directory, &fixture).unwrap();
             assert_eq!(contents.as_deref(), Some("max_lines = 5"));
-        }
-
-        #[test]
-        fn copy_fixture_clones_support_assets() {
-            let root = tempdir().unwrap();
-            let directory = utf8_path(root.path());
-            let fixture = directory.as_std_path().join("case.rs");
-            fs::write(&fixture, "fn main() {}").unwrap();
-            fs::write(directory.as_std_path().join("case.stderr"), "").unwrap();
-
-            let support_dir = directory.join("case");
-            fs::create_dir_all(support_dir.as_std_path()).unwrap();
-            fs::write(support_dir.as_std_path().join("helper.txt"), "data").unwrap();
-
-            let destination = tempdir().unwrap();
-            copy_fixture(&directory, &fixture, destination.path()).unwrap();
-
-            assert!(destination.path().join("case.rs").exists());
-            assert!(destination.path().join("case.stderr").exists());
-            assert!(destination.path().join("case").join("helper.txt").exists());
-        }
-
-        #[test]
-        fn copy_directory_preserves_nested_files() {
-            let source_root = tempdir().unwrap();
-            fs::create_dir_all(source_root.path().join("nested")).unwrap();
-            fs::write(source_root.path().join("nested").join("file.txt"), "data").unwrap();
-            let destination_root = tempdir().unwrap();
-            let destination = destination_root.path().join("copy");
-
-            copy_directory(source_root.path(), &destination).unwrap();
-
-            assert!(destination.join("nested").join("file.txt").exists());
         }
     }
 }
