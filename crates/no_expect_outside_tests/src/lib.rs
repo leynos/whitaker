@@ -57,7 +57,7 @@ impl Default for NoExpectOutsideTests {
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         self.is_doctest = std::env::var_os("UNSTABLE_RUSTDOC_TEST_PATH").is_some();
         let config_name = "no_expect_outside_tests";
         let config = match dylint_linting::config::<Config>(config_name) {
@@ -128,7 +128,7 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let typing_env = TypingEnv::fully_monomorphized(cx.tcx);
+    let typing_env = TypingEnv::fully_monomorphized();
     let ty = cx.tcx.normalize_erasing_regions(typing_env, ty).peel_refs();
 
     let Some(adt) = ty.ty_adt_def() else {

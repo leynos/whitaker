@@ -102,7 +102,7 @@ impl AttrInfo {
     fn from_hir(attr: &Attribute) -> Self {
         let span = attr.span();
         let is_doc = attr.doc_str().is_some();
-        let is_outer = matches!(attr.style, AttrStyle::Outer);
+        let is_outer = matches!(attr.style(), AttrStyle::Outer);
 
         Self {
             span,

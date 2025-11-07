@@ -124,7 +124,7 @@ fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
 }
 
 fn convert_attribute(attr: &hir::Attribute) -> Attribute {
-    let kind = match attr.style {
+    let kind = match attr.style() {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
     };
@@ -146,10 +146,10 @@ mod tests {
     use super::{convert_attribute, meta_contains_test_cfg};
     use common::AttributeKind;
     use rstest::rstest;
-    use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind};
-    use rustc_ast::attr::{AttrArgs, AttrId, AttrItem, AttrKind, NormalAttr};
-    use rustc_ast::ptr::P;
-    use rustc_ast::{Path, PathSegment};
+    use rustc_ast::ast::{
+        AttrArgs, AttrId, AttrItem, MetaItem, MetaItemInner, MetaItemKind, NormalAttr, P,
+    };
+    use rustc_ast::{AttrKind, Path, PathSegment};
     use rustc_hir as hir;
     use rustc_span::symbol::Ident;
     use rustc_span::{DUMMY_SP, create_default_session_globals_then};
@@ -162,7 +162,7 @@ mod tests {
 
         Path {
             span: DUMMY_SP,
-            segments: path_segments,
+            segments: path_segments.into(),
             tokens: None,
         }
     }
@@ -175,7 +175,7 @@ mod tests {
                 tokens: None,
             };
 
-            hir::Attribute {
+            rustc_ast::Attribute {
                 kind: AttrKind::Normal(NormalAttr {
                     item: P(item),
                     tokens: None,
@@ -209,6 +209,7 @@ mod tests {
             path: path_from_segments(segments),
             kind: MetaItemKind::Word,
             span: DUMMY_SP,
+            unsafety: rustc_ast::ast::Safety::Default,
         }
     }
 
@@ -217,6 +218,7 @@ mod tests {
             path: path_from_segments(segments),
             kind: MetaItemKind::List(P::from_vec(children)),
             span: DUMMY_SP,
+            unsafety: rustc_ast::ast::Safety::Default,
         }
     }
 
@@ -266,7 +268,7 @@ mod tests {
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    if let AttrKind::Normal(normal) = &attr.kind {
+    if let AttrKind::Normal(normal) = attr.kind() {
         if let Some(meta) = normal.item.meta(DUMMY_SP) {
             return meta_contains_test_cfg(&meta);
         }

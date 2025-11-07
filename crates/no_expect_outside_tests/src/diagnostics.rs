@@ -1,7 +1,5 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
-#[cfg(test)]
-use common::i18n::AttrKey;
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     safe_resolve_message_set,
