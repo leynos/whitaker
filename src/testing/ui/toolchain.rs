@@ -19,12 +19,9 @@ use super::HarnessError;
 #[derive(Debug, Clone)]
 pub(super) struct CrateName(String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct CrateNameError;
-
 impl CrateName {
-    fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
+    const fn new_unchecked(name: String) -> Self {
+        Self(name)
     }
 
     pub const fn as_str(&self) -> &str {
@@ -33,26 +30,22 @@ impl CrateName {
 }
 
 impl TryFrom<&str> for CrateName {
-    type Error = CrateNameError;
+    type Error = HarnessError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            Err(CrateNameError)
-        } else {
-            Ok(Self::new(value))
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(HarnessError::EmptyCrateName);
         }
+        Ok(Self::new_unchecked(trimmed.to_owned()))
     }
 }
 
 impl TryFrom<String> for CrateName {
-    type Error = CrateNameError;
+    type Error = HarnessError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            Err(CrateNameError)
-        } else {
-            Ok(Self(value))
-        }
+        Self::try_from(value.as_str())
     }
 }
 

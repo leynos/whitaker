@@ -142,11 +142,6 @@ pub fn run_with_runner(
     ui_directory: impl Into<Utf8PathBuf>,
     runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
 ) -> Result<(), HarnessError> {
-    let trimmed = crate_name.trim();
-    if trimmed.is_empty() {
-        return Err(HarnessError::EmptyCrateName);
-    }
-
     let directory: Utf8PathBuf = ui_directory.into();
     let directory_ref: &Utf8Path = directory.as_ref();
 
@@ -163,14 +158,14 @@ pub fn run_with_runner(
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
-    let crate_name_owned =
-        CrateName::try_from(trimmed).map_err(|_| HarnessError::EmptyCrateName)?;
+    let crate_name_owned = CrateName::try_from(crate_name)?;
+    let crate_name_trimmed = crate_name_owned.as_str();
     ensure_toolchain_library(&crate_name_owned)?;
 
-    match runner(trimmed, directory_ref) {
+    match runner(crate_name_trimmed, directory_ref) {
         Ok(()) => Ok(()),
         Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: trimmed.to_owned(),
+            crate_name: crate_name_trimmed.to_owned(),
             directory,
             message,
         }),
