@@ -41,6 +41,16 @@ fn rejects_absolute_directories() {
     assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
 }
 
+#[cfg(windows)]
+#[test]
+fn rejects_unix_style_absolute_directories_on_windows() {
+    let path = Utf8PathBuf::from("/tmp/ui");
+    let error = run_with_runner("lint", path.clone(), |_, _| Ok(()))
+        .expect_err("rooted paths should be rejected");
+
+    assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
+}
+
 #[test]
 fn propagates_runner_failures() {
     let error = run_with_runner("lint", "ui", |crate_name, directory| {

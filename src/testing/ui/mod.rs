@@ -149,7 +149,10 @@ pub fn run_with_runner(
         return Err(HarnessError::EmptyDirectory);
     }
 
-    if directory.is_absolute() {
+    if directory.has_root() {
+        // Windows treats paths such as `/tmp/ui` as rooted without marking them as
+        // absolute, so prefer `has_root` to catch both drive-qualified and Unix-style
+        // absolute inputs regardless of platform semantics.
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
