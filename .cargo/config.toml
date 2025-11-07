@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-Z", "force-unstable-if-unmarked"]
+rustflags = ["-Z", "force-unstable-if-unmarked", "-D", "warnings"]
