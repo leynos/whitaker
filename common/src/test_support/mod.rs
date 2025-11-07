@@ -4,6 +4,10 @@
 //! tests so repeated boilerplate (such as locale overrides) can live in one
 //! place with the necessary safety documentation.
 
+pub mod fixtures;
+
+pub use fixtures::{copy_directory, copy_fixture};
+
 use std::ffi::OsString;
 
 /// Guard that overrides `DYLINT_LOCALE` for the lifetime of the instance.

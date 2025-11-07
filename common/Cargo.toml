@@ -10,6 +10,7 @@ once_cell = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
+fs_extra = "1.2"
 
 [dev-dependencies]
 # Testing: Behavioural specs pin rstest-bdd crates to 0.1.0-alpha4 while we
@@ -22,6 +23,7 @@ rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
 regex = "1.10.4"
 logtest = "2.0.0"
+tempfile = "3.14.0"
 
 [lints.clippy]
 expect_used = "deny"
