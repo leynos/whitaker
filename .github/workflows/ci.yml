@@ -67,6 +67,8 @@ jobs:
         run: make lint
 
       - name: Test and Measure Coverage
+        env:
+          RUSTUP_TOOLCHAIN: ''
         uses: leynos/shared-actions/.github/actions/generate-coverage@c366af3e25f7cfb318dccfe58a92d6df5dffdf17
         with:
           output-path: lcov.info
