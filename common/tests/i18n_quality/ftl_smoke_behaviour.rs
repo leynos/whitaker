@@ -1,3 +1,10 @@
+//! Fluent smoke tests that exercise localisation bundle discovery and parsing
+//! behaviour.
+//!
+//! Scenarios ensure each Fluent file is detected once, parser errors surface,
+//! and duplicate message identifiers are reported via the same code path the
+//! application uses.
+
 use super::{FluentResource, get_all_ftl_files};
 use fluent_templates::fluent_bundle::{EntryKind, FluentBundle, FluentError};
 use rstest::fixture;
@@ -81,6 +88,15 @@ fn duplicate_message_count(resource: &FluentResource) -> usize {
     }
 }
 
+fn duplicate_error_result(resource: &FluentResource) -> Result<(), usize> {
+    let duplicate_errors = duplicate_message_count(resource);
+    if duplicate_errors == 0 {
+        Ok(())
+    } else {
+        Err(duplicate_errors)
+    }
+}
+
 impl ParsingWorld {
     fn set_fixture(&self, fixture: &str) {
         let template = match fixture {
@@ -99,16 +115,15 @@ impl ParsingWorld {
             .as_ref()
             .cloned()
             .expect("Fluent source should be initialised");
-        let (resource, parser_errors) = match FluentResource::try_new(source) {
-            Ok(resource) => (resource, Vec::new()),
-            Err((resource, errors)) => (resource, errors),
-        };
-        let duplicate_errors = duplicate_message_count(&resource);
-        let total_errors = parser_errors.len() + duplicate_errors;
-        let result = if total_errors == 0 {
-            Ok(())
-        } else {
-            Err(total_errors)
+        let result = match FluentResource::try_new(source) {
+            Ok(resource) => duplicate_error_result(&resource),
+            Err((resource, errors)) => {
+                if errors.is_empty() {
+                    duplicate_error_result(&resource)
+                } else {
+                    Err(errors.len())
+                }
+            }
         };
         self.outcome.borrow_mut().replace(result);
     }
