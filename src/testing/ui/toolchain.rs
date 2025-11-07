@@ -19,30 +19,41 @@ use super::HarnessError;
 #[derive(Debug, Clone)]
 pub(super) struct CrateName(String);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CrateNameError;
+
 impl CrateName {
-    const fn new_unchecked(name: String) -> Self {
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "String allocations require runtime heap access"
+    )]
+    fn new_unchecked(name: String) -> Self {
         Self(name)
     }
 
     pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
 }
 
 impl TryFrom<&str> for CrateName {
-    type Error = HarnessError;
+    type Error = CrateNameError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err(HarnessError::EmptyCrateName);
+            return Err(CrateNameError);
         }
         Ok(Self::new_unchecked(trimmed.to_owned()))
     }
 }
 
 impl TryFrom<String> for CrateName {
-    type Error = HarnessError;
+    type Error = CrateNameError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::try_from(value.as_str())

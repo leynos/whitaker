@@ -143,13 +143,12 @@ pub fn run_with_runner(
     runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
 ) -> Result<(), HarnessError> {
     let directory: Utf8PathBuf = ui_directory.into();
-    let directory_ref: &Utf8Path = directory.as_ref();
 
-    if directory_ref.as_str().trim().is_empty() {
+    if directory.as_str().trim().is_empty() {
         return Err(HarnessError::EmptyDirectory);
     }
 
-    if directory_is_rooted(directory_ref) {
+    if directory_is_rooted(directory.as_ref()) {
         // The helper rejects any path with a root so Unix-style absolute inputs and
         // drive-qualified paths such as `C:\ui` never escape the crate tree. On
         // Windows, `has_root` alone misses drive-relative paths (for example `C:ui`),
@@ -158,14 +157,15 @@ pub fn run_with_runner(
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
-    let crate_name_owned = CrateName::try_from(crate_name)?;
-    let crate_name_trimmed = crate_name_owned.as_str();
+    let crate_name_owned =
+        CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
+    let crate_name_str = crate_name_owned.as_str();
     ensure_toolchain_library(&crate_name_owned)?;
 
-    match runner(crate_name_trimmed, directory_ref) {
+    match runner(crate_name_str, directory.as_ref()) {
         Ok(()) => Ok(()),
         Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: crate_name_trimmed.to_owned(),
+            crate_name: crate_name_owned.into_inner(),
             directory,
             message,
         }),
