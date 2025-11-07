@@ -69,7 +69,7 @@ struct ParsingWorld {
     outcome: RefCell<Option<Result<(), usize>>>,
 }
 
-fn count_duplicate_messages(resource: &FluentResource) -> usize {
+fn count_duplicate_messages(resource: FluentResource) -> usize {
     let mut bundle = FluentBundle::new(vec![langid!("en-GB")]);
     match bundle.add_resource(resource) {
         Ok(_) => 0,
@@ -88,7 +88,7 @@ fn count_duplicate_messages(resource: &FluentResource) -> usize {
     }
 }
 
-fn bundle_duplicate_result(resource: &FluentResource) -> Result<(), usize> {
+fn bundle_duplicate_result(resource: FluentResource) -> Result<(), usize> {
     let duplicate_errors = count_duplicate_messages(resource);
     if duplicate_errors == 0 {
         Ok(())
@@ -116,12 +116,13 @@ impl ParsingWorld {
             .cloned()
             .expect("Fluent source should be initialised");
         let result = match FluentResource::try_new(source) {
-            Ok(resource) => bundle_duplicate_result(&resource),
+            Ok(resource) => bundle_duplicate_result(resource),
             Err((resource, errors)) => {
-                if errors.is_empty() {
-                    bundle_duplicate_result(&resource)
+                let error_count = errors.len();
+                if error_count == 0 {
+                    bundle_duplicate_result(resource)
                 } else {
-                    Err(errors.len())
+                    Err(error_count)
                 }
             }
         };
@@ -187,18 +188,21 @@ fn scenario_parse_duplicate(parsing_world: ParsingWorld) {
 
 #[test]
 fn count_duplicate_messages_detects_overrides() {
-    let source = String::from("one = First\none = Second");
-    let resource = FluentResource::try_new(source).expect("resource should parse");
-    assert_eq!(count_duplicate_messages(&resource), 1);
-    assert_eq!(bundle_duplicate_result(&resource), Err(1));
+    let duplicate_source = String::from("one = First\none = Second");
+    let resource =
+        FluentResource::try_new(duplicate_source.clone()).expect("resource should parse");
+    assert_eq!(count_duplicate_messages(resource), 1);
+    let resource = FluentResource::try_new(duplicate_source).expect("resource should parse");
+    assert_eq!(bundle_duplicate_result(resource), Err(1));
 }
 
 #[test]
 fn count_duplicate_messages_returns_zero_for_unique_resources() {
-    let source = String::from("one = First\ntwo = Second");
-    let resource = FluentResource::try_new(source).expect("resource should parse");
-    assert_eq!(count_duplicate_messages(&resource), 0);
-    assert_eq!(bundle_duplicate_result(&resource), Ok(()));
+    let unique_source = String::from("one = First\ntwo = Second");
+    let resource = FluentResource::try_new(unique_source.clone()).expect("resource should parse");
+    assert_eq!(count_duplicate_messages(resource), 0);
+    let resource = FluentResource::try_new(unique_source).expect("resource should parse");
+    assert_eq!(bundle_duplicate_result(resource), Ok(()));
 }
 
 fn parsing_world_with_source(source: &str) -> ParsingWorld {
