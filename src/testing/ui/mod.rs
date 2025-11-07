@@ -6,10 +6,13 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::{env, fmt, fs, io::Cursor, path::PathBuf, process::Command};
+use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cargo_metadata::{Message, Metadata, MetadataCommand};
+
+mod toolchain;
+
+use self::toolchain::ensure_toolchain_library;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -152,11 +155,11 @@ pub fn run_with_runner(
     }
 
     if directory_is_rooted(directory_ref) {
-        // Windows treats paths such as `/tmp/ui` as rooted without marking them as
-        // absolute, so prefer `has_root` to catch both drive-qualified and
-        // Unix-style absolute inputs regardless of platform semantics. Additionally,
-        // drive-relative paths such as `C:ui` carry a Windows prefix component without
-        // a root and should also be rejected to keep UI fixtures within the crate tree.
+        // The helper rejects any path with a root so Unix-style absolute inputs and
+        // drive-qualified paths such as `C:\ui` never escape the crate tree. On
+        // Windows, `has_root` alone misses drive-relative paths (for example `C:ui`),
+        // so the helper also inspects the first component for a Windows prefix to
+        // ensure those prefixed-but-rootless inputs are rejected as well.
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
@@ -188,170 +191,6 @@ fn directory_is_rooted(path: &Utf8Path) -> bool {
     {
         path.has_root()
     }
-}
-
-fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
-    let metadata = fetch_metadata()?;
-
-    if !workspace_has_package(&metadata, crate_name) {
-        // The harness is being exercised with a synthetic crate name. In that case the caller
-        // controls the build and we should not attempt to prepare artefacts.
-        return Ok(());
-    }
-
-    let source = build_and_locate_cdylib(crate_name, &metadata)?;
-    let parent = source
-        .parent()
-        .ok_or_else(|| HarnessError::LibraryMissing {
-            path: source.display().to_string(),
-        })?;
-
-    let toolchain = env::var("RUSTUP_TOOLCHAIN")
-        .ok()
-        .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
-        .unwrap_or_else(|| "unknown-toolchain".to_owned());
-    let file_name = source
-        .file_name()
-        .ok_or_else(|| HarnessError::LibraryMissing {
-            path: source.display().to_string(),
-        })?
-        .to_string_lossy()
-        .into_owned();
-    let suffix = env::consts::DLL_SUFFIX;
-    let target_name = file_name.as_str().strip_suffix(suffix).map_or_else(
-        || format!("{file_name}@{toolchain}"),
-        |stripped| format!("{stripped}@{toolchain}{suffix}"),
-    );
-    let target = parent.join(&target_name);
-
-    // Always refresh the toolchain-qualified artefact so UI tests exercise the latest build.
-    fs::copy(&source, &target).map_err(|error| HarnessError::LibraryCopyFailed {
-        source: source.display().to_string(),
-        target: target.display().to_string(),
-        message: error.to_string(),
-    })?;
-
-    Ok(())
-}
-
-fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<PathBuf, HarnessError> {
-    let output = execute_build_command(crate_name, metadata)?;
-    let package_id = find_package_id(crate_name, metadata)?;
-    find_cdylib_in_artifacts(&output.stdout, &package_id, crate_name)
-}
-
-fn execute_build_command(
-    crate_name: &str,
-    metadata: &Metadata,
-) -> Result<std::process::Output, HarnessError> {
-    let mut command = Command::new("cargo");
-    command
-        .arg("build")
-        .arg("--lib")
-        .arg("--quiet")
-        .arg("--message-format=json")
-        .arg("--package")
-        .arg(crate_name)
-        .current_dir(metadata.workspace_root.as_std_path());
-
-    let output = command
-        .output()
-        .map_err(|error| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_owned(),
-            message: error.to_string(),
-        })?;
-
-    if !output.status.success() {
-        return Err(HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_owned(),
-            message: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
-    }
-
-    Ok(output)
-}
-
-fn find_package_id(
-    crate_name: &str,
-    metadata: &Metadata,
-) -> Result<cargo_metadata::PackageId, HarnessError> {
-    metadata
-        .packages
-        .iter()
-        .find(|package| {
-            package.name == crate_name
-                && metadata
-                    .workspace_members
-                    .iter()
-                    .any(|member| member == &package.id)
-        })
-        .map(|package| package.id.clone())
-        .ok_or_else(|| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_owned(),
-            message: format!(
-                "package metadata missing for {crate_name}; unable to locate cdylib artefact"
-            ),
-        })
-}
-
-fn find_cdylib_in_artifacts(
-    stdout: &[u8],
-    package_id: &cargo_metadata::PackageId,
-    crate_name: &str,
-) -> Result<PathBuf, HarnessError> {
-    for message in Message::parse_stream(Cursor::new(stdout)) {
-        let Ok(Message::CompilerArtifact(artifact)) = message else {
-            // Ignore unrelated output and parse errors; the build succeeded so any
-            // remaining noise should not block locating the compiled artefact.
-            continue;
-        };
-
-        if let Some(path) = extract_cdylib_path(&artifact, package_id) {
-            return Ok(path);
-        }
-    }
-
-    Err(HarnessError::LibraryMissing {
-        path: format!("cdylib for {crate_name} not reported by cargo"),
-    })
-}
-
-fn extract_cdylib_path(
-    artifact: &cargo_metadata::Artifact,
-    package_id: &cargo_metadata::PackageId,
-) -> Option<PathBuf> {
-    if artifact.package_id != *package_id {
-        return None;
-    }
-
-    if !artifact.target.is_cdylib() {
-        return None;
-    }
-
-    artifact
-        .filenames
-        .iter()
-        .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
-        .map(|path| path.clone().into_std_path_buf())
-}
-
-fn fetch_metadata() -> Result<Metadata, HarnessError> {
-    MetadataCommand::new()
-        .no_deps()
-        .exec()
-        .map_err(|error| HarnessError::MetadataFailed {
-            message: error.to_string(),
-        })
-}
-
-fn workspace_has_package(metadata: &Metadata, crate_name: &str) -> bool {
-    metadata.packages.iter().any(|package| {
-        package.name == crate_name
-            && metadata
-                .workspace_members
-                .iter()
-                .any(|member| member == &package.id)
-    })
 }
 
 /// Run UI tests for the crate that invokes the macro.
