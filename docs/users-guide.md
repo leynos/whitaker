@@ -46,6 +46,29 @@ Run `make test` from the workspace root to execute unit, behaviour, and UI
 harness tests. The shared target enables `rstest` fixtures and `rstest-bdd`
 scenarios, ensuring each lint crate benefits from the consistent test harness.
 
+## Zero-config integration fixtures
+
+Whitaker exposes `whitaker::testing::cluster::test_cluster`, an `rstest`
+fixture that provisions a disposable Postgres-style cluster backed by a
+temporary directory. Import the fixture and list `test_cluster` in your test
+parameters to receive a ready connection URI without writing setup code:
+
+```rust
+use rstest::rstest;
+use whitaker::testing::cluster::{test_cluster, TestCluster};
+
+#[rstest]
+fn writes_data(test_cluster: TestCluster) {
+    assert!(test_cluster.connection_uri().starts_with("postgresql://"));
+}
+```
+
+For bespoke scenarios, call `TestCluster::builder()` and override the username,
+database, or port before invoking `build()`. Builders reject invalid
+identifiers, guard against destructive `DROP DATABASE` statements, and record
+every bootstrap statement so behaviour-driven tests can assert on the setup
+path via `cluster.executed_statements()`.
+
 ## Localised diagnostics
 
 Whitaker bundles Fluent resources under `locales/` so every lint can present

@@ -41,10 +41,11 @@ thiserror = { workspace = true }
 common = { path = "common" }
 
 dylint_linting = { workspace = true, optional = true }
+rstest = "0.26.1"
+tempfile = "3.10.1"
 
 [dev-dependencies]
 common = { path = "common" }
-rstest = "0.26.1"
 rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
 dylint_testing = { workspace = true }

@@ -2143,6 +2143,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "serde",
+ "tempfile",
  "thiserror 2.0.17",
  "toml",
 ]

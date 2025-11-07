@@ -37,6 +37,12 @@
   - [x] Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and add UI
         smoke tests that run under at least one non-English locale.
 
+- [x] Phase 2b — Provide an ergonomic RAII fixture
+  - [x] Integrate the zero-config RAII fixture with the `rstest` harness by
+        publishing the shared `test_cluster` fixture and behavioural coverage.
+  - [x] Document default usage patterns in the README, doctests, and user guides
+        so integration tests adopt the fixture without bespoke setup.
+
 - [ ] Phase 3 — Aggregated packaging and installer
   - [ ] Assemble the `suite` cdylib using constituent features and combined lint
         pass wiring.
