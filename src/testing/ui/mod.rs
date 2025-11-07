@@ -145,26 +145,48 @@ pub fn run_with_runner(
     }
 
     let directory: Utf8PathBuf = ui_directory.into();
-    if directory.as_str().trim().is_empty() {
+    let directory_ref: &Utf8Path = directory.as_ref();
+
+    if directory_ref.as_str().trim().is_empty() {
         return Err(HarnessError::EmptyDirectory);
     }
 
-    if directory.has_root() {
+    if directory_is_rooted(directory_ref) {
         // Windows treats paths such as `/tmp/ui` as rooted without marking them as
-        // absolute, so prefer `has_root` to catch both drive-qualified and Unix-style
-        // absolute inputs regardless of platform semantics.
+        // absolute, so prefer `has_root` to catch both drive-qualified and
+        // Unix-style absolute inputs regardless of platform semantics. Additionally,
+        // drive-relative paths such as `C:ui` carry a Windows prefix component without
+        // a root and should also be rejected to keep UI fixtures within the crate tree.
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
     ensure_toolchain_library(trimmed)?;
 
-    match runner(trimmed, directory.as_ref()) {
+    match runner(trimmed, directory_ref) {
         Ok(()) => Ok(()),
         Err(message) => Err(HarnessError::RunnerFailure {
             crate_name: trimmed.to_owned(),
             directory,
             message,
         }),
+    }
+}
+
+fn directory_is_rooted(path: &Utf8Path) -> bool {
+    #[cfg(windows)]
+    {
+        use std::path::Component;
+
+        path.has_root()
+            || matches!(
+                path.as_std_path().components().next(),
+                Some(Component::Prefix(_))
+            )
+    }
+
+    #[cfg(not(windows))]
+    {
+        path.has_root()
     }
 }
 
