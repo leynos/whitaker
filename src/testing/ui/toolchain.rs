@@ -6,7 +6,7 @@
 //! to refresh that copy.
 
 use std::{
-    env, fs,
+    env, fmt, fs,
     io::Cursor,
     path::PathBuf,
     process::{Command, Output},
@@ -16,7 +16,38 @@ use cargo_metadata::{self, Message, Metadata, MetadataCommand};
 
 use super::HarnessError;
 
-pub(super) fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessError> {
+#[derive(Debug, Clone)]
+pub(super) struct CrateName(String);
+
+impl CrateName {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    pub const fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<&str> for CrateName {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl AsRef<str> for CrateName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for CrateName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+pub(super) fn ensure_toolchain_library(crate_name: &CrateName) -> Result<(), HarnessError> {
     let metadata = fetch_metadata()?;
 
     if !workspace_has_package(&metadata, crate_name) {
@@ -43,11 +74,7 @@ pub(super) fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessEr
         })?
         .to_string_lossy()
         .into_owned();
-    let suffix = env::consts::DLL_SUFFIX;
-    let target_name = file_name.as_str().strip_suffix(suffix).map_or_else(
-        || format!("{file_name}@{toolchain}"),
-        |stripped| format!("{stripped}@{toolchain}{suffix}"),
-    );
+    let target_name = build_target_name(&file_name, &toolchain);
     let target = parent.join(&target_name);
 
     // Always refresh the toolchain-qualified artefact so UI tests exercise the latest build.
@@ -60,13 +87,27 @@ pub(super) fn ensure_toolchain_library(crate_name: &str) -> Result<(), HarnessEr
     Ok(())
 }
 
-fn build_and_locate_cdylib(crate_name: &str, metadata: &Metadata) -> Result<PathBuf, HarnessError> {
+fn build_target_name(file_name: &str, toolchain: &str) -> String {
+    let suffix = env::consts::DLL_SUFFIX;
+    file_name.strip_suffix(suffix).map_or_else(
+        || format!("{file_name}@{toolchain}"),
+        |stripped| format!("{stripped}@{toolchain}{suffix}"),
+    )
+}
+
+fn build_and_locate_cdylib(
+    crate_name: &CrateName,
+    metadata: &Metadata,
+) -> Result<PathBuf, HarnessError> {
     let output = execute_build_command(crate_name, metadata)?;
     let package_id = find_package_id(crate_name, metadata)?;
     find_cdylib_in_artifacts(&output.stdout, &package_id, crate_name)
 }
 
-fn execute_build_command(crate_name: &str, metadata: &Metadata) -> Result<Output, HarnessError> {
+fn execute_build_command(
+    crate_name: &CrateName,
+    metadata: &Metadata,
+) -> Result<Output, HarnessError> {
     let mut command = Command::new("cargo");
     command
         .arg("build")
@@ -74,19 +115,19 @@ fn execute_build_command(crate_name: &str, metadata: &Metadata) -> Result<Output
         .arg("--quiet")
         .arg("--message-format=json")
         .arg("--package")
-        .arg(crate_name)
+        .arg(crate_name.as_str())
         .current_dir(metadata.workspace_root.as_std_path());
 
     let output = command
         .output()
         .map_err(|error| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_owned(),
+            crate_name: crate_name.as_str().to_owned(),
             message: error.to_string(),
         })?;
 
     if !output.status.success() {
         return Err(HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_owned(),
+            crate_name: crate_name.as_str().to_owned(),
             message: String::from_utf8_lossy(&output.stderr).into_owned(),
         });
     }
@@ -95,14 +136,14 @@ fn execute_build_command(crate_name: &str, metadata: &Metadata) -> Result<Output
 }
 
 fn find_package_id(
-    crate_name: &str,
+    crate_name: &CrateName,
     metadata: &Metadata,
 ) -> Result<cargo_metadata::PackageId, HarnessError> {
     metadata
         .packages
         .iter()
         .find(|package| {
-            package.name == crate_name
+            package.name == crate_name.as_str()
                 && metadata
                     .workspace_members
                     .iter()
@@ -110,7 +151,7 @@ fn find_package_id(
         })
         .map(|package| package.id.clone())
         .ok_or_else(|| HarnessError::LibraryBuildFailed {
-            crate_name: crate_name.to_owned(),
+            crate_name: crate_name.as_str().to_owned(),
             message: format!(
                 "package metadata missing for {crate_name}; unable to locate cdylib artefact"
             ),
@@ -120,7 +161,7 @@ fn find_package_id(
 fn find_cdylib_in_artifacts(
     stdout: &[u8],
     package_id: &cargo_metadata::PackageId,
-    crate_name: &str,
+    crate_name: &CrateName,
 ) -> Result<PathBuf, HarnessError> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
         let Ok(Message::CompilerArtifact(artifact)) = message else {
@@ -167,9 +208,9 @@ fn fetch_metadata() -> Result<Metadata, HarnessError> {
         })
 }
 
-fn workspace_has_package(metadata: &Metadata, crate_name: &str) -> bool {
+fn workspace_has_package(metadata: &Metadata, crate_name: &CrateName) -> bool {
     metadata.packages.iter().any(|package| {
-        package.name == crate_name
+        package.name == crate_name.as_str()
             && metadata
                 .workspace_members
                 .iter()

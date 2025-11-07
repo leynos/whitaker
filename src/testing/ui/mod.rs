@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
-use self::toolchain::ensure_toolchain_library;
+use self::toolchain::{CrateName, ensure_toolchain_library};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -163,7 +163,8 @@ pub fn run_with_runner(
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
-    ensure_toolchain_library(trimmed)?;
+    let crate_name_owned = CrateName::from(trimmed);
+    ensure_toolchain_library(&crate_name_owned)?;
 
     match runner(trimmed, directory_ref) {
         Ok(()) => Ok(()),
