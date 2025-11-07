@@ -90,14 +90,21 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
         test.dylint_toml(config);
     }
 
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| test.run())).map_err(|payload| {
-        match payload.downcast::<String>() {
+    run_test_runner(fixture_name, || test.run())
+}
+
+fn run_test_runner<F>(fixture_name: &str, runner: F) -> Result<(), String>
+where
+    F: FnOnce(),
+{
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(runner)).map_err(|payload| match payload
+        .downcast::<String>(
+    ) {
+        Ok(message) => format!("{fixture_name}: {message}"),
+        Err(payload) => match payload.downcast::<&'static str>() {
             Ok(message) => format!("{fixture_name}: {message}"),
-            Err(payload) => match payload.downcast::<&'static str>() {
-                Ok(message) => format!("{fixture_name}: {message}"),
-                Err(_) => format!("{fixture_name}: dylint UI tests panicked without a message"),
-            },
-        }
+            Err(_) => format!("{fixture_name}: dylint UI tests panicked without a message"),
+        },
     })
 }
 
@@ -173,6 +180,16 @@ mod fixture_tests {
     }
 
     #[test]
+    fn discover_fixtures_returns_empty_directory() {
+        let dir = tempdir().unwrap();
+        let directory = utf8_path(dir.path());
+
+        let fixtures = discover_fixtures(&directory).unwrap();
+
+        assert!(fixtures.is_empty());
+    }
+
+    #[test]
     fn read_fixture_config_loads_optional_file() {
         let dir = tempdir().unwrap();
         let fixture = dir.path().join("case.rs");
@@ -182,6 +199,15 @@ mod fixture_tests {
 
         let contents = read_fixture_config(&fixture).unwrap();
         assert_eq!(contents.as_deref(), Some("key = 1"));
+    }
+
+    #[test]
+    fn read_fixture_config_rejects_missing_name() {
+        let path = PathBuf::from("/");
+        let error = read_fixture_config(&path).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), "fixture missing name");
     }
 
     #[test]
@@ -221,5 +247,11 @@ mod fixture_tests {
 
         let contents = resolve_fixture_config(&directory, &fixture).unwrap();
         assert_eq!(contents.as_deref(), Some("max_lines = 5"));
+    }
+
+    #[test]
+    fn run_test_runner_formats_panic_payloads() {
+        let error = run_test_runner("fixture.rs", || panic!("run failed")).unwrap_err();
+        assert_eq!(error, "fixture.rs: run failed");
     }
 }
