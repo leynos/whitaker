@@ -92,6 +92,7 @@ pub fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io;
     use tempfile::tempdir;
 
     #[test]
@@ -125,5 +126,46 @@ mod tests {
         copy_directory(source_root.path(), &destination).expect("copy succeeds");
 
         assert!(destination.join("nested").join("file.txt").exists());
+    }
+
+    #[test]
+    fn copy_fixture_missing_source_file_errors() {
+        let root = tempdir().expect("fixture root");
+        let fixture = root.path().join("missing.rs");
+        let destination = tempdir().expect("destination root");
+
+        let error = copy_fixture(root.path(), &fixture, destination.path())
+            .expect_err("missing source should error");
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn copy_fixture_without_stderr_succeeds() {
+        let root = tempdir().expect("fixture root");
+        let fixture = root.path().join("case.rs");
+        fs::write(&fixture, "fn main() {}").expect("fixture file");
+
+        let destination = tempdir().expect("destination root");
+        copy_fixture(root.path(), &fixture, destination.path())
+            .expect("copy succeeds without stderr");
+
+        assert!(destination.path().join("case.rs").exists());
+        assert!(!destination.path().join("case.stderr").exists());
+    }
+
+    #[test]
+    fn copy_fixture_without_support_directory_succeeds() {
+        let root = tempdir().expect("fixture root");
+        let fixture = root.path().join("case.rs");
+        fs::write(&fixture, "fn main() {}").expect("fixture file");
+        fs::write(root.path().join("case.stderr"), "stderr").expect("stderr file");
+
+        let destination = tempdir().expect("destination root");
+        copy_fixture(root.path(), &fixture, destination.path())
+            .expect("copy succeeds without support dir");
+
+        assert!(destination.path().join("case.rs").exists());
+        assert!(destination.path().join("case.stderr").exists());
+        assert!(!destination.path().join("case").exists());
     }
 }
