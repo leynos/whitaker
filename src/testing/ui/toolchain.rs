@@ -19,8 +19,11 @@ use super::HarnessError;
 #[derive(Debug, Clone)]
 pub(super) struct CrateName(String);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CrateNameError;
+
 impl CrateName {
-    pub fn new(name: impl Into<String>) -> Self {
+    fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
@@ -29,9 +32,27 @@ impl CrateName {
     }
 }
 
-impl From<&str> for CrateName {
-    fn from(value: &str) -> Self {
-        Self::new(value)
+impl TryFrom<&str> for CrateName {
+    type Error = CrateNameError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            Err(CrateNameError)
+        } else {
+            Ok(Self::new(value))
+        }
+    }
+}
+
+impl TryFrom<String> for CrateName {
+    type Error = CrateNameError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            Err(CrateNameError)
+        } else {
+            Ok(Self(value))
+        }
     }
 }
 
@@ -209,11 +230,20 @@ fn fetch_metadata() -> Result<Metadata, HarnessError> {
 }
 
 fn workspace_has_package(metadata: &Metadata, crate_name: &CrateName) -> bool {
-    metadata.packages.iter().any(|package| {
-        package.name == crate_name.as_str()
-            && metadata
-                .workspace_members
-                .iter()
-                .any(|member| member == &package.id)
-    })
+    metadata
+        .packages
+        .iter()
+        .any(|package| is_workspace_member(metadata, package, crate_name))
+}
+
+fn is_workspace_member(
+    metadata: &Metadata,
+    package: &cargo_metadata::Package,
+    crate_name: &CrateName,
+) -> bool {
+    package.name == crate_name.as_str()
+        && metadata
+            .workspace_members
+            .iter()
+            .any(|member| member == &package.id)
 }

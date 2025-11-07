@@ -163,7 +163,8 @@ pub fn run_with_runner(
         return Err(HarnessError::AbsoluteDirectory { directory });
     }
 
-    let crate_name_owned = CrateName::from(trimmed);
+    let crate_name_owned =
+        CrateName::try_from(trimmed).map_err(|_| HarnessError::EmptyCrateName)?;
     ensure_toolchain_library(&crate_name_owned)?;
 
     match runner(trimmed, directory_ref) {
