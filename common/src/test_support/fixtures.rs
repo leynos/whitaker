@@ -4,10 +4,11 @@
 //! supporting assets into a temporary workspace so UI harnesses only need to
 //! focus on executing the lint runner.
 
-use fs_extra::dir::{CopyOptions, copy as copy_dir};
 use std::fs;
 use std::io;
 use std::path::Path;
+
+const MAX_DIRECTORY_DEPTH: usize = 64;
 
 /// Copies a UI fixture and its optional support directory into `destination`.
 ///
@@ -62,6 +63,11 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 
 /// Recursively copies `source` into `destination`, overwriting existing files.
 ///
+/// The helper rejects any symlink it encounters to avoid accidental
+/// traversal outside the fixture tree. Directory recursion is capped at
+/// `MAX_DIRECTORY_DEPTH` to prevent runaway traversal when a fixture contains
+/// unexpectedly deep nesting.
+///
 /// # Examples
 ///
 /// ```
@@ -79,13 +85,75 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 /// # }
 /// ```
 pub fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
+    copy_directory_with_depth(source, destination, MAX_DIRECTORY_DEPTH)
+}
+
+fn copy_directory_with_depth(
+    source: &Path,
+    destination: &Path,
+    remaining_depth: usize,
+) -> io::Result<()> {
+    if remaining_depth == 0 {
+        return Err(depth_limit_error(source));
+    }
+
+    let metadata = source.symlink_metadata()?;
+    ensure_directory(source, &metadata)?;
+    ensure_not_symlink(source, metadata.file_type())?;
+
     fs::create_dir_all(destination)?;
-    let mut options = CopyOptions::new();
-    options.copy_inside = true;
-    options.overwrite = true;
-    copy_dir(source, destination, &options)
-        .map(|_| ())
-        .map_err(io::Error::other)
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let file_type = entry_path.symlink_metadata()?.file_type();
+
+        ensure_not_symlink(&entry_path, file_type)?;
+
+        let target = destination.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_directory_with_depth(&entry_path, &target, remaining_depth - 1)?;
+        } else {
+            fs::copy(&entry_path, target)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_not_symlink(path: &Path, file_type: fs::FileType) -> io::Result<()> {
+    if file_type.is_symlink() {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "refusing to follow symlink `{}` while copying fixtures",
+                path.display()
+            ),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_directory(path: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    if metadata.is_dir() {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("`{}` is not a directory", path.display()),
+        ))
+    }
+}
+
+fn depth_limit_error(path: &Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!(
+            "refusing to copy `{}`: directory depth exceeds limit of {} levels",
+            path.display(),
+            MAX_DIRECTORY_DEPTH
+        ),
+    )
 }
 
 #[cfg(test)]
@@ -93,6 +161,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io;
+    use std::path::Path;
     use tempfile::tempdir;
 
     #[test]
@@ -167,5 +236,51 @@ mod tests {
         assert!(destination.path().join("case.rs").exists());
         assert!(destination.path().join("case.stderr").exists());
         assert!(!destination.path().join("case").exists());
+    }
+
+    #[test]
+    fn copy_directory_enforces_depth_limit() {
+        let source_root = tempdir().expect("source root");
+        let mut current = source_root.path().to_path_buf();
+        for level in 0..=MAX_DIRECTORY_DEPTH {
+            current = current.join(format!("level_{level}"));
+            fs::create_dir_all(&current).expect("nested dir");
+        }
+
+        let destination = tempdir().expect("destination root");
+        let error = copy_directory(source_root.path(), destination.path())
+            .expect_err("deep nesting should error");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains(&MAX_DIRECTORY_DEPTH.to_string()));
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn copy_directory_rejects_symlinks() {
+        let source_root = tempdir().expect("source root");
+        let file = source_root.path().join("data.txt");
+        fs::write(&file, "data").expect("symlink target");
+        let link = source_root.path().join("link.txt");
+        create_symlink(&file, &link).expect("create symlink");
+
+        let destination = tempdir().expect("destination root");
+        let error = copy_directory(source_root.path(), destination.path())
+            .expect_err("symlink should error");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains("symlink"));
+    }
+
+    #[cfg(unix)]
+    fn create_symlink(target: &Path, link: &Path) -> io::Result<()> {
+        use std::os::unix::fs::symlink;
+        symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn create_symlink(target: &Path, link: &Path) -> io::Result<()> {
+        use std::os::windows::fs::symlink_file;
+        symlink_file(target, link)
     }
 }
