@@ -12,7 +12,6 @@ use common::i18n::{
 };
 #[cfg(test)]
 use common::i18n::{I18nError, resolve_message_set};
-use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
@@ -196,11 +195,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
     );
 
     cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
-        let FunctionAttrsMessages {
-            primary,
-            note,
-            help,
-        } = messages;
+        let primary = messages.primary();
+        let note = messages.note();
+        let help = messages.help();
 
         lint.primary_message(primary);
         lint.span_note(context.offending_span, note);

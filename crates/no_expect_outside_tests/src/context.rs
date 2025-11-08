@@ -30,7 +30,7 @@ pub(crate) fn collect_context<'tcx>(
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        if attrs.iter().any(is_cfg_test_attribute) {
+        if attrs.iter().any(|attr| is_cfg_test_attribute(cx, attr)) {
             has_cfg_test = true;
         }
 
@@ -121,6 +121,7 @@ fn context_entry_for<'tcx>(
 fn convert_attributes<'tcx>(cx: &LateContext<'tcx>, attrs: &[hir::Attribute]) -> Vec<Attribute> {
     attrs
         .iter()
+        .filter(|attr| !is_cfg_test_attribute(cx, attr))
         .map(|attr| convert_attribute(cx, attr))
         .collect()
 }
@@ -160,7 +161,7 @@ fn is_outer_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> bool {
 mod tests {
     use super::meta_contains_test_cfg;
     use rstest::rstest;
-    use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind, P};
+    use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind};
     use rustc_ast::{Path, PathSegment};
     use rustc_span::DUMMY_SP;
     use rustc_span::symbol::Ident;
@@ -190,14 +191,14 @@ mod tests {
     fn meta_list(segments: &[&str], children: Vec<MetaItemInner>) -> MetaItem {
         MetaItem {
             path: path_from_segments(segments),
-            kind: MetaItemKind::List(P::from_vec(children)),
+            kind: MetaItemKind::List(children.into()),
             span: DUMMY_SP,
             unsafety: rustc_ast::ast::Safety::Default,
         }
     }
 
     fn meta_inner(meta: MetaItem) -> MetaItemInner {
-        MetaItemInner::MetaItem(P::from_box(Box::new(meta)))
+        MetaItemInner::MetaItem(meta)
     }
 
     #[rstest]
@@ -241,10 +242,14 @@ mod tests {
     }
 }
 
-fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    let item = attr.get_normal_item();
-    if let Some(meta) = item.meta(DUMMY_SP) {
-        return meta_contains_test_cfg(&meta);
+fn is_cfg_test_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> bool {
+    let path_segments: Vec<_> = attr.path().collect();
+    if path_segments.len() != 1 || path_segments[0].as_str() != "cfg" {
+        return false;
+    }
+
+    if let Ok(snippet) = cx.sess().source_map().span_to_snippet(attr.span()) {
+        return snippet.contains("test");
     }
 
     false
