@@ -6,6 +6,11 @@
 //! declarations, attribute lines, and multi-line continuations so tests can
 //! inspect Fluent resources without depending on the runtime loader.
 
+#![expect(
+    dead_code,
+    reason = "Test support utilities kept available for various localisation test scenarios"
+)]
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::{BTreeMap, HashMap};
