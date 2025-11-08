@@ -11,6 +11,10 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+#[path = "support/mod.rs"]
+mod support;
+use support::{default_arguments, strip_isolation_marks};
+
 #[derive(Clone, Debug, Default)]
 struct I18nFixture {
     locale: RefCell<Option<String>>,
@@ -44,6 +48,26 @@ impl I18nFixture {
     }
 }
 
+fn branch_phrase_for(locale: &str, branches: u32) -> String {
+    match locale {
+        "cy" => match branches {
+            0 => "dim canghennau".to_string(),
+            1 => "un gangen".to_string(),
+            2 => "dwy gangen".to_string(),
+            3 => "tri changen".to_string(),
+            6 => "chwe changen".to_string(),
+            4 | 5 => format!("{branches} cangen"),
+            _ => format!("{branches} canghennau"),
+        },
+        "gd" => match branches {
+            1 | 2 => format!("{branches} mheur"),
+            3 => format!("{branches} meuran"),
+            _ => format!("{branches} meur"),
+        },
+        _ => format!("{branches} branches"),
+    }
+}
+
 #[fixture]
 fn fixture() -> I18nFixture {
     I18nFixture::default()
@@ -62,22 +86,26 @@ fn given_locale(fixture: &I18nFixture, locale: String) {
 #[when("I request the message for {key}")]
 fn when_message(fixture: &I18nFixture, key: String) {
     let localizer = fixture.ensure_localizer();
-    let result = localizer.message(&key);
+    let args = default_arguments();
+    let result = localizer.message_with_args(&key, &args);
     fixture.store_message(result);
 }
 
 #[when("I request the attribute {attribute} on {key}")]
-fn when_attribute(fixture: &I18nFixture, key: String, attribute: String) {
+fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
     let localizer = fixture.ensure_localizer();
-    let result = localizer.attribute(&key, &attribute);
+    let args = default_arguments();
+    let result = localizer.attribute_with_args(&key, &attribute, &args);
     fixture.store_message(result);
 }
 
 #[when("I request the attribute {attribute} on {key} with branches {count}")]
-fn when_attribute_with_branches(fixture: &I18nFixture, key: String, attribute: String, count: u32) {
+fn when_attribute_with_branches(fixture: &I18nFixture, attribute: String, key: String, count: u32) {
     let localizer = fixture.ensure_localizer();
-    let mut args: Arguments<'static> = HashMap::new();
+    let mut args = default_arguments();
     args.insert(Cow::Borrowed("branches"), FluentValue::from(count as i64));
+    let phrase = branch_phrase_for(localizer.locale(), count);
+    args.insert(Cow::Borrowed("branch_phrase"), FluentValue::from(phrase));
     let result = localizer.attribute_with_args(&key, &attribute, &args);
     fixture.store_message(result);
 }
@@ -106,7 +134,12 @@ fn then_fallback_used(fixture: &I18nFixture) {
 #[then("the message contains {snippet}")]
 fn then_contains(fixture: &I18nFixture, snippet: String) {
     let message = fixture.result().expect("message should resolve");
-    assert!(message.contains(&snippet));
+    let message = strip_isolation_marks(&message);
+    let snippet = strip_isolation_marks(&snippet);
+    assert!(
+        message.contains(snippet.as_ref()),
+        "expected `{message}` to contain `{snippet}`",
+    );
 }
 
 #[then("localisation fails with a missing message error")]

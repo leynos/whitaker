@@ -23,42 +23,42 @@ Feature: Localisation loader
   Scenario: Welsh lint count handles zero
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 0
-    Then the message contains dim lint
+    Then the message contains 0 o lintiau
 
   Scenario: Welsh lint count handles large values
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 2048
-    Then the message contains 2048 lint
+    Then the message contains 2048 o lintiau
 
   Scenario: Welsh lint count handles one
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 1
-    Then the message contains 1 lint
+    Then the message contains 1 o lintiau
 
   Scenario: Welsh lint count handles two
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 2
-    Then the message contains dau lint
+    Then the message contains 2 o lintiau
 
   Scenario: Welsh lint count handles three
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 3
-    Then the message contains 3 lint
+    Then the message contains 3 o lintiau
 
   Scenario: Welsh lint count handles six
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 6
-    Then the message contains 6 lint
+    Then the message contains 6 o lintiau
 
   Scenario: Welsh lint count handles eleven
     Given the locale preference cy
     When I request the attribute note on common-lint-count with lint count 11
-    Then the message contains 11 lint
+    Then the message contains 11 o lintiau
 
   Scenario: Falling back to English for untranslated attributes
     Given the locale preference cy
     When I request the attribute fallback-note on common-lint-count
-    Then the message contains Fallback diagnostics default to English
+    Then the message contains Mae diagnosteg wrth gefn yn ddiofyn i'r Saesneg
 
     Scenario: Surfacing a missing message error for unknown keys
       Given the locale preference en-GB
@@ -68,4 +68,4 @@ Feature: Localisation loader
     Scenario: Welsh conditional note applies lenition
       Given the locale preference cy
       When I request the attribute note on conditional_max_two_branches with branches 3
-      Then the message contains 3 changen
+      Then the message contains tri changen

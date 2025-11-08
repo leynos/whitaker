@@ -5,16 +5,21 @@
 //! catch regressions before they reach users.
 
 use common::i18n::{FluentValue, Localizer};
+use fluent_templates::fluent_bundle::FluentResource;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rstest::rstest;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-#[path = "support/mod.rs"]
+#[path = "../support/mod.rs"]
 mod support;
-use support::{FtlEntry, LocaleCode, LocaleContext, MessageId, file_pairs, parse_ftl};
+use support::{
+    FtlEntry, LocaleCode, LocaleContext, MessageId, file_pairs, parse_ftl, secondary_locales,
+    strip_isolation_marks,
+};
 
 static PLACEABLE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\{\s*\$([A-Za-z0-9_]+)").expect("valid placeable regex"));
@@ -24,6 +29,37 @@ fn extract_placeables(text: &str) -> BTreeSet<String> {
         .captures_iter(text)
         .map(|captures| captures[1].to_string())
         .collect()
+}
+
+pub(super) fn get_all_ftl_files() -> Vec<PathBuf> {
+    let mut files: BTreeSet<PathBuf> = BTreeSet::new();
+
+    for (_, en_path, _) in file_pairs() {
+        files.insert(en_path.clone());
+    }
+
+    for (_, locale_path) in secondary_locales() {
+        for entry in fs::read_dir(locale_path).expect("Locale dir readable") {
+            let path = entry.expect("Entry readable").path();
+            let is_ftl = path
+                .extension()
+                .map_or(false, |extension| extension == "ftl");
+            if is_ftl {
+                files.insert(path);
+            }
+        }
+    }
+
+    files.into_iter().collect()
+}
+
+fn parse_ftl_file(path: &Path) -> Result<(), String> {
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("Failed to read FTL file {}: {error}", path.display()))?;
+
+    FluentResource::try_new(content)
+        .map(|_| ())
+        .map_err(|(_, errors)| format!("Failed to parse FTL file {}: {errors:?}", path.display()))
 }
 
 fn validate_message_placeables(
@@ -142,6 +178,24 @@ fn fluent_placeables_remain_in_sync() {
 }
 
 #[test]
+fn ftl_bundles_parse_successfully() {
+    let mut errors = Vec::new();
+
+    for path in get_all_ftl_files() {
+        if let Err(error) = parse_ftl_file(&path) {
+            errors.push(error);
+        }
+    }
+
+    if !errors.is_empty() {
+        panic!(
+            "FTL parsing failed for one or more files:\n{}",
+            errors.join("\n")
+        );
+    }
+}
+
+#[test]
 fn localised_help_attributes_are_complete() {
     for (locale, en_path, locale_path) in file_pairs() {
         let locale_code = LocaleCode::from(locale.as_str());
@@ -206,7 +260,8 @@ fn welsh_branch_term_declensions(#[case] branches: i64, #[case] expected: &str) 
         .attribute_with_args("conditional_max_two_branches", "note", &args)
         .expect("conditional note should resolve");
     let expected_note = format!("Ar hyn o bryd mae {expected} yn y rheol.");
-    assert_eq!(note, expected_note);
+    let note = strip_isolation_marks(&note);
+    assert_eq!(note.as_ref(), expected_note);
 }
 
 fn branch_phrase(locale: &str, branches: i64) -> String {
@@ -245,12 +300,20 @@ fn welsh_branch_phrase(branches: i64) -> String {
 }
 
 #[test]
-fn secondary_locales_fall_back_to_english_for_missing_attribute() {
+fn secondary_locales_render_fallback_attribute() {
     for locale in ["cy", "gd"] {
         let localizer = Localizer::new(Some(locale));
         let note = localizer
             .attribute("common-lint-count", "fallback-note")
             .expect("fallback attribute should resolve");
-        assert_eq!(note, "Fallback diagnostics default to English.");
+        let note = strip_isolation_marks(&note);
+        match locale {
+            "cy" => assert_eq!(
+                note.as_ref(),
+                "Mae diagnosteg wrth gefn yn ddiofyn i'r Saesneg."
+            ),
+            "gd" => assert_eq!(note.as_ref(), "Fallback diagnostics default to English."),
+            _ => unreachable!(),
+        }
     }
 }

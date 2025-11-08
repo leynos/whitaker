@@ -22,6 +22,7 @@ rstest-bdd = "0.1.0-alpha4"
 rstest-bdd-macros = "0.1.0-alpha4"
 regex = "1.10.4"
 logtest = "2.0.0"
+tempfile = "3.14"
 
 [lints.clippy]
 expect_used = "deny"

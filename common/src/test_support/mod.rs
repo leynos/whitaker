@@ -3,6 +3,17 @@
 //! The helpers in this module are intended for use from unit and integration
 //! tests so repeated boilerplate (such as locale overrides) can live in one
 //! place with the necessary safety documentation.
+//!
+//! ## Available helpers
+//!
+//! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and
+//!   support directories) into isolated workspaces for dylint UI harnesses.
+//! - [`LocaleOverride`]: Temporarily mutates `DYLINT_LOCALE` so locale-sensitive
+//!   tests can execute without leaking global state between cases.
+
+pub mod fixtures;
+
+pub use fixtures::{copy_directory, copy_fixture};
 
 use std::ffi::OsString;
 

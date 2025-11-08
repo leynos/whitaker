@@ -32,7 +32,7 @@ impl Suggestion {
     /// ```
     /// use common::diagnostics::{Applicability, Suggestion};
     ///
-    /// let suggestion = Suggestion::new("Use expect", "expect(...)".into(), Applicability::MaybeIncorrect);
+    /// let suggestion = Suggestion::new("Use expect", "expect(...)", Applicability::MaybeIncorrect);
     /// assert_eq!(suggestion.message(), "Use expect");
     /// ```
     #[must_use]
@@ -174,7 +174,7 @@ impl DiagnosticBuilder {
 /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4)).expect("valid span for example");
 /// let diagnostic = span_lint("demo", "Example", span)
 ///     .help("Consider refactoring")
-///     .suggestion(Suggestion::new("Use helper", "helper()".into(), Applicability::MaybeIncorrect))
+///     .suggestion(Suggestion::new("Use helper", "helper()", Applicability::MaybeIncorrect))
 ///     .build();
 /// assert_eq!(diagnostic.code(), "demo");
 /// ```

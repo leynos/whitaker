@@ -1,0 +1,3 @@
+# This configuration applies only to the pass_short_module.rs fixture.
+[module_max_lines]
+max_lines = 15

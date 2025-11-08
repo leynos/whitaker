@@ -66,7 +66,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             _ => return,
         };
 
-        let span = module_span(module, item.span);
+        let span = module_span(cx, item, module);
         let Some(lines) = count_lines(cx.sess().source_map(), span) else {
             debug!(
                 target: LINT_NAME,
@@ -75,7 +75,6 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             );
             return;
         };
-
         debug!(
             target: LINT_NAME,
             "module `{}` spans {lines} lines (limit {limit}, from_macro: {from_macro})",
@@ -124,10 +123,22 @@ fn load_configuration() -> usize {
     }
 }
 
-fn module_span(module: &hir::Mod<'_>, fallback: Span) -> Span {
-    let span = module.spans.inner_span;
+fn module_span<'tcx>(
+    cx: &LateContext<'tcx>,
+    item: &'tcx hir::Item<'tcx>,
+    module: &hir::Mod<'tcx>,
+) -> Span {
+    let inner = module.spans.inner_span;
+    if !inner.is_dummy() {
+        return inner;
+    }
 
-    if span.is_dummy() { fallback } else { span }
+    let def_span = cx.tcx.def_span(item.owner_id.to_def_id());
+    if !def_span.is_dummy() {
+        return def_span;
+    }
+
+    item.span
 }
 
 fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
@@ -135,7 +146,26 @@ fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
         return None;
     };
 
-    Some(info.lines.len())
+    let Some(first) = info.lines.first() else {
+        return None;
+    };
+    let Some(last) = info.lines.last() else {
+        return None;
+    };
+
+    let contiguous = info
+        .lines
+        .windows(2)
+        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+    if !contiguous {
+        debug!(
+            target: LINT_NAME,
+            "span lines are not contiguous; skipping module length measurement"
+        );
+        return None;
+    }
+
+    Some(last.line_index.saturating_sub(first.line_index) + 1)
 }
 
 /// Diagnostic information for a module that exceeds line limits.
@@ -321,33 +351,5 @@ mod behaviour {
 }
 
 #[cfg(test)]
-mod ui {
-    use dylint_testing::ui::Test;
-
-    #[test]
-    fn ui() {
-        let crate_name = env!("CARGO_PKG_NAME");
-        let directory = "ui";
-        whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let mut test = Test::src_base(crate_name, dir);
-                if let Ok(contents) = std::fs::read_to_string(dir.join("dylint.toml")) {
-                    test.dylint_toml(&contents);
-                }
-                test.run();
-            }))
-            .map_err(|payload| match payload.downcast::<String>() {
-                Ok(message) => *message,
-                Err(payload) => match payload.downcast::<&'static str>() {
-                    Ok(message) => (*message).to_owned(),
-                    Err(_) => String::from("dylint UI tests panicked without a message"),
-                },
-            })
-        })
-        .unwrap_or_else(|error| {
-            panic!(
-                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
-            )
-        });
-    }
-}
+#[path = "lib_ui_tests.rs"]
+mod ui;
