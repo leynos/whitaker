@@ -8,7 +8,7 @@ use common::{
 use rustc_ast::ast::{MetaItem, MetaItemInner, Path};
 use rustc_hir as hir;
 use rustc_hir::Node;
-use rustc_lint::LateContext;
+use rustc_lint::{LateContext, LintContext};
 use rustc_span::{DUMMY_SP, sym};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -242,10 +242,9 @@ mod tests {
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    if let Ok(item) = attr.get_normal_item() {
-        if let Some(meta) = item.meta(DUMMY_SP) {
-            return meta_contains_test_cfg(&meta);
-        }
+    let item = attr.get_normal_item();
+    if let Some(meta) = item.meta(DUMMY_SP) {
+        return meta_contains_test_cfg(&meta);
     }
 
     false
