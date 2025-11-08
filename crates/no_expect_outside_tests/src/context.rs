@@ -9,7 +9,7 @@ use rustc_ast::ast::{MetaItem, MetaItemInner, Path};
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_lint::{LateContext, LintContext};
-use rustc_span::{DUMMY_SP, sym};
+use rustc_span::sym;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContextSummary {
@@ -243,7 +243,7 @@ mod tests {
 }
 
 fn is_cfg_test_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> bool {
-    let path_segments: Vec<_> = attr.path().collect();
+    let path_segments: Vec<_> = attr.path().into_iter().collect();
     if path_segments.len() != 1 || path_segments[0].as_str() != "cfg" {
         return false;
     }

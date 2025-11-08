@@ -195,9 +195,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
     );
 
     cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
-        let primary = messages.primary();
-        let note = messages.note();
-        let help = messages.help();
+        let primary = messages.primary().to_string();
+        let note = messages.note().to_string();
+        let help = messages.help().to_string();
 
         lint.primary_message(primary);
         lint.span_note(context.offending_span, note);
