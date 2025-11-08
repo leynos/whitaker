@@ -144,7 +144,7 @@ Utilities shared by lints:
   without rewriting the table. Unknown fields are rejected via
   `deny_unknown_fields` so configuration typos fail fast during deserialization.
 - Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
-  scenarios (v0.1.0-alpha4) to exercise happy, unhappy, and edge cases without
+  scenarios (v0.1.0) to exercise happy, unhappy, and edge cases without
   duplicating setup logic.
 
 ### Localisation infrastructure

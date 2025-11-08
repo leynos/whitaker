@@ -21,11 +21,10 @@ behaviour, the implementation status is noted. Examples and explanations are
 organized by the so‑called *three amigos* of BDD: the business analyst/product
 owner, the developer, and the tester.
 
-> **Alpha dependency notice:** The suite pins `rstest-bdd` and
-> `rstest-bdd-macros` to version `0.1.0-alpha4`. These crates are still in
-> alpha, so expect occasional breaking changes or unstable behaviour until the
-> maintainers publish a stable release. Revisit this section when upgrading the
-> dependencies to confirm whether the note still applies.
+> **Version pin notice:** The suite pins `rstest-bdd` and
+> `rstest-bdd-macros` to version `0.1.0` to match the API described in this
+> guide. Revisit this section whenever you upgrade the dependency to confirm
+> whether additional migration steps are required.
 
 ## The three amigos
 
@@ -290,14 +289,14 @@ To enable validation pin a feature in your `dev-dependencies`:
 
 ```toml
 [dev-dependencies]
-rstest-bdd-macros = { version = "0.1.0-alpha4", features = ["compile-time-validation"] }
+rstest-bdd-macros = { version = "0.1.0", features = ["compile-time-validation"] }
 ```
 
 For strict checking use:
 
 ```toml
 [dev-dependencies]
-rstest-bdd-macros = { version = "0.1.0-alpha4", features = ["strict-compile-time-validation"] }
+rstest-bdd-macros = { version = "0.1.0", features = ["strict-compile-time-validation"] }
 ```
 
 Steps are only validated when one of these features is enabled.
