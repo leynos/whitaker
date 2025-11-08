@@ -180,3 +180,15 @@ fn scenario_rejects_absolute_directory(harness_world: HarnessWorld) {
 fn scenario_propagates_runner_failure(harness_world: HarnessWorld) {
     let _ = harness_world;
 }
+
+#[cfg(windows)]
+#[scenario(path = "tests/features/ui_harness.feature", index = 4)]
+fn scenario_rejects_unc_directory(harness_world: HarnessWorld) {
+    let _ = harness_world;
+}
+
+#[cfg(windows)]
+#[scenario(path = "tests/features/ui_harness.feature", index = 5)]
+fn scenario_rejects_drive_relative_directory(harness_world: HarnessWorld) {
+    let _ = harness_world;
+}

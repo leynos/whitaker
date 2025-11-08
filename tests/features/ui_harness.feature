@@ -27,3 +27,15 @@ Feature: Whitaker UI test harness
     When the harness is executed
     Then the runner is invoked with crate lint and directory ui
     And the harness reports a runner failure mentioning diff mismatch
+
+  Scenario: Rejecting a Windows UNC UI directory
+    Given the harness is prepared for crate lint
+    And the UI directory is \\server\share\ui
+    When the harness is executed
+    Then the harness reports an absolute directory error containing \\server\share\ui
+
+  Scenario: Rejecting a drive-relative Windows UI directory
+    Given the harness is prepared for crate lint
+    And the UI directory is C:ui
+    When the harness is executed
+    Then the harness reports an absolute directory error containing C:ui

@@ -41,6 +41,36 @@ fn rejects_absolute_directories() {
     assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
 }
 
+#[cfg(windows)]
+#[test]
+fn rejects_unix_style_absolute_directories_on_windows() {
+    let path = Utf8PathBuf::from("/tmp/ui");
+    let error = run_with_runner("lint", path.clone(), |_, _| Ok(()))
+        .expect_err("rooted paths should be rejected");
+
+    assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
+}
+
+#[cfg(windows)]
+#[test]
+fn rejects_unc_directories_on_windows() {
+    let path = Utf8PathBuf::from(r"\\server\share\ui");
+    let error = run_with_runner("lint", path.clone(), |_, _| Ok(()))
+        .expect_err("UNC paths should be rejected");
+
+    assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
+}
+
+#[cfg(windows)]
+#[test]
+fn rejects_drive_relative_directories_on_windows() {
+    let path = Utf8PathBuf::from("C:ui");
+    let error = run_with_runner("lint", path.clone(), |_, _| Ok(()))
+        .expect_err("drive-relative paths should be rejected");
+
+    assert_eq!(error, HarnessError::AbsoluteDirectory { directory: path });
+}
+
 #[test]
 fn propagates_runner_failures() {
     let error = run_with_runner("lint", "ui", |crate_name, directory| {
