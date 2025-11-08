@@ -161,8 +161,8 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io;
-    use std::path::Path;
-    use tempfile::tempdir;
+    use std::path::{Path, PathBuf};
+    use tempfile::{TempDir, tempdir};
 
     #[test]
     fn copy_fixture_clones_support_assets() {
@@ -208,13 +208,32 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
     }
 
-    #[test]
-    fn copy_fixture_without_stderr_succeeds() {
+    fn setup_copy_fixture_test(
+        with_stderr: bool,
+        with_support: bool,
+    ) -> (TempDir, PathBuf, TempDir) {
         let root = tempdir().expect("fixture root");
         let fixture = root.path().join("case.rs");
         fs::write(&fixture, "fn main() {}").expect("fixture file");
 
+        if with_stderr {
+            fs::write(root.path().join("case.stderr"), "stderr").expect("stderr file");
+        }
+
+        if with_support {
+            let support_dir = root.path().join("case");
+            fs::create_dir_all(&support_dir).expect("support dir");
+            fs::write(support_dir.join("helper.rs"), "fn helper() {}").expect("support helper");
+        }
+
         let destination = tempdir().expect("destination root");
+        (root, fixture, destination)
+    }
+
+    #[test]
+    fn copy_fixture_without_stderr_succeeds() {
+        let (root, fixture, destination) = setup_copy_fixture_test(false, false);
+
         copy_fixture(root.path(), &fixture, destination.path())
             .expect("copy succeeds without stderr");
 
@@ -224,12 +243,8 @@ mod tests {
 
     #[test]
     fn copy_fixture_without_support_directory_succeeds() {
-        let root = tempdir().expect("fixture root");
-        let fixture = root.path().join("case.rs");
-        fs::write(&fixture, "fn main() {}").expect("fixture file");
-        fs::write(root.path().join("case.stderr"), "stderr").expect("stderr file");
+        let (root, fixture, destination) = setup_copy_fixture_test(true, false);
 
-        let destination = tempdir().expect("destination root");
         copy_fixture(root.path(), &fixture, destination.path())
             .expect("copy succeeds without support dir");
 
