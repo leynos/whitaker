@@ -60,12 +60,13 @@ fn world() -> LocalisationWorld {
 
 #[given("the locale {locale} is selected")]
 fn given_locale(world: &LocalisationWorld, locale: String) {
-    world.use_localizer(&locale);
+    world.use_localizer(locale.trim_matches('"'));
 }
 
 #[given("the subject kind is {kind}")]
 fn given_subject(world: &LocalisationWorld, kind: String) {
-    *world.subject.borrow_mut() = match kind.as_str() {
+    let normalized = kind.trim_matches('"');
+    *world.subject.borrow_mut() = match normalized {
         "function" => FunctionKind::Function,
         "method" => FunctionKind::Method,
         "trait method" => FunctionKind::TraitMethod,
@@ -75,7 +76,7 @@ fn given_subject(world: &LocalisationWorld, kind: String) {
 
 #[given("the attribute label is {label}")]
 fn given_attribute(world: &LocalisationWorld, label: String) {
-    *world.attribute.borrow_mut() = label;
+    *world.attribute.borrow_mut() = label.trim_matches('"').to_string();
 }
 
 #[given("the attribute snippet cannot be retrieved")]
@@ -125,24 +126,29 @@ fn resolve_localisation(
 
 #[then("the primary message contains {snippet}")]
 fn then_primary(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().primary().contains(&snippet));
+    let snippet = snippet.trim_matches('"');
+    assert!(world.messages().primary().contains(snippet));
 }
 
 #[then("the note mentions {snippet}")]
 fn then_note(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().note().contains(&snippet));
+    let snippet = snippet.trim_matches('"');
+    assert!(world.messages().note().contains(snippet));
 }
 
 #[then("the help mentions {snippet}")]
 fn then_help(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().help().contains(&snippet));
+    let snippet = snippet.trim_matches('"');
+    assert!(world.messages().help().contains(snippet));
 }
 
 #[then("localisation fails for {key}")]
 fn then_failure(world: &LocalisationWorld, key: String) {
     let error = world.error();
     match &*error {
-        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
+        I18nError::MissingMessage { key: missing, .. } => {
+            assert_eq!(missing, key.trim_matches('"'))
+        }
     }
 }
 

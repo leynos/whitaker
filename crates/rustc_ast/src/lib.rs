@@ -7,6 +7,11 @@
 //! scaffolding code can integrate with the compiler without each generated
 //! project reaching into unstable internals directly.
 
+#![expect(
+    unused_extern_crates,
+    reason = "Proxy crate re-exports compiler internals for Dylint shims"
+)]
 extern crate rustc_ast as upstream;
+extern crate rustc_driver;
 
 pub use upstream::*;

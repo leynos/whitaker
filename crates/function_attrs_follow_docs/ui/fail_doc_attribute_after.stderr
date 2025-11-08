@@ -1,4 +1,4 @@
-warning: Doc comments on functions must precede other outer attributes
+warning: Doc comments on functions must precede other outer attributes.
   --> $DIR/fail_doc_attribute_after.rs:5:1
    |
 LL | #[doc = "Function doc attribute appears after `#[inline]`."]
@@ -16,7 +16,7 @@ note: the lint level is defined here
 LL | #![warn(function_attrs_follow_docs)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning: Doc comments on methods must precede other outer attributes
+warning: Doc comments on methods must precede other outer attributes.
   --> $DIR/fail_doc_attribute_after.rs:12:5
    |
 LL |     #[doc = "Method doc attribute appears after `#[allow]`."]
@@ -29,7 +29,7 @@ LL |     #[allow(dead_code)]
    |     ^^^^^^^^^^^^^^^^^^^
    = help: Move the doc comment so it appears before #[allow(dead_code)] on the item.
 
-warning: Doc comments on trait methods must precede other outer attributes
+warning: Doc comments on trait methods must precede other outer attributes.
   --> $DIR/fail_doc_attribute_after.rs:18:5
    |
 LL |     #[doc = "Trait doc attribute appears after `#[allow]`."]

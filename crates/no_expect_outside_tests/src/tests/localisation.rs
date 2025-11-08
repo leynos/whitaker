@@ -79,20 +79,21 @@ fn world() -> LocalisationWorld {
 
 #[given("the locale {locale} is selected")]
 fn given_locale(world: &LocalisationWorld, locale: String) {
-    world.use_localizer(&locale);
+    world.use_localizer(locale.trim_matches('"'));
 }
 
 #[given("the receiver type is {receiver}")]
 fn given_receiver(world: &LocalisationWorld, receiver: String) {
-    world.set_receiver_type(&receiver);
+    world.set_receiver_type(receiver.trim_matches('"'));
 }
 
 #[given("the function context is {name}")]
 fn given_function(world: &LocalisationWorld, name: String) {
-    let value = if name.is_empty() {
+    let trimmed = name.trim_matches('"');
+    let value = if trimmed.is_empty() {
         None
     } else {
-        Some(name.as_str())
+        Some(trimmed)
     };
     world.set_function(value);
 }
@@ -139,17 +140,17 @@ fn when_localise(world: &LocalisationWorld) {
 
 #[then("the diagnostic mentions {snippet}")]
 fn then_primary(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().primary().contains(&snippet));
+    assert!(contains_normalised(world.messages().primary(), &snippet));
 }
 
 #[then("the note references {snippet}")]
 fn then_note(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().note().contains(&snippet));
+    assert!(contains_normalised(world.messages().note(), &snippet));
 }
 
 #[then("the help references {snippet}")]
 fn then_help(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().help().contains(&snippet));
+    assert!(contains_normalised(world.messages().help(), &snippet));
 }
 
 #[then("the fallback and localisation logic should handle the receiver type robustly")]
@@ -169,8 +170,9 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
 #[then("localisation fails for {key}")]
 fn then_failure(world: &LocalisationWorld, key: String) {
     let error = world.error();
+    let expected = key.trim_matches('"');
     match &*error {
-        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
+        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, expected),
     }
 }
 
@@ -216,7 +218,23 @@ fn then_fallback(world: &LocalisationWorld, snippet: String) {
     let receiver = world.receiver.borrow().clone();
     let category = ReceiverCategory::for_label(&receiver);
     let fallback = fallback_messages(&receiver, &context, category);
-    assert!(fallback.help().contains(&snippet));
+    assert!(contains_normalised(fallback.help(), &snippet));
+}
+
+fn contains_normalised(text: &str, snippet: &str) -> bool {
+    let sanitised_text = sanitise(text);
+    let sanitised_snippet = sanitise(snippet);
+    sanitised_text.contains(&sanitised_snippet)
+}
+
+fn sanitise(value: &str) -> String {
+    const LRI: char = '\u{2068}';
+    const PDI: char = '\u{2069}';
+
+    value
+        .chars()
+        .filter(|ch| *ch != '"' && *ch != '`' && *ch != LRI && *ch != PDI)
+        .collect()
 }
 
 fn execute_localisation(

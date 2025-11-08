@@ -5,10 +5,11 @@
 use common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context_with,
 };
+use rustc_ast::AttrStyle;
 use rustc_ast::ast::{MetaItem, MetaItemInner, Path};
 use rustc_hir as hir;
 use rustc_hir::Node;
-use rustc_lint::{LateContext, LintContext};
+use rustc_lint::LateContext;
 use rustc_span::sym;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -30,7 +31,7 @@ pub(crate) fn collect_context<'tcx>(
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        if attrs.iter().any(|attr| is_cfg_test_attribute(cx, attr)) {
+        if attrs.iter().any(is_cfg_test_attribute) {
             has_cfg_test = true;
         }
 
@@ -74,7 +75,7 @@ fn context_entry_for<'tcx>(
                     .opt_item_ident(item.owner_id.def_id)
                     .map(|ident| ident.name.to_string())
                     .unwrap_or_else(|| "<unknown>".to_string());
-                Some(ContextEntry::function(name, convert_attributes(cx, attrs)))
+                Some(ContextEntry::function(name, convert_attributes(attrs)))
             }
             hir::ItemKind::Mod(..) => {
                 let name = cx
@@ -85,52 +86,51 @@ fn context_entry_for<'tcx>(
                 Some(ContextEntry::new(
                     name,
                     ContextKind::Module,
-                    convert_attributes(cx, attrs),
+                    convert_attributes(attrs),
                 ))
             }
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
                 "impl".to_string(),
                 ContextKind::Impl,
-                convert_attributes(cx, attrs),
+                convert_attributes(attrs),
             )),
             _ => None,
         },
         Node::ImplItem(item) => match item.kind {
             hir::ImplItemKind::Fn(..) => Some(ContextEntry::function(
                 item.ident.name.to_string(),
-                convert_attributes(cx, attrs),
+                convert_attributes(attrs),
             )),
             _ => None,
         },
         Node::TraitItem(item) => match item.kind {
             hir::TraitItemKind::Fn(..) => Some(ContextEntry::function(
                 item.ident.name.to_string(),
-                convert_attributes(cx, attrs),
+                convert_attributes(attrs),
             )),
             _ => None,
         },
         Node::Block(_) => Some(ContextEntry::new(
             "block".to_string(),
             ContextKind::Block,
-            convert_attributes(cx, attrs),
+            convert_attributes(attrs),
         )),
         _ => None,
     }
 }
 
-fn convert_attributes<'tcx>(cx: &LateContext<'tcx>, attrs: &[hir::Attribute]) -> Vec<Attribute> {
+fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
     attrs
         .iter()
-        .filter(|attr| !is_cfg_test_attribute(cx, attr))
-        .map(|attr| convert_attribute(cx, attr))
+        .filter(|attr| !is_cfg_test_attribute(attr))
+        .map(convert_attribute)
         .collect()
 }
 
-fn convert_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> Attribute {
-    let kind = if is_outer_attribute(cx, attr) {
-        AttributeKind::Outer
-    } else {
-        AttributeKind::Inner
+fn convert_attribute(attr: &hir::Attribute) -> Attribute {
+    let kind = match attribute_style(attr) {
+        AttrStyle::Inner => AttributeKind::Inner,
+        AttrStyle::Outer => AttributeKind::Outer,
     };
     let path = attribute_path(attr);
 
@@ -149,22 +149,22 @@ fn attribute_path(attr: &hir::Attribute) -> AttributePath {
     }
 }
 
-fn is_outer_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> bool {
-    cx.sess()
-        .source_map()
-        .span_to_snippet(attr.span())
-        .map(|snippet| !snippet.trim_start().starts_with("#!"))
-        .unwrap_or(true)
+fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+    match attr {
+        hir::Attribute::Parsed(kind) => match kind {
+            hir::attrs::AttributeKind::DocComment { style, .. } => *style,
+            _ => AttrStyle::Outer,
+        },
+        hir::Attribute::Unparsed(item) => item.style,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::meta_contains_test_cfg;
-    use rstest::rstest;
     use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind};
     use rustc_ast::{Path, PathSegment};
-    use rustc_span::DUMMY_SP;
-    use rustc_span::symbol::Ident;
+    use rustc_span::{create_default_session_globals_then, symbol::Ident, DUMMY_SP};
 
     fn path_from_segments(segments: &[&str]) -> Path {
         let path_segments = segments
@@ -201,58 +201,112 @@ mod tests {
         MetaItemInner::MetaItem(meta)
     }
 
-    #[rstest]
-    #[case(meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["any"],
-            vec![meta_inner(meta_word(&["test"])), meta_inner(meta_word(&["doctest"]))],
-        ))],
-    ), true)]
-    #[case(meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["all"],
-            vec![meta_inner(meta_word(&["test"])), meta_inner(meta_word(&["unix"]))],
-        ))],
-    ), true)]
-    #[case(meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["not"],
-            vec![meta_inner(meta_word(&["test"]))],
-        ))],
-    ), false)]
-    #[case(meta_list(
-        &["cfg_attr"],
-        vec![
-            meta_inner(meta_word(&["test"])),
-            meta_inner(meta_list(&["cfg"], vec![meta_inner(meta_word(&["test"]))])),
-        ],
-    ), true)]
-    #[case(meta_list(
-        &["cfg_attr"],
-        vec![
-            meta_inner(meta_word(&["test"])),
-            meta_inner(meta_list(&["allow"], vec![meta_inner(meta_word(&["dead_code"]))])),
-        ],
-    ), false)]
-    fn meta_contains_test_cfg_cases(#[case] meta: MetaItem, #[case] expected: bool) {
-        assert_eq!(meta_contains_test_cfg(&meta), expected);
+    #[test]
+    fn meta_contains_test_cfg_cases() {
+        create_default_session_globals_then(|| {
+            let cases = [
+                (
+                    meta_list(
+                        &["cfg"],
+                        vec![meta_inner(meta_list(
+                            &["any"],
+                            vec![
+                                meta_inner(meta_word(&["test"])),
+                                meta_inner(meta_word(&["doctest"])),
+                            ],
+                        ))],
+                    ),
+                    true,
+                ),
+                (
+                    meta_list(
+                        &["cfg"],
+                        vec![meta_inner(meta_list(
+                            &["all"],
+                            vec![
+                                meta_inner(meta_word(&["test"])),
+                                meta_inner(meta_word(&["unix"])),
+                            ],
+                        ))],
+                    ),
+                    true,
+                ),
+                (
+                    meta_list(
+                        &["cfg"],
+                        vec![meta_inner(meta_list(
+                            &["not"],
+                            vec![meta_inner(meta_word(&["test"]))],
+                        ))],
+                    ),
+                    false,
+                ),
+                (
+                    meta_list(
+                        &["cfg_attr"],
+                        vec![
+                            meta_inner(meta_word(&["test"])),
+                            meta_inner(meta_list(&["cfg"], vec![meta_inner(meta_word(&["test"]))])),
+                        ],
+                    ),
+                    true,
+                ),
+                (
+                    meta_list(
+                        &["cfg_attr"],
+                        vec![
+                            meta_inner(meta_word(&["test"])),
+                            meta_inner(meta_list(
+                                &["allow"],
+                                vec![meta_inner(meta_word(&["dead_code"]))],
+                            )),
+                        ],
+                    ),
+                    false,
+                ),
+            ];
+
+            for (meta, expected) in cases {
+                assert_eq!(meta_contains_test_cfg(&meta), expected);
+            }
+        });
     }
 }
 
-fn is_cfg_test_attribute(cx: &LateContext<'_>, attr: &hir::Attribute) -> bool {
-    let path_segments: Vec<_> = attr.path().into_iter().collect();
-    if path_segments.len() != 1 || path_segments[0].as_str() != "cfg" {
+fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    if attr_is_path(attr, sym::cfg) {
+        return attr
+            .meta_item_list()
+            .map(|items| items.iter().any(meta_item_inner_contains_test))
+            .unwrap_or(false);
+    }
+
+    if !attr_is_path(attr, sym::cfg_attr) {
         return false;
     }
 
-    if let Ok(snippet) = cx.sess().source_map().span_to_snippet(attr.span()) {
-        return snippet.contains("test");
+    let Some(items) = attr.meta_item_list() else {
+        return false;
+    };
+    let mut iter = items.iter();
+    let Some(condition) = iter.next() else {
+        return false;
+    };
+
+    if !meta_item_inner_contains_test(condition) {
+        return false;
     }
 
-    false
+    iter.any(|item| match item {
+        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(inner),
+        MetaItemInner::Lit(_) => false,
+    })
+}
+
+fn attr_is_path(attr: &hir::Attribute, symbol: rustc_span::Symbol) -> bool {
+    attr.ident_path()
+        .map(|segments| segments.len() == 1 && segments[0].name == symbol)
+        .unwrap_or(false)
 }
 
 fn meta_item_inner_contains_test(item: &MetaItemInner) -> bool {

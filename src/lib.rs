@@ -1,6 +1,13 @@
 //! Core Whitaker library surfaces shared configuration and helpers for lint crates.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
+#[cfg(feature = "dylint-driver")]
+#[expect(
+    unused_extern_crates,
+    reason = "rustc_driver re-export kept for Dylint driver integration"
+)]
+extern crate rustc_driver;
+
 pub mod config;
 pub mod lints;
 pub mod testing;

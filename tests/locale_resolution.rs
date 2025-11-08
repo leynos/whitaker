@@ -1,4 +1,12 @@
 //! Behaviour-driven tests covering locale resolution semantics.
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+
+#[cfg(feature = "dylint-driver")]
+#[expect(
+    unused_extern_crates,
+    reason = "rustc_driver shim retained for Dylint testing via rustc_private"
+)]
+extern crate rustc_driver;
 
 use std::cell::RefCell;
 use std::str::FromStr;

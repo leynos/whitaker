@@ -8,14 +8,15 @@
 
 use common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
-    MessageResolution, get_localizer_for_lint, safe_resolve_message_set,
+    MessageResolution, get_localizer_for_lint, safe_resolve_message_set, strip_isolation_marks,
 };
 #[cfg(test)]
 use common::i18n::{I18nError, resolve_message_set};
+use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
-use rustc_span::Span;
+use rustc_span::{DUMMY_SP, Span};
 use std::borrow::Cow;
 use whitaker::SharedConfig;
 
@@ -98,15 +99,10 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    fn from_hir(cx: &LateContext<'_>, attr: &Attribute) -> Self {
-        let span = attr.span();
+    fn from_hir(attr: &Attribute) -> Self {
+        let span = attribute_span(attr);
         let is_doc = attr.doc_str().is_some();
-        let is_outer = cx
-            .sess()
-            .source_map()
-            .span_to_snippet(span)
-            .map(|snippet| !snippet.trim_start().starts_with("#!"))
-            .unwrap_or(true);
+        let is_outer = matches!(attribute_style(attr), AttrStyle::Outer);
 
         Self {
             span,
@@ -136,10 +132,7 @@ fn check_function_attributes(
     kind: FunctionKind,
     localizer: &Localizer,
 ) {
-    let infos: Vec<AttrInfo> = attrs
-        .iter()
-        .map(|attr| AttrInfo::from_hir(cx, attr))
-        .collect();
+    let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;
@@ -153,6 +146,27 @@ fn check_function_attributes(
         kind,
     };
     emit_diagnostic(cx, context, localizer);
+}
+
+fn attribute_span(attr: &Attribute) -> Span {
+    match attr {
+        hir::Attribute::Unparsed(item) => item.span,
+        hir::Attribute::Parsed(kind) => match kind {
+            hir::attrs::AttributeKind::DocComment { span, .. } => *span,
+            hir::attrs::AttributeKind::Inline(_, span) => *span,
+            _ => DUMMY_SP,
+        },
+    }
+}
+
+fn attribute_style(attr: &Attribute) -> AttrStyle {
+    match attr {
+        hir::Attribute::Parsed(kind) => match kind {
+            hir::attrs::AttributeKind::DocComment { style, .. } => *style,
+            _ => AttrStyle::Outer,
+        },
+        hir::Attribute::Unparsed(item) => item.style,
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -195,9 +209,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
     );
 
     cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
-        let primary = messages.primary().to_string();
-        let note = messages.note().to_string();
-        let help = messages.help().to_string();
+        let primary = strip_isolation_marks(messages.primary());
+        let note = strip_isolation_marks(messages.note());
+        let help = strip_isolation_marks(messages.help());
 
         lint.primary_message(primary);
         lint.span_note(context.offending_span, note);
@@ -257,7 +271,11 @@ where
 {
     let mut first_non_doc_outer = None;
 
-    for (index, attribute) in attrs.iter().enumerate() {
+    let mut order: Vec<usize> = (0..attrs.len()).collect();
+    order.sort_by_key(|&index| attrs[index].span().lo());
+
+    for index in order {
+        let attribute = &attrs[index];
         if !attribute.is_outer() {
             continue;
         }

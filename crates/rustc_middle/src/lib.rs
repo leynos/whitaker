@@ -7,6 +7,11 @@
 //! and generated lint crates can reason about MIR structures without declaring
 //! unstable upstream dependencies themselves.
 
+#![expect(
+    unused_extern_crates,
+    reason = "Proxy crate re-exports compiler internals for Dylint shims"
+)]
+extern crate rustc_driver;
 extern crate rustc_middle as upstream;
 
 pub use upstream::*;

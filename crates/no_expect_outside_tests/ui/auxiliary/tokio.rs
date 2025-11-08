@@ -1,6 +1,10 @@
+// no-prefer-dynamic
+// compile-flags: --crate-type=proc-macro --emit=metadata,link
 #![crate_type = "proc-macro"]
 
 //! Tokio UI aux crate: exposes a pass-through `#[tokio::test]` for fixtures.
+
+extern crate proc_macro;
 
 use proc_macro::TokenStream;
 

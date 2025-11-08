@@ -45,7 +45,9 @@ pub mod testing;
 pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
 };
-pub use helpers::{MessageResolution, get_localizer_for_lint, safe_resolve_message_set};
+pub use helpers::{
+    MessageResolution, get_localizer_for_lint, safe_resolve_message_set, strip_isolation_marks,
+};
 pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};
 pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};

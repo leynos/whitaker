@@ -1,4 +1,12 @@
 //! Behaviour-driven tests for the lint crate template helpers.
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+
+#[cfg(feature = "dylint-driver")]
+#[expect(
+    unused_extern_crates,
+    reason = "rustc_driver shim retained for lint template compiletest harness"
+)]
+extern crate rustc_driver;
 
 use std::cell::RefCell;
 

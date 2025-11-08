@@ -2,7 +2,7 @@ use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    safe_resolve_message_set,
+    safe_resolve_message_set, strip_isolation_marks,
 };
 #[cfg(test)]
 use common::i18n::{BundleLookup, I18nError, resolve_message_set};
@@ -176,11 +176,9 @@ pub(crate) fn emit_diagnostic(
     );
 
     cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, |lint| {
-        let NoExpectMessages {
-            primary,
-            note,
-            help,
-        } = messages;
+        let primary = strip_isolation_marks(messages.primary());
+        let note = strip_isolation_marks(messages.note());
+        let help = strip_isolation_marks(messages.help());
 
         lint.primary_message(primary);
         lint.note(note);

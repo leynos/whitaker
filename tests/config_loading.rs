@@ -1,4 +1,12 @@
 //! Behaviour-driven tests for shared configuration loading.
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+
+#[cfg(feature = "dylint-driver")]
+#[expect(
+    unused_extern_crates,
+    reason = "rustc_driver shim retained for Dylint testing via rustc_private"
+)]
+extern crate rustc_driver;
 
 use std::any::Any;
 use std::cell::RefCell;

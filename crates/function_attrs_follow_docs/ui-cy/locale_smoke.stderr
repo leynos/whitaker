@@ -1,19 +1,20 @@
 warning: Rhaid i sylwadau doc ar functions ddod o flaen priodoleddau allanol eraill.
-  --> $DIR/locale_smoke.rs:4:1
+  --> $DIR/locale_smoke.rs:7:1
    |
-LL | #[inline]
-   | ^^^^^^^^^
+LL | /// Function doc comment appears after `#[inline]`.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: Mae’r briodoledd #[inline] yn ymddangos cyn y sylw doc.
-  --> $DIR/locale_smoke.rs:4:1
+  --> $DIR/locale_smoke.rs:6:1
    |
 LL | #[inline]
    | ^^^^^^^^^
    = help: Symudwch y sylw doc fel ei fod o flaen #[inline] ar yr eitem.
 note: the lint level is defined here
-  --> $DIR/locale_smoke.rs:1:9
+  --> $DIR/locale_smoke.rs:3:9
    |
 LL | #![warn(function_attrs_follow_docs)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: 1 warning emitted
+

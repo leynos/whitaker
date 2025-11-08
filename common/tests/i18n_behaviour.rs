@@ -93,29 +93,37 @@ fn when_message(fixture: &I18nFixture, key: String) {
 
 #[when("I request the attribute {attribute} on {key}")]
 fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
+    if let Some((base, count)) = key.split_once(" with lint count ") {
+        return handle_lint_count_attribute(fixture, attribute.as_str(), base, count);
+    }
+
+    if let Some((base, count)) = key.split_once(" with branches ") {
+        return handle_attribute_with_branches(fixture, attribute.as_str(), base, count);
+    }
+
     let localizer = fixture.ensure_localizer();
     let args = default_arguments();
     let result = localizer.attribute_with_args(&key, &attribute, &args);
     fixture.store_message(result);
 }
 
-#[when("I request the attribute {attribute} on {key} with branches {count}")]
-fn when_attribute_with_branches(fixture: &I18nFixture, attribute: String, key: String, count: u32) {
+fn handle_attribute_with_branches(fixture: &I18nFixture, attribute: &str, key: &str, count: &str) {
+    let count: u32 = count.parse().expect("branch count must be numeric");
     let localizer = fixture.ensure_localizer();
     let mut args = default_arguments();
     args.insert(Cow::Borrowed("branches"), FluentValue::from(count as i64));
     let phrase = branch_phrase_for(localizer.locale(), count);
     args.insert(Cow::Borrowed("branch_phrase"), FluentValue::from(phrase));
-    let result = localizer.attribute_with_args(&key, &attribute, &args);
+    let result = localizer.attribute_with_args(key, attribute, &args);
     fixture.store_message(result);
 }
 
-#[when("I request the attribute note on common-lint-count with lint count {count}")]
-fn when_common_lint_count_note(fixture: &I18nFixture, count: u32) {
+fn handle_lint_count_attribute(fixture: &I18nFixture, attribute: &str, key: &str, count: &str) {
+    let count: u32 = count.parse().expect("lint count must be numeric");
     let localizer = fixture.ensure_localizer();
     let mut args: Arguments<'static> = HashMap::new();
     args.insert(Cow::Borrowed("lint"), FluentValue::from(count as i64));
-    let result = localizer.attribute_with_args("common-lint-count", "note", &args);
+    let result = localizer.attribute_with_args(key, attribute, &args);
     fixture.store_message(result);
 }
 

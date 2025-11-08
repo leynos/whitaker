@@ -6,6 +6,11 @@
 //! infrastructure via workspace dependencies rather than linking directly to
 //! unstable upstream crates.
 
+#![expect(
+    unused_extern_crates,
+    reason = "Proxy crate re-exports compiler internals for Dylint shims"
+)]
+extern crate rustc_driver;
 extern crate rustc_lint as upstream;
 
 pub use upstream::*;

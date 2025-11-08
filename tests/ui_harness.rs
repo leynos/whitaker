@@ -1,4 +1,12 @@
 //! Behaviour-driven tests for the Dylint UI harness helpers.
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+
+#[cfg(feature = "dylint-driver")]
+#[expect(
+    unused_extern_crates,
+    reason = "rustc_driver shim retained for Dylint driver harness tests"
+)]
+extern crate rustc_driver;
 
 use std::{cell::RefCell, convert::Infallible};
 

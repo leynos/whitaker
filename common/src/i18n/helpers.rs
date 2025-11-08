@@ -112,3 +112,26 @@ pub struct MessageResolution<'a> {
     /// Fluent argument map supplied to the lookup.
     pub args: &'a Arguments<'a>,
 }
+
+/// Remove Unicode isolation marks from Fluent-rendered text.
+///
+/// Fluent inserts [bidirectional isolation marks][bidi] around interpolated
+/// variables. While desirable in general, diagnostic snippets frequently render
+/// these markers as replacement glyphs, so the helper strips them to keep
+/// messages legible.
+///
+/// [bidi]: https://unicode.org/reports/tr9/#Explicit_Directional_Isolates
+#[must_use]
+pub fn strip_isolation_marks(value: &str) -> String {
+    const LRI: char = '\u{2068}';
+    const PDI: char = '\u{2069}';
+
+    if value.chars().any(|ch| ch == LRI || ch == PDI) {
+        value
+            .chars()
+            .filter(|ch| *ch != LRI && *ch != PDI)
+            .collect()
+    } else {
+        value.to_string()
+    }
+}
