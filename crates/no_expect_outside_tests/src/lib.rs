@@ -15,7 +15,7 @@ use common::{AttributePath, Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_middle::ty::Ty;
+use rustc_middle::ty::{Ty, TypingEnv};
 use rustc_span::sym;
 use serde::Deserialize;
 use whitaker::SharedConfig;
@@ -57,12 +57,8 @@ impl Default for NoExpectOutsideTests {
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.is_doctest = cx
-            .tcx
-            .sess
-            .env_var_os("UNSTABLE_RUSTDOC_TEST_PATH".as_ref())
-            .is_some();
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
+        self.is_doctest = std::env::var_os("UNSTABLE_RUSTDOC_TEST_PATH").is_some();
         let config_name = "no_expect_outside_tests";
         let config = match dylint_linting::config::<Config>(config_name) {
             Ok(Some(config)) => config,
@@ -132,10 +128,8 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let ty = cx
-        .tcx
-        .normalize_erasing_regions(cx.param_env, ty)
-        .peel_refs();
+    let typing_env = TypingEnv::fully_monomorphized();
+    let ty = cx.tcx.normalize_erasing_regions(typing_env, ty).peel_refs();
 
     let Some(adt) = ty.ty_adt_def() else {
         return false;

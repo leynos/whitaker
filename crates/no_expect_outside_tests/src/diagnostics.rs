@@ -1,7 +1,5 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
-#[cfg(test)]
-use common::i18n::AttrKey;
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     safe_resolve_message_set,
@@ -171,17 +169,17 @@ pub(crate) fn emit_diagnostic(
     let messages = safe_resolve_message_set(
         context.localizer,
         resolution,
-        |message| cx.tcx.sess.dcx().span_delayed_bug(expr.span, message),
+        |message| {
+            cx.tcx.sess.dcx().span_delayed_bug(expr.span, message);
+        },
         move || fallback_messages(&fallback_receiver, &fallback_context, category),
     );
 
-    cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, |lint| {
-        let NoExpectMessages {
-            primary,
-            note,
-            help,
-        } = messages;
+    let primary = messages.primary().to_string();
+    let note = messages.note().to_string();
+    let help = messages.help().to_string();
 
+    cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, move |lint| {
         lint.primary_message(primary);
         lint.note(note);
         lint.help(help);
