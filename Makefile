@@ -47,7 +47,7 @@ nixie:
 	nixie --no-sandbox
 
 publish-check: ## Run Lading publish pre-flight checks (override flags via PUBLISH_CHECK_FLAGS)
-	$(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
+	RUSTUP_TOOLCHAIN=nightly $(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
