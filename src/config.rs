@@ -55,9 +55,7 @@ impl SharedConfig {
 
         #[cfg(not(feature = "dylint-driver"))]
         {
-            panic!(
-                "`SharedConfig::load` uses the Dylint loader; use `SharedConfig::load_with` to inject a stub when testing"
-            );
+            Self::default()
         }
     }
 

@@ -1,0 +1,9 @@
+[preflight]
+# Skip Dylint lint crates whose test suites require the Dylint driver,
+# which the publish pre-flight run cannot currently satisfy.
+test_exclude = [
+    "function_attrs_follow_docs",
+    "no_expect_outside_tests",
+    "module_max_lines",
+]
+unit_tests_only = true

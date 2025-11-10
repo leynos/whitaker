@@ -1,5 +1,5 @@
 //! Core Whitaker library surfaces shared configuration and helpers for lint crates.
-#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
+#![feature(rustc_private)]
 
 pub mod config;
 pub mod lints;

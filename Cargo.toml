@@ -1,5 +1,14 @@
 [workspace]
 members = ["common", "crates/*"]
+exclude = [
+    "crates/rustc_ast",
+    "crates/rustc_attr_data_structures",
+    "crates/rustc_hir",
+    "crates/rustc_lint",
+    "crates/rustc_middle",
+    "crates/rustc_session",
+    "crates/rustc_span",
+]
 resolver = "2"
 
 [workspace.dependencies]
@@ -28,7 +37,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["dylint-driver"]
+default = []
 dylint-driver = ["dep:dylint_linting"]
 
 [dependencies]
