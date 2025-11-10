@@ -121,37 +121,77 @@ fn locales_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales")
 }
 
-static MESSAGE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^([A-Za-z0-9_-]+)\\s*=\\s*(.*)$").expect("valid message regex"));
+struct ParseCursor<'state> {
+    current_id: &'state mut Option<String>,
+    current_attribute: &'state mut Option<String>,
+}
+
+impl<'state> ParseCursor<'state> {
+    fn new(
+        current_id: &'state mut Option<String>,
+        current_attribute: &'state mut Option<String>,
+    ) -> Self {
+        Self {
+            current_id,
+            current_attribute,
+        }
+    }
+
+    fn message(&self) -> Option<&str> {
+        self.current_id.as_deref()
+    }
+
+    fn attribute(&self) -> Option<&str> {
+        self.current_attribute.as_deref()
+    }
+
+    fn set_message(&mut self, identifier: String) {
+        *self.current_id = Some(identifier);
+        self.current_attribute.take();
+    }
+
+    fn set_attribute(&mut self, attribute: String) {
+        *self.current_attribute = Some(attribute);
+    }
+}
+
+fn compile_regex(pattern: &str, context: &str) -> Regex {
+    Regex::new(pattern).unwrap_or_else(|error| panic!("{context}: {error}"))
+}
+
+static MESSAGE_RE: Lazy<Regex> = Lazy::new(|| {
+    compile_regex(
+        r"^([A-Za-z0-9_-]+)\\s*=\\s*(.*)$",
+        "message declarations should compile",
+    )
+});
 static ATTRIBUTE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\\s+\\.([A-Za-z0-9_-]+)\\s*=\\s*(.*)$").expect("valid attribute regex")
+    compile_regex(
+        r"^\\s+\\.([A-Za-z0-9_-]+)\\s*=\\s*(.*)$",
+        "attribute declarations should compile",
+    )
 });
 
 pub fn parse_ftl(path: &Path) -> BTreeMap<String, FtlEntry> {
     let mut entries: BTreeMap<String, FtlEntry> = BTreeMap::new();
-    let content = fs::read_to_string(path).expect("ftl file should be readable");
+    let content = fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("ftl file should be readable: {error}"));
 
     let mut current_id: Option<String> = None;
-    let mut current_attribute: Option<String> = None;
+   let mut current_attribute: Option<String> = None;
 
     for line in content.lines() {
-        if process_message_line(
-            line,
-            &MESSAGE_RE,
-            &mut entries,
-            &mut current_id,
-            &mut current_attribute,
-        ) {
+        if {
+            let mut cursor = ParseCursor::new(&mut current_id, &mut current_attribute);
+            process_message_line(line, &MESSAGE_RE, &mut entries, &mut cursor)
+        } {
             continue;
         }
 
-        if process_attribute_line(
-            line,
-            &ATTRIBUTE_RE,
-            &mut entries,
-            &current_id,
-            &mut current_attribute,
-        ) {
+        if {
+            let mut cursor = ParseCursor::new(&mut current_id, &mut current_attribute);
+            process_attribute_line(line, &ATTRIBUTE_RE, &mut entries, &mut cursor)
+        } {
             continue;
         }
 
@@ -174,16 +214,14 @@ fn process_message_line(
     line: &str,
     message_re: &Regex,
     entries: &mut BTreeMap<String, FtlEntry>,
-    current_id: &mut Option<String>,
-    current_attribute: &mut Option<String>,
+    cursor: &mut ParseCursor<'_>,
 ) -> bool {
     if let Some(captures) = message_re.captures(line) {
         let id = captures[1].to_string();
         let value = captures[2].to_string();
         let entry = entries.entry(id.clone()).or_default();
         entry.value = value;
-        *current_id = Some(id);
-        *current_attribute = None;
+        cursor.set_message(id);
         return true;
     }
 
@@ -194,19 +232,15 @@ fn process_attribute_line(
     line: &str,
     attribute_re: &Regex,
     entries: &mut BTreeMap<String, FtlEntry>,
-    current_id: &Option<String>,
-    current_attribute: &mut Option<String>,
+    cursor: &mut ParseCursor<'_>,
 ) -> bool {
     if let Some(captures) = attribute_re.captures(line) {
-        if let Some(current) = current_id.as_ref() {
+        if let Some(current) = cursor.message() {
             let name = captures[1].to_string();
             let value = captures[2].to_string();
-            entries
-                .entry(current.clone())
-                .or_default()
-                .attributes
-                .insert(name.clone(), value);
-            *current_attribute = Some(name);
+            let entry = entries.entry(current.to_string()).or_default();
+            entry.attributes.insert(name.clone(), value);
+            cursor.set_attribute(name);
         }
         return true;
     }
@@ -241,11 +275,12 @@ fn append_to_attribute(
     attribute: &AttributeName,
     line: &str,
 ) {
-    if let Some(entry) = entries.get_mut(message_id.as_str()) {
-        if let Some(text) = entry.attributes.get_mut(attribute.as_str()) {
-            text.push('\n');
-            text.push_str(line.trim());
-        }
+    if let Some(text) = entries
+        .get_mut(message_id.as_str())
+        .and_then(|entry| entry.attributes.get_mut(attribute.as_str()))
+    {
+        text.push('\n');
+        text.push_str(line.trim());
     }
 }
 
@@ -259,9 +294,9 @@ fn append_to_message(entries: &mut BTreeMap<String, FtlEntry>, message_id: &Mess
 pub fn secondary_locales() -> Vec<(String, PathBuf)> {
     let root = locales_root();
     let mut locales: Vec<(String, PathBuf)> = fs::read_dir(&root)
-        .expect("locales directory should exist")
+        .unwrap_or_else(|error| panic!("locales directory should exist: {error}"))
         .filter_map(|entry| {
-            let entry = entry.expect("valid directory entry");
+            let entry = entry.unwrap_or_else(|error| panic!("valid directory entry: {error}"));
             entry
                 .file_type()
                 .ok()
@@ -286,8 +321,10 @@ pub fn file_pairs() -> Vec<(String, PathBuf, PathBuf)> {
     let locales = secondary_locales();
     let mut pairs: Vec<(String, PathBuf, PathBuf)> = Vec::new();
 
-    for entry in fs::read_dir(&en).expect("en-GB locale should exist") {
-        let entry = entry.expect("valid directory entry");
+    for entry in
+        fs::read_dir(&en).unwrap_or_else(|error| panic!("en-GB locale should exist: {error}"))
+    {
+        let entry = entry.unwrap_or_else(|error| panic!("valid directory entry: {error}"));
         if entry.path().extension().and_then(|ext| ext.to_str()) != Some("ftl") {
             continue;
         }

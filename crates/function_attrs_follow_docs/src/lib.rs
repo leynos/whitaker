@@ -13,8 +13,8 @@ use common::i18n::{
 #[cfg(test)]
 use common::i18n::{I18nError, resolve_message_set};
 use rustc_ast::AttrStyle;
+use rustc_ast::attr::AttributeExt;
 use rustc_hir as hir;
-use rustc_hir::Attribute;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
@@ -41,7 +41,7 @@ dylint_linting::impl_late_lint! {
 }
 
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
-    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         let shared_config = SharedConfig::load();
         self.localizer =
             get_localizer_for_lint("function_attrs_follow_docs", shared_config.locale());
@@ -69,8 +69,9 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 enum FunctionKind {
+    #[default]
     Function,
     Method,
     TraitMethod,
@@ -93,10 +94,12 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    fn from_hir(attr: &Attribute) -> Self {
+    fn from_hir(attr: &hir::Attribute) -> Self {
         let span = attr.span();
         let is_doc = attr.doc_str().is_some();
-        let is_outer = matches!(attr.style(), AttrStyle::Outer);
+        let is_outer = attr
+            .doc_resolution_scope()
+            .is_none_or(|style| matches!(style, AttrStyle::Outer));
 
         Self {
             span,
@@ -122,7 +125,7 @@ impl OrderedAttribute for AttrInfo {
 
 fn check_function_attributes(
     cx: &LateContext<'_>,
-    attrs: &[Attribute],
+    attrs: &[hir::Attribute],
     kind: FunctionKind,
     localizer: &Localizer,
 ) {
@@ -173,24 +176,21 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
             cx.tcx
                 .sess
                 .dcx()
-                .span_delayed_bug(context.doc_span, message)
+                .span_delayed_bug(context.doc_span, message);
         },
         {
             let kind = context.kind;
             move || fallback_messages(kind, attribute.as_str())
         },
     );
+    let primary = messages.primary().to_string();
+    let note = messages.note().to_string();
+    let help = messages.help().to_string();
 
-    cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, |lint| {
-        let FunctionAttrsMessages {
-            primary,
-            note,
-            help,
-        } = messages;
-
-        lint.primary_message(primary);
-        lint.span_note(context.offending_span, note);
-        lint.help(help);
+    cx.span_lint(FUNCTION_ATTRS_FOLLOW_DOCS, context.doc_span, move |lint| {
+        lint.primary_message(primary.clone());
+        lint.span_note(context.offending_span, note.clone());
+        lint.help(help.clone());
     });
 }
 

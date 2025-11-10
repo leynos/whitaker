@@ -7,6 +7,8 @@
 //! and generated lint crates can reason about MIR structures without declaring
 //! unstable upstream dependencies themselves.
 
+extern crate rustc_driver;
+
 extern crate rustc_middle as upstream;
 
 pub use upstream::*;

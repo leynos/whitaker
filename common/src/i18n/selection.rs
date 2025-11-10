@@ -154,39 +154,69 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
-    #[rstest]
-    #[case(None, None, None, LocaleSource::Fallback, "en-GB", true)]
-    #[case(Some("cy"), None, None, LocaleSource::ExplicitArgument, "cy", false)]
-    #[case(
-        None,
-        Some(String::from("gd")),
-        None,
-        LocaleSource::EnvironmentVariable,
-        "gd",
-        false
-    )]
-    #[case(None, None, Some("cy"), LocaleSource::Configuration, "cy", false)]
-    #[case(
-        Some("zz"),
-        Some(String::from("yy")),
-        Some("cy"),
-        LocaleSource::Configuration,
-        "cy",
-        false
-    )]
-    fn resolves_sources(
-        #[case] explicit: Option<&str>,
-        #[case] environment: Option<String>,
-        #[case] configuration: Option<&str>,
-        #[case] expected_source: LocaleSource,
-        #[case] expected_locale: &str,
-        #[case] expected_fallback: bool,
-    ) {
-        let selection = resolve_localizer(explicit, environment, configuration);
+    #[derive(Clone, Copy, Debug)]
+    struct ResolutionCase {
+        explicit: Option<&'static str>,
+        environment: Option<&'static str>,
+        configuration: Option<&'static str>,
+        expected_source: LocaleSource,
+        expected_locale: &'static str,
+        expected_fallback: bool,
+    }
 
-        assert_eq!(selection.source(), expected_source);
-        assert_eq!(selection.locale(), expected_locale);
-        assert_eq!(selection.used_fallback(), expected_fallback);
+    impl ResolutionCase {
+        fn environment(&self) -> Option<String> {
+            self.environment.map(String::from)
+        }
+    }
+
+    #[rstest]
+    #[case(ResolutionCase {
+        explicit: None,
+        environment: None,
+        configuration: None,
+        expected_source: LocaleSource::Fallback,
+        expected_locale: "en-GB",
+        expected_fallback: true,
+    })]
+    #[case(ResolutionCase {
+        explicit: Some("cy"),
+        environment: None,
+        configuration: None,
+        expected_source: LocaleSource::ExplicitArgument,
+        expected_locale: "cy",
+        expected_fallback: false,
+    })]
+    #[case(ResolutionCase {
+        explicit: None,
+        environment: Some("gd"),
+        configuration: None,
+        expected_source: LocaleSource::EnvironmentVariable,
+        expected_locale: "gd",
+        expected_fallback: false,
+    })]
+    #[case(ResolutionCase {
+        explicit: None,
+        environment: None,
+        configuration: Some("cy"),
+        expected_source: LocaleSource::Configuration,
+        expected_locale: "cy",
+        expected_fallback: false,
+    })]
+    #[case(ResolutionCase {
+        explicit: Some("zz"),
+        environment: Some("yy"),
+        configuration: Some("cy"),
+        expected_source: LocaleSource::Configuration,
+        expected_locale: "cy",
+        expected_fallback: false,
+    })]
+    fn resolves_sources(#[case] case: ResolutionCase) {
+        let selection = resolve_localizer(case.explicit, case.environment(), case.configuration);
+
+        assert_eq!(selection.source(), case.expected_source);
+        assert_eq!(selection.locale(), case.expected_locale);
+        assert_eq!(selection.used_fallback(), case.expected_fallback);
     }
 
     #[rstest]

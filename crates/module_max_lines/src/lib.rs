@@ -6,7 +6,6 @@
 //! and warns when the count exceeds the configurable `max_lines` threshold.
 //! The lint uses localisation data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
-
 use common::i18n::{Arguments, I18nError, Localizer, resolve_localizer};
 use log::debug;
 use rustc_hir as hir;
@@ -142,16 +141,9 @@ fn module_span<'tcx>(
 }
 
 fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
-    let Ok(info) = source_map.span_to_lines(span) else {
-        return None;
-    };
-
-    let Some(first) = info.lines.first() else {
-        return None;
-    };
-    let Some(last) = info.lines.last() else {
-        return None;
-    };
+    let info = source_map.span_to_lines(span).ok()?;
+    let first = info.lines.first()?;
+    let last = info.lines.last()?;
 
     let contiguous = info
         .lines

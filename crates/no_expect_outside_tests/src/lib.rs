@@ -15,7 +15,7 @@ use common::{AttributePath, Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
-use rustc_middle::ty::Ty;
+use rustc_middle::ty::{self, Ty};
 use rustc_span::sym;
 use serde::Deserialize;
 use whitaker::SharedConfig;
@@ -60,7 +60,6 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         self.is_doctest = cx
             .tcx
-            .sess
             .env_var_os("UNSTABLE_RUSTDOC_TEST_PATH".as_ref())
             .is_some();
         let config_name = "no_expect_outside_tests";
@@ -132,10 +131,11 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let ty = cx
-        .tcx
-        .normalize_erasing_regions(cx.param_env, ty)
-        .peel_refs();
+    let typing_env = ty::TypingEnv {
+        typing_mode: ty::TypingMode::non_body_analysis(),
+        param_env: cx.param_env,
+    };
+    let ty = cx.tcx.normalize_erasing_regions(typing_env, ty).peel_refs();
 
     let Some(adt) = ty.ty_adt_def() else {
         return false;
@@ -146,19 +146,9 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    reason = "tests assert panic paths to validate lint behaviour"
-)]
 mod tests;
 
 #[cfg(test)]
-#[expect(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    reason = "behaviour tests exercise panic workflows intentionally"
-)]
 mod behaviour;
 
 #[cfg(test)]
