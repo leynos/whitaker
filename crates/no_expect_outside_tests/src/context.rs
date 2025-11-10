@@ -123,6 +123,27 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
 
     Attribute::new(path, kind)
 }
+
+/// Check if a cfg_attr has a test condition and contains nested cfg(test).
+fn check_cfg_attr_for_test<I>(items: I) -> bool
+where
+    I: IntoIterator<Item = MetaItemInner>,
+{
+    let mut iter = items.into_iter();
+    let Some(condition) = iter.next() else {
+        return false;
+    };
+
+    if !meta_item_inner_contains_test(condition) {
+        return false;
+    }
+
+    iter.any(|item| match item {
+        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
+        MetaItemInner::Lit(_) => false,
+    })
+}
+
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     let path = attr.path();
     if path.len() != 1 {
@@ -140,22 +161,9 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
         return false;
     }
 
-    let Some(items) = attr.meta_item_list() else {
-        return false;
-    };
-    let mut iter = items.into_iter();
-    let Some(condition) = iter.next() else {
-        return false;
-    };
-
-    if !meta_item_inner_contains_test(condition) {
-        return false;
-    }
-
-    iter.any(|item| match item {
-        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
-        MetaItemInner::Lit(_) => false,
-    })
+    attr.meta_item_list()
+        .map(|items| check_cfg_attr_for_test(items.into_iter()))
+        .unwrap_or(false)
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
@@ -208,22 +216,9 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
         return false;
     }
 
-    let Some(items) = meta.meta_item_list() else {
-        return false;
-    };
-    let mut iter = items.iter().cloned();
-    let Some(condition) = iter.next() else {
-        return false;
-    };
-
-    if !meta_item_inner_contains_test(condition) {
-        return false;
-    }
-
-    iter.any(|item| match item {
-        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
-        MetaItemInner::Lit(_) => false,
-    })
+    meta.meta_item_list()
+        .map(|items| check_cfg_attr_for_test(items.iter().cloned()))
+        .unwrap_or(false)
 }
 
 fn item_name(item: &hir::Item<'_>) -> Option<String> {
