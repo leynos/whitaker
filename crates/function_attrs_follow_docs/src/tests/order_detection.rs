@@ -91,30 +91,18 @@ fn order_rejected(result: &Option<(usize, usize)>) {
     assert!(result.is_some());
 }
 
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd scenarios reserve parameters for the macro harness"
-)]
+#[allow(unused_variables)]
 #[scenario(path = "tests/features/function_doc_order.feature", index = 0)]
 fn scenario_accepts_doc_first(world: AttributeWorld, result: Option<(usize, usize)>) {}
 
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd scenarios reserve parameters for the macro harness"
-)]
+#[allow(unused_variables)]
 #[scenario(path = "tests/features/function_doc_order.feature", index = 1)]
 fn scenario_rejects_doc_last(world: AttributeWorld, result: Option<(usize, usize)>) {}
 
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd scenarios reserve parameters for the macro harness"
-)]
+#[allow(unused_variables)]
 #[scenario(path = "tests/features/function_doc_order.feature", index = 2)]
 fn scenario_handles_no_doc(world: AttributeWorld, result: Option<(usize, usize)>) {}
 
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd scenarios reserve parameters for the macro harness"
-)]
+#[allow(unused_variables)]
 #[scenario(path = "tests/features/function_doc_order.feature", index = 3)]
 fn scenario_ignores_inner_attributes(world: AttributeWorld, result: Option<(usize, usize)>) {}

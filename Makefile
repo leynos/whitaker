@@ -3,7 +3,8 @@
 APP ?= whitaker
 CARGO ?= cargo
 BUILD_JOBS ?=
-CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
+CARGO_FLAGS ?= --workspace --all-targets --all-features
+RUST_FLAGS ?= -Z force-unstable-if-unmarked -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
@@ -19,14 +20,14 @@ clean: ## Remove build artifacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors
-	RUSTFLAGS="-Z force-unstable-if-unmarked -D warnings" $(CARGO) test --all-targets --no-default-features $(BUILD_JOBS)
+	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_FLAGS) $(BUILD_JOBS)
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
 lint: ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
-	$(CARGO) clippy $(CLIPPY_FLAGS)
+	$(CARGO) clippy $(CARGO_FLAGS) -- $(RUST_FLAGS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

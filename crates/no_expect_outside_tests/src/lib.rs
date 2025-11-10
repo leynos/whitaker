@@ -140,19 +140,11 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    reason = "tests assert panic paths to validate lint behaviour"
-)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests;
 
 #[cfg(test)]
-#[expect(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    reason = "behaviour tests exercise panic workflows intentionally"
-)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod behaviour;
 
 #[cfg(test)]

@@ -146,12 +146,8 @@ fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
         return None;
     };
 
-    let Some(first) = info.lines.first() else {
-        return None;
-    };
-    let Some(last) = info.lines.last() else {
-        return None;
-    };
+    let first = info.lines.first()?;
+    let last = info.lines.last()?;
 
     let contiguous = info
         .lines

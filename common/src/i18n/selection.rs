@@ -151,6 +151,8 @@ pub fn normalise_locale(input: Option<&str>) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::too_many_arguments)]
+
     use super::*;
     use rstest::rstest;
 

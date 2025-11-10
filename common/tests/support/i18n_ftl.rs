@@ -5,6 +5,12 @@
 //! the localisation quality and behaviour assertions. It understands message
 //! declarations, attribute lines, and multi-line continuations so tests can
 //! inspect Fluent resources without depending on the runtime loader.
+#![allow(
+    clippy::expect_used,
+    clippy::too_many_arguments,
+    clippy::collapsible_if
+)]
+#![allow(dead_code)]
 
 use once_cell::sync::Lazy;
 use regex::Regex;

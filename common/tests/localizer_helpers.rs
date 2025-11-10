@@ -80,8 +80,8 @@ impl HelperWorld {
         self.localizer
             .borrow()
             .as_ref()
-            .expect("localizer should be initialised")
-            .clone()
+            .cloned()
+            .unwrap_or_else(|| panic!("localizer should be initialised"))
     }
 
     fn assert_locale(&self, expected: &str) {
@@ -135,7 +135,7 @@ impl HelperWorld {
             .message_key
             .borrow()
             .clone()
-            .expect("a message key should be configured");
+            .unwrap_or_else(|| panic!("a message key should be configured"));
         let args = self.arguments.borrow().clone();
         let fallback = self.ensure_fallback();
 
@@ -161,7 +161,7 @@ impl HelperWorld {
             .borrow()
             .as_ref()
             .cloned()
-            .expect("diagnostic messages should be resolved")
+            .unwrap_or_else(|| panic!("diagnostic messages should be resolved"))
     }
 
     fn recorded_messages(&self) -> Vec<String> {

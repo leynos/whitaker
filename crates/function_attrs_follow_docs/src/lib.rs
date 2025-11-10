@@ -70,17 +70,12 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 enum FunctionKind {
+    #[default]
     Function,
     Method,
     TraitMethod,
-}
-
-impl Default for FunctionKind {
-    fn default() -> Self {
-        Self::Function
-    }
 }
 
 impl FunctionKind {

@@ -3,6 +3,7 @@
 //! Scenarios exercise fallback resolution, secondary locale delivery, and
 //! missing message handling to ensure lint crates can rely on predictable
 //! diagnostics across locales.
+#![allow(clippy::expect_used)]
 
 use common::i18n::{Arguments, FluentValue, I18nError, Localizer};
 use rstest::fixture;

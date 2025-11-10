@@ -166,7 +166,7 @@ fn attribute_to_meta(attr: &hir::Attribute) -> Option<MetaItem> {
     let kind = if let Some(list) = attr.meta_item_list() {
         MetaItemKind::List(list)
     } else if let Some(lit) = attr.value_lit() {
-        MetaItemKind::NameValue(lit.clone())
+        MetaItemKind::NameValue(*lit)
     } else {
         MetaItemKind::Word
     };
@@ -181,6 +181,80 @@ fn attribute_to_meta(attr: &hir::Attribute) -> Option<MetaItem> {
         kind,
         span,
     })
+}
+
+fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    attribute_to_meta(attr).is_some_and(|meta| meta_contains_test_cfg(&meta))
+}
+
+fn meta_item_inner_contains_test(item: &MetaItemInner) -> bool {
+    meta_item_inner_contains_test_with_polarity(item, true)
+}
+
+fn meta_item_inner_contains_test_with_polarity(item: &MetaItemInner, is_positive: bool) -> bool {
+    match item {
+        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(meta, is_positive),
+        MetaItemInner::Lit(_) => false,
+    }
+}
+
+fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
+    if path_is_ident(&meta.path, sym::test) || path_is_ident(&meta.path, sym::doctest) {
+        return is_positive;
+    }
+
+    if path_is_ident(&meta.path, sym::not) {
+        return meta
+            .meta_item_list()
+            .map(|items| {
+                items
+                    .iter()
+                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+            })
+            .unwrap_or(false);
+    }
+
+    meta.meta_item_list()
+        .map(|items| {
+            items
+                .iter()
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+        })
+        .unwrap_or(false)
+}
+
+fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
+    if path_is_ident(&meta.path, sym::cfg) {
+        return meta
+            .meta_item_list()
+            .map(|items| items.iter().any(meta_item_inner_contains_test))
+            .unwrap_or(false);
+    }
+
+    if !path_is_ident(&meta.path, sym::cfg_attr) {
+        return false;
+    }
+
+    let Some(items) = meta.meta_item_list() else {
+        return false;
+    };
+    let mut iter = items.iter();
+    let Some(condition) = iter.next() else {
+        return false;
+    };
+
+    if !meta_item_inner_contains_test(condition) {
+        return false;
+    }
+
+    iter.any(|item| match item {
+        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(inner),
+        MetaItemInner::Lit(_) => false,
+    })
+}
+
+fn path_is_ident(path: &rustc_ast::Path, symbol: rustc_span::Symbol) -> bool {
+    path.segments.len() == 1 && path.segments[0].ident.name == symbol
 }
 
 #[cfg(test)]
@@ -310,78 +384,4 @@ mod tests {
     fn meta_contains_test_cfg_cases(#[case] meta: MetaItem, #[case] expected: bool) {
         assert_eq!(meta_contains_test_cfg(&meta), expected);
     }
-}
-
-fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    attribute_to_meta(attr).is_some_and(|meta| meta_contains_test_cfg(&meta))
-}
-
-fn meta_item_inner_contains_test(item: &MetaItemInner) -> bool {
-    meta_item_inner_contains_test_with_polarity(item, true)
-}
-
-fn meta_item_inner_contains_test_with_polarity(item: &MetaItemInner, is_positive: bool) -> bool {
-    match item {
-        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(meta, is_positive),
-        MetaItemInner::Lit(_) => false,
-    }
-}
-
-fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
-    if path_is_ident(&meta.path, sym::test) || path_is_ident(&meta.path, sym::doctest) {
-        return is_positive;
-    }
-
-    if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .map(|items| {
-                items
-                    .iter()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            })
-            .unwrap_or(false);
-    }
-
-    meta.meta_item_list()
-        .map(|items| {
-            items
-                .iter()
-                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
-        })
-        .unwrap_or(false)
-}
-
-fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
-    if path_is_ident(&meta.path, sym::cfg) {
-        return meta
-            .meta_item_list()
-            .map(|items| items.iter().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
-    }
-
-    if !path_is_ident(&meta.path, sym::cfg_attr) {
-        return false;
-    }
-
-    let Some(items) = meta.meta_item_list() else {
-        return false;
-    };
-    let mut iter = items.iter();
-    let Some(condition) = iter.next() else {
-        return false;
-    };
-
-    if !meta_item_inner_contains_test(condition) {
-        return false;
-    }
-
-    iter.any(|item| match item {
-        MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(inner),
-        MetaItemInner::Lit(_) => false,
-    })
-}
-
-fn path_is_ident(path: &rustc_ast::Path, symbol: rustc_span::Symbol) -> bool {
-    path.segments.len() == 1 && path.segments[0].ident.name == symbol
 }
