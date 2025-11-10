@@ -162,7 +162,7 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     }
 
     attr.meta_item_list()
-        .map(|items| check_cfg_attr_for_test(items.into_iter()))
+        .map(|items| check_cfg_attr_for_test(items))
         .unwrap_or(false)
 }
 
