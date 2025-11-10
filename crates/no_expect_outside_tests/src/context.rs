@@ -164,7 +164,6 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     attr.meta_item_list()
         .map(check_cfg_attr_for_test)
         .unwrap_or(false)
-        .unwrap_or(false)
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
