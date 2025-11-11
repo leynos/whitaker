@@ -18,7 +18,7 @@ rustc_session = { workspace = true }
 rustc_span = { workspace = true }
 common = { path = "../../common" }
 log = { workspace = true }
-whitaker = { path = "../../" }
+whitaker = { path = "../../", features = ["dylint-driver"] }
 
 [dev-dependencies]
 rstest = { version = "0.26.1" }
