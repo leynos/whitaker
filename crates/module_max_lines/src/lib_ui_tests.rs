@@ -45,13 +45,11 @@ where
 
 fn discover_fixtures(directory: &Utf8Path) -> io::Result<Vec<PathBuf>> {
     let pattern = directory.join("*.rs").to_string();
-    let walker =
-        glob(&pattern).map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
+    let walker = glob(&pattern).map_err(|error| io::Error::other(error.to_string()))?;
     let mut fixtures = Vec::new();
 
     for entry in walker {
-        let path =
-            entry.map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
+        let path = entry.map_err(|error| io::Error::other(error.to_string()))?;
         if path.is_file() {
             fixtures.push(path);
         }
@@ -61,7 +59,7 @@ fn discover_fixtures(directory: &Utf8Path) -> io::Result<Vec<PathBuf>> {
 }
 
 struct FixtureEnvironment {
-    tempdir: TempDir,
+    _tempdir: TempDir,
     workdir: PathBuf,
     config: Option<String>,
 }
@@ -72,7 +70,7 @@ fn prepare_fixture(directory: &Utf8Path, source: &Path) -> io::Result<FixtureEnv
     let config = resolve_fixture_config(directory, source)?;
     Ok(FixtureEnvironment {
         workdir: tempdir.path().to_path_buf(),
-        tempdir,
+        _tempdir: tempdir,
         config,
     })
 }

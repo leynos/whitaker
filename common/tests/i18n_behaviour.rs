@@ -11,9 +11,9 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-#[path = "support/mod.rs"]
-mod support;
-use support::{default_arguments, strip_isolation_marks};
+#[path = "support/i18n_helpers.rs"]
+mod i18n_helpers;
+use i18n_helpers::{default_arguments, strip_isolation_marks};
 
 #[derive(Clone, Debug, Default)]
 struct I18nFixture {
@@ -68,6 +68,20 @@ fn branch_phrase_for(locale: &str, branches: u32) -> String {
     }
 }
 
+fn lint_count_from_key(key: &str) -> Option<(String, u32)> {
+    let suffix = " with lint count ";
+    let (base, count) = key.rsplit_once(suffix)?;
+    let value = count.trim().parse().ok()?;
+    Some((base.to_string(), value))
+}
+
+fn branch_count_from_key(key: &str) -> Option<(String, u32)> {
+    let suffix = " with branches ";
+    let (base, count) = key.rsplit_once(suffix)?;
+    let value = count.trim().parse().ok()?;
+    Some((base.to_string(), value))
+}
+
 #[fixture]
 fn fixture() -> I18nFixture {
     I18nFixture::default()
@@ -94,28 +108,30 @@ fn when_message(fixture: &I18nFixture, key: String) {
 #[when("I request the attribute {attribute} on {key}")]
 fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
     let localizer = fixture.ensure_localizer();
+
+    if let Some((base_key, branches)) = branch_count_from_key(&key) {
+        let mut args = default_arguments();
+        args.insert(
+            Cow::Borrowed("branches"),
+            FluentValue::from(branches as i64),
+        );
+        let phrase = branch_phrase_for(localizer.locale(), branches);
+        args.insert(Cow::Borrowed("branch_phrase"), FluentValue::from(phrase));
+        let result = localizer.attribute_with_args(&base_key, &attribute, &args);
+        fixture.store_message(result);
+        return;
+    }
+
+    if let Some((base_key, lint_count)) = lint_count_from_key(&key) {
+        let mut args: Arguments<'static> = HashMap::new();
+        args.insert(Cow::Borrowed("lint"), FluentValue::from(lint_count as i64));
+        let result = localizer.attribute_with_args(&base_key, &attribute, &args);
+        fixture.store_message(result);
+        return;
+    }
+
     let args = default_arguments();
     let result = localizer.attribute_with_args(&key, &attribute, &args);
-    fixture.store_message(result);
-}
-
-#[when("I request the attribute {attribute} on {key} with branches {count}")]
-fn when_attribute_with_branches(fixture: &I18nFixture, attribute: String, key: String, count: u32) {
-    let localizer = fixture.ensure_localizer();
-    let mut args = default_arguments();
-    args.insert(Cow::Borrowed("branches"), FluentValue::from(count as i64));
-    let phrase = branch_phrase_for(localizer.locale(), count);
-    args.insert(Cow::Borrowed("branch_phrase"), FluentValue::from(phrase));
-    let result = localizer.attribute_with_args(&key, &attribute, &args);
-    fixture.store_message(result);
-}
-
-#[when("I request the attribute note on common-lint-count with lint count {count}")]
-fn when_common_lint_count_note(fixture: &I18nFixture, count: u32) {
-    let localizer = fixture.ensure_localizer();
-    let mut args: Arguments<'static> = HashMap::new();
-    args.insert(Cow::Borrowed("lint"), FluentValue::from(count as i64));
-    let result = localizer.attribute_with_args("common-lint-count", "note", &args);
     fixture.store_message(result);
 }
 
@@ -133,7 +149,9 @@ fn then_fallback_used(fixture: &I18nFixture) {
 
 #[then("the message contains {snippet}")]
 fn then_contains(fixture: &I18nFixture, snippet: String) {
-    let message = fixture.result().expect("message should resolve");
+    let message = fixture
+        .result()
+        .unwrap_or_else(|error| panic!("message should resolve: {error}"));
     let message = strip_isolation_marks(&message);
     let snippet = strip_isolation_marks(&snippet);
     assert!(

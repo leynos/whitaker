@@ -7,6 +7,8 @@
 //! scaffolding code can integrate with the compiler without each generated
 //! project reaching into unstable internals directly.
 
+extern crate rustc_driver;
+
 extern crate rustc_ast as upstream;
 
 pub use upstream::*;

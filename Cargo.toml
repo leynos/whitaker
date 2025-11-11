@@ -28,7 +28,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["dylint-driver"]
+default = []
 dylint-driver = ["dep:dylint_linting"]
 
 [dependencies]

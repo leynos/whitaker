@@ -6,6 +6,8 @@
 //! infrastructure via workspace dependencies rather than linking directly to
 //! unstable upstream crates.
 
+extern crate rustc_driver;
+
 extern crate rustc_lint as upstream;
 
 pub use upstream::*;

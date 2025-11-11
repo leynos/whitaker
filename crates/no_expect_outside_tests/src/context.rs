@@ -9,6 +9,7 @@ use rustc_ast::AttrStyle;
 use rustc_ast::ast::{MetaItem, MetaItemInner};
 use rustc_hir as hir;
 use rustc_hir::Node;
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
 
@@ -65,15 +66,12 @@ pub(crate) fn summarise_context(
 fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<ContextEntry> {
     match node {
         Node::Item(item) => match &item.kind {
-            hir::ItemKind::Fn(..) => Some(ContextEntry::function(
-                item.ident.name.to_string(),
-                convert_attributes(attrs),
-            )),
-            hir::ItemKind::Mod(..) => Some(ContextEntry::new(
-                item.ident.name.to_string(),
-                ContextKind::Module,
-                convert_attributes(attrs),
-            )),
+            hir::ItemKind::Fn { .. } => {
+                item_name(item).map(|name| ContextEntry::function(name, convert_attributes(attrs)))
+            }
+            hir::ItemKind::Mod { .. } => item_name(item).map(|name| {
+                ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
+            }),
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
                 "impl".to_string(),
                 ContextKind::Impl,
@@ -109,7 +107,7 @@ fn convert_attributes(attrs: &[hir::Attribute]) -> Vec<Attribute> {
 }
 
 fn convert_attribute(attr: &hir::Attribute) -> Attribute {
-    let kind = match attr.style() {
+    let kind = match attribute_style(attr) {
         AttrStyle::Inner => AttributeKind::Inner,
         AttrStyle::Outer => AttributeKind::Outer,
     };
@@ -126,190 +124,11 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     Attribute::new(path, kind)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{convert_attribute, meta_contains_test_cfg};
-    use common::AttributeKind;
-    use rstest::rstest;
-    use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind};
-    use rustc_ast::attr::{AttrArgs, AttrId, AttrItem, AttrKind, NormalAttr};
-    use rustc_ast::ptr::P;
-    use rustc_ast::{Path, PathSegment};
-    use rustc_hir as hir;
-    use rustc_span::symbol::Ident;
-    use rustc_span::{DUMMY_SP, create_default_session_globals_then};
-
-    fn path_from_segments(segments: &[&str]) -> Path {
-        let path_segments = segments
-            .iter()
-            .map(|segment| PathSegment::from_ident(Ident::from_str(segment)))
-            .collect::<Vec<_>>();
-
-        Path {
-            span: DUMMY_SP,
-            segments: path_segments,
-            tokens: None,
-        }
-    }
-
-    fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
-        create_default_session_globals_then(|| {
-            let item = AttrItem {
-                path: path_from_segments(segments),
-                args: AttrArgs::Empty,
-                tokens: None,
-            };
-
-            hir::Attribute {
-                kind: AttrKind::Normal(NormalAttr {
-                    item: P(item),
-                    tokens: None,
-                }),
-                id: AttrId::new(0),
-                style: rustc_ast::AttrStyle::Outer,
-                span: DUMMY_SP,
-            }
-        })
-    }
-
-    #[rstest]
-    #[case(&["tokio", "test"])]
-    #[case(&["rstest"])]
-    fn convert_attribute_preserves_segments(#[case] segments: &[&str]) {
-        let hir_attr = hir_attribute_from_segments(segments);
-        let attribute = convert_attribute(&hir_attr);
-
-        assert_eq!(attribute.kind(), AttributeKind::Outer);
-        let converted_segments = attribute
-            .path()
-            .segments()
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        assert_eq!(converted_segments.as_slice(), segments);
-    }
-
-    fn meta_word(segments: &[&str]) -> MetaItem {
-        MetaItem {
-            path: path_from_segments(segments),
-            kind: MetaItemKind::Word,
-            span: DUMMY_SP,
-        }
-    }
-
-    fn meta_list(segments: &[&str], children: Vec<MetaItemInner>) -> MetaItem {
-        MetaItem {
-            path: path_from_segments(segments),
-            kind: MetaItemKind::List(P::from_vec(children)),
-            span: DUMMY_SP,
-        }
-    }
-
-    fn meta_inner(meta: MetaItem) -> MetaItemInner {
-        MetaItemInner::MetaItem(P::from_box(Box::new(meta)))
-    }
-
-    #[rstest]
-    #[case(meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["any"],
-            vec![meta_inner(meta_word(&["test"])), meta_inner(meta_word(&["doctest"]))],
-        ))],
-    ), true)]
-    #[case(meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["all"],
-            vec![meta_inner(meta_word(&["test"])), meta_inner(meta_word(&["unix"]))],
-        ))],
-    ), true)]
-    #[case(meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["not"],
-            vec![meta_inner(meta_word(&["test"]))],
-        ))],
-    ), false)]
-    #[case(meta_list(
-        &["cfg_attr"],
-        vec![
-            meta_inner(meta_word(&["test"])),
-            meta_inner(meta_list(&["cfg"], vec![meta_inner(meta_word(&["test"]))])),
-        ],
-    ), true)]
-    #[case(meta_list(
-        &["cfg_attr"],
-        vec![
-            meta_inner(meta_word(&["test"])),
-            meta_inner(meta_list(&["allow"], vec![meta_inner(meta_word(&["dead_code"]))])),
-        ],
-    ), false)]
-    fn meta_contains_test_cfg_cases(#[case] meta: MetaItem, #[case] expected: bool) {
-        assert_eq!(meta_contains_test_cfg(&meta), expected);
-    }
-}
-
-fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
-    attr.meta()
-        .is_some_and(|meta| meta_contains_test_cfg(&meta))
-}
-
-fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
-    meta_item_inner_contains_test_with_polarity(item, true)
-}
-
-fn meta_item_inner_contains_test_with_polarity(item: MetaItemInner, is_positive: bool) -> bool {
-    match item {
-        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(&meta, is_positive),
-        MetaItemInner::Lit(_) => false,
-    }
-}
-
-fn meta_contains_test(meta: &MetaItem) -> bool {
-    meta_contains_test_with_polarity(meta, true)
-}
-
-fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
-    if meta.path.is_ident(sym::test) || meta.path.is_ident(sym::doctest) {
-        return is_positive;
-    }
-
-    if meta.path.is_ident(sym::not) {
-        return meta
-            .meta_item_list()
-            .map(|items| {
-                items
-                    .into_iter()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            })
-            .unwrap_or(false);
-    }
-
-    meta.meta_item_list()
-        .map(|items| {
-            items
-                .into_iter()
-                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
-        })
-        .unwrap_or(false)
-}
-
-fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
-    if meta.path.is_ident(sym::cfg) {
-        return meta
-            .meta_item_list()
-            .map(|items| items.into_iter().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
-    }
-
-    if !meta.path.is_ident(sym::cfg_attr) {
-        return false;
-    }
-
-    let Some(mut items) = meta.meta_item_list() else {
-        return false;
-    };
+/// Check if a cfg_attr has a test condition and contains nested cfg(test).
+fn check_cfg_attr_for_test<I>(items: I) -> bool
+where
+    I: IntoIterator<Item = MetaItemInner>,
+{
     let mut iter = items.into_iter();
     let Some(condition) = iter.next() else {
         return false;
@@ -324,3 +143,99 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
         MetaItemInner::Lit(_) => false,
     })
 }
+
+fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    let path = attr.path();
+    if path.len() != 1 {
+        return false;
+    }
+
+    if path[0] == sym::cfg {
+        return attr
+            .meta_item_list()
+            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
+            .unwrap_or(false);
+    }
+
+    if path[0] != sym::cfg_attr {
+        return false;
+    }
+
+    attr.meta_item_list()
+        .map(check_cfg_attr_for_test)
+        .unwrap_or(false)
+}
+
+fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
+    meta_item_inner_contains_test_with_polarity(item, true)
+}
+
+fn meta_item_inner_contains_test_with_polarity(item: MetaItemInner, is_positive: bool) -> bool {
+    match item {
+        MetaItemInner::MetaItem(meta) => meta_contains_test_with_polarity(&meta, is_positive),
+        MetaItemInner::Lit(_) => false,
+    }
+}
+
+fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool {
+    if path_is_ident(&meta.path, sym::test) || path_is_ident(&meta.path, sym::doctest) {
+        return is_positive;
+    }
+
+    if path_is_ident(&meta.path, sym::not) {
+        return meta
+            .meta_item_list()
+            .map(|items| {
+                items
+                    .iter()
+                    .cloned()
+                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+            })
+            .unwrap_or(false);
+    }
+
+    meta.meta_item_list()
+        .map(|items| {
+            items
+                .iter()
+                .cloned()
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+        })
+        .unwrap_or(false)
+}
+
+fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
+    if path_is_ident(&meta.path, sym::cfg) {
+        return meta
+            .meta_item_list()
+            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
+            .unwrap_or(false);
+    }
+
+    if !path_is_ident(&meta.path, sym::cfg_attr) {
+        return false;
+    }
+
+    meta.meta_item_list()
+        .map(|items| check_cfg_attr_for_test(items.iter().cloned()))
+        .unwrap_or(false)
+}
+
+fn item_name(item: &hir::Item<'_>) -> Option<String> {
+    item.kind.ident().map(|ident| ident.name.to_string())
+}
+
+fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+    match attr {
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        _ => AttrStyle::Outer,
+    }
+}
+
+fn path_is_ident(path: &rustc_ast::Path, symbol: rustc_span::Symbol) -> bool {
+    path.segments.len() == 1 && path.segments[0].ident.name == symbol
+}
+
+#[cfg(test)]
+mod tests;
