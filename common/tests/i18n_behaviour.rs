@@ -235,6 +235,8 @@ fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
 
 #[cfg(test)]
 mod tests {
+    //! Validates lint count key parsing so attribute helpers feed deterministic
+    //! arguments into i18n scenarios.
     use super::lint_count_from_key;
     use rstest::rstest;
 
