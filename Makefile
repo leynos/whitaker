@@ -47,6 +47,7 @@ nixie:
 	nixie --no-sandbox
 
 publish-check: ## Run Lading publish pre-flight checks (override flags via PUBLISH_CHECK_FLAGS)
+	rustup component add --toolchain nightly rust-src rustc-dev llvm-tools-preview
 	RUSTUP_TOOLCHAIN=nightly $(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
 
 help: ## Show available targets
