@@ -236,39 +236,16 @@ fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
 #[cfg(test)]
 mod tests {
     use super::lint_count_from_key;
+    use rstest::rstest;
 
-    #[test]
-    fn lint_count_from_key_parses_valid_suffix() {
-        let key = "foo with lint count 42";
-        assert_eq!(lint_count_from_key(key), Some(("foo".to_string(), 42)));
-    }
-
-    #[test]
-    fn lint_count_from_key_rejects_missing_suffix() {
-        let key = "foo with lint 42";
-        assert_eq!(lint_count_from_key(key), None);
-    }
-
-    #[test]
-    fn lint_count_from_key_rejects_missing_count() {
-        let key = "foo with lint count ";
-        assert_eq!(lint_count_from_key(key), None);
-    }
-
-    #[test]
-    fn lint_count_from_key_rejects_non_numeric_count() {
-        let key = "foo with lint count abc";
-        assert_eq!(lint_count_from_key(key), None);
-    }
-
-    #[test]
-    fn lint_count_from_key_rejects_empty_string() {
-        assert_eq!(lint_count_from_key(""), None);
-    }
-
-    #[test]
-    fn lint_count_from_key_allows_suffix_only_with_value() {
-        let key = " with lint count 10";
-        assert_eq!(lint_count_from_key(key), Some(("".to_string(), 10)));
+    #[rstest]
+    #[case("foo with lint count 42", Some(("foo".to_string(), 42)))]
+    #[case("foo with lint 42", None)]
+    #[case("foo with lint count ", None)]
+    #[case("foo with lint count abc", None)]
+    #[case("", None)]
+    #[case(" with lint count 10", Some(("".to_string(), 10)))]
+    fn lint_count_from_key_parsing(#[case] input: &str, #[case] expected: Option<(String, u32)>) {
+        assert_eq!(lint_count_from_key(input), expected);
     }
 }
