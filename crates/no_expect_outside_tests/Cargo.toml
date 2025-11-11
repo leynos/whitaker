@@ -38,6 +38,6 @@ log = { workspace = true, optional = true }
 
 [dev-dependencies]
 rstest = { version = "0.26.1" }
-rstest-bdd = { version = "0.1.0-alpha4" }
-rstest-bdd-macros = { version = "0.1.0-alpha4" }
+rstest-bdd = { version = "0.1.0" }
+rstest-bdd-macros = { version = "0.1.0" }
 dylint_testing = { workspace = true }
