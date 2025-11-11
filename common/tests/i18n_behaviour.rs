@@ -232,3 +232,22 @@ fn scenario_missing_message(fixture: I18nFixture) {
 fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
     let _ = fixture;
 }
+
+#[cfg(test)]
+mod tests {
+    //! Validates lint count key parsing so attribute helpers feed deterministic
+    //! arguments into i18n scenarios.
+    use super::lint_count_from_key;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("foo with lint count 42", Some(("foo".to_string(), 42)))]
+    #[case("foo with lint 42", None)]
+    #[case("foo with lint count ", None)]
+    #[case("foo with lint count abc", None)]
+    #[case("", None)]
+    #[case(" with lint count 10", Some(("".to_string(), 10)))]
+    fn lint_count_from_key_parsing(#[case] input: &str, #[case] expected: Option<(String, u32)>) {
+        assert_eq!(lint_count_from_key(input), expected);
+    }
+}
