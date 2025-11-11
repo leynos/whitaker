@@ -21,12 +21,6 @@ behaviour, the implementation status is noted. Examples and explanations are
 organized by the so‑called *three amigos* of BDD: the business analyst/product
 owner, the developer, and the tester.
 
-> **Alpha dependency notice:** The suite pins `rstest-bdd` and
-> `rstest-bdd-macros` to version `0.1.0-alpha4`. These crates are still in
-> alpha, so expect occasional breaking changes or unstable behaviour until the
-> maintainers publish a stable release. Revisit this section when upgrading the
-> dependencies to confirm whether the note still applies.
-
 ## The three amigos
 
 | Role ("amigo")                     | Primary concerns                                                                                                                  | Features provided by `rstest‑bdd`                                                                                                                                                                                                                                                                                                                                                                         |
@@ -327,17 +321,18 @@ Best practices for writing effective scenarios include:
   (for example, `1e3`, `-1E-9`), and the special values `NaN`, `inf`, and
   `Infinity` (matched case-insensitively). Matching is anchored: the entire
   step text must match the pattern; partial matches do not succeed. Escape
-  literal braces with `{{` and `}}`. Use `\` to match a single backslash. A
-  trailing `\` or any other backslash escape is treated literally, so `\d`
-  matches the two-character sequence `\d`. Nested braces inside placeholders
-  are not supported. Placeholders follow `{name[:type]}`; `name` must start
-  with a letter or underscore and may contain letters, digits, or underscores
-  (`[A-Za-z_][A-Za-z0-9_]*`). Whitespace within the type hint is ignored (for
-  example, `{count: u32}` and `{count:u32}` are both accepted), but whitespace
-  is not allowed between the name and the colon. Prefer the compact form
-  `{count:u32}` in new code. When a pattern contains no placeholders, the step
-  text must match exactly. Unknown type hints are treated as generic
-  placeholders and capture any non-newline text greedily.
+  literal braces with `{{` and `}}`. Use
+  `\` to match a single backslash. A trailing `\` or any other backslash escape
+  is treated literally, so `\d` matches the two-character sequence `\d`. Nested
+  braces inside placeholders are not supported. Placeholders follow
+  `{name[:type]}`; `name` must start with a letter or underscore and may
+  contain letters, digits, or underscores (`[A-Za-z_][A-Za-z0-9_]*`).
+  Whitespace within the type hint is ignored (for example, `{count: u32}` and
+  `{count:u32}` are both accepted), but whitespace is not allowed between the
+  name and the colon. Prefer the compact form `{count:u32}` in new code. When a
+  pattern contains no placeholders, the step text must match exactly. Unknown
+  type hints are treated as generic placeholders and capture any non-newline
+  text greedily.
 
 ## Data tables and Docstrings
 
