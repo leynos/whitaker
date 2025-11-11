@@ -1,13 +1,13 @@
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
+#[cfg(all(feature = "dylint-driver", test))]
+mod behaviour;
 #[cfg(feature = "dylint-driver")]
 mod context;
 #[cfg(feature = "dylint-driver")]
 mod diagnostics;
 #[cfg(feature = "dylint-driver")]
 mod driver;
-#[cfg(all(feature = "dylint-driver", test))]
-mod behaviour;
 #[cfg(all(feature = "dylint-driver", test))]
 mod tests;
 #[cfg(all(feature = "dylint-driver", test))]
