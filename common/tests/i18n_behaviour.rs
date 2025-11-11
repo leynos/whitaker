@@ -232,3 +232,43 @@ fn scenario_missing_message(fixture: I18nFixture) {
 fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
     let _ = fixture;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::lint_count_from_key;
+
+    #[test]
+    fn lint_count_from_key_parses_valid_suffix() {
+        let key = "foo with lint count 42";
+        assert_eq!(lint_count_from_key(key), Some(("foo".to_string(), 42)));
+    }
+
+    #[test]
+    fn lint_count_from_key_rejects_missing_suffix() {
+        let key = "foo with lint 42";
+        assert_eq!(lint_count_from_key(key), None);
+    }
+
+    #[test]
+    fn lint_count_from_key_rejects_missing_count() {
+        let key = "foo with lint count ";
+        assert_eq!(lint_count_from_key(key), None);
+    }
+
+    #[test]
+    fn lint_count_from_key_rejects_non_numeric_count() {
+        let key = "foo with lint count abc";
+        assert_eq!(lint_count_from_key(key), None);
+    }
+
+    #[test]
+    fn lint_count_from_key_rejects_empty_string() {
+        assert_eq!(lint_count_from_key(""), None);
+    }
+
+    #[test]
+    fn lint_count_from_key_allows_suffix_only_with_value() {
+        let key = " with lint count 10";
+        assert_eq!(lint_count_from_key(key), Some(("".to_string(), 10)));
+    }
+}
