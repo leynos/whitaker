@@ -12,14 +12,13 @@ thiserror = { workspace = true }
 log = { workspace = true }
 
 [dev-dependencies]
-# Testing: Behavioural specs pin rstest-bdd crates to 0.1.0-alpha4 while we
-# await a stable release. These alpha builds may regress; capture any failures
-# with `make test` and report them via the troubleshooting guidance in
-# `docs/rstest-bdd-users-guide.md`. Where blockers arise, coordinate with the
-# maintainers to backport fixes or temporarily gate the affected feature tests.
+# Testing: Behavioural specs now target rstest-bdd 0.1.0, the first stable
+# release. Capture any regressions with `make test` and coordinate with the
+# maintainers per `docs/rstest-bdd-users-guide.md` before gating behaviour
+# tests or backporting fixes.
 rstest = "0.26.1"
-rstest-bdd = "0.1.0-alpha4"
-rstest-bdd-macros = "0.1.0-alpha4"
+rstest-bdd = "0.1.0"
+rstest-bdd-macros = "0.1.0"
 regex = "1.10.4"
 logtest = "2.0.0"
 tempfile = "3.14"
