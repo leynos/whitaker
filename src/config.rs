@@ -26,6 +26,9 @@ pub struct SharedConfig {
     /// its default when omitted from `dylint.toml`, which avoids duplicating the
     /// baseline settings in every workspace.
     pub module_max_lines: ModuleMaxLinesConfig,
+    /// Overrides for the `conditional_max_n_branches` lint. This field falls back to
+    /// its default when omitted from `dylint.toml`.
+    pub conditional_max_n_branches: ConditionalMaxNBranchesConfig,
 }
 
 impl SharedConfig {
@@ -115,6 +118,29 @@ impl Default for ModuleMaxLinesConfig {
     fn default() -> Self {
         Self {
             max_lines: Self::default_max_lines(),
+        }
+    }
+}
+
+/// Settings that influence the `conditional_max_n_branches` lint.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ConditionalMaxNBranchesConfig {
+    /// Maximum number of predicate atoms permitted in conditional expressions.
+    #[serde(default = "ConditionalMaxNBranchesConfig::default_max_branches")]
+    pub max_branches: usize,
+}
+
+impl ConditionalMaxNBranchesConfig {
+    const fn default_max_branches() -> usize {
+        2
+    }
+}
+
+impl Default for ConditionalMaxNBranchesConfig {
+    fn default() -> Self {
+        Self {
+            max_branches: Self::default_max_branches(),
         }
     }
 }
