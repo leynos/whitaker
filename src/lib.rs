@@ -8,7 +8,7 @@ pub mod config;
 pub mod lints;
 pub mod testing;
 
-pub use config::{ModuleMaxLinesConfig, SharedConfig};
+pub use config::{ConditionalMaxNBranchesConfig, ModuleMaxLinesConfig, SharedConfig};
 pub use lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 
 /// Returns a greeting for the library.
