@@ -1,0 +1,45 @@
+[package]
+name = "conditional_max_n_branches"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+test = false
+
+[features]
+default = []
+dylint-driver = [
+    "dep:common",
+    "dep:dylint_linting",
+    "dep:fluent-templates",
+    "dep:log",
+    "dep:rustc_hir",
+    "dep:rustc_lint",
+    "dep:rustc_session",
+    "dep:rustc_span",
+    "dep:serde",
+    "dep:whitaker"
+]
+
+[dependencies]
+common = { path = "../../common", optional = true }
+dylint_linting = { workspace = true, optional = true }
+fluent-templates = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+rustc_hir = { workspace = true, optional = true }
+rustc_lint = { workspace = true, optional = true }
+rustc_session = { workspace = true, optional = true }
+rustc_span = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
+
+[dev-dependencies]
+camino = { workspace = true }
+glob = "0.3"
+tempfile = "3.14.0"
+rstest = "0.26.1"
+rstest-bdd = "0.1.0"
+rstest-bdd-macros = "0.1.0"
+dylint_testing = { workspace = true }
+serial_test = "3.1.0"
