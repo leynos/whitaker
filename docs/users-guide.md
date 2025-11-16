@@ -98,12 +98,12 @@ args.insert(Cow::Borrowed("limit"), FluentValue::from(branch_limit));
 let branch_phrase_text = branch_phrase(localizer.locale(), branch_count as usize);
 args.insert(
     Cow::Borrowed("branch_phrase"),
-    FluentValue::from(branch_phrase_text.as_str()),
+    FluentValue::String(Cow::Owned(branch_phrase_text)),
 );
 let limit_phrase_text = branch_phrase(localizer.locale(), branch_limit as usize);
 args.insert(
     Cow::Borrowed("limit_phrase"),
-    FluentValue::from(limit_phrase_text.as_str()),
+    FluentValue::String(Cow::Owned(limit_phrase_text)),
 );
 
 let message = localizer

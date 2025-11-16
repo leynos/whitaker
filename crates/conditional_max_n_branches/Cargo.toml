@@ -38,7 +38,7 @@ whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
 common = { path = "../../common" }
 whitaker = { path = "../../" }
 camino = { workspace = true }
-glob = "0.3"
+glob = "0.3.0"
 tempfile = "3.14.0"
 rstest = "0.26.1"
 rstest-bdd = "0.1.0"

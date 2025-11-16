@@ -9,7 +9,7 @@ pub use driver::*;
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "stub when dylint-driver is disabled")]
     pub fn conditional_max_n_branches_disabled_stub() {}
 }
 

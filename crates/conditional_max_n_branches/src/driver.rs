@@ -131,18 +131,20 @@ impl ConditionalMaxNBranches {
             let Some(guard) = arm.guard else {
                 continue;
             };
-            self.inspect_condition(cx, ConditionKind::MatchGuard, guard);
+            let hir::Guard::If(expr) = guard else {
+                continue;
+            };
+            self.inspect_condition(cx, ConditionKind::MatchGuard, expr);
         }
     }
 }
 
 fn extract_while_condition<'hir>(block: &'hir hir::Block<'hir>) -> Option<&'hir hir::Expr<'hir>> {
-    match block.expr {
-        Some(expr) => match expr.kind {
-            ExprKind::If(cond, ..) => Some(cond),
-            _ => None,
-        },
-        None => None,
+    let expr = block.expr?;
+    if let ExprKind::If(cond, ..) = expr.kind {
+        Some(cond)
+    } else {
+        None
     }
 }
 
@@ -245,10 +247,10 @@ fn emit_diagnostic(
     let note = messages.note().to_string();
     let help = messages.help().to_string();
 
-    cx.span_lint(CONDITIONAL_MAX_N_BRANCHES, metadata.span, |lint| {
-        lint.primary_message(primary.clone());
-        lint.span_note(metadata.span, note.clone());
-        lint.help(help.clone());
+    cx.span_lint(CONDITIONAL_MAX_N_BRANCHES, metadata.span, move |lint| {
+        lint.primary_message(primary);
+        lint.span_note(metadata.span, note);
+        lint.help(help);
     });
 }
 

@@ -66,9 +66,8 @@ fn english_branch_phrase(branches: usize) -> String {
 
 fn gaelic_branch_phrase(branches: usize) -> String {
     match branches {
-        1 | 2 => format!("{branches} mheur"),
-        3 => format!("{branches} meuran"),
-        _ => format!("{branches} meur"),
+        1 => String::from("1 meur"),
+        _ => format!("{branches} meuran"),
     }
 }
 
@@ -77,7 +76,7 @@ fn welsh_branch_phrase(branches: usize) -> String {
         0 => String::from("dim canghennau"),
         1 => String::from("un gangen"),
         2 => String::from("dwy gangen"),
-        3 => String::from("tri changen"),
+        3 => String::from("tair cangen"),
         6 => String::from("chwe changen"),
         4 | 5 => format!("{branches} cangen"),
         _ => format!("{branches} canghennau"),
@@ -175,19 +174,25 @@ mod tests {
 
     #[test]
     fn renders_english_branch_phrase() {
+        assert_eq!(branch_phrase(FALLBACK_LOCALE, 0), "0 branches");
         assert_eq!(branch_phrase(FALLBACK_LOCALE, 1), "1 branch");
         assert_eq!(branch_phrase(FALLBACK_LOCALE, 4), "4 branches");
     }
 
     #[test]
     fn renders_gaelic_branch_phrase() {
-        assert_eq!(branch_phrase("gd", 2), "2 mheur");
-        assert_eq!(branch_phrase("gd", 4), "4 meur");
+        assert_eq!(branch_phrase("gd", 1), "1 meur");
+        assert_eq!(branch_phrase("gd", 2), "2 meuran");
+        assert_eq!(branch_phrase("gd", 3), "3 meuran");
     }
 
     #[test]
     fn renders_welsh_branch_phrase() {
-        assert_eq!(branch_phrase("cy", 3), "tri changen");
+        assert_eq!(branch_phrase("cy", 0), "dim canghennau");
+        assert_eq!(branch_phrase("cy", 1), "un gangen");
+        assert_eq!(branch_phrase("cy", 2), "dwy gangen");
+        assert_eq!(branch_phrase("cy", 3), "tair cangen");
+        assert_eq!(branch_phrase("cy", 6), "chwe changen");
         assert_eq!(branch_phrase("cy", 11), "11 canghennau");
     }
 }

@@ -149,7 +149,7 @@ Utilities shared by lints:
 - Adopt the rstest-bdd 0.1.0 stable release to eliminate alpha regressions
   whilst keeping compile-time validation consistent across lint crates.
 
-### Localisation infrastructure
+### Localization infrastructure
 
 - Adopt `fluent-templates` and `once_cell` as workspace dependencies,
   so each lint crate can load translated diagnostics without manual resource
@@ -419,7 +419,7 @@ extracting the predicate into a function with a domain-flavoured name. When a
 function is overkill, bind the expression to a local variable and branch on
 that name.
 
-**Design decision (2025-11-14).** Localisation relies on a shared
+**Design decision (2025-11-14).** Localization relies on a shared
 `common::i18n::branch_phrase` helper to render both the current branch count
 and the configured limit. This keeps Fluent resources and diagnostics in sync
 across English, Welsh, and Scottish Gaelic without duplicating mutation rules.

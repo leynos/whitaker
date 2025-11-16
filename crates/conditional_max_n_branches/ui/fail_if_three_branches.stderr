@@ -1,15 +1,15 @@
-warning: Collapse the �if condition� to �2 branches� or fewer.
+warning: Collapse the "if condition" to "2 branches" or fewer.
   --> $DIR/fail_if_three_branches.rs:8:8
    |
 LL |     if condition_a() && condition_b() && condition_c() {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-note: The conditional currently declares �3 branches�.
+note: The conditional currently declares "3 branches".
   --> $DIR/fail_if_three_branches.rs:8:8
    |
 LL |     if condition_a() && condition_b() && condition_c() {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = help: Extract helper functions or simplify the �if condition� to reduce branching.
+   = help: Extract helper functions or simplify the "if condition" to reduce branching.
 note: the lint level is defined here
   --> $DIR/fail_if_three_branches.rs:1:9
    |

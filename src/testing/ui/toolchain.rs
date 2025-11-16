@@ -81,7 +81,9 @@ pub(super) fn ensure_toolchain_library(crate_name: &CrateName) -> Result<(), Har
         return Ok(());
     }
 
-    let source = build_and_locate_cdylib(crate_name, &metadata)?;
+    let package = package_for_crate(&metadata, crate_name)?;
+    let needs_driver_feature = package.features.contains_key("dylint-driver");
+    let source = build_and_locate_cdylib(crate_name, &metadata, &package.id, needs_driver_feature)?;
     let parent = source
         .parent()
         .ok_or_else(|| HarnessError::LibraryMissing {
@@ -123,15 +125,17 @@ fn build_target_name(file_name: &str, toolchain: &str) -> String {
 fn build_and_locate_cdylib(
     crate_name: &CrateName,
     metadata: &Metadata,
+    package_id: &cargo_metadata::PackageId,
+    needs_driver_feature: bool,
 ) -> Result<PathBuf, HarnessError> {
-    let output = execute_build_command(crate_name, metadata)?;
-    let package_id = find_package_id(crate_name, metadata)?;
-    find_cdylib_in_artifacts(&output.stdout, &package_id, crate_name)
+    let output = execute_build_command(crate_name, metadata, needs_driver_feature)?;
+    find_cdylib_in_artifacts(&output.stdout, package_id, crate_name)
 }
 
 fn execute_build_command(
     crate_name: &CrateName,
     metadata: &Metadata,
+    needs_driver_feature: bool,
 ) -> Result<Output, HarnessError> {
     let mut command = Command::new("cargo");
     command
@@ -140,10 +144,13 @@ fn execute_build_command(
         .arg("--quiet")
         .arg("--message-format=json")
         .arg("--package")
-        .arg(crate_name.as_str())
-        .arg("--features")
-        .arg("dylint-driver")
-        .current_dir(metadata.workspace_root.as_std_path());
+        .arg(crate_name.as_str());
+
+    if needs_driver_feature {
+        command.arg("--features").arg("dylint-driver");
+    }
+
+    command.current_dir(metadata.workspace_root.as_std_path());
 
     let output = command
         .output()
@@ -162,10 +169,10 @@ fn execute_build_command(
     Ok(output)
 }
 
-fn find_package_id(
+fn package_for_crate<'a>(
+    metadata: &'a Metadata,
     crate_name: &CrateName,
-    metadata: &Metadata,
-) -> Result<cargo_metadata::PackageId, HarnessError> {
+) -> Result<&'a cargo_metadata::Package, HarnessError> {
     metadata
         .packages
         .iter()
@@ -176,7 +183,6 @@ fn find_package_id(
                     .iter()
                     .any(|member| member == &package.id)
         })
-        .map(|package| package.id.clone())
         .ok_or_else(|| HarnessError::LibraryBuildFailed {
             crate_name: crate_name.as_str().to_owned(),
             message: format!(

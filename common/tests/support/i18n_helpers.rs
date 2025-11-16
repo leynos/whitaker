@@ -2,7 +2,7 @@
 //! Provides argument builders and string post-processing utilities
 //! that keep suites aligned and readable.
 
-use common::i18n::{Arguments, FALLBACK_LOCALE, FluentValue, branch_phrase};
+use common::i18n::{Arguments, FluentValue};
 use std::borrow::Cow;
 
 const UNICODE_ISOLATION_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
@@ -51,10 +51,9 @@ pub fn default_arguments() -> Arguments<'static> {
     args.insert(Cow::Borrowed("lines"), FluentValue::from(42_i64));
     args.insert(Cow::Borrowed("limit"), FluentValue::from(12_i64));
     args.insert(Cow::Borrowed("branches"), FluentValue::from(3_i64));
-    let phrase = branch_phrase(FALLBACK_LOCALE, 3);
     args.insert(
         Cow::Borrowed("branch_phrase"),
-        FluentValue::String(Cow::Owned(phrase)),
+        FluentValue::from("3 branches"),
     );
     args
 }
