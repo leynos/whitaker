@@ -35,6 +35,8 @@ serde = { workspace = true, optional = true }
 whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+common = { path = "../../common" }
+whitaker = { path = "../../" }
 camino = { workspace = true }
 glob = "0.3"
 tempfile = "3.14.0"
