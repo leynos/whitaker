@@ -141,6 +141,8 @@ fn execute_build_command(
         .arg("--message-format=json")
         .arg("--package")
         .arg(crate_name.as_str())
+        .arg("--features")
+        .arg("dylint-driver")
         .current_dir(metadata.workspace_root.as_std_path());
 
     let output = command

@@ -1,0 +1,16 @@
+warning: Collapse the �if condition� to �1 branch� or fewer.
+  --> $DIR/fail_configured_limit.rs:5:8
+   |
+LL |     if ready() && approved() {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+   |
+note: The conditional currently declares �2 branches�.
+  --> $DIR/fail_configured_limit.rs:5:8
+   |
+LL |     if ready() && approved() {
+   |        ^^^^^^^^^^^^^^^^^^^^^
+   = help: Extract helper functions or simplify the �if condition� to reduce branching.
+   = note: `#[warn(conditional_max_n_branches)]` on by default
+
+warning: 1 warning emitted
+

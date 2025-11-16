@@ -246,6 +246,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "conditional_max_n_branches"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "fluent-templates",
+ "glob",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+ "serde",
+ "serial_test",
+ "tempfile",
+ "whitaker",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

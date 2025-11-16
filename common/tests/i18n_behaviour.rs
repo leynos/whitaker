@@ -4,7 +4,7 @@
 //! missing message handling to ensure lint crates can rely on predictable
 //! diagnostics across locales.
 
-use common::i18n::{Arguments, FluentValue, I18nError, Localizer};
+use common::i18n::{Arguments, FluentValue, I18nError, Localizer, branch_phrase};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;
@@ -45,26 +45,6 @@ impl I18nFixture {
             .as_ref()
             .cloned()
             .unwrap_or_else(|| panic!("lookup should have been performed"))
-    }
-}
-
-fn branch_phrase_for(locale: &str, branches: u32) -> String {
-    match locale {
-        "cy" => match branches {
-            0 => "dim canghennau".to_string(),
-            1 => "un gangen".to_string(),
-            2 => "dwy gangen".to_string(),
-            3 => "tri changen".to_string(),
-            6 => "chwe changen".to_string(),
-            4 | 5 => format!("{branches} cangen"),
-            _ => format!("{branches} canghennau"),
-        },
-        "gd" => match branches {
-            1 | 2 => format!("{branches} mheur"),
-            3 => format!("{branches} meuran"),
-            _ => format!("{branches} meur"),
-        },
-        _ => format!("{branches} branches"),
     }
 }
 
@@ -115,8 +95,11 @@ fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
             Cow::Borrowed("branches"),
             FluentValue::from(branches as i64),
         );
-        let phrase = branch_phrase_for(localizer.locale(), branches);
-        args.insert(Cow::Borrowed("branch_phrase"), FluentValue::from(phrase));
+        let phrase = branch_phrase(localizer.locale(), branches as usize);
+        args.insert(
+            Cow::Borrowed("branch_phrase"),
+            FluentValue::String(Cow::Owned(phrase)),
+        );
         let result = localizer.attribute_with_args(&base_key, &attribute, &args);
         fixture.store_message(result);
         return;
