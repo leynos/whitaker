@@ -5,7 +5,11 @@ fn secondary() -> bool { true }
 fn tertiary() -> bool { true }
 
 fn is_valid_for_rendering(_value: i32) -> bool {
-    primary() && secondary() && tertiary()
+    if primary() && secondary() && tertiary() {
+        true
+    } else {
+        false
+    }
 }
 
 fn render(value: i32) {

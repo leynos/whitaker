@@ -5,7 +5,11 @@ fn condition_b() -> bool { true }
 fn condition_c() -> bool { true }
 
 fn all_conditions_met() -> bool {
-    condition_a() && condition_b() && condition_c()
+    if condition_a() && condition_b() && condition_c() {
+        true
+    } else {
+        false
+    }
 }
 
 fn main() {

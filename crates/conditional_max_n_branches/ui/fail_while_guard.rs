@@ -5,7 +5,11 @@ fn has_capacity() -> bool { true }
 fn throttled() -> bool { true }
 
 fn should_continue_processing() -> bool {
-    ready() && (has_capacity() || throttled())
+    if ready() && (has_capacity() || throttled()) {
+        true
+    } else {
+        false
+    }
 }
 
 fn main() {
