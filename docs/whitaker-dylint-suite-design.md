@@ -393,9 +393,31 @@ Sketch uses `effective_visibilities` and `has_outer_doc`.
 
 ### 3.4 `module_must_have_inner_docs` (pedantic, warn)
 
-Every module must start with an inner doc `//!`.
+Warn when a module fails to open with an inner doc comment such as `//!` or
+`#![doc = "…"]`. Teams must explain a module's purpose before adding
+configuration attributes or code so that readers understand the file without
+scrolling.
 
-Sketch checks inner attributes on `ItemKind::Mod`.
+**Implementation (2025-11-17).** The lint inspects every `ItemKind::Mod`
+definition that originates from source (macro-expanded modules are skipped to
+avoid flagging generated helper modules). The detector walks the module's HIR
+attributes, filters to inner ones, and accepts the module only when the first
+inner attribute is a doc comment. Modules with no inner attributes, or those
+that place other inner attributes ahead of documentation, emit a
+`module_must_have_inner_docs` warning. Diagnostics highlight the offending
+attribute (or the start of the module body when docs are missing entirely) and
+use `module.spans.inner_span`/`def_span` fallbacks so file modules (`mod foo;`
+backed by `foo.rs`) are covered alongside inline modules. Localised strings
+pull from `locales/*/module_must_have_inner_docs.ftl`, passing the module name
+via the Fluent argument map, and fall back to a deterministic English message
+whenever localisation fails.
+
+**Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
+attribute detector, covering happy paths, missing docs, inner attributes that
+precede documentation, and outer-doc-only modules. UI fixtures capture inline
+modules, file modules (via `#[path = "…"]`), and macro-generated modules to
+prove that macro output remains exempt. A Welsh (`cy`) UI smoke test asserts
+that diagnostics localise correctly under `DYLINT_LOCALE=cy`.
 
 ### 3.5 `conditional_max_n_branches` (style, warn)
 

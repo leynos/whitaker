@@ -1329,6 +1329,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "module_must_have_inner_docs"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+ "serial_test",
+ "whitaker",
+]
+
+[[package]]
 name = "no_expect_outside_tests"
 version = "0.1.0"
 dependencies = [
