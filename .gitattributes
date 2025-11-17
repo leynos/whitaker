@@ -1,0 +1,4 @@
+# Keep UI test expectation files stable across platforms.
+*.stderr text eol=lf
+*.stdout text eol=lf
+*.fixed text eol=lf
