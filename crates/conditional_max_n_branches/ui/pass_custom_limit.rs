@@ -3,11 +3,7 @@ fn beta() -> bool { true }
 fn gamma() -> bool { true }
 
 fn all_conditions_satisfied() -> bool {
-    if alpha() && beta() && gamma() {
-        true
-    } else {
-        false
-    }
+    matches!((alpha(), beta(), gamma()), (true, true, true))
 }
 
 fn main() {

@@ -3,30 +3,34 @@
 use super::{ConditionDisposition, evaluate_condition};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
+use std::cell::RefCell;
 
 #[derive(Default)]
 struct PredicateWorld {
-    limit: usize,
-    branches: usize,
-    disposition: Option<ConditionDisposition>,
+    limit: RefCell<usize>,
+    branches: RefCell<usize>,
+    disposition: RefCell<Option<ConditionDisposition>>,
 }
 
 impl PredicateWorld {
-    fn set_limit(&mut self, value: usize) {
-        self.limit = value;
+    fn set_limit(&self, value: usize) {
+        *self.limit.borrow_mut() = value;
     }
 
-    fn set_branches(&mut self, value: usize) {
-        self.branches = value;
+    fn set_branches(&self, value: usize) {
+        *self.branches.borrow_mut() = value;
     }
 
-    fn evaluate(&mut self) {
-        let outcome = evaluate_condition(self.branches, self.limit);
-        self.disposition = Some(outcome);
+    fn evaluate(&self) {
+        let limit = *self.limit.borrow();
+        let branches = *self.branches.borrow();
+        let outcome = evaluate_condition(branches, limit);
+        self.disposition.borrow_mut().replace(outcome);
     }
 
     fn disposition(&self) -> ConditionDisposition {
         self.disposition
+            .borrow()
             .expect("predicate disposition must be recorded")
     }
 }
@@ -37,17 +41,17 @@ fn world() -> PredicateWorld {
 }
 
 #[given("the branch limit is {limit}")]
-fn given_limit(world: &mut PredicateWorld, limit: usize) {
+fn given_limit(world: &PredicateWorld, limit: usize) {
     world.set_limit(limit);
 }
 
 #[given("the predicate declares {branches} branches")]
-fn given_branches(world: &mut PredicateWorld, branches: usize) {
+fn given_branches(world: &PredicateWorld, branches: usize) {
     world.set_branches(branches);
 }
 
 #[when("I evaluate the predicate complexity")]
-fn when_evaluate(world: &mut PredicateWorld) {
+fn when_evaluate(world: &PredicateWorld) {
     world.evaluate();
 }
 

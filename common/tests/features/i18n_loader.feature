@@ -68,4 +68,4 @@ Feature: Localisation loader
     Scenario: Welsh conditional note applies lenition
       Given the locale preference cy
       When I request the attribute note on conditional_max_n_branches with branches 3
-      Then the message contains tri changen
+      Then the message contains tair cangen
