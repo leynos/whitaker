@@ -64,13 +64,13 @@ fn then_rejected(world: &PredicateWorld) {
 }
 
 #[scenario(path = "tests/features/conditional_branches.feature", index = 0)]
-fn scenario_within_limit(_world: PredicateWorld) {}
+fn scenario_within_limit(world: PredicateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/conditional_branches.feature", index = 1)]
-fn scenario_at_limit(_world: PredicateWorld) {}
+fn scenario_at_limit(world: PredicateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/conditional_branches.feature", index = 2)]
-fn scenario_exceeds_limit(_world: PredicateWorld) {}
+fn scenario_exceeds_limit(world: PredicateWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/conditional_branches.feature", index = 3)]
-fn scenario_custom_limit(_world: PredicateWorld) {}
+fn scenario_custom_limit(world: PredicateWorld) { let _ = world; }
