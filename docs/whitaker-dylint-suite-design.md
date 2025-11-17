@@ -402,7 +402,7 @@ Sketch checks inner attributes on `ItemKind::Mod`.
 Renamed from `conditional_max_two_branches` to reflect the new configurable
 branch limit. The lint now defaults to **two predicate branches** and emits a
 diagnostic when a conditional expression introduces **more than** the allowed
-number of boolean atoms.
+number of predicate branches.
 
 **Intent.** Discourage complex boolean predicates inside `if`, `while`, and
 match guard conditions. Inline expressions such as
@@ -433,10 +433,10 @@ across English, Welsh, and Scottish Gaelic without duplicating mutation rules.
 - Escape hatch: `#[allow(conditional_max_n_branches)]`.
 
 **Detection model.** A *complex conditional* is any boolean-valued expression
-in a branching position that contains more predicate atoms than the configured
-limit. An atom is a boolean leaf (comparisons, boolean-returning calls, boolean
-identifiers, etc.). Logical connectives (`&&`, `||`, `!`) form the internal
-nodes of the predicate tree.
+in a branching position that contains more predicate branches than the
+configured limit. A branch is a boolean leaf (comparisons, boolean-returning
+calls, boolean identifiers, etc.). Logical connectives (`&&`, `||`, `!`) form
+the internal nodes of the predicate tree.
 
 **Positions checked.**
 
@@ -445,16 +445,16 @@ nodes of the predicate tree.
 - `while <cond> { … }` with the same exclusion for `while let`.
 - `match` guards represented in HIR as `Guard::If(<cond>)`.
 
-**Algorithm.** Traverse the HIR expression and compute the number of atoms:
+**Algorithm.** Traverse the HIR expression and compute the number of branches:
 
 ```text
-atoms(e) =
-  if e is Binary(And|Or, lhs, rhs): atoms(lhs) + atoms(rhs)
-  if e is Unary(Not, inner):         atoms(inner)
+count_branches(e) =
+  if e is Binary(And|Or, lhs, rhs): count_branches(lhs) + count_branches(rhs)
+  if e is Unary(Not, inner):         count_branches(inner)
   else:                              1
 ```
 
-Emit a diagnostic when `atoms(e) > max_branches`, where the default
+Emit a diagnostic when `count_branches(e) > max_branches`, where the default
 `max_branches` is `2`.
 
 **Implementation sketch (`src/lib.rs`).**
@@ -480,14 +480,16 @@ impl_late_lint! {
     fn check_expr<'tcx>(&mut self, cx: &LateContext<'tcx>, e: &'tcx Expr<'tcx>) {
         match e.kind {
             ExprKind::If(cond, ..) | ExprKind::While(cond, ..) => {
-                if !matches!(cond.kind, ExprKind::Let(..)) && atoms(cond) > self.max_branches {
+                if !matches!(cond.kind, ExprKind::Let(..))
+                    && count_branches(cond) > self.max_branches
+                {
                     emit_conditional_lint(cx, cond.span);
                 }
             }
             ExprKind::Match(_, arms, _) => {
                 for arm in *arms {
                     if let Some(Guard::If(guard)) = arm.guard {
-                        if atoms(guard) > self.max_branches {
+                        if count_branches(guard) > self.max_branches {
                             emit_conditional_lint(cx, guard.span);
                         }
                     }
@@ -504,9 +506,9 @@ The runtime implementation tracks the configured limit, loads localization via
 phrases into Fluent, so diagnostics remain idiomatic across locales.
 
 **Notes.** Parentheses are normalized away by HIR, so grouping does not affect
-the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed
-a boolean context via casts. `if let`/`while let` are intentionally excluded
-because they are matching patterns, not boolean predicates.
+the branch count. Bitwise operators (`&`, `|`, `^`) are ignored unless they
+feed a boolean context via casts. `if let`/`while let` are intentionally
+excluded because they are matching patterns, not boolean predicates.
 
 **Diagnostics.**
 
@@ -542,10 +544,10 @@ in `dylint.toml`.
 crates/conditional_max_n_branches/ui/
 ├─ fail_if_three_branches.rs     # default limit hit via three-way conjunction
 ├─ fail_while_guard.rs           # `while` guard with nested disjunction
-├─ fail_match_guard.rs           # match guard with three atoms
-├─ fail_configured_limit.rs      # `max_branches = 1` highlights two-atom cond
-├─ pass_if_two_branches.rs       # default limit allows two atoms
-├─ pass_custom_limit.rs          # raised limit accepts three atoms
+├─ fail_match_guard.rs           # match guard with three branches
+├─ fail_configured_limit.rs      # `max_branches = 1` highlights two-branch cond
+├─ pass_if_two_branches.rs       # default limit allows two branches
+├─ pass_custom_limit.rs          # raised limit accepts three branches
 └─ pass_if_let.rs                # pattern guards remain out of scope
 ```
 
@@ -989,8 +991,8 @@ smooth it, and flag functions exhibiting two or more peaks (“bumps”).
 and predicate complexity.
 
 - Maintain a depth counter for entering/leaving `if`/`else`, `match`, loops.
-- Count predicate atoms with `atoms(expr)` where `&&`/`||` add, `!` recurses,
-  comparisons and boolean leaves count as one.
+- Count predicate branches with `count_branches(expr)` where `&&`/`||` add,
+  `!` recurses, comparisons and boolean leaves count as one.
 - Optionally add a control-flow weight for constructs such as `match` to reflect
   structural heft.
 
@@ -1000,14 +1002,14 @@ Rasterise once per function to produce a per-line signal `C[line]` representing
 local complexity.
 
 ```rust
-fn atoms(expr: &Expr<'_>) -> usize {
+fn count_branches(expr: &Expr<'_>) -> usize {
     match expr.kind {
         ExprKind::Binary(op, lhs, rhs)
             if matches!(op.node, BinOpKind::And | BinOpKind::Or) =>
         {
-            atoms(lhs) + atoms(rhs)
+            count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => atoms(inner),
+        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
         ExprKind::Binary(op, ..)
             if matches!(
                 op.node,
@@ -1124,8 +1126,8 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 - `public_fn_must_have_docs` (effective visibility + UI tests)
 - `module_must_have_inner_docs` (inline/file modules + UI tests)
 - `conditional_max_n_branches` (**complex predicate** detector)
-  - Count predicate atoms; config `max_branches`; examples in diagnostics; UI
-    tests for `if`/`while`/guards.
+  - Count predicate branches; config `max_branches`; examples in diagnostics;
+    UI tests for `if`/`while`/guards.
 - `test_must_not_have_example` (doc text scan + UI tests)
 - `module_max_lines` (line counting + config + UI tests)
 
@@ -1169,7 +1171,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 ### Phase 9 — Field feedback and tuning
 
 - Collect FP/FN reports; add fixtures.
-- Adjust defaults (`max_atoms`, `max_lines`); add targeted allowlists.
+- Adjust defaults (`max_branches`, `max_lines`); add targeted allowlists.
 
 ### Phase 10 — Extensions (nice-to-haves)
 

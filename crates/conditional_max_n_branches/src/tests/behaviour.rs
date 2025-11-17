@@ -3,36 +3,32 @@
 use super::{ConditionDisposition, evaluate_condition};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
+use std::cell::Cell;
 
 #[derive(Default)]
 struct PredicateWorld {
-    limit: RefCell<usize>,
-    branches: RefCell<usize>,
-    disposition: RefCell<Option<ConditionDisposition>>,
+    limit: Cell<usize>,
+    branches: Cell<usize>,
+    disposition: Cell<Option<ConditionDisposition>>,
 }
 
 impl PredicateWorld {
     fn set_limit(&self, value: usize) {
-        *self.limit.borrow_mut() = value;
+        self.limit.set(value);
     }
 
     fn set_branches(&self, value: usize) {
-        *self.branches.borrow_mut() = value;
+        self.branches.set(value);
     }
 
     fn evaluate(&self) {
-        let limit = *self.limit.borrow();
-        let branches = *self.branches.borrow();
-        let outcome = evaluate_condition(branches, limit);
-        self.disposition.borrow_mut().replace(outcome);
+        let outcome = evaluate_condition(self.branches.get(), self.limit.get());
+        self.disposition.set(Some(outcome));
     }
 
     fn disposition(&self) -> ConditionDisposition {
         self.disposition
-            .borrow()
-            .as_ref()
-            .copied()
+            .get()
             .expect("predicate disposition must be recorded")
     }
 }

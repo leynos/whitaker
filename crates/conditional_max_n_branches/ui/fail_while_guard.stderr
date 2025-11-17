@@ -1,15 +1,15 @@
-warning: Collapse the "if condition" to "2 branches" or fewer.
+warning: Collapse the ⁨if condition⁩ to ⁨2 branches⁩ or fewer.
   --> $DIR/fail_while_guard.rs:8:8
    |
 LL |     if ready() && (has_capacity() || throttled()) {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-note: The "if condition" currently contains "3 branches".
+note: The ⁨if condition⁩ currently contains ⁨3 branches⁩.
   --> $DIR/fail_while_guard.rs:8:8
    |
 LL |     if ready() && (has_capacity() || throttled()) {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = help: Extract helper functions or simplify the "if condition" to reduce branching.
+   = help: Extract helper functions or simplify the ⁨if condition⁩ to reduce branching.
 note: the lint level is defined here
   --> $DIR/fail_while_guard.rs:1:9
    |
