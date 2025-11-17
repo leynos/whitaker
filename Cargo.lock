@@ -210,7 +210,9 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "fluent-templates",
+ "glob",
  "log",
  "logtest",
  "once_cell",
@@ -243,6 +245,30 @@ dependencies = [
  "serde_json",
  "tester",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "conditional_max_n_branches"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "fluent-templates",
+ "glob",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+ "serde",
+ "serial_test",
+ "tempfile",
+ "whitaker",
 ]
 
 [[package]]

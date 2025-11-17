@@ -5,11 +5,14 @@ edition = "2024"
 
 [dependencies]
 
+camino = { workspace = true }
 fluent-templates = { workspace = true }
-once_cell = { workspace = true }
-unic-langid = { workspace = true }
-thiserror = { workspace = true }
+glob = "0.3.3"
 log = { workspace = true }
+once_cell = { workspace = true }
+tempfile = "3.14.0"
+thiserror = { workspace = true }
+unic-langid = { workspace = true }
 
 [dev-dependencies]
 # Testing: Behavioural specs now target rstest-bdd 0.1.0, the first stable
@@ -21,7 +24,7 @@ rstest-bdd = "0.1.0"
 rstest-bdd-macros = "0.1.0"
 regex = "1.10.4"
 logtest = "2.0.0"
-tempfile = "3.14"
+
 
 [lints.clippy]
 expect_used = "deny"

@@ -27,7 +27,7 @@ lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
 │  ├─ no_expect_outside_tests/
 │  ├─ public_fn_must_have_docs/
 │  ├─ module_must_have_inner_docs/
-│  ├─ conditional_max_two_branches/   # revised: complex conditional detection
+│  ├─ conditional_max_n_branches/     # revised: complex conditional detection
 │  ├─ test_must_not_have_example/
 │  ├─ module_max_lines/
 │  └─ no_unwrap_or_else_panic/        # separate crate
@@ -149,7 +149,7 @@ Utilities shared by lints:
 - Adopt the rstest-bdd 0.1.0 stable release to eliminate alpha regressions
   whilst keeping compile-time validation consistent across lint crates.
 
-### Localisation infrastructure
+### Localization infrastructure
 
 - Adopt `fluent-templates` and `once_cell` as workspace dependencies,
   so each lint crate can load translated diagnostics without manual resource
@@ -188,7 +188,7 @@ Utilities shared by lints:
 - Keep Fluent resources compatible with the `fluent-syntax 0.12` parser shipped
   by `fluent-templates 0.13`. Named term arguments triggered parser failures in
   the Welsh bundles, so the `cy` resources now inline select expressions and
-  avoid helper terms when plural logic is required. This keeps localisation
+  avoid helper terms when plural logic is required. This keeps localization
   coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
@@ -217,7 +217,7 @@ Utilities shared by lints:
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
   continues to execute via `dylint_testing`'s JSON output to keep diagnostics
   machine-readable while proving non-English locales work end to end.
-- Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
+- Exercise localization helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
   protects the fallback code paths from regression.
@@ -242,6 +242,7 @@ Utilities shared by lints:
 | `no_expect_outside_tests`     | restriction     | Ban `.expect(…)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item).   | deny  |
 | `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
 | `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
+| `conditional_max_n_branches`  | style           | Flag conditionals with more than the configured number of predicate branches; encourage decomposition.                  | warn  |
 | `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
 | `module_max_lines`            | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
 
@@ -396,41 +397,46 @@ Every module must start with an inner doc `//!`.
 
 Sketch checks inner attributes on `ItemKind::Mod`.
 
-### 3.5 `conditional_max_two_branches` (style, warn)
+### 3.5 `conditional_max_n_branches` (style, warn)
 
-Reinterpreted as a **complex conditional detector**. The crate name remains
-`conditional_max_two_branches` for backwards compatibility, with a future alias
-(`decompose_complex_conditional`) under consideration.
+Renamed from `conditional_max_two_branches` to reflect the new configurable
+branch limit. The lint now defaults to **two predicate branches** and emits a
+diagnostic when a conditional expression introduces **more than** the allowed
+number of predicate branches.
 
 **Intent.** Discourage complex boolean predicates inside `if`, `while`, and
 match guard conditions. Inline expressions such as
-`if x.started() && y.running()` obscure the business rule and contribute to the
-Complex Method smell. Encourage encapsulation via a well-named helper or a
-local variable.
+`if x.started() && y.running() && z.available()` obscure the business rule and
+contribute to the Complex Method smell. Encourage encapsulation via a
+well-named helper or a local variable.
 
-**Rationale.** Teams often accumulate guard clauses over time by bolting
-additional `&&`/`||`/`!` terms into the conditional. The logic becomes
-entangled with control-flow, harming readability and reuse. Extracting the
-predicate makes the rule explicit, improves testability, and reduces accidental
-duplication.
+**Rationale.** Teams often accrete guard clauses by bolting additional
+`&&`/`||`/`!` terms into a conditional. The logic becomes entangled with
+control-flow, harming readability and reuse. Extracting the predicate makes the
+rule explicit, improves testability, and reduces accidental duplication.
 
 **How to fix.** Apply the *Decompose Conditional* refactoring. Prefer
 extracting the predicate into a function with a domain-flavoured name. When a
 function is overkill, bind the expression to a local variable and branch on
 that name.
 
+**Design decision (2025-11-14).** Localization relies on a shared
+`common::i18n::branch_phrase` helper to render both the current branch count
+and the configured limit. This keeps Fluent resources and diagnostics in sync
+across English, Welsh, and Scottish Gaelic without duplicating mutation rules.
+
 **Lint metadata.**
 
-- Crate: `conditional_max_two_branches` (alias rename TBD).
+- Crate: `conditional_max_n_branches`.
 - Kind: `style`.
 - Default level: `warn`.
-- Escape hatch: `#[allow(conditional_max_two_branches)]`.
+- Escape hatch: `#[allow(conditional_max_n_branches)]`.
 
 **Detection model.** A *complex conditional* is any boolean-valued expression
-in a branching position that contains two or more predicate atoms. An atom is a
-boolean leaf (comparisons, boolean-returning calls, boolean identifiers, etc.).
-Logical connectives (`&&`, `||`, `!`) form the internal nodes of the predicate
-tree.
+in a branching position that contains more predicate branches than the
+configured limit. A branch is a boolean leaf (comparisons, boolean-returning
+calls, boolean identifiers, etc.). Logical connectives (`&&`, `||`, `!`) form
+the internal nodes of the predicate tree.
 
 **Positions checked.**
 
@@ -439,17 +445,17 @@ tree.
 - `while <cond> { … }` with the same exclusion for `while let`.
 - `match` guards represented in HIR as `Guard::If(<cond>)`.
 
-**Algorithm.** Traverse the HIR expression and compute the number of atoms:
+**Algorithm.** Traverse the HIR expression and compute the number of branches:
 
 ```text
-atoms(e) =
-  if e is Binary(And|Or, lhs, rhs): atoms(lhs) + atoms(rhs)
-  if e is Unary(Not, inner):         atoms(inner)
+count_branches(e) =
+  if e is Binary(And|Or, lhs, rhs): count_branches(lhs) + count_branches(rhs)
+  if e is Unary(Not, inner):         count_branches(inner)
   else:                              1
 ```
 
-Emit a diagnostic when `atoms(e) >= max_atoms`, where the default `max_atoms`
-is `1` (flag any conjunction/disjunction).
+Emit a diagnostic when `count_branches(e) > max_branches`, where the default
+`max_branches` is `2`.
 
 **Implementation sketch (`src/lib.rs`).**
 
@@ -460,7 +466,7 @@ use rustc_hir::{BinOpKind, Expr, ExprKind, Guard, UnOp};
 use rustc_lint::{LateContext, LateLintPass};
 
 declare_late_lint!(
-    pub CONDITIONAL_MAX_TWO_BRANCHES,
+    pub CONDITIONAL_MAX_N_BRANCHES,
     Warn,
     "complex conditional in a branch; decompose or extract"
 );
@@ -468,32 +474,23 @@ declare_late_lint!(
 pub struct Pass;
 
 impl_late_lint! {
-    CONDITIONAL_MAX_TWO_BRANCHES,
+    CONDITIONAL_MAX_N_BRANCHES,
     Pass,
 
     fn check_expr<'tcx>(&mut self, cx: &LateContext<'tcx>, e: &'tcx Expr<'tcx>) {
         match e.kind {
             ExprKind::If(cond, ..) | ExprKind::While(cond, ..) => {
-                if !matches!(cond.kind, ExprKind::Let(..)) && atoms(cond) >= 2 {
-                    common::span_lint(
-                        cx,
-                        CONDITIONAL_MAX_TWO_BRANCHES,
-                        cond.span,
-                        "complex conditional; extract to a named predicate or local variable",
-                    );
-                    // TODO: introduce multipart suggestion to name the predicate.
+                if !matches!(cond.kind, ExprKind::Let(..))
+                    && count_branches(cond) > self.max_branches
+                {
+                    emit_conditional_lint(cx, cond.span);
                 }
             }
             ExprKind::Match(_, arms, _) => {
                 for arm in *arms {
                     if let Some(Guard::If(guard)) = arm.guard {
-                        if atoms(guard) >= 2 {
-                            common::span_lint(
-                                cx,
-                                CONDITIONAL_MAX_TWO_BRANCHES,
-                                guard.span,
-                                "complex match guard; extract to a predicate",
-                            );
+                        if count_branches(guard) > self.max_branches {
+                            emit_conditional_lint(cx, guard.span);
                         }
                     }
                 }
@@ -502,53 +499,30 @@ impl_late_lint! {
         }
     }
 }
-
-fn atoms(e: &Expr<'_>) -> usize {
-    match e.kind {
-        ExprKind::Binary(op, lhs, rhs)
-            if matches!(op.node, BinOpKind::And | BinOpKind::Or) =>
-        {
-            atoms(lhs) + atoms(rhs)
-        }
-        ExprKind::Unary(UnOp::Not, inner) => atoms(inner),
-        ExprKind::Binary(op, ..)
-            if matches!(
-                op.node,
-                BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le | BinOpKind::Gt | BinOpKind::Ge
-            ) =>
-        {
-            1
-        }
-        _ => 1,
-    }
-}
 ```
 
+The runtime implementation tracks the configured limit, loads localization via
+`SharedConfig`, and feeds both `branches` and `limit` plus their rendered
+phrases into Fluent, so diagnostics remain idiomatic across locales.
+
 **Notes.** Parentheses are normalized away by HIR, so grouping does not affect
-the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed
-a boolean context via casts. `if let`/`while let` are intentionally excluded
-because they are matching patterns, not boolean predicates.
+the branch count. Bitwise operators (`&`, `|`, `^`) are ignored unless they
+feed a boolean context via casts. `if let`/`while let` are intentionally
+excluded because they are matching patterns, not boolean predicates.
 
 **Diagnostics.**
 
-- Message: “Complex conditional; encapsulate the predicate in a well-named
-  function or bind it to a local variable.”
-- Note (why): “Complex conditionals hinder readability and contribute to the
-  Complex Method smell; decompose the conditional to clarify the rule.”
-- Suggestions:
-  - Local binding (multipart, `Applicability::MaybeIncorrect`) that introduces
-    `let <name> = <cond>;` immediately prior to the statement and swaps the
-    condition for `<name>`.
-  - Function extraction sketch describing `fn <meaningful_name>(…) -> bool {
-    <cond> }` and updating the branch to call it.
+- Message: “Collapse the {name} to {limit_phrase} or fewer.”
+- Note (why): “The {name} currently contains {branch_phrase}.”
+- Help: “Extract helper functions or simplify the {name} to reduce branching.”
 
 **Configuration.**
 
 ```rust
 #[derive(serde::Deserialize)]
 struct Config {
-    /// Maximum predicate atoms allowed in a branch condition. Default: 1.
-    max_atoms: Option<usize>,
+    /// Maximum predicate branches allowed in a condition. Default: 2.
+    max_branches: Option<usize>,
 }
 ```
 
@@ -557,27 +531,24 @@ in `dylint.toml`.
 
 **False positives / limitations.**
 
-- Intentional short-circuiting (e.g. defensive double checks) may produce
-  acceptable two-atom predicates; users can increase `max_atoms` or allow the
-  lint locally.
-- Predicate name inference in suggestions is non-trivial. Favour clear
-  diagnostic text over brittle guesses; use placeholders such as
-  `/* predicate */` when necessary.
+- Intentional short-circuiting (e.g. defensive double checks) may still warrant
+  more branches; users can increase `max_branches` or allow the lint locally.
+- Predicate name inference in suggestions remains non-trivial. Favour clear
+  diagnostic text over brittle guesses.
 - Extracting to a function must preserve ownership and short-circuit semantics;
   prefer local binding when moves or borrows complicate extraction.
 
 **UI tests.**
 
 ```text
-crates/conditional_max_two_branches/tests/ui/
-├─ simple_and_bad.rs        # `if a() && b()` → warn
-├─ simple_ok.rs             # `if is_ready()` → ok
-├─ comparison_ok.rs         # `if x > 0` → ok
-├─ three_atoms_bad.rs       # `if a() || b() || c()` → warn
-├─ while_guard_bad.rs       # `while p() && !q()` → warn
-├─ match_guard_bad.rs       # match guard with `&&` → warn
-├─ if_let_excluded.rs       # `if let Some(_) = x` → ok
-└─ macros_edge.rs           # `assert!(a && b)` currently ignored
+crates/conditional_max_n_branches/ui/
+├─ fail_if_three_branches.rs     # default limit hit via three-way conjunction
+├─ fail_while_guard.rs           # `while` guard with nested disjunction
+├─ fail_match_guard.rs           # match guard with three branches
+├─ fail_configured_limit.rs      # `max_branches = 1` highlights two-branch cond
+├─ pass_if_two_branches.rs       # default limit allows two branches
+├─ pass_custom_limit.rs          # raised limit accepts three branches
+└─ pass_if_let.rs                # pattern guards remain out of scope
 ```
 
 Each `.rs` pairs with a `.stderr` expectation via `dylint_testing::ui_test`.
@@ -934,7 +905,7 @@ VS Code rust-analyser integration uses `cargo dylint` as the check command.
 ## 10) Configuration knobs (examples)
 
 - `module_max_lines.max_lines = 400`
-- `conditional_max_two_branches.max_atoms = 1`
+- `conditional_max_n_branches.max_branches = 2`
 - `no_expect_outside_tests` allowlist of modules (regex)
 - `no_unwrap_or_else_panic.allow_in_main = false`
 
@@ -1020,8 +991,8 @@ smooth it, and flag functions exhibiting two or more peaks (“bumps”).
 and predicate complexity.
 
 - Maintain a depth counter for entering/leaving `if`/`else`, `match`, loops.
-- Count predicate atoms with `atoms(expr)` where `&&`/`||` add, `!` recurses,
-  comparisons and boolean leaves count as one.
+- Count predicate branches with `count_branches(expr)` where `&&`/`||` add,
+  `!` recurses, comparisons and boolean leaves count as one.
 - Optionally add a control-flow weight for constructs such as `match` to reflect
   structural heft.
 
@@ -1031,14 +1002,14 @@ Rasterise once per function to produce a per-line signal `C[line]` representing
 local complexity.
 
 ```rust
-fn atoms(expr: &Expr<'_>) -> usize {
+fn count_branches(expr: &Expr<'_>) -> usize {
     match expr.kind {
         ExprKind::Binary(op, lhs, rhs)
             if matches!(op.node, BinOpKind::And | BinOpKind::Or) =>
         {
-            atoms(lhs) + atoms(rhs)
+            count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => atoms(inner),
+        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
         ExprKind::Binary(op, ..)
             if matches!(
                 op.node,
@@ -1101,9 +1072,8 @@ peak, guard clauses, macro-heavy code from external crates).
 **Implementation notes.** Use `SourceMap` for line mapping and `span` hygiene
 checks (`span.from_expansion()`, `span.source_callee()`) to decide when to skip
 data. Consider extracting the signal/bump detector into an internal helper
-crate for unit tests. The approach dovetails with
-`conditional_max_two_branches` and other maintainability lints for a
-complementary suite.
+crate for unit tests. The approach dovetails with `conditional_max_n_branches`
+and other maintainability lints for a complementary suite.
 
 **Verdict.** The Bumpy Road lint is realistic and actionable. It approximates
 CodeScene’s smell by emphasising the distribution of complexity within a single
@@ -1155,9 +1125,9 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 - `no_expect_outside_tests` (receiver type check + context guard + UI tests)
 - `public_fn_must_have_docs` (effective visibility + UI tests)
 - `module_must_have_inner_docs` (inline/file modules + UI tests)
-- `conditional_max_two_branches` (**complex predicate** detector)
-  - Count predicate atoms; config `max_atoms`; examples in diagnostics; UI
-    tests for `if`/`while`/guards.
+- `conditional_max_n_branches` (**complex predicate** detector)
+  - Count predicate branches; config `max_branches`; examples in diagnostics;
+    UI tests for `if`/`while`/guards.
 - `test_must_not_have_example` (doc text scan + UI tests)
 - `module_max_lines` (line counting + config + UI tests)
 
@@ -1201,7 +1171,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 ### Phase 9 — Field feedback and tuning
 
 - Collect FP/FN reports; add fixtures.
-- Adjust defaults (`max_atoms`, `max_lines`); add targeted allowlists.
+- Adjust defaults (`max_branches`, `max_lines`); add targeted allowlists.
 
 ### Phase 10 — Extensions (nice-to-haves)
 

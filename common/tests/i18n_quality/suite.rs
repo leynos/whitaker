@@ -4,7 +4,7 @@
 //! text remains complete, and exercise language-specific plural forms so we can
 //! catch regressions before they reach users.
 
-use common::i18n::{FluentValue, Localizer};
+use common::i18n::{FluentValue, Localizer, branch_phrase};
 use fluent_templates::fluent_bundle::FluentResource;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -142,13 +142,13 @@ fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
             Cow::Borrowed("branches"),
             FluentValue::from(branches as i64),
         );
-        let branch_phrase = branch_phrase(locale, branches);
+        let branch_phrase = branch_phrase(locale, branches as usize);
         args.insert(
             Cow::Borrowed("branch_phrase"),
-            FluentValue::from(branch_phrase.clone()),
+            FluentValue::String(Cow::Owned(branch_phrase.clone())),
         );
         let note = localizer
-            .attribute_with_args("conditional_max_two_branches", "note", &args)
+            .attribute_with_args("conditional_max_n_branches", "note", &args)
             .expect("conditional note should resolve");
         assert!(
             !note.contains('{'),
@@ -245,58 +245,23 @@ fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches:
 fn welsh_branch_term_declensions(#[case] branches: i64, #[case] expected: &str) {
     let localizer = Localizer::new(Some("cy"));
     let mut args = HashMap::new();
-    let branch_phrase = welsh_branch_phrase(branches);
+    let branch_phrase = branch_phrase("cy", branches as usize);
     assert_eq!(branch_phrase, expected);
 
     args.insert(
         Cow::Borrowed("branch_phrase"),
-        FluentValue::from(branch_phrase.clone()),
+        FluentValue::String(Cow::Owned(branch_phrase.clone())),
     );
     args.insert(
         Cow::Borrowed("branches"),
         FluentValue::from(branches as i64),
     );
     let note = localizer
-        .attribute_with_args("conditional_max_two_branches", "note", &args)
+        .attribute_with_args("conditional_max_n_branches", "note", &args)
         .expect("conditional note should resolve");
     let expected_note = format!("Ar hyn o bryd mae {expected} yn y rheol.");
     let note = strip_isolation_marks(&note);
     assert_eq!(note.as_ref(), expected_note);
-}
-
-fn branch_phrase(locale: &str, branches: i64) -> String {
-    match locale {
-        "cy" => welsh_branch_phrase(branches),
-        "gd" => gaelic_branch_phrase(branches),
-        _ => english_branch_phrase(branches),
-    }
-}
-
-fn english_branch_phrase(branches: i64) -> String {
-    match branches {
-        1 => "1 branch".to_string(),
-        _ => format!("{branches} branches"),
-    }
-}
-
-fn gaelic_branch_phrase(branches: i64) -> String {
-    match branches {
-        1 | 2 => format!("{branches} mheur"),
-        3 => format!("{branches} meuran"),
-        _ => format!("{branches} meur"),
-    }
-}
-
-fn welsh_branch_phrase(branches: i64) -> String {
-    match branches {
-        0 => "dim canghennau".to_string(),
-        1 => "un gangen".to_string(),
-        2 => "dwy gangen".to_string(),
-        3 => "tri changen".to_string(),
-        6 => "chwe changen".to_string(),
-        4 | 5 => format!("{branches} cangen"),
-        _ => format!("{branches} canghennau"),
-    }
 }
 
 #[test]

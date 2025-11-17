@@ -16,7 +16,7 @@ Feature: Localisation loader
 
   Scenario: Resolving Scottish Gaelic plural forms
     Given the locale preference gd
-    When I request the attribute note on conditional_max_two_branches with branches 3
+    When I request the attribute note on conditional_max_n_branches with branches 3
     Then the resolved locale is gd
     And the message contains meuran
 
@@ -67,5 +67,5 @@ Feature: Localisation loader
 
     Scenario: Welsh conditional note applies lenition
       Given the locale preference cy
-      When I request the attribute note on conditional_max_two_branches with branches 3
-      Then the message contains tri changen
+      When I request the attribute note on conditional_max_n_branches with branches 3
+      Then the message contains tair cangen

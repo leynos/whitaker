@@ -29,6 +29,60 @@ pub fn get_localizer_for_lint(lint_name: &str, configuration_locale: Option<&str
     selection.into_localizer()
 }
 
+/// Render a locale-aware description of the number of predicate branches.
+///
+/// Welsh and Scottish Gaelic require bespoke noun mutations, so the helper
+/// centralises those rules for reuse across diagnostics, UI tests, and
+/// localisation suites.
+///
+/// # Examples
+///
+/// ```
+/// use common::i18n::branch_phrase;
+///
+/// assert_eq!(branch_phrase("en-GB", 2), "2 branches");
+/// assert_eq!(branch_phrase("cy", 3), "tri changen");
+/// assert_eq!(branch_phrase("gd", 1), "1 mheur");
+/// ```
+#[must_use]
+pub fn branch_phrase(locale: &str, branches: usize) -> String {
+    match locale
+        .split_once('-')
+        .map(|(lang, _)| lang)
+        .unwrap_or(locale)
+    {
+        "cy" => welsh_branch_phrase(branches),
+        "gd" => gaelic_branch_phrase(branches),
+        _ => english_branch_phrase(branches),
+    }
+}
+
+fn english_branch_phrase(branches: usize) -> String {
+    match branches {
+        1 => String::from("1 branch"),
+        _ => format!("{branches} branches"),
+    }
+}
+
+fn gaelic_branch_phrase(branches: usize) -> String {
+    match branches {
+        1 => String::from("1 meur"),
+        _ => format!("{branches} meuran"),
+    }
+}
+
+fn welsh_branch_phrase(branches: usize) -> String {
+    match branches {
+        0 => String::from("dim canghennau"),
+        1 => String::from("un gangen"),
+        2 => String::from("dwy gangen"),
+        3 => String::from("tair cangen"),
+        6 => String::from("chwe changen"),
+        4 | 5 => format!("{branches} cangen"),
+        _ => format!("{branches} canghennau"),
+    }
+}
+
 /// Resolve a diagnostic message set while logging localisation failures.
 ///
 /// When lookups fail the helper invokes the supplied bug reporter, records the
@@ -111,4 +165,34 @@ pub struct MessageResolution<'a> {
     pub key: MessageKey<'a>,
     /// Fluent argument map supplied to the lookup.
     pub args: &'a Arguments<'a>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::branch_phrase;
+    use crate::i18n::FALLBACK_LOCALE;
+
+    #[test]
+    fn renders_english_branch_phrase() {
+        assert_eq!(branch_phrase(FALLBACK_LOCALE, 0), "0 branches");
+        assert_eq!(branch_phrase(FALLBACK_LOCALE, 1), "1 branch");
+        assert_eq!(branch_phrase(FALLBACK_LOCALE, 4), "4 branches");
+    }
+
+    #[test]
+    fn renders_gaelic_branch_phrase() {
+        assert_eq!(branch_phrase("gd", 1), "1 meur");
+        assert_eq!(branch_phrase("gd", 2), "2 meuran");
+        assert_eq!(branch_phrase("gd", 3), "3 meuran");
+    }
+
+    #[test]
+    fn renders_welsh_branch_phrase() {
+        assert_eq!(branch_phrase("cy", 0), "dim canghennau");
+        assert_eq!(branch_phrase("cy", 1), "un gangen");
+        assert_eq!(branch_phrase("cy", 2), "dwy gangen");
+        assert_eq!(branch_phrase("cy", 3), "tair cangen");
+        assert_eq!(branch_phrase("cy", 6), "chwe changen");
+        assert_eq!(branch_phrase("cy", 11), "11 canghennau");
+    }
 }

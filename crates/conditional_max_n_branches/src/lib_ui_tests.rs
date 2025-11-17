@@ -1,6 +1,6 @@
 //! UI harness and helpers for running dylint fixtures against the
-//! `module_max_lines` lint. These tests ensure curated fixtures execute without
-//! diffs and provide coverage for the shared fixture-discovery helpers.
+//! `conditional_max_n_branches` lint. These tests ensure curated fixtures execute without
+//! diffs and provide coverage for the fixture discovery helpers.
 
 use camino::Utf8Path;
 use common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};

@@ -8,12 +8,19 @@
 //!
 //! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and
 //!   support directories) into isolated workspaces for dylint UI harnesses.
+//! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint
+//!   UI tests with consistent panic handling.
 //! - [`LocaleOverride`]: Temporarily mutates `DYLINT_LOCALE` so locale-sensitive
 //!   tests can execute without leaking global state between cases.
 
 pub mod fixtures;
+pub mod ui;
 
 pub use fixtures::{copy_directory, copy_fixture};
+pub use ui::{
+    FixtureEnvironment, discover_fixtures, prepare_fixture, read_directory_config,
+    read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
+};
 
 use std::ffi::OsString;
 
