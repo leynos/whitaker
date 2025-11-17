@@ -4,7 +4,7 @@ warning: Collapse the "if condition" to "2 branches" or fewer.
 LL |     if condition_a() && condition_b() && condition_c() {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-note: The conditional currently declares "3 branches".
+note: The "if condition" currently contains "3 branches".
   --> $DIR/fail_if_three_branches.rs:8:8
    |
 LL |     if condition_a() && condition_b() && condition_c() {
@@ -17,4 +17,3 @@ LL | #![warn(conditional_max_n_branches)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: 1 warning emitted
-

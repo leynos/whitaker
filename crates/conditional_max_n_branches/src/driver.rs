@@ -128,13 +128,9 @@ impl ConditionalMaxNBranches {
 
     fn inspect_match_guards(&self, cx: &LateContext<'_>, arms: &[hir::Arm<'_>]) {
         for arm in arms {
-            let Some(guard) = arm.guard else {
-                continue;
-            };
-            let hir::Guard::If(expr) = guard else {
-                continue;
-            };
-            self.inspect_condition(cx, ConditionKind::MatchGuard, expr);
+            if let Some(expr) = arm.guard {
+                self.inspect_condition(cx, ConditionKind::MatchGuard, expr);
+            }
         }
     }
 }
@@ -262,7 +258,10 @@ fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> Diag
         kind.display_name(),
         limit_phrase_text
     );
-    let note = format!("The conditional currently declares {branch_phrase_text}.");
+    let note = format!(
+        "The {} currently contains {branch_phrase_text}.",
+        kind.display_name()
+    );
     let help = format!(
         "Extract helper functions or simplify the {} to reduce branching.",
         kind.display_name()

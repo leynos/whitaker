@@ -4,7 +4,7 @@ warning: Collapse the "if condition" to "2 branches" or fewer.
 LL |     if primary() && secondary() && tertiary() {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-note: The conditional currently declares "3 branches".
+note: The "if condition" currently contains "3 branches".
   --> $DIR/fail_match_guard.rs:8:8
    |
 LL |     if primary() && secondary() && tertiary() {
@@ -17,4 +17,3 @@ LL | #![warn(conditional_max_n_branches)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: 1 warning emitted
-

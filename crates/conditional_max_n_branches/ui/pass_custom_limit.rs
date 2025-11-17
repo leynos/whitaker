@@ -1,9 +1,11 @@
+#![warn(conditional_max_n_branches)]
+
 fn alpha() -> bool { true }
 fn beta() -> bool { true }
 fn gamma() -> bool { true }
 
 fn all_conditions_satisfied() -> bool {
-    matches!((alpha(), beta(), gamma()), (true, true, true))
+    alpha() && beta() && gamma()
 }
 
 fn main() {

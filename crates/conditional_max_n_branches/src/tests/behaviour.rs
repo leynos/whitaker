@@ -31,6 +31,8 @@ impl PredicateWorld {
     fn disposition(&self) -> ConditionDisposition {
         self.disposition
             .borrow()
+            .as_ref()
+            .copied()
             .expect("predicate disposition must be recorded")
     }
 }

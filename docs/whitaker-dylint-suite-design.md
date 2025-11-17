@@ -188,7 +188,7 @@ Utilities shared by lints:
 - Keep Fluent resources compatible with the `fluent-syntax 0.12` parser shipped
   by `fluent-templates 0.13`. Named term arguments triggered parser failures in
   the Welsh bundles, so the `cy` resources now inline select expressions and
-  avoid helper terms when plural logic is required. This keeps localisation
+  avoid helper terms when plural logic is required. This keeps localization
   coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
@@ -217,7 +217,7 @@ Utilities shared by lints:
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
   continues to execute via `dylint_testing`'s JSON output to keep diagnostics
   machine-readable while proving non-English locales work end to end.
-- Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
+- Exercise localization helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
   protects the fallback code paths from regression.
@@ -242,6 +242,7 @@ Utilities shared by lints:
 | `no_expect_outside_tests`     | restriction     | Ban `.expect(…)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item).   | deny  |
 | `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
 | `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
+| `conditional_max_n_branches`  | style           | Flag conditionals with more than the configured number of predicate branches; encourage decomposition.                  | warn  |
 | `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
 | `module_max_lines`            | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
 
@@ -498,9 +499,9 @@ impl_late_lint! {
 }
 ```
 
-The runtime implementation tracks the configured limit, loads localisation via
+The runtime implementation tracks the configured limit, loads localization via
 `SharedConfig`, and feeds both `branches` and `limit` plus their rendered
-phrases into Fluent so diagnostics remain idiomatic across locales.
+phrases into Fluent, so diagnostics remain idiomatic across locales.
 
 **Notes.** Parentheses are normalized away by HIR, so grouping does not affect
 the atom count. Bitwise operators (`&`, `|`, `^`) are ignored unless they feed
@@ -510,7 +511,7 @@ because they are matching patterns, not boolean predicates.
 **Diagnostics.**
 
 - Message: “Collapse the {name} to {limit_phrase} or fewer.”
-- Note (why): “The conditional currently declares {branch_phrase}.”
+- Note (why): “The {name} currently contains {branch_phrase}.”
 - Help: “Extract helper functions or simplify the {name} to reduce branching.”
 
 **Configuration.**
