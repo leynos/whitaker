@@ -239,15 +239,31 @@ fn emit_diagnostic(
         || fallback_messages(metadata.kind, metadata.branches, limit),
     );
 
-    let primary = messages.primary().to_string();
-    let note = messages.note().to_string();
-    let help = messages.help().to_string();
+    let primary = normalise_isolation_marks(messages.primary());
+    let note = normalise_isolation_marks(messages.note());
+    let help = normalise_isolation_marks(messages.help());
 
     cx.span_lint(CONDITIONAL_MAX_N_BRANCHES, metadata.span, move |lint| {
         lint.primary_message(primary);
         lint.span_note(metadata.span, note);
         lint.help(help);
     });
+}
+
+fn normalise_isolation_marks(text: &str) -> String {
+    if text
+        .chars()
+        .any(|character| matches!(character, '\u{2068}' | '\u{2069}' | '\u{FFFD}'))
+    {
+        text.chars()
+            .map(|character| match character {
+                '\u{2068}' | '\u{2069}' | '\u{FFFD}' => '"',
+                other => other,
+            })
+            .collect()
+    } else {
+        text.to_string()
+    }
 }
 
 fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> DiagnosticMessageSet {
