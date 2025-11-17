@@ -241,7 +241,7 @@ Utilities shared by lints:
 | `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                    | warn  |
 | `no_expect_outside_tests`     | restriction     | Ban `.expect(…)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item).   | deny  |
 | `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
-| `module_must_have_inner_docs` | pedantic        | Every module must open with a `//!` inner doc comment.                                                                  | warn  |
+| `module_must_have_inner_docs` | pedantic        | Every module must start with a `//!` inner doc comment.                                                                 | warn  |
 | `conditional_max_n_branches`  | style           | Flag conditionals with more than the configured number of predicate branches; encourage decomposition.                  | warn  |
 | `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
 | `module_max_lines`            | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
