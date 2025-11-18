@@ -1,3 +1,4 @@
+//! UI test: inline modules that start with inner docs should pass.
 #![warn(module_must_have_inner_docs)]
 
 mod documented {

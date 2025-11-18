@@ -1,4 +1,4 @@
-warning: Module �long_module� spans �18� lines which exceeds the �5� line limit.
+warning: Module long_module spans 18 lines which exceeds the 5 line limit.
   --> $DIR/fail_module_too_long.rs:2:5
    |
 LL | mod long_module {
@@ -9,7 +9,7 @@ note: Large modules are harder to navigate and review.
    |
 LL | mod long_module {
    | ^^^^^^^^^^^^^^^
-   = help: Split �long_module� into smaller modules or reduce its responsibilities.
+   = help: Split long_module into smaller modules or reduce its responsibilities.
    = note: `#[warn(module_max_lines)]` on by default
 
 warning: this lint expectation is unfulfilled

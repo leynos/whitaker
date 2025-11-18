@@ -14,10 +14,10 @@ use common::i18n::{
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
-use rustc_span::symbol::Ident;
-use rustc_span::{BytePos, Span};
 #[cfg(test)]
 use rustc_span::DUMMY_SP;
+use rustc_span::symbol::Ident;
+use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
 
 const LINT_NAME: &str = "module_must_have_inner_docs";
@@ -103,6 +103,21 @@ enum LeadingContent {
     Misordered { offset: usize, len: usize },
 }
 
+fn contains_doc_token(attr_body: &str) -> bool {
+    attr_body.match_indices("doc").any(|(index, _)| {
+        let before = attr_body[..index]
+            .chars()
+            .rev()
+            .find(|ch| !ch.is_whitespace());
+        let after = attr_body[index + 3..]
+            .chars()
+            .find(|ch| !ch.is_whitespace());
+        let before_ok = before.is_none_or(|ch| !ch.is_ascii_alphanumeric() && ch != '_');
+        let after_ok = after.is_none_or(|ch| !ch.is_ascii_alphanumeric() && ch != '_');
+        before_ok && after_ok
+    })
+}
+
 fn classify_leading_content(snippet: &str) -> LeadingContent {
     let bytes = snippet.as_bytes();
     let len = bytes.len();
@@ -122,10 +137,14 @@ fn classify_leading_content(snippet: &str) -> LeadingContent {
     }
     if rest.starts_with("#![") {
         let attr_end = rest.find(']').unwrap_or(rest.len());
-        let attr_body = &rest[3..attr_end].to_ascii_lowercase();
-        if attr_body.contains("doc") {
+        let attr_body = rest[3..attr_end].to_ascii_lowercase();
+        if contains_doc_token(&attr_body) {
             return LeadingContent::Doc;
         }
+    }
+
+    if rest.starts_with("#[") {
+        return LeadingContent::Missing;
     }
 
     if rest.starts_with('#') {
@@ -265,6 +284,14 @@ mod tests {
     fn outer_docs_do_not_satisfy_requirement() {
         assert_eq!(
             detect_module_docs_from_snippet("/// doc"),
+            ModuleDocDisposition::MissingDocs
+        );
+    }
+
+    #[rstest]
+    fn outer_doc_attribute_does_not_satisfy_requirement() {
+        assert_eq!(
+            detect_module_docs_from_snippet("#[doc = \"module docs\"]\npub fn demo() {}"),
             ModuleDocDisposition::MissingDocs
         );
     }

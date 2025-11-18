@@ -1,6 +1,7 @@
+//! UI test: file-backed modules with inner docs should pass.
 #![warn(module_must_have_inner_docs)]
 
-// Module file contains the inline module data for the pass scenario.
+// This file-backed module contains the pass scenario.
 #[path = "pass_file_module/documented.module"]
 mod documented;
 

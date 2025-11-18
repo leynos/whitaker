@@ -1,12 +1,14 @@
+//! UI test: an inner attribute appearing before module docs must trigger the lint.
 #![warn(module_must_have_inner_docs)]
 
 mod reordering {
-    #![allow(dead_code)]
+    #![expect(dead_code, reason = "fixture requires an inner attribute before docs")]
     //! Documentation arrives too late.
 
     pub fn example() {}
 }
 
 fn main() {
-    reordering::example();
+    // Intentionally empty: `example` remains unused so the `#[expect(dead_code, ..)]`
+    // attribute has a matching lint.
 }

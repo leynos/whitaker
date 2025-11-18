@@ -1,11 +1,10 @@
+//! UI test: macro-generated modules should be ignored by the lint.
 #![warn(module_must_have_inner_docs)]
 
 macro_rules! make_module {
     ($name:ident) => {
         mod $name {
-            pub fn value() -> usize {
-                1
-            }
+            pub fn value() -> usize { 1 }
         }
     };
 }

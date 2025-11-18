@@ -4,7 +4,10 @@
 //! and warns when the count exceeds the configurable `max_lines` threshold.
 //! The lint uses localisation data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
-use common::i18n::{Arguments, I18nError, Localizer, resolve_localizer};
+use common::i18n::{
+    Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution, resolve_localizer,
+    safe_resolve_message_set,
+};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
@@ -14,7 +17,7 @@ use rustc_span::symbol::Ident;
 use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span};
 
 const LINT_NAME: &str = "module_max_lines";
-const MESSAGE_KEY: &str = "module_max_lines";
+const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("module_max_lines");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ModuleDisposition {
@@ -158,19 +161,31 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
     args.insert(Cow::Borrowed("lines"), FluentValue::from(info.lines as i64));
     args.insert(Cow::Borrowed("limit"), FluentValue::from(info.limit as i64));
 
-    let (primary, note, help) = localised_messages(localizer, &args).unwrap_or_else(|error| {
-        debug!(
-            target: LINT_NAME,
-            "missing localisation for `{}`: {error}; using fallback strings",
-            LINT_NAME
-        );
-        fallback_messages(module_name, info.lines, info.limit)
-    });
+    let resolution = MessageResolution {
+        lint_name: LINT_NAME,
+        key: MESSAGE_KEY,
+        args: &args,
+    };
+    let messages = safe_resolve_message_set(
+        localizer,
+        resolution,
+        |message| {
+            debug!(
+                target: LINT_NAME,
+                "missing localisation for `{}`: {message}; using fallback strings",
+                LINT_NAME
+            );
+        },
+        || fallback_messages(module_name, info.lines, info.limit),
+    );
 
     cx.span_lint(MODULE_MAX_LINES, info.ident.span, |lint| {
-        lint.primary_message(primary);
-        lint.span_note(module_header_span(info.item_span, info.ident.span), note);
-        lint.help(help);
+        lint.primary_message(messages.primary().to_string());
+        lint.span_note(
+            module_header_span(info.item_span, info.ident.span),
+            messages.note().to_string(),
+        );
+        lint.help(messages.help().to_string());
     });
 }
 
@@ -178,24 +193,12 @@ fn module_header_span(item_span: Span, ident_span: Span) -> Span {
     item_span.with_hi(ident_span.hi())
 }
 
-fn localised_messages(
-    localizer: &Localizer,
-    args: &Arguments<'_>,
-) -> Result<(String, String, String), I18nError> {
-    let primary = localizer.message_with_args(MESSAGE_KEY, args)?;
-    let note = localizer.attribute_with_args(MESSAGE_KEY, "note", args)?;
-    let help = localizer.attribute_with_args(MESSAGE_KEY, "help", args)?;
-
-    Ok((primary, note, help))
-}
-
-fn fallback_messages(module: &str, lines: usize, limit: usize) -> (String, String, String) {
-    let primary =
-        format!("Module {module} spans {lines} lines which exceeds the {limit} line limit.");
-    let note = String::from("Large modules are harder to navigate and review.");
-    let help = format!("Split {module} into smaller modules or reduce its responsibilities.");
-
-    (primary, note, help)
+fn fallback_messages(module: &str, lines: usize, limit: usize) -> DiagnosticMessageSet {
+    DiagnosticMessageSet::new(
+        format!("Module {module} spans {lines} lines which exceeds the {limit} line limit."),
+        String::from("Large modules are harder to navigate and review."),
+        format!("Split {module} into smaller modules or reduce its responsibilities."),
+    )
 }
 
 #[cfg(test)]
