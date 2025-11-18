@@ -135,7 +135,7 @@ pub fn safe_resolve_message_set(
     fallback: impl FnOnce() -> DiagnosticMessageSet,
 ) -> DiagnosticMessageSet {
     match resolve_message_set(localizer, resolution.key, resolution.args) {
-        Ok(messages) => messages,
+        Ok(messages) => messages.strip_isolating_marks(),
         Err(error) => {
             debug!(
                 target: resolution.lint_name,
@@ -151,7 +151,7 @@ pub fn safe_resolve_message_set(
                 localizer.locale(),
             ));
 
-            fallback()
+            fallback().strip_isolating_marks()
         }
     }
 }

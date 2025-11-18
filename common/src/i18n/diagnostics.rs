@@ -182,6 +182,23 @@ impl DiagnosticMessageSet {
     pub fn help(&self) -> &str {
         &self.help
     }
+
+    /// Remove Unicode isolating marks inserted by Fluent placeholders.
+    pub(crate) fn strip_isolating_marks(self) -> Self {
+        fn strip(mut text: String) -> String {
+            const ISOLATING_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
+            if text.chars().any(|ch| ISOLATING_MARKS.contains(&ch)) {
+                text.retain(|ch| !ISOLATING_MARKS.contains(&ch));
+            }
+            text
+        }
+
+        Self {
+            primary: strip(self.primary),
+            note: strip(self.note),
+            help: strip(self.help),
+        }
+    }
 }
 
 /// Resolve the primary, note, and help messages for a lint diagnostic.

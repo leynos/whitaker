@@ -1,4 +1,4 @@
-warning: Rhaid i fodiwl �missing� ddechrau gyda sylw mewnol.
+warning: Rhaid i fodiwl missing ddechrau gyda sylw mewnol.
   --> $DIR/locale_smoke.rs:5:5
    |
 LL |     pub fn demo() {}
@@ -9,7 +9,7 @@ note: Nid yw’r eitem gyntaf yn y modiwl yn sylw `//!`.
    |
 LL | mod missing {
    | ^^^^^^^^^^^
-   = help: Disgrifiwch bwrpas �missing� gyda sylw mewnol ar y brig.
+   = help: Disgrifiwch bwrpas missing gyda sylw mewnol ar y brig.
 note: the lint level is defined here
   --> $DIR/locale_smoke.rs:2:9
    |

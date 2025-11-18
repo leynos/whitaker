@@ -400,20 +400,21 @@ scrolling.
 
 **Implementation (2025-11-17).** The lint inspects every `ItemKind::Mod`
 definition that originates from source (macro-expanded modules are skipped to
-avoid flagging generated helper modules). The detector walks the module's HIR
-attributes, filters to inner ones, and accepts the module only when the first
-inner attribute is a doc comment. Modules with no inner attributes, or those
-that place other inner attributes ahead of documentation, emit a
-`module_must_have_inner_docs` warning. Diagnostics highlight the offending
-attribute (or the start of the module body when docs are missing entirely) and
-use `module.spans.inner_span`/`def_span` fallbacks so file modules (`mod foo;`
-backed by `foo.rs`) are covered alongside inline modules. Localised strings
-pull from `locales/*/module_must_have_inner_docs.ftl`, passing the module name
-via the Fluent argument map, and fall back to a deterministic English message
-whenever localisation fails.
+avoid flagging generated helper modules). Rather than walk the attribute AST
+itself, the detector reads the module body's first snippet via
+`module_body_span` and checks the first non-whitespace tokens. `//!` and
+`#![doc = …]` (including `cfg_attr` wrappers) mark the module as documented. If
+the snippet starts with an inner attribute marker (`#`) before any doc, the
+lint emits `FirstInnerIsNotDoc` and highlights the offending token; otherwise
+it reports missing documentation using the module body's start span. The shared
+span helpers from `whitaker::hir` supply consistent ranges for inline and file
+modules. Localised strings pull from
+`locales/*/module_must_have_inner_docs.ftl`, passing the module name via the
+Fluent argument map, and fall back to a deterministic English message whenever
+localisation fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
-attribute detector, covering happy paths, missing docs, inner attributes that
+snippet classifier, covering happy paths, missing docs, inner attributes that
 precede documentation, and outer-doc-only modules. UI fixtures capture inline
 modules, file modules (via `#[path = "…"]`), and macro-generated modules to
 prove that macro output remains exempt. A Welsh (`cy`) UI smoke test asserts

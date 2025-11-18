@@ -12,13 +12,13 @@ use common::i18n::{
     get_localizer_for_lint, safe_resolve_message_set,
 };
 use log::debug;
-use rustc_ast::AttrStyle;
 use rustc_hir as hir;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
-use rustc_span::Span;
 use rustc_span::symbol::Ident;
-use whitaker::SharedConfig;
+use rustc_span::{BytePos, Span};
+#[cfg(test)]
+use rustc_span::DUMMY_SP;
+use whitaker::{SharedConfig, module_body_span, module_header_span};
 
 const LINT_NAME: &str = "module_must_have_inner_docs";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
@@ -63,15 +63,15 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
             return;
         }
 
-        let attrs = cx.tcx.hir_attrs(item.hir_id());
-        let disposition = detect_module_docs(attrs);
+        let module_body = module_body_span(cx, item, module);
+        let disposition = detect_module_docs_in_span(cx, module_body);
         if disposition == ModuleDocDisposition::HasLeadingDoc {
             return;
         }
 
         let primary_span = match disposition {
             ModuleDocDisposition::HasLeadingDoc => return,
-            ModuleDocDisposition::MissingDocs => module_body_start_span(cx, item, module),
+            ModuleDocDisposition::MissingDocs => module_body.shrink_to_lo(),
             ModuleDocDisposition::FirstInnerIsNotDoc(span) => span,
         };
         let header_span = module_header_span(item.span, ident.span);
@@ -82,38 +82,6 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
         };
 
         emit_diagnostic(cx, &context, &self.localizer);
-    }
-}
-
-/// Simplified attribute interface used by the detector and its tests.
-pub(crate) trait ModuleAttribute {
-    /// Returns `true` when the attribute is written with `#![...]` syntax.
-    fn is_inner(&self) -> bool;
-    /// Returns `true` when the attribute is a documentation comment.
-    fn is_doc(&self) -> bool;
-    /// Provides the attribute span for diagnostics.
-    fn span(&self) -> Span;
-}
-
-impl ModuleAttribute for hir::Attribute {
-    fn is_inner(&self) -> bool {
-        matches!(attribute_style(self), AttrStyle::Inner)
-    }
-
-    fn is_doc(&self) -> bool {
-        self.doc_str().is_some()
-    }
-
-    fn span(&self) -> Span {
-        self.span()
-    }
-}
-
-fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
-    match attr {
-        hir::Attribute::Unparsed(item) => item.style,
-        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        _ => AttrStyle::Outer,
     }
 }
 
@@ -128,15 +96,55 @@ pub(crate) enum ModuleDocDisposition {
     FirstInnerIsNotDoc(Span),
 }
 
-/// Determine whether the module begins with an inner doc comment.
-#[must_use]
-pub(crate) fn detect_module_docs<A: ModuleAttribute>(attrs: &[A]) -> ModuleDocDisposition {
-    let mut inner_attributes = attrs.iter().filter(|attr| attr.is_inner());
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LeadingContent {
+    Doc,
+    Missing,
+    Misordered { offset: usize, len: usize },
+}
 
-    match inner_attributes.next() {
-        Some(attr) if attr.is_doc() => ModuleDocDisposition::HasLeadingDoc,
-        Some(attr) => ModuleDocDisposition::FirstInnerIsNotDoc(attr.span()),
-        None => ModuleDocDisposition::MissingDocs,
+fn classify_leading_content(snippet: &str) -> LeadingContent {
+    let bytes = snippet.as_bytes();
+    let len = bytes.len();
+    let mut offset = 0;
+
+    while offset < len && bytes[offset].is_ascii_whitespace() {
+        offset += 1;
+    }
+
+    if offset >= len {
+        return LeadingContent::Missing;
+    }
+
+    let rest = &snippet[offset..];
+    if rest.starts_with("//!") {
+        return LeadingContent::Doc;
+    }
+    if rest.starts_with("#![") {
+        let attr_end = rest.find(']').unwrap_or(rest.len());
+        let attr_body = &rest[3..attr_end].to_ascii_lowercase();
+        if attr_body.contains("doc") {
+            return LeadingContent::Doc;
+        }
+    }
+
+    if rest.starts_with('#') {
+        let line_len = rest.find(['\n', '\r']).unwrap_or(rest.len());
+        return LeadingContent::Misordered {
+            offset,
+            len: line_len,
+        };
+    }
+
+    LeadingContent::Missing
+}
+
+#[cfg(test)]
+fn detect_module_docs_from_snippet(snippet: &str) -> ModuleDocDisposition {
+    match classify_leading_content(snippet) {
+        LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
+        LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
+        LeadingContent::Misordered { .. } => ModuleDocDisposition::FirstInnerIsNotDoc(DUMMY_SP),
     }
 }
 
@@ -144,6 +152,28 @@ struct ModuleDiagnosticContext {
     ident: Ident,
     primary_span: Span,
     header_span: Span,
+}
+
+fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> ModuleDocDisposition {
+    let source_map = cx.tcx.sess.source_map();
+    let Ok(snippet) = source_map.span_to_snippet(module_body) else {
+        return ModuleDocDisposition::MissingDocs;
+    };
+
+    match classify_leading_content(&snippet) {
+        LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
+        LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
+        LeadingContent::Misordered { offset, len } => {
+            ModuleDocDisposition::FirstInnerIsNotDoc(first_token_span(module_body, offset, len))
+        }
+    }
+}
+
+fn first_token_span(module_body: Span, offset: usize, len: usize) -> Span {
+    let base = module_body.shrink_to_lo();
+    let start = base.lo() + BytePos(offset as u32);
+    let hi = start + BytePos(len.max(1) as u32);
+    base.with_lo(start).with_hi(hi)
 }
 
 fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, localizer: &Localizer) {
@@ -186,85 +216,6 @@ fn fallback_messages(module: &str) -> ModuleDocMessages {
     DiagnosticMessageSet::new(primary, note, help)
 }
 
-fn module_body_start_span<'tcx>(
-    cx: &LateContext<'tcx>,
-    item: &'tcx hir::Item<'tcx>,
-    module: &hir::Mod<'tcx>,
-) -> Span {
-    let inner_span = module.spans.inner_span;
-    if !inner_span.is_dummy() {
-        return inner_span.shrink_to_lo();
-    }
-
-    let def_span = cx.tcx.def_span(item.owner_id.to_def_id());
-    if !def_span.is_dummy() {
-        return def_span.shrink_to_lo();
-    }
-
-    item.span.shrink_to_lo()
-}
-
-fn module_header_span(item_span: Span, ident_span: Span) -> Span {
-    item_span.with_hi(ident_span.hi())
-}
-
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::ModuleAttribute;
-    use rustc_span::{DUMMY_SP, Span};
-
-    /// Lightweight attribute stub for exercising the detector.
-    #[derive(Clone, Copy, Debug, Default)]
-    pub struct StubAttribute {
-        inner: bool,
-        doc: bool,
-        span: Span,
-    }
-
-    impl StubAttribute {
-        /// Construct an inner doc attribute.
-        pub fn inner_doc() -> Self {
-            Self {
-                inner: true,
-                doc: true,
-                span: DUMMY_SP,
-            }
-        }
-
-        /// Construct a non-doc inner attribute (for example, `#![allow(..)]`).
-        pub fn inner_allow() -> Self {
-            Self {
-                inner: true,
-                doc: false,
-                span: DUMMY_SP,
-            }
-        }
-
-        /// Construct an outer doc attribute.
-        pub fn outer_doc() -> Self {
-            Self {
-                inner: false,
-                doc: true,
-                span: DUMMY_SP,
-            }
-        }
-    }
-
-    impl ModuleAttribute for StubAttribute {
-        fn is_inner(&self) -> bool {
-            self.inner
-        }
-
-        fn is_doc(&self) -> bool {
-            self.doc
-        }
-
-        fn span(&self) -> Span {
-            self.span
-        }
-    }
-}
-
 #[cfg(test)]
 #[path = "tests/behaviour.rs"]
 mod behaviour;
@@ -275,40 +226,45 @@ mod ui;
 
 #[cfg(test)]
 mod tests {
-    use super::{ModuleDocDisposition, test_support::StubAttribute};
+    use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
     use rstest::rstest;
 
     #[rstest]
-    fn detects_missing_docs_when_no_inner_attributes() {
+    fn detects_missing_docs_when_no_content() {
         assert_eq!(
-            super::detect_module_docs::<StubAttribute>(&[]),
+            detect_module_docs_from_snippet("\n  \n"),
             ModuleDocDisposition::MissingDocs
         );
     }
 
     #[rstest]
     fn accepts_leading_inner_doc() {
-        let attrs = [StubAttribute::inner_doc()];
         assert_eq!(
-            super::detect_module_docs(&attrs),
+            detect_module_docs_from_snippet("//! module docs"),
+            ModuleDocDisposition::HasLeadingDoc
+        );
+    }
+
+    #[rstest]
+    fn accepts_inner_doc_attribute() {
+        assert_eq!(
+            detect_module_docs_from_snippet("#![doc = \"text\"]"),
             ModuleDocDisposition::HasLeadingDoc
         );
     }
 
     #[rstest]
     fn rejects_doc_after_inner_attribute() {
-        let attrs = [StubAttribute::inner_allow(), StubAttribute::inner_doc()];
         assert!(matches!(
-            super::detect_module_docs(&attrs),
+            detect_module_docs_from_snippet("#![allow(dead_code)]\n//! doc"),
             ModuleDocDisposition::FirstInnerIsNotDoc(_)
         ));
     }
 
     #[rstest]
     fn outer_docs_do_not_satisfy_requirement() {
-        let attrs = [StubAttribute::outer_doc()];
         assert_eq!(
-            super::detect_module_docs(&attrs),
+            detect_module_docs_from_snippet("/// doc"),
             ModuleDocDisposition::MissingDocs
         );
     }

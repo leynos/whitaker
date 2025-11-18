@@ -1,4 +1,4 @@
-warning: Module �reordering� must start with an inner doc comment.
+warning: Module reordering must start with an inner doc comment.
   --> $DIR/fail_inner_attribute_before_doc.rs:4:5
    |
 LL |     #![allow(dead_code)]
@@ -9,7 +9,7 @@ note: The first item in the module is not a `//!` style comment.
    |
 LL | mod reordering {
    | ^^^^^^^^^^^^^^
-   = help: Explain the purpose of �reordering� by adding an inner doc comment at the top.
+   = help: Explain the purpose of reordering by adding an inner doc comment at the top.
 note: the lint level is defined here
   --> $DIR/fail_inner_attribute_before_doc.rs:1:9
    |

@@ -1,4 +1,4 @@
-warning: Module �missing� must start with an inner doc comment.
+warning: Module missing must start with an inner doc comment.
   --> $DIR/fail_missing_inner_doc.rs:4:5
    |
 LL |     pub fn demo() {}
@@ -9,7 +9,7 @@ note: The first item in the module is not a `//!` style comment.
    |
 LL | mod missing {
    | ^^^^^^^^^^^
-   = help: Explain the purpose of �missing� by adding an inner doc comment at the top.
+   = help: Explain the purpose of missing by adding an inner doc comment at the top.
 note: the lint level is defined here
   --> $DIR/fail_missing_inner_doc.rs:1:9
    |

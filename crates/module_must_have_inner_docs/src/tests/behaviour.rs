@@ -1,27 +1,27 @@
 //! Behaviour-driven coverage for module documentation detection.
 //!
-//! These scenarios exercise `detect_module_docs` to ensure modules only pass
+//! These scenarios exercise the snippet classifier to ensure modules only pass
 //! when they begin with an inner doc comment.
 
-use super::{ModuleDocDisposition, detect_module_docs, test_support::StubAttribute};
+use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 
 #[derive(Default)]
 struct ModuleWorld {
-    attributes: RefCell<Vec<StubAttribute>>,
+    prefix: RefCell<String>,
     result: RefCell<Option<ModuleDocDisposition>>,
 }
 
 impl ModuleWorld {
-    fn push(&self, attribute: StubAttribute) {
-        self.attributes.borrow_mut().push(attribute);
+    fn push(&self, text: &str) {
+        self.prefix.borrow_mut().push_str(text);
     }
 
     fn evaluate(&self) {
-        let attrs = self.attributes.borrow();
-        let outcome = detect_module_docs(attrs.as_slice());
+        let snippet = self.prefix.borrow();
+        let outcome = detect_module_docs_from_snippet(&snippet);
         self.result.replace(Some(outcome));
     }
 
@@ -41,28 +41,27 @@ fn world() -> ModuleWorld {
 
 #[given("the module begins with an inner doc comment")]
 fn given_inner_doc(world: &ModuleWorld) {
-    world.push(StubAttribute::inner_doc());
+    world.push("//! module docs\n");
 }
 
 #[given("the module body starts with code only")]
 fn given_no_attributes(world: &ModuleWorld) {
-    let _ = world;
-    // No attributes are added so the detector sees an empty list.
+    world.push("pub fn demo() {}\n");
 }
 
 #[given("the module contains an inner configuration attribute")]
 fn given_inner_allow(world: &ModuleWorld) {
-    world.push(StubAttribute::inner_allow());
+    world.push("#![allow(dead_code)]\n");
 }
 
 #[given("documentation follows that attribute")]
 fn given_doc_after(world: &ModuleWorld) {
-    world.push(StubAttribute::inner_doc());
+    world.push("//! trailing docs\n");
 }
 
 #[given("the module declares only outer documentation")]
 fn given_outer_doc(world: &ModuleWorld) {
-    world.push(StubAttribute::outer_doc());
+    world.push("/// outer docs\n");
 }
 
 #[when("I validate the module documentation requirements")]

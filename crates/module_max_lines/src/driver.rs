@@ -11,7 +11,7 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
-use whitaker::{ModuleMaxLinesConfig, SharedConfig};
+use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span};
 
 const LINT_NAME: &str = "module_max_lines";
 const MESSAGE_KEY: &str = "module_max_lines";
@@ -63,7 +63,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
             _ => return,
         };
 
-        let span = module_span(cx, item, module);
+        let span = module_body_span(cx, item, module);
         let Some(lines) = count_lines(cx.sess().source_map(), span) else {
             debug!(
                 target: LINT_NAME,
@@ -118,24 +118,6 @@ fn load_configuration() -> usize {
             ModuleMaxLinesConfig::default().max_lines
         }
     }
-}
-
-fn module_span<'tcx>(
-    cx: &LateContext<'tcx>,
-    item: &'tcx hir::Item<'tcx>,
-    module: &hir::Mod<'tcx>,
-) -> Span {
-    let inner = module.spans.inner_span;
-    if !inner.is_dummy() {
-        return inner;
-    }
-
-    let def_span = cx.tcx.def_span(item.owner_id.to_def_id());
-    if !def_span.is_dummy() {
-        return def_span;
-    }
-
-    item.span
 }
 
 fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
