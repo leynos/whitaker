@@ -1,0 +1,38 @@
+[package]
+name = "no_std_fs_operations"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+test = false
+
+[features]
+default = []
+dylint-driver = [
+    "dep:common",
+    "dep:dylint_linting",
+    "dep:log",
+    "dep:rustc_hir",
+    "dep:rustc_lint",
+    "dep:rustc_session",
+    "dep:rustc_span",
+    "dep:whitaker"
+]
+
+[dependencies]
+dylint_linting = { workspace = true, optional = true }
+rustc_hir = { workspace = true, optional = true }
+rustc_lint = { workspace = true, optional = true }
+rustc_session = { workspace = true, optional = true }
+rustc_span = { workspace = true, optional = true }
+common = { path = "../../common", optional = true }
+log = { workspace = true, optional = true }
+whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
+
+[dev-dependencies]
+rstest = { version = "0.26.1" }
+rstest-bdd = { version = "0.1.0" }
+rstest-bdd-macros = { version = "0.1.0" }
+dylint_testing = { workspace = true }
+serial_test = "3.1.0"
