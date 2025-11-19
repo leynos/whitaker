@@ -187,9 +187,7 @@ impl DiagnosticMessageSet {
     pub(crate) fn strip_isolating_marks(self) -> Self {
         fn strip(mut text: String) -> String {
             const ISOLATING_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
-            if text.chars().any(|ch| ISOLATING_MARKS.contains(&ch)) {
-                text.retain(|ch| !ISOLATING_MARKS.contains(&ch));
-            }
+            text.retain(|ch| !ISOLATING_MARKS.contains(&ch));
             text
         }
 
