@@ -74,12 +74,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
 }
 
 impl NoStdFsOperations {
-    fn emit_optional(
-        &self,
-        cx: &LateContext<'_>,
-        span: Span,
-        usage: Option<StdFsUsage>,
-    ) {
+    fn emit_optional(&self, cx: &LateContext<'_>, span: Span, usage: Option<StdFsUsage>) {
         if let Some(usage) = usage {
             self.emit(cx, span, usage);
         }
