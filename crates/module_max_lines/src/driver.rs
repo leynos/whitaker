@@ -14,7 +14,7 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
-use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span};
+use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span, module_header_span};
 
 const LINT_NAME: &str = "module_max_lines";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("module_max_lines");
@@ -187,10 +187,6 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
         );
         lint.help(messages.help().to_string());
     });
-}
-
-fn module_header_span(item_span: Span, ident_span: Span) -> Span {
-    item_span.with_hi(ident_span.hi())
 }
 
 fn fallback_messages(module: &str, lines: usize, limit: usize) -> DiagnosticMessageSet {

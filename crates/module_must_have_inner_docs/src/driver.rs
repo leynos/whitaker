@@ -119,42 +119,45 @@ fn contains_doc_token(attr_body: &str) -> bool {
 }
 
 fn classify_leading_content(snippet: &str) -> LeadingContent {
-    let bytes = snippet.as_bytes();
-    let len = bytes.len();
-    let mut offset = 0;
-
-    while offset < len && bytes[offset].is_ascii_whitespace() {
-        offset += 1;
-    }
-
-    if offset >= len {
+    let (offset, rest) = skip_leading_whitespace(snippet);
+    if rest.is_empty() {
         return LeadingContent::Missing;
     }
-
-    let rest = &snippet[offset..];
-    if rest.starts_with("//!") {
+    if is_doc_comment(rest) {
         return LeadingContent::Doc;
+    }
+    check_attribute_order(rest, offset)
+}
+
+fn skip_leading_whitespace(snippet: &str) -> (usize, &str) {
+    let bytes = snippet.as_bytes();
+    let mut offset = 0;
+    while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
+        offset += 1;
+    }
+    (offset, &snippet[offset..])
+}
+
+fn is_doc_comment(rest: &str) -> bool {
+    if rest.starts_with("//!") {
+        return true;
     }
     if rest.starts_with("#![") {
         let attr_end = rest.find(']').unwrap_or(rest.len());
         let attr_body = rest[3..attr_end].to_ascii_lowercase();
-        if contains_doc_token(&attr_body) {
-            return LeadingContent::Doc;
-        }
+        return contains_doc_token(&attr_body);
     }
+    false
+}
 
+fn check_attribute_order(rest: &str, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
         return LeadingContent::Missing;
     }
-
     if rest.starts_with('#') {
-        let line_len = rest.find(['\n', '\r']).unwrap_or(rest.len());
-        return LeadingContent::Misordered {
-            offset,
-            len: line_len,
-        };
+        let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
+        return LeadingContent::Misordered { offset, len };
     }
-
     LeadingContent::Missing
 }
 
