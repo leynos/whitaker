@@ -29,7 +29,12 @@ edition = "2024"
 
 [features]
 default = []
-dylint-driver = ["dep:dylint_linting"]
+dylint-driver = [
+    "dep:dylint_linting",
+    "dep:rustc_hir",
+    "dep:rustc_lint",
+    "dep:rustc_span",
+]
 
 [dependencies]
 
@@ -40,6 +45,9 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 common = { path = "common" }
 
+rustc_hir = { workspace = true, optional = true }
+rustc_lint = { workspace = true, optional = true }
+rustc_span = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]

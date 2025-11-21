@@ -5,10 +5,14 @@
 extern crate rustc_driver;
 
 pub mod config;
+#[cfg(feature = "dylint-driver")]
+pub mod hir;
 pub mod lints;
 pub mod testing;
 
 pub use config::{ModuleMaxLinesConfig, SharedConfig};
+#[cfg(feature = "dylint-driver")]
+pub use hir::{module_body_span, module_header_span};
 pub use lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 
 /// Returns a greeting for the library.

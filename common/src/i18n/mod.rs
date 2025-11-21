@@ -26,7 +26,6 @@ static_loader! {
     pub(crate) static LOADER = {
         locales: "../locales",
         fallback_language: "en-GB",
-        // Retain Fluent's default Unicode isolating marks for bidi safety.
     };
 }
 
