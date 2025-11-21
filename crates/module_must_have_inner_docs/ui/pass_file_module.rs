@@ -5,10 +5,6 @@
 #[path = "pass_file_module/documented.module"]
 mod documented;
 
-fn use_file_module() {
-    documented::touch();
-}
-
 fn main() {
-    use_file_module();
+    documented::touch();
 }

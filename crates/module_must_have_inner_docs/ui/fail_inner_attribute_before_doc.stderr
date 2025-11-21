@@ -1,8 +1,8 @@
 warning: Module reordering must start with an inner doc comment.
   --> $DIR/fail_inner_attribute_before_doc.rs:5:5
    |
-LL |     #![expect(dead_code, reason = "fixture req$DIRres an inner attribute before docs")]
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |     #![expect(dead_code, reason = "fixture needs an inner attribute before docs")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The first item in the module is not a `//!` style comment.
   --> $DIR/fail_inner_attribute_before_doc.rs:4:1

@@ -5,8 +5,8 @@
 //! The lint uses localisation data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
 use common::i18n::{
-    Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution, resolve_localizer,
-    safe_resolve_message_set,
+    Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
+    get_localizer_for_lint, safe_resolve_message_set,
 };
 use log::debug;
 use rustc_hir as hir;
@@ -51,13 +51,8 @@ impl Default for ModuleMaxLines {
 impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         self.max_lines = load_configuration();
-        let environment_locale =
-            std::env::var_os("DYLINT_LOCALE").and_then(|value| value.into_string().ok());
         let shared_config = SharedConfig::load();
-        let selection = resolve_localizer(None, environment_locale, shared_config.locale());
-
-        selection.log_outcome(LINT_NAME);
-        self.localizer = selection.into_localizer();
+        self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -175,6 +170,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
                 "missing localisation for `{}`: {message}; using fallback strings",
                 LINT_NAME
             );
+            cx.tcx.sess.dcx().span_delayed_bug(info.item_span, message);
         },
         || fallback_messages(module_name, info.lines, info.limit),
     );
