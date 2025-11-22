@@ -15,6 +15,9 @@ pub use driver::*;
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "Stub entry point retained when the lint is compiled without the driver feature"
+    )]
     pub fn no_std_fs_operations_disabled_stub() {}
 }

@@ -1362,6 +1362,7 @@ dependencies = [
  "rstest-bdd-macros",
  "rustc_hir",
  "rustc_lint",
+ "rustc_middle",
  "rustc_session",
  "rustc_span",
  "serial_test",

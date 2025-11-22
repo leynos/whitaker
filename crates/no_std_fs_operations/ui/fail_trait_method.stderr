@@ -1,0 +1,43 @@
+error: std::fs operation `�std::fs::File�` bypasses the capability-based filesystem policy.
+  --> $DIR/fail_trait_method.rs:3:5
+   |
+LL | use std::fs::File;
+   |     ^^^^^^^^^^^^^
+   |
+   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.
+   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.
+note: the lint level is defined here
+  --> $DIR/fail_trait_method.rs:1:9
+   |
+LL | #![deny(no_std_fs_operations)]
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+error: std::fs operation `�std::fs::File::open�` bypasses the capability-based filesystem policy.
+  --> $DIR/fail_trait_method.rs:7:20
+   |
+LL |     let mut file = File::open("./demo.txt").unwrap();
+   |                    ^^^^^^^^^^
+   |
+   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.
+   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.
+
+error: std::fs operation `�std::fs::File�` bypasses the capability-based filesystem policy.
+  --> $DIR/fail_trait_method.rs:7:20
+   |
+LL |     let mut file = File::open("./demo.txt").unwrap();
+   |                    ^^^^
+   |
+   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.
+   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.
+
+error: std::fs operation `�std::fs::File::read�` bypasses the capability-based filesystem policy.
+  --> $DIR/fail_trait_method.rs:9:5
+   |
+LL |     file.read(&mut buf).unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.
+   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.
+
+error: aborting due to 4 previous errors
+

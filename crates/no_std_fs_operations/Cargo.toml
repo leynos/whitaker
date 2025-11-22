@@ -15,6 +15,7 @@ dylint-driver = [
     "dep:log",
     "dep:rustc_hir",
     "dep:rustc_lint",
+    "dep:rustc_middle",
     "dep:rustc_session",
     "dep:rustc_span",
     "dep:whitaker"
@@ -24,6 +25,7 @@ dylint-driver = [
 dylint_linting = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
+rustc_middle = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 common = { path = "../../common", optional = true }

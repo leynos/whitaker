@@ -584,10 +584,11 @@ Lint when module span exceeds 400 lines. Configurable via `max_lines`.
 ### 3.8 `no_std_fs_operations` (restriction, deny)
 
 Forbid ambient filesystem calls routed through `std::fs` so teams must rely on
-capability-bearing handles (`cap_std::fs::Dir`) and UTF-8 paths from `camino`.
-Any `std::fs` import, type, function, or inherent method usage trips this lint,
-covering both fully qualified paths (`std::fs::read_to_string`) and items
-pulled in via `use std::fs::{self, File}`.
+capability-bearing handles (`cap_std::fs::Dir`) and UTF-8 (the 8-bit Unicode
+Transformation Format) paths from `camino`. Any `std::fs` import, type,
+function, or inherent method usage trips this lint, covering both fully
+qualified paths (`std::fs::read_to_string`) and items pulled in via
+`use std::fs::{self, File}`.
 
 **Implementation.**
 

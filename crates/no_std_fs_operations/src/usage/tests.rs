@@ -1,14 +1,24 @@
-use super::{StdFsUsage, UsageCategory, matches_std_fs_path};
+use super::{StdFsUsage, UsageCategory, label_is_std_fs};
 use rstest::rstest;
 
 #[rstest]
 #[case("std::fs", true)]
 #[case("std::fs::File::open", true)]
 #[case("std::fs::read_to_string", true)]
+// Ambiguous/edge cases follow
 #[case("std::path::Path", false)]
 #[case("cap_std::fs::Dir", false)]
+#[case("std::fs_extra", false)]
+#[case("std::fs2", false)]
+#[case("std::fs ", false)]
+#[case(" std::fs", false)]
+#[case("std::fs::", true)]
+#[case("std::fs::File ::open", false)]
+#[case("std::fs::File\t::open", false)]
+#[case("std::fs::File::open ", false)]
+#[case("std::fs::File::open()", false)]
 fn recognises_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
-    assert_eq!(matches_std_fs_path(path), expected);
+    assert_eq!(label_is_std_fs(path), expected);
 }
 
 #[rstest]

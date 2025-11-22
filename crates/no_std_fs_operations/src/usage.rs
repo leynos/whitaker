@@ -93,9 +93,8 @@ pub fn classify_def_id(
     }
 
     let label = cx.tcx.def_path_str(def_id);
-    let path = SimplePath::parse(&label);
 
-    is_std_fs_path(&path).then(|| StdFsUsage::new(label, category))
+    label_is_std_fs(&label).then(|| StdFsUsage::new(label, category))
 }
 
 fn is_std_fs_path(path: &SimplePath) -> bool {
@@ -103,9 +102,33 @@ fn is_std_fs_path(path: &SimplePath) -> bool {
     segments.len() >= 2 && segments[0] == "std" && segments[1] == "fs"
 }
 
-#[cfg(test)]
-pub(crate) fn matches_std_fs_path(path: &str) -> bool {
-    let path = SimplePath::parse(path);
+pub(crate) fn label_is_std_fs(label: &str) -> bool {
+    if label != label.trim() {
+        return false;
+    }
+
+    if label.is_empty()
+        || label
+            .chars()
+            .any(|ch| ch.is_whitespace() || matches!(ch, '(' | ')'))
+    {
+        return false;
+    }
+
+    if !label.starts_with("std::fs") {
+        return false;
+    }
+
+    let remainder = &label["std::fs".len()..];
+    if remainder.is_empty() {
+        return true;
+    }
+
+    if !remainder.starts_with("::") {
+        return false;
+    }
+
+    let path = SimplePath::parse(label);
     is_std_fs_path(&path)
 }
 
