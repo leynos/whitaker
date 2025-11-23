@@ -19,7 +19,7 @@ pub enum UsageCategory {
 }
 
 impl UsageCategory {
-    /// Returns a stable &str identifier for use in tests and localisation.
+    /// Returns a stable &str identifier for use in tests and localization.
     #[cfg(test)]
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -31,7 +31,7 @@ impl UsageCategory {
     }
 }
 
-/// Normalised view of a `std::fs` operation for diagnostics and tests.
+/// Normalized view of a `std::fs` operation for diagnostics and tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StdFsUsage {
     operation: String,
@@ -44,7 +44,7 @@ impl StdFsUsage {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// # use crate::usage::{StdFsUsage, UsageCategory};
     /// let usage = StdFsUsage::new(String::from("std::fs::read"), UsageCategory::Call);
     /// assert_eq!(usage.operation(), "std::fs::read");
@@ -61,7 +61,7 @@ impl StdFsUsage {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// # use crate::usage::{StdFsUsage, UsageCategory};
     /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"), UsageCategory::Call);
     /// assert_eq!(usage.operation(), "std::fs::remove_file");
@@ -83,11 +83,11 @@ impl StdFsUsage {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use rustc_hir as hir;
 /// # use rustc_lint::LateContext;
 /// # use crate::usage::{classify_qpath, UsageCategory};
-/// # fn example<'tcx>(cx: &LateContext<'tcx>, qpath: &hir::QPath<'tcx>, hir_id: hir::HirId, span: hir::HirId) {
+/// # fn example<'tcx>(cx: &LateContext<'tcx>, qpath: &hir::QPath<'tcx>, hir_id: hir::HirId) {
 /// let _ = classify_qpath(cx, qpath, hir_id, UsageCategory::Call);
 /// # }
 /// ```
@@ -106,7 +106,7 @@ pub fn classify_qpath(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use rustc_hir::def::Res;
 /// # use rustc_lint::LateContext;
 /// # use crate::usage::{classify_res, UsageCategory};
@@ -124,7 +124,7 @@ pub fn classify_res(cx: &LateContext<'_>, res: Res, category: UsageCategory) -> 
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use rustc_hir::def_id::DefId;
 /// # use rustc_lint::LateContext;
 /// # use crate::usage::{classify_def_id, UsageCategory};

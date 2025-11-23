@@ -1,4 +1,4 @@
-//! Localised diagnostics for the `no_std_fs_operations` lint.
+//! Localized diagnostics for the `no_std_fs_operations` lint.
 
 use crate::NO_STD_FS_OPERATIONS;
 use crate::usage::StdFsUsage;
@@ -86,4 +86,21 @@ pub(crate) fn localised_messages(
         FluentValue::from(operation.to_string()),
     );
     resolve_message_set(lookup, MESSAGE_KEY, &args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_message;
+
+    #[test]
+    fn removes_isolation_marks() {
+        let raw = String::from("\u{2068}std::fs::read\u{2069}");
+        assert_eq!(sanitize_message(raw), "std::fs::read");
+    }
+
+    #[test]
+    fn preserves_clean_text() {
+        let raw = String::from("std::fs::File::open");
+        assert_eq!(sanitize_message(raw.clone()), raw);
+    }
 }

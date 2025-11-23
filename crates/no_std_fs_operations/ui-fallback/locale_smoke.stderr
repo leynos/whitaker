@@ -1,5 +1,5 @@
 error: std::fs operation `std::fs::read` bypasses the capability-based filesystem policy.
-  --> $DIR/locale_smoke.rs:4:13
+  --> $DIR/locale_smoke.rs:5:13
    |
 LL |     let _ = std::fs::read("./demo.txt");
    |             ^^^^^^^^^^^^^
@@ -7,7 +7,7 @@ LL |     let _ = std::fs::read("./demo.txt");
    = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.
    = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.
 note: the lint level is defined here
-  --> $DIR/locale_smoke.rs:1:9
+  --> $DIR/locale_smoke.rs:2:9
    |
 LL | #![deny(no_std_fs_operations)]
    |         ^^^^^^^^^^^^^^^^^^^^

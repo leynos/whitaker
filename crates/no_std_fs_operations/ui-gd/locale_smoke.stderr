@@ -1,5 +1,5 @@
 error: Tha gnìomh std::fs `std::fs::read` a’ seachnadh a’ phoileasaidh comasan airson an t-siostaim fhaidhlichean.
-  --> $DIR/locale_smoke.rs:4:13
+  --> $DIR/locale_smoke.rs:5:13
    |
 LL |     let _ = std::fs::read("./demo.txt");
    |             ^^^^^^^^^^^^^
@@ -7,7 +7,7 @@ LL |     let _ = std::fs::read("./demo.txt");
    = note: Bidh std::fs a’ dol an sàs leis an eòlas àrainneachd; gabhaibh làmhan `cap_std::fs::Dir` agus slighean camino gus am bi an neach-gairm a’ taghadh na comasan.
    = help: Cuir seachad `cap_std::fs::Dir` agus paramadairean `camino::Utf8Path`/`Utf8PathBuf` tron API seach std::fs a ghairm gu dìreach.
 note: the lint level is defined here
-  --> $DIR/locale_smoke.rs:1:9
+  --> $DIR/locale_smoke.rs:2:9
    |
 LL | #![deny(no_std_fs_operations)]
    |         ^^^^^^^^^^^^^^^^^^^^

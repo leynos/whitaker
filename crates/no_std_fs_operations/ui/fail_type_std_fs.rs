@@ -1,3 +1,4 @@
+//! UI fixture demonstrating disallowed `std::fs` type aliases.
 #![deny(no_std_fs_operations)]
 
 type AmbientFile = std::fs::File;

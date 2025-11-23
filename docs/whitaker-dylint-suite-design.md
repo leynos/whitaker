@@ -601,7 +601,7 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
 - Each finding produces a `StdFsUsage` struct containing the resolved operation
   label (for diagnostics) and a category (`Import`, `Type`, or `Call`). The
   category drives unit tests and future config knobs but diagnostics currently
-  emphasise the operation name only to keep translations succinct.
+  emphasize the operation name only to keep translations succinct.
 - Diagnostics reuse Fluent bundles (`no_std_fs_operations.ftl`) with the
   operation label supplied via `{ $operation }`. The note explains why ambient
   access is disallowed and the help recommends `cap_std::fs` + `camino`.
