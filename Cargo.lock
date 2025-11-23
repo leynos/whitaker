@@ -1350,6 +1350,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "no_std_fs_operations"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_middle",
+ "rustc_session",
+ "rustc_span",
+ "serial_test",
+ "whitaker",
+]
+
+[[package]]
 name = "num_cpus"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

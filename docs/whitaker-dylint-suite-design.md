@@ -581,6 +581,45 @@ Lint when module span exceeds 400 lines. Configurable via `max_lines`.
   span is highlighted whilst an additional note points to the declaration
   header to minimise visual noise in long files.
 
+### 3.8 `no_std_fs_operations` (restriction, deny)
+
+Forbid ambient filesystem calls routed through `std::fs` so teams must rely on
+capability-bearing handles (`cap_std::fs::Dir`) and UTF-8 (the 8-bit Unicode
+Transformation Format) paths from `camino`. Any `std::fs` import, type,
+function, or inherent method usage trips this lint, covering both fully
+qualified paths (`std::fs::read_to_string`) and items pulled in via
+`use std::fs::{self, File}`.
+
+**Implementation.**
+
+- `NoStdFsOperations` implements `LateLintPass::check_path` so every `hir::Path`
+  (expressions, type positions, use trees, patterns) is inspected once.
+- Detected paths are converted to strings via `tcx.def_path_str(def_id)` and fed
+  into a `SimplePath` parser. A match requires the first two segments to equal
+  `["std", "fs"]`. Re-exports remain covered because the resolved `DefId`
+  points back to `std`.
+- Each finding produces a `StdFsUsage` struct containing the resolved operation
+  label (for diagnostics) and a category (`Import`, `Type`, or `Call`). The
+  category drives unit tests and future config knobs but diagnostics currently
+  emphasize the operation name only to keep translations succinct.
+- Diagnostics reuse Fluent bundles (`no_std_fs_operations.ftl`) with the
+  operation label supplied via `{ $operation }`. The note explains why ambient
+  access is disallowed and the help recommends `cap_std::fs` + `camino`.
+
+**Tests.**
+
+- Unit tests cover the operation classifier, ensuring paths such as
+  `std::fs::File::open`, `std::fs::remove_file`, bare module references, and
+  renamed imports all register as `StdFsUsage` while `cap_std::fs` remains
+  untouched.
+- Behaviour-driven tests (via `rstest-bdd 0.1.0`) exercise localisation, failure
+  fallbacks, and the world state used to model capability hints. Scenarios
+  cover en-GB, cy, and gd locales, as well as missing-message paths.
+- UI fixtures demonstrate unhappy paths (imports, function calls, and type
+  aliases) along with happy paths that rely on `cap_std::fs` and `camino`
+  equivalents. Locale smoke tests run through the Welsh harness to keep Fluent
+  bundles wired up.
+
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
 Separate Dylint crate forbidding `unwrap_or_else(..)` closures that panic

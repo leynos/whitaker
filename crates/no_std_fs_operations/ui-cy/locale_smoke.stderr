@@ -1,0 +1,16 @@
+error: Mae gweithred std::fs `std::fs::read` yn osgoi’r polisi capasiti ar gyfer y system ffeiliau.
+  --> $DIR/locale_smoke.rs:5:13
+   |
+LL |     let _ = std::fs::read("./demo.txt");
+   |             ^^^^^^^^^^^^^
+   |
+   = note: Mae std::fs yn cyffwrdd â’r cyfeiriadur amgylcheddol; derbyniwch ddolenni `cap_std::fs::Dir` a llwybrau camino er mwyn i’r galwr ddewis y gallu.
+   = help: Pasio `cap_std::fs::Dir` a pharamedrau `camino::Utf8Path`/`Utf8PathBuf` drwy’ch APIau yn hytrach na galw std::fs yn uniongyrchol.
+note: the lint level is defined here
+  --> $DIR/locale_smoke.rs:2:9
+   |
+LL | #![deny(no_std_fs_operations)]
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
