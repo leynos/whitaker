@@ -28,9 +28,3 @@ mod driver;
 
 #[cfg(feature = "dylint-driver")]
 pub use driver::*;
-
-#[cfg(not(feature = "dylint-driver"))]
-mod stub {
-    #[expect(dead_code, reason = "stub when dylint-driver is disabled")]
-    pub fn module_must_have_inner_docs_disabled_stub() {}
-}
