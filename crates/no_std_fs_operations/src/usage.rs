@@ -41,6 +41,14 @@ pub struct StdFsUsage {
 impl StdFsUsage {
     /// Construct a new usage instance.
     #[must_use]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use crate::usage::{StdFsUsage, UsageCategory};
+    /// let usage = StdFsUsage::new(String::from("std::fs::read"), UsageCategory::Call);
+    /// assert_eq!(usage.operation(), "std::fs::read");
+    /// ```
     pub fn new(operation: String, category: UsageCategory) -> Self {
         Self {
             operation,
@@ -50,6 +58,14 @@ impl StdFsUsage {
 
     /// Returns the fully qualified operation path (e.g., `std::fs::read`).
     #[must_use]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use crate::usage::{StdFsUsage, UsageCategory};
+    /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"), UsageCategory::Call);
+    /// assert_eq!(usage.operation(), "std::fs::remove_file");
+    /// ```
     pub fn operation(&self) -> &str {
         &self.operation
     }
@@ -64,6 +80,17 @@ impl StdFsUsage {
 
 /// Classify a resolved path (expression, type, import) into a usage record.
 #[must_use]
+///
+/// # Examples
+///
+/// ```
+/// # use rustc_hir as hir;
+/// # use rustc_lint::LateContext;
+/// # use crate::usage::{classify_qpath, UsageCategory};
+/// # fn example<'tcx>(cx: &LateContext<'tcx>, qpath: &hir::QPath<'tcx>, hir_id: hir::HirId, span: hir::HirId) {
+/// let _ = classify_qpath(cx, qpath, hir_id, UsageCategory::Call);
+/// # }
+/// ```
 pub fn classify_qpath(
     cx: &LateContext<'_>,
     qpath: &hir::QPath<'_>,
@@ -76,6 +103,17 @@ pub fn classify_qpath(
 
 /// Classify using a `Res` obtained from HIR traversal.
 #[must_use]
+///
+/// # Examples
+///
+/// ```
+/// # use rustc_hir::def::Res;
+/// # use rustc_lint::LateContext;
+/// # use crate::usage::{classify_res, UsageCategory};
+/// # fn example<'tcx>(cx: &LateContext<'tcx>, res: Res) {
+/// let _ = classify_res(cx, res, UsageCategory::Type);
+/// # }
+/// ```
 pub fn classify_res(cx: &LateContext<'_>, res: Res, category: UsageCategory) -> Option<StdFsUsage> {
     res.opt_def_id()
         .and_then(|def_id| classify_def_id(cx, def_id, category))
@@ -83,6 +121,17 @@ pub fn classify_res(cx: &LateContext<'_>, res: Res, category: UsageCategory) -> 
 
 /// Classify a `DefId` by inspecting its fully qualified path.
 #[must_use]
+///
+/// # Examples
+///
+/// ```
+/// # use rustc_hir::def_id::DefId;
+/// # use rustc_lint::LateContext;
+/// # use crate::usage::{classify_def_id, UsageCategory};
+/// # fn example<'tcx>(cx: &LateContext<'tcx>, def_id: DefId) {
+/// let _ = classify_def_id(cx, def_id, UsageCategory::Call);
+/// # }
+/// ```
 pub fn classify_def_id(
     cx: &LateContext<'_>,
     def_id: DefId,
