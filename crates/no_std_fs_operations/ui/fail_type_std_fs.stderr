@@ -1,4 +1,4 @@
-error: std::fs operation `�std::fs::File�` bypasses the capability-based filesystem policy.
+error: std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.
   --> $DIR/fail_type_std_fs.rs:3:20
    |
 LL | type AmbientFile = std::fs::File;

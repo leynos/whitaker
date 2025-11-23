@@ -1,4 +1,4 @@
-//! Behaviour-driven localisation tests for the `no_std_fs_operations` lint.
+//! Behaviour-driven localization tests for the `no_std_fs_operations` lint.
 
 use crate::diagnostics::{StdFsMessages, localised_messages};
 use common::i18n::testing::FailingLookup;

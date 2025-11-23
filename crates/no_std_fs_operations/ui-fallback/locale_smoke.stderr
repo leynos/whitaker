@@ -1,4 +1,4 @@
-error: std::fs operation `�std::fs::read�` bypasses the capability-based filesystem policy.
+error: std::fs operation `std::fs::read` bypasses the capability-based filesystem policy.
   --> $DIR/locale_smoke.rs:4:13
    |
 LL |     let _ = std::fs::read("./demo.txt");

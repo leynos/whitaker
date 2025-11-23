@@ -1,3 +1,4 @@
+//! UI fixture showing compliant capability-style filesystem access using mock types.
 #![deny(no_std_fs_operations)]
 
 mod capability_fs {
@@ -5,22 +6,16 @@ mod capability_fs {
     pub struct Dir;
 
     impl Dir {
-        pub fn open(&self, _path: &Utf8PathBuf) -> Utf8PathBuf {
-            _path.clone()
-        }
+        pub fn open(&self, _path: &Utf8PathBuf) -> Utf8PathBuf { _path.clone() }
     }
 
     #[derive(Clone)]
     pub struct Utf8PathBuf(String);
 
     impl Utf8PathBuf {
-        pub fn from(input: &str) -> Self {
-            Self(input.to_owned())
-        }
+        pub fn from(input: &str) -> Self { Self(input.to_owned()) }
 
-        pub fn as_str(&self) -> &str {
-            &self.0
-        }
+        pub fn as_str(&self) -> &str { &self.0 }
     }
 }
 

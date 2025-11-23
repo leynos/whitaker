@@ -1,4 +1,4 @@
-error: Tha gnìomh std::fs `�std::fs::read�` a’ seachnadh a’ phoileasaidh comasan airson an t-siostaim fhaidhlichean.
+error: Tha gnìomh std::fs `std::fs::read` a’ seachnadh a’ phoileasaidh comasan airson an t-siostaim fhaidhlichean.
   --> $DIR/locale_smoke.rs:4:13
    |
 LL |     let _ = std::fs::read("./demo.txt");

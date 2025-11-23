@@ -1,4 +1,4 @@
-error: Mae gweithred std::fs `�std::fs::read�` yn osgoi’r polisi capasiti ar gyfer y system ffeiliau.
+error: Mae gweithred std::fs `std::fs::read` yn osgoi’r polisi capasiti ar gyfer y system ffeiliau.
   --> $DIR/locale_smoke.rs:4:13
    |
 LL |     let _ = std::fs::read("./demo.txt");

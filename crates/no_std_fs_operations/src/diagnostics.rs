@@ -41,14 +41,10 @@ pub(crate) fn emit_diagnostic(
         move || fallback_messages(&fallback_operation),
     );
 
-    let primary = messages.primary().to_string();
-    let note = messages.note().to_string();
-    let help = messages.help().to_string();
-
     cx.span_lint(NO_STD_FS_OPERATIONS, span, move |lint| {
-        lint.primary_message(primary.clone());
-        lint.note(note.clone());
-        lint.help(help.clone());
+        lint.primary_message(sanitize_message(messages.primary().to_string()));
+        lint.note(sanitize_message(messages.note().to_string()));
+        lint.help(sanitize_message(messages.help().to_string()));
     });
 }
 
@@ -60,15 +56,23 @@ fn fallback_messages(operation: &str) -> StdFsMessages {
     let primary = format!(
         "Avoid using std::fs operation `{operation}`; require capability-bearing handles instead."
     );
-    let note = String::from(
-        "std::fs reads the ambient working directory, so it bypasses the capability model enforced \
-         by cap-std and camino.",
-    );
-    let help = String::from(
-        "Pass `cap_std::fs::Dir` handles and camino::Utf8Path/Utf8PathBuf arguments down to the \
-         call so only explicit capabilities touch the filesystem.",
-    );
+    let note = concat!(
+        "std::fs reads the ambient working directory, ",
+        "so it bypasses the capability model enforced by cap-std and camino."
+    )
+    .to_string();
+    let help = concat!(
+        "Pass `cap_std::fs::Dir` handles and camino::Utf8Path/Utf8PathBuf arguments down to the call ",
+        "so only explicit capabilities touch the filesystem."
+    )
+    .to_string();
     DiagnosticMessageSet::new(primary, note, help)
+}
+
+fn sanitize_message(text: String) -> String {
+    text.chars()
+        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
+        .collect()
 }
 
 #[cfg(test)]

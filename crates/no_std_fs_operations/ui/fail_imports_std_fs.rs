@@ -1,3 +1,4 @@
+//! UI fixture demonstrating disallowed `std::fs` imports and calls.
 #![deny(no_std_fs_operations)]
 
 use std::fs::{self, File};
