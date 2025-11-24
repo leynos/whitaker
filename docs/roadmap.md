@@ -21,8 +21,10 @@
         harness boilerplate.
   - [x] Implement `function_attrs_follow_docs` with targeted UI scenarios.
   - [x] Implement `no_expect_outside_tests` with context-aware diagnostics.
-  - [ ] Implement `module_must_have_inner_docs` ensuring each module opens
-        with an inner doc comment.
+  - [x] Implement `module_must_have_inner_docs` ensuring each module opens
+        with an inner doc comment, including UI scenarios for inline, file,
+        and macro-generated modules plus localised diagnostics and
+        behaviour-driven coverage.
   - [ ] Implement `public_fn_must_have_docs` using effective visibility data.
   - [ ] Implement `test_must_not_have_example` covering code-fence heuristics.
   - [x] Implement `module_max_lines` with configurable thresholds.

@@ -1,4 +1,4 @@
-warning: Module �oversized_module� spans �22� lines which exceeds the �15� line limit.
+warning: Module oversized_module spans 22 lines, exceeding the allowed 15.
   --> $DIR/fail_long_module.rs:4:5
    |
 LL | mod oversized_module;
@@ -9,8 +9,7 @@ note: Large modules are harder to navigate and review.
    |
 LL | mod oversized_module;
    | ^^^^^^^^^^^^^^^^^^^^
-   = help: Split �oversized_module� into smaller modules or reduce its responsibilities.
+   = help: Split oversized_module into smaller modules or reduce its responsibilities.
    = note: `#[warn(module_max_lines)]` on by default
 
 warning: 1 warning emitted
-
