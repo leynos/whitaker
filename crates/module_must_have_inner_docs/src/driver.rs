@@ -103,21 +103,6 @@ enum LeadingContent {
     Misordered { offset: usize, len: usize },
 }
 
-fn contains_doc_token(attr_body: &str) -> bool {
-    attr_body.match_indices("doc").any(|(index, _)| {
-        let before = attr_body[..index]
-            .chars()
-            .rev()
-            .find(|ch| !ch.is_whitespace());
-        let after = attr_body[index + 3..]
-            .chars()
-            .find(|ch| !ch.is_whitespace());
-        let before_ok = before.is_none_or(|ch| !ch.is_ascii_alphanumeric() && ch != '_');
-        let after_ok = after.is_none_or(|ch| !ch.is_ascii_alphanumeric() && ch != '_');
-        before_ok && after_ok
-    })
-}
-
 fn classify_leading_content(snippet: &str) -> LeadingContent {
     let (offset, rest) = skip_leading_whitespace(snippet);
     if rest.is_empty() {
@@ -142,12 +127,126 @@ fn is_doc_comment(rest: &str) -> bool {
     if rest.starts_with("//!") {
         return true;
     }
-    if rest.starts_with("#![") {
-        let attr_end = rest.find(']').unwrap_or(rest.len());
-        let attr_body = rest[3..attr_end].to_ascii_lowercase();
-        return contains_doc_token(&attr_body);
+    if let Some(after_bang) = rest.strip_prefix("#!") {
+        let (_, tail) = skip_leading_whitespace(after_bang);
+        if let Some(body) = tail.strip_prefix('[') {
+            let attr_end = body.find(']').unwrap_or(body.len());
+            let attr_body = &body[..attr_end];
+            return is_doc_attr(attr_body);
+        }
     }
     false
+}
+
+fn is_doc_attr(attr_body: &str) -> bool {
+    let Some((ident, tail)) = take_ident(attr_body) else {
+        return false;
+    };
+
+    if ident.eq_ignore_ascii_case("doc") {
+        return true;
+    }
+
+    if ident.eq_ignore_ascii_case("cfg_attr") {
+        return cfg_attr_has_doc(tail);
+    }
+
+    false
+}
+
+fn take_ident(input: &str) -> Option<(&str, &str)> {
+    let (_, trimmed) = skip_leading_whitespace(input);
+    let mut iter = trimmed.char_indices();
+    let (start, ch) = iter.next()?;
+    if !is_ident_start(ch) {
+        return None;
+    }
+
+    let mut end = start + ch.len_utf8();
+    for (idx, ch) in iter {
+        if is_ident_continue(ch) {
+            end = idx + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    let ident = &trimmed[..end];
+    Some((ident, &trimmed[end..]))
+}
+
+fn is_ident_start(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphabetic()
+}
+
+fn is_ident_continue(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
+}
+
+fn cfg_attr_has_doc(rest: &str) -> bool {
+    let (_, trimmed) = skip_leading_whitespace(rest);
+    let Some(content) = trimmed.strip_prefix('(') else {
+        return false;
+    };
+
+    let mut depth: usize = 1;
+    let mut first_comma = None;
+    let mut closing_paren = None;
+
+    for (idx, ch) in content.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    closing_paren = Some(idx);
+                    break;
+                }
+            }
+            ',' if depth == 1 && first_comma.is_none() => first_comma = Some(idx),
+            _ => {}
+        }
+    }
+
+    let Some(attr_section_start) = first_comma else {
+        return false;
+    };
+    let Some(close_idx) = closing_paren else {
+        return false;
+    };
+
+    let args = &content[..close_idx];
+    let attr_section = &args[attr_section_start + 1..];
+    has_doc_in_meta_list(attr_section)
+}
+
+fn has_doc_in_meta_list(list: &str) -> bool {
+    let mut depth: usize = 0;
+    let mut start = 0;
+
+    for (idx, ch) in list.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                if meta_ident_is_doc(&list[start..idx]) {
+                    return true;
+                }
+                start = idx + 1;
+            }
+            _ => {}
+        }
+    }
+
+    meta_ident_is_doc(&list[start..])
+}
+
+fn meta_ident_is_doc(segment: &str) -> bool {
+    let Some((ident, _)) = take_ident(segment) else {
+        return false;
+    };
+
+    ident.eq_ignore_ascii_case("doc")
 }
 
 fn check_attribute_order(rest: &str, offset: usize) -> LeadingContent {
@@ -247,55 +346,5 @@ mod behaviour;
 mod ui;
 
 #[cfg(test)]
-mod tests {
-    use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
-    use rstest::rstest;
-
-    #[rstest]
-    fn detects_missing_docs_when_no_content() {
-        assert_eq!(
-            detect_module_docs_from_snippet("\n  \n"),
-            ModuleDocDisposition::MissingDocs
-        );
-    }
-
-    #[rstest]
-    fn accepts_leading_inner_doc() {
-        assert_eq!(
-            detect_module_docs_from_snippet("//! module docs"),
-            ModuleDocDisposition::HasLeadingDoc
-        );
-    }
-
-    #[rstest]
-    fn accepts_inner_doc_attribute() {
-        assert_eq!(
-            detect_module_docs_from_snippet("#![doc = \"text\"]"),
-            ModuleDocDisposition::HasLeadingDoc
-        );
-    }
-
-    #[rstest]
-    fn rejects_doc_after_inner_attribute() {
-        assert!(matches!(
-            detect_module_docs_from_snippet("#![allow(dead_code)]\n//! doc"),
-            ModuleDocDisposition::FirstInnerIsNotDoc(_)
-        ));
-    }
-
-    #[rstest]
-    fn outer_docs_do_not_satisfy_requirement() {
-        assert_eq!(
-            detect_module_docs_from_snippet("/// doc"),
-            ModuleDocDisposition::MissingDocs
-        );
-    }
-
-    #[rstest]
-    fn outer_doc_attribute_does_not_satisfy_requirement() {
-        assert_eq!(
-            detect_module_docs_from_snippet("#[doc = \"module docs\"]\npub fn demo() {}"),
-            ModuleDocDisposition::MissingDocs
-        );
-    }
-}
+#[path = "tests/classifier.rs"]
+mod classifier;
