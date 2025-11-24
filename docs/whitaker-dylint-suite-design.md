@@ -408,7 +408,7 @@ the snippet starts with an inner attribute marker (`#`) before any doc, the
 lint emits `FirstInnerIsNotDoc` and highlights the offending token; otherwise
 it reports missing documentation using the module body's start span. The shared
 span helpers from `whitaker::hir` supply consistent ranges for inline and file
-modules. Localised strings pull from
+modules. Localized strings pull from
 `locales/*/module_must_have_inner_docs.ftl`, passing the module name via the
 Fluent argument map, and fall back to a deterministic English message whenever
 localization fails.
