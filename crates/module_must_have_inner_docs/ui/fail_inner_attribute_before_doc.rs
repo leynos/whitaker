@@ -2,9 +2,10 @@
 #![warn(module_must_have_inner_docs)]
 
 mod reordering {
-    #![expect(dead_code, reason = "fixture: attribute before inner docs")]
+    #![recursion_limit = "32"]
     //! Documentation arrives too late.
 
+    #[expect(dead_code, reason = "fixture: attribute before inner docs")]
     pub fn example() {}
 }
 
