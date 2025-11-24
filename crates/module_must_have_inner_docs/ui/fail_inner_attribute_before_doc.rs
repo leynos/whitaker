@@ -2,7 +2,10 @@
 #![warn(module_must_have_inner_docs)]
 
 mod reordering {
-    #![expect(dead_code, reason = "fixture needs an inner attribute before docs")]
+    #![expect(
+        dead_code,
+        reason = "fixture intentionally places attribute before docs"
+    )]
     //! Documentation arrives too late.
 
     pub fn example() {}

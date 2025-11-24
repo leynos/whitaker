@@ -187,7 +187,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
 
 fn fallback_messages(module: &str, lines: usize, limit: usize) -> DiagnosticMessageSet {
     DiagnosticMessageSet::new(
-        format!("Module {module} spans {lines} lines which exceeds the {limit} line limit."),
+        format!("Module {module} spans {lines} lines, exceeding the allowed {limit}."),
         String::from("Large modules are harder to navigate and review."),
         format!("Split {module} into smaller modules or reduce its responsibilities."),
     )

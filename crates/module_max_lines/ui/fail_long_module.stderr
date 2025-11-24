@@ -1,4 +1,4 @@
-warning: Module oversized_module spans 22 lines which exceeds the 15 line limit.
+warning: Module oversized_module spans 22 lines, exceeding the allowed 15.
   --> $DIR/fail_long_module.rs:4:5
    |
 LL | mod oversized_module;
@@ -13,4 +13,3 @@ LL | mod oversized_module;
    = note: `#[warn(module_max_lines)]` on by default
 
 warning: 1 warning emitted
-

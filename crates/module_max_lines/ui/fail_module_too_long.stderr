@@ -1,4 +1,4 @@
-warning: Module long_module spans 18 lines which exceeds the 5 line limit.
+warning: Module long_module spans 18 lines, exceeding the allowed 5.
   --> $DIR/fail_module_too_long.rs:2:5
    |
 LL | mod long_module {
@@ -22,4 +22,3 @@ LL | #[expect(dead_code, reason = "test fixture only")]
    = note: `#[warn(unfulfilled_lint_expectations)]` on by default
 
 warning: 2 warnings emitted
-
