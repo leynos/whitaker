@@ -12,13 +12,4 @@ LL | mod long_module {
    = help: Split long_module into smaller modules or reduce its responsibilities.
    = note: `#[warn(module_max_lines)]` on by default
 
-warning: this lint expectation is unfulfilled
-  --> $DIR/fail_module_too_long.rs:1:10
-   |
-LL | #[expect(dead_code, reason = "test fixture only")]
-   |          ^^^^^^^^^
-   |
-   = note: test fixture only
-   = note: `#[warn(unfulfilled_lint_expectations)]` on by default
-
-warning: 2 warnings emitted
+warning: 1 warning emitted
