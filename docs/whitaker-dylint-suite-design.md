@@ -408,17 +408,17 @@ the snippet starts with an inner attribute marker (`#`) before any doc, the
 lint emits `FirstInnerIsNotDoc` and highlights the offending token; otherwise
 it reports missing documentation using the module body's start span. The shared
 span helpers from `whitaker::hir` supply consistent ranges for inline and file
-modules. Localised strings pull from
+modules. Localized strings pull from
 `locales/*/module_must_have_inner_docs.ftl`, passing the module name via the
 Fluent argument map, and fall back to a deterministic English message whenever
-localisation fails.
+localization fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
 precede documentation, and outer-doc-only modules. UI fixtures capture inline
 modules, file modules (via `#[path = "…"]`), and macro-generated modules to
 prove that macro output remains exempt. A Welsh (`cy`) UI smoke test asserts
-that diagnostics localise correctly under `DYLINT_LOCALE=cy`.
+that diagnostics localize correctly under `DYLINT_LOCALE=cy`.
 
 ### 3.5 `conditional_max_n_branches` (style, warn)
 
