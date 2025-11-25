@@ -263,6 +263,12 @@ fn cfg_attr_has_doc(rest: ParseInput<'_>) -> bool {
 }
 
 fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
+    parse_meta_list_segments(list.as_ref())
+        .any(|segment| check_segment_for_doc(ParseInput::from(segment)))
+}
+
+fn parse_meta_list_segments(list: &str) -> impl Iterator<Item = &str> {
+    let mut segments = Vec::new();
     let mut depth: usize = 0;
     let mut start = 0;
 
@@ -271,16 +277,18 @@ fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
             '(' => depth += 1,
             ')' => depth = depth.saturating_sub(1),
             ',' if depth == 0 => {
-                if check_segment_for_doc(ParseInput::from(&list[start..idx])) {
-                    return true;
-                }
+                segments.push(&list[start..idx]);
                 start = idx + 1;
             }
             _ => {}
         }
     }
 
-    check_segment_for_doc(ParseInput::from(&list[start..]))
+    if start <= list.len() {
+        segments.push(&list[start..]);
+    }
+
+    segments.into_iter()
 }
 
 fn check_segment_for_doc(segment: ParseInput<'_>) -> bool {
