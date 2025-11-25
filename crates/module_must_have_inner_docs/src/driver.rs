@@ -6,6 +6,7 @@
 //! attributes before it, trigger a diagnostic that nudges teams to document the
 //! module purpose at the top of the file.
 use std::borrow::Cow;
+use std::ops::Deref;
 
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
@@ -19,6 +20,33 @@ use rustc_span::DUMMY_SP;
 use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
+
+macro_rules! str_newtype {
+    ($name:ident) => {
+        #[derive(Clone, Copy, Debug)]
+        struct $name<'a>(&'a str);
+
+        impl<'a> From<&'a str> for $name<'a> {
+            fn from(value: &'a str) -> Self { Self(value) }
+        }
+
+        impl<'a> AsRef<str> for $name<'a> {
+            fn as_ref(&self) -> &str { self.0 }
+        }
+
+        impl<'a> Deref for $name<'a> {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target { self.0 }
+        }
+    };
+}
+
+str_newtype!(SourceSnippet);
+str_newtype!(AttributeBody);
+str_newtype!(ParseInput);
+str_newtype!(MetaList);
+str_newtype!(ModuleName);
 
 const LINT_NAME: &str = "module_must_have_inner_docs";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
@@ -103,8 +131,8 @@ enum LeadingContent {
     Misordered { offset: usize, len: usize },
 }
 
-fn classify_leading_content(snippet: &str) -> LeadingContent {
-    let (offset, rest) = skip_leading_whitespace(snippet);
+fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
+    let (offset, rest) = skip_leading_whitespace(ParseInput::from(snippet.as_ref()));
     if rest.is_empty() {
         return LeadingContent::Missing;
     }
@@ -114,32 +142,32 @@ fn classify_leading_content(snippet: &str) -> LeadingContent {
     check_attribute_order(rest, offset)
 }
 
-fn skip_leading_whitespace(snippet: &str) -> (usize, &str) {
+fn skip_leading_whitespace(snippet: ParseInput<'_>) -> (usize, ParseInput<'_>) {
     let bytes = snippet.as_bytes();
     let mut offset = 0;
     while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
         offset += 1;
     }
-    (offset, &snippet[offset..])
+    (offset, ParseInput::from(&snippet[offset..]))
 }
 
-fn is_doc_comment(rest: &str) -> bool {
+fn is_doc_comment(rest: ParseInput<'_>) -> bool {
     if rest.starts_with("//!") {
         return true;
     }
     if let Some(after_bang) = rest.strip_prefix("#!") {
-        let (_, tail) = skip_leading_whitespace(after_bang);
+        let (_, tail) = skip_leading_whitespace(ParseInput::from(after_bang));
         if let Some(body) = tail.strip_prefix('[') {
             let attr_end = body.find(']').unwrap_or(body.len());
-            let attr_body = &body[..attr_end];
+            let attr_body = AttributeBody::from(&body[..attr_end]);
             return is_doc_attr(attr_body);
         }
     }
     false
 }
 
-fn is_doc_attr(attr_body: &str) -> bool {
-    let Some((ident, tail)) = take_ident(attr_body) else {
+fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
+    let Some((ident, tail)) = take_ident(ParseInput::from(attr_body.as_ref())) else {
         return false;
     };
 
@@ -154,7 +182,7 @@ fn is_doc_attr(attr_body: &str) -> bool {
     false
 }
 
-fn take_ident(input: &str) -> Option<(&str, &str)> {
+fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, ParseInput<'_>)> {
     let (_, trimmed) = skip_leading_whitespace(input);
     let mut iter = trimmed.char_indices();
     let (start, ch) = iter.next()?;
@@ -171,8 +199,8 @@ fn take_ident(input: &str) -> Option<(&str, &str)> {
         }
     }
 
-    let ident = &trimmed[..end];
-    Some((ident, &trimmed[end..]))
+    let ident = ParseInput::from(&trimmed[..end]);
+    Some((ident, ParseInput::from(&trimmed[end..])))
 }
 
 fn is_ident_start(ch: char) -> bool {
@@ -183,7 +211,7 @@ fn is_ident_continue(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
-fn cfg_attr_has_doc(rest: &str) -> bool {
+fn cfg_attr_has_doc(rest: ParseInput<'_>) -> bool {
     let (_, trimmed) = skip_leading_whitespace(rest);
     let Some(content) = trimmed.strip_prefix('(') else {
         return false;
@@ -217,10 +245,10 @@ fn cfg_attr_has_doc(rest: &str) -> bool {
 
     let args = &content[..close_idx];
     let attr_section = &args[attr_section_start + 1..];
-    has_doc_in_meta_list(attr_section)
+    has_doc_in_meta_list(MetaList::from(attr_section))
 }
 
-fn has_doc_in_meta_list(list: &str) -> bool {
+fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
     let mut depth: usize = 0;
     let mut start = 0;
 
@@ -229,7 +257,7 @@ fn has_doc_in_meta_list(list: &str) -> bool {
             '(' => depth += 1,
             ')' => depth = depth.saturating_sub(1),
             ',' if depth == 0 => {
-                if meta_ident_is_doc(&list[start..idx]) {
+                if check_segment_for_doc(ParseInput::from(&list[start..idx])) {
                     return true;
                 }
                 start = idx + 1;
@@ -238,10 +266,14 @@ fn has_doc_in_meta_list(list: &str) -> bool {
         }
     }
 
-    meta_ident_is_doc(&list[start..])
+    check_segment_for_doc(ParseInput::from(&list[start..]))
 }
 
-fn meta_ident_is_doc(segment: &str) -> bool {
+fn check_segment_for_doc(segment: ParseInput<'_>) -> bool {
+    meta_ident_is_doc(segment)
+}
+
+fn meta_ident_is_doc(segment: ParseInput<'_>) -> bool {
     let Some((ident, _)) = take_ident(segment) else {
         return false;
     };
@@ -249,7 +281,7 @@ fn meta_ident_is_doc(segment: &str) -> bool {
     ident.eq_ignore_ascii_case("doc")
 }
 
-fn check_attribute_order(rest: &str, offset: usize) -> LeadingContent {
+fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
         return LeadingContent::Missing;
     }
@@ -261,7 +293,7 @@ fn check_attribute_order(rest: &str, offset: usize) -> LeadingContent {
 }
 
 #[cfg(test)]
-fn detect_module_docs_from_snippet(snippet: &str) -> ModuleDocDisposition {
+fn detect_module_docs_from_snippet(snippet: SourceSnippet<'_>) -> ModuleDocDisposition {
     match classify_leading_content(snippet) {
         LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
         LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
@@ -281,7 +313,7 @@ fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> Module
         return ModuleDocDisposition::MissingDocs;
     };
 
-    match classify_leading_content(&snippet) {
+    match classify_leading_content(SourceSnippet::from(&snippet)) {
         LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
         LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
         LeadingContent::Misordered { offset, len } => {
@@ -299,8 +331,8 @@ fn first_token_span(module_body: Span, offset: usize, len: usize) -> Span {
 
 fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, localizer: &Localizer) {
     let mut args: Arguments<'_> = Arguments::default();
-    let module_name = context.ident.name.as_str();
-    args.insert(Cow::Borrowed("module"), FluentValue::from(module_name));
+    let module_name = ModuleName::from(context.ident.name.as_str());
+    args.insert(Cow::Borrowed("module"), FluentValue::from(module_name.as_ref()));
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
@@ -328,11 +360,16 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
 
 type ModuleDocMessages = DiagnosticMessageSet;
 
-fn fallback_messages(module: &str) -> ModuleDocMessages {
-    let primary = format!("Module {module} must start with an inner doc comment.");
+fn fallback_messages(module: ModuleName<'_>) -> ModuleDocMessages {
+    let primary = format!(
+        "Module {} must start with an inner doc comment.",
+        module.as_ref()
+    );
     let note = String::from("The first item in the module is not a `//!` style comment.");
-    let help =
-        format!("Explain the purpose of {module} by adding an inner doc comment at the top.");
+    let help = format!(
+        "Explain the purpose of {} by adding an inner doc comment at the top.",
+        module.as_ref()
+    );
 
     DiagnosticMessageSet::new(primary, note, help)
 }

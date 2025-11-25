@@ -21,7 +21,7 @@ impl ModuleWorld {
 
     fn evaluate(&self) {
         let snippet = self.prefix.borrow();
-        let outcome = detect_module_docs_from_snippet(&snippet);
+        let outcome = detect_module_docs_from_snippet(snippet.as_str().into());
         self.result.replace(Some(outcome));
     }
 
