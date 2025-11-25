@@ -27,17 +27,23 @@ macro_rules! str_newtype {
         struct $name<'a>(&'a str);
 
         impl<'a> From<&'a str> for $name<'a> {
-            fn from(value: &'a str) -> Self { Self(value) }
+            fn from(value: &'a str) -> Self {
+                Self(value)
+            }
         }
 
         impl<'a> AsRef<str> for $name<'a> {
-            fn as_ref(&self) -> &str { self.0 }
+            fn as_ref(&self) -> &str {
+                self.0
+            }
         }
 
         impl<'a> Deref for $name<'a> {
             type Target = str;
 
-            fn deref(&self) -> &Self::Target { self.0 }
+            fn deref(&self) -> &Self::Target {
+                self.0
+            }
         }
     };
 }
@@ -332,7 +338,10 @@ fn first_token_span(module_body: Span, offset: usize, len: usize) -> Span {
 fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, localizer: &Localizer) {
     let mut args: Arguments<'_> = Arguments::default();
     let module_name = ModuleName::from(context.ident.name.as_str());
-    args.insert(Cow::Borrowed("module"), FluentValue::from(module_name.as_ref()));
+    args.insert(
+        Cow::Borrowed("module"),
+        FluentValue::from(module_name.as_ref()),
+    );
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
