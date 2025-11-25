@@ -54,6 +54,12 @@ str_newtype!(ParseInput);
 str_newtype!(MetaList);
 str_newtype!(ModuleName);
 
+impl<'a> ParseInput<'a> {
+    fn as_str(self) -> &'a str {
+        self.0
+    }
+}
+
 const LINT_NAME: &str = "module_must_have_inner_docs";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
@@ -148,13 +154,14 @@ fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
     check_attribute_order(rest, offset)
 }
 
-fn skip_leading_whitespace(snippet: ParseInput<'_>) -> (usize, ParseInput<'_>) {
-    let bytes = snippet.as_bytes();
+fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, ParseInput<'a>) {
+    let snippet_str = snippet.as_str();
+    let bytes = snippet_str.as_bytes();
     let mut offset = 0;
     while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
         offset += 1;
     }
-    (offset, ParseInput::from(&snippet[offset..]))
+    (offset, ParseInput::from(&snippet_str[offset..]))
 }
 
 fn is_doc_comment(rest: ParseInput<'_>) -> bool {
@@ -188,9 +195,10 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
     false
 }
 
-fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, ParseInput<'_>)> {
+fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, ParseInput<'a>)> {
     let (_, trimmed) = skip_leading_whitespace(input);
-    let mut iter = trimmed.char_indices();
+    let trimmed_str = trimmed.as_str();
+    let mut iter = trimmed_str.char_indices();
     let (start, ch) = iter.next()?;
     if !is_ident_start(ch) {
         return None;
@@ -205,8 +213,8 @@ fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, ParseInput<'_>)>
         }
     }
 
-    let ident = ParseInput::from(&trimmed[..end]);
-    Some((ident, ParseInput::from(&trimmed[end..])))
+    let ident = ParseInput::from(&trimmed_str[..end]);
+    Some((ident, ParseInput::from(&trimmed_str[end..])))
 }
 
 fn is_ident_start(ch: char) -> bool {
@@ -319,7 +327,7 @@ fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> Module
         return ModuleDocDisposition::MissingDocs;
     };
 
-    match classify_leading_content(SourceSnippet::from(&snippet)) {
+    match classify_leading_content(SourceSnippet::from(snippet.as_str())) {
         LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
         LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
         LeadingContent::Misordered { offset, len } => {
