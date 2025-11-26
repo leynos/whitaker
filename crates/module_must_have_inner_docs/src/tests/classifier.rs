@@ -12,6 +12,77 @@ fn detects_missing_docs_when_no_content() {
 }
 
 #[rstest]
+fn cfg_attr_with_doc_in_condition_is_not_treated_as_docs() {
+    let snippet = r#"#![cfg_attr(doc, no_mangle)]"#.into();
+    assert_eq!(
+        detect_module_docs_from_snippet(snippet),
+        ModuleDocDisposition::MissingDocs
+    );
+}
+
+#[rstest]
+fn cfg_attr_with_nested_cfg_expression_and_doc_attr_is_treated_as_docs() {
+    let snippet = r#"#![cfg_attr(any(unix, windows), doc = "text")]"#.into();
+    assert_eq!(
+        detect_module_docs_from_snippet(snippet),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
+fn cfg_attr_with_doc_and_other_attrs_doc_first_is_treated_as_docs() {
+    let snippet = r#"#![cfg_attr(feature = "docs", doc = "text", inline)]"#.into();
+    assert_eq!(
+        detect_module_docs_from_snippet(snippet),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
+fn cfg_attr_with_doc_and_other_attrs_doc_last_is_treated_as_docs() {
+    let snippet = r#"#![cfg_attr(feature = "docs", inline, doc = "text")]"#.into();
+    assert_eq!(
+        detect_module_docs_from_snippet(snippet),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
+fn cfg_attr_with_documentation_attr_is_not_treated_as_docs() {
+    let snippet = r#"#![cfg_attr(feature = "docs", documentation = "text")]"#.into();
+    assert_eq!(
+        detect_module_docs_from_snippet(snippet),
+        ModuleDocDisposition::MissingDocs
+    );
+}
+
+#[rstest]
+fn accepts_mixed_case_inner_doc_attribute_upper() {
+    assert_eq!(
+        detect_module_docs_from_snippet("#![DOC = \"module docs\"]".into()),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
+fn accepts_mixed_case_inner_doc_attribute_camel() {
+    assert_eq!(
+        detect_module_docs_from_snippet("#![Doc = \"module docs\"]".into()),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
+fn accepts_mixed_case_inner_doc_in_cfg_attr() {
+    assert_eq!(
+        detect_module_docs_from_snippet(
+            "#![cfg_attr(feature = \"docs\", Doc = \"module docs\")]".into()
+        ),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
 fn accepts_leading_inner_doc() {
     assert_eq!(
         detect_module_docs_from_snippet("//! module docs".into()),
@@ -71,6 +142,26 @@ fn accepts_cfg_attr_doc() {
 fn handles_whitespace_in_inner_doc_attribute() {
     assert_eq!(
         detect_module_docs_from_snippet(" #! [ doc = \"\" ] ".into()),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+
+    assert_eq!(
+        detect_module_docs_from_snippet("#!\n   [ doc = \"text\" ]".into()),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+
+    assert_eq!(
+        detect_module_docs_from_snippet("#![   doc = \"text\"   ]".into()),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
+fn handles_whitespace_in_cfg_attr_inner_doc_attribute() {
+    assert_eq!(
+        detect_module_docs_from_snippet(
+            "#![cfg_attr(\n       feature = \"docs\",\n       doc = \"text\",\n   )]".into()
+        ),
         ModuleDocDisposition::HasLeadingDoc
     );
 }
