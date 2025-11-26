@@ -30,6 +30,7 @@ rustc_span = { workspace = true, optional = true }
 common = { path = "../../common", optional = true }
 log = { workspace = true, optional = true }
 whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
+newt-hype = "0.1"
 
 [dev-dependencies]
 rstest = "0.26.1"

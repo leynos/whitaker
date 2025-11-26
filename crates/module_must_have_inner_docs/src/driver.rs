@@ -6,13 +6,13 @@
 //! attributes before it, trigger a diagnostic that nudges teams to document the
 //! module purpose at the top of the file.
 use std::borrow::Cow;
-use std::ops::Deref;
 
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, safe_resolve_message_set,
 };
 use log::debug;
+use newt_hype::{base_newtype, newtype};
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
@@ -21,38 +21,22 @@ use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
 
-macro_rules! str_newtype {
-    ($name:ident) => {
-        #[derive(Clone, Copy, Debug)]
-        struct $name<'a>(&'a str);
-
-        impl<'a> From<&'a str> for $name<'a> {
-            fn from(value: &'a str) -> Self {
-                Self(value)
-            }
-        }
-
-        impl<'a> AsRef<str> for $name<'a> {
-            fn as_ref(&self) -> &str {
-                self.0
-            }
-        }
-
-        impl<'a> Deref for $name<'a> {
-            type Target = str;
-
-            fn deref(&self) -> &Self::Target {
-                self.0
-            }
-        }
-    };
+base_newtype! {
+    #[derive(Clone, Copy, Debug)]
+    pub StrWrapper<'a>: &'a str;
 }
 
-str_newtype!(SourceSnippet);
-str_newtype!(AttributeBody);
-str_newtype!(ParseInput);
-str_newtype!(MetaList);
-str_newtype!(ModuleName);
+newtype!(SourceSnippet, StrWrapper<'a>: &'a str);
+newtype!(AttributeBody, StrWrapper<'a>: &'a str);
+newtype!(ParseInput, StrWrapper<'a>: &'a str);
+newtype!(MetaList, StrWrapper<'a>: &'a str);
+newtype!(ModuleName, StrWrapper<'a>: &'a str);
+
+impl<'a> ParseInput<'a> {
+    pub fn as_str(&self) -> &'a str {
+        **self
+    }
+}
 
 impl<'a> ParseInput<'a> {
     fn as_str(self) -> &'a str {
