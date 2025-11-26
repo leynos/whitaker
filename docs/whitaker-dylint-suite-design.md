@@ -409,8 +409,9 @@ traces the first-level `cfg_attr` meta list to find `doc` entries, which avoids
 substring-based false positives such as `#![allow(undocumented_unsafe_blocks)]`
 and misclassifying `documentation = "…"`. If the snippet starts with an inner
 attribute marker (`#`) before any doc, the lint emits `FirstInnerIsNotDoc` and
-highlights the offending token; otherwise it reports missing documentation
-using the module body's start span. The shared span helpers from
+highlights the offending token, unless the leading attribute is a doc-less
+`cfg_attr` wrapper, in which case it falls back to `MissingDocs` so the
+diagnostic targets the module start. The shared span helpers from
 `whitaker::hir` supply consistent ranges for inline and file modules. Localized
 strings pull from `locales/*/module_must_have_inner_docs.ftl`, passing the
 module name via the Fluent argument map, and fall back to a deterministic

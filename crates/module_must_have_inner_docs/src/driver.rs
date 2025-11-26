@@ -256,6 +256,30 @@ fn is_case_incorrect_doc_inner_attr(rest: ParseInput<'_>) -> bool {
     segment_has_case_incorrect_doc(body)
 }
 
+fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
+    let after_bang = rest.strip_prefix("#!")?;
+
+    let (_, tail) = parser::skip_leading_whitespace(ParseInput::from(after_bang));
+    let body = tail.strip_prefix('[')?;
+
+    let attr_end = body.find(']').unwrap_or(body.len());
+    Some(AttributeBody::from(&body[..attr_end]))
+}
+
+fn is_cfg_attr_without_doc(rest: ParseInput<'_>) -> bool {
+    let Some(body) = inner_attribute_body(rest) else {
+        return false;
+    };
+
+    let Some((ident, tail)) = parser::take_ident(ParseInput::from(*body)) else {
+        return false;
+    };
+
+    // A doc-less `cfg_attr` wrapper leaves the module undocumented even when
+    // the condition holds, so treat it the same as having no inner attributes.
+    *ident == "cfg_attr" && !parser::cfg_attr_has_doc(tail)
+}
+
 fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
         return LeadingContent::Missing;
@@ -265,6 +289,10 @@ fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent 
     }
 
     if is_case_incorrect_doc_inner_attr(rest) {
+        return LeadingContent::Missing;
+    }
+
+    if is_cfg_attr_without_doc(rest) {
         return LeadingContent::Missing;
     }
 

@@ -146,7 +146,7 @@ fn is_ident_continue(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
-fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
+pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
     let (_, tail) = skip_leading_whitespace(tail);
     let Some(args) = tail.strip_prefix('(') else {
         return false;
