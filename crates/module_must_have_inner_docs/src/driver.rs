@@ -37,6 +37,8 @@ impl<'a> ParseInput<'a> {
     /// # Example
     ///
     /// ```
+    /// use crate::ParseInput;
+    ///
     /// let input = ParseInput::from("example");
     /// assert_eq!(input.as_str(), "example");
     /// ```

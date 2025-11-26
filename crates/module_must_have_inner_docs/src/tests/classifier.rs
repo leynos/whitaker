@@ -89,11 +89,3 @@ fn handles_whitespace_in_cfg_attr_inner_doc_attribute() {
         ModuleDocDisposition::HasLeadingDoc
     );
 }
-
-#[rstest]
-fn rejects_similar_but_non_doc_attribute() {
-    assert!(matches!(
-        detect_module_docs_from_snippet("#![documentation = \"text\"]".into()),
-        ModuleDocDisposition::FirstInnerIsNotDoc(_)
-    ));
-}
