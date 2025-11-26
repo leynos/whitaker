@@ -76,19 +76,7 @@ pub(super) fn is_doc_comment(rest: ParseInput<'_>) -> bool {
 // Returns true for direct `doc` attributes and for `cfg_attr` wrappers that
 // contain a `doc` entry.
 fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
-    let Some((ident, tail)) = take_ident(ParseInput::from(*attr_body)) else {
-        return false;
-    };
-
-    if *ident == "doc" {
-        return true;
-    }
-
-    if *ident == "cfg_attr" {
-        return cfg_attr_has_doc(tail);
-    }
-
-    false
+    is_doc_ident(ParseInput::from(*attr_body))
 }
 
 /// Extracts the leading identifier from the input, skipping any leading
@@ -130,6 +118,22 @@ pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, P
 
     let ident = ParseInput::from(&trimmed_str[..end]);
     Some((ident, ParseInput::from(&trimmed_str[end..])))
+}
+
+fn is_doc_ident(input: ParseInput<'_>) -> bool {
+    let Some((ident, tail)) = take_ident(input) else {
+        return false;
+    };
+
+    if *ident == "doc" {
+        return true;
+    }
+
+    if *ident == "cfg_attr" {
+        return cfg_attr_has_doc(tail);
+    }
+
+    false
 }
 
 fn is_ident_start(ch: char) -> bool {
@@ -236,17 +240,5 @@ fn process_char_for_doc(list_str: &str, ch: char, state: &mut ParserState, idx: 
 }
 
 fn segment_is_doc(segment: &str) -> bool {
-    let Some((ident, tail)) = take_ident(ParseInput::from(segment)) else {
-        return false;
-    };
-
-    if *ident == "doc" {
-        return true;
-    }
-
-    if *ident == "cfg_attr" {
-        return cfg_attr_has_doc(tail);
-    }
-
-    false
+    is_doc_ident(ParseInput::from(segment))
 }
