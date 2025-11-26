@@ -1,4 +1,15 @@
 //! Parsing helpers for module doc detection.
+//!
+//! This module tokenises raw attribute text to spot inner doc comments, walks
+//! `cfg_attr` wrappers to inspect their contained meta items, and skips leading
+//! whitespace before parsing. It looks for doc tokens (`//!` line comments and
+//! `#![doc = \"...\"]` style attributes) while ignoring commas inside nested
+//! parentheses when dissecting meta lists. Key helpers:
+//! - `skip_leading_whitespace`: advances a text cursor past ASCII whitespace.
+//! - `is_doc_comment`: recognises leading doc comments or doc attributes,
+//!   including those wrapped in `cfg_attr`.
+//! These utilities underpin the lint that determines whether a module has the
+//! required leading inner docs.
 
 use crate::{AttributeBody, MetaList, ParseInput};
 
