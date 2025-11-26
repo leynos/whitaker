@@ -116,41 +116,45 @@ fn cfg_attr_has_doc(rest: ParseInput<'_>) -> bool {
     has_doc_in_meta_list(MetaList::from(attr_section))
 }
 
+struct ParserState {
+    depth: usize,
+    start: usize,
+}
+
+impl ParserState {
+    fn new() -> Self {
+        Self { depth: 0, start: 0 }
+    }
+}
+
 fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
     let list_str = *list;
-    let mut depth: usize = 0;
-    let mut start = 0;
+    let mut state = ParserState::new();
 
     for (idx, ch) in list_str.char_indices() {
-        if process_char_for_doc(list_str, ch, &mut depth, &mut start, idx) {
+        if process_char_for_doc(list_str, ch, &mut state, idx) {
             return true;
         }
     }
 
-    segment_is_doc(&list_str[start..])
+    segment_is_doc(&list_str[state.start..])
 }
 
-fn process_char_for_doc(
-    list_str: &str,
-    ch: char,
-    depth: &mut usize,
-    start: &mut usize,
-    idx: usize,
-) -> bool {
+fn process_char_for_doc(list_str: &str, ch: char, state: &mut ParserState, idx: usize) -> bool {
     match ch {
         '(' => {
-            *depth += 1;
+            state.depth += 1;
             false
         }
         ')' => {
-            *depth = depth.saturating_sub(1);
+            state.depth = state.depth.saturating_sub(1);
             false
         }
-        ',' if *depth == 0 => {
-            if segment_is_doc(&list_str[*start..idx]) {
+        ',' if state.depth == 0 => {
+            if segment_is_doc(&list_str[state.start..idx]) {
                 return true;
             }
-            *start = idx + 1;
+            state.start = idx + 1;
             false
         }
         _ => false,
