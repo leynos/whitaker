@@ -8,6 +8,7 @@
 //! - `skip_leading_whitespace`: advances a text cursor past ASCII whitespace.
 //! - `is_doc_comment`: recognises leading doc comments or doc attributes,
 //!   including those wrapped in `cfg_attr`.
+//!
 //! These utilities underpin the lint that determines whether a module has the
 //! required leading inner docs.
 
