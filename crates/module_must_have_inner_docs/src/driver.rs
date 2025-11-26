@@ -247,40 +247,29 @@ fn cfg_attr_has_doc(rest: ParseInput<'_>) -> bool {
 }
 
 fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
-    parse_meta_list_segments(list.as_ref())
-        .any(|segment| check_segment_for_doc(ParseInput::from(segment)))
-}
-
-fn parse_meta_list_segments(list: &str) -> impl Iterator<Item = &str> {
-    let mut segments = Vec::new();
+    let list_str = list.as_ref();
     let mut depth: usize = 0;
     let mut start = 0;
 
-    for (idx, ch) in list.char_indices() {
+    for (idx, ch) in list_str.char_indices() {
         match ch {
             '(' => depth += 1,
             ')' => depth = depth.saturating_sub(1),
             ',' if depth == 0 => {
-                segments.push(&list[start..idx]);
+                if segment_is_doc(&list_str[start..idx]) {
+                    return true;
+                }
                 start = idx + 1;
             }
             _ => {}
         }
     }
 
-    if start <= list.len() {
-        segments.push(&list[start..]);
-    }
-
-    segments.into_iter()
+    segment_is_doc(&list_str[start..])
 }
 
-fn check_segment_for_doc(segment: ParseInput<'_>) -> bool {
-    meta_ident_is_doc(segment)
-}
-
-fn meta_ident_is_doc(segment: ParseInput<'_>) -> bool {
-    let Some((ident, _)) = take_ident(segment) else {
+fn segment_is_doc(segment: &str) -> bool {
+    let Some((ident, _)) = take_ident(ParseInput::from(segment)) else {
         return false;
     };
 
