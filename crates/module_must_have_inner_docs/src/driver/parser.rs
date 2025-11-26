@@ -146,97 +146,41 @@ fn is_ident_continue(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
-fn cfg_attr_has_doc(rest: ParseInput<'_>) -> bool {
-    let (_, trimmed) = skip_leading_whitespace(rest);
-    // Parse `cfg_attr(condition, attr1, attr2, ...)`; after `(` comes the
-    // condition, then a comma, then the attribute list.
-    let Some(content) = trimmed.strip_prefix('(') else {
+fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
+    let (_, tail) = skip_leading_whitespace(tail);
+    let Some(args) = tail.strip_prefix('(') else {
         return false;
     };
+    let Some(close_idx) = args.rfind(')') else {
+        return false;
+    };
+    let meta_list = &args[..close_idx];
 
-    let mut depth: usize = 1;
-    let mut first_comma = None;
-    let mut closing_paren = None;
+    has_doc_in_meta_list_after_first(MetaList::from(meta_list))
+}
 
-    // Walk the chars, tracking parentheses so we can ignore commas inside nested
-    // cfg expressions. The first comma at depth 1 separates the condition from
-    // the attribute list; the closing paren at depth 0 marks the end.
-    for (idx, ch) in content.char_indices() {
+fn has_doc_in_meta_list_after_first(list: MetaList<'_>) -> bool {
+    let list_str = *list;
+    let mut depth: usize = 0;
+    let mut start = 0;
+    let mut seen_comma = false;
+
+    for (idx, ch) in list_str.char_indices() {
         match ch {
             '(' => depth += 1,
-            ')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    closing_paren = Some(idx);
-                    break;
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                if seen_comma && segment_is_doc(&list_str[start..idx]) {
+                    return true;
                 }
+                seen_comma = true;
+                start = idx + 1;
             }
-            ',' if depth == 1 && first_comma.is_none() => first_comma = Some(idx),
             _ => {}
         }
     }
 
-    let Some(attr_section_start) = first_comma else {
-        return false;
-    };
-    let Some(close_idx) = closing_paren else {
-        return false;
-    };
-
-    // `args` holds everything inside the outer parens; slice from the comma
-    // boundary to the closing paren to obtain the attribute list as a MetaList.
-    let args = &content[..close_idx];
-    let attr_section = &args[attr_section_start + 1..];
-    has_doc_in_meta_list(MetaList::from(attr_section))
-}
-
-struct ParserState {
-    depth: usize,
-    start: usize,
-}
-
-impl ParserState {
-    fn new() -> Self {
-        Self { depth: 0, start: 0 }
-    }
-}
-
-fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
-    // Scan comma-separated meta items at depth 0, using depth tracking to skip
-    // commas inside nested parentheses. `process_char_for_doc` updates state and
-    // early-returns when a doc segment is found; the final call checks the tail
-    // after the last comma.
-    let list_str = *list;
-    let mut state = ParserState::new();
-
-    for (idx, ch) in list_str.char_indices() {
-        if process_char_for_doc(list_str, ch, &mut state, idx) {
-            return true;
-        }
-    }
-
-    segment_is_doc(&list_str[state.start..])
-}
-
-fn process_char_for_doc(list_str: &str, ch: char, state: &mut ParserState, idx: usize) -> bool {
-    match ch {
-        '(' => {
-            state.depth += 1;
-            false
-        }
-        ')' => {
-            state.depth = state.depth.saturating_sub(1);
-            false
-        }
-        ',' if state.depth == 0 => {
-            if segment_is_doc(&list_str[state.start..idx]) {
-                return true;
-            }
-            state.start = idx + 1;
-            false
-        }
-        _ => false,
-    }
+    seen_comma && segment_is_doc(&list_str[start..])
 }
 
 fn segment_is_doc(segment: &str) -> bool {

@@ -156,25 +156,53 @@ fn segment_has_case_incorrect_doc(segment: &str) -> bool {
     false
 }
 
+struct CaseDocState {
+    depth: usize,
+    start: usize,
+}
+
+impl CaseDocState {
+    fn new() -> Self {
+        Self { depth: 0, start: 0 }
+    }
+}
+
 fn has_case_incorrect_doc_in_meta_list(list: &str) -> bool {
-    let mut depth: usize = 0;
-    let mut start = 0;
+    let mut state = CaseDocState::new();
 
     for (idx, ch) in list.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                if segment_has_case_incorrect_doc(&list[start..idx]) {
-                    return true;
-                }
-                start = idx + 1;
-            }
-            _ => {}
+        if process_char_for_case_incorrect_doc(list, ch, &mut state, idx) {
+            return true;
         }
     }
 
-    segment_has_case_incorrect_doc(&list[start..])
+    segment_has_case_incorrect_doc(&list[state.start..])
+}
+
+fn process_char_for_case_incorrect_doc(
+    list: &str,
+    ch: char,
+    state: &mut CaseDocState,
+    idx: usize,
+) -> bool {
+    match ch {
+        '(' => {
+            state.depth += 1;
+            false
+        }
+        ')' => {
+            state.depth = state.depth.saturating_sub(1);
+            false
+        }
+        ',' if state.depth == 0 => {
+            if segment_has_case_incorrect_doc(&list[state.start..idx]) {
+                return true;
+            }
+            state.start = idx + 1;
+            false
+        }
+        _ => false,
+    }
 }
 
 fn cfg_attr_has_case_incorrect_doc(rest: ParseInput<'_>) -> bool {
