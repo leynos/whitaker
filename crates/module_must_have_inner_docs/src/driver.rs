@@ -12,7 +12,7 @@ use common::i18n::{
     get_localizer_for_lint, safe_resolve_message_set,
 };
 use log::debug;
-use newt_hype::{base_newtype, newtype};
+use newt_hype::base_newtype;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
@@ -21,26 +21,17 @@ use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
 
-base_newtype! {
-    #[derive(Clone, Copy, Debug)]
-    pub StrWrapper<'a>: &'a str;
-}
+base_newtype!(StrWrapper);
 
-newtype!(SourceSnippet, StrWrapper<'a>: &'a str);
-newtype!(AttributeBody, StrWrapper<'a>: &'a str);
-newtype!(ParseInput, StrWrapper<'a>: &'a str);
-newtype!(MetaList, StrWrapper<'a>: &'a str);
-newtype!(ModuleName, StrWrapper<'a>: &'a str);
+pub type SourceSnippet<'a> = StrWrapper<&'a str>;
+pub type AttributeBody<'a> = StrWrapper<&'a str>;
+pub type ParseInput<'a> = StrWrapper<&'a str>;
+pub type MetaList<'a> = StrWrapper<&'a str>;
+pub type ModuleName<'a> = StrWrapper<&'a str>;
 
 impl<'a> ParseInput<'a> {
     pub fn as_str(&self) -> &'a str {
         **self
-    }
-}
-
-impl<'a> ParseInput<'a> {
-    fn as_str(self) -> &'a str {
-        self.0
     }
 }
 
@@ -128,7 +119,7 @@ enum LeadingContent {
 }
 
 fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
-    let (offset, rest) = skip_leading_whitespace(ParseInput::from(snippet.as_ref()));
+    let (offset, rest) = skip_leading_whitespace(ParseInput::from(*snippet));
     if rest.is_empty() {
         return LeadingContent::Missing;
     }
@@ -164,7 +155,7 @@ fn is_doc_comment(rest: ParseInput<'_>) -> bool {
 }
 
 fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
-    let Some((ident, tail)) = take_ident(ParseInput::from(attr_body.as_ref())) else {
+    let Some((ident, tail)) = take_ident(ParseInput::from(*attr_body)) else {
         return false;
     };
 
@@ -247,7 +238,7 @@ fn cfg_attr_has_doc(rest: ParseInput<'_>) -> bool {
 }
 
 fn has_doc_in_meta_list(list: MetaList<'_>) -> bool {
-    let list_str = list.as_ref();
+    let list_str = *list;
     let mut depth: usize = 0;
     let mut start = 0;
 
@@ -327,10 +318,7 @@ fn first_token_span(module_body: Span, offset: usize, len: usize) -> Span {
 fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, localizer: &Localizer) {
     let mut args: Arguments<'_> = Arguments::default();
     let module_name = ModuleName::from(context.ident.name.as_str());
-    args.insert(
-        Cow::Borrowed("module"),
-        FluentValue::from(module_name.as_ref()),
-    );
+    args.insert(Cow::Borrowed("module"), FluentValue::from(*module_name));
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
@@ -359,14 +347,11 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
 type ModuleDocMessages = DiagnosticMessageSet;
 
 fn fallback_messages(module: ModuleName<'_>) -> ModuleDocMessages {
-    let primary = format!(
-        "Module {} must start with an inner doc comment.",
-        module.as_ref()
-    );
+    let primary = format!("Module {} must start with an inner doc comment.", *module);
     let note = String::from("The first item in the module is not a `//!` style comment.");
     let help = format!(
         "Explain the purpose of {} by adding an inner doc comment at the top.",
-        module.as_ref()
+        *module
     );
 
     DiagnosticMessageSet::new(primary, note, help)
