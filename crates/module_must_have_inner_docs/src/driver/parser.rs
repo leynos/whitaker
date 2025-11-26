@@ -159,28 +159,60 @@ pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
     has_doc_in_meta_list_after_first(MetaList::from(meta_list))
 }
 
+struct ParserStateSkipFirst {
+    depth: usize,
+    start: usize,
+    seen_comma: bool,
+}
+
+impl ParserStateSkipFirst {
+    fn new() -> Self {
+        Self {
+            depth: 0,
+            start: 0,
+            seen_comma: false,
+        }
+    }
+}
+
 fn has_doc_in_meta_list_after_first(list: MetaList<'_>) -> bool {
     let list_str = *list;
-    let mut depth: usize = 0;
-    let mut start = 0;
-    let mut seen_comma = false;
+    let mut state = ParserStateSkipFirst::new();
 
     for (idx, ch) in list_str.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                if seen_comma && segment_is_doc(&list_str[start..idx]) {
-                    return true;
-                }
-                seen_comma = true;
-                start = idx + 1;
-            }
-            _ => {}
+        if process_char_for_doc_after_first(list_str, ch, &mut state, idx) {
+            return true;
         }
     }
 
-    seen_comma && segment_is_doc(&list_str[start..])
+    state.seen_comma && segment_is_doc(&list_str[state.start..])
+}
+
+fn process_char_for_doc_after_first(
+    list_str: &str,
+    ch: char,
+    state: &mut ParserStateSkipFirst,
+    idx: usize,
+) -> bool {
+    match ch {
+        '(' => {
+            state.depth += 1;
+            false
+        }
+        ')' => {
+            state.depth = state.depth.saturating_sub(1);
+            false
+        }
+        ',' if state.depth == 0 => {
+            if state.seen_comma && segment_is_doc(&list_str[state.start..idx]) {
+                return true;
+            }
+            state.seen_comma = true;
+            state.start = idx + 1;
+            false
+        }
+        _ => false,
+    }
 }
 
 fn segment_is_doc(segment: &str) -> bool {
