@@ -160,13 +160,13 @@ pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
     has_doc_in_meta_list_after_first(MetaList::from(meta_list))
 }
 
-struct ParserStateSkipFirst {
+struct ParserStateAfterFirst {
     depth: usize,
     start: usize,
     seen_comma: bool,
 }
 
-impl ParserStateSkipFirst {
+impl ParserStateAfterFirst {
     fn new() -> Self {
         Self {
             depth: 0,
@@ -178,7 +178,7 @@ impl ParserStateSkipFirst {
 
 fn has_doc_in_meta_list_after_first(list: MetaList<'_>) -> bool {
     let list_str = *list;
-    let mut state = ParserStateSkipFirst::new();
+    let mut state = ParserStateAfterFirst::new();
 
     for (idx, ch) in list_str.char_indices() {
         if process_char_for_doc_after_first(list_str, ch, &mut state, idx) {
@@ -192,7 +192,7 @@ fn has_doc_in_meta_list_after_first(list: MetaList<'_>) -> bool {
 fn process_char_for_doc_after_first(
     list_str: &str,
     ch: char,
-    state: &mut ParserStateSkipFirst,
+    state: &mut ParserStateAfterFirst,
     idx: usize,
 ) -> bool {
     match ch {
