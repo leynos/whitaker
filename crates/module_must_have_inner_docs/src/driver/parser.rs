@@ -236,7 +236,7 @@ fn process_char_for_doc(list_str: &str, ch: char, state: &mut ParserState, idx: 
 }
 
 fn segment_is_doc(segment: &str) -> bool {
-    let Some((ident, _)) = take_ident(ParseInput::from(segment)) else {
+    let Some((ident, tail)) = take_ident(ParseInput::from(segment)) else {
         return false;
     };
 
@@ -245,7 +245,7 @@ fn segment_is_doc(segment: &str) -> bool {
     }
 
     if *ident == "cfg_attr" {
-        return cfg_attr_has_doc(ParseInput::from(segment));
+        return cfg_attr_has_doc(tail);
     }
 
     false

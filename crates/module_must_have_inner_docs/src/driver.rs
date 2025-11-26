@@ -139,27 +139,38 @@ fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
     check_attribute_order(rest, offset)
 }
 
+/// Detects inner attributes like `#![DOC = ...]` where casing of `doc` is wrong.
+fn is_case_incorrect_doc_inner_attr(rest: ParseInput<'_>) -> bool {
+    let Some(after_bang) = rest.strip_prefix("#!") else {
+        return false;
+    };
+
+    let (_, tail) = parser::skip_leading_whitespace(ParseInput::from(after_bang));
+    let Some(body) = tail.strip_prefix('[') else {
+        return false;
+    };
+
+    let Some((ident, _)) = parser::take_ident(ParseInput::from(body)) else {
+        return false;
+    };
+
+    ident.eq_ignore_ascii_case("doc") && *ident != "doc"
+}
+
 fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
         return LeadingContent::Missing;
     }
-    if rest.starts_with('#') {
-        if rest.starts_with("#!")
-            && let Some(after_bang) = rest.strip_prefix("#!")
-            && let Some((_, tail)) = Some(parser::skip_leading_whitespace(ParseInput::from(
-                after_bang,
-            )))
-            && let Some(body) = tail.strip_prefix('[')
-            && let Some((ident, _)) = parser::take_ident(ParseInput::from(body))
-            && ident.eq_ignore_ascii_case("doc")
-            && *ident != "doc"
-        {
-            return LeadingContent::Missing;
-        }
-        let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
-        return LeadingContent::Misordered { offset, len };
+    if !rest.starts_with('#') {
+        return LeadingContent::Missing;
     }
-    LeadingContent::Missing
+
+    if is_case_incorrect_doc_inner_attr(rest) {
+        return LeadingContent::Missing;
+    }
+
+    let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
+    LeadingContent::Misordered { offset, len }
 }
 
 #[cfg(test)]
