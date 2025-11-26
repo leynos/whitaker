@@ -60,7 +60,7 @@ fn cfg_attr_with_documentation_attr_is_not_treated_as_docs() {
 fn accepts_mixed_case_inner_doc_attribute_upper() {
     assert_eq!(
         detect_module_docs_from_snippet("#![DOC = \"module docs\"]".into()),
-        ModuleDocDisposition::HasLeadingDoc
+        ModuleDocDisposition::MissingDocs
     );
 }
 
@@ -68,7 +68,7 @@ fn accepts_mixed_case_inner_doc_attribute_upper() {
 fn accepts_mixed_case_inner_doc_attribute_camel() {
     assert_eq!(
         detect_module_docs_from_snippet("#![Doc = \"module docs\"]".into()),
-        ModuleDocDisposition::HasLeadingDoc
+        ModuleDocDisposition::MissingDocs
     );
 }
 
@@ -78,7 +78,7 @@ fn accepts_mixed_case_inner_doc_in_cfg_attr() {
         detect_module_docs_from_snippet(
             "#![cfg_attr(feature = \"docs\", Doc = \"module docs\")]".into()
         ),
-        ModuleDocDisposition::HasLeadingDoc
+        ModuleDocDisposition::MissingDocs
     );
 }
 

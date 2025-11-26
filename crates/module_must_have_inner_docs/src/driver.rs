@@ -30,6 +30,14 @@ pub type MetaList<'a> = StrWrapper<&'a str>;
 pub type ModuleName<'a> = StrWrapper<&'a str>;
 
 impl<'a> ParseInput<'a> {
+    /// Returns the underlying string slice.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let input = ParseInput::from("example");
+    /// assert_eq!(input.as_str(), "example");
+    /// ```
     pub fn as_str(&self) -> &'a str {
         **self
     }
@@ -159,17 +167,23 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
         return false;
     };
 
-    if ident.eq_ignore_ascii_case("doc") {
+    if *ident == "doc" {
         return true;
     }
 
-    if ident.eq_ignore_ascii_case("cfg_attr") {
+    if *ident == "cfg_attr" {
         return cfg_attr_has_doc(tail);
     }
 
     false
 }
 
+/// Extracts the leading identifier from the input, skipping any leading
+/// whitespace.
+///
+/// An identifier starts with `_` or an ASCII letter and continues with `_` or
+/// ASCII alphanumerics. Returns the identifier and the remaining input, or
+/// `None` when no identifier is present.
 fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, ParseInput<'a>)> {
     let (_, trimmed) = skip_leading_whitespace(input);
     let trimmed_str = trimmed.as_str();
@@ -264,7 +278,7 @@ fn segment_is_doc(segment: &str) -> bool {
         return false;
     };
 
-    ident.eq_ignore_ascii_case("doc")
+    *ident == "doc"
 }
 
 fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
