@@ -2,9 +2,10 @@
 //!
 //! `module_must_have_inner_docs` inspects every non-macro module and
 //! verifies that the first inner attribute is a doc comment (`//!` or
-//! `#![doc = "..."]`). Modules missing such a comment, or placing other inner
-//! attributes before it, trigger a diagnostic that nudges teams to document the
-//! module purpose at the top of the file.
+//! `#![doc = "..."]`, including nested `cfg_attr` wrappers). Modules missing
+//! such a comment, or placing other inner attributes before it, trigger a
+//! diagnostic that nudges teams to document the module purpose at the top of
+//! the file.
 use std::borrow::Cow;
 
 use common::i18n::{
