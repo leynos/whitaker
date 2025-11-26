@@ -144,17 +144,17 @@ fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent 
         return LeadingContent::Missing;
     }
     if rest.starts_with('#') {
-        if rest.starts_with("#!") {
-            if let Some(after_bang) = rest.strip_prefix("#!") {
-                let (_, tail) = parser::skip_leading_whitespace(ParseInput::from(after_bang));
-                if let Some(body) = tail.strip_prefix('[') {
-                    if let Some((ident, _)) = parser::take_ident(ParseInput::from(body)) {
-                        if ident.eq_ignore_ascii_case("doc") && *ident != "doc" {
-                            return LeadingContent::Missing;
-                        }
-                    }
-                }
-            }
+        if rest.starts_with("#!")
+            && let Some(after_bang) = rest.strip_prefix("#!")
+            && let Some((_, tail)) = Some(parser::skip_leading_whitespace(ParseInput::from(
+                after_bang,
+            )))
+            && let Some(body) = tail.strip_prefix('[')
+            && let Some((ident, _)) = parser::take_ident(ParseInput::from(body))
+            && ident.eq_ignore_ascii_case("doc")
+            && *ident != "doc"
+        {
+            return LeadingContent::Missing;
         }
         let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
         return LeadingContent::Misordered { offset, len };

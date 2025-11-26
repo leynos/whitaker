@@ -52,6 +52,17 @@ fn rejects_mixed_case_doc_identifiers(#[case] snippet: &str) {
 }
 
 #[rstest]
+fn accepts_nested_cfg_attr_doc() {
+    assert_eq!(
+        detect_module_docs_from_snippet(
+            "#![cfg_attr(feature = \"outer\", cfg_attr(feature = \"inner\", doc = \"Module docs\"))]"
+                .into()
+        ),
+        ModuleDocDisposition::HasLeadingDoc
+    );
+}
+
+#[rstest]
 #[case("#![allow(dead_code)]\n//! doc")]
 #[case("#![allow(undocumented_unsafe_blocks)]")]
 #[case("#![documentation = \"text\"]")]

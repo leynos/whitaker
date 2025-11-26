@@ -1,6 +1,6 @@
 //! Parsing helpers for module doc detection.
 //!
-//! This module tokenises raw attribute text to spot inner doc comments, walks
+//! This module tokenizes raw attribute text to spot inner doc comments, walks
 //! `cfg_attr` wrappers to inspect their contained meta items, and skips leading
 //! whitespace before parsing. It looks for doc tokens (`//!` line comments and
 //! `#![doc = \"...\"]` style attributes) while ignoring commas inside nested
@@ -42,7 +42,7 @@ pub(super) fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, Pa
 
 /// Determines whether the input starts with a module-level doc comment.
 ///
-/// Recognises two forms:
+/// Recognizes two forms:
 /// - Line doc comments: `//! ...`
 /// - Inner attribute docs: `#![doc = "..."]` or `#![ doc = "..." ]`
 ///
@@ -133,6 +133,8 @@ pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, P
 }
 
 fn is_ident_start(ch: char) -> bool {
+    // Ident parsing is intentionally ASCII-only; we only need to recognise
+    // built-in attribute names such as `doc` and `cfg_attr`.
     ch == '_' || ch.is_ascii_alphabetic()
 }
 
@@ -238,5 +240,13 @@ fn segment_is_doc(segment: &str) -> bool {
         return false;
     };
 
-    *ident == "doc"
+    if *ident == "doc" {
+        return true;
+    }
+
+    if *ident == "cfg_attr" {
+        return cfg_attr_has_doc(ParseInput::from(segment));
+    }
+
+    false
 }
