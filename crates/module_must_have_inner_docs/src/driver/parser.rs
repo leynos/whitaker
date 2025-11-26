@@ -110,7 +110,7 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
 ///
 /// assert!(take_ident(ParseInput::from("  123")).is_none());
 /// ```
-fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, ParseInput<'a>)> {
+pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, ParseInput<'a>)> {
     let (_, trimmed) = skip_leading_whitespace(input);
     let trimmed_str = trimmed.as_str();
     let mut iter = trimmed_str.char_indices();
