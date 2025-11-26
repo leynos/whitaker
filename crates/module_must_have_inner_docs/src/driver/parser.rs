@@ -120,6 +120,7 @@ pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, P
     Some((ident, ParseInput::from(&trimmed_str[end..])))
 }
 
+// Detects documentation by matching a `doc` ident directly or inside `cfg_attr`.
 fn is_doc_ident(input: ParseInput<'_>) -> bool {
     let Some((ident, tail)) = take_ident(input) else {
         return false;
