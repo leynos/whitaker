@@ -29,7 +29,7 @@
   - [ ] Implement `test_must_not_have_example` covering code-fence heuristics.
   - [x] Implement `module_max_lines` with configurable thresholds.
   - [x] Implement `conditional_max_n_branches` for complex predicates.
-  - [ ] Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
+  - [x] Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
 
 - [x] Phase 2a — Localization enablement
   - [x] Add `fluent-templates` and `once_cell` to the workspace dependencies

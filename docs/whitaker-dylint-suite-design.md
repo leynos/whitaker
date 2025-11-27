@@ -812,6 +812,7 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
             return common::is_path_to(cx, def_id, &[&["core", "panicking", "panic"],
                 &["core", "panicking", "panic_fmt"],
                 &["std", "panic", "panic_any"],
+                &["std", "rt", "panic_fmt"],
                 &["std", "rt", "begin_panic"]]);
         }
     }
@@ -870,6 +871,21 @@ libraries = [
   closures that always diverge (`!` type), albeit at higher maintenance cost.
 - Allow a module allowlist, mirroring `no_expect_outside_tests`, if teams
   need targeted exemptions.
+
+### Implementation decisions (2025-11-27)
+
+- The lint now ships in `crates/no_unwrap_or_else_panic` with a
+  default **deny** level and localisation wired through the shared Fluent
+  bundles.
+- A new `allow_in_main` boolean configuration controls whether panicking
+  fallbacks are permitted inside `main`; the default keeps panics forbidden.
+- Panic detection prefers `clippy_utils::macros::is_panic` when the optional
+  `clippy` feature is enabled and falls back to matching well-known panic paths
+  (e.g. `core::panicking::panic_fmt` and `std::rt::panic_fmt`) plus
+  `unwrap`/`expect` on `Option`/`Result` receivers.
+- Behavioural coverage relies on `rstest-bdd` scenarios that assert lint
+  decisions across production, test, doctest, and `main` contexts; UI tests
+  document both the enforced and allowed configurations.
 
 ## 5) Aggregated library (`suite`) — optional
 
