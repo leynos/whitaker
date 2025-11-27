@@ -2,9 +2,10 @@
 //!
 //! `module_must_have_inner_docs` inspects every non-macro module and
 //! verifies that the first inner attribute is a doc comment (`//!` or
-//! `#![doc = "..."]`). Modules missing such a comment, or placing other inner
-//! attributes before it, trigger a diagnostic that nudges teams to document the
-//! module purpose at the top of the file.
+//! `#![doc = "..."]`, including nested `cfg_attr` wrappers). Modules missing
+//! such a comment, or placing other inner attributes before it, trigger a
+//! diagnostic that nudges teams to document the module purpose at the top of
+//! the file.
 use std::borrow::Cow;
 
 use common::i18n::{
@@ -12,6 +13,7 @@ use common::i18n::{
     get_localizer_for_lint, safe_resolve_message_set,
 };
 use log::debug;
+use newt_hype::base_newtype;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
@@ -19,6 +21,30 @@ use rustc_span::DUMMY_SP;
 use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
+
+mod parser;
+
+base_newtype!(StrWrapper);
+
+pub type SourceSnippet<'a> = StrWrapper<&'a str>;
+pub type AttributeBody<'a> = StrWrapper<&'a str>;
+pub type ParseInput<'a> = StrWrapper<&'a str>;
+pub type MetaList<'a> = StrWrapper<&'a str>;
+pub type ModuleName<'a> = StrWrapper<&'a str>;
+
+impl<'a> ParseInput<'a> {
+    /// Returns the underlying string slice.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let input = ParseInput::from("example");
+    /// assert_eq!(input.as_str(), "example");
+    /// ```
+    pub fn as_str(&self) -> &'a str {
+        **self
+    }
+}
 
 const LINT_NAME: &str = "module_must_have_inner_docs";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
@@ -103,66 +129,179 @@ enum LeadingContent {
     Misordered { offset: usize, len: usize },
 }
 
-fn contains_doc_token(attr_body: &str) -> bool {
-    attr_body.match_indices("doc").any(|(index, _)| {
-        let before = attr_body[..index]
-            .chars()
-            .rev()
-            .find(|ch| !ch.is_whitespace());
-        let after = attr_body[index + 3..]
-            .chars()
-            .find(|ch| !ch.is_whitespace());
-        let before_ok = before.is_none_or(|ch| !ch.is_ascii_alphanumeric() && ch != '_');
-        let after_ok = after.is_none_or(|ch| !ch.is_ascii_alphanumeric() && ch != '_');
-        before_ok && after_ok
-    })
-}
-
-fn classify_leading_content(snippet: &str) -> LeadingContent {
-    let (offset, rest) = skip_leading_whitespace(snippet);
+fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
+    let (offset, rest) = parser::skip_leading_whitespace(ParseInput::from(*snippet));
     if rest.is_empty() {
         return LeadingContent::Missing;
     }
-    if is_doc_comment(rest) {
+    if parser::is_doc_comment(rest) {
         return LeadingContent::Doc;
     }
     check_attribute_order(rest, offset)
 }
 
-fn skip_leading_whitespace(snippet: &str) -> (usize, &str) {
-    let bytes = snippet.as_bytes();
-    let mut offset = 0;
-    while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
-        offset += 1;
-    }
-    (offset, &snippet[offset..])
-}
+fn segment_has_case_incorrect_doc(segment: &str) -> bool {
+    let Some((ident, tail)) = parser::take_ident(ParseInput::from(segment)) else {
+        return false;
+    };
 
-fn is_doc_comment(rest: &str) -> bool {
-    if rest.starts_with("//!") {
-        return true;
+    if ident.eq_ignore_ascii_case("doc") {
+        return *ident != "doc";
     }
-    if rest.starts_with("#![") {
-        let attr_end = rest.find(']').unwrap_or(rest.len());
-        let attr_body = rest[3..attr_end].to_ascii_lowercase();
-        return contains_doc_token(&attr_body);
+
+    if *ident == "cfg_attr" {
+        return cfg_attr_has_case_incorrect_doc(tail);
     }
+
     false
 }
 
-fn check_attribute_order(rest: &str, offset: usize) -> LeadingContent {
+struct CaseDocState {
+    depth: usize,
+    start: usize,
+}
+
+impl CaseDocState {
+    fn new() -> Self {
+        Self { depth: 0, start: 0 }
+    }
+}
+
+fn has_case_incorrect_doc_in_meta_list(list: &str) -> bool {
+    let mut state = CaseDocState::new();
+
+    for (idx, ch) in list.char_indices() {
+        if process_char_for_case_incorrect_doc(list, ch, &mut state, idx) {
+            return true;
+        }
+    }
+
+    segment_has_case_incorrect_doc(&list[state.start..])
+}
+
+fn process_char_for_case_incorrect_doc(
+    list: &str,
+    ch: char,
+    state: &mut CaseDocState,
+    idx: usize,
+) -> bool {
+    match ch {
+        '(' => {
+            state.depth += 1;
+            false
+        }
+        ')' => {
+            state.depth = state.depth.saturating_sub(1);
+            false
+        }
+        ',' if state.depth == 0 => {
+            if segment_has_case_incorrect_doc(&list[state.start..idx]) {
+                return true;
+            }
+            state.start = idx + 1;
+            false
+        }
+        _ => false,
+    }
+}
+
+fn cfg_attr_has_case_incorrect_doc(rest: ParseInput<'_>) -> bool {
+    let (_, trimmed) = parser::skip_leading_whitespace(rest);
+    let Some(content) = trimmed.strip_prefix('(') else {
+        return false;
+    };
+
+    let mut depth: usize = 1;
+    let mut first_comma = None;
+    let mut closing_paren = None;
+
+    for (idx, ch) in content.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    closing_paren = Some(idx);
+                    break;
+                }
+            }
+            ',' if depth == 1 && first_comma.is_none() => first_comma = Some(idx),
+            _ => {}
+        }
+    }
+
+    let Some(attr_section_start) = first_comma else {
+        return false;
+    };
+    let Some(close_idx) = closing_paren else {
+        return false;
+    };
+
+    let args = &content[..close_idx];
+    let attr_section = &args[attr_section_start + 1..];
+    has_case_incorrect_doc_in_meta_list(attr_section)
+}
+
+/// Detects inner attributes like `#![DOC = ...]` or `#![cfg_attr(..., Doc = ...)]`
+/// where casing of `doc` is wrong.
+fn is_case_incorrect_doc_inner_attr(rest: ParseInput<'_>) -> bool {
+    let Some(after_bang) = rest.strip_prefix("#!") else {
+        return false;
+    };
+    let (_, tail) = parser::skip_leading_whitespace(ParseInput::from(after_bang));
+    let Some(body) = tail.strip_prefix('[') else {
+        return false;
+    };
+
+    segment_has_case_incorrect_doc(body)
+}
+
+fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
+    let after_bang = rest.strip_prefix("#!")?;
+
+    let (_, tail) = parser::skip_leading_whitespace(ParseInput::from(after_bang));
+    let body = tail.strip_prefix('[')?;
+
+    let attr_end = body.find(']').unwrap_or(body.len());
+    Some(AttributeBody::from(&body[..attr_end]))
+}
+
+fn is_cfg_attr_without_doc(rest: ParseInput<'_>) -> bool {
+    let Some(body) = inner_attribute_body(rest) else {
+        return false;
+    };
+
+    let Some((ident, tail)) = parser::take_ident(ParseInput::from(*body)) else {
+        return false;
+    };
+
+    // A doc-less `cfg_attr` wrapper leaves the module undocumented even when
+    // the condition holds, so treat it the same as having no inner attributes.
+    *ident == "cfg_attr" && !parser::cfg_attr_has_doc(tail)
+}
+
+fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
         return LeadingContent::Missing;
     }
-    if rest.starts_with('#') {
-        let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
-        return LeadingContent::Misordered { offset, len };
+    if !rest.starts_with('#') {
+        return LeadingContent::Missing;
     }
-    LeadingContent::Missing
+
+    if is_case_incorrect_doc_inner_attr(rest) {
+        return LeadingContent::Missing;
+    }
+
+    if is_cfg_attr_without_doc(rest) {
+        return LeadingContent::Missing;
+    }
+
+    let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
+    LeadingContent::Misordered { offset, len }
 }
 
 #[cfg(test)]
-fn detect_module_docs_from_snippet(snippet: &str) -> ModuleDocDisposition {
+fn detect_module_docs_from_snippet(snippet: SourceSnippet<'_>) -> ModuleDocDisposition {
     match classify_leading_content(snippet) {
         LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
         LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
@@ -182,7 +321,7 @@ fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> Module
         return ModuleDocDisposition::MissingDocs;
     };
 
-    match classify_leading_content(&snippet) {
+    match classify_leading_content(SourceSnippet::from(snippet.as_str())) {
         LeadingContent::Doc => ModuleDocDisposition::HasLeadingDoc,
         LeadingContent::Missing => ModuleDocDisposition::MissingDocs,
         LeadingContent::Misordered { offset, len } => {
@@ -200,8 +339,8 @@ fn first_token_span(module_body: Span, offset: usize, len: usize) -> Span {
 
 fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, localizer: &Localizer) {
     let mut args: Arguments<'_> = Arguments::default();
-    let module_name = context.ident.name.as_str();
-    args.insert(Cow::Borrowed("module"), FluentValue::from(module_name));
+    let module_name = ModuleName::from(context.ident.name.as_str());
+    args.insert(Cow::Borrowed("module"), FluentValue::from(*module_name));
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
@@ -229,11 +368,13 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
 
 type ModuleDocMessages = DiagnosticMessageSet;
 
-fn fallback_messages(module: &str) -> ModuleDocMessages {
-    let primary = format!("Module {module} must start with an inner doc comment.");
+fn fallback_messages(module: ModuleName<'_>) -> ModuleDocMessages {
+    let primary = format!("Module {} must start with an inner doc comment.", *module);
     let note = String::from("The first item in the module is not a `//!` style comment.");
-    let help =
-        format!("Explain the purpose of {module} by adding an inner doc comment at the top.");
+    let help = format!(
+        "Explain the purpose of {} by adding an inner doc comment at the top.",
+        *module
+    );
 
     DiagnosticMessageSet::new(primary, note, help)
 }
@@ -247,55 +388,5 @@ mod behaviour;
 mod ui;
 
 #[cfg(test)]
-mod tests {
-    use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
-    use rstest::rstest;
-
-    #[rstest]
-    fn detects_missing_docs_when_no_content() {
-        assert_eq!(
-            detect_module_docs_from_snippet("\n  \n"),
-            ModuleDocDisposition::MissingDocs
-        );
-    }
-
-    #[rstest]
-    fn accepts_leading_inner_doc() {
-        assert_eq!(
-            detect_module_docs_from_snippet("//! module docs"),
-            ModuleDocDisposition::HasLeadingDoc
-        );
-    }
-
-    #[rstest]
-    fn accepts_inner_doc_attribute() {
-        assert_eq!(
-            detect_module_docs_from_snippet("#![doc = \"text\"]"),
-            ModuleDocDisposition::HasLeadingDoc
-        );
-    }
-
-    #[rstest]
-    fn rejects_doc_after_inner_attribute() {
-        assert!(matches!(
-            detect_module_docs_from_snippet("#![allow(dead_code)]\n//! doc"),
-            ModuleDocDisposition::FirstInnerIsNotDoc(_)
-        ));
-    }
-
-    #[rstest]
-    fn outer_docs_do_not_satisfy_requirement() {
-        assert_eq!(
-            detect_module_docs_from_snippet("/// doc"),
-            ModuleDocDisposition::MissingDocs
-        );
-    }
-
-    #[rstest]
-    fn outer_doc_attribute_does_not_satisfy_requirement() {
-        assert_eq!(
-            detect_module_docs_from_snippet("#[doc = \"module docs\"]\npub fn demo() {}"),
-            ModuleDocDisposition::MissingDocs
-        );
-    }
-}
+#[path = "tests/classifier.rs"]
+mod classifier;
