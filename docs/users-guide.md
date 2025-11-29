@@ -116,6 +116,53 @@ if localizer.used_fallback() {
 }
 ```
 
+## `no_unwrap_or_else_panic`
+
+Purpose: deny panicking `unwrap_or_else` fallbacks on `Option` / `Result`
+outside tests and doctests, closing the loophole where panics are hidden inside
+the fallback closure. Plain `.unwrap()` / `.expect(...)` remain unaffected by
+this lint.
+
+Scope and behaviour:
+
+- Triggers only on `unwrap_or_else` when the receiver is `Option` or `Result`.
+- Detects panics via a shared path list (`core::panicking::panic`, `panic_fmt`,
+  `panic_any`, `begin_panic`, and their `std::panicking` counterparts) and
+  via inner `unwrap` / `expect` inside the closure body.
+- Skips doctests (`UNSTABLE_RUSTDOC_TEST_PATH` set) and test-like contexts.
+- Config knob `no_unwrap_or_else_panic.allow_in_main = true` (default false)
+  permits panicking fallbacks inside `main`.
+
+What is allowed:
+
+- Plain `.unwrap()` / `.expect(...)` (covered by other policies).
+- `unwrap_or_else` with a non-panicking fallback (e.g. error propagation,
+  returning defaults).
+- Test and doctest code.
+
+What is denied:
+
+- `unwrap_or_else(|| panic!(..))`, `panic_any`, or a fallback that panics via
+  an inner `unwrap` / `expect`, when used in production code and not exempted
+  by configuration.
+
+How to fix:
+
+- Propagate the error (`?`, `map_err`, custom error types) or use `expect` with
+  a clear message if a panic is truly intended.
+- For `main`-only panics, set `no_unwrap_or_else_panic.allow_in_main = true` in
+  `dylint.toml`.
+
+Tests:
+
+- UI fixtures cover: direct panics, `panic_any`, inner-unwrap panics,
+  allow-in-main, test/doctest skips, safe fallbacks, non-Option/Result
+  receivers, and the explicit allowance of plain `unwrap`/`expect`.
+- Unit tests exercise the pure policy (`should_flag`) and panic detector path
+  matching.
+
+---
+
 ## `function_attrs_follow_docs`
 
 Whitaker's first lint checks that doc comments sit in front of all other outer

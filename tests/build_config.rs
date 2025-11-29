@@ -10,8 +10,7 @@ fn cargo_config_prefers_dynamic_linking() {
     let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".cargo/config.toml");
     let contents = fs::read_to_string(&config_path)
         .unwrap_or_else(|err| panic!("failed to read {:?}: {err}", config_path));
-    let value: Value =
-        toml::from_str(&contents).expect("cargo config should parse as TOML table");
+    let value: Value = toml::from_str(&contents).expect("cargo config should parse as TOML table");
 
     let rustflags = value
         .get("build")
