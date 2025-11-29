@@ -1,3 +1,4 @@
+//! UI test: panicking `unwrap_or_else` should be denied.
 #![deny(no_unwrap_or_else_panic)]
 
 fn demo(flag: bool) -> i32 {

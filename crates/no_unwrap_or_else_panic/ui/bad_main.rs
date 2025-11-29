@@ -1,3 +1,4 @@
+//! UI test: lint triggers inside `main` unless configured otherwise.
 #![deny(no_unwrap_or_else_panic)]
 
 fn main() {

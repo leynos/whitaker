@@ -25,7 +25,7 @@ pub use driver::*;
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "stub used when the driver feature is disabled")]
     pub fn no_unwrap_or_else_panic_disabled_stub() {}
 }
 

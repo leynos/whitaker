@@ -11,6 +11,19 @@ pub mod macros {
     use rustc_hir as hir;
     use rustc_lint::LateContext;
 
+    // Panic entry points mirrored from the main lint panic detector to avoid
+    // brittle substring heuristics.
+    const PANIC_PATHS: &[&str] = &[
+        "core::panicking::panic",
+        "core::panicking::panic_fmt",
+        "core::panicking::panic_any",
+        "core::panicking::begin_panic",
+        "std::panicking::panic",
+        "std::panicking::panic_fmt",
+        "std::panicking::panic_any",
+        "std::panicking::begin_panic",
+    ];
+
     /// Best-effort panic detection mirroring Clippy's helper.
     #[must_use]
     pub fn is_panic(cx: &LateContext<'_>, expr: &hir::Expr<'_>) -> bool {
@@ -31,9 +44,8 @@ pub mod macros {
         };
 
         let path = cx.tcx.def_path_str(def_id);
-        path.contains("panicking::panic")
-            || path.contains("panic_fmt")
-            || path.contains("panic_any")
-            || path.contains("begin_panic")
+        PANIC_PATHS
+            .iter()
+            .any(|candidate| path.as_str() == *candidate)
     }
 }
