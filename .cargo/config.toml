@@ -1,0 +1,5 @@
+[build]
+# Dylint lint crates link against rustc_private (rustc_driver) which ships as
+# shared libraries; preferring dynamic linkage keeps std/core/alloc from being
+# pulled in twice when building cdylibs during tests.
+rustflags = ["-C", "prefer-dynamic"]

@@ -8,7 +8,7 @@ crate-type = ["cdylib", "rlib"]
 test = false
 
 [features]
-default = ["dylint-driver"]
+default = []
 dylint-driver = [
     "dep:dylint_linting",
     "dep:log",

@@ -80,11 +80,12 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   `camino`, `serde`, `thiserror`, `toml`, and proxy crates such as
   `rustc_attr_data_structures` so lint crates can opt into shared versions via
   `workspace = true`.
-- The workspace pins `nightly-2025-05-05` in `rust-toolchain.toml`. Later
-  nightlies embed the "extra symbols" patch used by `dylint_driver` which
-  conflicts with the driver copies bundled with Dylint 5.0.0. Dropping back to
-  the 5 May toolchain side-steps the duplicate symbol panic whilst matching the
-  compiler version against which the proxies were tested.
+- The workspace pins `nightly-2025-09-18` in `rust-toolchain.toml` and
+  forces `-C prefer-dynamic` via `.cargo/config.toml`. Preferring dynamic
+  std/core keeps `rustc_private` consumers (for example `rustc_driver` in
+  Dylint) from pulling mixed static and dynamic runtimes, eliminating the
+  duplicate symbol errors seen on newer nightlies while staying on a
+  toolchain recent enough for `dylint_linting` 5.x.
 - UI harness helpers now prepare the cdylib expected by the driver. Before each
   run, the harness copies `lib<crate>.so` to the `lib<crate>@<toolchain>.so`
   name derived from `RUSTUP_TOOLCHAIN`. The copy is skipped for synthetic crate
