@@ -1,17 +1,15 @@
 //! Detect panics inside `unwrap_or_else` fallback closures.
 
-#[cfg(not(feature = "clippy"))]
 use common::SimplePath;
 use rustc_hir as hir;
-#[cfg(not(feature = "clippy"))]
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Expr, ExprKind};
 use rustc_lint::LateContext;
 use rustc_middle::ty;
 use rustc_span::sym;
 
-/// Known panic entry points used when the optional `clippy` feature is absent.
-#[cfg(not(feature = "clippy"))]
+/// Known panic entry points used to mirror the non-Clippy detector and avoid
+/// substring matching on def-paths.
 const PANIC_PATHS: &[&[&str]] = &[
     &["core", "panicking", "panic"],
     &["core", "panicking", "panic_fmt"],
@@ -87,12 +85,6 @@ fn is_unwrap_or_expect<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) -> 
         && receiver_is_option_or_result(cx, receiver)
 }
 
-#[cfg(feature = "clippy")]
-fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    clippy_utils::macros::is_panic(cx, expr)
-}
-
-#[cfg(not(feature = "clippy"))]
 fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     let ExprKind::Call(callee, _) = expr.kind else {
         return false;
@@ -108,7 +100,6 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
         .any(|candidate| common::is_path_to(&path, candidate.iter().copied()))
 }
 
-#[cfg(not(feature = "clippy"))]
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {
     cx.typeck_results()
         .type_dependent_def_id(callee.hir_id)
