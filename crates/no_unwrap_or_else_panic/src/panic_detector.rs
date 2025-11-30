@@ -8,15 +8,22 @@ use rustc_lint::LateContext;
 use rustc_middle::ty;
 use rustc_span::sym;
 
-/// Known panic entry points used to mirror the non-Clippy detector and avoid
-/// substring matching on def-paths.
+/// Known panic entry points used by both clippy and non-clippy builds.
 const PANIC_PATHS: &[&[&str]] = &[
+    // core
     &["core", "panicking", "panic"],
     &["core", "panicking", "panic_fmt"],
     &["core", "panicking", "panic_nounwind"],
     &["core", "panicking", "panic_str"],
-    &["std", "rt", "panic_fmt"],
+    &["core", "panicking", "panic_any"],
+    &["core", "panicking", "begin_panic"],
+    // std::panicking re-exports
+    &["std", "panicking", "panic"],
+    &["std", "panicking", "panic_fmt"],
     &["std", "panicking", "panic_any"],
+    &["std", "panicking", "begin_panic"],
+    // std::rt wrappers
+    &["std", "rt", "panic_fmt"],
     &["std", "rt", "begin_panic"],
     &["std", "rt", "begin_panic_fmt"],
 ];
@@ -85,6 +92,8 @@ fn is_unwrap_or_expect<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) -> 
         && receiver_is_option_or_result(cx, receiver)
 }
 
+/// Returns `true` when `expr` calls a known panic entry point. Uses def-path
+/// string matching because internal panic helpers lack stable diagnostic items.
 fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     let ExprKind::Call(callee, _) = expr.kind else {
         return false;

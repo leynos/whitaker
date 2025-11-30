@@ -12,11 +12,9 @@ fn ui() {
     whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
         run_fixtures(crate_name, dir)
     })
-    .unwrap_or_else(|error| {
-        panic!(
-            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
-        )
-    });
+    .expect(&format!(
+        "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\" }}"
+    ));
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {

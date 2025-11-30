@@ -23,7 +23,7 @@ pub(crate) fn emit_diagnostic(
     let mut args: Arguments<'_> = Arguments::default();
     args.insert(
         Cow::Borrowed("receiver"),
-        FluentValue::from(receiver_label.clone()),
+        FluentValue::from(receiver_label.as_str()),
     );
 
     let resolution = MessageResolution {
@@ -49,12 +49,10 @@ pub(crate) fn emit_diagnostic(
 }
 
 fn fallback_messages(receiver: &str) -> DiagnosticMessageSet {
-    let primary =
-        format!("Replace unwrap_or_else(|| panic!(..)) on {receiver} with error handling.");
+    let primary = format!("Replace unwrap_or_else with a non-panicking fallback on {receiver}.");
     let note = String::from("The closure supplied to unwrap_or_else triggers a panic.");
-    let help = String::from(
-        "Propagate the error or use expect with a descriptive message instead of panicking.",
-    );
+    let help =
+        String::from("Propagate the error or use expect with a descriptive message instead.");
 
     DiagnosticMessageSet::new(primary, note, help)
 }

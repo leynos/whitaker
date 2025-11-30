@@ -36,7 +36,6 @@ whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
 clippy_utils = { workspace = true, optional = true }
 
 [dev-dependencies]
-common = { path = "../../common" }
 camino = { workspace = true }
 dylint_testing = { workspace = true }
 rstest = "0.26.1"

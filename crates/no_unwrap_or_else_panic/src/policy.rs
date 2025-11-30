@@ -17,6 +17,17 @@ impl LintPolicy {
 }
 
 /// Decide whether the lint should emit based on context and closure behaviour.
+///
+/// # Examples
+///
+/// ```
+/// use no_unwrap_or_else_panic::policy::{should_flag, LintPolicy};
+/// use no_unwrap_or_else_panic::context::ContextSummary;
+///
+/// let policy = LintPolicy::new(false);
+/// let summary = ContextSummary { is_test: false, in_main: false };
+/// assert!(should_flag(&policy, &summary, true, false));
+/// ```
 #[must_use]
 pub(crate) fn should_flag(
     policy: &LintPolicy,

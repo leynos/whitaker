@@ -1,4 +1,4 @@
-error: Replace unwrap_or_else(|| panic!(..)) on `std::option::Option<i32>` with error handling.
+error: Replace unwrap_or_else on `std::option::Option<i32>` with a non-panicking fallback.
   --> $DIR/bad_unwrap_or_else_unwrap.rs:7:13
    |
 LL |     let _ = value.unwrap_or_else(|| {

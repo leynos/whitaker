@@ -1,3 +1,4 @@
+//! UI test: panicking `unwrap_or_else` should be allowed inside #[test].
 #![deny(no_unwrap_or_else_panic)]
 
 #[cfg(test)]

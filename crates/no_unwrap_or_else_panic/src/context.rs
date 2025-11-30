@@ -135,6 +135,8 @@ fn item_name(item: &hir::Item<'_>) -> Option<String> {
 }
 
 #[cfg(feature = "dylint-driver")]
+/// Returns `true` when the attribute is `#[cfg(test)]` or a `cfg_attr(test, cfg(test))`
+/// wrapper, ensuring test-only scopes are treated as exempt.
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     let path = attr.path();
     if path.len() != 1 {

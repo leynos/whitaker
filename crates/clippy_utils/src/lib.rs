@@ -16,12 +16,17 @@ pub mod macros {
     const PANIC_PATHS: &[&str] = &[
         "core::panicking::panic",
         "core::panicking::panic_fmt",
+        "core::panicking::panic_nounwind",
+        "core::panicking::panic_str",
         "core::panicking::panic_any",
         "core::panicking::begin_panic",
         "std::panicking::panic",
         "std::panicking::panic_fmt",
         "std::panicking::panic_any",
         "std::panicking::begin_panic",
+        "std::rt::panic_fmt",
+        "std::rt::begin_panic",
+        "std::rt::begin_panic_fmt",
     ];
 
     /// Best-effort panic detection mirroring Clippy's helper.

@@ -40,6 +40,11 @@ fn given_panicking(world: &DecisionWorld) {
     world.closure_panics.set(true);
 }
 
+#[given("a panicking unwrap_or_else fallback")]
+fn given_panicking_alias(world: &DecisionWorld) {
+    given_panicking(world);
+}
+
 #[given("code runs inside a test")]
 fn given_test_context(world: &DecisionWorld) {
     let mut summary = world.summary.get();
