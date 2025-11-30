@@ -24,6 +24,7 @@ pub mod macros {
         "std::panicking::panic_fmt",
         "std::panicking::panic_any",
         "std::panicking::begin_panic",
+        "std::panic::panic_any",
         "std::rt::panic_fmt",
         "std::rt::begin_panic",
         "std::rt::begin_panic_fmt",
@@ -49,8 +50,7 @@ pub mod macros {
         };
 
         let path = cx.tcx.def_path_str(def_id);
-        PANIC_PATHS
-            .iter()
-            .any(|candidate| path.as_str() == *candidate)
+        let path_str = path.as_str();
+        PANIC_PATHS.contains(&path_str)
     }
 }

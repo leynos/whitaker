@@ -22,6 +22,8 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["std", "panicking", "panic_fmt"],
     &["std", "panicking", "panic_any"],
     &["std", "panicking", "begin_panic"],
+    // std::panic re-exports
+    &["std", "panic", "panic_any"],
     // std::rt wrappers
     &["std", "rt", "panic_fmt"],
     &["std", "rt", "begin_panic"],
