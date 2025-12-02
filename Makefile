@@ -10,8 +10,7 @@ RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
-PUBLISH_CHECK_FLAGS ?= # Flags passed to Lading publish; override via env or caller.
-LADING ?= uvx --from git+https://github.com/leynos/lading lading
+PUBLISH_PACKAGES ?= whitaker
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -46,9 +45,22 @@ nixie:
 	# environment variable control for this option
 	nixie --no-sandbox
 
-publish-check: ## Run Lading publish pre-flight checks (override flags via PUBLISH_CHECK_FLAGS)
+publish-check: ## Build, test, and validate packages before publishing
 	rustup component add --toolchain nightly rust-src rustc-dev llvm-tools-preview
-	RUSTUP_TOOLCHAIN=nightly $(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
+	TMP_DIR=$$(mktemp -d); \
+	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
+	if ! command -v cargo-dylint >/dev/null 2>&1; then \
+		$(CARGO) install cargo-dylint; \
+	fi; \
+	if ! command -v dylint-link >/dev/null 2>&1; then \
+		$(CARGO) install dylint-link; \
+	fi; \
+	cd "$$TMP_DIR" && $(CARGO) dylint --list --git https://github.com/leynos/whitaker --rev "$${GIT_TAG:-HEAD}" --all
+	for crate in $(PUBLISH_PACKAGES); do \
+		$(CARGO) package -p $$crate; \
+	done
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
