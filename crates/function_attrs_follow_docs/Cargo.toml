@@ -2,6 +2,9 @@
 name = "function_attrs_follow_docs"
 version = "0.1.0"
 edition = "2024"
+publish = false
+description = "Dylint lint that enforces function attributes follow documentation comments"
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
