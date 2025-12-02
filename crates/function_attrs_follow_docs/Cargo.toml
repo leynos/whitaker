@@ -32,9 +32,9 @@ rustc_lint = { workspace = true, optional = true }
 rustc_middle = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
-common = { path = "../../common", optional = true }
+common = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
-whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
+whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 rstest = { version = "0.26.1" }

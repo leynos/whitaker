@@ -23,7 +23,7 @@ dylint-driver = [
 clippy = ["dylint-driver", "dep:clippy_utils"]
 
 [dependencies]
-common = { path = "../../common" }
+common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }
@@ -32,7 +32,7 @@ rustc_middle = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
+whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
 clippy_utils = { workspace = true, optional = true }
 
 [dev-dependencies]
