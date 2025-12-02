@@ -1,0 +1,2 @@
+[no_unwrap_or_else_panic]
+allow_in_main = true

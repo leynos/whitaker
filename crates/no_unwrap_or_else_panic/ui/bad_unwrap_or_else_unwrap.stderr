@@ -1,0 +1,24 @@
+error: Replace unwrap_or_else on `std::option::Option<i32>` with a non-panicking fallback.
+  --> $DIR/bad_unwrap_or_else_unwrap.rs:7:13
+   |
+LL |       let _ = value.unwrap_or_else(|| {
+   |  _____________^
+LL | |         let nested: Option<i32> = None;
+LL | |         nested.unwrap()
+LL | |     });
+   | |______^
+   |
+note: The closure supplied to unwrap_or_else triggers a panic.
+  --> $DIR/bad_unwrap_or_else_unwrap.rs:7:13
+   |
+LL |     let _ = value.unwrap_or_else(|| {
+   |             ^^^^^
+   = help: Propagate the error or use expect with a descriptive message instead of panicking.
+note: the lint level is defined here
+  --> $DIR/bad_unwrap_or_else_unwrap.rs:3:9
+   |
+LL | #![deny(no_unwrap_or_else_panic)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+

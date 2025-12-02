@@ -201,6 +201,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
 
 [[package]]
+name = "clippy_utils"
+version = "0.1.0"
+dependencies = [
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_span",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1393,6 +1402,28 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serial_test",
+ "whitaker",
+]
+
+[[package]]
+name = "no_unwrap_or_else_panic"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "clippy_utils",
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_middle",
+ "rustc_span",
+ "serde",
  "whitaker",
 ]
 

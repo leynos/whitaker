@@ -80,11 +80,12 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   `camino`, `serde`, `thiserror`, `toml`, and proxy crates such as
   `rustc_attr_data_structures` so lint crates can opt into shared versions via
   `workspace = true`.
-- The workspace pins `nightly-2025-05-05` in `rust-toolchain.toml`. Later
-  nightlies embed the "extra symbols" patch used by `dylint_driver` which
-  conflicts with the driver copies bundled with Dylint 5.0.0. Dropping back to
-  the 5 May toolchain side-steps the duplicate symbol panic whilst matching the
-  compiler version against which the proxies were tested.
+- The workspace pins `nightly-2025-09-18` in `rust-toolchain.toml` and
+  forces `-C prefer-dynamic` via `.cargo/config.toml`. Preferring dynamic
+  std/core keeps `rustc_private` consumers (for example `rustc_driver` in
+  Dylint) from pulling mixed static and dynamic runtimes, eliminating the
+  duplicate symbol errors seen on newer nightlies while staying on a
+  toolchain recent enough for `dylint_linting` 5.x.
 - UI harness helpers now prepare the cdylib expected by the driver. Before each
   run, the harness copies `lib<crate>.so` to the `lib<crate>@<toolchain>.so`
   name derived from `RUSTUP_TOOLCHAIN`. The copy is skipped for synthetic crate
@@ -188,7 +189,7 @@ Utilities shared by lints:
 - Keep Fluent resources compatible with the `fluent-syntax 0.12` parser shipped
   by `fluent-templates 0.13`. Named term arguments triggered parser failures in
   the Welsh bundles, so the `cy` resources now inline select expressions and
-  avoid helper terms when plural logic is required. This keeps localization
+  avoid helper terms when plural logic is required. This keeps localisation
   coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
@@ -217,7 +218,7 @@ Utilities shared by lints:
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
   continues to execute via `dylint_testing`'s JSON output to keep diagnostics
   machine-readable while proving non-English locales work end to end.
-- Exercise localization helpers with `rstest-bdd` behaviour tests, using stub
+- Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
   protects the fallback code paths from regression.
@@ -415,7 +416,7 @@ diagnostic targets the module start. The shared span helpers from
 `whitaker::hir` supply consistent ranges for inline and file modules. Localized
 strings pull from `locales/*/module_must_have_inner_docs.ftl`, passing the
 module name via the Fluent argument map, and fall back to a deterministic
-English message whenever localization fails.
+English message whenever localisation fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
@@ -531,7 +532,7 @@ impl_late_lint! {
 }
 ```
 
-The runtime implementation tracks the configured limit, loads localization via
+The runtime implementation tracks the configured limit, loads localisation via
 `SharedConfig`, and feeds both `branches` and `limit` plus their rendered
 phrases into Fluent, so diagnostics remain idiomatic across locales.
 
@@ -652,9 +653,10 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
 
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
-Separate Dylint crate forbidding `unwrap_or_else(..)` closures that panic
-outside tests or doctests. Suits teams enforcing “no panics in production”
-policies.
+Separate Dylint crate that **only** targets panicking `unwrap_or_else` fallbacks
+on `Option`/`Result`. Plain `.unwrap()` / `.expect(...)` remain the remit of
+other policies; this lint closes the “unwrap_or_else(|| panic!(...))” loophole
+without broadening scope.
 
 ### Intent
 
@@ -669,13 +671,23 @@ returns.
 crates/no_unwrap_or_else_panic/
 ├─ Cargo.toml
 └─ src/
-   └─ lib.rs
-
-crates/no_unwrap_or_else_panic/tests/ui/
-  ├─ ok_map_err.rs
-  ├─ bad_unwrap_or_else_panic.rs
-  ├─ ok_in_test.rs
-  └─ bad_indirect_panic.rs   # limitation: indirect panics not detected
+   ├─ lib.rs           # feature gating, public surface
+   ├─ context.rs       # test/main/doctest detection
+   ├─ policy.rs        # pure decision logic (unit tested)
+   ├─ panic_detector.rs# shared panic + unwrap/expect detector
+   └─ diagnostics.rs   # localisation + emission
+crates/no_unwrap_or_else_panic/ui/
+  ├─ bad_unwrap_or_else_panic.rs       # direct panic
+  ├─ bad_unwrap_or_else_panic_any.rs   # panic_any
+  ├─ bad_unwrap_or_else_unwrap.rs      # inner unwrap panic
+  ├─ bad_main.rs                       # main panics without allow
+  ├─ ok_in_test.rs                     # test context allowed
+  ├─ ok_main_allowed.rs                # allow_in_main config
+  ├─ ok_map_err.rs                     # propagates errors
+  ├─ ok_unwrap_or_else_safe.rs         # safe fallback
+  ├─ ok_plain_unwrap.rs                # plain unwrap allowed
+  ├─ ok_plain_expect.rs                # plain expect allowed
+  └─ ok_custom_unwrap_or_else.rs       # non-Option/Result receiver ignored
 ```
 
 ### `Cargo.toml`
@@ -697,140 +709,58 @@ serde           = { version = "1", features = ["derive"] }
 clippy_utils    = { workspace = true, optional = true }
 
 [features]
-clippy = ["dep:clippy_utils"]
+dylint-driver = [
+    "dep:dylint_linting",
+    "dep:log",
+    "dep:rustc_ast",
+    "dep:rustc_hir",
+    "dep:rustc_lint",
+    "dep:rustc_middle",
+    "dep:rustc_span",
+    "dep:serde",
+    "dep:whitaker",
+]
+clippy = ["dylint-driver", "dep:clippy_utils"]
 
 [dev-dependencies]
 dylint_testing = { workspace = true }
 ```
 
-> The optional `clippy` feature plugs into `clippy_utils::macros::is_panic`
-> for higher-fidelity panic detection.
+> `dylint-driver` gates rustc_private linkage; tests build without it to avoid
+> duplicate std/core. `clippy` is optional and now shares the same panic-path
+> detector as the non-Clippy build.
 
-### `src/lib.rs` (skeleton)
+### Detector highlights
 
-```rust
-#![allow(clippy::single_match_else)]
-use dylint_linting::{declare_late_lint, impl_late_lint};
-use rustc_hir as hir;
-use rustc_hir::{Expr, ExprKind};
-use rustc_lint::{LateContext, LateLintPass};
+- Gated to `unwrap_or_else` on `Option`/`Result` only.
+- Panics detected via a shared `PANIC_PATHS` table (core/std panic entry points)
+  plus inner `unwrap`/`expect` on the closure body.
+- Clippy and non-Clippy builds share the same path-based detector; no substring
+  heuristics.
+- Context guard:
+  - skips doctests (`UNSTABLE_RUSTDOC_TEST_PATH` present),
+  - skips test-like scopes (including `#[cfg(test)]` and common test attrs),
+  - optional `allow_in_main` config (default: false).
+- Policy is a pure function (`policy::should_flag`) with unit tests covering all
+  branches.
 
-declare_late_lint!(
-    pub NO_UNWRAP_OR_ELSE_PANIC,
-    Deny,
-    "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)"
-);
+### Tests
 
-pub struct Pass;
+- **Unit:** policy matrix (`should_flag`), panic detector path matching,
+  `receiver_is_option_or_result`.
+- **UI:** panicking closures (direct panic, `panic_any`, inner unwrap), allowed
+  paths (map_err, safe fallback, test context, allow_in_main), scope guards
+  (plain unwrap/expect, non-Option/Result receivers).
+- **Build guard:** integration test ensures `.cargo/config.toml` retains
+  `-C prefer-dynamic` to prevent duplicate std/core during lint cdylib builds.
 
-#[derive(serde::Deserialize, Default)]
-struct Config {
-    /// Permit panicking closures inside `main`
-    allow_in_main: Option<bool>,
-}
+### Behaviour
 
-impl_late_lint! {
-    NO_UNWRAP_OR_ELSE_PANIC,
-    Pass,
-
-    fn check_expr<'tcx>(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        if let ExprKind::MethodCall(segment, recv, args, _) = expr.kind {
-            if segment.ident.name.as_str() == "unwrap_or_else"
-                && common::recv_is_option_or_result(cx, recv)
-            {
-                if let [closure_arg] = args {
-                    if let Some(body_id) = as_closure_body(closure_arg) {
-                        if should_lint_here(cx, expr)
-                            && closure_contains_forbidden(cx, body_id)
-                        {
-                            common::span_lint(
-                                cx,
-                                NO_UNWRAP_OR_ELSE_PANIC,
-                                expr.span,
-                                "`unwrap_or_else` with a panicking closure; return an error instead",
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn as_closure_body(expr: &Expr<'_>) -> Option<hir::BodyId> {
-    match expr.kind {
-        ExprKind::Closure(hir::Closure { body, .. }) => Some(*body),
-        _ => None,
-    }
-}
-
-fn should_lint_here(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    if common::in_test_like_context(cx, expr.hir_id) {
-        return false;
-    }
-    let cfg: Config = dylint_linting::config_or_default(cx.tcx, "no_unwrap_or_else_panic");
-    if cfg.allow_in_main.unwrap_or(false) && common::is_in_main_fn(cx, expr.hir_id) {
-        return false;
-    }
-    true
-}
-
-fn closure_contains_forbidden(cx: &LateContext<'_>, body_id: hir::BodyId) -> bool {
-    let mut finder = Finder { cx, found: false };
-    let body = cx.tcx.hir().body(body_id);
-    rustc_hir::intravisit::Visitor::visit_body(&mut finder, body);
-    finder.found
-}
-
-struct Finder<'a, 'tcx> {
-    cx: &'a LateContext<'tcx>,
-    found: bool,
-}
-
-impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for Finder<'a, 'tcx> {
-    fn visit_expr(&mut self, e: &'tcx Expr<'tcx>) {
-        if self.found {
-            return;
-        }
-        if is_panic_call(self.cx, e) || is_unwrap_or_expect(self.cx, e) {
-            self.found = true;
-            return;
-        }
-        rustc_hir::intravisit::walk_expr(self, e);
-    }
-}
-
-#[cfg(feature = "clippy")]
-fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    clippy_utils::macros::is_panic(cx, expr)
-}
-
-#[cfg(not(feature = "clippy"))]
-fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    if let ExprKind::Call(callee, _) = expr.kind {
-        if let Some(def_id) = common::def_id_of_expr_callee(cx, callee) {
-            return common::is_path_to(cx, def_id, &[&["core", "panicking", "panic"],
-                &["core", "panicking", "panic_fmt"],
-                &["std", "panic", "panic_any"],
-                &["std", "rt", "begin_panic"]]);
-        }
-    }
-    false
-}
-
-fn is_unwrap_or_expect(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    if let ExprKind::MethodCall(segment, recv, ..) = expr.kind {
-        let name = segment.ident.name.as_str();
-        return (name == "unwrap" || name == "expect")
-            && common::recv_is_option_or_result(cx, recv);
-    }
-    false
-}
-```
-
-> Extend the `common` crate with `def_id_of_expr_callee` and `is_path_to` to
-> keep this lint terse. They wrap `type_dependent_def_id` lookups and path
-> matching.
+- Emits on panicking `unwrap_or_else` outside tests/doctests.
+- Suggests propagating errors or using `expect` with a message; the lint does
+  **not** flag plain `unwrap` / `expect`.
+- Config: `no_unwrap_or_else_panic.allow_in_main = true` permits panics in
+  `main`; default is `false`.
 
 ### UI tests
 
@@ -858,9 +788,14 @@ libraries = [
 
 ### CI and build matrix
 
-- Add `cargo test -p no_unwrap_or_else_panic` to the pipeline.
-- Exercise both `--no-default-features` and `--features clippy` builds to ensure
-  optional panic detection remains functional.
+- `cargo test --workspace --all-targets` (includes this crate).
+- UI suite exercises panicking and non-panicking fallbacks, allow-in-main,
+  panic_any, inner unwrap, plain unwrap/expect (allowed), and non-Option/Result
+  receivers.
+- Build guard test asserts `.cargo/config.toml` keeps `-C prefer-dynamic`
+  (prevents duplicate std/core during lint cdylib builds).
+- Optional `--features clippy` builds share the same panic-path detector as the
+  default build; no substring heuristics remain.
 
 ### Limitations and future work
 
@@ -870,6 +805,21 @@ libraries = [
   closures that always diverge (`!` type), albeit at higher maintenance cost.
 - Allow a module allowlist, mirroring `no_expect_outside_tests`, if teams
   need targeted exemptions.
+
+### Implementation decisions (2025-11-27)
+
+- The lint now ships in `crates/no_unwrap_or_else_panic` with a
+  default **deny** level and localisation wired through the shared Fluent
+  bundles.
+- A new `allow_in_main` boolean configuration controls whether panicking
+  fallbacks are permitted inside `main`; the default keeps panics forbidden.
+- Panic detection prefers `clippy_utils::macros::is_panic` when the optional
+  `clippy` feature is enabled and falls back to matching well-known panic paths
+  (e.g. `core::panicking::panic_fmt` and `std::rt::panic_fmt`) plus
+  `unwrap`/`expect` on `Option`/`Result` receivers.
+- Behavioural coverage relies on `rstest-bdd` scenarios that assert lint
+  decisions across production, test, doctest, and `main` contexts; UI tests
+  document both the enforced and allowed configurations.
 
 ## 5) Aggregated library (`suite`) — optional
 

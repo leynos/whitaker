@@ -2,6 +2,9 @@
 name = "common"
 version = "0.1.0"
 edition = "2024"
+publish = false
+description = "Internal common utilities for Whitaker lints"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 

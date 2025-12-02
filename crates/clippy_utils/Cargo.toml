@@ -1,0 +1,12 @@
+[package]
+name = "clippy_utils"
+version = "0.1.0"
+description = "Minimal clippy utilities shim for Whitaker lints"
+license = "MIT OR Apache-2.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rustc_hir = { version = "0.1.0", path = "../rustc_hir" }
+rustc_lint = { version = "0.1.0", path = "../rustc_lint" }
+rustc_span = { version = "0.1.0", path = "../rustc_span" }

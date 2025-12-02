@@ -13,6 +13,6 @@ mod stub {
     pub fn conditional_max_n_branches_disabled_stub() {}
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "dylint-driver"))]
 #[path = "lib_ui_tests.rs"]
 mod ui;
