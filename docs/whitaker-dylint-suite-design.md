@@ -189,7 +189,7 @@ Utilities shared by lints:
 - Keep Fluent resources compatible with the `fluent-syntax 0.12` parser shipped
   by `fluent-templates 0.13`. Named term arguments triggered parser failures in
   the Welsh bundles, so the `cy` resources now inline select expressions and
-  avoid helper terms when plural logic is required. This keeps localization
+  avoid helper terms when plural logic is required. This keeps localisation
   coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
@@ -218,7 +218,7 @@ Utilities shared by lints:
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
   continues to execute via `dylint_testing`'s JSON output to keep diagnostics
   machine-readable while proving non-English locales work end to end.
-- Exercise localization helpers with `rstest-bdd` behaviour tests, using stub
+- Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
   protects the fallback code paths from regression.
@@ -416,7 +416,7 @@ diagnostic targets the module start. The shared span helpers from
 `whitaker::hir` supply consistent ranges for inline and file modules. Localized
 strings pull from `locales/*/module_must_have_inner_docs.ftl`, passing the
 module name via the Fluent argument map, and fall back to a deterministic
-English message whenever localization fails.
+English message whenever localisation fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
@@ -532,7 +532,7 @@ impl_late_lint! {
 }
 ```
 
-The runtime implementation tracks the configured limit, loads localization via
+The runtime implementation tracks the configured limit, loads localisation via
 `SharedConfig`, and feeds both `branches` and `limit` plus their rendered
 phrases into Fluent, so diagnostics remain idiomatic across locales.
 

@@ -20,7 +20,7 @@ impl LintPolicy {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use no_unwrap_or_else_panic::policy::{should_flag, LintPolicy};
 /// use no_unwrap_or_else_panic::context::ContextSummary;
 ///

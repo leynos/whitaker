@@ -133,6 +133,13 @@ Scope and behaviour:
 - Config knob `no_unwrap_or_else_panic.allow_in_main = true` (default false)
   permits panicking fallbacks inside `main`.
 
+Configuration (in `dylint.toml`):
+
+```toml
+[tool.dylint.libraries.no_unwrap_or_else_panic]
+allow_in_main = true
+```
+
 What is allowed:
 
 - Plain `.unwrap()` / `.expect(...)` (covered by other policies).
