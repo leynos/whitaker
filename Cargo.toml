@@ -2,6 +2,12 @@
 members = ["common", "crates/*"]
 resolver = "2"
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/leynos/whitaker"
+homepage = "https://github.com/leynos/whitaker"
+documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.md"
+
 [workspace.dependencies]
 camino = "1.2.1"
 cargo_metadata = "0.23.0"
