@@ -2,6 +2,7 @@
 name = "conditional_max_n_branches"
 version = "0.1.0"
 edition = "2024"
+publish = false
 description = "Dylint lint that enforces an upper bound on conditional branch counts"
 license.workspace = true
 repository.workspace = true
