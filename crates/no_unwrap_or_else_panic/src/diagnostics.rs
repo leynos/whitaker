@@ -15,15 +15,10 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 ///
 /// # Examples
 ///
-/// ```ignore
-/// # use no_unwrap_or_else_panic::diagnostics::emit_diagnostic;
-/// # use no_unwrap_or_else_panic::diagnostics::fallback_messages;
-/// # use no_unwrap_or_else_panic::tests::mock_localizer;
-/// # use rustc_hir as hir;
-/// # fn demo(cx: &rustc_lint::LateContext<'_>, call: &hir::Expr<'_>, recv: &hir::Expr<'_>) {
-/// #     let localizer = mock_localizer();
-/// emit_diagnostic(cx, call, recv, &localizer);
-/// # }
+/// ```rust,ignore
+/// // Called from a lint driver once `call` and `receiver` are known:
+/// // let localizer = resolve_localizer(...);
+/// // emit_diagnostic(cx, call, receiver, &localizer);
 /// ```
 pub(crate) fn emit_diagnostic(
     cx: &LateContext<'_>,

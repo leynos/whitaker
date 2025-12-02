@@ -655,7 +655,7 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
 
 Separate Dylint crate that **only** targets panicking `unwrap_or_else` fallbacks
 on `Option`/`Result`. Plain `.unwrap()` / `.expect(...)` remain the remit of
-other policies; this lint closes the “unwrap_or_else(|| panic!(..))” loophole
+other policies; this lint closes the “unwrap_or_else(|| panic!(...))” loophole
 without broadening scope.
 
 ### Intent
