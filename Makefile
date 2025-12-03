@@ -47,7 +47,7 @@ nixie:
 
 publish-check: ## Build, test, and validate packages before publishing
 	rustup component add --toolchain nightly rust-src rustc-dev llvm-tools-preview
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build --workspace --all-features $(BUILD_JOBS)
 	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
