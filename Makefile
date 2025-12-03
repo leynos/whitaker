@@ -57,7 +57,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	if ! command -v dylint-link >/dev/null 2>&1; then \
 		$(CARGO) install dylint-link; \
 	fi; \
-	cd "$$TMP_DIR" && $(CARGO) dylint list --git https://github.com/leynos/whitaker --rev "$${GIT_TAG:-HEAD}" --all
+	cd "$$TMP_DIR" && $(CARGO) init --bin --name temp-project && $(CARGO) dylint list --git https://github.com/leynos/whitaker --rev "$${GIT_TAG:-HEAD}" --all
 	for crate in $(PUBLISH_PACKAGES); do \
 		$(CARGO) package -p $$crate; \
 	done
