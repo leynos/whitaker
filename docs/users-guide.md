@@ -54,8 +54,8 @@ trial the current branch tip.
 
 ## Quick Setup
 
-To integrate Whitaker lints into your own project, add the following to your
-workspace `Cargo.toml`:
+To integrate Whitaker lints into a project, add the following to the workspace
+`Cargo.toml`:
 
 ```toml
 [workspace.metadata.dylint]
@@ -72,28 +72,32 @@ cargo dylint --all
 
 ### Version pinning
 
-For reproducible builds, pin to a specific release tag or commit:
+For reproducible builds, reuse the shared declaration and add one of the
+following keys to the library entry:
 
-```toml
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", tag = "v0.1.0", pattern = "crates/*" }
-]
-```
+- Release tag:
 
-Or use a specific commit SHA:
+  ```toml
+  [workspace.metadata.dylint]
+  libraries = [
+    { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
+  ]
+  ```
 
-```toml
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", rev = "abc123def456", pattern = "crates/*" }
-]
-```
+- Commit hash (Secure Hash Algorithm, SHA):
+
+  ```toml
+  [workspace.metadata.dylint]
+  libraries = [
+    { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
+  ]
+  ```
 
 ### Future enhancement
 
-If you prefer command-line setup, consider requesting an initialisation command
-from the cargo-dylint maintainers:
+The cargo-dylint tool does not yet ship an initialisation command; the metadata
+edits above remain the supported path. A possible future addition could look
+like:
 
 ```sh
 # Potential future feature
