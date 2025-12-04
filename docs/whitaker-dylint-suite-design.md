@@ -823,9 +823,10 @@ libraries = [
 
 ## 5) Aggregated library (`suite`) — optional
 
-Bundle all lint crates for users who prefer a single dynamic library. Enable
-the `constituent` feature in each lint dependency to prevent them from
-exporting their own `register_lints` symbol.
+Bundle all lint crates for users who prefer a single dynamic library. The suite
+enables the `constituent` feature on each lint dependency so their individual
+dylint entrypoints stay dormant while the combined pass exposes a single
+`register_lints` symbol.
 
 ```toml
 [package]
@@ -834,51 +835,70 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 dylint_linting = { workspace = true }
-function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs", features = ["constituent"] }
-no_expect_outside_tests = { path = "../crates/no_expect_outside_tests", features = ["constituent"] }
-public_fn_must_have_docs = { path = "../crates/public_fn_must_have_docs", features = ["constituent"] }
-module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs", features = ["constituent"] }
-test_must_not_have_example = { path = "../crates/test_must_not_have_example", features = ["constituent"] }
-module_max_lines = { path = "../crates/module_max_lines", features = ["constituent"] }
+function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs",
+    features = ["dylint-driver", "constituent"] }
+no_expect_outside_tests = { path = "../crates/no_expect_outside_tests",
+    features = ["dylint-driver", "constituent"] }
+module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs",
+    features = ["dylint-driver", "constituent"] }
+conditional_max_n_branches = { path = "../crates/conditional_max_n_branches",
+    features = ["dylint-driver", "constituent"] }
+module_max_lines = { path = "../crates/module_max_lines",
+    features = ["dylint-driver", "constituent"] }
+no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic",
+    features = ["dylint-driver", "constituent"] }
+no_std_fs_operations = { path = "../crates/no_std_fs_operations",
+    features = ["dylint-driver", "constituent"] }
 ```
 
 ```rust
+use conditional_max_n_branches::ConditionalMaxNBranches;
 use dylint_linting::{declare_combined_late_lint_pass, dylint_library};
+use function_attrs_follow_docs::FunctionAttrsFollowDocs;
+use module_max_lines::ModuleMaxLines;
+use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
+use no_expect_outside_tests::NoExpectOutsideTests;
+use no_std_fs_operations::NoStdFsOperations;
+use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
 use rustc_lint::{LateLintPass, LintStore};
 use rustc_session::Session;
 
 dylint_library!();
 
-declare_combined_late_lint_pass!(CombinedPass => [
-    function_attrs_follow_docs::Pass,
-    no_expect_outside_tests::Pass,
-    public_fn_must_have_docs::Pass,
-    module_must_have_inner_docs::Pass,
-    test_must_not_have_example::Pass,
-    module_max_lines::Pass,
+declare_combined_late_lint_pass!(SuitePass => [
+    FunctionAttrsFollowDocs,
+    NoExpectOutsideTests,
+    ModuleMustHaveInnerDocs,
+    ConditionalMaxNBranches,
+    ModuleMaxLines,
+    NoUnwrapOrElsePanic,
+    NoStdFsOperations,
 ]);
 
 #[no_mangle]
-pub fn register_lints(sess: &Session, store: &mut LintStore) {
+pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
     dylint_linting::init_config(sess);
     store.register_lints(&[
         function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
         no_expect_outside_tests::NO_EXPECT_OUTSIDE_TESTS,
-        public_fn_must_have_docs::PUBLIC_FN_MUST_HAVE_DOCS,
         module_must_have_inner_docs::MODULE_MUST_HAVE_INNER_DOCS,
-        test_must_not_have_example::TEST_MUST_NOT_HAVE_EXAMPLE,
+        conditional_max_n_branches::CONDITIONAL_MAX_N_BRANCHES,
         module_max_lines::MODULE_MAX_LINES,
+        no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
+        no_std_fs_operations::NO_STD_FS_OPERATIONS,
     ]);
-    store.register_late_pass(|_| Box::new(CombinedPass));
+    store.register_late_pass(|_| Box::new(SuitePass));
 }
 ```
 
-> Re-export helper constructors from each lint crate so the combined pass can
-> reuse them without duplicating logic.
+Re-export `register_suite_lints` and `suite_lint_decls` so tests and
+documentation can assert the wiring without needing a `Session`. Behaviour
+coverage uses `rstest-bdd 0.1.0` to prove the happy path registration and to
+surface the duplicate-lint panic when called twice.
 
 ## 6) Installer CLI — optional
 

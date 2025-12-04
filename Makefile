@@ -13,7 +13,7 @@ NIXIE ?= nixie
 WHITAKER_REPO ?= $(CURDIR)
 WHITAKER_REV ?= HEAD
 PUBLISH_PACKAGES ?=
-LINT_CRATES ?= conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests no_std_fs_operations no_unwrap_or_else_panic
+LINT_CRATES ?= conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests no_std_fs_operations no_unwrap_or_else_panic suite
 CARGO_DYLINT_VERSION ?= 5.0.0
 DYLINT_LINK_VERSION ?= 5.0.0
 
