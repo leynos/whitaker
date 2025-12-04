@@ -14,6 +14,8 @@ WHITAKER_REPO ?= $(CURDIR)
 WHITAKER_REV ?= HEAD
 PUBLISH_PACKAGES ?=
 LINT_CRATES ?= conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests no_std_fs_operations no_unwrap_or_else_panic
+CARGO_DYLINT_VERSION ?= 5.0.0
+DYLINT_LINK_VERSION ?= 5.0.0
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -58,10 +60,10 @@ publish-check: ## Build, test, and validate packages before publishing
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	if ! command -v cargo-dylint >/dev/null 2>&1; then \
-		$(CARGO) install --locked cargo-dylint; \
+		$(CARGO) install --locked --version $(CARGO_DYLINT_VERSION) cargo-dylint; \
 	fi; \
 	if ! command -v dylint-link >/dev/null 2>&1; then \
-		$(CARGO) install --locked dylint-link; \
+		$(CARGO) install --locked --version $(DYLINT_LINK_VERSION) dylint-link; \
 	fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
