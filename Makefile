@@ -10,7 +10,7 @@ RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
-PUBLISH_PACKAGES ?= whitaker
+PUBLISH_PACKAGES ?=
 LINT_CRATES ?= conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests no_std_fs_operations no_unwrap_or_else_panic
 
 build: target/debug/$(APP) ## Build debug binary
@@ -60,8 +60,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	fi; \
 	HEAD_SHA=$$(git rev-parse HEAD); \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
-	HOST_TRIPLE=$$(rustc -vV | sed -n 's/^host: \\(.*\\)$$/\\1/p'); \
-	TOOLCHAIN="$$PINNED_TOOLCHAIN-$$HOST_TRIPLE"; \
+	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone https://github.com/leynos/whitaker "$$TMP_DIR/whitaker-src"; \
 	cd "$$TMP_DIR/whitaker-src" && git checkout "$${GIT_TAG:-$$HEAD_SHA}"; \
@@ -70,9 +69,9 @@ publish-check: ## Build, test, and validate packages before publishing
 		mkdir -p "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release"; \
 		cp "$$TARGET_DIR/release/lib$$lint.so" "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release/lib$$lint@$$TOOLCHAIN.so"; \
 	done; \
-	CARGO_TARGET_DIR="$$TARGET_DIR" $(CARGO) +$$PINNED_TOOLCHAIN dylint list --no-metadata --no-build --lib-path "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release" $(addprefix --lib ,$(LINT_CRATES))
+	DYLINT_LIBRARY_PATH="$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release" CARGO_TARGET_DIR="$$TARGET_DIR" $(CARGO) +$$PINNED_TOOLCHAIN dylint list --no-metadata --no-build
 	for crate in $(PUBLISH_PACKAGES); do \
-		$(CARGO) package -p $$crate; \
+		$(CARGO) package -p $$crate --allow-dirty; \
 	done
 
 help: ## Show available targets
