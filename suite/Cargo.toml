@@ -1,0 +1,45 @@
+[package]
+name = "suite"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Aggregated Whitaker Dylint suite cdylib"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+dylint-driver = [
+    "dep:dylint_linting",
+    "dep:function_attrs_follow_docs",
+    "dep:no_expect_outside_tests",
+    "dep:module_must_have_inner_docs",
+    "dep:conditional_max_n_branches",
+    "dep:module_max_lines",
+    "dep:no_unwrap_or_else_panic",
+    "dep:no_std_fs_operations",
+    "dep:rustc_hir",
+    "dep:rustc_lint",
+    "dep:rustc_session",
+    "dep:rustc_span",
+]
+
+[dependencies]
+dylint_linting = { workspace = true, optional = true }
+rustc_lint = { workspace = true, optional = true }
+rustc_session = { workspace = true, optional = true }
+rustc_hir = { workspace = true, optional = true }
+rustc_span = { workspace = true, optional = true }
+function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs", optional = true, features = ["dylint-driver", "constituent"] }
+no_expect_outside_tests = { path = "../crates/no_expect_outside_tests", optional = true, features = ["dylint-driver", "constituent"] }
+module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs", optional = true, features = ["dylint-driver", "constituent"] }
+conditional_max_n_branches = { path = "../crates/conditional_max_n_branches", optional = true, features = ["dylint-driver", "constituent"] }
+module_max_lines = { path = "../crates/module_max_lines", optional = true, features = ["dylint-driver", "constituent"] }
+no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic", optional = true, features = ["dylint-driver", "constituent"] }
+no_std_fs_operations = { path = "../crates/no_std_fs_operations", optional = true, features = ["dylint-driver", "constituent"] }
+
+[dev-dependencies]
+rstest = "0.26.1"
+rstest-bdd = "0.1.0"
+rstest-bdd-macros = "0.1.0"

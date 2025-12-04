@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "crates/*"]
+members = ["common", "crates/*", "suite"]
 resolver = "2"
 
 [workspace.package]
@@ -33,6 +33,7 @@ rustc_span = { path = "crates/rustc_span", version = "0.1.0" }
 [workspace.metadata.dylint]
 libraries = [
     { git = "https://github.com/leynos/whitaker", pattern = "crates/*" },
+    { git = "https://github.com/leynos/whitaker", pattern = "suite" },
 ]
 
 [package]
