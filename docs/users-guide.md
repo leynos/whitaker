@@ -40,6 +40,18 @@ the crate. Template construction fails fast on empty crate names, uppercase
 characters, trailing separators, or absolute paths so mistakes are surfaced
 before any files are written.
 
+## Getting the lints
+
+Install `cargo-dylint` and `dylint-link` once, then load the Whitaker lint
+suite directly from Git so the exact binaries that will ship are tested:
+
+```sh
+cargo dylint list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
+```
+
+Swap `v0.1.0` for the tag to exercise; omit `--rev` or set `GIT_TAG=HEAD` to
+trial the current branch tip.
+
 ## Running lint UI tests
 
 Run `make test` from the workspace root to execute unit, behaviour, and UI
@@ -127,8 +139,8 @@ Scope and behaviour:
 
 - Triggers only on `unwrap_or_else` when the receiver is `Option` or `Result`.
 - Detects panics via a shared path list (`core::panicking::panic`, `panic_fmt`,
-  `panic_any`, `begin_panic`, and their `std::panicking` counterparts) and
-  via inner `unwrap` / `expect` inside the closure body.
+  `panic_any`, `begin_panic`, and their `std::panicking` counterparts) and via
+  inner `unwrap` / `expect` inside the closure body.
 - Skips doctests (`UNSTABLE_RUSTDOC_TEST_PATH` set) and test-like contexts.
 - Config knob `no_unwrap_or_else_panic.allow_in_main = true` (default false)
   permits panicking fallbacks inside `main`.
@@ -168,7 +180,7 @@ Tests:
 - Unit tests exercise the pure policy (`should_flag`) and panic detector path
   matching.
 
----
+______________________________________________________________________
 
 ## `function_attrs_follow_docs`
 

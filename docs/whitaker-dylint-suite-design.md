@@ -84,8 +84,8 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   forces `-C prefer-dynamic` via `.cargo/config.toml`. Preferring dynamic
   std/core keeps `rustc_private` consumers (for example `rustc_driver` in
   Dylint) from pulling mixed static and dynamic runtimes, eliminating the
-  duplicate symbol errors seen on newer nightlies while staying on a
-  toolchain recent enough for `dylint_linting` 5.x.
+  duplicate symbol errors seen on newer nightlies while staying on a toolchain
+  recent enough for `dylint_linting` 5.x.
 - UI harness helpers now prepare the cdylib expected by the driver. Before each
   run, the harness copies `lib<crate>.so` to the `lib<crate>@<toolchain>.so`
   name derived from `RUSTUP_TOOLCHAIN`. The copy is skipped for synthetic crate
@@ -653,10 +653,10 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
 
 ## 4) Additional restriction lint (separate crate): `no_unwrap_or_else_panic`
 
-Separate Dylint crate that **only** targets panicking `unwrap_or_else` fallbacks
-on `Option`/`Result`. Plain `.unwrap()` / `.expect(...)` remain the remit of
-other policies; this lint closes the “unwrap_or_else(|| panic!(...))” loophole
-without broadening scope.
+Separate Dylint crate that **only** targets panicking `unwrap_or_else`
+fallbacks on `Option`/`Result`. Plain `.unwrap()` / `.expect(...)` remain the
+remit of other policies; this lint closes the “unwrap_or_else(|| panic!(…))”
+loophole without broadening scope.
 
 ### Intent
 
