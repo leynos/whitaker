@@ -43,14 +43,14 @@ before any files are written.
 ## Getting the lints
 
 Install `cargo-dylint` and `dylint-link` once, then load the Whitaker lint
-suite directly from Git so you test the exact binaries that will ship:
+suite directly from Git so the exact binaries that will ship are tested:
 
 ```sh
 cargo dylint --list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
 ```
 
-Swap `v0.1.0` for the tag you want to exercise; omit `--rev` or set
-`GIT_TAG=HEAD` to trial the current branch tip.
+Swap `v0.1.0` for the tag to exercise; omit `--rev` or set `GIT_TAG=HEAD` to
+trial the current branch tip.
 
 ## Running lint UI tests
 
