@@ -49,9 +49,11 @@ nixie:
 	nixie --no-sandbox
 
 publish-check: ## Build, test, and validate packages before publishing
-	rustup component add --toolchain nightly rust-src rustc-dev llvm-tools-preview
+	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
+	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
+	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build --workspace --all-features $(BUILD_JOBS)
-	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +nightly test $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN test $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	if ! command -v cargo-dylint >/dev/null 2>&1; then \
@@ -60,8 +62,6 @@ publish-check: ## Build, test, and validate packages before publishing
 	if ! command -v dylint-link >/dev/null 2>&1; then \
 		$(CARGO) install --locked dylint-link; \
 	fi; \
-	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
-	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
 	cd "$$TMP_DIR/whitaker-src" && { \
@@ -70,11 +70,11 @@ publish-check: ## Build, test, and validate packages before publishing
 		git checkout "$$TARGET_REV"; \
 	}; \
 	for lint in $(LINT_CRATES); do \
-		CARGO_TARGET_DIR="$$TARGET_DIR" RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$PINNED_TOOLCHAIN build --release --features dylint-driver -p $$lint; \
+		CARGO_TARGET_DIR="$$TARGET_DIR" RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 		mkdir -p "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release"; \
 		cp "$$TARGET_DIR/release/lib$$lint.so" "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release/lib$$lint@$$TOOLCHAIN.so"; \
 	done; \
-	DYLINT_LIBRARY_PATH="$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release" CARGO_TARGET_DIR="$$TARGET_DIR" $(CARGO) +$$PINNED_TOOLCHAIN dylint list --no-metadata --no-build
+	DYLINT_LIBRARY_PATH="$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release" CARGO_TARGET_DIR="$$TARGET_DIR" $(CARGO) +$$TOOLCHAIN dylint list --no-metadata --no-build
 	for crate in $(PUBLISH_PACKAGES); do \
 		$(CARGO) package -p $$crate --allow-dirty; \
 	done

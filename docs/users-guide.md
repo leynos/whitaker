@@ -46,7 +46,7 @@ Install `cargo-dylint` and `dylint-link` once, then load the Whitaker lint
 suite directly from Git so the exact binaries that will ship are tested:
 
 ```sh
-cargo dylint --list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
+cargo dylint list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
 ```
 
 Swap `v0.1.0` for the tag to exercise; omit `--rev` or set `GIT_TAG=HEAD` to
