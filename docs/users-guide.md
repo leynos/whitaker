@@ -72,25 +72,19 @@ cargo dylint --all
 
 ### Version pinning
 
-For reproducible builds, reuse the shared declaration and add one of the
-following keys to the library entry:
+For reproducible builds, reuse the shared declaration and replace the library
+entry with exactly one of:
 
 - Release tag:
 
   ```toml
-  [workspace.metadata.dylint]
-  libraries = [
-    { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
-  ]
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
   ```
 
 - Commit hash (Secure Hash Algorithm, SHA):
 
   ```toml
-  [workspace.metadata.dylint]
-  libraries = [
-    { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
-  ]
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
   ```
 
 ### Future enhancement
