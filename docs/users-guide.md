@@ -64,7 +64,7 @@ libraries = [
 ]
 ```
 
-Then run the lints across your workspace:
+Then run the lints across the workspace:
 
 ```sh
 cargo dylint --all
@@ -89,7 +89,7 @@ entry with exactly one of:
 
 ### Future enhancement
 
-The cargo-dylint tool does not yet ship an initialisation command; the metadata
+The cargo-dylint tool does not yet ship an initialization command; the metadata
 edits above remain the supported path. A possible future addition could look
 like:
 
