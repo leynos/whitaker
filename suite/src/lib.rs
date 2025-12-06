@@ -1,4 +1,3 @@
-#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 //! Aggregated Whitaker Dylint suite.
 //!
 //! This crate bundles the individual Whitaker lint crates into a single
@@ -7,10 +6,11 @@
 //! dylint entrypoint so the library can register itself through
 //! `register_lints` while also exposing a pure-Rust view of the wiring for
 //! tests and documentation.
+#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
-mod wiring;
+mod lints;
 
-pub use wiring::{LintDescriptor, SUITE_LINTS, suite_lint_names};
+pub use lints::{LintDescriptor, SUITE_LINTS, suite_lint_names};
 
 #[cfg(feature = "dylint-driver")]
 mod driver;
