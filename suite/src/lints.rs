@@ -56,6 +56,16 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     no_std_fs_operations::NO_STD_FS_OPERATIONS,
 ];
 
+/// Returns an iterator over the canonical lint names in suite order.
+///
+/// # Examples
+///
+/// ```
+/// # use suite::suite_lint_names;
+/// let names: Vec<_> = suite_lint_names().collect();
+/// assert_eq!(names.len(), 7);
+/// assert!(names.contains(&"no_unwrap_or_else_panic"));
+/// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
     SUITE_LINTS.iter().map(|descriptor| descriptor.name)

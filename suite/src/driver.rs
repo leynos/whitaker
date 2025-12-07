@@ -5,7 +5,7 @@ use dylint_linting::dylint_library;
 use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
 use rustc_session::Session;
 
-// Import all constituent lint pass types
+// Import constituent lint pass types required by `late_lint_methods!`.
 use conditional_max_n_branches::ConditionalMaxNBranches;
 use function_attrs_follow_docs::FunctionAttrsFollowDocs;
 use module_max_lines::ModuleMaxLines;
