@@ -19,6 +19,7 @@ dylint-driver = [
     "dep:rustc_span",
     "dep:whitaker"
 ]
+constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
 dylint_linting = { workspace = true, optional = true }

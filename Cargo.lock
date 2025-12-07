@@ -2072,6 +2072,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
+name = "suite"
+version = "0.1.0"
+dependencies = [
+ "conditional_max_n_branches",
+ "dylint_linting",
+ "function_attrs_follow_docs",
+ "module_max_lines",
+ "module_must_have_inner_docs",
+ "no_expect_outside_tests",
+ "no_std_fs_operations",
+ "no_unwrap_or_else_panic",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -42,7 +42,7 @@
         smoke tests that run under at least one non-English locale.
 
 - [ ] Phase 3 — Aggregated packaging and installer
-  - [ ] Assemble the `suite` cdylib using constituent features and combined lint
+  - [x] Assemble the `suite` cdylib using constituent features and combined lint
         pass wiring.
   - [ ] Implement the installer CLI that builds, links, and stages all lint
         libraries.
