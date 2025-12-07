@@ -52,6 +52,55 @@ cargo dylint list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
 Swap `v0.1.0` for the tag to exercise; omit `--rev` or set `GIT_TAG=HEAD` to
 trial the current branch tip.
 
+## Quick Setup
+
+To integrate Whitaker lints into a project, add the following to the workspace
+`Cargo.toml`:
+
+```toml
+[workspace.metadata.dylint]
+libraries = [
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*" }
+]
+```
+
+Then run the lints across the workspace:
+
+```sh
+cargo dylint --all
+```
+
+### Version pinning
+
+For reproducible builds, reuse the shared declaration and replace the library
+entry with exactly one of:
+
+- Release tag:
+
+  ```toml
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
+  ```
+
+- Commit hash (Secure Hash Algorithm, SHA):
+
+  ```toml
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
+  ```
+
+### Future enhancement
+
+The cargo-dylint tool does not yet ship an initialization command; the metadata
+edits above remain the supported path. A possible future addition could look
+like:
+
+```sh
+# Potential future feature
+cargo dylint init --git https://github.com/leynos/whitaker --pattern "crates/*"
+```
+
+This would provide an idiomatic Rust-native way to configure workspace metadata
+without manual TOML editing.
+
 ## Running lint UI tests
 
 Run `make test` from the workspace root to execute unit, behaviour, and UI
