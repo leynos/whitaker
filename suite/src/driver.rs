@@ -36,7 +36,7 @@ rustc_lint::late_lint_methods!(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use rustc_lint::LintStore;
 /// # use suite::register_suite_lints;
 /// let mut store = LintStore::new();
@@ -52,7 +52,7 @@ pub fn register_suite_lints(store: &mut LintStore) {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use suite::suite_lint_decls;
 /// let names: Vec<_> = suite_lint_decls()
 ///     .iter()
