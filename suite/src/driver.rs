@@ -67,7 +67,9 @@ pub fn suite_lint_decls() -> &'static [&'static Lint] {
 
 /// Dylint entrypoint that initialises configuration and registers lints.
 ///
-/// Safety: callers must pass non-null, correctly initialised `Session` and
+/// # Safety
+///
+/// Callers must pass non-null, correctly initialised `Session` and
 /// `LintStore` references from the host compiler context that remain valid on
 /// this thread for the duration of the call.
 #[unsafe(no_mangle)]
