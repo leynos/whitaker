@@ -1,31 +1,33 @@
 //! Combined lint wiring for the suite cdylib.
 
-use crate::lints::{SUITE_LINT_DECLS, suite_lints_with};
+use crate::lints::SUITE_LINT_DECLS;
 use dylint_linting::dylint_library;
 use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
 use rustc_session::Session;
 
+// Import all constituent lint pass types
+use conditional_max_n_branches::ConditionalMaxNBranches;
+use function_attrs_follow_docs::FunctionAttrsFollowDocs;
+use module_max_lines::ModuleMaxLines;
+use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
+use no_expect_outside_tests::NoExpectOutsideTests;
+use no_std_fs_operations::NoStdFsOperations;
+use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
+
 dylint_library!();
 
-macro_rules! suite_pass_entry {
-    ($lint_mod:ident, $crate_mod:ident, $pass_ty:ident, $lint_const:ident) => {
-        $pass_ty: $crate_mod::$pass_ty::default(),
-    };
-}
-
-macro_rules! build_suite_pass {
-    ($(($lint_mod:ident, $crate_mod:ident, $pass_ty:ident, $lint_const:ident)),+ $(,)?) => {
-        rustc_lint::late_lint_methods!(
-            declare_combined_late_lint_pass,
-            [
-                SuitePass,
-                [$( $pass_ty: $crate_mod::$pass_ty::default(), )+]
-            ]
-        );
-    };
-}
-
-suite_lints_with!(build_suite_pass);
+rustc_lint::late_lint_methods!(
+    declare_combined_late_lint_pass,
+    [SuitePass, [
+        FunctionAttrsFollowDocs: function_attrs_follow_docs::FunctionAttrsFollowDocs::default(),
+        NoExpectOutsideTests: no_expect_outside_tests::NoExpectOutsideTests::default(),
+        ModuleMustHaveInnerDocs: module_must_have_inner_docs::ModuleMustHaveInnerDocs::default(),
+        ConditionalMaxNBranches: conditional_max_n_branches::ConditionalMaxNBranches::default(),
+        ModuleMaxLines: module_max_lines::ModuleMaxLines::default(),
+        NoUnwrapOrElsePanic: no_unwrap_or_else_panic::NoUnwrapOrElsePanic::default(),
+        NoStdFsOperations: no_std_fs_operations::NoStdFsOperations::default(),
+    ]]
+);
 
 /// Registers the suite lints into the provided lint store.
 ///
@@ -68,7 +70,7 @@ pub fn suite_lint_decls() -> &'static [&'static Lint] {
 /// Safety: callers must pass non-null, correctly initialised `Session` and
 /// `LintStore` references from the host compiler context that remain valid on
 /// this thread for the duration of the call.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
     dylint_linting::init_config(sess);
     register_suite_lints(store);

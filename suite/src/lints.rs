@@ -9,88 +9,52 @@ pub struct LintDescriptor {
     pub crate_name: &'static str,
 }
 
-/// Single source of truth for all suite lints. The callback macro receives a
-/// comma-separated list of `(lint_mod, crate_mod, pass_ty, lint_const)` tuples.
-macro_rules! suite_lints_with {
-    ($callback:ident) => {
-        $callback!(
-            (
-                function_attrs_follow_docs,
-                function_attrs_follow_docs,
-                FunctionAttrsFollowDocs,
-                FUNCTION_ATTRS_FOLLOW_DOCS
-            ),
-            (
-                no_expect_outside_tests,
-                no_expect_outside_tests,
-                NoExpectOutsideTests,
-                NO_EXPECT_OUTSIDE_TESTS
-            ),
-            (
-                module_must_have_inner_docs,
-                module_must_have_inner_docs,
-                ModuleMustHaveInnerDocs,
-                MODULE_MUST_HAVE_INNER_DOCS
-            ),
-            (
-                conditional_max_n_branches,
-                conditional_max_n_branches,
-                ConditionalMaxNBranches,
-                CONDITIONAL_MAX_N_BRANCHES
-            ),
-            (
-                module_max_lines,
-                module_max_lines,
-                ModuleMaxLines,
-                MODULE_MAX_LINES
-            ),
-            (
-                no_unwrap_or_else_panic,
-                no_unwrap_or_else_panic,
-                NoUnwrapOrElsePanic,
-                NO_UNWRAP_OR_ELSE_PANIC
-            ),
-            (
-                no_std_fs_operations,
-                no_std_fs_operations,
-                NoStdFsOperations,
-                NO_STD_FS_OPERATIONS
-            )
-        )
-    };
-}
-
-pub(crate) use suite_lints_with;
-
-macro_rules! make_descriptor_array {
-    ($(($lint_mod:ident, $crate_mod:ident, $pass_ty:ident, $lint_const:ident)),+ $(,)?) => {
-        [
-            $(LintDescriptor {
-                name: stringify!($lint_mod),
-                crate_name: stringify!($crate_mod),
-            },)+
-        ]
-    };
-}
-
 /// Static list of the lints exposed by the Whitaker suite.
-pub const SUITE_LINTS: &[LintDescriptor] = &suite_lints_with!(make_descriptor_array);
+pub const SUITE_LINTS: &[LintDescriptor] = &[
+    LintDescriptor {
+        name: "function_attrs_follow_docs",
+        crate_name: "function_attrs_follow_docs",
+    },
+    LintDescriptor {
+        name: "no_expect_outside_tests",
+        crate_name: "no_expect_outside_tests",
+    },
+    LintDescriptor {
+        name: "module_must_have_inner_docs",
+        crate_name: "module_must_have_inner_docs",
+    },
+    LintDescriptor {
+        name: "conditional_max_n_branches",
+        crate_name: "conditional_max_n_branches",
+    },
+    LintDescriptor {
+        name: "module_max_lines",
+        crate_name: "module_max_lines",
+    },
+    LintDescriptor {
+        name: "no_unwrap_or_else_panic",
+        crate_name: "no_unwrap_or_else_panic",
+    },
+    LintDescriptor {
+        name: "no_std_fs_operations",
+        crate_name: "no_std_fs_operations",
+    },
+];
 
 #[cfg(feature = "dylint-driver")]
 use rustc_lint::Lint;
 
-#[cfg(feature = "dylint-driver")]
-macro_rules! make_decl_array {
-    ($(($lint_mod:ident, $crate_mod:ident, $pass_ty:ident, $lint_const:ident)),+ $(,)?) => {
-        [
-            $( $crate_mod::$lint_const, )+
-        ]
-    };
-}
-
 /// Lint declarations derived from the suite membership.
 #[cfg(feature = "dylint-driver")]
-pub const SUITE_LINT_DECLS: &[&'static Lint] = &suite_lints_with!(make_decl_array);
+pub const SUITE_LINT_DECLS: &[&Lint] = &[
+    function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
+    no_expect_outside_tests::NO_EXPECT_OUTSIDE_TESTS,
+    module_must_have_inner_docs::MODULE_MUST_HAVE_INNER_DOCS,
+    conditional_max_n_branches::CONDITIONAL_MAX_N_BRANCHES,
+    module_max_lines::MODULE_MAX_LINES,
+    no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
+    no_std_fs_operations::NO_STD_FS_OPERATIONS,
+];
 
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {
