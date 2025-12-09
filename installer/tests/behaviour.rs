@@ -6,7 +6,7 @@
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use whitaker_installer::builder::{
     CrateName, LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names,
 };
@@ -18,10 +18,10 @@ use whitaker_installer::output::ShellSnippet;
 
 #[derive(Default)]
 struct CrateResolutionWorld {
-    specific_lints: Cell<Vec<CrateName>>,
+    specific_lints: RefCell<Vec<CrateName>>,
     suite_only: Cell<bool>,
     no_suite: Cell<bool>,
-    resolved: Cell<Vec<CrateName>>,
+    resolved: RefCell<Vec<CrateName>>,
 }
 
 #[fixture]
@@ -31,7 +31,7 @@ fn crate_world() -> CrateResolutionWorld {
 
 #[given("no specific lints are requested")]
 fn given_no_specific_lints(crate_world: &CrateResolutionWorld) {
-    crate_world.specific_lints.set(Vec::new());
+    crate_world.specific_lints.replace(Vec::new());
 }
 
 #[given("suite is not excluded")]
@@ -53,52 +53,50 @@ fn given_suite_excluded(crate_world: &CrateResolutionWorld) {
 fn given_specific_lints(crate_world: &CrateResolutionWorld) {
     crate_world
         .specific_lints
-        .set(vec![CrateName::from("module_max_lines")]);
+        .replace(vec![CrateName::from("module_max_lines")]);
 }
 
 #[when("the crate list is resolved")]
 fn when_crates_resolved(crate_world: &CrateResolutionWorld) {
-    let lints = crate_world.specific_lints.take();
+    let lints = crate_world.specific_lints.replace(Vec::new());
     let resolved = resolve_crates(
         &lints,
         crate_world.suite_only.get(),
         crate_world.no_suite.get(),
     );
-    crate_world.resolved.set(resolved);
+    crate_world.resolved.replace(resolved);
 }
 
 #[then("all lint crates are included")]
 fn then_all_lints_included(crate_world: &CrateResolutionWorld) {
-    let resolved = crate_world.resolved.take();
+    let resolved = crate_world.resolved.borrow();
     for lint in LINT_CRATES {
         assert!(
             resolved.contains(&CrateName::from(*lint)),
             "expected {lint} to be included"
         );
     }
-    crate_world.resolved.set(resolved);
 }
 
 #[then("the suite crate is included")]
 fn then_suite_included(crate_world: &CrateResolutionWorld) {
-    let resolved = crate_world.resolved.take();
+    let resolved = crate_world.resolved.borrow();
     assert!(
         resolved.contains(&CrateName::from(SUITE_CRATE)),
         "expected suite to be included"
     );
-    crate_world.resolved.set(resolved);
 }
 
 #[then("only the suite crate is included")]
 fn then_only_suite(crate_world: &CrateResolutionWorld) {
-    let resolved = crate_world.resolved.take();
+    let resolved = crate_world.resolved.borrow();
     assert_eq!(resolved.len(), 1);
     assert_eq!(resolved.first().map(CrateName::as_str), Some(SUITE_CRATE));
 }
 
 #[then("the suite crate is not included")]
 fn then_suite_not_included(crate_world: &CrateResolutionWorld) {
-    let resolved = crate_world.resolved.take();
+    let resolved = crate_world.resolved.borrow();
     assert!(
         !resolved.contains(&CrateName::from(SUITE_CRATE)),
         "expected suite to be excluded"
@@ -107,7 +105,7 @@ fn then_suite_not_included(crate_world: &CrateResolutionWorld) {
 
 #[then("only the requested lints are included")]
 fn then_only_requested(crate_world: &CrateResolutionWorld) {
-    let resolved = crate_world.resolved.take();
+    let resolved = crate_world.resolved.borrow();
     assert_eq!(resolved.len(), 1);
     assert_eq!(
         resolved.first().map(CrateName::as_str),
@@ -121,7 +119,7 @@ fn then_only_requested(crate_world: &CrateResolutionWorld) {
 
 #[derive(Default)]
 struct ValidationWorld {
-    names: Cell<Vec<CrateName>>,
+    names: RefCell<Vec<CrateName>>,
     result: Cell<Option<bool>>,
 }
 
@@ -132,7 +130,7 @@ fn validation_world() -> ValidationWorld {
 
 #[given("a list of valid crate names")]
 fn given_valid_names(validation_world: &ValidationWorld) {
-    validation_world.names.set(vec![
+    validation_world.names.replace(vec![
         CrateName::from("module_max_lines"),
         CrateName::from("suite"),
     ]);
@@ -142,12 +140,12 @@ fn given_valid_names(validation_world: &ValidationWorld) {
 fn given_unknown_name(validation_world: &ValidationWorld) {
     validation_world
         .names
-        .set(vec![CrateName::from("nonexistent_lint")]);
+        .replace(vec![CrateName::from("nonexistent_lint")]);
 }
 
 #[when("the names are validated")]
 fn when_names_validated(validation_world: &ValidationWorld) {
-    let names = validation_world.names.take();
+    let names = validation_world.names.borrow();
     let result = validate_crate_names(&names).is_ok();
     validation_world.result.set(Some(result));
 }
@@ -168,8 +166,8 @@ fn then_validation_fails(validation_world: &ValidationWorld) {
 
 #[derive(Default)]
 struct ToolchainWorld {
-    contents: Cell<String>,
-    channel: Cell<Option<String>>,
+    contents: RefCell<String>,
+    channel: RefCell<Option<String>>,
     error: Cell<bool>,
 }
 
@@ -180,7 +178,7 @@ fn toolchain_world() -> ToolchainWorld {
 
 #[given("a rust-toolchain.toml with standard format")]
 fn given_standard_toolchain(toolchain_world: &ToolchainWorld) {
-    toolchain_world.contents.set(
+    toolchain_world.contents.replace(
         r#"
 [toolchain]
 channel = "nightly-2025-09-18"
@@ -192,7 +190,7 @@ components = ["rust-src"]
 
 #[given("a rust-toolchain.toml without a channel")]
 fn given_no_channel(toolchain_world: &ToolchainWorld) {
-    toolchain_world.contents.set(
+    toolchain_world.contents.replace(
         r#"
 [toolchain]
 components = ["rust-src"]
@@ -203,7 +201,7 @@ components = ["rust-src"]
 
 #[when("the toolchain is detected")]
 fn when_toolchain_detected(toolchain_world: &ToolchainWorld) {
-    let contents = toolchain_world.contents.take();
+    let contents = toolchain_world.contents.borrow();
     let table: Result<toml::Table, _> = contents.parse();
 
     match table {
@@ -215,7 +213,7 @@ fn when_toolchain_detected(toolchain_world: &ToolchainWorld) {
                 .map(String::from);
 
             if channel.is_some() {
-                toolchain_world.channel.set(channel);
+                toolchain_world.channel.replace(channel);
             } else {
                 toolchain_world.error.set(true);
             }
@@ -226,8 +224,8 @@ fn when_toolchain_detected(toolchain_world: &ToolchainWorld) {
 
 #[then("the channel is extracted correctly")]
 fn then_channel_extracted(toolchain_world: &ToolchainWorld) {
-    let channel = toolchain_world.channel.take();
-    assert_eq!(channel, Some("nightly-2025-09-18".to_owned()));
+    let channel = toolchain_world.channel.borrow();
+    assert_eq!(*channel, Some("nightly-2025-09-18".to_owned()));
 }
 
 #[then("detection fails with an invalid file error")]
@@ -241,8 +239,8 @@ fn then_detection_fails(toolchain_world: &ToolchainWorld) {
 
 #[derive(Default)]
 struct SnippetWorld {
-    path: Cell<String>,
-    snippet: Cell<Option<ShellSnippet>>,
+    path: RefCell<String>,
+    snippet: RefCell<Option<ShellSnippet>>,
 }
 
 #[fixture]
@@ -254,39 +252,36 @@ fn snippet_world() -> SnippetWorld {
 fn given_library_path(snippet_world: &SnippetWorld) {
     snippet_world
         .path
-        .set("/home/user/.local/share/dylint/lib".to_owned());
+        .replace("/home/user/.local/share/dylint/lib".to_owned());
 }
 
 #[when("shell snippets are generated")]
 fn when_snippets_generated(snippet_world: &SnippetWorld) {
-    let path = snippet_world.path.take();
-    let utf8_path = camino::Utf8PathBuf::from(path);
+    let path = snippet_world.path.borrow();
+    let utf8_path = camino::Utf8PathBuf::from(path.as_str());
     let snippet = ShellSnippet::new(&utf8_path);
-    snippet_world.snippet.set(Some(snippet));
+    snippet_world.snippet.replace(Some(snippet));
 }
 
 #[then("bash snippet uses export syntax")]
 fn then_bash_export(snippet_world: &SnippetWorld) {
-    let snippet = snippet_world.snippet.take();
+    let snippet = snippet_world.snippet.borrow();
     let s = snippet.as_ref().expect("snippet should exist");
     assert!(s.bash.starts_with("export "));
-    snippet_world.snippet.set(snippet);
 }
 
 #[then("fish snippet uses set -gx syntax")]
 fn then_fish_set(snippet_world: &SnippetWorld) {
-    let snippet = snippet_world.snippet.take();
+    let snippet = snippet_world.snippet.borrow();
     let s = snippet.as_ref().expect("snippet should exist");
     assert!(s.fish.starts_with("set -gx "));
-    snippet_world.snippet.set(snippet);
 }
 
 #[then("PowerShell snippet uses $env syntax")]
 fn then_powershell_env(snippet_world: &SnippetWorld) {
-    let snippet = snippet_world.snippet.take();
+    let snippet = snippet_world.snippet.borrow();
     let s = snippet.as_ref().expect("snippet should exist");
     assert!(s.powershell.starts_with("$env:"));
-    snippet_world.snippet.set(snippet);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,9 +290,9 @@ fn then_powershell_env(snippet_world: &SnippetWorld) {
 
 #[derive(Default)]
 struct StagingWorld {
-    crate_name: Cell<String>,
-    toolchain: Cell<String>,
-    staged_name: Cell<String>,
+    crate_name: RefCell<String>,
+    toolchain: RefCell<String>,
+    staged_name: RefCell<String>,
 }
 
 #[fixture]
@@ -307,28 +302,32 @@ fn staging_world() -> StagingWorld {
 
 #[given("a built library")]
 fn given_built_library(staging_world: &StagingWorld) {
-    staging_world.crate_name.set("module_max_lines".to_owned());
+    staging_world
+        .crate_name
+        .replace("module_max_lines".to_owned());
 }
 
 #[given("a staging directory")]
 fn given_staging_dir(staging_world: &StagingWorld) {
-    staging_world.toolchain.set("nightly-2025-09-18".to_owned());
+    staging_world
+        .toolchain
+        .replace("nightly-2025-09-18".to_owned());
 }
 
 #[when("the library is staged")]
 fn when_library_staged(staging_world: &StagingWorld) {
-    let crate_name = staging_world.crate_name.take();
-    let toolchain = staging_world.toolchain.take();
+    let crate_name = staging_world.crate_name.borrow();
+    let toolchain = staging_world.toolchain.borrow();
 
     let base_name = crate_name.replace('-', "_");
     let staged_name = format!("lib{base_name}@{toolchain}.so");
 
-    staging_world.staged_name.set(staged_name);
+    staging_world.staged_name.replace(staged_name);
 }
 
 #[then("the staged filename includes the toolchain")]
 fn then_staged_includes_toolchain(staging_world: &StagingWorld) {
-    let name = staging_world.staged_name.take();
+    let name = staging_world.staged_name.borrow();
     assert!(name.contains("nightly-2025-09-18"));
     assert!(name.contains("module_max_lines"));
 }
