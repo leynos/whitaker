@@ -7,7 +7,9 @@
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::Cell;
-use whitaker_installer::builder::{LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names};
+use whitaker_installer::builder::{
+    CrateName, LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names,
+};
 use whitaker_installer::output::ShellSnippet;
 
 // ---------------------------------------------------------------------------
@@ -16,10 +18,10 @@ use whitaker_installer::output::ShellSnippet;
 
 #[derive(Default)]
 struct CrateResolutionWorld {
-    specific_lints: Cell<Vec<String>>,
+    specific_lints: Cell<Vec<CrateName>>,
     suite_only: Cell<bool>,
     no_suite: Cell<bool>,
-    resolved: Cell<Vec<String>>,
+    resolved: Cell<Vec<CrateName>>,
 }
 
 #[fixture]
@@ -51,7 +53,7 @@ fn given_suite_excluded(crate_world: &CrateResolutionWorld) {
 fn given_specific_lints(crate_world: &CrateResolutionWorld) {
     crate_world
         .specific_lints
-        .set(vec!["module_max_lines".to_owned()]);
+        .set(vec![CrateName::from("module_max_lines")]);
 }
 
 #[when("the crate list is resolved")]
@@ -62,9 +64,7 @@ fn when_crates_resolved(crate_world: &CrateResolutionWorld) {
         crate_world.suite_only.get(),
         crate_world.no_suite.get(),
     );
-    crate_world
-        .resolved
-        .set(resolved.iter().map(|s| (*s).to_owned()).collect());
+    crate_world.resolved.set(resolved);
 }
 
 #[then("all lint crates are included")]
@@ -72,7 +72,7 @@ fn then_all_lints_included(crate_world: &CrateResolutionWorld) {
     let resolved = crate_world.resolved.take();
     for lint in LINT_CRATES {
         assert!(
-            resolved.contains(&(*lint).to_owned()),
+            resolved.contains(&CrateName::from(*lint)),
             "expected {lint} to be included"
         );
     }
@@ -83,7 +83,7 @@ fn then_all_lints_included(crate_world: &CrateResolutionWorld) {
 fn then_suite_included(crate_world: &CrateResolutionWorld) {
     let resolved = crate_world.resolved.take();
     assert!(
-        resolved.contains(&SUITE_CRATE.to_owned()),
+        resolved.contains(&CrateName::from(SUITE_CRATE)),
         "expected suite to be included"
     );
     crate_world.resolved.set(resolved);
@@ -93,14 +93,14 @@ fn then_suite_included(crate_world: &CrateResolutionWorld) {
 fn then_only_suite(crate_world: &CrateResolutionWorld) {
     let resolved = crate_world.resolved.take();
     assert_eq!(resolved.len(), 1);
-    assert_eq!(resolved.first().map(String::as_str), Some(SUITE_CRATE));
+    assert_eq!(resolved.first().map(CrateName::as_str), Some(SUITE_CRATE));
 }
 
 #[then("the suite crate is not included")]
 fn then_suite_not_included(crate_world: &CrateResolutionWorld) {
     let resolved = crate_world.resolved.take();
     assert!(
-        !resolved.contains(&SUITE_CRATE.to_owned()),
+        !resolved.contains(&CrateName::from(SUITE_CRATE)),
         "expected suite to be excluded"
     );
 }
@@ -110,7 +110,7 @@ fn then_only_requested(crate_world: &CrateResolutionWorld) {
     let resolved = crate_world.resolved.take();
     assert_eq!(resolved.len(), 1);
     assert_eq!(
-        resolved.first().map(String::as_str),
+        resolved.first().map(CrateName::as_str),
         Some("module_max_lines")
     );
 }
@@ -121,7 +121,7 @@ fn then_only_requested(crate_world: &CrateResolutionWorld) {
 
 #[derive(Default)]
 struct ValidationWorld {
-    names: Cell<Vec<String>>,
+    names: Cell<Vec<CrateName>>,
     result: Cell<Option<bool>>,
 }
 
@@ -132,16 +132,17 @@ fn validation_world() -> ValidationWorld {
 
 #[given("a list of valid crate names")]
 fn given_valid_names(validation_world: &ValidationWorld) {
-    validation_world
-        .names
-        .set(vec!["module_max_lines".to_owned(), "suite".to_owned()]);
+    validation_world.names.set(vec![
+        CrateName::from("module_max_lines"),
+        CrateName::from("suite"),
+    ]);
 }
 
 #[given("a list containing an unknown crate name")]
 fn given_unknown_name(validation_world: &ValidationWorld) {
     validation_world
         .names
-        .set(vec!["nonexistent_lint".to_owned()]);
+        .set(vec![CrateName::from("nonexistent_lint")]);
 }
 
 #[when("the names are validated")]

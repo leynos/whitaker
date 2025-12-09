@@ -3,7 +3,7 @@
 //! This module handles copying built libraries to the target directory with
 //! the toolchain-specific naming convention required by Dylint.
 
-use crate::builder::{BuildResult, library_extension, library_prefix};
+use crate::builder::{BuildResult, CrateName, library_extension, library_prefix};
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
@@ -98,8 +98,8 @@ impl Stager {
     }
 
     /// Compute the staged filename with toolchain suffix.
-    fn staged_filename(&self, crate_name: &str) -> String {
-        let base_name = crate_name.replace('-', "_");
+    fn staged_filename(&self, crate_name: &CrateName) -> String {
+        let base_name = crate_name.as_str().replace('-', "_");
         format!(
             "{}{}@{}{}",
             library_prefix(),
@@ -128,7 +128,8 @@ mod tests {
     #[test]
     fn staged_filename_includes_toolchain() {
         let stager = Stager::new(Utf8PathBuf::from("/tmp/test"), "nightly-2025-09-18");
-        let filename = stager.staged_filename("module_max_lines");
+        let crate_name = CrateName::from("module_max_lines");
+        let filename = stager.staged_filename(&crate_name);
 
         assert!(filename.contains("nightly-2025-09-18"));
         assert!(filename.contains("module_max_lines"));

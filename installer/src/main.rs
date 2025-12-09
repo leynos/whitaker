@@ -7,7 +7,7 @@
 use camino::Utf8PathBuf;
 use clap::Parser;
 use whitaker_installer::builder::{
-    BuildConfig, Builder, find_workspace_root, resolve_crates, validate_crate_names,
+    BuildConfig, Builder, CrateName, find_workspace_root, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::output::{ShellSnippet, success_message};
@@ -78,13 +78,20 @@ fn run(cli: Cli) -> Result<()> {
     // Verify toolchain is installed
     toolchain.verify_installed()?;
 
+    // Convert lint names to CrateName
+    let lint_names: Vec<CrateName> = cli
+        .lint
+        .iter()
+        .map(|s| CrateName::from(s.as_str()))
+        .collect();
+
     // Validate lint names if specific lints were requested
-    if !cli.lint.is_empty() {
-        validate_crate_names(&cli.lint)?;
+    if !lint_names.is_empty() {
+        validate_crate_names(&lint_names)?;
     }
 
     // Resolve which crates to build
-    let crates = resolve_crates(&cli.lint, cli.suite_only, cli.no_suite);
+    let crates = resolve_crates(&lint_names, cli.suite_only, cli.no_suite);
 
     // Determine target directory
     let target_dir = cli
@@ -151,7 +158,7 @@ fn run(cli: Cli) -> Result<()> {
 struct DryRunConfig<'a> {
     workspace_root: &'a Utf8PathBuf,
     toolchain: &'a str,
-    crates: &'a [&'static str],
+    crates: &'a [CrateName],
     target_dir: &'a Utf8PathBuf,
 }
 

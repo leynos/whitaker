@@ -6,7 +6,59 @@
 use crate::error::{InstallerError, Result};
 use crate::toolchain::Toolchain;
 use camino::{Utf8Path, Utf8PathBuf};
+use std::fmt;
 use std::process::Command;
+
+/// A validated crate name for lint libraries.
+///
+/// This newtype wrapper provides type safety for crate names, ensuring they are
+/// passed explicitly rather than as raw strings.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CrateName(String);
+
+impl CrateName {
+    /// Create a new crate name.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// Get the crate name as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consume the wrapper and return the inner string.
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl AsRef<str> for CrateName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for CrateName {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
+impl From<String> for CrateName {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl fmt::Display for CrateName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// Static list of lint crates available for building.
 ///
@@ -41,7 +93,7 @@ pub struct BuildConfig {
 #[derive(Debug, Clone)]
 pub struct BuildResult {
     /// Name of the crate that was built.
-    pub crate_name: String,
+    pub crate_name: CrateName,
     /// Path to the compiled library.
     pub library_path: Utf8PathBuf,
 }
@@ -63,12 +115,12 @@ impl Builder {
     /// # Errors
     ///
     /// Returns an error if the cargo build command fails.
-    pub fn build_crate(&self, crate_name: &str) -> Result<BuildResult> {
+    pub fn build_crate(&self, crate_name: &CrateName) -> Result<BuildResult> {
         let mut cmd = Command::new("cargo");
 
         cmd.arg(format!("+{}", self.config.toolchain.channel()));
         cmd.args(["build", "--release", "--features", "dylint-driver"]);
-        cmd.args(["-p", crate_name]);
+        cmd.args(["-p", crate_name.as_str()]);
 
         if let Some(jobs) = self.config.jobs {
             cmd.args(["-j", &jobs.to_string()]);
@@ -86,7 +138,7 @@ impl Builder {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(InstallerError::BuildFailed {
-                crate_name: crate_name.to_owned(),
+                crate_name: crate_name.to_string(),
                 reason: stderr.to_string(),
             });
         }
@@ -94,7 +146,7 @@ impl Builder {
         let library_path = self.library_path(crate_name);
 
         Ok(BuildResult {
-            crate_name: crate_name.to_owned(),
+            crate_name: crate_name.clone(),
             library_path,
         })
     }
@@ -104,7 +156,7 @@ impl Builder {
     /// # Errors
     ///
     /// Returns an error if any crate fails to build.
-    pub fn build_all(&self, crates: &[&str]) -> Result<Vec<BuildResult>> {
+    pub fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> {
         let mut results = Vec::with_capacity(crates.len());
 
         for crate_name in crates {
@@ -116,11 +168,11 @@ impl Builder {
     }
 
     /// Compute the expected library path for a crate.
-    fn library_path(&self, crate_name: &str) -> Utf8PathBuf {
+    fn library_path(&self, crate_name: &CrateName) -> Utf8PathBuf {
         let lib_name = format!(
             "{}{}{}",
             library_prefix(),
-            crate_name.replace('-', "_"),
+            crate_name.as_str().replace('-', "_"),
             library_extension()
         );
 
@@ -163,11 +215,13 @@ pub const fn library_prefix() -> &'static str {
 /// # Errors
 ///
 /// Returns an error if any crate name is not recognised.
-pub fn validate_crate_names(names: &[String]) -> Result<()> {
+pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
     for name in names {
-        let is_valid = LINT_CRATES.contains(&name.as_str()) || name == SUITE_CRATE;
+        let is_valid = LINT_CRATES.contains(&name.as_str()) || name.as_str() == SUITE_CRATE;
         if !is_valid {
-            return Err(InstallerError::LintCrateNotFound { name: name.clone() });
+            return Err(InstallerError::LintCrateNotFound {
+                name: name.to_string(),
+            });
         }
     }
     Ok(())
@@ -176,30 +230,31 @@ pub fn validate_crate_names(names: &[String]) -> Result<()> {
 /// Build the list of crates to compile based on CLI options.
 #[must_use]
 pub fn resolve_crates(
-    specific_lints: &[String],
+    specific_lints: &[CrateName],
     suite_only: bool,
     no_suite: bool,
-) -> Vec<&'static str> {
+) -> Vec<CrateName> {
     if suite_only {
-        return vec![SUITE_CRATE];
+        return vec![CrateName::from(SUITE_CRATE)];
     }
 
     if !specific_lints.is_empty() {
         return specific_lints
             .iter()
             .filter_map(|name| {
+                let name_str = name.as_str();
                 LINT_CRATES
                     .iter()
-                    .find(|&&c| c == name)
-                    .copied()
-                    .or_else(|| (name == SUITE_CRATE).then_some(SUITE_CRATE))
+                    .find(|&&c| c == name_str)
+                    .map(|&c| CrateName::from(c))
+                    .or_else(|| (name_str == SUITE_CRATE).then(|| CrateName::from(SUITE_CRATE)))
             })
             .collect();
     }
 
-    let mut crates: Vec<&str> = LINT_CRATES.to_vec();
+    let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
     if !no_suite {
-        crates.push(SUITE_CRATE);
+        crates.push(CrateName::from(SUITE_CRATE));
     }
     crates
 }
@@ -239,39 +294,42 @@ mod tests {
     #[test]
     fn resolve_crates_returns_all_by_default() {
         let crates = resolve_crates(&[], false, false);
-        assert!(crates.contains(&"module_max_lines"));
-        assert!(crates.contains(&SUITE_CRATE));
+        assert!(crates.contains(&CrateName::from("module_max_lines")));
+        assert!(crates.contains(&CrateName::from(SUITE_CRATE)));
     }
 
     #[test]
     fn resolve_crates_suite_only() {
         let crates = resolve_crates(&[], true, false);
-        assert_eq!(crates, vec![SUITE_CRATE]);
+        assert_eq!(crates, vec![CrateName::from(SUITE_CRATE)]);
     }
 
     #[test]
     fn resolve_crates_no_suite() {
         let crates = resolve_crates(&[], false, true);
-        assert!(!crates.contains(&SUITE_CRATE));
-        assert!(crates.contains(&"module_max_lines"));
+        assert!(!crates.contains(&CrateName::from(SUITE_CRATE)));
+        assert!(crates.contains(&CrateName::from("module_max_lines")));
     }
 
     #[test]
     fn resolve_crates_specific_lints() {
-        let specific = vec!["module_max_lines".to_owned()];
+        let specific = vec![CrateName::from("module_max_lines")];
         let crates = resolve_crates(&specific, false, false);
-        assert_eq!(crates, vec!["module_max_lines"]);
+        assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
     }
 
     #[test]
     fn validate_known_crates_succeeds() {
-        let names = vec!["module_max_lines".to_owned(), "suite".to_owned()];
+        let names = vec![
+            CrateName::from("module_max_lines"),
+            CrateName::from("suite"),
+        ];
         assert!(validate_crate_names(&names).is_ok());
     }
 
     #[test]
     fn validate_unknown_crate_fails() {
-        let names = vec!["nonexistent_lint".to_owned()];
+        let names = vec![CrateName::from("nonexistent_lint")];
         let result = validate_crate_names(&names);
         assert!(result.is_err());
     }
