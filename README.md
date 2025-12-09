@@ -69,6 +69,6 @@ the [roadmap](docs/roadmap.md) for details.
   implementation details
 - [Roadmap](docs/roadmap.md) — Development phases and progress
 
-## License
+## Licence
 
-Whitaker is released under the [ISC License](LICENSE).
+Whitaker is released under the [ISC Licence](LICENSE).
