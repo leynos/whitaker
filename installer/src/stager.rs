@@ -142,10 +142,11 @@ mod tests {
         );
         let path = stager.staging_path();
 
-        assert_eq!(
-            path.as_str(),
-            "/home/user/.local/share/dylint/lib/nightly-2025-09-18/release"
-        );
+        // Use ends_with for platform-independent path checking (compares components,
+        // not strings, so it works with both / and \ separators)
+        assert!(path.ends_with("nightly-2025-09-18/release"));
+        assert!(path.as_str().contains("dylint"));
+        assert!(path.as_str().contains("lib"));
     }
 
     #[test]
