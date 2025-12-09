@@ -44,7 +44,7 @@
 - [ ] Phase 3 — Aggregated packaging and installer
   - [x] Assemble the `suite` cdylib using constituent features and combined lint
         pass wiring.
-  - [ ] Implement the installer CLI that builds, links, and stages all lint
+  - [x] Implement the installer CLI that builds, links, and stages all lint
         libraries.
   - [ ] Provide consumer guidance and workspace metadata examples in
         documentation.
