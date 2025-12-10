@@ -4,6 +4,7 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
+use crate::builder::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
 
@@ -42,7 +43,7 @@ pub enum InstallerError {
     #[error("cargo build failed for {crate_name}: {reason}")]
     BuildFailed {
         /// Name of the crate that failed to build.
-        crate_name: String,
+        crate_name: CrateName,
         /// Description of the build failure.
         reason: String,
     },
@@ -67,7 +68,7 @@ pub enum InstallerError {
     #[error("lint crate {name} not found in workspace")]
     LintCrateNotFound {
         /// Name of the missing lint crate.
-        name: String,
+        name: CrateName,
     },
 
     /// The workspace root could not be found.
@@ -102,7 +103,7 @@ mod tests {
     #[test]
     fn build_failed_includes_crate_name() {
         let err = InstallerError::BuildFailed {
-            crate_name: "module_max_lines".to_owned(),
+            crate_name: CrateName::from("module_max_lines"),
             reason: "compilation error".to_owned(),
         };
         let msg = err.to_string();

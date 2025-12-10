@@ -138,7 +138,7 @@ impl Builder {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(InstallerError::BuildFailed {
-                crate_name: crate_name.to_string(),
+                crate_name: crate_name.clone(),
                 reason: stderr.to_string(),
             });
         }
@@ -225,9 +225,7 @@ pub fn is_known_crate(name: &CrateName) -> bool {
 pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
     for name in names {
         if !is_known_crate(name) {
-            return Err(InstallerError::LintCrateNotFound {
-                name: name.to_string(),
-            });
+            return Err(InstallerError::LintCrateNotFound { name: name.clone() });
         }
     }
     Ok(())
@@ -236,9 +234,8 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
 /// Build the list of crates to compile based on CLI options.
 ///
 /// Note: This function assumes that `specific_lints` have been validated via
-/// `validate_crate_names()` prior to calling. Unknown names are filtered out
-/// as a safety measure, but callers should validate first for proper error
-/// messages.
+/// `validate_crate_names()` prior to calling. Callers must validate inputs
+/// first to get proper error messages for unknown names.
 #[must_use]
 pub fn resolve_crates(
     specific_lints: &[CrateName],
@@ -250,13 +247,8 @@ pub fn resolve_crates(
     }
 
     if !specific_lints.is_empty() {
-        // Filter to known crates only. Callers should validate first via
-        // validate_crate_names() to get proper error messages for unknown names.
-        return specific_lints
-            .iter()
-            .filter(|name| is_known_crate(name))
-            .cloned()
-            .collect();
+        // Assumes names have been validated via validate_crate_names().
+        return specific_lints.to_vec();
     }
 
     let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();

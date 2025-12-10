@@ -9,7 +9,8 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
 use toml::Table;
 use whitaker_installer::builder::{
-    CrateName, LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names,
+    CrateName, LINT_CRATES, SUITE_CRATE, library_extension, library_prefix, resolve_crates,
+    validate_crate_names,
 };
 use whitaker_installer::output::ShellSnippet;
 
@@ -321,7 +322,9 @@ fn when_library_staged(staging_world: &StagingWorld) {
     let toolchain = staging_world.toolchain.borrow();
 
     let base_name = crate_name.replace('-', "_");
-    let staged_name = format!("lib{base_name}@{toolchain}.so");
+    let prefix = library_prefix();
+    let ext = library_extension();
+    let staged_name = format!("{prefix}{base_name}@{toolchain}{ext}");
 
     staging_world.staged_name.replace(staged_name);
 }
