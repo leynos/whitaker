@@ -40,14 +40,14 @@ impl Toolchain {
 
     /// Create a toolchain with an explicit override channel.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the workspace root path is invalid.
-    pub fn with_override(workspace_root: &Utf8Path, channel: &str) -> Result<Self> {
-        Ok(Self {
+    /// This constructor does not perform validation; callers are responsible
+    /// for ensuring the `workspace_root` and `channel` are valid.
+    #[must_use]
+    pub fn with_override(workspace_root: &Utf8Path, channel: &str) -> Self {
+        Self {
             channel: channel.to_owned(),
             workspace_root: workspace_root.to_owned(),
-        })
+        }
     }
 
     /// Verify that the toolchain is installed via rustup.

@@ -7,6 +7,7 @@
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+use toml::Table;
 use whitaker_installer::builder::{
     CrateName, LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names,
 };
@@ -202,7 +203,7 @@ components = ["rust-src"]
 #[when("the toolchain is detected")]
 fn when_toolchain_detected(toolchain_world: &ToolchainWorld) {
     let contents = toolchain_world.contents.borrow();
-    let table: Result<toml::Table, _> = contents.parse();
+    let table: Result<Table, _> = contents.parse();
 
     match table {
         Ok(t) => {

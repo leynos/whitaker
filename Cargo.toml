@@ -12,6 +12,8 @@ documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.m
 common = { path = "common", version = "0.1.0" }
 camino = "1.2.1"
 cargo_metadata = "0.23.0"
+clap = "4.5.38"
+dirs = "6.0.0"
 dylint_linting = "5"
 dylint_testing = "5"
 fluent-templates = "^0.13.1"
@@ -21,6 +23,8 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 thiserror = "2"
 log = "0.4.28"
+rstest-bdd = "0.2.0"
+rstest-bdd-macros = "0.2.0"
 clippy_utils = { path = "crates/clippy_utils", version = "0.1.0" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.1.0" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.1.0" }
@@ -67,8 +71,8 @@ dylint_linting = { workspace = true, optional = true }
 [dev-dependencies]
 common = { workspace = true }
 rstest = "0.26.1"
-rstest-bdd = "0.1.0"
-rstest-bdd-macros = "0.1.0"
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 
 [lints.clippy]

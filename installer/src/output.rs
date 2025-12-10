@@ -18,6 +18,18 @@ pub struct ShellSnippet {
 
 impl ShellSnippet {
     /// Create shell snippets for the given library path.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use camino::Utf8PathBuf;
+    /// use whitaker_installer::output::ShellSnippet;
+    ///
+    /// let path = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
+    /// let snippet = ShellSnippet::new(&path);
+    ///
+    /// assert!(snippet.bash.contains("DYLINT_LIBRARY_PATH"));
+    /// ```
     #[must_use]
     pub fn new(library_path: &Utf8Path) -> Self {
         Self {

@@ -55,10 +55,12 @@ pub enum InstallerError {
     },
 
     /// The target directory exists but is not writable.
-    #[error("target directory {path} is not writable")]
+    #[error("target directory {path} is not writable: {reason}")]
     TargetNotWritable {
         /// Path to the non-writable directory.
         path: Utf8PathBuf,
+        /// Description of the underlying I/O error.
+        reason: String,
     },
 
     /// A specified lint crate was not found in the workspace.
@@ -66,6 +68,13 @@ pub enum InstallerError {
     LintCrateNotFound {
         /// Name of the missing lint crate.
         name: String,
+    },
+
+    /// The workspace root could not be found.
+    #[error("workspace not found: {reason}")]
+    WorkspaceNotFound {
+        /// Description of why the workspace was not found.
+        reason: String,
     },
 
     /// An I/O operation failed.

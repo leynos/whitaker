@@ -210,6 +210,13 @@ pub const fn library_prefix() -> &'static str {
     }
 }
 
+/// Check whether a crate name is a known lint crate or the suite.
+#[must_use]
+pub fn is_known_crate(name: &CrateName) -> bool {
+    let s = name.as_str();
+    LINT_CRATES.contains(&s) || s == SUITE_CRATE
+}
+
 /// Validate that all specified crate names are known lint crates.
 ///
 /// # Errors
@@ -217,8 +224,7 @@ pub const fn library_prefix() -> &'static str {
 /// Returns an error if any crate name is not recognised.
 pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
     for name in names {
-        let is_valid = LINT_CRATES.contains(&name.as_str()) || name.as_str() == SUITE_CRATE;
-        if !is_valid {
+        if !is_known_crate(name) {
             return Err(InstallerError::LintCrateNotFound {
                 name: name.to_string(),
             });
@@ -228,6 +234,11 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
 }
 
 /// Build the list of crates to compile based on CLI options.
+///
+/// Note: This function assumes that `specific_lints` have been validated via
+/// `validate_crate_names()` prior to calling. Unknown names are filtered out
+/// as a safety measure, but callers should validate first for proper error
+/// messages.
 #[must_use]
 pub fn resolve_crates(
     specific_lints: &[CrateName],
@@ -239,16 +250,12 @@ pub fn resolve_crates(
     }
 
     if !specific_lints.is_empty() {
+        // Filter to known crates only. Callers should validate first via
+        // validate_crate_names() to get proper error messages for unknown names.
         return specific_lints
             .iter()
-            .filter_map(|name| {
-                let name_str = name.as_str();
-                LINT_CRATES
-                    .iter()
-                    .find(|&&c| c == name_str)
-                    .map(|&c| CrateName::from(c))
-                    .or_else(|| (name_str == SUITE_CRATE).then(|| CrateName::from(SUITE_CRATE)))
-            })
+            .filter(|name| is_known_crate(name))
+            .cloned()
             .collect();
     }
 
@@ -282,8 +289,8 @@ pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
         }
     }
 
-    Err(InstallerError::ToolchainDetection {
-        reason: "could not find workspace root".to_owned(),
+    Err(InstallerError::WorkspaceNotFound {
+        reason: "could not find Cargo.toml with [workspace] section".to_owned(),
     })
 }
 

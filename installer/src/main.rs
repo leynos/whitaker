@@ -51,7 +51,7 @@ struct Cli {
     #[arg(short, long)]
     verbose: bool,
 
-    /// Suppress output except errors.
+    /// Suppress output except errors (does not affect --dry-run output).
     #[arg(short, long, conflicts_with = "verbose")]
     quiet: bool,
 }
@@ -71,7 +71,7 @@ fn run(cli: Cli) -> Result<()> {
 
     // Detect or override toolchain
     let toolchain = match &cli.toolchain {
-        Some(channel) => Toolchain::with_override(&workspace_root, channel)?,
+        Some(channel) => Toolchain::with_override(&workspace_root, channel),
         None => Toolchain::detect(&workspace_root)?,
     };
 

@@ -41,7 +41,10 @@ impl Stager {
                 let _ = fs::remove_file(&test_path);
                 Ok(())
             }
-            Err(_) => Err(InstallerError::TargetNotWritable { path: staging_dir }),
+            Err(e) => Err(InstallerError::TargetNotWritable {
+                path: staging_dir,
+                reason: e.to_string(),
+            }),
         }
     }
 
