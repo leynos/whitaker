@@ -4,7 +4,7 @@
 //! After installation, it prints shell configuration snippets for enabling
 //! library discovery.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use whitaker_installer::builder::{
     BuildConfig, Builder, CrateName, find_workspace_root, resolve_crates, validate_crate_names,
@@ -156,10 +156,10 @@ fn run(cli: Cli) -> Result<()> {
 
 /// Configuration for dry run output.
 struct DryRunConfig<'a> {
-    workspace_root: &'a Utf8PathBuf,
+    workspace_root: &'a Utf8Path,
     toolchain: &'a str,
     crates: &'a [CrateName],
-    target_dir: &'a Utf8PathBuf,
+    target_dir: &'a Utf8Path,
 }
 
 fn dry_run_output(cli: &Cli, config: DryRunConfig<'_>) -> Result<()> {
