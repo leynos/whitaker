@@ -68,57 +68,54 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 mod tests {
     use super::*;
     use camino::Utf8PathBuf;
+    use rstest::{fixture, rstest};
 
-    #[test]
-    fn snippet_contains_path() {
-        let path = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
-        let snippet = ShellSnippet::new(&path);
-
-        assert!(snippet.bash.contains("/home/user/.local/share/dylint/lib"));
-        assert!(snippet.fish.contains("/home/user/.local/share/dylint/lib"));
-        assert!(
-            snippet
-                .powershell
-                .contains("/home/user/.local/share/dylint/lib")
-        );
+    /// Shared fixture providing a test library path.
+    #[fixture]
+    fn test_path() -> Utf8PathBuf {
+        Utf8PathBuf::from("/home/user/.local/share/dylint/lib")
     }
 
-    #[test]
-    fn bash_snippet_uses_export() {
-        let path = Utf8PathBuf::from("/tmp/dylint");
-        let snippet = ShellSnippet::new(&path);
-
-        assert!(snippet.bash.starts_with("export "));
-        assert!(snippet.bash.contains("DYLINT_LIBRARY_PATH"));
+    /// Shared fixture providing a shell snippet for the test path.
+    #[fixture]
+    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet {
+        ShellSnippet::new(&test_path)
     }
 
-    #[test]
-    fn fish_snippet_uses_set_gx() {
-        let path = Utf8PathBuf::from("/tmp/dylint");
-        let snippet = ShellSnippet::new(&path);
-
-        assert!(snippet.fish.starts_with("set -gx "));
+    #[rstest]
+    fn snippet_contains_path(test_snippet: ShellSnippet, test_path: Utf8PathBuf) {
+        let path_str = test_path.as_str();
+        assert!(test_snippet.bash.contains(path_str));
+        assert!(test_snippet.fish.contains(path_str));
+        assert!(test_snippet.powershell.contains(path_str));
     }
 
-    #[test]
-    fn display_text_includes_all_shells() {
-        let path = Utf8PathBuf::from("/tmp/dylint");
-        let snippet = ShellSnippet::new(&path);
-        let display = snippet.display_text();
+    #[rstest]
+    fn bash_snippet_uses_export(test_snippet: ShellSnippet) {
+        assert!(test_snippet.bash.starts_with("export "));
+        assert!(test_snippet.bash.contains("DYLINT_LIBRARY_PATH"));
+    }
+
+    #[rstest]
+    fn fish_snippet_uses_set_gx(test_snippet: ShellSnippet) {
+        assert!(test_snippet.fish.starts_with("set -gx "));
+    }
+
+    #[rstest]
+    fn display_text_includes_all_shells(test_snippet: ShellSnippet) {
+        let display = test_snippet.display_text();
 
         assert!(display.contains("bash/zsh"));
         assert!(display.contains("fish"));
         assert!(display.contains("PowerShell"));
     }
 
-    #[test]
-    fn success_message_pluralises_correctly() {
+    #[rstest]
+    #[case::singular(1, "1 lint library")]
+    #[case::plural(5, "5 lint libraries")]
+    fn success_message_pluralises_correctly(#[case] count: usize, #[case] expected: &str) {
         let path = Utf8PathBuf::from("/tmp");
-
-        let single = success_message(1, &path);
-        assert!(single.contains("1 lint library"));
-
-        let multiple = success_message(5, &path);
-        assert!(multiple.contains("5 lint libraries"));
+        let msg = success_message(count, &path);
+        assert!(msg.contains(expected));
     }
 }

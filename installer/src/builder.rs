@@ -295,25 +295,34 @@ fn is_workspace_root(cargo_toml: &Utf8Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn resolve_crates_returns_all_by_default() {
-        let crates = resolve_crates(&[], false, false);
-        assert!(crates.contains(&CrateName::from("module_max_lines")));
-        assert!(crates.contains(&CrateName::from(SUITE_CRATE)));
+    /// Test configuration for resolve_crates variants.
+    struct ResolveCratesCase {
+        suite_only: bool,
+        no_suite: bool,
+        expect_lint: bool,
+        expect_suite: bool,
     }
 
-    #[test]
-    fn resolve_crates_suite_only() {
-        let crates = resolve_crates(&[], true, false);
-        assert_eq!(crates, vec![CrateName::from(SUITE_CRATE)]);
-    }
+    /// Parameterised tests for resolve_crates variants.
+    #[rstest]
+    #[case::default(ResolveCratesCase { suite_only: false, no_suite: false, expect_lint: true, expect_suite: true })]
+    #[case::suite_only(ResolveCratesCase { suite_only: true, no_suite: false, expect_lint: false, expect_suite: true })]
+    #[case::no_suite(ResolveCratesCase { suite_only: false, no_suite: true, expect_lint: true, expect_suite: false })]
+    fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
+        let crates = resolve_crates(&[], case.suite_only, case.no_suite);
 
-    #[test]
-    fn resolve_crates_no_suite() {
-        let crates = resolve_crates(&[], false, true);
-        assert!(!crates.contains(&CrateName::from(SUITE_CRATE)));
-        assert!(crates.contains(&CrateName::from("module_max_lines")));
+        assert_eq!(
+            crates.contains(&CrateName::from("module_max_lines")),
+            case.expect_lint,
+            "lint crate inclusion mismatch"
+        );
+        assert_eq!(
+            crates.contains(&CrateName::from(SUITE_CRATE)),
+            case.expect_suite,
+            "suite crate inclusion mismatch"
+        );
     }
 
     #[test]
@@ -323,20 +332,12 @@ mod tests {
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
     }
 
-    #[test]
-    fn validate_known_crates_succeeds() {
-        let names = vec![
-            CrateName::from("module_max_lines"),
-            CrateName::from("suite"),
-        ];
-        assert!(validate_crate_names(&names).is_ok());
-    }
-
-    #[test]
-    fn validate_unknown_crate_fails() {
-        let names = vec![CrateName::from("nonexistent_lint")];
-        let result = validate_crate_names(&names);
-        assert!(result.is_err());
+    #[rstest]
+    #[case::valid(&["module_max_lines", "suite"], true)]
+    #[case::unknown(&["nonexistent_lint"], false)]
+    fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
+        let names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();
+        assert_eq!(validate_crate_names(&names).is_ok(), expect_ok);
     }
 
     #[test]

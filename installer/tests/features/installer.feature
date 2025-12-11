@@ -58,3 +58,8 @@ Feature: Whitaker lint library installer
     And a staging directory
     When the library is staged
     Then the staged filename includes the toolchain
+
+  Scenario: Reject staging to non-writable directory
+    Given a non-writable staging directory
+    When the staging directory is prepared
+    Then staging fails with a target not writable error

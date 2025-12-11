@@ -180,6 +180,7 @@ fn dry_run_output(cli: &Cli, config: DryRunConfig<'_>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn cli_parses_defaults() {
@@ -211,15 +212,15 @@ mod tests {
         assert_eq!(cli.lint.len(), 2);
     }
 
-    #[test]
-    fn cli_parses_suite_only() {
-        let cli = Cli::parse_from(["whitaker-install", "--suite-only"]);
-        assert!(cli.suite_only);
-    }
-
-    #[test]
-    fn cli_parses_dry_run() {
-        let cli = Cli::parse_from(["whitaker-install", "--dry-run"]);
-        assert!(cli.dry_run);
+    /// Parameterised tests for boolean CLI flags.
+    #[rstest]
+    #[case::suite_only(&["whitaker-install", "--suite-only"], |cli: &Cli| cli.suite_only)]
+    #[case::dry_run(&["whitaker-install", "--dry-run"], |cli: &Cli| cli.dry_run)]
+    #[case::verbose(&["whitaker-install", "-v"], |cli: &Cli| cli.verbose)]
+    #[case::quiet(&["whitaker-install", "-q"], |cli: &Cli| cli.quiet)]
+    #[case::no_suite(&["whitaker-install", "--no-suite"], |cli: &Cli| cli.no_suite)]
+    fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
+        let cli = Cli::parse_from(args);
+        assert!(check(&cli));
     }
 }

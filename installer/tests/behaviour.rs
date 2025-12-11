@@ -327,6 +327,85 @@ fn then_staged_includes_toolchain(staging_world: &StagingWorld) {
 }
 
 // ---------------------------------------------------------------------------
+// Staging failure world
+// ---------------------------------------------------------------------------
+
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use tempfile::TempDir;
+use whitaker_installer::error::InstallerError;
+
+struct StagingFailureWorld {
+    stager: RefCell<Option<Stager>>,
+    result: RefCell<Option<Result<(), InstallerError>>>,
+    // Keep temp_dir alive for the lifetime of the test
+    _temp_dir: RefCell<Option<TempDir>>,
+}
+
+impl Default for StagingFailureWorld {
+    fn default() -> Self {
+        Self {
+            stager: RefCell::new(None),
+            result: RefCell::new(None),
+            _temp_dir: RefCell::new(None),
+        }
+    }
+}
+
+#[fixture]
+fn staging_failure_world() -> StagingFailureWorld {
+    StagingFailureWorld::default()
+}
+
+#[given("a non-writable staging directory")]
+fn given_non_writable_dir(staging_failure_world: &StagingFailureWorld) {
+    // Create a temp directory and make it read-only
+    let temp_dir = TempDir::new().expect("failed to create temp dir");
+    let dir_path = temp_dir.path();
+
+    // Create the nested staging path structure that Stager expects
+    let staging_path = dir_path.join("nightly-2025-09-18").join("release");
+    fs::create_dir_all(&staging_path).expect("failed to create staging path");
+
+    // Make the directory read-only (no write permission)
+    let mut perms = fs::metadata(&staging_path)
+        .expect("failed to get metadata")
+        .permissions();
+    perms.set_mode(0o444); // read-only
+    fs::set_permissions(&staging_path, perms).expect("failed to set permissions");
+
+    let utf8_path = Utf8PathBuf::try_from(dir_path.to_path_buf()).expect("temp dir path not UTF-8");
+    let stager = Stager::new(utf8_path, "nightly-2025-09-18");
+
+    staging_failure_world.stager.replace(Some(stager));
+    staging_failure_world._temp_dir.replace(Some(temp_dir));
+}
+
+#[when("the staging directory is prepared")]
+fn when_staging_prepared(staging_failure_world: &StagingFailureWorld) {
+    let stager = staging_failure_world.stager.borrow();
+    let stager = stager.as_ref().expect("stager not set");
+    let result = stager.prepare();
+    staging_failure_world.result.replace(Some(result));
+}
+
+#[then("staging fails with a target not writable error")]
+fn then_staging_fails_not_writable(staging_failure_world: &StagingFailureWorld) {
+    // Skip this assertion when running as root (uid 0) since root can bypass
+    // filesystem permissions. This is similar to how CI containers often run.
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+
+    let result = staging_failure_world.result.borrow();
+    let result = result.as_ref().expect("result not set");
+    assert!(
+        matches!(result, Err(InstallerError::TargetNotWritable { .. })),
+        "expected TargetNotWritable error, got {result:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Scenario bindings
 // ---------------------------------------------------------------------------
 
@@ -378,4 +457,9 @@ fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) {
 #[scenario(path = "tests/features/installer.feature", index = 9)]
 fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) {
     let _ = staging_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 10)]
+fn scenario_reject_staging_non_writable(staging_failure_world: StagingFailureWorld) {
+    let _ = staging_failure_world;
 }
