@@ -101,7 +101,17 @@ impl Stager {
     }
 
     /// Compute the staged filename with toolchain suffix.
-    fn staged_filename(&self, crate_name: &CrateName) -> String {
+    ///
+    /// The filename follows the Dylint naming convention:
+    /// `{prefix}{crate_name}@{toolchain}{extension}`
+    ///
+    /// Where:
+    /// - `prefix` is platform-specific (`lib` on Unix, empty on Windows)
+    /// - `crate_name` has hyphens replaced with underscores
+    /// - `toolchain` is the Rust toolchain channel
+    /// - `extension` is platform-specific (`.so`, `.dylib`, or `.dll`)
+    #[must_use]
+    pub fn staged_filename(&self, crate_name: &CrateName) -> String {
         let base_name = crate_name.as_str().replace('-', "_");
         format!(
             "{}{}@{}{}",

@@ -83,7 +83,15 @@ impl Toolchain {
 }
 
 /// Parse the channel from `rust-toolchain.toml` contents.
-fn parse_toolchain_channel(contents: &str) -> Result<String> {
+///
+/// This function supports two formats:
+/// 1. Standard format with `[toolchain].channel`
+/// 2. Simple format with a top-level `channel` key
+///
+/// # Errors
+///
+/// Returns an error if the TOML is invalid or no channel field is found.
+pub fn parse_toolchain_channel(contents: &str) -> Result<String> {
     let table: toml::Table =
         contents
             .parse()

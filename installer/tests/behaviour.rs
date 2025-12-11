@@ -4,15 +4,16 @@
 //! scenarios that cover crate resolution, toolchain detection, staging,
 //! and output generation.
 
+use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
-use toml::Table;
 use whitaker_installer::builder::{
-    CrateName, LINT_CRATES, SUITE_CRATE, library_extension, library_prefix, resolve_crates,
-    validate_crate_names,
+    CrateName, LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::output::ShellSnippet;
+use whitaker_installer::stager::Stager;
+use whitaker_installer::toolchain::parse_toolchain_channel;
 
 // ---------------------------------------------------------------------------
 // Crate resolution world
@@ -204,21 +205,10 @@ components = ["rust-src"]
 #[when("the toolchain is detected")]
 fn when_toolchain_detected(toolchain_world: &ToolchainWorld) {
     let contents = toolchain_world.contents.borrow();
-    let table: Result<Table, _> = contents.parse();
 
-    match table {
-        Ok(t) => {
-            let channel = t
-                .get("toolchain")
-                .and_then(|tc| tc.get("channel"))
-                .and_then(|c| c.as_str())
-                .map(String::from);
-
-            if channel.is_some() {
-                toolchain_world.channel.replace(channel);
-            } else {
-                toolchain_world.error.set(true);
-            }
+    match parse_toolchain_channel(&contents) {
+        Ok(channel) => {
+            toolchain_world.channel.replace(Some(channel));
         }
         Err(_) => toolchain_world.error.set(true),
     }
@@ -322,10 +312,9 @@ fn when_library_staged(staging_world: &StagingWorld) {
     let crate_name = crate_name.as_ref().expect("crate name not set");
     let toolchain = staging_world.toolchain.borrow();
 
-    let base_name = crate_name.as_str().replace('-', "_");
-    let prefix = library_prefix();
-    let ext = library_extension();
-    let staged_name = format!("{prefix}{base_name}@{toolchain}{ext}");
+    // Use the production Stager to compute the filename
+    let stager = Stager::new(Utf8PathBuf::from("/tmp/test"), &toolchain);
+    let staged_name = stager.staged_filename(crate_name);
 
     staging_world.staged_name.replace(staged_name);
 }
