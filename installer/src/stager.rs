@@ -165,10 +165,10 @@ mod tests {
 
     #[test]
     fn default_target_dir_is_some() {
-        // This test may fail in environments without a home directory
-        let dir = default_target_dir();
-        if let Some(d) = dir {
-            assert!(d.as_str().contains("dylint"));
-        }
+        // Skip assertion in environments without a home directory (e.g., CI containers)
+        let Some(d) = default_target_dir() else {
+            return;
+        };
+        assert!(d.as_str().contains("dylint"));
     }
 }
