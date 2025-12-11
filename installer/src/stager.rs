@@ -78,14 +78,7 @@ impl Stager {
     ///
     /// Returns an error if any staging operation fails.
     pub fn stage_all(&self, build_results: &[BuildResult]) -> Result<Vec<Utf8PathBuf>> {
-        let mut staged = Vec::with_capacity(build_results.len());
-
-        for result in build_results {
-            let path = self.stage(result)?;
-            staged.push(path);
-        }
-
-        Ok(staged)
+        build_results.iter().map(|r| self.stage(r)).collect()
     }
 
     /// Return the full path to the staging directory.

@@ -79,11 +79,7 @@ fn run(cli: Cli) -> Result<()> {
     toolchain.verify_installed()?;
 
     // Convert lint names to CrateName
-    let lint_names: Vec<CrateName> = cli
-        .lint
-        .iter()
-        .map(|s| CrateName::from(s.as_str()))
-        .collect();
+    let lint_names: Vec<CrateName> = cli.lint.iter().cloned().map(CrateName::from).collect();
 
     // Validate lint names if specific lints were requested
     if !lint_names.is_empty() {

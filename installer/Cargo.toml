@@ -19,7 +19,6 @@ clap = { workspace = true, features = ["derive"] }
 dirs = { workspace = true }
 
 [dev-dependencies]
-camino = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

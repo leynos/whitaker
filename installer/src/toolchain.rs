@@ -54,11 +54,14 @@ impl Toolchain {
     ///
     /// # Errors
     ///
-    /// Returns an error if the toolchain is not installed.
+    /// Returns an error if rustup is not found or the toolchain is not installed.
     pub fn verify_installed(&self) -> Result<()> {
         let output = Command::new("rustup")
             .args(["run", &self.channel, "rustc", "--version"])
-            .output()?;
+            .output()
+            .map_err(|e| InstallerError::ToolchainDetection {
+                reason: format!("failed to run rustup: {e}"),
+            })?;
 
         if output.status.success() {
             return Ok(());

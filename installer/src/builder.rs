@@ -9,10 +9,11 @@ use camino::{Utf8Path, Utf8PathBuf};
 use std::fmt;
 use std::process::Command;
 
-/// A validated crate name for lint libraries.
+/// A semantic crate name for lint libraries.
 ///
 /// This newtype wrapper provides type safety for crate names, ensuring they are
-/// passed explicitly rather than as raw strings.
+/// passed explicitly rather than as raw strings. Validation is performed by
+/// [`validate_crate_names`] and related helpers, not by this type itself.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CrateName(String);
 
