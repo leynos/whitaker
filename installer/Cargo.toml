@@ -19,10 +19,10 @@ clap = { workspace = true, features = ["derive"] }
 dirs = { workspace = true }
 
 [dev-dependencies]
-rstest = "0.26.1"
+rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
-tempfile = "3.19.1"
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

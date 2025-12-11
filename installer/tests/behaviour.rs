@@ -292,7 +292,7 @@ fn then_powershell_env(snippet_world: &SnippetWorld) {
 
 #[derive(Default)]
 struct StagingWorld {
-    crate_name: RefCell<String>,
+    crate_name: RefCell<Option<CrateName>>,
     toolchain: RefCell<String>,
     staged_name: RefCell<String>,
 }
@@ -306,7 +306,7 @@ fn staging_world() -> StagingWorld {
 fn given_built_library(staging_world: &StagingWorld) {
     staging_world
         .crate_name
-        .replace("module_max_lines".to_owned());
+        .replace(Some(CrateName::from("module_max_lines")));
 }
 
 #[given("a staging directory")]
@@ -319,9 +319,10 @@ fn given_staging_dir(staging_world: &StagingWorld) {
 #[when("the library is staged")]
 fn when_library_staged(staging_world: &StagingWorld) {
     let crate_name = staging_world.crate_name.borrow();
+    let crate_name = crate_name.as_ref().expect("crate name not set");
     let toolchain = staging_world.toolchain.borrow();
 
-    let base_name = crate_name.replace('-', "_");
+    let base_name = crate_name.as_str().replace('-', "_");
     let prefix = library_prefix();
     let ext = library_extension();
     let staged_name = format!("{prefix}{base_name}@{toolchain}{ext}");

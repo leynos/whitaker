@@ -268,11 +268,8 @@ pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
 
     loop {
         let cargo_toml = current.join("Cargo.toml");
-        if cargo_toml.exists() {
-            let contents = std::fs::read_to_string(&cargo_toml)?;
-            if contents.contains("[workspace]") {
-                return Ok(current);
-            }
+        if cargo_toml.exists() && is_workspace_root(&cargo_toml) {
+            return Ok(current);
         }
 
         match current.parent() {
@@ -284,6 +281,14 @@ pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
     Err(InstallerError::WorkspaceNotFound {
         reason: "could not find Cargo.toml with [workspace] section".to_owned(),
     })
+}
+
+/// Check if a `Cargo.toml` file contains a `[workspace]` section.
+fn is_workspace_root(cargo_toml: &Utf8Path) -> bool {
+    std::fs::read_to_string(cargo_toml)
+        .ok()
+        .and_then(|contents| contents.parse::<toml::Table>().ok())
+        .is_some_and(|table| table.contains_key("workspace"))
 }
 
 #[cfg(test)]

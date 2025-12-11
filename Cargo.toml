@@ -23,8 +23,10 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.9.8"
 thiserror = "2"
 log = "0.4.28"
+rstest = "0.26.1"
 rstest-bdd = "0.2.0"
 rstest-bdd-macros = "0.2.0"
+tempfile = "3.19.1"
 clippy_utils = { path = "crates/clippy_utils", version = "0.1.0" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.1.0" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.1.0" }
@@ -70,7 +72,7 @@ dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]
 common = { workspace = true }
-rstest = "0.26.1"
+rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
