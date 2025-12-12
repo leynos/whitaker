@@ -119,10 +119,15 @@ fn when_installer_cli_run(cli_world: &CliWorld) {
     cli_world.output.replace(Some(output));
 }
 
+/// Helper function to retrieve the command output from the CLI world.
+fn get_output(cli_world: &CliWorld) -> std::cell::Ref<'_, Output> {
+    let output = cli_world.output.borrow();
+    std::cell::Ref::map(output, |opt| opt.as_ref().expect("output not set"))
+}
+
 #[then("the CLI exits successfully")]
 fn then_cli_exits_successfully(cli_world: &CliWorld) {
-    let output = cli_world.output.borrow();
-    let output = output.as_ref().expect("output not set");
+    let output = get_output(cli_world);
     assert!(
         output.status.success(),
         "expected success, stderr: {}",
@@ -150,8 +155,7 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
 
 #[then("the CLI exits with an error")]
 fn then_cli_exits_with_error(cli_world: &CliWorld) {
-    let output = cli_world.output.borrow();
-    let output = output.as_ref().expect("output not set");
+    let output = get_output(cli_world);
     assert!(
         !output.status.success(),
         "expected failure, stdout: {}, stderr: {}",
