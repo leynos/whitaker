@@ -1,0 +1,29 @@
+[package]
+name = "whitaker-installer"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Installer CLI for Whitaker Dylint lint libraries"
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "whitaker-install"
+path = "src/main.rs"
+
+[dependencies]
+camino = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+dirs = { workspace = true }
+
+[dev-dependencies]
+libc = { workspace = true }
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
