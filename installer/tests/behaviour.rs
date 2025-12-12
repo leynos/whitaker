@@ -191,6 +191,13 @@ components = ["rust-src"]
     );
 }
 
+#[given("a rust-toolchain.toml with top-level channel")]
+fn given_top_level_channel(toolchain_world: &ToolchainWorld) {
+    toolchain_world
+        .contents
+        .replace(r#"channel = "nightly-2025-09-18""#.to_owned());
+}
+
 #[given("a rust-toolchain.toml without a channel")]
 fn given_no_channel(toolchain_world: &ToolchainWorld) {
     toolchain_world.contents.replace(
@@ -455,22 +462,27 @@ fn scenario_parse_standard_toolchain(toolchain_world: ToolchainWorld) {
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 7)]
-fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) {
+fn scenario_parse_top_level_channel(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 8)]
+fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) {
+    let _ = toolchain_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 9)]
 fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) {
     let _ = snippet_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 9)]
+#[scenario(path = "tests/features/installer.feature", index = 10)]
 fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) {
     let _ = staging_world;
 }
 
 #[cfg(unix)]
-#[scenario(path = "tests/features/installer.feature", index = 10)]
+#[scenario(path = "tests/features/installer.feature", index = 11)]
 fn scenario_reject_staging_non_writable(staging_failure_world: StagingFailureWorld) {
     let _ = staging_failure_world;
 }

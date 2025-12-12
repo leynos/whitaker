@@ -41,6 +41,11 @@ Feature: Whitaker lint library installer
     When the toolchain is detected
     Then the channel is extracted correctly
 
+  Scenario: Parse top-level channel format
+    Given a rust-toolchain.toml with top-level channel
+    When the toolchain is detected
+    Then the channel is extracted correctly
+
   Scenario: Reject missing channel in toolchain file
     Given a rust-toolchain.toml without a channel
     When the toolchain is detected
