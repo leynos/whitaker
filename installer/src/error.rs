@@ -78,6 +78,15 @@ pub enum InstallerError {
         reason: String,
     },
 
+    /// A Cargo.toml file could not be parsed during workspace detection.
+    #[error("invalid Cargo.toml at {path}: {reason}")]
+    InvalidCargoToml {
+        /// Path to the invalid Cargo.toml.
+        path: camino::Utf8PathBuf,
+        /// Description of the parse error.
+        reason: String,
+    },
+
     /// An I/O operation failed.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),

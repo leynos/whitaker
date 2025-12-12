@@ -63,7 +63,8 @@ impl fmt::Display for CrateName {
 
 /// Static list of lint crates available for building.
 ///
-/// This list includes all individual lint crates plus the aggregated suite.
+/// This list includes all individual lint crates. The aggregated suite is
+/// defined separately as [`SUITE_CRATE`].
 pub const LINT_CRATES: &[&str] = &[
     "conditional_max_n_branches",
     "function_attrs_follow_docs",
@@ -145,6 +146,14 @@ impl Builder {
         }
 
         let library_path = self.library_path(crate_name);
+        if !library_path.exists() {
+            return Err(InstallerError::BuildFailed {
+                crate_name: crate_name.clone(),
+                reason: format!(
+                    "cargo succeeded but expected library was not found at: {library_path}"
+                ),
+            });
+        }
 
         Ok(BuildResult {
             crate_name: crate_name.clone(),
@@ -263,13 +272,14 @@ pub fn resolve_crates(
 ///
 /// # Errors
 ///
-/// Returns an error if the workspace root cannot be determined.
+/// Returns an error if the workspace root cannot be determined, or if a
+/// `Cargo.toml` file cannot be read or parsed.
 pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
     let mut current = start.to_owned();
 
     loop {
         let cargo_toml = current.join("Cargo.toml");
-        if cargo_toml.exists() && is_workspace_root(&cargo_toml) {
+        if cargo_toml.exists() && is_workspace_root(&cargo_toml)? {
             return Ok(current);
         }
 
@@ -285,11 +295,19 @@ pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
 }
 
 /// Check if a `Cargo.toml` file contains a `[workspace]` section.
-fn is_workspace_root(cargo_toml: &Utf8Path) -> bool {
-    std::fs::read_to_string(cargo_toml)
-        .ok()
-        .and_then(|contents| contents.parse::<toml::Table>().ok())
-        .is_some_and(|table| table.contains_key("workspace"))
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or parsed.
+fn is_workspace_root(cargo_toml: &Utf8Path) -> Result<bool> {
+    let contents = std::fs::read_to_string(cargo_toml)?;
+    let table = contents
+        .parse::<toml::Table>()
+        .map_err(|e| InstallerError::InvalidCargoToml {
+            path: cargo_toml.to_owned(),
+            reason: e.to_string(),
+        })?;
+    Ok(table.contains_key("workspace"))
 }
 
 #[cfg(test)]
@@ -336,8 +354,17 @@ mod tests {
     #[case::valid(&["module_max_lines", "suite"], true)]
     #[case::unknown(&["nonexistent_lint"], false)]
     fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
-        let names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();
-        assert_eq!(validate_crate_names(&names).is_ok(), expect_ok);
+        let crate_names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();
+        let res = validate_crate_names(&crate_names);
+        if expect_ok {
+            assert!(res.is_ok());
+        } else {
+            let err = res.expect_err("expected validation failure");
+            assert!(
+                matches!(&err, InstallerError::LintCrateNotFound { name } if *name == crate_names[0]),
+                "unexpected error: {err:?}"
+            );
+        }
     }
 
     #[test]
@@ -349,5 +376,8 @@ mod tests {
         assert_eq!(ext, ".dylib");
         #[cfg(target_os = "windows")]
         assert_eq!(ext, ".dll");
+        // Fallback for other Unix-like platforms (e.g., FreeBSD, OpenBSD)
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        assert_eq!(ext, ".so");
     }
 }
