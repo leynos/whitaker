@@ -56,25 +56,37 @@ struct Cli {
     quiet: bool,
 }
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
-    run(cli)
+    if let Err(err) = run(cli) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
 }
 
 fn run(cli: Cli) -> Result<()> {
     let workspace_root = determine_workspace_root()?;
     let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
-    let crates = convert_and_validate_lints(&cli.lint, cli.suite_only, cli.no_suite)?;
+    let crates = resolve_requested_crates(&cli)?;
     let target_dir = determine_target_dir(cli.target_dir.clone())?;
 
     if cli.dry_run {
-        let config = DryRunConfig {
-            workspace_root: &workspace_root,
-            toolchain: toolchain.channel(),
-            crates: &crates,
-            target_dir: &target_dir,
-        };
-        return dry_run_output(&cli, config);
+        eprintln!("Dry run - no files will be modified\n");
+        eprintln!("Workspace root: {workspace_root}");
+        eprintln!("Toolchain: {}", toolchain.channel());
+        eprintln!("Target directory: {target_dir}");
+        eprintln!("Verbose: {}", cli.verbose);
+
+        if let Some(jobs) = cli.jobs {
+            eprintln!("Parallel jobs: {jobs}");
+        }
+
+        eprintln!("\nCrates to build:");
+        for crate_name in &crates {
+            eprintln!("  - {crate_name}");
+        }
+
+        return Ok(());
     }
 
     let build_results = perform_build(&cli, &workspace_root, &toolchain, &crates)?;
@@ -103,19 +115,19 @@ fn resolve_toolchain(
     Ok(toolchain)
 }
 
-/// Converts lint names to `CrateName`, validates them, and resolves the final crate list.
-fn convert_and_validate_lints(
-    lints: &[String],
-    suite_only: bool,
-    no_suite: bool,
-) -> Result<Vec<CrateName>> {
-    let lint_names: Vec<CrateName> = lints.iter().cloned().map(CrateName::from).collect();
+/// Resolves requested crates from the CLI flags.
+///
+/// This converts lint names into `CrateName` values, validates any provided
+/// names, and applies suite-only / no-suite policy to determine the final build
+/// list.
+fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
+    let lint_names: Vec<CrateName> = cli.lint.iter().cloned().map(CrateName::from).collect();
 
     if !lint_names.is_empty() {
         validate_crate_names(&lint_names)?;
     }
 
-    Ok(resolve_crates(&lint_names, suite_only, no_suite))
+    Ok(resolve_crates(&lint_names, cli.suite_only, cli.no_suite))
 }
 
 /// Determines the target directory from CLI or falls back to the default.
@@ -173,33 +185,6 @@ fn stage_and_output(
         eprintln!();
         let snippet = ShellSnippet::new(target_dir);
         eprintln!("{}", snippet.display_text());
-    }
-
-    Ok(())
-}
-
-/// Configuration for dry run output.
-struct DryRunConfig<'a> {
-    workspace_root: &'a Utf8Path,
-    toolchain: &'a str,
-    crates: &'a [CrateName],
-    target_dir: &'a Utf8Path,
-}
-
-fn dry_run_output(cli: &Cli, config: DryRunConfig<'_>) -> Result<()> {
-    eprintln!("Dry run - no files will be modified\n");
-    eprintln!("Workspace root: {}", config.workspace_root);
-    eprintln!("Toolchain: {}", config.toolchain);
-    eprintln!("Target directory: {}", config.target_dir);
-    eprintln!("Verbose: {}", cli.verbose);
-
-    if let Some(jobs) = cli.jobs {
-        eprintln!("Parallel jobs: {jobs}");
-    }
-
-    eprintln!("\nCrates to build:");
-    for crate_name in config.crates {
-        eprintln!("  - {crate_name}");
     }
 
     Ok(())

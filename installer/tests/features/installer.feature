@@ -68,3 +68,21 @@ Feature: Whitaker lint library installer
     Given a non-writable staging directory
     When the staging directory is prepared
     Then staging fails with a target not writable error
+
+  Scenario: Dry-run outputs configuration
+    Given the installer is invoked with dry-run and a target directory
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And dry-run output is shown
+
+  Scenario: Dry-run rejects unknown lint
+    Given the installer is invoked with dry-run and an unknown lint
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And an unknown lint message is shown
+
+  Scenario: Install suite to a temporary directory
+    Given the installer is invoked in suite-only mode to a temporary directory
+    When the installer CLI is run
+    Then installation succeeds or is skipped
+    And the suite library is staged
