@@ -6,7 +6,9 @@
 use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
+#[cfg(unix)]
+use std::cell::Cell;
+use std::cell::RefCell;
 use whitaker_installer::builder::CrateName;
 use whitaker_installer::stager::Stager;
 
