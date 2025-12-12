@@ -62,43 +62,11 @@ fn main() -> Result<()> {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    // Determine workspace root
-    let cwd = std::env::current_dir()?;
-    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::ToolchainDetection {
-        reason: format!("current directory is not valid UTF-8: {e}"),
-    })?;
-    let workspace_root = find_workspace_root(&cwd_utf8)?;
+    let workspace_root = determine_workspace_root()?;
+    let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
+    let crates = convert_and_validate_lints(&cli.lint, cli.suite_only, cli.no_suite)?;
+    let target_dir = determine_target_dir(cli.target_dir.clone())?;
 
-    // Detect or override toolchain
-    let toolchain = match &cli.toolchain {
-        Some(channel) => Toolchain::with_override(&workspace_root, channel),
-        None => Toolchain::detect(&workspace_root)?,
-    };
-
-    // Verify toolchain is installed
-    toolchain.verify_installed()?;
-
-    // Convert lint names to CrateName
-    let lint_names: Vec<CrateName> = cli.lint.iter().cloned().map(CrateName::from).collect();
-
-    // Validate lint names if specific lints were requested
-    if !lint_names.is_empty() {
-        validate_crate_names(&lint_names)?;
-    }
-
-    // Resolve which crates to build
-    let crates = resolve_crates(&lint_names, cli.suite_only, cli.no_suite);
-
-    // Determine target directory
-    let target_dir = cli
-        .target_dir
-        .clone()
-        .or_else(default_target_dir)
-        .ok_or_else(|| InstallerError::StagingFailed {
-            reason: "could not determine default target directory".to_owned(),
-        })?;
-
-    // Handle dry run
     if cli.dry_run {
         let config = DryRunConfig {
             workspace_root: &workspace_root,
@@ -109,7 +77,63 @@ fn run(cli: Cli) -> Result<()> {
         return dry_run_output(&cli, config);
     }
 
-    // Build crates
+    let build_results = perform_build(&cli, &workspace_root, &toolchain, &crates)?;
+    stage_and_output(&cli, &toolchain, &target_dir, &build_results)
+}
+
+/// Locates the workspace root from the current directory.
+fn determine_workspace_root() -> Result<Utf8PathBuf> {
+    let cwd = std::env::current_dir()?;
+    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::ToolchainDetection {
+        reason: format!("current directory is not valid UTF-8: {e}"),
+    })?;
+    find_workspace_root(&cwd_utf8)
+}
+
+/// Detects or overrides the toolchain, then verifies it is installed.
+fn resolve_toolchain(
+    workspace_root: &Utf8Path,
+    override_channel: Option<&str>,
+) -> Result<Toolchain> {
+    let toolchain = match override_channel {
+        Some(channel) => Toolchain::with_override(workspace_root, channel),
+        None => Toolchain::detect(workspace_root)?,
+    };
+    toolchain.verify_installed()?;
+    Ok(toolchain)
+}
+
+/// Converts lint names to `CrateName`, validates them, and resolves the final crate list.
+fn convert_and_validate_lints(
+    lints: &[String],
+    suite_only: bool,
+    no_suite: bool,
+) -> Result<Vec<CrateName>> {
+    let lint_names: Vec<CrateName> = lints.iter().cloned().map(CrateName::from).collect();
+
+    if !lint_names.is_empty() {
+        validate_crate_names(&lint_names)?;
+    }
+
+    Ok(resolve_crates(&lint_names, suite_only, no_suite))
+}
+
+/// Determines the target directory from CLI or falls back to the default.
+fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
+    cli_target
+        .or_else(default_target_dir)
+        .ok_or_else(|| InstallerError::StagingFailed {
+            reason: "could not determine default target directory".to_owned(),
+        })
+}
+
+/// Builds all requested crates.
+fn perform_build(
+    cli: &Cli,
+    workspace_root: &Utf8Path,
+    toolchain: &Toolchain,
+    crates: &[CrateName],
+) -> Result<Vec<whitaker_installer::builder::BuildResult>> {
     if !cli.quiet {
         eprintln!(
             "Building {} lint crate(s) with toolchain {}...",
@@ -118,32 +142,36 @@ fn run(cli: Cli) -> Result<()> {
         );
     }
 
-    let build_target_dir = workspace_root.join("target");
     let config = BuildConfig {
         toolchain: toolchain.clone(),
-        target_dir: build_target_dir,
+        target_dir: workspace_root.join("target"),
         jobs: cli.jobs,
         verbose: cli.verbose,
     };
 
-    let builder = Builder::new(config);
-    let build_results = builder.build_all(&crates)?;
+    Builder::new(config).build_all(crates)
+}
 
-    // Stage libraries
+/// Stages built libraries and outputs success information.
+fn stage_and_output(
+    cli: &Cli,
+    toolchain: &Toolchain,
+    target_dir: &Utf8Path,
+    build_results: &[whitaker_installer::builder::BuildResult],
+) -> Result<()> {
     if !cli.quiet {
         eprintln!("Staging libraries to {}...", target_dir);
     }
 
-    let stager = Stager::new(target_dir.clone(), toolchain.channel());
+    let stager = Stager::new(target_dir.to_owned(), toolchain.channel());
     stager.prepare()?;
-    stager.stage_all(&build_results)?;
+    stager.stage_all(build_results)?;
 
-    // Output success message and shell snippet
     if !cli.quiet {
         eprintln!();
-        eprintln!("{}", success_message(build_results.len(), &target_dir));
+        eprintln!("{}", success_message(build_results.len(), target_dir));
         eprintln!();
-        let snippet = ShellSnippet::new(&target_dir);
+        let snippet = ShellSnippet::new(target_dir);
         eprintln!("{}", snippet.display_text());
     }
 
