@@ -93,15 +93,42 @@ macro_rules! skip_if_needed {
     };
 }
 
+/// Sets up a temporary directory and returns its path as a string.
+fn setup_temp_dir(cli_world: &CliWorld) -> String {
+    let temp_dir = TempDir::new().expect("failed to create temp dir");
+    let target_dir = temp_dir.path().to_string_lossy().to_string();
+    cli_world._temp_dir.replace(Some(temp_dir));
+    target_dir
+}
+
+/// Asserts that the CLI exit status matches the expected success state.
+fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
+    skip_if_needed!(cli_world);
+
+    let output = get_output(cli_world);
+    if expected_success {
+        assert!(
+            output.status.success(),
+            "expected success, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    } else {
+        assert!(
+            !output.status.success(),
+            "expected failure, stdout: {}, stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 #[given("the installer is invoked with dry-run and a target directory")]
 fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
     let Some(channel) = ensure_required_toolchain_available(cli_world) else {
         return;
     };
 
-    let temp_dir = TempDir::new().expect("failed to create temp dir");
-    let target_dir = temp_dir.path().to_string_lossy().to_string();
-    cli_world._temp_dir.replace(Some(temp_dir));
+    let target_dir = setup_temp_dir(cli_world);
 
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
@@ -132,9 +159,7 @@ fn given_suite_only_install(cli_world: &CliWorld) {
         return;
     };
 
-    let temp_dir = TempDir::new().expect("failed to create temp dir");
-    let target_dir = temp_dir.path().to_string_lossy().to_string();
-    cli_world._temp_dir.replace(Some(temp_dir));
+    let target_dir = setup_temp_dir(cli_world);
 
     cli_world.args.replace(vec![
         "--suite-only".to_owned(),
@@ -175,14 +200,7 @@ fn get_output(cli_world: &CliWorld) -> std::cell::Ref<'_, Output> {
 
 #[then("the CLI exits successfully")]
 fn then_cli_exits_successfully(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let output = get_output(cli_world);
-    assert!(
-        output.status.success(),
-        "expected success, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_exit_status(cli_world, true);
 }
 
 #[then("dry-run output is shown")]
@@ -209,15 +227,7 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
 
 #[then("the CLI exits with an error")]
 fn then_cli_exits_with_error(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let output = get_output(cli_world);
-    assert!(
-        !output.status.success(),
-        "expected failure, stdout: {}, stderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_exit_status(cli_world, false);
 }
 
 #[then("an unknown lint message is shown")]
