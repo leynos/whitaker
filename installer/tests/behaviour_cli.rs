@@ -78,6 +78,13 @@ fn ensure_toolchain_available(cli_world: &CliWorld) -> Option<String> {
     }
 }
 
+/// Ensures a toolchain is available for scenarios that strictly require it.
+/// Returns the channel if available, or None if the scenario should be skipped.
+fn ensure_required_toolchain_available(cli_world: &CliWorld) -> Option<String> {
+    cli_world.requires_toolchain.set(true);
+    ensure_toolchain_available(cli_world)
+}
+
 macro_rules! skip_if_needed {
     ($cli_world:expr) => {
         if $cli_world.skip_assertions.get() {
@@ -88,8 +95,7 @@ macro_rules! skip_if_needed {
 
 #[given("the installer is invoked with dry-run and a target directory")]
 fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
-    cli_world.requires_toolchain.set(true);
-    let Some(channel) = ensure_toolchain_available(cli_world) else {
+    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
         return;
     };
 
@@ -108,9 +114,8 @@ fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
 
 #[given("the installer is invoked with dry-run and an unknown lint")]
 fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
-    let Some(channel) = ensure_toolchain_available(cli_world) else {
-        return;
-    };
+    let channel = pinned_toolchain_channel();
+    cli_world.toolchain.replace(Some(channel.clone()));
 
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
@@ -123,8 +128,7 @@ fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
 
 #[given("the installer is invoked in suite-only mode to a temporary directory")]
 fn given_suite_only_install(cli_world: &CliWorld) {
-    cli_world.requires_toolchain.set(true);
-    let Some(_channel) = ensure_toolchain_available(cli_world) else {
+    let Some(_channel) = ensure_required_toolchain_available(cli_world) else {
         return;
     };
 
