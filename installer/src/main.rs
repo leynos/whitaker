@@ -66,8 +66,8 @@ fn main() {
 
 fn run(cli: Cli) -> Result<()> {
     let workspace_root = determine_workspace_root()?;
-    let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
     let crates = resolve_requested_crates(&cli)?;
+    let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
     let target_dir = determine_target_dir(cli.target_dir.clone())?;
 
     if cli.dry_run {

@@ -16,6 +16,7 @@ struct CliWorld {
     args: RefCell<Vec<String>>,
     output: RefCell<Option<Output>>,
     skip_assertions: Cell<bool>,
+    requires_toolchain: Cell<bool>,
     toolchain: RefCell<Option<String>>,
     // Keep temp_dir alive for the lifetime of the scenario.
     _temp_dir: RefCell<Option<TempDir>>,
@@ -40,16 +41,99 @@ fn pinned_toolchain_channel() -> String {
     parse_toolchain_channel(&contents).expect("failed to parse rust-toolchain.toml")
 }
 
-#[given("the installer is invoked with dry-run and a target directory")]
-fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
+fn is_toolchain_installed(channel: &str) -> bool {
+    Command::new("rustup")
+        .args(["run", channel, "rustc", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn skip_scenario_when_toolchain_missing(cli_world: &CliWorld, channel: &str) {
+    if !is_toolchain_installed(channel) {
+        eprintln!(
+            "Skipping scenario because rustup toolchain '{}' is not installed. Install this toolchain to run these tests.",
+            channel
+        );
+        cli_world.skip_assertions.set(true);
+        rstest_bdd::skip!(
+            "rustup toolchain '{channel}' is not installed. Install this toolchain to run these tests.",
+            channel = channel
+        );
+    }
+}
+
+fn ensure_toolchain_available(cli_world: &CliWorld) -> Option<String> {
+    let channel = pinned_toolchain_channel();
+    cli_world.toolchain.replace(Some(channel.clone()));
+
+    if cli_world.requires_toolchain.get() {
+        skip_scenario_when_toolchain_missing(cli_world, &channel);
+    }
+
+    if cli_world.skip_assertions.get() {
+        None
+    } else {
+        Some(channel)
+    }
+}
+
+/// Ensures a toolchain is available for scenarios that strictly require it.
+/// Returns the channel if available, or None if the scenario should be skipped.
+fn ensure_required_toolchain_available(cli_world: &CliWorld) -> Option<String> {
+    cli_world.requires_toolchain.set(true);
+    ensure_toolchain_available(cli_world)
+}
+
+macro_rules! skip_if_needed {
+    ($cli_world:expr) => {
+        if $cli_world.skip_assertions.get() {
+            return;
+        }
+    };
+}
+
+/// Sets up a temporary directory and returns its path as a string.
+fn setup_temp_dir(cli_world: &CliWorld) -> String {
     let temp_dir = TempDir::new().expect("failed to create temp dir");
     let target_dir = temp_dir.path().to_string_lossy().to_string();
     cli_world._temp_dir.replace(Some(temp_dir));
+    target_dir
+}
+
+/// Asserts that the CLI exit status matches the expected success state.
+fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
+    skip_if_needed!(cli_world);
+
+    let output = get_output(cli_world);
+    if expected_success {
+        assert!(
+            output.status.success(),
+            "expected success, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    } else {
+        assert!(
+            !output.status.success(),
+            "expected failure, stdout: {}, stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[given("the installer is invoked with dry-run and a target directory")]
+fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
+    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
+        return;
+    };
+
+    let target_dir = setup_temp_dir(cli_world);
 
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
         "--toolchain".to_owned(),
-        "stable".to_owned(),
+        channel,
         "--target-dir".to_owned(),
         target_dir,
     ]);
@@ -57,10 +141,13 @@ fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
 
 #[given("the installer is invoked with dry-run and an unknown lint")]
 fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
+    let channel = pinned_toolchain_channel();
+    cli_world.toolchain.replace(Some(channel.clone()));
+
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
         "--toolchain".to_owned(),
-        "stable".to_owned(),
+        channel,
         "--lint".to_owned(),
         "nonexistent_lint".to_owned(),
     ]);
@@ -68,23 +155,11 @@ fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
 
 #[given("the installer is invoked in suite-only mode to a temporary directory")]
 fn given_suite_only_install(cli_world: &CliWorld) {
-    let channel = pinned_toolchain_channel();
-    cli_world.toolchain.replace(Some(channel.clone()));
-
-    let toolchain_installed = Command::new("rustup")
-        .args(["run", &channel, "rustc", "--version"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-
-    if !toolchain_installed {
-        cli_world.skip_assertions.set(true);
+    let Some(_channel) = ensure_required_toolchain_available(cli_world) else {
         return;
-    }
+    };
 
-    let temp_dir = TempDir::new().expect("failed to create temp dir");
-    let target_dir = temp_dir.path().to_string_lossy().to_string();
-    cli_world._temp_dir.replace(Some(temp_dir));
+    let target_dir = setup_temp_dir(cli_world);
 
     cli_world.args.replace(vec![
         "--suite-only".to_owned(),
@@ -97,9 +172,7 @@ fn given_suite_only_install(cli_world: &CliWorld) {
 
 #[when("the installer CLI is run")]
 fn when_installer_cli_run(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
+    skip_if_needed!(cli_world);
 
     let args = cli_world.args.borrow();
     let mut cmd = Command::new("cargo");
@@ -127,22 +200,21 @@ fn get_output(cli_world: &CliWorld) -> std::cell::Ref<'_, Output> {
 
 #[then("the CLI exits successfully")]
 fn then_cli_exits_successfully(cli_world: &CliWorld) {
-    let output = get_output(cli_world);
-    assert!(
-        output.status.success(),
-        "expected success, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_exit_status(cli_world, true);
 }
 
 #[then("dry-run output is shown")]
 fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
-    let output = cli_world.output.borrow();
-    let output = output.as_ref().expect("output not set");
+    skip_if_needed!(cli_world);
+
+    let toolchain = cli_world.toolchain.borrow();
+    let toolchain = toolchain.as_ref().expect("toolchain not set");
+
+    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(stderr.contains("Dry run - no files will be modified"));
-    assert!(stderr.contains("Toolchain: stable"));
+    assert!(stderr.contains(&format!("Toolchain: {toolchain}")));
     assert!(stderr.contains("Crates to build:"));
     assert!(stderr.contains("module_max_lines"));
     assert!(stderr.contains("suite"));
@@ -155,20 +227,26 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
 
 #[then("the CLI exits with an error")]
 fn then_cli_exits_with_error(cli_world: &CliWorld) {
-    let output = get_output(cli_world);
-    assert!(
-        !output.status.success(),
-        "expected failure, stdout: {}, stderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_exit_status(cli_world, false);
 }
 
 #[then("an unknown lint message is shown")]
 fn then_unknown_lint_message_is_shown(cli_world: &CliWorld) {
-    let output = cli_world.output.borrow();
-    let output = output.as_ref().expect("output not set");
+    skip_if_needed!(cli_world);
+
+    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Lint validation fails before dry-run configuration output is rendered.
+    assert!(
+        !stderr.contains("Dry run - no files will be modified"),
+        "dry-run configuration output should not be printed on unknown-lint error, stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Crates to build:"),
+        "dry-run configuration output should not be printed on unknown-lint error, stderr: {stderr}"
+    );
+
     assert!(
         stderr.contains("lint crate nonexistent_lint not found"),
         "unexpected stderr: {stderr}"
@@ -177,12 +255,9 @@ fn then_unknown_lint_message_is_shown(cli_world: &CliWorld) {
 
 #[then("installation succeeds or is skipped")]
 fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
+    skip_if_needed!(cli_world);
 
-    let output = cli_world.output.borrow();
-    let output = output.as_ref().expect("output not set");
+    let output = get_output(cli_world);
     assert!(
         output.status.success(),
         "installation failed: {}",
@@ -192,9 +267,7 @@ fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
 
 #[then("the suite library is staged")]
 fn then_suite_library_is_staged(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
+    skip_if_needed!(cli_world);
 
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");
