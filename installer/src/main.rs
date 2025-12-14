@@ -118,11 +118,11 @@ fn resolve_toolchain(
     Ok(toolchain)
 }
 
-/// Resolves requested crates from the CLI flags.
-///
-/// This converts lint names into `CrateName` values, validates any provided
-/// names, and applies suite-only / no-suite policy to determine the final build
-/// list.
+// Resolves requested crates from the CLI flags.
+//
+// This converts lint names into `CrateName` values, validates any provided
+// names, and applies suite-only / no-suite policy to determine the final build
+// list.
 fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
     if cli.suite_only {
         return Ok(resolve_crates(&[], true, cli.no_suite));
@@ -216,6 +216,20 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
+    fn base_cli() -> Cli {
+        Cli {
+            target_dir: None,
+            lint: Vec::new(),
+            suite_only: false,
+            no_suite: false,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        }
+    }
+
     #[test]
     fn cli_parses_defaults() {
         let cli = Cli::parse_from(["whitaker-install"]);
@@ -281,47 +295,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(
-        Cli {
-            target_dir: None,
-            lint: Vec::new(),
-            suite_only: false,
-            no_suite: false,
-            jobs: None,
-            toolchain: None,
-            dry_run: false,
-            verbose: false,
-            quiet: false,
-        },
-        true,
-        true
-    )]
+    #[case::default(base_cli(), true, true)]
     #[case::no_suite(
-        Cli {
-            target_dir: None,
-            lint: Vec::new(),
-            suite_only: false,
-            no_suite: true,
-            jobs: None,
-            toolchain: None,
-            dry_run: false,
-            verbose: false,
-            quiet: false,
+        {
+            let mut cli = base_cli();
+            cli.no_suite = true;
+            cli
         },
         true,
         false
     )]
     #[case::suite_only(
-        Cli {
-            target_dir: None,
-            lint: Vec::new(),
-            suite_only: true,
-            no_suite: false,
-            jobs: None,
-            toolchain: None,
-            dry_run: false,
-            verbose: false,
-            quiet: false,
+        {
+            let mut cli = base_cli();
+            cli.suite_only = true;
+            cli
         },
         false,
         true
@@ -341,17 +329,8 @@ mod tests {
 
     #[test]
     fn resolve_requested_crates_returns_specific_lints_when_provided() {
-        let cli = Cli {
-            target_dir: None,
-            lint: vec!["module_max_lines".to_owned()],
-            suite_only: false,
-            no_suite: false,
-            jobs: None,
-            toolchain: None,
-            dry_run: false,
-            verbose: false,
-            quiet: false,
-        };
+        let mut cli = base_cli();
+        cli.lint = vec!["module_max_lines".to_owned()];
 
         let crates = resolve_requested_crates(&cli).expect("expected crate resolution to succeed");
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
@@ -359,17 +338,8 @@ mod tests {
 
     #[test]
     fn resolve_requested_crates_rejects_unknown_lints() {
-        let cli = Cli {
-            target_dir: None,
-            lint: vec!["nonexistent_lint".to_owned()],
-            suite_only: false,
-            no_suite: false,
-            jobs: None,
-            toolchain: None,
-            dry_run: false,
-            verbose: false,
-            quiet: false,
-        };
+        let mut cli = base_cli();
+        cli.lint = vec!["nonexistent_lint".to_owned()];
 
         let err = resolve_requested_crates(&cli).expect_err("expected crate resolution to fail");
         assert!(matches!(

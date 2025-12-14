@@ -36,9 +36,18 @@ fn workspace_root() -> PathBuf {
 
 fn pinned_toolchain_channel() -> String {
     let toolchain_path = workspace_root().join("rust-toolchain.toml");
-    let contents =
-        std::fs::read_to_string(&toolchain_path).expect("failed to read rust-toolchain.toml");
-    parse_toolchain_channel(&contents).expect("failed to parse rust-toolchain.toml")
+    let contents = std::fs::read_to_string(&toolchain_path).unwrap_or_else(|err| {
+        panic!(
+            "failed to read rust-toolchain.toml at {}: {err}",
+            toolchain_path.display()
+        )
+    });
+    parse_toolchain_channel(&contents).unwrap_or_else(|err| {
+        panic!(
+            "failed to parse rust-toolchain.toml at {}: {err}",
+            toolchain_path.display()
+        )
+    })
 }
 
 fn is_toolchain_installed(channel: &str) -> bool {

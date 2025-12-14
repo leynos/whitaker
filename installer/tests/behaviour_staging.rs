@@ -9,6 +9,7 @@ use rstest_bdd_macros::{given, scenario, then, when};
 #[cfg(unix)]
 use std::cell::Cell;
 use std::cell::RefCell;
+use tempfile::TempDir;
 use whitaker_installer::builder::CrateName;
 use whitaker_installer::stager::Stager;
 
@@ -49,7 +50,10 @@ fn when_library_staged(staging_world: &StagingWorld) {
     let toolchain = staging_world.toolchain.borrow();
 
     // Use the production Stager to compute the filename.
-    let stager = Stager::new(Utf8PathBuf::from("/tmp/test"), &toolchain);
+    let temp_dir = TempDir::new().expect("failed to create temp dir");
+    let utf8_path =
+        Utf8PathBuf::try_from(temp_dir.path().to_path_buf()).expect("temp dir path not UTF-8");
+    let stager = Stager::new(utf8_path, toolchain.as_str());
     let staged_name = stager.staged_filename(crate_name);
 
     staging_world.staged_name.replace(staged_name);
@@ -117,7 +121,7 @@ mod staging_failure {
         let mut perms = fs::metadata(&staging_path)
             .expect("failed to get metadata")
             .permissions();
-        perms.set_mode(0o444); // read-only
+        perms.set_mode(0o555); // readable/traversable, not writable
         fs::set_permissions(&staging_path, perms).expect("failed to set permissions");
 
         let utf8_path =
