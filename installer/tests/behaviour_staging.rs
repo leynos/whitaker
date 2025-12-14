@@ -164,6 +164,8 @@ mod staging_failure {
 
         // Skip this assertion when running as root (uid 0) since root can bypass
         // filesystem permissions. This is similar to how CI containers often run.
+        // SAFETY: `libc::geteuid()` is a simple FFI call with no preconditions;
+        // it returns the effective user ID without modifying any state.
         if unsafe { libc::geteuid() } == 0 {
             return;
         }

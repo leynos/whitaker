@@ -141,13 +141,8 @@ fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
 
 #[given("the installer is invoked with dry-run and an unknown lint")]
 fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
-    let channel = pinned_toolchain_channel();
-    cli_world.toolchain.replace(Some(channel.clone()));
-
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
-        "--toolchain".to_owned(),
-        channel,
         "--lint".to_owned(),
         "nonexistent_lint".to_owned(),
     ]);
@@ -175,16 +170,7 @@ fn when_installer_cli_run(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
     let args = cli_world.args.borrow();
-    let mut cmd = Command::new("cargo");
-    cmd.args([
-        "run",
-        "-q",
-        "-p",
-        "whitaker-installer",
-        "--bin",
-        "whitaker-install",
-        "--",
-    ]);
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-install"));
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
 
@@ -269,6 +255,7 @@ fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
 fn then_suite_library_is_staged(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
+    let output = get_output(cli_world);
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");
     let temp_dir = cli_world._temp_dir.borrow();
@@ -281,11 +268,17 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect::<Vec<_>>();
 
+    let expected_substring = format!("suite@{channel}");
+    let matches = entries
+        .iter()
+        .filter(|name| name.contains(&expected_substring))
+        .count();
+
     assert!(
-        entries
-            .iter()
-            .any(|name| name.contains(&format!("suite@{channel}"))),
-        "expected suite library to be staged in {staging_dir:?}, entries: {entries:?}"
+        matches == 1,
+        "expected exactly one suite library matching '{expected_substring}' to be staged in {staging_dir:?}; matches={matches}, entries={entries:?}, stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 
@@ -293,6 +286,8 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
 // Scenario bindings
 // ---------------------------------------------------------------------------
 
+// Do not reorder scenarios in tests/features/installer.feature — bindings are
+// index-based.
 #[scenario(path = "tests/features/installer.feature", index = 12)]
 fn scenario_dry_run_outputs_configuration(cli_world: CliWorld) {
     let _ = cli_world;

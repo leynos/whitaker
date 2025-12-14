@@ -6,6 +6,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
+use std::io::Write;
 use whitaker_installer::builder::{
     BuildConfig, Builder, CrateName, find_workspace_root, resolve_crates, validate_crate_names,
 };
@@ -58,9 +59,10 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    if let Err(err) = run(cli) {
-        eprintln!("{err}");
-        std::process::exit(1);
+    let mut stderr = std::io::stderr();
+    let exit_code = exit_code_for_run_result(run(cli), &mut stderr);
+    if exit_code != 0 {
+        std::process::exit(exit_code);
     }
 }
 
@@ -76,6 +78,7 @@ fn run(cli: Cli) -> Result<()> {
         eprintln!("Toolchain: {}", toolchain.channel());
         eprintln!("Target directory: {target_dir}");
         eprintln!("Verbose: {}", cli.verbose);
+        eprintln!("Quiet: {}", cli.quiet);
 
         if let Some(jobs) = cli.jobs {
             eprintln!("Parallel jobs: {jobs}");
@@ -121,13 +124,21 @@ fn resolve_toolchain(
 /// names, and applies suite-only / no-suite policy to determine the final build
 /// list.
 fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
-    let lint_names: Vec<CrateName> = cli.lint.iter().cloned().map(CrateName::from).collect();
-
-    if !lint_names.is_empty() {
-        validate_crate_names(&lint_names)?;
+    if cli.suite_only {
+        return Ok(resolve_crates(&[], true, cli.no_suite));
     }
 
-    Ok(resolve_crates(&lint_names, cli.suite_only, cli.no_suite))
+    let lint_crates: Vec<CrateName> = cli
+        .lint
+        .iter()
+        .map(|name| CrateName::from(name.as_str()))
+        .collect();
+
+    if !lint_crates.is_empty() {
+        validate_crate_names(&lint_crates)?;
+    }
+
+    Ok(resolve_crates(&lint_crates, cli.suite_only, cli.no_suite))
 }
 
 /// Determines the target directory from CLI or falls back to the default.
@@ -190,6 +201,16 @@ fn stage_and_output(
     Ok(())
 }
 
+fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
+    match result {
+        Ok(()) => 0,
+        Err(err) => {
+            let _ = writeln!(stderr, "{err}");
+            1
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,5 +256,133 @@ mod tests {
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));
+    }
+
+    #[test]
+    fn exit_code_for_run_result_returns_zero_on_success() {
+        let mut stderr = Vec::new();
+        let exit_code = exit_code_for_run_result(Ok(()), &mut stderr);
+        assert_eq!(exit_code, 0);
+        assert!(stderr.is_empty());
+    }
+
+    #[test]
+    fn exit_code_for_run_result_prints_error_and_returns_one() {
+        let err = InstallerError::LintCrateNotFound {
+            name: CrateName::from("nonexistent_lint"),
+        };
+
+        let mut stderr = Vec::new();
+        let exit_code = exit_code_for_run_result(Err(err), &mut stderr);
+        assert_eq!(exit_code, 1);
+
+        let stderr = String::from_utf8(stderr).expect("stderr was not UTF-8");
+        assert!(stderr.contains("lint crate nonexistent_lint not found"));
+    }
+
+    #[rstest]
+    #[case::default(
+        Cli {
+            target_dir: None,
+            lint: Vec::new(),
+            suite_only: false,
+            no_suite: false,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        },
+        true,
+        true
+    )]
+    #[case::no_suite(
+        Cli {
+            target_dir: None,
+            lint: Vec::new(),
+            suite_only: false,
+            no_suite: true,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        },
+        true,
+        false
+    )]
+    #[case::suite_only(
+        Cli {
+            target_dir: None,
+            lint: Vec::new(),
+            suite_only: true,
+            no_suite: false,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        },
+        false,
+        true
+    )]
+    fn resolve_requested_crates_respects_suite_and_lint_flags(
+        #[case] cli: Cli,
+        #[case] expect_lint: bool,
+        #[case] expect_suite: bool,
+    ) {
+        let crates = resolve_requested_crates(&cli).expect("expected crate resolution to succeed");
+        assert_eq!(
+            crates.contains(&CrateName::from("module_max_lines")),
+            expect_lint
+        );
+        assert_eq!(crates.contains(&CrateName::from("suite")), expect_suite);
+    }
+
+    #[test]
+    fn resolve_requested_crates_returns_specific_lints_when_provided() {
+        let cli = Cli {
+            target_dir: None,
+            lint: vec!["module_max_lines".to_owned()],
+            suite_only: false,
+            no_suite: false,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        };
+
+        let crates = resolve_requested_crates(&cli).expect("expected crate resolution to succeed");
+        assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
+    }
+
+    #[test]
+    fn resolve_requested_crates_rejects_unknown_lints() {
+        let cli = Cli {
+            target_dir: None,
+            lint: vec!["nonexistent_lint".to_owned()],
+            suite_only: false,
+            no_suite: false,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        };
+
+        let err = resolve_requested_crates(&cli).expect_err("expected crate resolution to fail");
+        assert!(matches!(
+            err,
+            InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
+        ));
+    }
+
+    #[rstest]
+    #[case::suite_only_with_lint(&["whitaker-install", "--suite-only", "--lint", "module_max_lines"])]
+    #[case::suite_only_with_no_suite(&["whitaker-install", "--suite-only", "--no-suite"])]
+    #[case::verbose_with_quiet(&["whitaker-install", "--verbose", "--quiet"])]
+    fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
+        Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");
     }
 }
