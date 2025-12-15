@@ -6,6 +6,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
+use std::io::Write;
 use whitaker_installer::builder::{
     BuildConfig, Builder, CrateName, find_workspace_root, resolve_crates, validate_crate_names,
 };
@@ -56,25 +57,39 @@ struct Cli {
     quiet: bool,
 }
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
-    run(cli)
+    let mut stderr = std::io::stderr();
+    let exit_code = exit_code_for_run_result(run(cli), &mut stderr);
+    if exit_code != 0 {
+        std::process::exit(exit_code);
+    }
 }
 
 fn run(cli: Cli) -> Result<()> {
     let workspace_root = determine_workspace_root()?;
+    let crates = resolve_requested_crates(&cli)?;
     let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
-    let crates = convert_and_validate_lints(&cli.lint, cli.suite_only, cli.no_suite)?;
     let target_dir = determine_target_dir(cli.target_dir.clone())?;
 
     if cli.dry_run {
-        let config = DryRunConfig {
-            workspace_root: &workspace_root,
-            toolchain: toolchain.channel(),
-            crates: &crates,
-            target_dir: &target_dir,
-        };
-        return dry_run_output(&cli, config);
+        eprintln!("Dry run - no files will be modified\n");
+        eprintln!("Workspace root: {workspace_root}");
+        eprintln!("Toolchain: {}", toolchain.channel());
+        eprintln!("Target directory: {target_dir}");
+        eprintln!("Verbose: {}", cli.verbose);
+        eprintln!("Quiet: {}", cli.quiet);
+
+        if let Some(jobs) = cli.jobs {
+            eprintln!("Parallel jobs: {jobs}");
+        }
+
+        eprintln!("\nCrates to build:");
+        for crate_name in &crates {
+            eprintln!("  - {crate_name}");
+        }
+
+        return Ok(());
     }
 
     let build_results = perform_build(&cli, &workspace_root, &toolchain, &crates)?;
@@ -103,19 +118,27 @@ fn resolve_toolchain(
     Ok(toolchain)
 }
 
-/// Converts lint names to `CrateName`, validates them, and resolves the final crate list.
-fn convert_and_validate_lints(
-    lints: &[String],
-    suite_only: bool,
-    no_suite: bool,
-) -> Result<Vec<CrateName>> {
-    let lint_names: Vec<CrateName> = lints.iter().cloned().map(CrateName::from).collect();
-
-    if !lint_names.is_empty() {
-        validate_crate_names(&lint_names)?;
+// Resolves requested crates from the CLI flags.
+//
+// This converts lint names into `CrateName` values, validates any provided
+// names, and applies suite-only / no-suite policy to determine the final build
+// list.
+fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
+    if cli.suite_only {
+        return Ok(resolve_crates(&[], true, cli.no_suite));
     }
 
-    Ok(resolve_crates(&lint_names, suite_only, no_suite))
+    let lint_crates: Vec<CrateName> = cli
+        .lint
+        .iter()
+        .map(|name| CrateName::from(name.as_str()))
+        .collect();
+
+    if !lint_crates.is_empty() {
+        validate_crate_names(&lint_crates)?;
+    }
+
+    Ok(resolve_crates(&lint_crates, cli.suite_only, cli.no_suite))
 }
 
 /// Determines the target directory from CLI or falls back to the default.
@@ -178,37 +201,34 @@ fn stage_and_output(
     Ok(())
 }
 
-/// Configuration for dry run output.
-struct DryRunConfig<'a> {
-    workspace_root: &'a Utf8Path,
-    toolchain: &'a str,
-    crates: &'a [CrateName],
-    target_dir: &'a Utf8Path,
-}
-
-fn dry_run_output(cli: &Cli, config: DryRunConfig<'_>) -> Result<()> {
-    eprintln!("Dry run - no files will be modified\n");
-    eprintln!("Workspace root: {}", config.workspace_root);
-    eprintln!("Toolchain: {}", config.toolchain);
-    eprintln!("Target directory: {}", config.target_dir);
-    eprintln!("Verbose: {}", cli.verbose);
-
-    if let Some(jobs) = cli.jobs {
-        eprintln!("Parallel jobs: {jobs}");
+fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
+    match result {
+        Ok(()) => 0,
+        Err(err) => {
+            let _ = writeln!(stderr, "{err}");
+            1
+        }
     }
-
-    eprintln!("\nCrates to build:");
-    for crate_name in config.crates {
-        eprintln!("  - {crate_name}");
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
+
+    fn base_cli() -> Cli {
+        Cli {
+            target_dir: None,
+            lint: Vec::new(),
+            suite_only: false,
+            no_suite: false,
+            jobs: None,
+            toolchain: None,
+            dry_run: false,
+            verbose: false,
+            quiet: false,
+        }
+    }
 
     #[test]
     fn cli_parses_defaults() {
@@ -250,5 +270,89 @@ mod tests {
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));
+    }
+
+    #[test]
+    fn exit_code_for_run_result_returns_zero_on_success() {
+        let mut stderr = Vec::new();
+        let exit_code = exit_code_for_run_result(Ok(()), &mut stderr);
+        assert_eq!(exit_code, 0);
+        assert!(stderr.is_empty());
+    }
+
+    #[test]
+    fn exit_code_for_run_result_prints_error_and_returns_one() {
+        let err = InstallerError::LintCrateNotFound {
+            name: CrateName::from("nonexistent_lint"),
+        };
+
+        let mut stderr = Vec::new();
+        let exit_code = exit_code_for_run_result(Err(err), &mut stderr);
+        assert_eq!(exit_code, 1);
+
+        let stderr = String::from_utf8(stderr).expect("stderr was not UTF-8");
+        assert!(stderr.contains("lint crate nonexistent_lint not found"));
+    }
+
+    #[rstest]
+    #[case::default(base_cli(), true, true)]
+    #[case::no_suite(
+        {
+            let mut cli = base_cli();
+            cli.no_suite = true;
+            cli
+        },
+        true,
+        false
+    )]
+    #[case::suite_only(
+        {
+            let mut cli = base_cli();
+            cli.suite_only = true;
+            cli
+        },
+        false,
+        true
+    )]
+    fn resolve_requested_crates_respects_suite_and_lint_flags(
+        #[case] cli: Cli,
+        #[case] expect_lint: bool,
+        #[case] expect_suite: bool,
+    ) {
+        let crates = resolve_requested_crates(&cli).expect("expected crate resolution to succeed");
+        assert_eq!(
+            crates.contains(&CrateName::from("module_max_lines")),
+            expect_lint
+        );
+        assert_eq!(crates.contains(&CrateName::from("suite")), expect_suite);
+    }
+
+    #[test]
+    fn resolve_requested_crates_returns_specific_lints_when_provided() {
+        let mut cli = base_cli();
+        cli.lint = vec!["module_max_lines".to_owned()];
+
+        let crates = resolve_requested_crates(&cli).expect("expected crate resolution to succeed");
+        assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
+    }
+
+    #[test]
+    fn resolve_requested_crates_rejects_unknown_lints() {
+        let mut cli = base_cli();
+        cli.lint = vec!["nonexistent_lint".to_owned()];
+
+        let err = resolve_requested_crates(&cli).expect_err("expected crate resolution to fail");
+        assert!(matches!(
+            err,
+            InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
+        ));
+    }
+
+    #[rstest]
+    #[case::suite_only_with_lint(&["whitaker-install", "--suite-only", "--lint", "module_max_lines"])]
+    #[case::suite_only_with_no_suite(&["whitaker-install", "--suite-only", "--no-suite"])]
+    #[case::verbose_with_quiet(&["whitaker-install", "--verbose", "--quiet"])]
+    fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
+        Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");
     }
 }
