@@ -1,8 +1,11 @@
 # Whitaker User's Guide
 
-Whitaker ships helpers that streamline the creation of new Dylint crates. This
-guide explains how to scaffold a lint crate using the shared template and how
-to run the accompanying UI tests.
+Whitaker is a collection of opinionated Dylint lints for Rust. This guide
+explains how to install and configure the lints, use the installer CLI, and
+customise behaviour for your project.
+
+For contributors who want to add new lints, see the section on generating lint
+crates from the template.
 
 ## Generating a lint crate from the template
 
@@ -52,6 +55,99 @@ cargo dylint list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
 Swap `v0.1.0` for the tag to exercise; omit `--rev` or set `GIT_TAG=HEAD` to
 trial the current branch tip.
 
+## Using whitaker-install
+
+The `whitaker-install` CLI builds, links, and stages Dylint lint libraries for
+local use. This approach is useful when you want pre-built libraries rather
+than building from source on each `cargo dylint` invocation.
+
+### Prerequisites
+
+Before using `whitaker-install`, ensure you have:
+
+- `cargo-dylint` and `dylint-link` installed (`cargo install cargo-dylint
+  dylint-link`)
+- A compatible Rust nightly toolchain (the installer detects this from
+  `rust-toolchain.toml`)
+
+### Basic usage
+
+Clone the Whitaker repository and run the installer from the workspace root:
+
+```sh
+git clone https://github.com/leynos/whitaker.git
+cd whitaker
+cargo run --release -p whitaker-installer
+```
+
+By default, this builds all seven lint crates plus the aggregated suite and
+stages them to a platform-specific directory:
+
+- Linux: `~/.local/share/dylint/lib`
+- macOS: `~/Library/Application Support/dylint/lib`
+- Windows: `%LOCALAPPDATA%\dylint\lib`
+
+### Installation modes
+
+Build only the aggregated suite (single library containing all lints):
+
+```sh
+whitaker-install --suite-only
+```
+
+Build specific lints by name (can be repeated):
+
+```sh
+whitaker-install -l module_max_lines -l no_expect_outside_tests
+```
+
+Build all individual lints but exclude the suite:
+
+```sh
+whitaker-install --no-suite
+```
+
+### Configuration options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--target-dir DIR` | `-t` | Staging directory for built libraries |
+| `--lint NAME` | `-l` | Build specific lint (repeatable) |
+| `--suite-only` | | Build only the aggregated suite |
+| `--no-suite` | | Exclude the aggregated suite |
+| `--toolchain TOOLCHAIN` | | Override the detected toolchain |
+| `--jobs N` | `-j` | Number of parallel build jobs |
+| `--dry-run` | | Show what would be done without executing |
+| `--verbose` | `-v` | Increase output verbosity |
+| `--quiet` | `-q` | Suppress output except errors |
+
+### Shell configuration
+
+After installation, configure your shell to find the staged libraries. The
+installer prints snippets for common shells:
+
+```sh
+# bash/zsh (~/.bashrc, ~/.zshrc)
+export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib"
+
+# fish (~/.config/fish/config.fish)
+set -gx DYLINT_LIBRARY_PATH "$HOME/.local/share/dylint/lib"
+
+# PowerShell ($PROFILE)
+$env:DYLINT_LIBRARY_PATH = "$HOME/.local/share/dylint/lib"
+```
+
+### Running installed lints
+
+With `DYLINT_LIBRARY_PATH` set, run the lints without workspace metadata:
+
+```sh
+cargo dylint --all
+```
+
+Or combine with workspace metadata for hybrid setups where some lints are
+pre-built and others are fetched from Git.
+
 ## Quick Setup
 
 To integrate Whitaker lints into a project, add the following to the workspace
@@ -70,36 +166,89 @@ Then run the lints across the workspace:
 cargo dylint --all
 ```
 
-### Version pinning
+### Suite vs individual crates
 
-For reproducible builds, reuse the shared declaration and replace the library
-entry with exactly one of:
+Whitaker offers two ways to load lints:
 
-- Release tag:
+- **Individual crates** (`pattern = "crates/*"`): Each lint is a separate
+  library. This allows selective loading and independent version pinning but
+  results in more build artifacts.
+- **Aggregated suite** (`pattern = "suite"`): All lints in a single library.
+  Faster to load but all-or-nothing.
 
-  ```toml
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
-  ```
+For most projects, the aggregated suite provides the simplest setup:
 
-- Commit hash (Secure Hash Algorithm, SHA):
-
-  ```toml
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
-  ```
-
-### Future enhancement
-
-The cargo-dylint tool does not yet ship an initialization command; the metadata
-edits above remain the supported path. A possible future addition could look
-like:
-
-```sh
-# Potential future feature
-cargo dylint init --git https://github.com/leynos/whitaker --pattern "crates/*"
+```toml
+[workspace.metadata.dylint]
+libraries = [
+  { git = "https://github.com/leynos/whitaker", pattern = "suite" }
+]
 ```
 
-This would provide an idiomatic Rust-native way to configure workspace metadata
-without manual TOML editing.
+Use individual crates when you need only a subset of lints or want to pin
+specific lints to different versions.
+
+### Version pinning
+
+For reproducible builds, pin to a specific release tag or commit:
+
+```toml
+# Release tag
+[workspace.metadata.dylint]
+libraries = [
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
+]
+```
+
+```toml
+# Commit hash (Secure Hash Algorithm, SHA)
+[workspace.metadata.dylint]
+libraries = [
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
+]
+```
+
+### Using pre-built libraries
+
+If you have installed lints via `whitaker-install`, configure Dylint to use the
+staged libraries:
+
+```toml
+[workspace.metadata.dylint]
+libraries = [
+  { path = "/home/user/.local/share/dylint/lib" }
+]
+```
+
+This skips the build step entirely, providing faster lint runs at the cost of
+managing library updates manually.
+
+### Lint configuration
+
+Configure individual lint behaviour in `dylint.toml` at the workspace root:
+
+```toml
+# Module size threshold (default: 400)
+[module_max_lines]
+max_lines = 500
+
+# Conditional branch limit (default: 2)
+[conditional_max_n_branches]
+max_branches = 3
+
+# Custom test attributes
+[no_expect_outside_tests]
+additional_test_attributes = ["my_framework::test", "async_std::test"]
+
+# Allow panics in main
+[no_unwrap_or_else_panic]
+allow_in_main = true
+
+# Diagnostic language (default: en-GB)
+locale = "cy"
+```
+
+See individual lint sections below for available configuration options.
 
 ## Running lint UI tests
 
@@ -282,3 +431,216 @@ additional_test_attributes = ["my_framework::test"]
 Any functions annotated with those attributes are treated as tests for the
 purpose of this lint, matching the behaviour of built-in markers such as
 `#[test]` and `#[rstest]`.
+
+______________________________________________________________________
+
+## `module_must_have_inner_docs`
+
+Purpose: enforce that every module begins with an inner documentation comment.
+This lint helps maintain consistent documentation practices by requiring all
+modules to explain their purpose at the beginning of their definition.
+
+Scope and behaviour:
+
+- Inspects all non-macro modules (both inline `mod foo { .. }` and file-backed
+  modules).
+- Emits a warning when a module's body does not start with a `//!` style
+  comment or `#![doc = "..."]` attribute.
+- The doc comment must appear before other inner attributes.
+- Skips macro-generated modules automatically.
+
+What is allowed:
+
+- Modules beginning with `//!` comments.
+- Modules beginning with `#![doc = "..."]` attributes.
+- Modules with doc comments wrapped in `#![cfg_attr(...)]` (if the doc is
+  present).
+- Macro-generated modules (automatically ignored).
+
+What is denied:
+
+- Modules without leading documentation.
+- Modules with other attributes appearing before the doc comment.
+
+How to fix:
+
+Add an inner doc comment at the very beginning of the module body:
+
+```rust
+mod undocumented {
+    //! Explain the module's purpose here.
+    pub fn value() {}
+}
+```
+
+Or use the attribute form:
+
+```rust
+mod documented {
+    #![doc = "Module documentation using attributes"]
+    pub fn value() {}
+}
+```
+
+______________________________________________________________________
+
+## `module_max_lines`
+
+Purpose: measure module size and warn when modules exceed a configurable line
+count threshold. This promotes code maintainability by encouraging developers
+to keep modules reasonably sized and focused.
+
+Scope and behaviour:
+
+- Measures the number of source lines occupied by each module.
+- Counts from the first to the last line of the module body.
+- Emits a warning when module line count exceeds the configured limit.
+- Ignores macro-generated modules.
+
+Configuration (in `dylint.toml`):
+
+```toml
+[module_max_lines]
+max_lines = 400
+```
+
+The default threshold is 400 lines. Adjust this to match your team's standards.
+
+What is allowed:
+
+- Modules with line count at or below the configured limit.
+- Macro-generated modules (automatically ignored).
+
+What is denied:
+
+- Modules exceeding the configured line limit.
+
+How to fix:
+
+Split the module into smaller submodules:
+
+```rust
+// Before: Single 500-line module
+mod large_module {
+    // 500 lines of code...
+}
+
+// After: Split into focused modules
+mod domain_a {
+    //! Handles feature A.
+}
+
+mod domain_b {
+    //! Handles feature B.
+}
+```
+
+______________________________________________________________________
+
+## `conditional_max_n_branches`
+
+Purpose: limit the complexity of conditional predicates by enforcing a maximum
+number of boolean branches. This improves code readability and testability by
+preventing overly complex conditions in if/while statements and match guards.
+
+Scope and behaviour:
+
+- Counts boolean branches (AND/OR operations) in predicates.
+- Inspects `if` conditions, `while` loop conditions, and `match` guard
+  expressions.
+- Counts branches recursively through binary operations (`&&` and `||`).
+- Emits a warning when branch count exceeds the configured limit.
+
+Configuration (in `dylint.toml`):
+
+```toml
+[conditional_max_n_branches]
+max_branches = 2
+```
+
+The default threshold is 2 branches. A predicate like `a && b && c` has three
+branches and would trigger the lint at the default setting.
+
+What is allowed:
+
+- Predicates with branch count at or below the configured limit.
+- Single conditions and simple boolean combinations within the limit.
+
+What is denied:
+
+- Predicates exceeding the configured branch limit.
+
+How to fix:
+
+Extract complex conditions into helper functions:
+
+```rust
+// Before: Too many branches
+if condition_a && condition_b && condition_c {
+    // action
+}
+
+// After: Extract to helper function
+fn should_proceed() -> bool {
+    condition_a && condition_b && condition_c
+}
+
+if should_proceed() {
+    // action
+}
+```
+
+______________________________________________________________________
+
+## `no_std_fs_operations`
+
+Purpose: enforce capability-based filesystem access by forbidding direct use of
+`std::fs` operations. This lint promotes a security model where filesystem
+access is mediated through capability-bearing handles (`cap_std`) rather than
+relying on the ambient working directory.
+
+Scope and behaviour:
+
+- Detects all imports of `std::fs` items (`use std::fs::...`).
+- Detects all calls to `std::fs` functions.
+- Detects type references to `std::fs` types (structs, aliases).
+- Detects struct literals using `std::fs` types.
+
+What is allowed:
+
+- Using `cap_std::fs::Dir` handles for filesystem operations.
+- Using `camino::Utf8Path` and `camino::Utf8PathBuf` for path handling.
+- Capability-based approaches to filesystem access.
+
+What is denied:
+
+- `use std::fs::{...}` imports.
+- Direct calls to any `std::fs` operation.
+- Creating instances of `std::fs` types.
+
+How to fix:
+
+Replace `std::fs` with capability-based alternatives using `cap_std`:
+
+```rust
+// Before: Direct std::fs usage
+use std::fs;
+
+fn read_config() -> std::io::Result<String> {
+    fs::read_to_string("config.toml")
+}
+
+// After: Capability-based with cap_std
+use cap_std::fs::Dir;
+use camino::Utf8Path;
+
+fn read_config(config_dir: &Dir, path: &Utf8Path) -> std::io::Result<String> {
+    config_dir.read_to_string(path)
+}
+```
+
+Key principles:
+
+- Pass `cap_std::fs::Dir` handles as parameters.
+- Use `camino::Utf8Path` / `camino::Utf8PathBuf` for paths.
+- Avoid ambient working directory assumptions.

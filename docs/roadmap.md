@@ -41,12 +41,12 @@
   - [x] Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and add UI
         smoke tests that run under at least one non-English locale.
 
-- [ ] Phase 3 — Aggregated packaging and installer
+- [x] Phase 3 — Aggregated packaging and installer
   - [x] Assemble the `suite` cdylib using constituent features and combined lint
         pass wiring.
   - [x] Implement the installer CLI that builds, links, and stages all lint
         libraries.
-  - [ ] Provide consumer guidance and workspace metadata examples in
+  - [x] Provide consumer guidance and workspace metadata examples in
         documentation.
 
 - [ ] Phase 4 — Quality gates and automation

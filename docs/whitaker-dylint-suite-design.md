@@ -1222,3 +1222,61 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 
 - Track rustc/dylint; bump nightly + deps in lockstep.
 - Maintain CHANGELOG; periodic re-runs of examples; refresh UI snapshots.
+
+______________________________________________________________________
+
+## 12) Phase 3 documentation design decisions
+
+This section records design decisions made during Phase 3 consumer guidance and
+workspace metadata documentation work.
+
+### CLI documentation placement
+
+**Decision:** Document `whitaker-install` CLI in the existing `users-guide.md`
+rather than creating a separate file.
+
+**Rationale:** Keeping all consumer-facing documentation consolidated reduces
+navigation overhead for users. The CLI is an optional convenience tool that
+complements the workspace metadata approach; it does not warrant standalone
+documentation. Users benefit from seeing both methods (workspace metadata and
+pre-built libraries) in the same guide so they can compare and choose.
+
+### Documentation testing approach
+
+**Decision:** Use rstest-bdd scenarios to validate that documented TOML examples
+parse correctly. Tests live in `installer/tests/behaviour_docs.rs` with feature
+specifications in `installer/tests/features/consumer_guidance.feature`.
+
+**Rationale:** BDD scenarios document expected behaviour in human-readable form,
+which aligns with the project's existing test patterns. Validating TOML examples
+ensures documentation does not drift from valid syntax over time. The tests are
+lightweight (parsing only) and run quickly as part of the standard test suite.
+
+### Workspace metadata example selection
+
+**Decision:** Include examples for suite-only, individual crates, version-pinned
+(tag and commit), and pre-built path configurations in the user's guide.
+
+**Rationale:** These cover the primary consumer use cases:
+
+- **Suite-only** — Simplest setup for projects wanting all lints with minimal
+  configuration.
+- **Individual crates** — For projects needing selective lint adoption or
+  independent version pinning.
+- **Version pinning** — Essential for reproducible CI builds.
+- **Pre-built path** — Enables faster lint runs when libraries are pre-staged
+  via `whitaker-install`.
+
+The examples progress from simple to advanced, matching the learning curve for
+new adopters.
+
+### Lint documentation structure
+
+**Decision:** Document each lint with consistent sections: Purpose, Scope and
+behaviour, Configuration, What is allowed, What is denied, How to fix.
+
+**Rationale:** This structure mirrors the existing lint documentation pattern
+established for `no_unwrap_or_else_panic` and `function_attrs_follow_docs`. It
+ensures users can quickly find the information they need without reading the
+full section. The "How to fix" sections provide actionable guidance rather than
+just describing what is wrong.
