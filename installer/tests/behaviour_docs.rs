@@ -25,78 +25,84 @@ fn toml_world() -> TomlWorld {
     TomlWorld::default()
 }
 
+/// Helper function to set TOML content in the world fixture.
+fn set_toml_content(toml_world: &TomlWorld, content: &str) {
+    toml_world.content.replace(content.to_owned());
+}
+
 // ---------------------------------------------------------------------------
 // Given steps - Workspace metadata examples
 // ---------------------------------------------------------------------------
 
 #[given("a workspace metadata example for suite-only")]
 fn given_suite_only_metadata(toml_world: &TomlWorld) {
-    toml_world.content.replace(
+    set_toml_content(
+        toml_world,
         r#"
 [workspace.metadata.dylint]
 libraries = [
   { git = "https://github.com/leynos/whitaker", pattern = "suite" }
 ]
-"#
-        .to_owned(),
+"#,
     );
 }
 
 #[given("a workspace metadata example for individual crates")]
 fn given_individual_crates_metadata(toml_world: &TomlWorld) {
-    toml_world.content.replace(
+    set_toml_content(
+        toml_world,
         r#"
 [workspace.metadata.dylint]
 libraries = [
   { git = "https://github.com/leynos/whitaker", pattern = "crates/*" }
 ]
-"#
-        .to_owned(),
+"#,
     );
 }
 
 #[given("a workspace metadata example with tag pinning")]
 fn given_tag_pinning_metadata(toml_world: &TomlWorld) {
-    toml_world.content.replace(
+    set_toml_content(
+        toml_world,
         r#"
 [workspace.metadata.dylint]
 libraries = [
   { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
 ]
-"#
-        .to_owned(),
+"#,
     );
 }
 
 #[given("a workspace metadata example with revision pinning")]
 fn given_revision_pinning_metadata(toml_world: &TomlWorld) {
-    toml_world.content.replace(
+    set_toml_content(
+        toml_world,
         r#"
 [workspace.metadata.dylint]
 libraries = [
   { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
 ]
-"#
-        .to_owned(),
+"#,
     );
 }
 
 #[given("a workspace metadata example with pre-built path")]
 fn given_prebuilt_path_metadata(toml_world: &TomlWorld) {
-    toml_world.content.replace(
+    set_toml_content(
+        toml_world,
         r#"
 [workspace.metadata.dylint]
 libraries = [
   { path = "/home/user/.local/share/dylint/lib" }
 ]
-"#
-        .to_owned(),
+"#,
     );
 }
 
 #[given("a dylint.toml example with lint configuration")]
 fn given_dylint_toml_config(toml_world: &TomlWorld) {
-    toml_world.content.replace(
+    set_toml_content(
+        toml_world,
         r#"
 [module_max_lines]
 max_lines = 500
@@ -111,8 +117,7 @@ additional_test_attributes = ["my_framework::test", "async_std::test"]
 allow_in_main = true
 
 locale = "cy"
-"#
-        .to_owned(),
+"#,
     );
 }
 
