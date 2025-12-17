@@ -1243,19 +1243,22 @@ pre-built libraries) in the same guide so they can compare and choose.
 
 ### Documentation testing approach
 
-**Decision:** Use rstest-bdd scenarios to validate that documented TOML examples
-parse correctly. Tests live in `installer/tests/behaviour_docs.rs` with feature
-specifications in `installer/tests/features/consumer_guidance.feature`.
+**Decision:** Use rstest-bdd scenarios to validate that documented TOML
+examples parse correctly. Tests live in `installer/tests/behaviour_docs.rs`
+with feature specifications in
+`installer/tests/features/consumer_guidance.feature`.
 
-**Rationale:** BDD scenarios document expected behaviour in human-readable form,
-which aligns with the project's existing test patterns. Validating TOML examples
-ensures documentation does not drift from valid syntax over time. The tests are
-lightweight (parsing only) and run quickly as part of the standard test suite.
+**Rationale:** BDD scenarios document expected behaviour in human-readable
+form, which aligns with the project's existing test patterns. Validating TOML
+examples ensures documentation does not drift from valid syntax over time. The
+tests are lightweight (parsing only) and run quickly as part of the standard
+test suite.
 
 ### Workspace metadata example selection
 
-**Decision:** Include examples for suite-only, individual crates, version-pinned
-(tag and commit), and pre-built path configurations in the user's guide.
+**Decision:** Include examples for suite-only, individual crates,
+version-pinned (tag and commit), and pre-built path configurations in the
+user's guide.
 
 **Rationale:** These cover the primary consumer use cases:
 

@@ -104,6 +104,8 @@ fn given_dylint_toml_config(toml_world: &TomlWorld) {
     set_toml_content(
         toml_world,
         r#"
+locale = "cy"
+
 [module_max_lines]
 max_lines = 500
 
@@ -115,8 +117,6 @@ additional_test_attributes = ["my_framework::test", "async_std::test"]
 
 [no_unwrap_or_else_panic]
 allow_in_main = true
-
-locale = "cy"
 "#,
     );
 }
@@ -170,7 +170,7 @@ fn then_libraries_pattern_is(toml_world: &TomlWorld, expected: String) {
         .and_then(|p| p.as_str())
         .expect("expected libraries[0].pattern");
 
-    assert_eq!(pattern, expected.trim_matches('"'));
+    assert_eq!(pattern, expected);
 }
 
 #[then("the tag field is present")]
@@ -178,7 +178,7 @@ fn then_tag_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let has_tag = table
+    let tag = table
         .get("workspace")
         .and_then(|w| w.get("metadata"))
         .and_then(|m| m.get("dylint"))
@@ -186,9 +186,10 @@ fn then_tag_present(toml_world: &TomlWorld) {
         .and_then(|l| l.as_array())
         .and_then(|arr| arr.first())
         .and_then(|lib| lib.get("tag"))
-        .is_some();
+        .and_then(|t| t.as_str())
+        .expect("expected tag field to be present");
 
-    assert!(has_tag, "expected tag field to be present");
+    assert_eq!(tag, "v0.1.0", "expected tag == \"v0.1.0\"");
 }
 
 #[then("the revision field is present")]
@@ -196,7 +197,7 @@ fn then_revision_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let has_rev = table
+    let rev = table
         .get("workspace")
         .and_then(|w| w.get("metadata"))
         .and_then(|m| m.get("dylint"))
@@ -204,9 +205,10 @@ fn then_revision_present(toml_world: &TomlWorld) {
         .and_then(|l| l.as_array())
         .and_then(|arr| arr.first())
         .and_then(|lib| lib.get("rev"))
-        .is_some();
+        .and_then(|r| r.as_str())
+        .expect("expected rev field to be present");
 
-    assert!(has_rev, "expected rev field to be present");
+    assert_eq!(rev, "abc123def456", "expected rev == \"abc123def456\"");
 }
 
 #[then("the path field is present")]
@@ -214,7 +216,7 @@ fn then_path_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let has_path = table
+    let path = table
         .get("workspace")
         .and_then(|w| w.get("metadata"))
         .and_then(|m| m.get("dylint"))
@@ -222,9 +224,13 @@ fn then_path_present(toml_world: &TomlWorld) {
         .and_then(|l| l.as_array())
         .and_then(|arr| arr.first())
         .and_then(|lib| lib.get("path"))
-        .is_some();
+        .and_then(|p| p.as_str())
+        .expect("expected path field to be present");
 
-    assert!(has_path, "expected path field to be present");
+    assert_eq!(
+        path, "/home/user/.local/share/dylint/lib",
+        "expected path == \"/home/user/.local/share/dylint/lib\""
+    );
 }
 
 #[then("module_max_lines configuration is present")]
@@ -255,38 +261,110 @@ fn then_conditional_max_branches_present(toml_world: &TomlWorld) {
     assert_eq!(max_branches, 3);
 }
 
+#[then("no_expect_outside_tests additional_test_attributes configuration is present")]
+fn then_no_expect_outside_tests_additional_test_attributes_present(toml_world: &TomlWorld) {
+    let parsed = toml_world.parsed.borrow();
+    let table = parsed.as_ref().expect("expected parsed TOML");
+
+    let attributes = table
+        .get("no_expect_outside_tests")
+        .and_then(|t| t.get("additional_test_attributes"))
+        .and_then(|a| a.as_array())
+        .expect("expected no_expect_outside_tests.additional_test_attributes array");
+
+    let values: Vec<_> = attributes
+        .iter()
+        .map(|v| {
+            v.as_str()
+                .expect("expected additional_test_attributes entries to be strings")
+        })
+        .collect();
+
+    assert_eq!(
+        values,
+        vec!["my_framework::test", "async_std::test"],
+        "unexpected no_expect_outside_tests.additional_test_attributes"
+    );
+}
+
+#[then("no_unwrap_or_else_panic allow_in_main configuration is present")]
+fn then_no_unwrap_or_else_panic_allow_in_main_present(toml_world: &TomlWorld) {
+    let parsed = toml_world.parsed.borrow();
+    let table = parsed.as_ref().expect("expected parsed TOML");
+
+    let allow_in_main = table
+        .get("no_unwrap_or_else_panic")
+        .and_then(|t| t.get("allow_in_main"))
+        .and_then(|v| v.as_bool())
+        .expect("expected no_unwrap_or_else_panic.allow_in_main boolean");
+
+    assert!(
+        allow_in_main,
+        "expected no_unwrap_or_else_panic.allow_in_main to be true"
+    );
+}
+
+#[then("locale configuration is present")]
+fn then_locale_configuration_present(toml_world: &TomlWorld) {
+    let parsed = toml_world.parsed.borrow();
+    let table = parsed.as_ref().expect("expected parsed TOML");
+
+    let locale = table
+        .get("locale")
+        .and_then(|v| v.as_str())
+        .expect("expected locale string");
+
+    assert_eq!(locale, "cy", "expected locale == \"cy\"");
+}
+
 // ---------------------------------------------------------------------------
 // Scenario bindings
-//
-// Do not reorder scenarios - indices are bound to feature file order.
 // ---------------------------------------------------------------------------
 
-#[scenario(path = "tests/features/consumer_guidance.feature", index = 0)]
+#[scenario(
+    path = "tests/features/consumer_guidance.feature",
+    name = "Suite-only workspace metadata is valid TOML"
+)]
 fn scenario_suite_only_metadata(toml_world: TomlWorld) {
     let _ = toml_world;
 }
 
-#[scenario(path = "tests/features/consumer_guidance.feature", index = 1)]
+#[scenario(
+    path = "tests/features/consumer_guidance.feature",
+    name = "Individual crates workspace metadata is valid TOML"
+)]
 fn scenario_individual_crates_metadata(toml_world: TomlWorld) {
     let _ = toml_world;
 }
 
-#[scenario(path = "tests/features/consumer_guidance.feature", index = 2)]
+#[scenario(
+    path = "tests/features/consumer_guidance.feature",
+    name = "Version-pinned workspace metadata with tag is valid TOML"
+)]
 fn scenario_tag_pinning_metadata(toml_world: TomlWorld) {
     let _ = toml_world;
 }
 
-#[scenario(path = "tests/features/consumer_guidance.feature", index = 3)]
+#[scenario(
+    path = "tests/features/consumer_guidance.feature",
+    name = "Version-pinned workspace metadata with revision is valid TOML"
+)]
 fn scenario_revision_pinning_metadata(toml_world: TomlWorld) {
     let _ = toml_world;
 }
 
-#[scenario(path = "tests/features/consumer_guidance.feature", index = 4)]
+#[scenario(
+    path = "tests/features/consumer_guidance.feature",
+    name = "Pre-built library path workspace metadata is valid TOML"
+)]
 fn scenario_prebuilt_path_metadata(toml_world: TomlWorld) {
     let _ = toml_world;
 }
 
-#[scenario(path = "tests/features/consumer_guidance.feature", index = 5)]
+#[scenario(
+    path = "tests/features/consumer_guidance.feature",
+    name = "dylint.toml lint configuration is valid TOML"
+)]
 fn scenario_dylint_toml_config(toml_world: TomlWorld) {
     let _ = toml_world;
 }

@@ -1,8 +1,8 @@
 # Whitaker User's Guide
 
 Whitaker is a collection of opinionated Dylint lints for Rust. This guide
-explains how to install and configure the lints, use the installer CLI, and
-customise behaviour for your project.
+explains how to install and configure the lints, use the installer command-line
+interface (CLI), and customise behaviour for a given project.
 
 For contributors who want to add new lints, see the section on generating lint
 crates from the template.
@@ -58,12 +58,12 @@ trial the current branch tip.
 ## Using whitaker-install
 
 The `whitaker-install` CLI builds, links, and stages Dylint lint libraries for
-local use. This approach is useful when you want pre-built libraries rather
-than building from source on each `cargo dylint` invocation.
+local use. This approach is useful when pre-built libraries are preferred
+rather than building from source on each `cargo dylint` invocation.
 
 ### Prerequisites
 
-Before using `whitaker-install`, ensure you have:
+Before using `whitaker-install`, ensure the following are available:
 
 - `cargo-dylint` and `dylint-link` installed (`cargo install cargo-dylint
   dylint-link`)
@@ -109,21 +109,21 @@ whitaker-install --no-suite
 
 ### Configuration options
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--target-dir DIR` | `-t` | Staging directory for built libraries |
-| `--lint NAME` | `-l` | Build specific lint (repeatable) |
-| `--suite-only` | | Build only the aggregated suite |
-| `--no-suite` | | Exclude the aggregated suite |
-| `--toolchain TOOLCHAIN` | | Override the detected toolchain |
-| `--jobs N` | `-j` | Number of parallel build jobs |
-| `--dry-run` | | Show what would be done without executing |
-| `--verbose` | `-v` | Increase output verbosity |
-| `--quiet` | `-q` | Suppress output except errors |
+| Option                  | Short | Description                             |
+| ----------------------- | ----- | --------------------------------------- |
+| `--target-dir DIR`      | `-t`  | Staging directory for built libraries   |
+| `--lint NAME`           | `-l`  | Build specific lint (repeatable)        |
+| `--suite-only`          |       | Build only the aggregated suite         |
+| `--no-suite`            |       | Exclude the aggregated suite            |
+| `--toolchain TOOLCHAIN` |       | Override the detected toolchain         |
+| `--jobs N`              | `-j`  | Number of parallel build jobs           |
+| `--dry-run`             |       | Show what would be done without running |
+| `--verbose`             | `-v`  | Increase output verbosity               |
+| `--quiet`               | `-q`  | Suppress output except errors           |
 
 ### Shell configuration
 
-After installation, configure your shell to find the staged libraries. The
+After installation, configure the shell to find the staged libraries. The
 installer prints snippets for common shells:
 
 ```sh
@@ -185,8 +185,8 @@ libraries = [
 ]
 ```
 
-Use individual crates when you need only a subset of lints or want to pin
-specific lints to different versions.
+Use individual crates when only a subset of lints is required or when specific
+lints must be pinned to different versions.
 
 ### Version pinning
 
@@ -210,8 +210,8 @@ libraries = [
 
 ### Using pre-built libraries
 
-If you have installed lints via `whitaker-install`, configure Dylint to use the
-staged libraries:
+If lints have been installed via `whitaker-install`, configure Dylint to use
+the staged libraries:
 
 ```toml
 [workspace.metadata.dylint]
@@ -504,7 +504,7 @@ Configuration (in `dylint.toml`):
 max_lines = 400
 ```
 
-The default threshold is 400 lines. Adjust this to match your team's standards.
+The default threshold is 400 lines. Adjust this to match project conventions.
 
 What is allowed:
 
