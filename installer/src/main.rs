@@ -182,19 +182,21 @@ fn stage_and_output(
     target_dir: &Utf8Path,
     build_results: &[whitaker_installer::builder::BuildResult],
 ) -> Result<()> {
+    let stager = Stager::new(target_dir.to_owned(), toolchain.channel());
+    let staging_path = stager.staging_path();
+
     if !cli.quiet {
-        eprintln!("Staging libraries to {}...", target_dir);
+        eprintln!("Staging libraries to {}...", staging_path);
     }
 
-    let stager = Stager::new(target_dir.to_owned(), toolchain.channel());
     stager.prepare()?;
     stager.stage_all(build_results)?;
 
     if !cli.quiet {
         eprintln!();
-        eprintln!("{}", success_message(build_results.len(), target_dir));
+        eprintln!("{}", success_message(build_results.len(), &staging_path));
         eprintln!();
-        let snippet = ShellSnippet::new(target_dir);
+        let snippet = ShellSnippet::new(&staging_path);
         eprintln!("{}", snippet.display_text());
     }
 

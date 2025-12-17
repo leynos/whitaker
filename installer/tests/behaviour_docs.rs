@@ -93,7 +93,7 @@ fn given_prebuilt_path_metadata(toml_world: &TomlWorld) {
         r#"
 [workspace.metadata.dylint]
 libraries = [
-  { path = "/home/user/.local/share/dylint/lib" }
+  { path = "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release" }
 ]
 "#,
     );
@@ -228,8 +228,8 @@ fn then_path_present(toml_world: &TomlWorld) {
         .expect("expected path field to be present");
 
     assert_eq!(
-        path, "/home/user/.local/share/dylint/lib",
-        "expected path == \"/home/user/.local/share/dylint/lib\""
+        path, "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release",
+        "expected path == \"/home/user/.local/share/dylint/lib/nightly-2025-01-15/release\""
     );
 }
 

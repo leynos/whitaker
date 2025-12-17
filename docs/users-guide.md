@@ -81,11 +81,14 @@ cargo run --release -p whitaker-installer
 ```
 
 By default, this builds all seven lint crates plus the aggregated suite and
-stages them to a platform-specific directory:
+stages them to a platform-specific directory under `<toolchain>/release`:
 
-- Linux: `~/.local/share/dylint/lib`
-- macOS: `~/Library/Application Support/dylint/lib`
-- Windows: `%LOCALAPPDATA%\dylint\lib`
+- Linux: `~/.local/share/dylint/lib/<toolchain>/release`
+- macOS: `~/Library/Application Support/dylint/lib/<toolchain>/release`
+- Windows: `%LOCALAPPDATA%\dylint\lib\<toolchain>\release`
+
+For example, with toolchain `nightly-2025-01-15`, the Linux path would be
+`~/.local/share/dylint/lib/nightly-2025-01-15/release`.
 
 ### Installation modes
 
@@ -124,17 +127,19 @@ whitaker-install --no-suite
 ### Shell configuration
 
 After installation, configure the shell to find the staged libraries. The
-installer prints snippets for common shells:
+installer prints the exact path including the toolchain subdirectory. Example
+snippets for common shells (replace `<toolchain>` with the actual toolchain,
+e.g., `nightly-2025-01-15`):
 
 ```sh
 # bash/zsh (~/.bashrc, ~/.zshrc)
-export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib"
+export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib/<toolchain>/release"
 
 # fish (~/.config/fish/config.fish)
-set -gx DYLINT_LIBRARY_PATH "$HOME/.local/share/dylint/lib"
+set -gx DYLINT_LIBRARY_PATH "$HOME/.local/share/dylint/lib/<toolchain>/release"
 
 # PowerShell ($PROFILE)
-$env:DYLINT_LIBRARY_PATH = "$HOME/.local/share/dylint/lib"
+$env:DYLINT_LIBRARY_PATH = "$HOME/.local/share/dylint/lib/<toolchain>/release"
 ```
 
 ### Running installed lints
@@ -211,12 +216,13 @@ libraries = [
 ### Using pre-built libraries
 
 If lints have been installed via `whitaker-install`, configure Dylint to use
-the staged libraries:
+the staged libraries. The path must include the toolchain and release
+subdirectories:
 
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { path = "/home/user/.local/share/dylint/lib" }
+  { path = "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release" }
 ]
 ```
 
