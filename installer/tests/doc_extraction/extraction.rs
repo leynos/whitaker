@@ -22,6 +22,16 @@ pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     extract_toml_blocks(&content)
 });
 
+/// Process a single line within a TOML code block, accumulating non-comment lines.
+fn accumulate_toml_line(line: &str, current_block: &mut String) {
+    // Skip comment lines for cleaner TOML
+    if line.trim_start().starts_with('#') {
+        return;
+    }
+    current_block.push_str(line);
+    current_block.push('\n');
+}
+
 /// Extract all TOML code blocks from markdown content.
 ///
 /// Skips comment lines (starting with `#`) for cleaner TOML extraction.
@@ -50,17 +60,20 @@ pub fn extract_toml_blocks(markdown: &str) -> Vec<String> {
         if line.starts_with("```toml") {
             in_toml_block = true;
             current_block.clear();
-        } else if in_toml_block && line.starts_with("```") {
+            continue;
+        }
+
+        if !in_toml_block {
+            continue;
+        }
+
+        if line.starts_with("```") {
             in_toml_block = false;
             blocks.push(current_block.clone());
-        } else if in_toml_block {
-            // Skip comment lines for cleaner TOML
-            if line.trim_start().starts_with('#') {
-                continue;
-            }
-            current_block.push_str(line);
-            current_block.push('\n');
+            continue;
         }
+
+        accumulate_toml_line(line, &mut current_block);
     }
 
     blocks
