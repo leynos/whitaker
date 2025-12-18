@@ -1273,8 +1273,9 @@ user's guide.
 The examples progress from simple to advanced, matching the learning curve for
 new adopters.
 
-The following diagram illustrates the consumer decision flow for adopting
-Whitaker lints:
+Flowchart: consumer decision flow for adopting Whitaker lints, showing suite
+versus individual crate choices, installation and workspace configuration
+options, version pinning strategies, and final lint execution.
 
 ```mermaid
 flowchart TD
@@ -1317,10 +1318,7 @@ flowchart TD
     P_run_lints --> Q_end[End]
 ```
 
-*Figure 1: Consumer decision flow for Whitaker lint adoption. The flowchart
-guides users through choosing between the aggregated suite or individual
-crates, deciding on pre-built versus git-sourced libraries, and selecting
-appropriate version pinning strategies.*
+*Figure 1: Consumer decision flow for Whitaker lint adoption.*
 
 ### Lint documentation structure
 
