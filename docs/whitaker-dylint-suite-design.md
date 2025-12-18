@@ -1273,6 +1273,55 @@ user's guide.
 The examples progress from simple to advanced, matching the learning curve for
 new adopters.
 
+The following diagram illustrates the consumer decision flow for adopting
+Whitaker lints:
+
+```mermaid
+flowchart TD
+    A_start[Start: Need Whitaker lints in project] --> B_decide_mode{Prefer simplest setup
+    and all lints enabled?}
+    B_decide_mode -->|Yes| C_suite[Use aggregated suite
+    pattern = suite]
+    B_decide_mode -->|No| D_selective{Need selective lints or
+    independent version pinning?}
+
+    C_suite --> E_install_choice{Prefer pre_built libraries?}
+    D_selective --> F_individual[Use individual crates
+    pattern = crates/*]
+
+    E_install_choice -->|Yes| G_run_installer[Run whitaker_install
+    to build and stage suite]
+    E_install_choice -->|No| H_use_git[Use git source in
+    workspace metadata only]
+
+    F_individual --> I_version_pin{Need reproducible CI builds?}
+    I_version_pin -->|Tag| J_tag_pin[Pin using tag field
+    tag = v0.1.0]
+    I_version_pin -->|Commit| K_rev_pin[Pin using rev field
+    rev = abc123...]
+    I_version_pin -->|No| L_unpinned[Use git without tag or rev]
+
+    G_run_installer --> M_workspace_path[Configure workspace_metadata_dylint
+    with path to staged libs]
+    H_use_git --> N_workspace_git[Configure workspace_metadata_dylint
+    with git and pattern]
+
+    M_workspace_path --> O_set_env[Set DYLINT_LIBRARY_PATH
+    in shell config]
+    N_workspace_git --> O_set_env
+    J_tag_pin --> O_set_env
+    K_rev_pin --> O_set_env
+    L_unpinned --> O_set_env
+
+    O_set_env --> P_run_lints[Run cargo_dylint_all]
+    P_run_lints --> Q_end[End]
+```
+
+*Figure 1: Consumer decision flow for Whitaker lint adoption. The flowchart
+guides users through choosing between the aggregated suite or individual crates,
+deciding on pre-built versus git-sourced libraries, and selecting appropriate
+version pinning strategies.*
+
 ### Lint documentation structure
 
 **Decision:** Document each lint with consistent sections: Purpose, Scope and
