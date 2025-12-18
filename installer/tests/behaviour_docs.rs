@@ -1,12 +1,68 @@
 //! Behaviour-driven tests for documentation examples.
 //!
 //! These scenarios validate that documented TOML examples parse correctly
-//! and produce expected configurations.
+//! and produce expected configurations. Examples are loaded directly from
+//! the user guide to prevent drift between documentation and tests.
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+use std::sync::LazyLock;
 use toml::Table;
+
+// ---------------------------------------------------------------------------
+// Documentation extraction
+// ---------------------------------------------------------------------------
+
+/// Path to the user guide relative to the workspace root.
+const USERS_GUIDE_PATH: &str = "docs/users-guide.md";
+
+/// Extracted TOML code blocks from the user guide, loaded once at test startup.
+static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .expect("installer crate should be in workspace");
+    let guide_path = workspace_root.join(USERS_GUIDE_PATH);
+
+    let content = std::fs::read_to_string(&guide_path).expect("failed to read users-guide.md");
+
+    extract_toml_blocks(&content)
+});
+
+/// Extract all TOML code blocks from markdown content.
+fn extract_toml_blocks(markdown: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut in_toml_block = false;
+    let mut current_block = String::new();
+
+    for line in markdown.lines() {
+        if line.starts_with("```toml") {
+            in_toml_block = true;
+            current_block.clear();
+        } else if in_toml_block && line.starts_with("```") {
+            in_toml_block = false;
+            blocks.push(current_block.clone());
+        } else if in_toml_block {
+            // Skip comment lines for cleaner TOML
+            if !line.trim_start().starts_with('#') {
+                current_block.push_str(line);
+                current_block.push('\n');
+            }
+        }
+    }
+
+    blocks
+}
+
+/// Find a TOML block containing the specified marker text.
+fn find_block_containing(marker: &str) -> String {
+    DOC_TOML_BLOCKS
+        .iter()
+        .find(|block| block.contains(marker))
+        .unwrap_or_else(|| panic!("no TOML block containing '{marker}' found in documentation"))
+        .clone()
+}
 
 // ---------------------------------------------------------------------------
 // TOML validation world
@@ -31,94 +87,53 @@ fn set_toml_content(toml_world: &TomlWorld, content: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// Given steps - Workspace metadata examples
+// Given steps - Workspace metadata examples (loaded from documentation)
 // ---------------------------------------------------------------------------
 
 #[given("a workspace metadata example for suite-only")]
 fn given_suite_only_metadata(toml_world: &TomlWorld) {
-    set_toml_content(
-        toml_world,
-        r#"
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "suite" }
-]
-"#,
-    );
+    // Matches the "aggregated suite provides the simplest setup" example
+    let block = find_block_containing(r#"pattern = "suite""#);
+    set_toml_content(toml_world, &block);
 }
 
 #[given("a workspace metadata example for individual crates")]
 fn given_individual_crates_metadata(toml_world: &TomlWorld) {
-    set_toml_content(
-        toml_world,
-        r#"
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*" }
-]
-"#,
-    );
+    // Matches the Quick Setup example with pattern = "crates/*"
+    // Use the first block with this pattern (Quick Setup section)
+    let block = DOC_TOML_BLOCKS
+        .iter()
+        .find(|b| {
+            b.contains(r#"pattern = "crates/*""#) && !b.contains("tag =") && !b.contains("rev =")
+        })
+        .expect("no individual crates TOML block found")
+        .clone();
+    set_toml_content(toml_world, &block);
 }
 
 #[given("a workspace metadata example with tag pinning")]
 fn given_tag_pinning_metadata(toml_world: &TomlWorld) {
-    set_toml_content(
-        toml_world,
-        r#"
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
-]
-"#,
-    );
+    let block = find_block_containing(r#"tag = "v0.1.0""#);
+    set_toml_content(toml_world, &block);
 }
 
 #[given("a workspace metadata example with revision pinning")]
 fn given_revision_pinning_metadata(toml_world: &TomlWorld) {
-    set_toml_content(
-        toml_world,
-        r#"
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
-]
-"#,
-    );
+    let block = find_block_containing(r#"rev = "abc123def456""#);
+    set_toml_content(toml_world, &block);
 }
 
 #[given("a workspace metadata example with pre-built path")]
 fn given_prebuilt_path_metadata(toml_world: &TomlWorld) {
-    set_toml_content(
-        toml_world,
-        r#"
-[workspace.metadata.dylint]
-libraries = [
-  { path = "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release" }
-]
-"#,
-    );
+    let block = find_block_containing("path = ");
+    set_toml_content(toml_world, &block);
 }
 
 #[given("a dylint.toml example with lint configuration")]
 fn given_dylint_toml_config(toml_world: &TomlWorld) {
-    set_toml_content(
-        toml_world,
-        r#"
-locale = "cy"
-
-[module_max_lines]
-max_lines = 500
-
-[conditional_max_n_branches]
-max_branches = 3
-
-[no_expect_outside_tests]
-additional_test_attributes = ["my_framework::test", "async_std::test"]
-
-[no_unwrap_or_else_panic]
-allow_in_main = true
-"#,
-    );
+    // The lint configuration block contains module_max_lines and other settings
+    let block = find_block_containing("[module_max_lines]");
+    set_toml_content(toml_world, &block);
 }
 
 // ---------------------------------------------------------------------------
@@ -227,9 +242,9 @@ fn then_path_present(toml_world: &TomlWorld) {
         .and_then(|p| p.as_str())
         .expect("expected path field to be present");
 
-    assert_eq!(
-        path, "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release",
-        "expected path == \"/home/user/.local/share/dylint/lib/nightly-2025-01-15/release\""
+    assert!(
+        path.contains("dylint/lib") && path.contains("/release"),
+        "expected path to contain toolchain/release structure, got: {path}"
     );
 }
 
@@ -367,4 +382,61 @@ fn scenario_prebuilt_path_metadata(toml_world: TomlWorld) {
 )]
 fn scenario_dylint_toml_config(toml_world: TomlWorld) {
     let _ = toml_world;
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests for extraction helpers
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_toml_blocks_from_markdown() {
+        let markdown = r#"
+# Example
+
+```toml
+[section]
+key = "value"
+```
+
+Some text.
+
+```toml
+other = true
+```
+"#;
+
+        let blocks = extract_toml_blocks(markdown);
+        assert_eq!(blocks.len(), 2);
+        assert!(blocks[0].contains("key = \"value\""));
+        assert!(blocks[1].contains("other = true"));
+    }
+
+    #[test]
+    fn skips_comment_lines_in_toml_blocks() {
+        let markdown = r#"
+```toml
+# This is a comment
+[section]
+key = "value"
+```
+"#;
+
+        let blocks = extract_toml_blocks(markdown);
+        assert_eq!(blocks.len(), 1);
+        assert!(!blocks[0].contains("# This is a comment"));
+        assert!(blocks[0].contains("key = \"value\""));
+    }
+
+    #[test]
+    fn doc_toml_blocks_are_loaded() {
+        // Verify the lazy static loaded successfully
+        assert!(
+            !DOC_TOML_BLOCKS.is_empty(),
+            "expected TOML blocks from users-guide.md"
+        );
+    }
 }

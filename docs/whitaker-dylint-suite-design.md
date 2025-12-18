@@ -1225,7 +1225,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 
 ______________________________________________________________________
 
-## 12) Phase 3 documentation design decisions
+## 16) Phase 3 documentation design decisions
 
 This section records design decisions made during Phase 3 consumer guidance and
 workspace metadata documentation work.

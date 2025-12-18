@@ -234,6 +234,9 @@ managing library updates manually.
 Configure individual lint behaviour in `dylint.toml` at the workspace root:
 
 ```toml
+# Diagnostic language (default: en-GB)
+locale = "cy"
+
 # Module size threshold (default: 400)
 [module_max_lines]
 max_lines = 500
@@ -249,9 +252,6 @@ additional_test_attributes = ["my_framework::test", "async_std::test"]
 # Allow panics in main
 [no_unwrap_or_else_panic]
 allow_in_main = true
-
-# Diagnostic language (default: en-GB)
-locale = "cy"
 ```
 
 See individual lint sections below for available configuration options.
