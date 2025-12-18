@@ -1278,11 +1278,11 @@ Whitaker lints:
 
 ```mermaid
 flowchart TD
-    A_start[Start: Need Whitaker lints in project] --> B_decide_mode{Prefer simplest setup
+    A_start[Start: Want Whitaker lints in project] --> B_decide_mode{Prefer simplest setup
     and all lints enabled?}
     B_decide_mode -->|Yes| C_suite[Use aggregated suite
     pattern = suite]
-    B_decide_mode -->|No| D_selective{Need selective lints or
+    B_decide_mode -->|No| D_selective{Require selective lints or
     independent version pinning?}
 
     C_suite --> E_install_choice{Prefer pre_built libraries?}
@@ -1294,7 +1294,7 @@ flowchart TD
     E_install_choice -->|No| H_use_git[Use git source in
     workspace metadata only]
 
-    F_individual --> I_version_pin{Need reproducible CI builds?}
+    F_individual --> I_version_pin{Require reproducible CI builds?}
     I_version_pin -->|Tag| J_tag_pin[Pin using tag field
     tag = v0.1.0]
     I_version_pin -->|Commit| K_rev_pin[Pin using rev field
@@ -1318,9 +1318,9 @@ flowchart TD
 ```
 
 *Figure 1: Consumer decision flow for Whitaker lint adoption. The flowchart
-guides users through choosing between the aggregated suite or individual crates,
-deciding on pre-built versus git-sourced libraries, and selecting appropriate
-version pinning strategies.*
+guides users through choosing between the aggregated suite or individual
+crates, deciding on pre-built versus git-sourced libraries, and selecting
+appropriate version pinning strategies.*
 
 ### Lint documentation structure
 

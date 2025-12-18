@@ -206,7 +206,7 @@ libraries = [
 ```
 
 ```toml
-# Commit hash (Secure Hash Algorithm, SHA)
+# Commit hash
 [workspace.metadata.dylint]
 libraries = [
   { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }

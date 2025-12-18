@@ -4,65 +4,13 @@
 //! and produce expected configurations. Examples are loaded directly from
 //! the user guide to prevent drift between documentation and tests.
 
+mod doc_extraction;
+
+use doc_extraction::extraction::{DOC_TOML_BLOCKS, find_block_containing};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
-use std::sync::LazyLock;
 use toml::Table;
-
-// ---------------------------------------------------------------------------
-// Documentation extraction
-// ---------------------------------------------------------------------------
-
-/// Path to the user guide relative to the workspace root.
-const USERS_GUIDE_PATH: &str = "docs/users-guide.md";
-
-/// Extracted TOML code blocks from the user guide, loaded once at test startup.
-static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let workspace_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .expect("installer crate should be in workspace");
-    let guide_path = workspace_root.join(USERS_GUIDE_PATH);
-
-    let content = std::fs::read_to_string(&guide_path).expect("failed to read users-guide.md");
-
-    extract_toml_blocks(&content)
-});
-
-/// Extract all TOML code blocks from markdown content.
-fn extract_toml_blocks(markdown: &str) -> Vec<String> {
-    let mut blocks = Vec::new();
-    let mut in_toml_block = false;
-    let mut current_block = String::new();
-
-    for line in markdown.lines() {
-        if line.starts_with("```toml") {
-            in_toml_block = true;
-            current_block.clear();
-        } else if in_toml_block && line.starts_with("```") {
-            in_toml_block = false;
-            blocks.push(current_block.clone());
-        } else if in_toml_block {
-            // Skip comment lines for cleaner TOML
-            if !line.trim_start().starts_with('#') {
-                current_block.push_str(line);
-                current_block.push('\n');
-            }
-        }
-    }
-
-    blocks
-}
-
-/// Find a TOML block containing the specified marker text.
-fn find_block_containing(marker: &str) -> String {
-    DOC_TOML_BLOCKS
-        .iter()
-        .find(|block| block.contains(marker))
-        .unwrap_or_else(|| panic!("no TOML block containing '{marker}' found in documentation"))
-        .clone()
-}
 
 // ---------------------------------------------------------------------------
 // TOML validation world
@@ -159,6 +107,42 @@ fn when_toml_parsed(toml_world: &TomlWorld) {
 // Then steps
 // ---------------------------------------------------------------------------
 
+// Helper functions for TOML navigation
+// ---------------------------------------------------------------------------
+
+/// Get a reference to the first library entry in workspace.metadata.dylint.libraries.
+fn get_first_library(table: &Table) -> &toml::Value {
+    table
+        .get("workspace")
+        .and_then(|w| w.get("metadata"))
+        .and_then(|m| m.get("dylint"))
+        .and_then(|d| d.get("libraries"))
+        .and_then(|l| l.as_array())
+        .and_then(|arr| arr.first())
+        .expect("expected workspace.metadata.dylint.libraries[0]")
+}
+
+/// Get a string field from the first library entry.
+fn get_library_string_field<'a>(table: &'a Table, field: &str) -> &'a str {
+    get_first_library(table)
+        .get(field)
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| panic!("expected libraries[0].{field} to be a string"))
+}
+
+/// Get an integer configuration value from a nested table.
+fn get_config_integer(table: &Table, section: &str, key: &str) -> i64 {
+    table
+        .get(section)
+        .and_then(|s| s.get(key))
+        .and_then(|v| v.as_integer())
+        .unwrap_or_else(|| panic!("expected {section}.{key} to be an integer"))
+}
+
+// ---------------------------------------------------------------------------
+// Assertion steps
+// ---------------------------------------------------------------------------
+
 #[then("parsing succeeds")]
 fn then_parsing_succeeds(toml_world: &TomlWorld) {
     let error = toml_world.error.borrow();
@@ -174,16 +158,7 @@ fn then_libraries_pattern_is(toml_world: &TomlWorld, expected: String) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let pattern = table
-        .get("workspace")
-        .and_then(|w| w.get("metadata"))
-        .and_then(|m| m.get("dylint"))
-        .and_then(|d| d.get("libraries"))
-        .and_then(|l| l.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|lib| lib.get("pattern"))
-        .and_then(|p| p.as_str())
-        .expect("expected libraries[0].pattern");
+    let pattern = get_library_string_field(table, "pattern");
 
     assert_eq!(pattern, expected);
 }
@@ -193,16 +168,7 @@ fn then_tag_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let tag = table
-        .get("workspace")
-        .and_then(|w| w.get("metadata"))
-        .and_then(|m| m.get("dylint"))
-        .and_then(|d| d.get("libraries"))
-        .and_then(|l| l.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|lib| lib.get("tag"))
-        .and_then(|t| t.as_str())
-        .expect("expected tag field to be present");
+    let tag = get_library_string_field(table, "tag");
 
     assert_eq!(tag, "v0.1.0", "expected tag == \"v0.1.0\"");
 }
@@ -212,16 +178,7 @@ fn then_revision_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let rev = table
-        .get("workspace")
-        .and_then(|w| w.get("metadata"))
-        .and_then(|m| m.get("dylint"))
-        .and_then(|d| d.get("libraries"))
-        .and_then(|l| l.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|lib| lib.get("rev"))
-        .and_then(|r| r.as_str())
-        .expect("expected rev field to be present");
+    let rev = get_library_string_field(table, "rev");
 
     assert_eq!(rev, "abc123def456", "expected rev == \"abc123def456\"");
 }
@@ -231,16 +188,7 @@ fn then_path_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let path = table
-        .get("workspace")
-        .and_then(|w| w.get("metadata"))
-        .and_then(|m| m.get("dylint"))
-        .and_then(|d| d.get("libraries"))
-        .and_then(|l| l.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|lib| lib.get("path"))
-        .and_then(|p| p.as_str())
-        .expect("expected path field to be present");
+    let path = get_library_string_field(table, "path");
 
     assert!(
         path.contains("dylint/lib") && path.contains("/release"),
@@ -253,11 +201,7 @@ fn then_module_max_lines_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let max_lines = table
-        .get("module_max_lines")
-        .and_then(|m| m.get("max_lines"))
-        .and_then(|v| v.as_integer())
-        .expect("expected module_max_lines.max_lines");
+    let max_lines = get_config_integer(table, "module_max_lines", "max_lines");
 
     assert_eq!(max_lines, 500);
 }
@@ -267,11 +211,7 @@ fn then_conditional_max_branches_present(toml_world: &TomlWorld) {
     let parsed = toml_world.parsed.borrow();
     let table = parsed.as_ref().expect("expected parsed TOML");
 
-    let max_branches = table
-        .get("conditional_max_n_branches")
-        .and_then(|m| m.get("max_branches"))
-        .and_then(|v| v.as_integer())
-        .expect("expected conditional_max_n_branches.max_branches");
+    let max_branches = get_config_integer(table, "conditional_max_n_branches", "max_branches");
 
     assert_eq!(max_branches, 3);
 }
@@ -382,61 +322,4 @@ fn scenario_prebuilt_path_metadata(toml_world: TomlWorld) {
 )]
 fn scenario_dylint_toml_config(toml_world: TomlWorld) {
     let _ = toml_world;
-}
-
-// ---------------------------------------------------------------------------
-// Unit tests for extraction helpers
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn extracts_toml_blocks_from_markdown() {
-        let markdown = r#"
-# Example
-
-```toml
-[section]
-key = "value"
-```
-
-Some text.
-
-```toml
-other = true
-```
-"#;
-
-        let blocks = extract_toml_blocks(markdown);
-        assert_eq!(blocks.len(), 2);
-        assert!(blocks[0].contains("key = \"value\""));
-        assert!(blocks[1].contains("other = true"));
-    }
-
-    #[test]
-    fn skips_comment_lines_in_toml_blocks() {
-        let markdown = r#"
-```toml
-# This is a comment
-[section]
-key = "value"
-```
-"#;
-
-        let blocks = extract_toml_blocks(markdown);
-        assert_eq!(blocks.len(), 1);
-        assert!(!blocks[0].contains("# This is a comment"));
-        assert!(blocks[0].contains("key = \"value\""));
-    }
-
-    #[test]
-    fn doc_toml_blocks_are_loaded() {
-        // Verify the lazy static loaded successfully
-        assert!(
-            !DOC_TOML_BLOCKS.is_empty(),
-            "expected TOML blocks from users-guide.md"
-        );
-    }
 }
