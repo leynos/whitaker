@@ -25,7 +25,9 @@ impl ShellSnippet {
     /// use camino::Utf8PathBuf;
     /// use whitaker_installer::output::ShellSnippet;
     ///
-    /// let path = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
+    /// let path = Utf8PathBuf::from(
+    ///     "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release"
+    /// );
     /// let snippet = ShellSnippet::new(&path);
     ///
     /// assert!(snippet.bash.contains("DYLINT_LIBRARY_PATH"));
@@ -73,7 +75,7 @@ mod tests {
     /// Shared fixture providing a test library path.
     #[fixture]
     fn test_path() -> Utf8PathBuf {
-        Utf8PathBuf::from("/home/user/.local/share/dylint/lib")
+        Utf8PathBuf::from("/home/user/.local/share/dylint/lib/nightly-2025-01-15/release")
     }
 
     /// Shared fixture providing a shell snippet for the test path.
