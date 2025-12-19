@@ -267,8 +267,8 @@ dependencies = [
  "once_cell",
  "regex",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "tempfile",
  "thiserror 2.0.17",
  "unic-langid",
@@ -308,8 +308,8 @@ dependencies = [
  "glob",
  "log",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_hir",
  "rustc_lint",
  "rustc_session",
@@ -737,8 +737,8 @@ dependencies = [
  "dylint_testing",
  "log",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_ast",
  "rustc_attr_data_structures",
  "rustc_hir",
@@ -1394,8 +1394,8 @@ dependencies = [
  "glob",
  "log",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_hir",
  "rustc_lint",
  "rustc_session",
@@ -1414,8 +1414,8 @@ dependencies = [
  "log",
  "newt-hype 0.1.4",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_ast",
  "rustc_hir",
  "rustc_lint",
@@ -1446,8 +1446,8 @@ dependencies = [
  "dylint_testing",
  "log",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_ast",
  "rustc_hir",
  "rustc_lint",
@@ -1467,8 +1467,8 @@ dependencies = [
  "dylint_testing",
  "log",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_hir",
  "rustc_lint",
  "rustc_middle",
@@ -1489,8 +1489,8 @@ dependencies = [
  "dylint_testing",
  "log",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_ast",
  "rustc_hir",
  "rustc_lint",
@@ -1792,30 +1792,6 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0c58a595280bc9d8386a1888aac2264838ce90f29450dfa50d4b9a00cbbcc63"
-dependencies = [
- "ctor",
- "derive_more",
- "fluent",
- "gherkin",
- "hashbrown",
- "i18n-embed",
- "inventory",
- "log",
- "once_cell",
- "regex",
- "rstest-bdd-patterns 0.1.0",
- "rust-embed",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "unic-langid",
-]
-
-[[package]]
-name = "rstest-bdd"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fcefde6aee6db6d70c149d48e17111e9e088a1ff71da92234e986a23fb4c134"
@@ -1830,34 +1806,12 @@ dependencies = [
  "log",
  "once_cell",
  "regex",
- "rstest-bdd-patterns 0.2.0",
+ "rstest-bdd-patterns",
  "rust-embed",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "unic-langid",
-]
-
-[[package]]
-name = "rstest-bdd-macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7db2930cac8d70e8a7d4aab1e0b6782b6aadfef3b68d6acf91179e8433ec44df"
-dependencies = [
- "camino",
- "cap-std",
- "cfg-if",
- "convert_case 0.6.0",
- "gherkin",
- "once_cell",
- "proc-macro-crate",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "regex",
- "rstest-bdd-patterns 0.1.0",
- "syn 2.0.106",
- "walkdir",
 ]
 
 [[package]]
@@ -1878,19 +1832,9 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "rstest-bdd-patterns 0.2.0",
+ "rstest-bdd-patterns",
  "syn 2.0.106",
  "walkdir",
-]
-
-[[package]]
-name = "rstest-bdd-patterns"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dee8d9e47e63602b9061a3d73e48c0248f49d5bc730d64a8b27750f09342f81b"
-dependencies = [
- "regex",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2237,8 +2181,8 @@ dependencies = [
  "no_std_fs_operations",
  "no_unwrap_or_else_panic",
  "rstest",
- "rstest-bdd 0.1.0",
- "rstest-bdd-macros 0.1.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_hir",
  "rustc_lint",
  "rustc_session",
@@ -2663,8 +2607,8 @@ dependencies = [
  "dylint_linting",
  "dylint_testing",
  "rstest",
- "rstest-bdd 0.2.0",
- "rstest-bdd-macros 0.2.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "rustc_hir",
  "rustc_lint",
  "rustc_span",
@@ -2682,8 +2626,8 @@ dependencies = [
  "dirs",
  "libc",
  "rstest",
- "rstest-bdd 0.2.0",
- "rstest-bdd-macros 0.2.0",
+ "rstest-bdd",
+ "rstest-bdd-macros",
  "tempfile",
  "thiserror 2.0.17",
  "toml 0.9.8",

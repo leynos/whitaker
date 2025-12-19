@@ -18,13 +18,13 @@ thiserror = { workspace = true }
 unic-langid = { workspace = true }
 
 [dev-dependencies]
-# Testing: Behavioural specs now target rstest-bdd 0.1.0, the first stable
-# release. Capture any regressions with `make test` and coordinate with the
-# maintainers per `docs/rstest-bdd-users-guide.md` before gating behaviour
-# tests or backporting fixes.
-rstest = "0.26.1"
-rstest-bdd = "0.1.0"
-rstest-bdd-macros = "0.1.0"
+# Testing: Behavioural specs use rstest-bdd 0.2.x (workspace pin). Capture any
+# regressions with `make test` and coordinate with the maintainers per
+# `docs/rstest-bdd-users-guide.md` before gating behaviour tests or backporting
+# fixes.
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 regex = "1.10.4"
 logtest = "2.0.0"
 

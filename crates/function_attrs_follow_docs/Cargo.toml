@@ -41,8 +41,8 @@ log = { workspace = true, optional = true }
 whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
-rstest = { version = "0.26.1" }
-rstest-bdd = { version = "0.1.0" }
-rstest-bdd-macros = { version = "0.1.0" }
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = "3.1.0"

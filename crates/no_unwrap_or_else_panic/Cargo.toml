@@ -42,9 +42,9 @@ clippy_utils = { workspace = true, optional = true }
 [dev-dependencies]
 camino = { workspace = true }
 dylint_testing = { workspace = true }
-rstest = "0.26.1"
-rstest-bdd = "0.1.0"
-rstest-bdd-macros = "0.1.0"
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 
 [lints.clippy]
 expect_used = "deny"

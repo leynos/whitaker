@@ -41,8 +41,8 @@ pub fn get_localizer_for_lint(lint_name: &str, configuration_locale: Option<&str
 /// use common::i18n::branch_phrase;
 ///
 /// assert_eq!(branch_phrase("en-GB", 2), "2 branches");
-/// assert_eq!(branch_phrase("cy", 3), "tri changen");
-/// assert_eq!(branch_phrase("gd", 1), "1 mheur");
+/// assert_eq!(branch_phrase("cy", 3), "tair cangen");
+/// assert_eq!(branch_phrase("gd", 1), "1 meur");
 /// ```
 #[must_use]
 pub fn branch_phrase(locale: &str, branches: usize) -> String {

@@ -57,7 +57,7 @@
         workspace.
 
 - [ ] Phase 5 — Experimental Bumpy Road lint
-  - [ ] Implement the per-line complexity signal builder and smoothing window
+  - [x] Implement the per-line complexity signal builder and smoothing window
         logic.
   - [ ] Detect bump intervals, surface diagnostics with labelled spans, and add
         configuration options.

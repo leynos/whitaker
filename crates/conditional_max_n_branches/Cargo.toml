@@ -47,8 +47,8 @@ whitaker = { version = "0.1.0", path = "../../" }
 camino = { workspace = true }
 glob = "0.3.0"
 tempfile = "3.14.0"
-rstest = "0.26.1"
-rstest-bdd = "0.1.0"
-rstest-bdd-macros = "0.1.0"
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = "3.1.0"
