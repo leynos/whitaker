@@ -5,7 +5,6 @@
 //! sustained "bumps" rather than short spikes. This module provides the
 //! low-level building blocks: rasterising weighted line segments into a
 //! per-line vector and applying a centred moving-average smoothing window.
-#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use std::ops::RangeInclusive;
 
@@ -263,7 +262,11 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
         return Err(SmoothingError::WindowMustBePositive { window });
     }
 
-    if window.is_multiple_of(2) {
+    fn is_even(value: usize) -> bool {
+        (value & 1) == 0
+    }
+
+    if is_even(window) {
         return Err(SmoothingError::WindowMustBeOdd { window });
     }
 
@@ -300,19 +303,34 @@ mod tests {
     #[rstest]
     fn rasterise_signal_accumulates_overlapping_segments() {
         let segments = vec![
-            LineSegment::new(10, 12, 1.0).expect("segment should be valid"),
-            LineSegment::new(12, 14, 2.0).expect("segment should be valid"),
+            match LineSegment::new(10, 12, 1.0) {
+                Ok(segment) => segment,
+                Err(error) => panic!("segment should be valid: {error}"),
+            },
+            match LineSegment::new(12, 14, 2.0) {
+                Ok(segment) => segment,
+                Err(error) => panic!("segment should be valid: {error}"),
+            },
         ];
 
-        let signal = rasterise_signal(10..=14, &segments).expect("signal should build");
+        let signal = match rasterise_signal(10..=14, &segments) {
+            Ok(signal) => signal,
+            Err(error) => panic!("signal should build: {error}"),
+        };
         assert_eq!(signal, vec![1.0, 1.0, 3.0, 2.0, 2.0]);
     }
 
     #[rstest]
     fn rasterise_signal_rejects_segments_outside_function_range() {
-        let segments = vec![LineSegment::new(9, 10, 1.0).expect("segment should be valid")];
+        let segments = vec![match LineSegment::new(9, 10, 1.0) {
+            Ok(segment) => segment,
+            Err(error) => panic!("segment should be valid: {error}"),
+        }];
 
-        let err = rasterise_signal(11..=14, &segments).expect_err("segment should be rejected");
+        let err = match rasterise_signal(11..=14, &segments) {
+            Ok(signal) => panic!("segment should be rejected but built {signal:?}"),
+            Err(error) => error,
+        };
         assert!(matches!(
             err,
             SignalBuildError::SegmentOutsideFunctionRange { .. }
@@ -322,25 +340,37 @@ mod tests {
     #[rstest]
     fn moving_average_smoothing_uses_central_window() {
         let signal = vec![0.0, 0.0, 3.0, 0.0, 0.0];
-        let smoothed = smooth_moving_average(&signal, 3).expect("window should be valid");
+        let smoothed = match smooth_moving_average(&signal, 3) {
+            Ok(signal) => signal,
+            Err(error) => panic!("window should be valid: {error}"),
+        };
         assert_eq!(smoothed, vec![0.0, 1.0, 1.0, 1.0, 0.0]);
     }
 
     #[rstest]
     fn moving_average_window_must_be_positive() {
-        let err = smooth_moving_average(&[1.0, 2.0], 0).expect_err("window should be rejected");
+        let err = match smooth_moving_average(&[1.0, 2.0], 0) {
+            Ok(signal) => panic!("window should be rejected but produced {signal:?}"),
+            Err(error) => error,
+        };
         assert_eq!(err, SmoothingError::WindowMustBePositive { window: 0 });
     }
 
     #[rstest]
     fn moving_average_window_must_be_odd() {
-        let err = smooth_moving_average(&[1.0, 2.0], 2).expect_err("window should be rejected");
+        let err = match smooth_moving_average(&[1.0, 2.0], 2) {
+            Ok(signal) => panic!("window should be rejected but produced {signal:?}"),
+            Err(error) => error,
+        };
         assert_eq!(err, SmoothingError::WindowMustBeOdd { window: 2 });
     }
 
     #[rstest]
     fn segment_validation_rejects_start_after_end() {
-        let err = LineSegment::new(6, 4, 1.0).expect_err("segment should be invalid");
+        let err = match LineSegment::new(6, 4, 1.0) {
+            Ok(segment) => panic!("segment should be invalid but built {segment:?}"),
+            Err(error) => error,
+        };
         assert_eq!(
             err,
             SegmentError::StartAfterEnd {
