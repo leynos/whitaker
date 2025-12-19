@@ -117,6 +117,67 @@ pub enum SignalBuildError {
     },
 }
 
+fn validate_function_range(
+    function_start: usize,
+    function_end: usize,
+) -> Result<(), SignalBuildError> {
+    if function_start == 0 || function_end == 0 {
+        return Err(SignalBuildError::FunctionLineRangeMustBeOneBased {
+            start_line: function_start,
+            end_line: function_end,
+        });
+    }
+
+    if function_start > function_end {
+        return Err(SignalBuildError::FunctionStartAfterEnd {
+            start_line: function_start,
+            end_line: function_end,
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_segment_in_range(
+    segment: &LineSegment,
+    function_start: usize,
+    function_end: usize,
+) -> Result<(), SignalBuildError> {
+    if segment.end_line() < function_start || segment.start_line() > function_end {
+        return Err(SignalBuildError::SegmentOutsideFunctionRange {
+            segment_start: segment.start_line(),
+            segment_end: segment.end_line(),
+            function_start,
+            function_end,
+        });
+    }
+
+    Ok(())
+}
+
+fn apply_segment_to_diff(segment: &LineSegment, diff: &mut [f64], function_start: usize) {
+    let segment_start = segment.start_line().saturating_sub(function_start);
+    let segment_end = segment.end_line().saturating_sub(function_start);
+
+    if let Some(cell) = diff.get_mut(segment_start) {
+        *cell += segment.value();
+    }
+
+    if let Some(cell) = diff.get_mut(segment_end + 1) {
+        *cell -= segment.value();
+    }
+}
+
+fn accumulate_signal_from_diff(diff: &[f64], len: usize) -> Vec<f64> {
+    let mut signal = Vec::with_capacity(len);
+    let mut running = 0.0_f64;
+    for delta in diff.iter().take(len) {
+        running += delta;
+        signal.push(running);
+    }
+    signal
+}
+
 /// Rasterises weighted [`LineSegment`] values into a per-line signal.
 ///
 /// The returned vector has length `function_end - function_start + 1`, where the
@@ -152,50 +213,17 @@ pub fn rasterise_signal(
     let function_start = *function_lines.start();
     let function_end = *function_lines.end();
 
-    if function_start == 0 || function_end == 0 {
-        return Err(SignalBuildError::FunctionLineRangeMustBeOneBased {
-            start_line: function_start,
-            end_line: function_end,
-        });
-    }
-
-    if function_start > function_end {
-        return Err(SignalBuildError::FunctionStartAfterEnd {
-            start_line: function_start,
-            end_line: function_end,
-        });
-    }
+    validate_function_range(function_start, function_end)?;
 
     let len = function_end - function_start + 1;
     let mut diff = vec![0.0_f64; len + 1];
 
     for segment in segments {
-        if segment.end_line() < function_start || segment.start_line() > function_end {
-            return Err(SignalBuildError::SegmentOutsideFunctionRange {
-                segment_start: segment.start_line(),
-                segment_end: segment.end_line(),
-                function_start,
-                function_end,
-            });
-        }
-
-        let segment_start = segment.start_line().saturating_sub(function_start);
-        let segment_end = segment.end_line().saturating_sub(function_start);
-
-        diff[segment_start] += segment.value();
-        if let Some(cell) = diff.get_mut(segment_end + 1) {
-            *cell -= segment.value();
-        }
+        validate_segment_in_range(segment, function_start, function_end)?;
+        apply_segment_to_diff(segment, diff.as_mut_slice(), function_start);
     }
 
-    let mut signal = Vec::with_capacity(len);
-    let mut running = 0.0_f64;
-    for delta in diff.iter().take(len) {
-        running += delta;
-        signal.push(running);
-    }
-
-    Ok(signal)
+    Ok(accumulate_signal_from_diff(diff.as_slice(), len))
 }
 
 /// Errors emitted when smoothing a signal.
