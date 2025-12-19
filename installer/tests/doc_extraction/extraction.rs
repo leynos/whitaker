@@ -39,8 +39,9 @@ fn accumulate_toml_line(line: &str, current_block: &mut String) {
 ///
 /// # Examples
 ///
-/// ```
-/// # use behaviour_docs::extraction::extract_toml_blocks;
+/// ```ignore
+/// use doc_extraction::extraction::extract_toml_blocks;
+///
 /// let markdown = r#"
 /// ```toml
 /// # A comment
