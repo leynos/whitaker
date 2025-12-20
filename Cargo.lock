@@ -120,6 +120,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "bumpy_road_function"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "fluent-templates",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
+ "serde",
+ "tempfile",
+ "whitaker",
+]
+
+[[package]]
 name = "camino"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2172,6 +2194,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 name = "suite"
 version = "0.1.0"
 dependencies = [
+ "bumpy_road_function",
  "conditional_max_n_branches",
  "dylint_linting",
  "function_attrs_follow_docs",

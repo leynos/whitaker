@@ -1,0 +1,29 @@
+warning: Multiple clusters of nested conditional logic in `bumpy`.
+  --> $DIR/fail_two_clusters.rs:3:8
+   |
+LL |    pub fn bumpy(input: i32) -> i32 {
+   |  _________^^^^^____________________-
+   | | _________________________________|
+   | ||
+LL | ||     let mut total = 0;
+LL | ||
+LL | ||     if input > 0
+...  ||
+LL | ||         && input != 9
+LL | ||         && input != 11
+   | ||_- Complexity bump 1 spans 4 lines.
+...  |
+LL | |          && input != 1800
+LL | |          && input != 1900
+   | |__- Complexity bump 2 spans 4 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 3.
+  --> $DIR/fail_two_clusters.rs:3:8
+   |
+LL | pub fn bumpy(input: i32) -> i32 {
+   |        ^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+

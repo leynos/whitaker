@@ -63,9 +63,10 @@ fn when_register_suite(world: &RegistrationWorld) {
     *world.result.borrow_mut() = registration;
 }
 
-#[then("the store has {count} registered lints")]
-fn then_registered_count(world: &RegistrationWorld, count: usize) {
-    assert_eq!(world.store.borrow().get_lints().len(), count);
+#[then("the store has the suite lints registered")]
+fn then_registered_suite_lints(world: &RegistrationWorld) {
+    let expected = suite_lint_names().count();
+    assert_eq!(world.store.borrow().get_lints().len(), expected);
 }
 
 #[then("the late pass count is {count}")]
