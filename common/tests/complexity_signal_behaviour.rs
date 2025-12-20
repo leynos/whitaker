@@ -36,48 +36,64 @@ impl SignalWorld {
         self.smoothing_window.set(Some(window));
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture configuration is required for this behaviour test"
+    )]
     fn build_signal(&self) {
         let start = self
             .function_start
             .get()
-            .unwrap_or_else(|| panic!("function range start must be configured"));
+            .expect("function range start must be configured");
         let end = self
             .function_end
             .get()
-            .unwrap_or_else(|| panic!("function range end must be configured"));
+            .expect("function range end must be configured");
         let segments = self.segments.borrow();
         self.built_signal
             .replace(Some(rasterize_signal(start..=end, segments.as_slice())));
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture configuration is required for this behaviour test"
+    )]
     fn smooth(&self) {
         let window = self
             .smoothing_window
             .get()
-            .unwrap_or_else(|| panic!("smoothing window must be configured"));
+            .expect("smoothing window must be configured");
         let raw_signal = self
             .raw_signal
             .borrow()
             .clone()
-            .unwrap_or_else(|| panic!("raw signal must be configured"));
+            .expect("raw signal must be configured");
         self.smoothed_signal
             .replace(Some(smooth_moving_average(&raw_signal, window)));
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture configuration is required for this behaviour test"
+    )]
     fn built_signal(&self) -> Result<Vec<f64>, SignalBuildError> {
         self.built_signal
             .borrow()
             .as_ref()
             .cloned()
-            .unwrap_or_else(|| panic!("built signal must be recorded"))
+            .expect("built signal must be recorded")
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture configuration is required for this behaviour test"
+    )]
     fn smoothed_signal(&self) -> Result<Vec<f64>, SmoothingError> {
         self.smoothed_signal
             .borrow()
             .as_ref()
             .cloned()
-            .unwrap_or_else(|| panic!("smoothed signal must be recorded"))
+            .expect("smoothed signal must be recorded")
     }
 }
 
