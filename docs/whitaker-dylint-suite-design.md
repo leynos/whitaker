@@ -1073,9 +1073,9 @@ highlight the top two intervals in the diagnostic.
 - Treat function and segment line ranges as one-based and inclusive.
 - Reject any segment that does not intersect the function line range (do not
   clamp it), so span-mapping mistakes fail fast during lint development.
-- Rasterise segments using a difference array so the build cost is
+- Rasterize segments using a difference array, so the build cost is
   `O(lines + segments)` per function.
-- Require `window` to be positive and odd so the average is centred.
+- Require `window` to be positive and odd, so the average is centred.
 - Contract the smoothing window at the start/end of a function rather than
   padding, so edges are deterministic without introducing extra artefacts.
 

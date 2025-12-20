@@ -86,6 +86,10 @@ fn world() -> SignalWorld {
     SignalWorld::default()
 }
 
+/// Parses a comma-separated list of floating-point values.
+///
+/// The feature text uses values like `0.0, 1.0, 2.0`. Whitespace is ignored and
+/// empty segments are skipped.
 fn parse_f64_list(values: &str) -> Vec<f64> {
     values
         .split(',')
@@ -99,6 +103,10 @@ fn parse_f64_list(values: &str) -> Vec<f64> {
         .collect()
 }
 
+/// Asserts that two floating-point vectors are equal within a tiny tolerance.
+///
+/// This helper is intended for deterministic test values that may experience
+/// insignificant rounding differences.
 fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
     assert_eq!(
         actual.len(),

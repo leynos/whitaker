@@ -303,34 +303,19 @@ mod tests {
     #[rstest]
     fn rasterise_signal_accumulates_overlapping_segments() {
         let segments = vec![
-            match LineSegment::new(10, 12, 1.0) {
-                Ok(segment) => segment,
-                Err(error) => panic!("segment should be valid: {error}"),
-            },
-            match LineSegment::new(12, 14, 2.0) {
-                Ok(segment) => segment,
-                Err(error) => panic!("segment should be valid: {error}"),
-            },
+            LineSegment::new(10, 12, 1.0).expect("segment should be valid"),
+            LineSegment::new(12, 14, 2.0).expect("segment should be valid"),
         ];
 
-        let signal = match rasterise_signal(10..=14, &segments) {
-            Ok(signal) => signal,
-            Err(error) => panic!("signal should build: {error}"),
-        };
+        let signal = rasterise_signal(10..=14, &segments).expect("signal should build");
         assert_eq!(signal, vec![1.0, 1.0, 3.0, 2.0, 2.0]);
     }
 
     #[rstest]
     fn rasterise_signal_rejects_segments_outside_function_range() {
-        let segments = vec![match LineSegment::new(9, 10, 1.0) {
-            Ok(segment) => segment,
-            Err(error) => panic!("segment should be valid: {error}"),
-        }];
+        let segments = vec![LineSegment::new(9, 10, 1.0).expect("segment should be valid")];
 
-        let err = match rasterise_signal(11..=14, &segments) {
-            Ok(signal) => panic!("segment should be rejected but built {signal:?}"),
-            Err(error) => error,
-        };
+        let err = rasterise_signal(11..=14, &segments).expect_err("segment should be rejected");
         assert!(matches!(
             err,
             SignalBuildError::SegmentOutsideFunctionRange { .. }
@@ -340,37 +325,25 @@ mod tests {
     #[rstest]
     fn moving_average_smoothing_uses_central_window() {
         let signal = vec![0.0, 0.0, 3.0, 0.0, 0.0];
-        let smoothed = match smooth_moving_average(&signal, 3) {
-            Ok(signal) => signal,
-            Err(error) => panic!("window should be valid: {error}"),
-        };
+        let smoothed = smooth_moving_average(&signal, 3).expect("window should be valid");
         assert_eq!(smoothed, vec![0.0, 1.0, 1.0, 1.0, 0.0]);
     }
 
     #[rstest]
     fn moving_average_window_must_be_positive() {
-        let err = match smooth_moving_average(&[1.0, 2.0], 0) {
-            Ok(signal) => panic!("window should be rejected but produced {signal:?}"),
-            Err(error) => error,
-        };
+        let err = smooth_moving_average(&[1.0, 2.0], 0).expect_err("window should be rejected");
         assert_eq!(err, SmoothingError::WindowMustBePositive { window: 0 });
     }
 
     #[rstest]
     fn moving_average_window_must_be_odd() {
-        let err = match smooth_moving_average(&[1.0, 2.0], 2) {
-            Ok(signal) => panic!("window should be rejected but produced {signal:?}"),
-            Err(error) => error,
-        };
+        let err = smooth_moving_average(&[1.0, 2.0], 2).expect_err("window should be rejected");
         assert_eq!(err, SmoothingError::WindowMustBeOdd { window: 2 });
     }
 
     #[rstest]
     fn segment_validation_rejects_start_after_end() {
-        let err = match LineSegment::new(6, 4, 1.0) {
-            Ok(segment) => panic!("segment should be invalid but built {segment:?}"),
-            Err(error) => error,
-        };
+        let err = LineSegment::new(6, 4, 1.0).expect_err("segment should be invalid");
         assert_eq!(
             err,
             SegmentError::StartAfterEnd {
