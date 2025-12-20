@@ -1068,6 +1068,17 @@ intervals shorter than `min_bump_lines` (default 2). Warn when the function has
 two or more such bumps. Record severity via the area above the threshold and
 highlight the top two intervals in the diagnostic.
 
+**Phase 5 implementation decisions.**
+
+- Treat function and segment line ranges as one-based and inclusive.
+- Reject any segment that does not intersect the function line range (do not
+  clamp it), so span-mapping mistakes fail fast during lint development.
+- Rasterize segments using a difference array, so the build cost is
+  `O(lines + segments)` per function.
+- Require `window` to be positive and odd, so the average is centred.
+- Contract the smoothing window at the start/end of a function rather than
+  padding, so edges are deterministic without introducing extra artefacts.
+
 **Algorithm sketch.**
 
 1. Walk the function HIR, updating depth and collecting segments for blocks,

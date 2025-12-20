@@ -35,9 +35,9 @@ fluent-templates = { workspace = true, optional = true }
 
 [dev-dependencies]
 camino = { workspace = true }
-rstest = { version = "0.26.1" }
-rstest-bdd = { version = "0.1.0" }
-rstest-bdd-macros = { version = "0.1.0" }
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 tempfile = "3.14.0"
 glob = "0.3"

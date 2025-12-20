@@ -34,8 +34,8 @@ whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], o
 newt-hype = "0.1"
 
 [dev-dependencies]
-rstest = "0.26.1"
-rstest-bdd = "0.1.0"
-rstest-bdd-macros = "0.1.0"
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = "3.1.0"

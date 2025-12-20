@@ -2,6 +2,7 @@
 //! path, expression, span, and diagnostic utilities for Whitaker lints.
 
 pub mod attributes;
+pub mod complexity_signal;
 pub mod context;
 pub mod diagnostics;
 pub mod expr;
