@@ -163,12 +163,7 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
             area += value - threshold;
         } else if let Some(start) = current_start.take() {
             let end = index.saturating_sub(1);
-            let interval = BumpInterval {
-                start_index: start,
-                end_index: end,
-                area_above_threshold: area,
-            };
-            if interval.len() >= min_bump_lines {
+            if let Some(interval) = finalize_bump(start, end, area, min_bump_lines) {
                 intervals.push(interval);
             }
         }
@@ -176,17 +171,31 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
 
     if let Some(start) = current_start {
         let end = smoothed.len() - 1;
-        let interval = BumpInterval {
-            start_index: start,
-            end_index: end,
-            area_above_threshold: area,
-        };
-        if interval.len() >= min_bump_lines {
+        if let Some(interval) = finalize_bump(start, end, area, min_bump_lines) {
             intervals.push(interval);
         }
     }
 
     intervals
+}
+
+fn finalize_bump(
+    start: usize,
+    end: usize,
+    area: f64,
+    min_bump_lines: usize,
+) -> Option<BumpInterval> {
+    let interval = BumpInterval {
+        start_index: start,
+        end_index: end,
+        area_above_threshold: area,
+    };
+
+    if interval.len() >= min_bump_lines {
+        Some(interval)
+    } else {
+        None
+    }
 }
 
 /// Returns the two most severe bumps by area (breaking ties by longest interval, then earliest).
