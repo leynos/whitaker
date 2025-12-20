@@ -1,7 +1,7 @@
 //! Behaviour-driven coverage for per-line complexity signal building and smoothing.
 
 use common::complexity_signal::{
-    LineSegment, SignalBuildError, SmoothingError, rasterise_signal, smooth_moving_average,
+    LineSegment, SignalBuildError, SmoothingError, rasterize_signal, smooth_moving_average,
 };
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -47,7 +47,7 @@ impl SignalWorld {
             .unwrap_or_else(|| panic!("function range end must be configured"));
         let segments = self.segments.borrow();
         self.built_signal
-            .replace(Some(rasterise_signal(start..=end, segments.as_slice())));
+            .replace(Some(rasterize_signal(start..=end, segments.as_slice())));
     }
 
     fn smooth(&self) {

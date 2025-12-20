@@ -3,7 +3,7 @@
 //! The Bumpy Road detector described in `docs/whitaker-dylint-suite-design.md`
 //! models complexity as a per-line signal, then applies smoothing to highlight
 //! sustained "bumps" rather than short spikes. This module provides the
-//! low-level building blocks: rasterising weighted line segments into a
+//! low-level building blocks: rasterizing weighted line segments into a
 //! per-line vector and applying a centred moving-average smoothing window.
 
 use std::ops::RangeInclusive;
@@ -177,7 +177,7 @@ fn accumulate_signal_from_diff(diff: &[f64], len: usize) -> Vec<f64> {
     signal
 }
 
-/// Rasterises weighted [`LineSegment`] values into a per-line signal.
+/// Rasterizes weighted [`LineSegment`] values into a per-line signal.
 ///
 /// The returned vector has length `function_end - function_start + 1`, where the
 /// value at index `0` corresponds to `function_start`.
@@ -194,18 +194,18 @@ fn accumulate_signal_from_diff(diff: &[f64], len: usize) -> Vec<f64> {
 /// # Examples
 ///
 /// ```
-/// use common::complexity_signal::{LineSegment, rasterise_signal};
+/// use common::complexity_signal::{LineSegment, rasterize_signal};
 ///
 /// let segments = [
 ///     LineSegment::new(10, 12, 1.0).expect("segment should be valid"),
 ///     LineSegment::new(12, 14, 2.0).expect("segment should be valid"),
 /// ];
 ///
-/// let signal = rasterise_signal(10..=14, &segments).expect("signal should build");
+/// let signal = rasterize_signal(10..=14, &segments).expect("signal should build");
 /// assert_eq!(signal, vec![1.0, 1.0, 3.0, 2.0, 2.0]);
 /// ```
 #[must_use = "Inspect the signal build result to handle invalid ranges"]
-pub fn rasterise_signal(
+pub fn rasterize_signal(
     function_lines: RangeInclusive<usize>,
     segments: &[LineSegment],
 ) -> Result<Vec<f64>, SignalBuildError> {
@@ -223,6 +223,15 @@ pub fn rasterise_signal(
     }
 
     Ok(accumulate_signal_from_diff(diff.as_slice(), len))
+}
+
+#[deprecated(note = "Use rasterize_signal instead.")]
+#[must_use = "Inspect the signal build result to handle invalid ranges"]
+pub fn rasterise_signal(
+    function_lines: RangeInclusive<usize>,
+    segments: &[LineSegment],
+) -> Result<Vec<f64>, SignalBuildError> {
+    rasterize_signal(function_lines, segments)
 }
 
 /// Errors emitted when smoothing a signal.
@@ -301,21 +310,21 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    fn rasterise_signal_accumulates_overlapping_segments() {
+    fn rasterize_signal_accumulates_overlapping_segments() {
         let segments = vec![
             LineSegment::new(10, 12, 1.0).expect("segment should be valid"),
             LineSegment::new(12, 14, 2.0).expect("segment should be valid"),
         ];
 
-        let signal = rasterise_signal(10..=14, &segments).expect("signal should build");
+        let signal = rasterize_signal(10..=14, &segments).expect("signal should build");
         assert_eq!(signal, vec![1.0, 1.0, 3.0, 2.0, 2.0]);
     }
 
     #[rstest]
-    fn rasterise_signal_rejects_segments_outside_function_range() {
+    fn rasterize_signal_rejects_segments_outside_function_range() {
         let segments = vec![LineSegment::new(9, 10, 1.0).expect("segment should be valid")];
 
-        let err = rasterise_signal(11..=14, &segments).expect_err("segment should be rejected");
+        let err = rasterize_signal(11..=14, &segments).expect_err("segment should be rejected");
         assert!(matches!(
             err,
             SignalBuildError::SegmentOutsideFunctionRange { .. }
