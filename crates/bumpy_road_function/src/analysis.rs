@@ -177,6 +177,10 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
     intervals
 }
 
+// These helpers keep explicit parameters so the extraction from `detect_bumps`
+// is easy to follow at call sites, even though they exceed Clippy's default
+// argument count threshold.
+#[allow(clippy::too_many_arguments)]
 fn process_sample_value(
     value: f64,
     threshold: f64,
@@ -201,6 +205,8 @@ fn start_bump_if_needed(index: usize, current_start: &mut Option<usize>, area: &
     }
 }
 
+// Mirrors the in-loop bump finalisation branch extracted from `detect_bumps`.
+#[allow(clippy::too_many_arguments)]
 fn finalize_current_bump(
     index: usize,
     current_start: &mut Option<usize>,
@@ -218,6 +224,8 @@ fn finalize_current_bump(
     }
 }
 
+// Mirrors the post-loop bump finalisation extracted from `detect_bumps`.
+#[allow(clippy::too_many_arguments)]
 fn finalize_pending_bump(
     current_start: Option<usize>,
     end: usize,

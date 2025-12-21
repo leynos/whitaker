@@ -6,6 +6,7 @@
 //! the two largest bump intervals with labelled spans.
 
 use std::borrow::Cow;
+use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
 use crate::analysis::{BumpInterval, Settings, detect_bumps, normalise_settings, top_two_bumps};
@@ -19,6 +20,7 @@ use log::debug;
 use rustc_hir as hir;
 use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
+use rustc_span::symbol::Symbol;
 use rustc_span::{BytePos, DesugaringKind, Span};
 use serde::Deserialize;
 use whitaker::SharedConfig;
@@ -114,70 +116,27 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
-        let hir::ItemKind::Fn { ident, body, .. } = item.kind else {
+        let Some(target) = extract_item_target(item) else {
             return;
         };
 
-        if item.span.from_expansion() {
-            return;
-        }
-
-        analyse_body(
-            cx,
-            AnalysisTarget {
-                name: ident.name.as_str(),
-                primary_span: ident.span,
-                body_id: body,
-            },
-            &self.settings,
-            &self.localizer,
-        );
+        self.analyse_if_not_expanded(cx, item.span, target);
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
-        let hir::ImplItemKind::Fn(_, body_id) = item.kind else {
+        let Some(target) = extract_impl_item_target(item) else {
             return;
         };
 
-        if item.span.from_expansion() {
-            return;
-        }
-
-        analyse_body(
-            cx,
-            AnalysisTarget {
-                name: item.ident.name.as_str(),
-                primary_span: item.ident.span,
-                body_id,
-            },
-            &self.settings,
-            &self.localizer,
-        );
+        self.analyse_if_not_expanded(cx, item.span, target);
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
-        let hir::TraitItemKind::Fn(_, trait_fn) = item.kind else {
+        let Some(target) = extract_trait_item_target(item) else {
             return;
         };
 
-        let hir::TraitFn::Provided(body_id) = trait_fn else {
-            return;
-        };
-
-        if item.span.from_expansion() {
-            return;
-        }
-
-        analyse_body(
-            cx,
-            AnalysisTarget {
-                name: item.ident.name.as_str(),
-                primary_span: item.ident.span,
-                body_id,
-            },
-            &self.settings,
-            &self.localizer,
-        );
+        self.analyse_if_not_expanded(cx, item.span, target);
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
@@ -185,24 +144,26 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
             return;
         }
 
-        let ExprKind::Closure(hir::Closure { body, .. }) = expr.kind else {
+        let Some(target) = extract_expr_target(expr) else {
             return;
         };
 
-        if expr.span.from_expansion() {
+        self.analyse_if_not_expanded(cx, expr.span, target);
+    }
+}
+
+impl BumpyRoadFunction {
+    fn analyse_if_not_expanded(
+        &self,
+        cx: &LateContext<'_>,
+        span: Span,
+        target: AnalysisTarget<'_>,
+    ) {
+        if span.from_expansion() {
             return;
         }
 
-        analyse_body(
-            cx,
-            AnalysisTarget {
-                name: "closure",
-                primary_span: expr.span,
-                body_id: *body,
-            },
-            &self.settings,
-            &self.localizer,
-        );
+        analyse_body(cx, target, &self.settings, &self.localizer);
     }
 }
 
@@ -220,10 +181,69 @@ fn load_configuration() -> Config {
     }
 }
 
+fn extract_item_target<'hir>(item: &'hir hir::Item<'hir>) -> Option<AnalysisTarget<'hir>> {
+    let hir::ItemKind::Fn { ident, body, .. } = item.kind else {
+        return None;
+    };
+
+    Some(AnalysisTarget {
+        name: ident.name,
+        primary_span: ident.span,
+        body_id: body,
+        _marker: PhantomData,
+    })
+}
+
+fn extract_impl_item_target<'hir>(item: &'hir hir::ImplItem<'hir>) -> Option<AnalysisTarget<'hir>> {
+    let hir::ImplItemKind::Fn(_, body_id) = item.kind else {
+        return None;
+    };
+
+    Some(AnalysisTarget {
+        name: item.ident.name,
+        primary_span: item.ident.span,
+        body_id,
+        _marker: PhantomData,
+    })
+}
+
+fn extract_trait_item_target<'hir>(
+    item: &'hir hir::TraitItem<'hir>,
+) -> Option<AnalysisTarget<'hir>> {
+    let hir::TraitItemKind::Fn(_, trait_fn) = item.kind else {
+        return None;
+    };
+
+    let hir::TraitFn::Provided(body_id) = trait_fn else {
+        return None;
+    };
+
+    Some(AnalysisTarget {
+        name: item.ident.name,
+        primary_span: item.ident.span,
+        body_id,
+        _marker: PhantomData,
+    })
+}
+
+fn extract_expr_target<'hir>(expr: &'hir hir::Expr<'hir>) -> Option<AnalysisTarget<'hir>> {
+    let ExprKind::Closure(hir::Closure { body, .. }) = expr.kind else {
+        return None;
+    };
+
+    Some(AnalysisTarget {
+        name: Symbol::intern("closure"),
+        primary_span: expr.span,
+        body_id: *body,
+        _marker: PhantomData,
+    })
+}
+
 struct AnalysisTarget<'a> {
-    name: &'a str,
+    name: Symbol,
     primary_span: Span,
     body_id: hir::BodyId,
+    _marker: PhantomData<&'a ()>,
 }
 
 fn analyse_body(
@@ -282,7 +302,7 @@ fn analyse_body(
     emit_diagnostic(
         cx,
         DiagnosticInput {
-            name: target.name,
+            name: target.name.as_str(),
             primary_span: target.primary_span,
             body_span,
             function_lines,
