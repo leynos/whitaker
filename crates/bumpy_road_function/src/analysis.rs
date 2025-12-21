@@ -139,6 +139,30 @@ impl BumpInterval {
     }
 }
 
+struct BumpDetectionContext {
+    threshold: f64,
+    min_bump_lines: usize,
+    current_start: Option<usize>,
+    area: f64,
+    intervals: Vec<BumpInterval>,
+}
+
+impl BumpDetectionContext {
+    fn new(threshold: f64, min_bump_lines: usize) -> Self {
+        Self {
+            threshold,
+            min_bump_lines: min_bump_lines.max(1),
+            current_start: None,
+            area: 0.0,
+            intervals: Vec::new(),
+        }
+    }
+
+    fn into_intervals(self) -> Vec<BumpInterval> {
+        self.intervals
+    }
+}
+
 /// Detects bump intervals in the smoothed signal.
 ///
 /// A bump is a contiguous run of samples whose value is at least `threshold`.
@@ -149,97 +173,41 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
         return Vec::new();
     }
 
-    let min_bump_lines = min_bump_lines.max(1);
-    let mut intervals = Vec::new();
-    let mut current_start: Option<usize> = None;
-    let mut area = 0.0_f64;
+    let mut context = BumpDetectionContext::new(threshold, min_bump_lines);
 
     for (index, &value) in smoothed.iter().enumerate() {
-        process_sample_value(
-            value,
-            threshold,
-            index,
-            &mut current_start,
-            &mut area,
-            &mut intervals,
-            min_bump_lines,
-        );
+        process_sample_value(value, index, &mut context);
     }
 
-    finalize_pending_bump(
-        current_start,
-        smoothed.len() - 1,
-        area,
-        min_bump_lines,
-        &mut intervals,
-    );
-
-    intervals
-}
-
-// These helpers keep explicit parameters so the extraction from `detect_bumps`
-// is easy to follow at call sites, even though they exceed Clippy's default
-// argument count threshold.
-#[allow(clippy::too_many_arguments)]
-fn process_sample_value(
-    value: f64,
-    threshold: f64,
-    index: usize,
-    current_start: &mut Option<usize>,
-    area: &mut f64,
-    intervals: &mut Vec<BumpInterval>,
-    min_bump_lines: usize,
-) {
-    if value >= threshold {
-        start_bump_if_needed(index, current_start, area);
-        *area += value - threshold;
-    } else {
-        finalize_current_bump(index, current_start, *area, intervals, min_bump_lines);
+    let end = smoothed.len() - 1;
+    if let Some(start) = context.current_start.take()
+        && let Some(interval) = finalize_bump(start, end, context.area, context.min_bump_lines)
+    {
+        context.intervals.push(interval);
     }
+
+    context.into_intervals()
 }
 
-fn start_bump_if_needed(index: usize, current_start: &mut Option<usize>, area: &mut f64) {
-    if current_start.is_none() {
-        *current_start = Some(index);
-        *area = 0.0;
+fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionContext) {
+    if value >= context.threshold {
+        if context.current_start.is_none() {
+            context.current_start = Some(index);
+            context.area = 0.0;
+        }
+        context.area += value - context.threshold;
+        return;
     }
-}
 
-// Mirrors the in-loop bump finalisation branch extracted from `detect_bumps`.
-#[allow(clippy::too_many_arguments)]
-fn finalize_current_bump(
-    index: usize,
-    current_start: &mut Option<usize>,
-    area: f64,
-    intervals: &mut Vec<BumpInterval>,
-    min_bump_lines: usize,
-) {
-    let Some(start) = current_start.take() else {
+    let Some(start) = context.current_start.take() else {
         return;
     };
 
     let end = index.saturating_sub(1);
-    if let Some(interval) = finalize_bump(start, end, area, min_bump_lines) {
-        intervals.push(interval);
+    if let Some(interval) = finalize_bump(start, end, context.area, context.min_bump_lines) {
+        context.intervals.push(interval);
     }
-}
-
-// Mirrors the post-loop bump finalisation extracted from `detect_bumps`.
-#[allow(clippy::too_many_arguments)]
-fn finalize_pending_bump(
-    current_start: Option<usize>,
-    end: usize,
-    area: f64,
-    min_bump_lines: usize,
-    intervals: &mut Vec<BumpInterval>,
-) {
-    let Some(start) = current_start else {
-        return;
-    };
-
-    if let Some(interval) = finalize_bump(start, end, area, min_bump_lines) {
-        intervals.push(interval);
-    }
+    context.area = 0.0;
 }
 
 fn finalize_bump(
