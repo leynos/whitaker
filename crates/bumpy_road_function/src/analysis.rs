@@ -57,6 +57,28 @@ impl Default for Settings {
 ///
 /// The lint treats invalid values as configuration mistakes and falls back to
 /// defaults rather than panicking or emitting spurious diagnostics.
+///
+/// # Examples
+///
+/// ```
+/// use bumpy_road_function::analysis::{normalise_settings, Settings, Weights};
+///
+/// let settings = Settings {
+///     threshold: -1.0,
+///     window: 2,
+///     weights: Weights {
+///         depth: -1.0,
+///         predicate: 0.5,
+///         flow: -0.25,
+///     },
+///     ..Settings::default()
+/// };
+///
+/// let normalised = normalise_settings(settings);
+/// assert_eq!(normalised.threshold, Settings::default().threshold);
+/// assert_eq!(normalised.window, Settings::default().window);
+/// assert_eq!(normalised.weights, Settings::default().weights);
+/// ```
 #[must_use]
 pub fn normalise_settings(settings: Settings) -> Settings {
     fn normalise_weight(candidate: f64, fallback: f64) -> f64 {
@@ -67,6 +89,10 @@ pub fn normalise_settings(settings: Settings) -> Settings {
         }
     }
 
+    fn is_valid_window(window: usize) -> bool {
+        window != 0 && (window & 1) == 1
+    }
+
     let defaults = Settings::default();
     let threshold = if settings.threshold.is_finite() && settings.threshold >= 0.0 {
         settings.threshold
@@ -74,14 +100,11 @@ pub fn normalise_settings(settings: Settings) -> Settings {
         defaults.threshold
     };
 
-    let mut window = if settings.window == 0 {
-        defaults.window
-    } else {
+    let window = if is_valid_window(settings.window) {
         settings.window
+    } else {
+        defaults.window
     };
-    if (window & 1) == 0 {
-        window = defaults.window;
-    }
 
     let min_bump_lines = settings.min_bump_lines.max(1);
     let weights = Weights {
@@ -139,6 +162,7 @@ impl BumpInterval {
     }
 }
 
+/// Mutable state maintained during bump detection.
 struct BumpDetectionContext {
     threshold: f64,
     min_bump_lines: usize,
@@ -167,6 +191,19 @@ impl BumpDetectionContext {
 ///
 /// A bump is a contiguous run of samples whose value is at least `threshold`.
 /// Bumps shorter than `min_bump_lines` are discarded.
+///
+/// # Examples
+///
+/// ```
+/// use bumpy_road_function::analysis::detect_bumps;
+///
+/// let signal = [0.0, 3.0, 3.2, 0.0, 3.1, 3.0];
+/// let bumps = detect_bumps(&signal, 3.0, 2);
+///
+/// assert_eq!(bumps.len(), 2);
+/// assert_eq!((bumps[0].start_index(), bumps[0].end_index()), (1, 2));
+/// assert_eq!((bumps[1].start_index(), bumps[1].end_index()), (4, 5));
+/// ```
 #[must_use]
 pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> Vec<BumpInterval> {
     if smoothed.is_empty() {
@@ -230,6 +267,20 @@ fn finalize_bump(
 }
 
 /// Returns the two most severe bumps by area (breaking ties by longest interval, then earliest).
+///
+/// # Examples
+///
+/// ```
+/// use bumpy_road_function::analysis::{detect_bumps, top_two_bumps};
+///
+/// let signal = [0.0, 6.0, 0.0, 4.0, 4.0, 0.0, 5.0, 0.0, 4.0, 4.0];
+/// let bumps = detect_bumps(&signal, 3.0, 1);
+/// let top = top_two_bumps(bumps);
+///
+/// assert_eq!(top.len(), 2);
+/// assert_eq!((top[0].start_index(), top[0].end_index()), (1, 1));
+/// assert_eq!((top[1].start_index(), top[1].end_index()), (3, 4));
+/// ```
 #[must_use]
 pub fn top_two_bumps(mut intervals: Vec<BumpInterval>) -> Vec<BumpInterval> {
     intervals.sort_by(|left, right| {

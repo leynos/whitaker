@@ -70,8 +70,17 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// ```
 /// # use suite::suite_lint_names;
 /// let names: Vec<_> = suite_lint_names().collect();
-/// assert!(names.len() >= 7);
-/// assert!(names.contains(&"no_unwrap_or_else_panic"));
+/// for expected in [
+///     "function_attrs_follow_docs",
+///     "no_expect_outside_tests",
+///     "module_must_have_inner_docs",
+///     "conditional_max_n_branches",
+///     "module_max_lines",
+///     "no_unwrap_or_else_panic",
+///     "no_std_fs_operations",
+/// ] {
+///     assert!(names.contains(&expected));
+/// }
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {

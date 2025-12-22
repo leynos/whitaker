@@ -26,6 +26,9 @@ clean: ## Remove build artifacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors
+	# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
+	# linkage pitfalls when building cdylib-based lints; `publish-check` omits
+	# this flag to exercise production-like linking behaviour.
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
 
 target/%/$(APP): ## Build binary in debug or release mode

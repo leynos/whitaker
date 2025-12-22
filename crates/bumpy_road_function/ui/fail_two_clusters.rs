@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but not invoked")]
 
 fn process_low_range(input: i32) -> i32 {
     if input > 0 && input < 100 && input != 5 && input != 7 && input != 9 && input != 11 {
@@ -41,5 +41,7 @@ pub fn bumpy(input: i32) -> i32 {
 
     total
 }
+
+fn dead_code_fixture_marker() {}
 
 fn main() {}

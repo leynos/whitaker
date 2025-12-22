@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixture; functions are analysed but not invoked")]
 
 pub fn bumpy(input: i32) -> i32 {
     let mut total = 0;
@@ -34,5 +34,6 @@ pub fn bumpy(input: i32) -> i32 {
     total
 }
 
-fn main() {}
+fn dead_code_fixture_marker() {}
 
+fn main() {}

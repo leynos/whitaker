@@ -16,62 +16,54 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 
 #[rstest]
-fn normalise_settings_rejects_even_window() {
-    let settings = Settings {
+#[case::even_window(
+    Settings {
         window: 2,
         ..Settings::default()
-    };
-
-    let normalised = normalise_settings(settings);
-    assert_eq!(normalised.window, Settings::default().window);
-}
-
-#[rstest]
-fn normalise_settings_rejects_zero_window() {
-    let settings = Settings {
+    },
+    Settings::default(),
+)]
+#[case::zero_window(
+    Settings {
         window: 0,
         ..Settings::default()
-    };
-
-    let normalised = normalise_settings(settings);
-    assert_eq!(normalised.window, Settings::default().window);
-}
-
-#[rstest]
-fn normalise_settings_rejects_negative_threshold() {
-    let settings = Settings {
+    },
+    Settings::default(),
+)]
+#[case::negative_threshold(
+    Settings {
         threshold: -1.0,
         ..Settings::default()
-    };
-
-    let normalised = normalise_settings(settings);
-    assert_eq!(normalised.threshold, Settings::default().threshold);
-}
-
-#[rstest]
-fn normalise_settings_clamps_min_bump_lines() {
-    let settings = Settings {
+    },
+    Settings::default(),
+)]
+#[case::min_bump_lines_clamped(
+    Settings {
         min_bump_lines: 0,
         ..Settings::default()
-    };
-
-    let normalised = normalise_settings(settings);
-    assert_eq!(normalised.min_bump_lines, 1);
-}
-
-#[rstest]
-fn normalise_settings_rejects_negative_weights() {
-    let settings = Settings {
+    },
+    Settings {
+        min_bump_lines: 1,
+        ..Settings::default()
+    },
+)]
+#[case::negative_weights(
+    Settings {
         weights: Weights {
             depth: -1.0,
             predicate: 0.5,
             flow: -0.25,
         },
         ..Settings::default()
-    };
-
+    },
+    Settings::default(),
+)]
+fn normalise_settings_falls_back_to_defaults(
+    #[case] settings: Settings,
+    #[case] expected: Settings,
+) {
     let normalised = normalise_settings(settings);
-    assert_eq!(normalised.weights, Settings::default().weights);
+    assert_eq!(normalised, expected);
 }
 
 #[rstest]
