@@ -57,8 +57,8 @@ pub(super) fn emit_diagnostic(
         || fallback_messages(input.name, input.bumps.len(), input.settings.threshold),
     );
 
-    let bump_spans = build_bump_spans(cx, input.body_span, &input.function_lines, &input.bumps);
     let highlighted = top_two_bumps(input.bumps);
+    let bump_spans = build_bump_spans(cx, input.body_span, &input.function_lines, &highlighted);
 
     cx.span_lint(BUMPY_ROAD_FUNCTION, input.primary_span, |lint| {
         lint.primary_message(messages.primary().to_string());
@@ -80,19 +80,19 @@ fn build_bump_spans(
     cx: &LateContext<'_>,
     body_span: Span,
     function_lines: &RangeInclusive<usize>,
-    bumps: &[BumpInterval],
+    highlighted: &[BumpInterval],
 ) -> Vec<Option<Span>> {
     let source_map = cx.tcx.sess.source_map();
     let Ok(snippet) = source_map.span_to_snippet(body_span) else {
-        return vec![None; 2];
+        return vec![None; highlighted.len()];
     };
 
     let line_starts = line_start_offsets(&snippet);
     let body_start_line = *function_lines.start();
     let mapper = LineSpanMapper::new(body_span, snippet.len(), body_start_line, line_starts);
 
-    let top = top_two_bumps(bumps.to_vec());
-    top.iter()
+    highlighted
+        .iter()
         .map(|interval| {
             let start_line = body_start_line + interval.start_index();
             let end_line = body_start_line + interval.end_index();

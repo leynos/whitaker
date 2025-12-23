@@ -193,25 +193,35 @@ fn then_threshold(world: &World, threshold: f64) {
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 0)]
 fn scenario_two_bumps(world: World) {
+    // `rstest-bdd` binds the fixture through this argument, even though the
+    // step functions perform the assertions.
     let _ = world;
 }
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 1)]
 fn scenario_one_bump(world: World) {
+    // `rstest-bdd` binds the fixture through this argument, even though the
+    // step functions perform the assertions.
     let _ = world;
 }
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 2)]
 fn scenario_short_spike(world: World) {
+    // `rstest-bdd` binds the fixture through this argument, even though the
+    // step functions perform the assertions.
     let _ = world;
 }
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 3)]
 fn scenario_even_window(world: World) {
+    // `rstest-bdd` binds the fixture through this argument, even though the
+    // step functions perform the assertions.
     let _ = world;
 }
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 4)]
 fn scenario_negative_threshold(world: World) {
+    // `rstest-bdd` binds the fixture through this argument, even though the
+    // step functions perform the assertions.
     let _ = world;
 }

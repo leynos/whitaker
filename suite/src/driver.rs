@@ -55,7 +55,8 @@ define_suite_pass!(BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::de
 /// # use suite::register_suite_lints;
 /// let mut store = LintStore::new();
 /// register_suite_lints(&mut store);
-/// assert_eq!(store.get_lints().len(), 7);
+/// let expected = if cfg!(feature = "experimental-bumpy-road") { 8 } else { 7 };
+/// assert_eq!(store.get_lints().len(), expected);
 /// ```
 pub fn register_suite_lints(store: &mut LintStore) {
     store.register_lints(SUITE_LINT_DECLS);

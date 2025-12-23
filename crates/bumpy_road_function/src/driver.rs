@@ -5,8 +5,6 @@
 //! more separated bumps above a configurable threshold. The warning highlights
 //! the two largest bump intervals with labelled spans.
 
-use std::marker::PhantomData;
-
 use crate::analysis::{Settings, detect_bumps, normalise_settings};
 use common::complexity_signal::{rasterize_signal, smooth_moving_average};
 use common::i18n::MessageKey;
@@ -14,6 +12,7 @@ use common::{Localizer, get_localizer_for_lint};
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
+use rustc_span::Ident;
 use rustc_span::Span;
 use rustc_span::symbol::Symbol;
 use whitaker::SharedConfig;
@@ -96,12 +95,7 @@ impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
 }
 
 impl BumpyRoadFunction {
-    fn analyse_if_not_expanded(
-        &self,
-        cx: &LateContext<'_>,
-        span: Span,
-        target: AnalysisTarget<'_>,
-    ) {
+    fn analyse_if_not_expanded(&self, cx: &LateContext<'_>, span: Span, target: AnalysisTarget) {
         if span.from_expansion() {
             return;
         }
@@ -110,29 +104,27 @@ impl BumpyRoadFunction {
     }
 }
 
-fn extract_item_target<'hir>(item: &'hir hir::Item<'hir>) -> Option<AnalysisTarget<'hir>> {
+fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
     let hir::ItemKind::Fn { ident, body, .. } = item.kind else {
         return None;
     };
 
-    Some(make_analysis_target(ident.name, ident.span, body))
+    Some(make_ident_target(ident, body))
 }
 
-fn extract_impl_item_target<'hir>(item: &'hir hir::ImplItem<'hir>) -> Option<AnalysisTarget<'hir>> {
-    let hir::ImplItemKind::Fn(_, body_id) = item.kind else {
-        return None;
-    };
+fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> {
+    if let hir::ImplItemKind::Fn(_, body_id) = item.kind {
+        return Some(make_analysis_target(
+            item.ident.name,
+            item.ident.span,
+            body_id,
+        ));
+    }
 
-    Some(make_analysis_target(
-        item.ident.name,
-        item.ident.span,
-        body_id,
-    ))
+    None
 }
 
-fn extract_trait_item_target<'hir>(
-    item: &'hir hir::TraitItem<'hir>,
-) -> Option<AnalysisTarget<'hir>> {
+fn extract_trait_item_target(item: &hir::TraitItem<'_>) -> Option<AnalysisTarget> {
     let hir::TraitItemKind::Fn(_, trait_fn) = item.kind else {
         return None;
     };
@@ -148,7 +140,7 @@ fn extract_trait_item_target<'hir>(
     ))
 }
 
-fn extract_expr_target<'hir>(expr: &'hir hir::Expr<'hir>) -> Option<AnalysisTarget<'hir>> {
+fn extract_expr_target(expr: &hir::Expr<'_>) -> Option<AnalysisTarget> {
     let ExprKind::Closure(hir::Closure { body, .. }) = expr.kind else {
         return None;
     };
@@ -160,29 +152,27 @@ fn extract_expr_target<'hir>(expr: &'hir hir::Expr<'hir>) -> Option<AnalysisTarg
     ))
 }
 
-fn make_analysis_target<'hir>(
-    name: Symbol,
-    primary_span: Span,
-    body_id: hir::BodyId,
-) -> AnalysisTarget<'hir> {
+fn make_analysis_target(name: Symbol, primary_span: Span, body_id: hir::BodyId) -> AnalysisTarget {
     AnalysisTarget {
         name,
         primary_span,
         body_id,
-        _marker: PhantomData,
     }
 }
 
-struct AnalysisTarget<'a> {
+fn make_ident_target(ident: Ident, body_id: hir::BodyId) -> AnalysisTarget {
+    make_analysis_target(ident.name, ident.span, body_id)
+}
+
+struct AnalysisTarget {
     name: Symbol,
     primary_span: Span,
     body_id: hir::BodyId,
-    _marker: PhantomData<&'a ()>,
 }
 
 fn analyse_body(
     cx: &LateContext<'_>,
-    target: AnalysisTarget<'_>,
+    target: AnalysisTarget,
     settings: &Settings,
     localizer: &Localizer,
 ) {

@@ -150,6 +150,10 @@ impl BumpInterval {
     }
 
     /// Returns `true` when the interval contains no samples.
+    ///
+    /// The current detector never constructs empty intervals, but this check is
+    /// retained defensively so callers can validate values originating from
+    /// other sources.
     #[must_use]
     pub const fn is_empty(self) -> bool {
         self.start_index > self.end_index

@@ -1,5 +1,9 @@
+//! UI fixture that should trigger the bumpy road lint.
+//!
+//! This refactored variant still contains two separated conditional clusters.
 #![expect(dead_code, reason = "UI test fixture; functions are analysed but not invoked")]
 
+/// Applies conditional logic for the low input range (0-100) and returns an accumulated total.
 fn process_low_range(input: i32) -> i32 {
     if input > 0 && input < 100 && input != 5 && input != 7 && input != 9 && input != 11 {
         let mut total = 0;
@@ -13,6 +17,7 @@ fn process_low_range(input: i32) -> i32 {
     }
 }
 
+/// Applies conditional logic for the high input range (1000-2000) and returns an accumulated total.
 fn process_high_range(input: i32) -> i32 {
     if input > 1000
         && input < 2000
@@ -32,6 +37,12 @@ fn process_high_range(input: i32) -> i32 {
     }
 }
 
+/// Produces a value with two separated conditional clusters.
+///
+/// ```rust
+/// # use crate::bumpy;
+/// assert_eq!(bumpy(2), 5);
+/// ```
 pub fn bumpy(input: i32) -> i32 {
     let mut total = 0;
 
