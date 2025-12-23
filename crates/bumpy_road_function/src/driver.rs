@@ -115,12 +115,7 @@ fn extract_item_target<'hir>(item: &'hir hir::Item<'hir>) -> Option<AnalysisTarg
         return None;
     };
 
-    Some(AnalysisTarget {
-        name: ident.name,
-        primary_span: ident.span,
-        body_id: body,
-        _marker: PhantomData,
-    })
+    Some(make_analysis_target(ident.name, ident.span, body))
 }
 
 fn extract_impl_item_target<'hir>(item: &'hir hir::ImplItem<'hir>) -> Option<AnalysisTarget<'hir>> {
@@ -128,12 +123,11 @@ fn extract_impl_item_target<'hir>(item: &'hir hir::ImplItem<'hir>) -> Option<Ana
         return None;
     };
 
-    Some(AnalysisTarget {
-        name: item.ident.name,
-        primary_span: item.ident.span,
+    Some(make_analysis_target(
+        item.ident.name,
+        item.ident.span,
         body_id,
-        _marker: PhantomData,
-    })
+    ))
 }
 
 fn extract_trait_item_target<'hir>(
@@ -147,12 +141,11 @@ fn extract_trait_item_target<'hir>(
         return None;
     };
 
-    Some(AnalysisTarget {
-        name: item.ident.name,
-        primary_span: item.ident.span,
+    Some(make_analysis_target(
+        item.ident.name,
+        item.ident.span,
         body_id,
-        _marker: PhantomData,
-    })
+    ))
 }
 
 fn extract_expr_target<'hir>(expr: &'hir hir::Expr<'hir>) -> Option<AnalysisTarget<'hir>> {
@@ -160,12 +153,24 @@ fn extract_expr_target<'hir>(expr: &'hir hir::Expr<'hir>) -> Option<AnalysisTarg
         return None;
     };
 
-    Some(AnalysisTarget {
-        name: Symbol::intern("closure"),
-        primary_span: expr.span,
-        body_id: *body,
+    Some(make_analysis_target(
+        Symbol::intern("closure"),
+        expr.span,
+        *body,
+    ))
+}
+
+fn make_analysis_target<'hir>(
+    name: Symbol,
+    primary_span: Span,
+    body_id: hir::BodyId,
+) -> AnalysisTarget<'hir> {
+    AnalysisTarget {
+        name,
+        primary_span,
+        body_id,
         _marker: PhantomData,
-    })
+    }
 }
 
 struct AnalysisTarget<'a> {
