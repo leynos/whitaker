@@ -1,5 +1,5 @@
 warning: Multiple clusters of nested conditional logic in `bumpy`.
-  --> $DIR/fail_two_clusters_legacy.rs:12:8
+  --> $DIR/fail_two_clusters_legacy.rs:11:8
    |
 LL |    pub fn bumpy(input: i32) -> i32 {
    |  _________^^^^^____________________-
@@ -18,7 +18,7 @@ LL | |          && input != 1900
    | |__- Complexity bump 2 spans 4 lines.
    |
 note: Detected 2 complexity bumps above the threshold 3.
-  --> $DIR/fail_two_clusters_legacy.rs:12:8
+  --> $DIR/fail_two_clusters_legacy.rs:11:8
    |
 LL | pub fn bumpy(input: i32) -> i32 {
    |        ^^^^^

@@ -9,8 +9,7 @@ fn is_valid_input(input: i32) -> bool {
 
 /// Returns an accumulated value with a single conditional cluster.
 ///
-/// ```rust
-/// # use crate::mostly_linear;
+/// ```ignore
 /// assert_eq!(mostly_linear(2), 5);
 /// ```
 pub fn mostly_linear(input: i32) -> i32 {

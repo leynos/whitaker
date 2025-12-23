@@ -39,8 +39,7 @@ fn process_high_range(input: i32) -> i32 {
 
 /// Produces a value with two separated conditional clusters.
 ///
-/// ```rust
-/// # use crate::bumpy;
+/// ```ignore
 /// assert_eq!(bumpy(2), 5);
 /// ```
 pub fn bumpy(input: i32) -> i32 {
