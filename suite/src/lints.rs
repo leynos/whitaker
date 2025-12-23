@@ -39,6 +39,11 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         name: "no_std_fs_operations",
         crate_name: "no_std_fs_operations",
     },
+    #[cfg(feature = "experimental-bumpy-road")]
+    LintDescriptor {
+        name: "bumpy_road_function",
+        crate_name: "bumpy_road_function",
+    },
 ];
 
 #[cfg(feature = "dylint-driver")]
@@ -54,6 +59,8 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     module_max_lines::MODULE_MAX_LINES,
     no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
     no_std_fs_operations::NO_STD_FS_OPERATIONS,
+    #[cfg(feature = "experimental-bumpy-road")]
+    bumpy_road_function::BUMPY_ROAD_FUNCTION,
 ];
 
 /// Returns an iterator over the canonical lint names in suite order.
@@ -63,8 +70,17 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// ```
 /// # use suite::suite_lint_names;
 /// let names: Vec<_> = suite_lint_names().collect();
-/// assert_eq!(names.len(), 7);
-/// assert!(names.contains(&"no_unwrap_or_else_panic"));
+/// for expected in [
+///     "function_attrs_follow_docs",
+///     "no_expect_outside_tests",
+///     "module_must_have_inner_docs",
+///     "conditional_max_n_branches",
+///     "module_max_lines",
+///     "no_unwrap_or_else_panic",
+///     "no_std_fs_operations",
+/// ] {
+///     assert!(names.contains(&expected));
+/// }
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {

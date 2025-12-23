@@ -1,0 +1,299 @@
+//! Pure helpers for detecting "bumpy road" intervals in a smoothed signal.
+//!
+//! The lint pass uses these helpers after constructing and smoothing the
+//! per-line complexity signal. Keeping this logic independent from `rustc_*`
+//! APIs allows unit and behavioural testing without compiling the compiler
+//! driver.
+
+/// Weighting applied to signal segments.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Weights {
+    /// Contribution added per nesting depth level.
+    pub depth: f64,
+    /// Contribution added per predicate branch.
+    pub predicate: f64,
+    /// Contribution added per control-flow construct (e.g. match arms).
+    pub flow: f64,
+}
+
+impl Default for Weights {
+    fn default() -> Self {
+        Self {
+            depth: 1.0,
+            predicate: 0.5,
+            flow: 0.5,
+        }
+    }
+}
+
+/// User-facing configuration after normalisation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Settings {
+    /// Smoothed value threshold at which a bump is considered active.
+    pub threshold: f64,
+    /// Centred moving-average window size.
+    pub window: usize,
+    /// Minimum number of contiguous lines required to keep a bump.
+    pub min_bump_lines: usize,
+    /// Segment weights.
+    pub weights: Weights,
+    /// Whether closure bodies are inspected as additional function-like scopes.
+    pub include_closures: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            threshold: 3.0,
+            window: 3,
+            min_bump_lines: 2,
+            weights: Weights::default(),
+            include_closures: false,
+        }
+    }
+}
+
+/// Normalises settings so invalid values fall back to safe defaults.
+///
+/// The lint treats invalid values as configuration mistakes and falls back to
+/// defaults rather than panicking or emitting spurious diagnostics.
+///
+/// # Examples
+///
+/// ```
+/// use bumpy_road_function::analysis::{normalise_settings, Settings, Weights};
+///
+/// let settings = Settings {
+///     threshold: -1.0,
+///     window: 2,
+///     weights: Weights {
+///         depth: -1.0,
+///         predicate: 0.5,
+///         flow: -0.25,
+///     },
+///     ..Settings::default()
+/// };
+///
+/// let normalised = normalise_settings(settings);
+/// assert_eq!(normalised.threshold, Settings::default().threshold);
+/// assert_eq!(normalised.window, Settings::default().window);
+/// assert_eq!(normalised.weights, Settings::default().weights);
+/// ```
+#[must_use]
+pub fn normalise_settings(settings: Settings) -> Settings {
+    fn normalise_weight(candidate: f64, fallback: f64) -> f64 {
+        if candidate.is_finite() && candidate >= 0.0 {
+            candidate
+        } else {
+            fallback
+        }
+    }
+
+    fn is_valid_window(window: usize) -> bool {
+        window != 0 && (window & 1) == 1
+    }
+
+    let defaults = Settings::default();
+    let threshold = if settings.threshold.is_finite() && settings.threshold >= 0.0 {
+        settings.threshold
+    } else {
+        defaults.threshold
+    };
+
+    let window = if is_valid_window(settings.window) {
+        settings.window
+    } else {
+        defaults.window
+    };
+
+    let min_bump_lines = settings.min_bump_lines.max(1);
+    let weights = Weights {
+        depth: normalise_weight(settings.weights.depth, defaults.weights.depth),
+        predicate: normalise_weight(settings.weights.predicate, defaults.weights.predicate),
+        flow: normalise_weight(settings.weights.flow, defaults.weights.flow),
+    };
+
+    Settings {
+        threshold,
+        window,
+        min_bump_lines,
+        weights,
+        include_closures: settings.include_closures,
+    }
+}
+
+/// A contiguous bump interval detected in a smoothed signal.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BumpInterval {
+    start_index: usize,
+    end_index: usize,
+    area_above_threshold: f64,
+}
+
+impl BumpInterval {
+    /// First index covered by the bump (inclusive).
+    #[must_use]
+    pub const fn start_index(self) -> usize {
+        self.start_index
+    }
+
+    /// Last index covered by the bump (inclusive).
+    #[must_use]
+    pub const fn end_index(self) -> usize {
+        self.end_index
+    }
+
+    /// Number of samples spanned by the bump.
+    #[must_use]
+    pub const fn len(self) -> usize {
+        self.end_index - self.start_index + 1
+    }
+
+    /// Returns `true` when the interval contains no samples.
+    ///
+    /// The current detector never constructs empty intervals, but this check is
+    /// retained defensively so callers can validate values originating from
+    /// other sources.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.start_index > self.end_index
+    }
+
+    /// Area above the threshold used for ranking bumps.
+    #[must_use]
+    pub const fn area_above_threshold(self) -> f64 {
+        self.area_above_threshold
+    }
+}
+
+/// Mutable state maintained during bump detection.
+struct BumpDetectionContext {
+    threshold: f64,
+    min_bump_lines: usize,
+    current_start: Option<usize>,
+    area: f64,
+    intervals: Vec<BumpInterval>,
+}
+
+impl BumpDetectionContext {
+    fn new(threshold: f64, min_bump_lines: usize) -> Self {
+        Self {
+            threshold,
+            min_bump_lines: min_bump_lines.max(1),
+            current_start: None,
+            area: 0.0,
+            intervals: Vec::new(),
+        }
+    }
+
+    fn into_intervals(self) -> Vec<BumpInterval> {
+        self.intervals
+    }
+}
+
+/// Detects bump intervals in the smoothed signal.
+///
+/// A bump is a contiguous run of samples whose value is at least `threshold`.
+/// Bumps shorter than `min_bump_lines` are discarded.
+///
+/// # Examples
+///
+/// ```
+/// use bumpy_road_function::analysis::detect_bumps;
+///
+/// let signal = [0.0, 3.0, 3.2, 0.0, 3.1, 3.0];
+/// let bumps = detect_bumps(&signal, 3.0, 2);
+///
+/// assert_eq!(bumps.len(), 2);
+/// assert_eq!((bumps[0].start_index(), bumps[0].end_index()), (1, 2));
+/// assert_eq!((bumps[1].start_index(), bumps[1].end_index()), (4, 5));
+/// ```
+#[must_use]
+pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> Vec<BumpInterval> {
+    if smoothed.is_empty() {
+        return Vec::new();
+    }
+
+    let mut context = BumpDetectionContext::new(threshold, min_bump_lines);
+
+    for (index, &value) in smoothed.iter().enumerate() {
+        process_sample_value(value, index, &mut context);
+    }
+
+    let end = smoothed.len() - 1;
+    if let Some(start) = context.current_start.take()
+        && let Some(interval) = finalize_bump(start, end, context.area, context.min_bump_lines)
+    {
+        context.intervals.push(interval);
+    }
+
+    context.into_intervals()
+}
+
+fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionContext) {
+    if value >= context.threshold {
+        if context.current_start.is_none() {
+            context.current_start = Some(index);
+            context.area = 0.0;
+        }
+        context.area += value - context.threshold;
+        return;
+    }
+
+    let Some(start) = context.current_start.take() else {
+        return;
+    };
+
+    let end = index.saturating_sub(1);
+    if let Some(interval) = finalize_bump(start, end, context.area, context.min_bump_lines) {
+        context.intervals.push(interval);
+    }
+    context.area = 0.0;
+}
+
+fn finalize_bump(
+    start: usize,
+    end: usize,
+    area: f64,
+    min_bump_lines: usize,
+) -> Option<BumpInterval> {
+    let interval = BumpInterval {
+        start_index: start,
+        end_index: end,
+        area_above_threshold: area,
+    };
+
+    if interval.len() >= min_bump_lines {
+        Some(interval)
+    } else {
+        None
+    }
+}
+
+/// Returns the two most severe bumps by area (breaking ties by longest interval, then earliest).
+///
+/// # Examples
+///
+/// ```
+/// use bumpy_road_function::analysis::{detect_bumps, top_two_bumps};
+///
+/// let signal = [0.0, 6.0, 0.0, 4.0, 4.0, 0.0, 5.0, 0.0, 4.0, 4.0];
+/// let bumps = detect_bumps(&signal, 3.0, 1);
+/// let top = top_two_bumps(bumps);
+///
+/// assert_eq!(top.len(), 2);
+/// assert_eq!((top[0].start_index(), top[0].end_index()), (1, 1));
+/// assert_eq!((top[1].start_index(), top[1].end_index()), (3, 4));
+/// ```
+#[must_use]
+pub fn top_two_bumps(mut intervals: Vec<BumpInterval>) -> Vec<BumpInterval> {
+    intervals.sort_by(|left, right| {
+        right
+            .area_above_threshold
+            .total_cmp(&left.area_above_threshold)
+            .then_with(|| right.len().cmp(&left.len()))
+            .then_with(|| left.start_index.cmp(&right.start_index))
+    });
+    intervals.truncate(2);
+    intervals
+}

@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
+experimental-bumpy-road = ["dylint-driver", "dep:bumpy_road_function"]
 dylint-driver = [
     "dep:dylint_linting",
     "dep:function_attrs_follow_docs",
@@ -38,6 +39,7 @@ conditional_max_n_branches = { path = "../crates/conditional_max_n_branches", op
 module_max_lines = { path = "../crates/module_max_lines", optional = true, features = ["dylint-driver", "constituent"] }
 no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic", optional = true, features = ["dylint-driver", "constituent"] }
 no_std_fs_operations = { path = "../crates/no_std_fs_operations", optional = true, features = ["dylint-driver", "constituent"] }
+bumpy_road_function = { path = "../crates/bumpy_road_function", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
 rstest = { workspace = true }

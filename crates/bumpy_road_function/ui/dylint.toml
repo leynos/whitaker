@@ -1,0 +1,7 @@
+[bumpy_road_function]
+threshold = 3.0
+window = 3
+min_bump_lines = 2
+include_closures = false
+weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
+

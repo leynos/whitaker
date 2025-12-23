@@ -56,10 +56,10 @@
   - [ ] Enforce lint-level deny rules and fail builds on warnings across the
         workspace.
 
-- [ ] Phase 5 — Experimental Bumpy Road lint
+- [x] Phase 5 — Experimental Bumpy Road lint
   - [x] Implement the per-line complexity signal builder and smoothing window
         logic.
-  - [ ] Detect bump intervals, surface diagnostics with labelled spans, and add
+  - [x] Detect bump intervals, surface diagnostics with labelled spans, and add
         configuration options.
-  - [ ] Ship UI coverage for positive and negative Bumpy Road scenarios and gate
+  - [x] Ship UI coverage for positive and negative Bumpy Road scenarios and gate
         behind a feature flag.

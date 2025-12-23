@@ -1078,6 +1078,12 @@ highlight the top two intervals in the diagnostic.
 - Require `window` to be positive and odd, so the average is centred.
 - Contract the smoothing window at the start/end of a function rather than
   padding, so edges are deterministic without introducing extra artefacts.
+- When configuration values are invalid (negative threshold, even/zero window,
+  negative weights), fall back to defaults and log at debug level rather than
+  panicking.
+- Exclude the lint from the aggregated `suite` crate by default; enable it via
+  the `suite` feature flag `experimental-bumpy-road`, or load the lint crate
+  directly when opting into experimental checks.
 
 **Algorithm sketch.**
 

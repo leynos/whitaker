@@ -116,11 +116,11 @@ whitaker-install --no-suite
 | ----------------------- | ----- | --------------------------------------- |
 | `--target-dir DIR`      | `-t`  | Staging directory for built libraries   |
 | `--lint NAME`           | `-l`  | Build specific lint (repeatable)        |
-| `--suite-only`          |       | Build only the aggregated suite         |
-| `--no-suite`            |       | Exclude the aggregated suite            |
-| `--toolchain TOOLCHAIN` |       | Override the detected toolchain         |
+| `--suite-only`          | `—`   | Build only the aggregated suite         |
+| `--no-suite`            | `—`   | Exclude the aggregated suite            |
+| `--toolchain TOOLCHAIN` | `—`   | Override the detected toolchain         |
 | `--jobs N`              | `-j`  | Number of parallel build jobs           |
-| `--dry-run`             |       | Show what would be done without running |
+| `--dry-run`             | `—`   | Show what would be done without running |
 | `--verbose`             | `-v`  | Increase output verbosity               |
 | `--quiet`               | `-q`  | Suppress output except errors           |
 
@@ -192,6 +192,20 @@ libraries = [
 
 Use individual crates when only a subset of lints is required or when specific
 lints must be pinned to different versions.
+
+### Experimental lints
+
+Whitaker includes an experimental "Bumpy Road" detector
+(`bumpy_road_function`). It is excluded from the aggregated suite by default.
+To opt in, load the lint crate explicitly alongside the suite:
+
+```toml
+[workspace.metadata.dylint]
+libraries = [
+  { git = "https://github.com/leynos/whitaker", pattern = "suite" },
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/bumpy_road_function" }
+]
+```
 
 ### Version pinning
 
