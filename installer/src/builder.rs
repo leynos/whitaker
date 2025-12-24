@@ -243,29 +243,26 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
 
 /// Build the list of crates to compile based on CLI options.
 ///
+/// By default, only the aggregated suite is built. Use `individual_lints` to
+/// build all individual lint crates instead, or provide `specific_lints` to
+/// cherry-pick particular lints.
+///
 /// Note: This function assumes that `specific_lints` have been validated via
 /// `validate_crate_names()` prior to calling. Callers must validate inputs
 /// first to get proper error messages for unknown names.
 #[must_use]
-pub fn resolve_crates(
-    specific_lints: &[CrateName],
-    suite_only: bool,
-    no_suite: bool,
-) -> Vec<CrateName> {
-    if suite_only {
-        return vec![CrateName::from(SUITE_CRATE)];
-    }
-
+pub fn resolve_crates(specific_lints: &[CrateName], individual_lints: bool) -> Vec<CrateName> {
     if !specific_lints.is_empty() {
         // Assumes names have been validated via validate_crate_names().
         return specific_lints.to_vec();
     }
 
-    let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
-    if !no_suite {
-        crates.push(CrateName::from(SUITE_CRATE));
+    if individual_lints {
+        return LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
     }
-    crates
+
+    // Default: suite only
+    vec![CrateName::from(SUITE_CRATE)]
 }
 
 /// Find the workspace root by looking for `Cargo.toml` with `[workspace]`.
@@ -317,19 +314,17 @@ mod tests {
 
     /// Test configuration for resolve_crates variants.
     struct ResolveCratesCase {
-        suite_only: bool,
-        no_suite: bool,
+        individual_lints: bool,
         expect_lint: bool,
         expect_suite: bool,
     }
 
     /// Parameterised tests for resolve_crates variants.
     #[rstest]
-    #[case::default(ResolveCratesCase { suite_only: false, no_suite: false, expect_lint: true, expect_suite: true })]
-    #[case::suite_only(ResolveCratesCase { suite_only: true, no_suite: false, expect_lint: false, expect_suite: true })]
-    #[case::no_suite(ResolveCratesCase { suite_only: false, no_suite: true, expect_lint: true, expect_suite: false })]
+    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, expect_lint: false, expect_suite: true })]
+    #[case::individual_lints(ResolveCratesCase { individual_lints: true, expect_lint: true, expect_suite: false })]
     fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
-        let crates = resolve_crates(&[], case.suite_only, case.no_suite);
+        let crates = resolve_crates(&[], case.individual_lints);
 
         assert_eq!(
             crates.contains(&CrateName::from("module_max_lines")),
@@ -346,7 +341,7 @@ mod tests {
     #[test]
     fn resolve_crates_specific_lints() {
         let specific = vec![CrateName::from("module_max_lines")];
-        let crates = resolve_crates(&specific, false, false);
+        let crates = resolve_crates(&specific, false);
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
     }
 

@@ -110,6 +110,11 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     let path = if attr.doc_str().is_some() {
         AttributePath::from("doc")
     } else {
+        // Parsed attributes (like #[must_use]) don't have an accessible path;
+        // calling path() on them would panic.
+        let hir::Attribute::Unparsed(_) = attr else {
+            return Attribute::new(AttributePath::from("parsed"), kind);
+        };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
         match names.next() {
             Some(first) => AttributePath::new(std::iter::once(first).chain(names)),
@@ -138,6 +143,12 @@ fn item_name(item: &hir::Item<'_>) -> Option<String> {
 /// Returns `true` when the attribute is `#[cfg(test)]` or a `cfg_attr(test, cfg(test))`
 /// wrapper, ensuring test-only scopes are treated as exempt.
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+    // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
+    // avoid panics when calling path() on arbitrary parsed attributes.
+    let hir::Attribute::Unparsed(_) = attr else {
+        return false;
+    };
+
     let path = attr.path();
     if path.len() != 1 {
         return false;

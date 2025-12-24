@@ -28,13 +28,9 @@ struct Cli {
     #[arg(short, long, value_name = "NAME")]
     lint: Vec<String>,
 
-    /// Build only the aggregated suite.
-    #[arg(long, conflicts_with = "lint", conflicts_with = "no_suite")]
-    suite_only: bool,
-
-    /// Exclude the aggregated suite from the build.
-    #[arg(long, conflicts_with = "suite_only")]
-    no_suite: bool,
+    /// Build all individual lint crates instead of the aggregated suite.
+    #[arg(long, conflicts_with = "lint")]
+    individual_lints: bool,
 
     /// Number of parallel build jobs.
     #[arg(short, long, value_name = "N")]
@@ -118,16 +114,11 @@ fn resolve_toolchain(
     Ok(toolchain)
 }
 
-// Resolves requested crates from the CLI flags.
-//
-// This converts lint names into `CrateName` values, validates any provided
-// names, and applies suite-only / no-suite policy to determine the final build
-// list.
+/// Resolves requested crates from the CLI flags.
+///
+/// Converts lint names into `CrateName` values, validates any provided names,
+/// and applies the individual-lints flag to determine the final build list.
 fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
-    if cli.suite_only {
-        return Ok(resolve_crates(&[], true, cli.no_suite));
-    }
-
     let lint_crates: Vec<CrateName> = cli
         .lint
         .iter()
@@ -138,7 +129,7 @@ fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
         validate_crate_names(&lint_crates)?;
     }
 
-    Ok(resolve_crates(&lint_crates, cli.suite_only, cli.no_suite))
+    Ok(resolve_crates(&lint_crates, cli.individual_lints))
 }
 
 /// Determines the target directory from CLI or falls back to the default.
@@ -222,8 +213,7 @@ mod tests {
         Cli {
             target_dir: None,
             lint: Vec::new(),
-            suite_only: false,
-            no_suite: false,
+            individual_lints: false,
             jobs: None,
             toolchain: None,
             dry_run: false,
@@ -237,8 +227,7 @@ mod tests {
         let cli = Cli::parse_from(["whitaker-install"]);
         assert!(cli.target_dir.is_none());
         assert!(cli.lint.is_empty());
-        assert!(!cli.suite_only);
-        assert!(!cli.no_suite);
+        assert!(!cli.individual_lints);
         assert!(!cli.dry_run);
         assert!(!cli.verbose);
         assert!(!cli.quiet);
@@ -264,11 +253,10 @@ mod tests {
 
     /// Parameterised tests for boolean CLI flags.
     #[rstest]
-    #[case::suite_only(&["whitaker-install", "--suite-only"], |cli: &Cli| cli.suite_only)]
+    #[case::individual_lints(&["whitaker-install", "--individual-lints"], |cli: &Cli| cli.individual_lints)]
     #[case::dry_run(&["whitaker-install", "--dry-run"], |cli: &Cli| cli.dry_run)]
     #[case::verbose(&["whitaker-install", "-v"], |cli: &Cli| cli.verbose)]
     #[case::quiet(&["whitaker-install", "-q"], |cli: &Cli| cli.quiet)]
-    #[case::no_suite(&["whitaker-install", "--no-suite"], |cli: &Cli| cli.no_suite)]
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));
@@ -297,26 +285,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(base_cli(), true, true)]
-    #[case::no_suite(
+    #[case::default_suite_only(base_cli(), false, true)]
+    #[case::individual_lints(
         {
             let mut cli = base_cli();
-            cli.no_suite = true;
+            cli.individual_lints = true;
             cli
         },
         true,
         false
     )]
-    #[case::suite_only(
-        {
-            let mut cli = base_cli();
-            cli.suite_only = true;
-            cli
-        },
-        false,
-        true
-    )]
-    fn resolve_requested_crates_respects_suite_and_lint_flags(
+    fn resolve_requested_crates_respects_individual_lints_flag(
         #[case] cli: Cli,
         #[case] expect_lint: bool,
         #[case] expect_suite: bool,
@@ -351,8 +330,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::suite_only_with_lint(&["whitaker-install", "--suite-only", "--lint", "module_max_lines"])]
-    #[case::suite_only_with_no_suite(&["whitaker-install", "--suite-only", "--no-suite"])]
+    #[case::individual_lints_with_lint(&["whitaker-install", "--individual-lints", "--lint", "module_max_lines"])]
     #[case::verbose_with_quiet(&["whitaker-install", "--verbose", "--quiet"])]
     fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
         Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");

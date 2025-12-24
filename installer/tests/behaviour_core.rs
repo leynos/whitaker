@@ -20,8 +20,7 @@ use whitaker_installer::toolchain::parse_toolchain_channel;
 #[derive(Default)]
 struct CrateResolutionWorld {
     specific_lints: RefCell<Vec<CrateName>>,
-    suite_only: Cell<bool>,
-    no_suite: Cell<bool>,
+    individual_lints: Cell<bool>,
     resolved: RefCell<Vec<CrateName>>,
 }
 
@@ -35,19 +34,9 @@ fn given_no_specific_lints(crate_world: &CrateResolutionWorld) {
     crate_world.specific_lints.replace(Vec::new());
 }
 
-#[given("suite is not excluded")]
-fn given_suite_not_excluded(crate_world: &CrateResolutionWorld) {
-    crate_world.no_suite.set(false);
-}
-
-#[given("suite-only mode is enabled")]
-fn given_suite_only(crate_world: &CrateResolutionWorld) {
-    crate_world.suite_only.set(true);
-}
-
-#[given("suite is excluded")]
-fn given_suite_excluded(crate_world: &CrateResolutionWorld) {
-    crate_world.no_suite.set(true);
+#[given("individual lints mode is enabled")]
+fn given_individual_lints(crate_world: &CrateResolutionWorld) {
+    crate_world.individual_lints.set(true);
 }
 
 #[given("specific lints are requested")]
@@ -60,11 +49,7 @@ fn given_specific_lints(crate_world: &CrateResolutionWorld) {
 #[when("the crate list is resolved")]
 fn when_crates_resolved(crate_world: &CrateResolutionWorld) {
     let lints = crate_world.specific_lints.replace(Vec::new());
-    let resolved = resolve_crates(
-        &lints,
-        crate_world.suite_only.get(),
-        crate_world.no_suite.get(),
-    );
+    let resolved = resolve_crates(&lints, crate_world.individual_lints.get());
     crate_world.resolved.replace(resolved);
 }
 
@@ -286,51 +271,46 @@ fn then_powershell_env(snippet_world: &SnippetWorld) {
 // ---------------------------------------------------------------------------
 
 #[scenario(path = "tests/features/installer.feature", index = 0)]
-fn scenario_resolve_all_crates(crate_world: CrateResolutionWorld) {
+fn scenario_resolve_suite_only_by_default(crate_world: CrateResolutionWorld) {
     let _ = crate_world;
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 1)]
-fn scenario_resolve_suite_only(crate_world: CrateResolutionWorld) {
+fn scenario_resolve_individual_lints(crate_world: CrateResolutionWorld) {
     let _ = crate_world;
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 2)]
-fn scenario_resolve_without_suite(crate_world: CrateResolutionWorld) {
-    let _ = crate_world;
-}
-
-#[scenario(path = "tests/features/installer.feature", index = 3)]
 fn scenario_resolve_specific_lints(crate_world: CrateResolutionWorld) {
     let _ = crate_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 4)]
+#[scenario(path = "tests/features/installer.feature", index = 3)]
 fn scenario_validate_known_names(validation_world: ValidationWorld) {
     let _ = validation_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 5)]
+#[scenario(path = "tests/features/installer.feature", index = 4)]
 fn scenario_reject_unknown_names(validation_world: ValidationWorld) {
     let _ = validation_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 6)]
+#[scenario(path = "tests/features/installer.feature", index = 5)]
 fn scenario_parse_standard_toolchain(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 7)]
+#[scenario(path = "tests/features/installer.feature", index = 6)]
 fn scenario_parse_top_level_channel(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 8)]
+#[scenario(path = "tests/features/installer.feature", index = 7)]
 fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 9)]
+#[scenario(path = "tests/features/installer.feature", index = 8)]
 fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) {
     let _ = snippet_world;
 }

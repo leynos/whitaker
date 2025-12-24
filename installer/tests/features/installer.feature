@@ -3,20 +3,13 @@ Feature: Whitaker lint library installer
   It detects the pinned toolchain, builds crates with the required features,
   and copies them to a target directory with toolchain-specific naming.
 
-  Scenario: Resolve all crates by default
+  Scenario: Resolve suite only by default
     Given no specific lints are requested
-    And suite is not excluded
-    When the crate list is resolved
-    Then all lint crates are included
-    And the suite crate is included
-
-  Scenario: Resolve suite only
-    Given suite-only mode is enabled
     When the crate list is resolved
     Then only the suite crate is included
 
-  Scenario: Resolve without suite
-    Given suite is excluded
+  Scenario: Resolve individual lints
+    Given individual lints mode is enabled
     When the crate list is resolved
     Then all lint crates are included
     And the suite crate is not included
@@ -82,7 +75,7 @@ Feature: Whitaker lint library installer
     And an unknown lint message is shown
 
   Scenario: Install suite to a temporary directory
-    Given the installer is invoked in suite-only mode to a temporary directory
+    Given the installer is invoked to a temporary directory
     When the installer CLI is run
     Then installation succeeds or is skipped
     And the suite library is staged

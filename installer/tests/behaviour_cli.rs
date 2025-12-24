@@ -157,16 +157,16 @@ fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
     ]);
 }
 
-#[given("the installer is invoked in suite-only mode to a temporary directory")]
-fn given_suite_only_install(cli_world: &CliWorld) {
+#[given("the installer is invoked to a temporary directory")]
+fn given_suite_install(cli_world: &CliWorld) {
     let Some(_channel) = ensure_required_toolchain_available(cli_world) else {
         return;
     };
 
     let target_dir = setup_temp_dir(cli_world);
 
+    // Suite-only is the default, so no extra flag is needed.
     cli_world.args.replace(vec![
-        "--suite-only".to_owned(),
         "--jobs".to_owned(),
         "1".to_owned(),
         "--target-dir".to_owned(),
@@ -211,7 +211,7 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
     assert!(stderr.contains("Dry run - no files will be modified"));
     assert!(stderr.contains(&format!("Toolchain: {toolchain}")));
     assert!(stderr.contains("Crates to build:"));
-    assert!(stderr.contains("module_max_lines"));
+    // Default is suite-only, so we expect only the suite crate.
     assert!(stderr.contains("suite"));
 
     let temp_dir = cli_world._temp_dir.borrow();
@@ -297,17 +297,17 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
 
 // Do not reorder scenarios in tests/features/installer.feature — bindings are
 // index-based.
-#[scenario(path = "tests/features/installer.feature", index = 12)]
+#[scenario(path = "tests/features/installer.feature", index = 11)]
 fn scenario_dry_run_outputs_configuration(cli_world: CliWorld) {
     let _ = cli_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 13)]
+#[scenario(path = "tests/features/installer.feature", index = 12)]
 fn scenario_dry_run_rejects_unknown_lint(cli_world: CliWorld) {
     let _ = cli_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 14)]
+#[scenario(path = "tests/features/installer.feature", index = 13)]
 fn scenario_install_suite_to_temp_dir(cli_world: CliWorld) {
     let _ = cli_world;
 }
