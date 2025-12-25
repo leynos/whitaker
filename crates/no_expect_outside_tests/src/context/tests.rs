@@ -80,6 +80,90 @@ fn meta_inner(meta: MetaItem) -> MetaItemInner {
     MetaItemInner::MetaItem(meta)
 }
 
+// ---------------------------------------------------------------------------
+// cfg pattern helpers
+// ---------------------------------------------------------------------------
+
+/// Builds `cfg(any(...))`.
+fn cfg_any(items: Vec<MetaItem>) -> MetaItem {
+    meta_list(
+        &["cfg"],
+        vec![meta_inner(meta_list(
+            &["any"],
+            items.into_iter().map(meta_inner).collect(),
+        ))],
+    )
+}
+
+/// Builds `cfg(all(...))`.
+fn cfg_all(items: Vec<MetaItem>) -> MetaItem {
+    meta_list(
+        &["cfg"],
+        vec![meta_inner(meta_list(
+            &["all"],
+            items.into_iter().map(meta_inner).collect(),
+        ))],
+    )
+}
+
+/// Builds `cfg(not(...))`.
+fn cfg_not(item: MetaItem) -> MetaItem {
+    meta_list(
+        &["cfg"],
+        vec![meta_inner(meta_list(&["not"], vec![meta_inner(item)]))],
+    )
+}
+
+/// Builds `cfg_attr(condition, attribute)`.
+fn cfg_attr(condition: MetaItem, attribute: MetaItem) -> MetaItem {
+    meta_list(
+        &["cfg_attr"],
+        vec![meta_inner(condition), meta_inner(attribute)],
+    )
+}
+
+/// Builds simple `cfg(path)` style attributes.
+fn cfg_simple(segments: &[&str]) -> MetaItem {
+    meta_list(&["cfg"], vec![meta_inner(meta_word(segments))])
+}
+
+// ---------------------------------------------------------------------------
+// MetaItem builders for parameterised tests
+// ---------------------------------------------------------------------------
+
+/// Builds `cfg(any(test, doctest))`.
+fn build_cfg_any_test_doctest() -> MetaItem {
+    cfg_any(vec![meta_word(&["test"]), meta_word(&["doctest"])])
+}
+
+/// Builds `cfg(all(test, unix))`.
+fn build_cfg_all_test_unix() -> MetaItem {
+    cfg_all(vec![meta_word(&["test"]), meta_word(&["unix"])])
+}
+
+/// Builds `cfg(not(test))`.
+fn build_cfg_not_test() -> MetaItem {
+    cfg_not(meta_word(&["test"]))
+}
+
+/// Builds `cfg_attr(test, cfg(test))`.
+fn build_cfg_attr_test_cfg_test() -> MetaItem {
+    cfg_attr(meta_word(&["test"]), cfg_simple(&["test"]))
+}
+
+/// Builds `cfg_attr(test, allow(dead_code))`.
+fn build_cfg_attr_test_allow() -> MetaItem {
+    cfg_attr(
+        meta_word(&["test"]),
+        meta_list(&["allow"], vec![meta_inner(meta_word(&["dead_code"]))]),
+    )
+}
+
+/// Helper function to test `meta_contains_test_cfg` behaviour.
+fn assert_meta_test_cfg(meta: MetaItem, expected: bool) {
+    assert_eq!(meta_contains_test_cfg(&meta), expected);
+}
+
 /// Asserts that `convert_attribute` preserves path segments for the given
 /// attribute path. Must be called within `create_default_session_globals_then`.
 fn assert_converts_path(segments: &[&str]) {
@@ -96,85 +180,43 @@ fn assert_converts_path(segments: &[&str]) {
     assert_eq!(converted_segments.as_slice(), segments);
 }
 
-// ---------------------------------------------------------------------------
-// MetaItem builders for parameterised tests
-// ---------------------------------------------------------------------------
-
-/// Builds `cfg(any(test, doctest))`.
-fn build_cfg_any_test_doctest() -> MetaItem {
-    meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["any"],
-            vec![
-                meta_inner(meta_word(&["test"])),
-                meta_inner(meta_word(&["doctest"])),
-            ],
-        ))],
-    )
-}
-
-/// Builds `cfg(all(test, unix))`.
-fn build_cfg_all_test_unix() -> MetaItem {
-    meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["all"],
-            vec![
-                meta_inner(meta_word(&["test"])),
-                meta_inner(meta_word(&["unix"])),
-            ],
-        ))],
-    )
-}
-
-/// Builds `cfg(not(test))`.
-fn build_cfg_not_test() -> MetaItem {
-    meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(
-            &["not"],
-            vec![meta_inner(meta_word(&["test"]))],
-        ))],
-    )
-}
-
-/// Builds `cfg_attr(test, cfg(test))`.
-fn build_cfg_attr_test_cfg_test() -> MetaItem {
-    meta_list(
-        &["cfg_attr"],
-        vec![
-            meta_inner(meta_word(&["test"])),
-            meta_inner(meta_list(&["cfg"], vec![meta_inner(meta_word(&["test"]))])),
-        ],
-    )
-}
-
-/// Builds `cfg_attr(test, allow(dead_code))`.
-fn build_cfg_attr_test_allow() -> MetaItem {
-    meta_list(
-        &["cfg_attr"],
-        vec![
-            meta_inner(meta_word(&["test"])),
-            meta_inner(meta_list(
-                &["allow"],
-                vec![meta_inner(meta_word(&["dead_code"]))],
-            )),
-        ],
-    )
-}
-
-/// Verify `meta_contains_test_cfg` correctly identifies test contexts.
-#[rstest]
-#[case::cfg_any_test_doctest(build_cfg_any_test_doctest as fn() -> MetaItem, true)]
-#[case::cfg_all_test_unix(build_cfg_all_test_unix as fn() -> MetaItem, true)]
-#[case::cfg_not_test(build_cfg_not_test as fn() -> MetaItem, false)]
-#[case::cfg_attr_test_cfg_test(build_cfg_attr_test_cfg_test as fn() -> MetaItem, true)]
-#[case::cfg_attr_test_allow(build_cfg_attr_test_allow as fn() -> MetaItem, false)]
-fn meta_contains_test_cfg_cases(#[case] builder: fn() -> MetaItem, #[case] expected: bool) {
+/// Verify `cfg(any(test, doctest))` is detected as a test context.
+#[test]
+fn meta_contains_test_cfg_any_test_doctest() {
     create_default_session_globals_then(|| {
-        let meta = builder();
-        assert_eq!(meta_contains_test_cfg(&meta), expected);
+        assert_meta_test_cfg(build_cfg_any_test_doctest(), true);
+    });
+}
+
+/// Verify `cfg(all(test, unix))` is detected as a test context.
+#[test]
+fn meta_contains_test_cfg_all_test_unix() {
+    create_default_session_globals_then(|| {
+        assert_meta_test_cfg(build_cfg_all_test_unix(), true);
+    });
+}
+
+/// Verify `cfg(not(test))` is NOT detected as a test context (negated).
+#[test]
+fn meta_contains_test_cfg_not_test() {
+    create_default_session_globals_then(|| {
+        assert_meta_test_cfg(build_cfg_not_test(), false);
+    });
+}
+
+/// Verify `cfg_attr(test, cfg(test))` is detected as a test context.
+#[test]
+fn meta_contains_test_cfg_attr_test_cfg_test() {
+    create_default_session_globals_then(|| {
+        assert_meta_test_cfg(build_cfg_attr_test_cfg_test(), true);
+    });
+}
+
+/// Verify `cfg_attr(test, allow(dead_code))` is NOT detected as a test context.
+#[test]
+fn meta_contains_test_cfg_attr_test_allow() {
+    create_default_session_globals_then(|| {
+        assert_meta_test_cfg(build_cfg_attr_test_allow(), false);
     });
 }
 
