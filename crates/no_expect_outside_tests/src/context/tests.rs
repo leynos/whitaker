@@ -22,8 +22,10 @@ impl PathSegments {
     const fn new(segments: &'static [&'static str]) -> Self {
         Self(segments)
     }
+}
 
-    fn as_slice(&self) -> &[&str] {
+impl AsRef<[&'static str]> for PathSegments {
+    fn as_ref(&self) -> &[&'static str] {
         self.0
     }
 }
@@ -42,7 +44,7 @@ const PATH_DEAD_CODE: PathSegments = PathSegments::new(&["dead_code"]);
 
 fn path_from_segments(segments: PathSegments) -> Path {
     let path_segments = segments
-        .as_slice()
+        .as_ref()
         .iter()
         .map(|segment| PathSegment::from_ident(Ident::from_str(segment)))
         .collect::<Vec<_>>()
@@ -57,7 +59,7 @@ fn path_from_segments(segments: PathSegments) -> Path {
 
 fn hir_attribute_from_segments(segments: PathSegments) -> hir::Attribute {
     let path_segments = segments
-        .as_slice()
+        .as_ref()
         .iter()
         .map(|segment| Ident::from_str(segment))
         .collect::<Vec<_>>()
@@ -208,7 +210,7 @@ fn assert_converts_path(segments: PathSegments) {
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    assert_eq!(converted_segments.as_slice(), segments.as_slice());
+    assert_eq!(converted_segments.as_slice(), segments.as_ref());
 }
 
 /// Verify `cfg(any(test, doctest))` is detected as a test context.
