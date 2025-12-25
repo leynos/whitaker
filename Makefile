@@ -1,11 +1,11 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck
 
 APP ?= whitaker
 CARGO ?= cargo
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
-TEST_CARGO_FLAGS ?= --workspace --all-targets --all-features $(TEST_EXCLUDES)
+TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint
@@ -52,6 +52,9 @@ nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
 	nixie --no-sandbox
+
+typecheck:
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS)
 
 publish-check: ## Build, test, and validate packages before publishing
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
