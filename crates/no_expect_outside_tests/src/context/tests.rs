@@ -3,10 +3,8 @@
 //! Verifies HIR attribute conversion to `common::Attribute` and `cfg(test)`
 //! detection for both parsed and unparsed attribute variants.
 
-use super::{
-    PARSED_ATTRIBUTE_PLACEHOLDER, convert_attribute, is_cfg_test_attribute, meta_contains_test_cfg,
-};
-use common::AttributeKind;
+use super::{convert_attribute, is_cfg_test_attribute, meta_contains_test_cfg};
+use common::{AttributeKind, PARSED_ATTRIBUTE_PLACEHOLDER};
 use rstest::rstest;
 use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
 use rustc_hir as hir;

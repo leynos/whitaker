@@ -213,6 +213,11 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
     assert!(stderr.contains("Crates to build:"));
     // Default is suite-only, so we expect only the suite crate.
     assert!(stderr.contains("suite"));
+    // Ensure individual lint crates are NOT present in suite-only mode.
+    assert!(
+        !stderr.contains("module_max_lines"),
+        "individual lint crate should not appear in suite-only mode, stderr: {stderr}"
+    );
 
     let temp_dir = cli_world._temp_dir.borrow();
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");

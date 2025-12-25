@@ -12,8 +12,8 @@ pub mod span;
 pub mod test_support;
 
 pub use attributes::{
-    Attribute, AttributeKind, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
-    outer_attributes, split_doc_attributes,
+    Attribute, AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER, has_test_like_attribute,
+    has_test_like_attribute_with, outer_attributes, split_doc_attributes,
 };
 pub use context::{
     ContextEntry, ContextKind, in_test_like_context, in_test_like_context_with, is_in_main_fn,

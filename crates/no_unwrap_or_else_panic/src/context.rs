@@ -3,6 +3,8 @@
 //! Converts HIR ancestors into simplified context entries so the lint can
 //! detect test-like scopes, doctest guards, and `main` functions.
 
+#[cfg(feature = "dylint-driver")]
+use common::PARSED_ATTRIBUTE_PLACEHOLDER;
 use common::{Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind};
 
 /// Summary of the surrounding context for a HIR node.
@@ -113,7 +115,7 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
         // Parsed attributes (like #[must_use]) don't have an accessible path;
         // calling path() on them would panic.
         let hir::Attribute::Unparsed(_) = attr else {
-            return Attribute::new(AttributePath::from("parsed"), kind);
+            return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
         match names.next() {
@@ -237,3 +239,6 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
 fn path_is_ident(path: &AstPath, ident: rustc_span::Symbol) -> bool {
     path.segments.len() == 1 && path.segments[0].ident.name == ident
 }
+
+#[cfg(test)]
+mod tests;

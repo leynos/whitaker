@@ -3,7 +3,8 @@
 //! summarisation.
 
 use common::{
-    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind, in_test_like_context_with,
+    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
+    PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
 };
 use rustc_ast::AttrStyle;
 use rustc_ast::ast::{MetaItem, MetaItemInner};
@@ -12,9 +13,6 @@ use rustc_hir::Node;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
-
-/// Placeholder path for parsed attributes that don't expose their path.
-pub(crate) const PARSED_ATTRIBUTE_PLACEHOLDER: &str = "parsed";
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContextSummary {
