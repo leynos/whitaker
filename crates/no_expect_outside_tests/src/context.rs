@@ -13,6 +13,9 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
 
+/// Placeholder path for parsed attributes that don't expose their path.
+pub(crate) const PARSED_ATTRIBUTE_PLACEHOLDER: &str = "parsed";
+
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContextSummary {
     pub(crate) is_test: bool,
@@ -117,7 +120,7 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
         // Parsed attributes (like #[must_use]) don't have an accessible path;
         // calling path() on them would panic.
         let hir::Attribute::Unparsed(_) = attr else {
-            return Attribute::new(AttributePath::from("parsed"), kind);
+            return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
         match names.next() {

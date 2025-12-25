@@ -3,7 +3,9 @@
 //! Verifies HIR attribute conversion to `common::Attribute` and `cfg(test)`
 //! detection for both parsed and unparsed attribute variants.
 
-use super::{convert_attribute, is_cfg_test_attribute, meta_contains_test_cfg};
+use super::{
+    PARSED_ATTRIBUTE_PLACEHOLDER, convert_attribute, is_cfg_test_attribute, meta_contains_test_cfg,
+};
 use common::AttributeKind;
 use rstest::rstest;
 use rustc_ast::ast::{MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
@@ -188,6 +190,7 @@ fn build_cfg_attr_test_allow() -> MetaItem {
 }
 
 /// Helper function to test `meta_contains_test_cfg` behaviour.
+/// Must be called within `create_default_session_globals_then`.
 fn assert_meta_test_cfg(meta: MetaItem, expected: bool) {
     assert_eq!(meta_contains_test_cfg(&meta), expected);
 }
@@ -262,7 +265,10 @@ fn convert_attribute_handles_parsed_must_use() {
     let attribute = convert_attribute(&parsed_attr);
 
     // Should return a placeholder "parsed" path instead of panicking.
-    assert_eq!(attribute.path().segments(), &["parsed".to_string()]);
+    assert_eq!(
+        attribute.path().segments(),
+        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_string()]
+    );
     assert_eq!(attribute.kind(), AttributeKind::Outer);
 }
 
