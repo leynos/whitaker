@@ -12,8 +12,35 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_span::symbol::Ident;
 use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 
-fn path_from_segments(segments: &[&str]) -> Path {
+/// Type-safe wrapper for AST path segments.
+#[derive(Debug, Clone, Copy)]
+struct PathSegments(&'static [&'static str]);
+
+impl PathSegments {
+    const fn new(segments: &'static [&'static str]) -> Self {
+        Self(segments)
+    }
+
+    fn as_slice(&self) -> &[&str] {
+        self.0
+    }
+}
+
+// Common path constants
+const PATH_CFG: PathSegments = PathSegments::new(&["cfg"]);
+const PATH_TEST: PathSegments = PathSegments::new(&["test"]);
+const PATH_ANY: PathSegments = PathSegments::new(&["any"]);
+const PATH_ALL: PathSegments = PathSegments::new(&["all"]);
+const PATH_NOT: PathSegments = PathSegments::new(&["not"]);
+const PATH_CFG_ATTR: PathSegments = PathSegments::new(&["cfg_attr"]);
+const PATH_ALLOW: PathSegments = PathSegments::new(&["allow"]);
+const PATH_DOCTEST: PathSegments = PathSegments::new(&["doctest"]);
+const PATH_UNIX: PathSegments = PathSegments::new(&["unix"]);
+const PATH_DEAD_CODE: PathSegments = PathSegments::new(&["dead_code"]);
+
+fn path_from_segments(segments: PathSegments) -> Path {
     let path_segments = segments
+        .as_slice()
         .iter()
         .map(|segment| PathSegment::from_ident(Ident::from_str(segment)))
         .collect::<Vec<_>>()
@@ -26,8 +53,9 @@ fn path_from_segments(segments: &[&str]) -> Path {
     }
 }
 
-fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
+fn hir_attribute_from_segments(segments: PathSegments) -> hir::Attribute {
     let path_segments = segments
+        .as_slice()
         .iter()
         .map(|segment| Ident::from_str(segment))
         .collect::<Vec<_>>()
@@ -50,15 +78,15 @@ fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
 
 /// Verify that `convert_attribute` preserves path segments for attributes.
 #[rstest]
-#[case::multi_segment(&["tokio", "test"])]
-#[case::single_segment(&["rstest"])]
-fn convert_attribute_preserves_path_segments(#[case] segments: &[&str]) {
+#[case::multi_segment(PathSegments::new(&["tokio", "test"]))]
+#[case::single_segment(PathSegments::new(&["rstest"]))]
+fn convert_attribute_preserves_path_segments(#[case] segments: PathSegments) {
     create_default_session_globals_then(|| {
         assert_converts_path(segments);
     });
 }
 
-fn meta_word(segments: &[&str]) -> MetaItem {
+fn meta_word(segments: PathSegments) -> MetaItem {
     MetaItem {
         path: path_from_segments(segments),
         kind: MetaItemKind::Word,
@@ -67,7 +95,7 @@ fn meta_word(segments: &[&str]) -> MetaItem {
     }
 }
 
-fn meta_list(segments: &[&str], children: Vec<MetaItemInner>) -> MetaItem {
+fn meta_list(segments: PathSegments, children: Vec<MetaItemInner>) -> MetaItem {
     MetaItem {
         path: path_from_segments(segments),
         kind: MetaItemKind::List(children.into()),
@@ -87,9 +115,9 @@ fn meta_inner(meta: MetaItem) -> MetaItemInner {
 /// Builds `cfg(any(...))`.
 fn cfg_any(items: Vec<MetaItem>) -> MetaItem {
     meta_list(
-        &["cfg"],
+        PATH_CFG,
         vec![meta_inner(meta_list(
-            &["any"],
+            PATH_ANY,
             items.into_iter().map(meta_inner).collect(),
         ))],
     )
@@ -98,9 +126,9 @@ fn cfg_any(items: Vec<MetaItem>) -> MetaItem {
 /// Builds `cfg(all(...))`.
 fn cfg_all(items: Vec<MetaItem>) -> MetaItem {
     meta_list(
-        &["cfg"],
+        PATH_CFG,
         vec![meta_inner(meta_list(
-            &["all"],
+            PATH_ALL,
             items.into_iter().map(meta_inner).collect(),
         ))],
     )
@@ -109,22 +137,22 @@ fn cfg_all(items: Vec<MetaItem>) -> MetaItem {
 /// Builds `cfg(not(...))`.
 fn cfg_not(item: MetaItem) -> MetaItem {
     meta_list(
-        &["cfg"],
-        vec![meta_inner(meta_list(&["not"], vec![meta_inner(item)]))],
+        PATH_CFG,
+        vec![meta_inner(meta_list(PATH_NOT, vec![meta_inner(item)]))],
     )
 }
 
 /// Builds `cfg_attr(condition, attribute)`.
 fn cfg_attr(condition: MetaItem, attribute: MetaItem) -> MetaItem {
     meta_list(
-        &["cfg_attr"],
+        PATH_CFG_ATTR,
         vec![meta_inner(condition), meta_inner(attribute)],
     )
 }
 
 /// Builds simple `cfg(path)` style attributes.
-fn cfg_simple(segments: &[&str]) -> MetaItem {
-    meta_list(&["cfg"], vec![meta_inner(meta_word(segments))])
+fn cfg_simple(segments: PathSegments) -> MetaItem {
+    meta_list(PATH_CFG, vec![meta_inner(meta_word(segments))])
 }
 
 // ---------------------------------------------------------------------------
@@ -133,29 +161,29 @@ fn cfg_simple(segments: &[&str]) -> MetaItem {
 
 /// Builds `cfg(any(test, doctest))`.
 fn build_cfg_any_test_doctest() -> MetaItem {
-    cfg_any(vec![meta_word(&["test"]), meta_word(&["doctest"])])
+    cfg_any(vec![meta_word(PATH_TEST), meta_word(PATH_DOCTEST)])
 }
 
 /// Builds `cfg(all(test, unix))`.
 fn build_cfg_all_test_unix() -> MetaItem {
-    cfg_all(vec![meta_word(&["test"]), meta_word(&["unix"])])
+    cfg_all(vec![meta_word(PATH_TEST), meta_word(PATH_UNIX)])
 }
 
 /// Builds `cfg(not(test))`.
 fn build_cfg_not_test() -> MetaItem {
-    cfg_not(meta_word(&["test"]))
+    cfg_not(meta_word(PATH_TEST))
 }
 
 /// Builds `cfg_attr(test, cfg(test))`.
 fn build_cfg_attr_test_cfg_test() -> MetaItem {
-    cfg_attr(meta_word(&["test"]), cfg_simple(&["test"]))
+    cfg_attr(meta_word(PATH_TEST), cfg_simple(PATH_TEST))
 }
 
 /// Builds `cfg_attr(test, allow(dead_code))`.
 fn build_cfg_attr_test_allow() -> MetaItem {
     cfg_attr(
-        meta_word(&["test"]),
-        meta_list(&["allow"], vec![meta_inner(meta_word(&["dead_code"]))]),
+        meta_word(PATH_TEST),
+        meta_list(PATH_ALLOW, vec![meta_inner(meta_word(PATH_DEAD_CODE))]),
     )
 }
 
@@ -166,7 +194,7 @@ fn assert_meta_test_cfg(meta: MetaItem, expected: bool) {
 
 /// Asserts that `convert_attribute` preserves path segments for the given
 /// attribute path. Must be called within `create_default_session_globals_then`.
-fn assert_converts_path(segments: &[&str]) {
+fn assert_converts_path(segments: PathSegments) {
     let hir_attr = hir_attribute_from_segments(segments);
     let attribute = convert_attribute(&hir_attr);
 
@@ -177,7 +205,7 @@ fn assert_converts_path(segments: &[&str]) {
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    assert_eq!(converted_segments.as_slice(), segments);
+    assert_eq!(converted_segments.as_slice(), segments.as_slice());
 }
 
 /// Verify `cfg(any(test, doctest))` is detected as a test context.
