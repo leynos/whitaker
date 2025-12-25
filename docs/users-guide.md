@@ -111,7 +111,7 @@ whitaker-install --individual-lints
 | ----------------------- | ----- | ------------------------------------------ |
 | `--target-dir DIR`      | `-t`  | Staging directory for built libraries      |
 | `--lint NAME`           | `-l`  | Build specific lint (repeatable)           |
-| `--individual-lints`    | `—`   | Build individual crates instead of suite   |
+| `--individual-lints`    | `—`   | Build individual crates instead of the suite |
 | `--toolchain TOOLCHAIN` | `—`   | Override the detected toolchain            |
 | `--jobs N`              | `-j`  | Number of parallel build jobs              |
 | `--dry-run`             | `—`   | Show what would be done without running    |
