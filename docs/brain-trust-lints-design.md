@@ -24,12 +24,13 @@ Non-goals:
 ## Background: the brain class smell in object-oriented code and Rust
 
 Object-oriented literature (notably Lanza and Marinescu) describes a "brain
-class" as a large, complex class that centralises too much intelligence. Common
+class" as a large, complex class that centralizes too much intelligence. Common
 signals include:[^brain-class]
 
 - Many methods and high overall complexity (Weighted Methods per Class (WMC)).
 - At least one "brain method" that dominates the class's behaviour.
-- Low cohesion (for example, high LCOM4 or low Tight Class Cohesion (TCC)).
+- Low cohesion (for example, high Lack of Cohesion in Methods (LCOM4) or low
+  Tight Class Cohesion (TCC)).
 - Significant access to foreign data (Access to Foreign Data (ATFD)).
 
 Tools such as CodeScene combine these metrics to detect brain
@@ -147,7 +148,7 @@ This will allow reuse in future cohesion-aware lints.
 
 ### Performance considerations
 
-Deep analysis is only performed after cheap thresholds are crossed (for
+Deep analysis is only performed after lightweight thresholds are crossed (for
 example, when a type exceeds a minimum method count). This avoids paying the
 full analysis cost for trivial types.
 
@@ -168,7 +169,7 @@ brain_type: `Foo` has WMC=118, LCOM4=3, and a brain method `parse_all`
 ```
 
 Notes explain why the metrics matter and how they map to the brain class smell.
-Messages are localised via Fluent entries, using the existing Whitaker tone.
+Messages are localized via Fluent entries, using the existing Whitaker tone.
 
 ### Decomposition advice
 
@@ -218,9 +219,9 @@ Planned approach:
 - Keep messages in English for consistent tool ingestion.
 - Avoid overhead when SARIF output is disabled.
 
-## Configuration, localisation, and testing
+## Configuration, localization, and testing
 
-- **Localisation**: add Fluent entries for `brain_type` and `brain_trait` in
+- **Localization**: add Fluent entries for `brain_type` and `brain_trait` in
   line with existing lint tone.
 - **Configuration**: add `brain_type` and `brain_trait` sections to
   `whitaker.toml`.

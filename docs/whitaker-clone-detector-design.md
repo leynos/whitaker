@@ -1,4 +1,4 @@
-# Whitaker clone detector: two-pass design (rustc_lexer + ra_ap_syntax) with SARIF IR
+# Whitaker clone detector: two-pass design (rustc_lexer + ra_ap_syntax) with SARIF intermediate representation (IR)
 
 ## Purpose and non-goals
 
@@ -29,11 +29,11 @@ crates/
   suite/                      # existing aggregate dylint library (unchanged)
 ```
 
-**Pass A - token pipeline (rustc_lexer).** Goal: fast, workspace-wide discovery
+**Pass A – token pipeline (rustc_lexer).** Goal: fast, workspace-wide discovery
 of Type-1 and Type-2 candidates.
 
-- Tokenise.
-- Normalise.
+- Tokenize.
+- Normalize.
 - k-shingle to Rabin-Karp rolling hash.
 - Winnowing.
 - MinHash + locality-sensitive hashing (LSH).
@@ -41,7 +41,7 @@ of Type-1 and Type-2 candidates.
 - Jaccard similarity.
 - Emit SARIF (pre-refined).
 
-**Pass B - AST pipeline (ra_ap_syntax).** Goal: refine Pass A candidates and
+**Pass B – AST pipeline (ra_ap_syntax).** Goal: refine Pass A candidates and
 detect Type-3 near-miss clones.
 
 - Parse with `ra_ap_syntax`.
@@ -70,7 +70,7 @@ passes. Use `runs[0]` for the token pass and `runs[1]` for the AST pass. Each
 ### `whitaker_clones_core`
 
 - **fs**: workspace discovery via `ignore`, `globset`, and `camino`.
-- **token**: `rustc_lexer`-based normalisation, k-shingling, winnowing, and
+- **token**: `rustc_lexer`-based normalization, k-shingling, winnowing, and
   similarity.
 - **ast**: `ra_ap_syntax` parsing, region-to-node mapping, and feature
   extraction.
@@ -98,17 +98,17 @@ passes. Use `runs[0]` for the token pass and `runs[1]` for the AST pass. Each
 
 ## Data model and configuration
 
-### Normalised fragment key
+### Normalized fragment key
 
 `FragmentId = Blake3(file_rel_path | start_byte | end_byte | norm_profile)`
 
 ### Similarity profiles
 
 - **T1:** strip comments and whitespace.
-- **T2:** T1 plus canonicalise identifiers and literals (`<ID_i>`, `<NUM>`,
+- **T2:** T1 plus canonicalize identifiers and literals (`<ID_i>`, `<NUM>`,
   `<STR>`); scope-local ID numbering.
 - **T3:** AST features plus subtree hashes; identifier and literal
-  canonicalisation applies at concrete syntax tree (CST) level.
+  canonicalization applies at concrete syntax tree (CST) level.
 
 ### Configuration (Tom's Obvious, Minimal Language (TOML); used by CLI and lint)
 
@@ -139,9 +139,9 @@ hashes = 128
 
 ### Rules
 
-- `WHK001` - Type-1 clone (token exact after trivia removal)
-- `WHK002` - Type-2 clone (token equivalent under renaming)
-- `WHK003` - Type-3 clone (near-miss; AST similar)
+- `WHK001` – Type-1 clone (token exact after trivia removal)
+- `WHK002` – Type-2 clone (token equivalent under renaming)
+- `WHK003` – Type-3 clone (near-miss; AST similar)
 
 ### Result mapping
 
@@ -184,7 +184,7 @@ Whitaker's lint reads either the refined run (preferred) or falls back to Run 0.
 ```rust
 pub enum Norm { T1, T2 }
 
-pub fn normalise(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
+pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
     use rustc_lexer::{tokenize, TokenKind};
     let mut out = Vec::new();
     let mut off = 0;
@@ -211,7 +211,7 @@ pub fn normalise(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
 
 - **Shingle:** sequence of `k` token kinds (default `k=25`).
 - **Rabin-Karp:** base `B = 1_000_003` 64-bit rolling hash.
-- **Winnowing:** window `w=16`; keep minima to stabilise fingerprints.
+- **Winnowing:** window `w=16`; keep minima to stabilize fingerprints.
 - Store `(fingerprint, region)` where `region` spans token bytes.
 
 ### MinHash and LSH
@@ -266,7 +266,7 @@ pub fn map_bytes_to_node(file_text: &str, start: usize, end: usize) -> AstFragme
   `w(depth) = 1 / (1 + depth)`.
 - **Production multiset:** bigrams and trigrams of
   `(parent_kind -> child_kind)`.
-- **Canonical subtree hash:** Merkle-style hash where leaves are normalised
+- **Canonical subtree hash:** Merkle-style hash where leaves are normalized
   (`<ID>`, `<LIT>`), and internal nodes include kind plus arity.
 
 ### Scoring and acceptance (Type-3)
@@ -274,7 +274,7 @@ pub fn map_bytes_to_node(file_text: &str, start: usize, end: usize) -> AstFragme
 - Compute cosine similarity between histograms.
 - If cosine is at least `type3_threshold`, mark as a Type-3 candidate.
 - Optional refine: bounded tree-edit distance on a 500-node cap; accept if the
-  normalised tree-edit distance is at most `max_edit_distance`.
+  normalized tree-edit distance is at most `max_edit_distance`.
 
 ### SARIF update (Run 1)
 
@@ -324,7 +324,7 @@ cargo whitaker clones refine \
   --in target/whitaker/clones.token.sarif \
   --out target/whitaker/clones.refined.sarif
 
-# Summarise for humans.
+# Summarize for humans.
 cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 ```
 
@@ -341,14 +341,14 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 - **Golden tests** for SARIF: stable JSON with deterministic ordering.
 - **User interface (UI) tests** in the Dylint crate: consume pre-baked SARIF to
   verify diagnostics.
-- **Property tests** for normalisation (for example, comment or whitespace
+- **Property tests** for normalization (for example, comment or whitespace
   permutations yield identical T1 tokens).
 
 ## Risks and mitigations
 
 - **False positives** (builder or macro-heavy code): provide allowlists and
   raise T3 threshold.
-- **Path mapping mismatches**: normalise with `camino::Utf8Path` and record
+- **Path mapping mismatches**: normalize with `camino::Utf8Path` and record
   `originalUriBaseIds` in SARIF.
 - **AST drift** across `ra_ap_*` snapshots: pin versions and narrow the API
   surface in `whitaker_clones_core::ast`.
