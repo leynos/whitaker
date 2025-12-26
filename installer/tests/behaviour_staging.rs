@@ -187,13 +187,13 @@ mod staging_failure {
 // Scenario bindings
 // ---------------------------------------------------------------------------
 
-#[scenario(path = "tests/features/installer.feature", index = 10)]
+#[scenario(path = "tests/features/installer.feature", index = 9)]
 fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) {
     let _ = staging_world;
 }
 
 #[cfg(unix)]
-#[scenario(path = "tests/features/installer.feature", index = 11)]
+#[scenario(path = "tests/features/installer.feature", index = 10)]
 fn scenario_reject_staging_non_writable(staging_failure_world: StagingFailureWorld) {
     let _ = staging_failure_world;
 }

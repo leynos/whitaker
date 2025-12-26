@@ -80,8 +80,9 @@ cd whitaker
 cargo run --release -p whitaker-installer
 ```
 
-By default, this builds all seven lint crates plus the aggregated suite and
-stages them to a platform-specific directory under `<toolchain>/release`:
+By default, this builds only the aggregated suite (a single library containing
+all lints) and stages it to a platform-specific directory under
+`<toolchain>/release`:
 
 - Linux: `~/.local/share/dylint/lib/<toolchain>/release`
 - macOS: `~/Library/Application Support/dylint/lib/<toolchain>/release`
@@ -92,37 +93,30 @@ For example, with toolchain `nightly-2025-01-15`, the Linux path would be
 
 ### Installation modes
 
-Build only the aggregated suite (single library containing all lints):
-
-```sh
-whitaker-install --suite-only
-```
-
-Build specific lints by name (can be repeated):
+Build-specific lints by name (can be repeated):
 
 ```sh
 whitaker-install -l module_max_lines -l no_expect_outside_tests
 ```
 
-Build all individual lints but exclude the suite:
+Build all individual lint crates instead of the suite:
 
 ```sh
-whitaker-install --no-suite
+whitaker-install --individual-lints
 ```
 
 ### Configuration options
 
-| Option                  | Short | Description                             |
-| ----------------------- | ----- | --------------------------------------- |
-| `--target-dir DIR`      | `-t`  | Staging directory for built libraries   |
-| `--lint NAME`           | `-l`  | Build specific lint (repeatable)        |
-| `--suite-only`          | `—`   | Build only the aggregated suite         |
-| `--no-suite`            | `—`   | Exclude the aggregated suite            |
-| `--toolchain TOOLCHAIN` | `—`   | Override the detected toolchain         |
-| `--jobs N`              | `-j`  | Number of parallel build jobs           |
-| `--dry-run`             | `—`   | Show what would be done without running |
-| `--verbose`             | `-v`  | Increase output verbosity               |
-| `--quiet`               | `-q`  | Suppress output except errors           |
+| Option                  | Short | Description                                |
+| ----------------------- | ----- | ------------------------------------------ |
+| `--target-dir DIR`      | `-t`  | Staging directory for built libraries      |
+| `--lint NAME`           | `-l`  | Build-specific lint (repeatable)           |
+| `--individual-lints`    | `—`   | Build individual crates instead of the suite |
+| `--toolchain TOOLCHAIN` | `—`   | Override the detected toolchain            |
+| `--jobs N`              | `-j`  | Number of parallel build jobs              |
+| `--dry-run`             | `—`   | Show what would be done without running    |
+| `--verbose`             | `-v`  | Increase output verbosity                  |
+| `--quiet`               | `-q`  | Suppress output except errors              |
 
 ### Shell configuration
 
