@@ -14,7 +14,7 @@ renaming), and Type-3 (near-miss) clones.
 (MIR), program dependence graph (PDG), or static single assignment (SSA)
 analysis; cross-language clones.
 
-## Overview: two-pass pipeline and SARIF IR
+## Overview: two-pass pipeline and SARIF intermediate representation (IR)
 
 The repository layout below highlights new crates and their roles.
 
@@ -22,7 +22,8 @@ The repository layout below highlights new crates and their roles.
 crates/
   common/                     # existing Whitaker helpers
   whitaker_sarif/             # SARIF 2.1.0 model + helpers
-  whitaker_clones_core/       # token + AST engines, LSH, grouping, scoring
+  whitaker_clones_core/       # token + abstract syntax tree (AST) engines,
+                              # locality-sensitive hashing (LSH), grouping, scoring
   whitaker_clones_cli/        # `cargo whitaker clones` binary
   clone_detected/             # (dylint) thin consumer of SARIF -> diagnostics
   suite/                      # existing aggregate dylint library (unchanged)
