@@ -93,7 +93,7 @@ For example, with toolchain `nightly-2025-01-15`, the Linux path would be
 
 ### Installation modes
 
-Build specific lints by name (can be repeated):
+Build-specific lints by name (can be repeated):
 
 ```sh
 whitaker-install -l module_max_lines -l no_expect_outside_tests
@@ -110,7 +110,7 @@ whitaker-install --individual-lints
 | Option                  | Short | Description                                |
 | ----------------------- | ----- | ------------------------------------------ |
 | `--target-dir DIR`      | `-t`  | Staging directory for built libraries      |
-| `--lint NAME`           | `-l`  | Build specific lint (repeatable)           |
+| `--lint NAME`           | `-l`  | Build-specific lint (repeatable)           |
 | `--individual-lints`    | `—`   | Build individual crates instead of the suite |
 | `--toolchain TOOLCHAIN` | `—`   | Override the detected toolchain            |
 | `--jobs N`              | `-j`  | Number of parallel build jobs              |
