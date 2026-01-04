@@ -1249,8 +1249,8 @@ workspace metadata documentation work.
 
 ### CLI documentation placement
 
-**Decision:** Document `whitaker-install` CLI in the existing `users-guide.md`
-rather than creating a separate file.
+**Decision:** Document `whitaker-installer` CLI in the existing
+`users-guide.md` rather than creating a separate file.
 
 **Rationale:** Keeping all consumer-facing documentation consolidated reduces
 navigation overhead for users. The CLI is an optional convenience tool that
@@ -1285,7 +1285,7 @@ user's guide.
   independent version pinning.
 - **Version pinning** — Essential for reproducible CI builds.
 - **Pre-built path** — Enables faster lint runs when libraries are pre-staged
-  via `whitaker-install`.
+  via `whitaker-installer`.
 
 The examples progress from simple to advanced, matching the learning curve for
 new adopters.
