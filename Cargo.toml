@@ -52,6 +52,7 @@ edition = "2024"
 [[bin]]
 name = "whitaker-installer"
 path = "installer/src/main.rs"
+doc = false
 
 [features]
 default = []
