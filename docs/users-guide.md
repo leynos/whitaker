@@ -115,7 +115,7 @@ whitaker-installer --individual-lints
 | `--toolchain TOOLCHAIN` | `—`   | Override the detected toolchain              |
 | `--jobs N`              | `-j`  | Number of parallel build jobs                |
 | `--dry-run`             | `—`   | Show what would be done without running      |
-| `--verbose`             | `-v`  | Increase output verbosity                    |
+| `--verbose`             | `-v`  | Increase output verbosity (repeatable)       |
 | `--quiet`               | `-q`  | Suppress output except errors                |
 
 ### Shell configuration

@@ -296,6 +296,42 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     );
 }
 
+#[test]
+fn dry_run_reports_verbosity_levels() {
+    let channel = pinned_toolchain_channel();
+    if !is_toolchain_installed(&channel) {
+        return;
+    }
+
+    let run_dry_run = |extra_args: &[&str]| -> String {
+        let mut args = vec!["--dry-run", "--toolchain", channel.as_str()];
+        args.extend_from_slice(extra_args);
+
+        let output = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"))
+            .args(args)
+            .current_dir(workspace_root())
+            .output()
+            .expect("failed to run whitaker-installer");
+
+        assert!(
+            output.status.success(),
+            "expected success, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        String::from_utf8_lossy(&output.stderr).to_string()
+    };
+
+    let default_output = run_dry_run(&[]);
+    assert!(default_output.contains("Verbosity level: 0"));
+
+    let single_output = run_dry_run(&["-v"]);
+    assert!(single_output.contains("Verbosity level: 1"));
+
+    let double_output = run_dry_run(&["-vv"]);
+    assert!(double_output.contains("Verbosity level: 2"));
+}
+
 // ---------------------------------------------------------------------------
 // Scenario bindings
 // ---------------------------------------------------------------------------

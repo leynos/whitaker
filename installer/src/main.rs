@@ -45,7 +45,13 @@ struct Cli {
     dry_run: bool,
 
     /// Increase output verbosity (repeatable).
-    #[arg(short, long, action = clap::ArgAction::Count, conflicts_with = "quiet")]
+    #[arg(
+        short,
+        long = "verbose",
+        alias = "verbosity",
+        action = clap::ArgAction::Count,
+        conflicts_with = "quiet"
+    )]
     verbosity: u8,
 
     /// Suppress output except errors (does not affect --dry-run output).
@@ -55,7 +61,6 @@ struct Cli {
 
 struct RunContext<'a> {
     cli: &'a Cli,
-    stderr: &'a mut dyn Write,
     workspace_root: &'a Utf8Path,
     toolchain: &'a Toolchain,
     target_dir: &'a Utf8Path,
@@ -83,7 +88,7 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
         write_stderr_line(stderr, format!("Workspace root: {workspace_root}"));
         write_stderr_line(stderr, format!("Toolchain: {}", toolchain.channel()));
         write_stderr_line(stderr, format!("Target directory: {target_dir}"));
-        write_stderr_line(stderr, format!("Verbose: {}", cli.verbosity > 0));
+        write_stderr_line(stderr, format!("Verbosity level: {}", cli.verbosity));
         write_stderr_line(stderr, format!("Quiet: {}", cli.quiet));
 
         if let Some(jobs) = cli.jobs {
@@ -99,15 +104,14 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
         return Ok(());
     }
 
-    let mut context = RunContext {
+    let context = RunContext {
         cli,
-        stderr,
         workspace_root: &workspace_root,
         toolchain: &toolchain,
         target_dir: &target_dir,
     };
-    let build_results = perform_build(&mut context, &crates)?;
-    stage_and_output(&mut context, &build_results)
+    let build_results = perform_build(&context, &crates, stderr)?;
+    stage_and_output(&context, &build_results, stderr)
 }
 
 /// Locates the workspace root from the current directory.
@@ -161,12 +165,13 @@ fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> 
 
 /// Builds all requested crates.
 fn perform_build(
-    context: &mut RunContext<'_>,
+    context: &RunContext<'_>,
     crates: &[CrateName],
+    stderr: &mut dyn Write,
 ) -> Result<Vec<whitaker_installer::builder::BuildResult>> {
     if !context.cli.quiet {
         write_stderr_line(
-            context.stderr,
+            stderr,
             format!(
                 "Building {} lint crate(s) with toolchain {}...",
                 crates.len(),
@@ -175,46 +180,45 @@ fn perform_build(
         );
     }
 
-    let config = BuildConfig {
-        toolchain: context.toolchain.clone(),
-        target_dir: context.workspace_root.join("target"),
-        jobs: context.cli.jobs,
-        verbose: context.cli.verbosity > 0,
-    };
+    let config = build_config_for_cli(context);
 
     Builder::new(config).build_all(crates)
 }
 
 /// Stages built libraries and outputs success information.
 fn stage_and_output(
-    context: &mut RunContext<'_>,
+    context: &RunContext<'_>,
     build_results: &[whitaker_installer::builder::BuildResult],
+    stderr: &mut dyn Write,
 ) -> Result<()> {
     let stager = Stager::new(context.target_dir.to_owned(), context.toolchain.channel());
     let staging_path = stager.staging_path();
 
     if !context.cli.quiet {
-        write_stderr_line(
-            context.stderr,
-            format!("Staging libraries to {staging_path}..."),
-        );
+        write_stderr_line(stderr, format!("Staging libraries to {staging_path}..."));
     }
 
     stager.prepare()?;
     stager.stage_all(build_results)?;
 
     if !context.cli.quiet {
-        write_stderr_line(context.stderr, "");
-        write_stderr_line(
-            context.stderr,
-            success_message(build_results.len(), &staging_path),
-        );
-        write_stderr_line(context.stderr, "");
+        write_stderr_line(stderr, "");
+        write_stderr_line(stderr, success_message(build_results.len(), &staging_path));
+        write_stderr_line(stderr, "");
         let snippet = ShellSnippet::new(&staging_path);
-        write_stderr_line(context.stderr, snippet.display_text());
+        write_stderr_line(stderr, snippet.display_text());
     }
 
     Ok(())
+}
+
+fn build_config_for_cli(context: &RunContext<'_>) -> BuildConfig {
+    BuildConfig {
+        toolchain: context.toolchain.clone(),
+        target_dir: context.workspace_root.join("target"),
+        jobs: context.cli.jobs,
+        verbosity: context.cli.verbosity,
+    }
 }
 
 fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
@@ -228,8 +232,8 @@ fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
 }
 
 fn write_stderr_line(stderr: &mut dyn Write, message: impl std::fmt::Display) {
-    if let Err(write_err) = writeln!(stderr, "{message}") {
-        drop(write_err);
+    if writeln!(stderr, "{message}").is_err() {
+        // Best-effort logging; ignore write failures.
     }
 }
 
@@ -289,6 +293,17 @@ mod tests {
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));
+    }
+
+    /// Parameterised tests for repeatable verbosity flags.
+    #[rstest]
+    #[case::double_short(&["whitaker-installer", "-vv"], 2)]
+    #[case::triple_short(&["whitaker-installer", "-vvv"], 3)]
+    #[case::double_long(&["whitaker-installer", "--verbose", "--verbose"], 2)]
+    #[case::double_alias(&["whitaker-installer", "--verbosity", "--verbosity"], 2)]
+    fn cli_parses_repeatable_verbosity_flags(#[case] args: &[&str], #[case] expected: u8) {
+        let cli = Cli::parse_from(args);
+        assert_eq!(cli.verbosity, expected);
     }
 
     #[test]
@@ -363,5 +378,22 @@ mod tests {
     #[case::verbose_with_quiet(&["whitaker-installer", "--verbose", "--quiet"])]
     fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
         Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");
+    }
+
+    #[test]
+    fn build_config_propagates_verbosity_level() {
+        let cli = Cli::parse_from(["whitaker-installer", "-vv"]);
+        let workspace_root = Utf8PathBuf::from("/tmp");
+        let toolchain = Toolchain::with_override(&workspace_root, "nightly-2025-09-18");
+        let target_dir = Utf8PathBuf::from("/tmp/target");
+        let context = RunContext {
+            cli: &cli,
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+        };
+
+        let config = build_config_for_cli(&context);
+        assert_eq!(config.verbosity, 2);
     }
 }

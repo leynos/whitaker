@@ -87,8 +87,8 @@ pub struct BuildConfig {
     pub target_dir: Utf8PathBuf,
     /// Number of parallel build jobs (None for cargo default).
     pub jobs: Option<usize>,
-    /// Whether to print verbose output.
-    pub verbose: bool,
+    /// Verbosity level for cargo output.
+    pub verbosity: u8,
 }
 
 /// Result of building a single crate.
@@ -131,7 +131,7 @@ impl Builder {
         cmd.env("CARGO_TARGET_DIR", self.config.target_dir.as_str());
         cmd.current_dir(self.config.toolchain.workspace_root());
 
-        if self.config.verbose {
+        for _ in 0..self.config.verbosity {
             cmd.arg("-v");
         }
 
