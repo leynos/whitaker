@@ -2626,6 +2626,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "cargo_metadata",
+ "clap",
  "common",
  "dylint_linting",
  "dylint_testing",
@@ -2638,6 +2639,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.17",
  "toml 0.9.8",
+ "whitaker-installer",
 ]
 
 [[package]]

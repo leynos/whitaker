@@ -35,7 +35,7 @@ impl Stager {
         fs::create_dir_all(&staging_dir)?;
 
         // Verify writability by attempting to create a temp file
-        let test_path = staging_dir.join(".whitaker-install-test");
+        let test_path = staging_dir.join(".whitaker-installer-test");
         match fs::write(&test_path, b"test") {
             Ok(()) => {
                 let _ = fs::remove_file(&test_path);
