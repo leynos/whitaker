@@ -55,15 +55,15 @@ cargo dylint list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
 Swap `v0.1.0` for the tag to exercise; omit `--rev` or set `GIT_TAG=HEAD` to
 trial the current branch tip.
 
-## Using whitaker-install
+## Using whitaker-installer
 
-The `whitaker-install` CLI builds, links, and stages Dylint lint libraries for
-local use. This approach is useful when pre-built libraries are preferred
+The `whitaker-installer` CLI builds, links, and stages Dylint lint libraries
+for local use. This approach is useful when pre-built libraries are preferred
 rather than building from source on each `cargo dylint` invocation.
 
 ### Prerequisites
 
-Before using `whitaker-install`, ensure the following are available:
+Before using `whitaker-installer`, ensure the following are available:
 
 - `cargo-dylint` and `dylint-link` installed (`cargo install cargo-dylint
   dylint-link`)
@@ -96,13 +96,13 @@ For example, with toolchain `nightly-2025-01-15`, the Linux path would be
 Build-specific lints by name (can be repeated):
 
 ```sh
-whitaker-install -l module_max_lines -l no_expect_outside_tests
+whitaker-installer -l module_max_lines -l no_expect_outside_tests
 ```
 
 Build all individual lint crates instead of the suite:
 
 ```sh
-whitaker-install --individual-lints
+whitaker-installer --individual-lints
 ```
 
 ### Configuration options
@@ -223,7 +223,7 @@ libraries = [
 
 ### Using pre-built libraries
 
-If lints have been installed via `whitaker-install`, configure Dylint to use
+If lints have been installed via `whitaker-installer`, configure Dylint to use
 the staged libraries. The path must include the toolchain and release
 subdirectories:
 

@@ -1,4 +1,4 @@
-//! End-to-end CLI behaviour tests for `whitaker-install`.
+//! End-to-end CLI behaviour tests for `whitaker-installer`.
 //!
 //! These scenarios invoke the installer binary and validate dry-run output,
 //! error handling, and (when possible) installation results.
@@ -179,11 +179,11 @@ fn when_installer_cli_run(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
     let args = cli_world.args.borrow();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-install"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
 
-    let output = cmd.output().expect("failed to run whitaker-install");
+    let output = cmd.output().expect("failed to run whitaker-installer");
     cli_world.output.replace(Some(output));
 }
 

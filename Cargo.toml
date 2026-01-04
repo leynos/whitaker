@@ -10,6 +10,7 @@ documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.m
 
 [workspace.dependencies]
 common = { path = "common", version = "0.1.0" }
+whitaker-installer = { path = "installer", version = "0.1.0" }
 camino = "1.2.1"
 cargo_metadata = "0.23.0"
 clap = "4.5.38"
@@ -48,6 +49,10 @@ name = "whitaker"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "whitaker-installer"
+path = "installer/src/main.rs"
+
 [features]
 default = []
 dylint-driver = [
@@ -61,10 +66,12 @@ dylint-driver = [
 
 camino = { workspace = true }
 cargo_metadata = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 common = { workspace = true }
+whitaker-installer = { workspace = true }
 
 rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
