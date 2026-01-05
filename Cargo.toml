@@ -49,12 +49,6 @@ name = "whitaker"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-# Keep this binary at the workspace root so `cargo install --path .` installs it.
-name = "whitaker-installer"
-path = "installer/src/main.rs"
-doc = false
-
 [features]
 default = []
 dylint-driver = [

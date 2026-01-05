@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 PLANS.md is not present in this repository.
 
@@ -59,8 +59,9 @@ existing behavioural tests still work, and `make install-smoke` succeeds while
 ## Progress
 
 - [x] (2026-01-05 00:00Z) Draft ExecPlan for issue #94.
-- [ ] Inspect current workspace configuration and installation instructions.
-- [ ] Remove duplicate binary ownership and adjust install workflows.
+- [x] (2026-01-05 00:10Z) Inspect workspace configuration and install flow.
+- [x] (2026-01-05 00:15Z) Remove duplicate binary ownership and adjust install
+  workflow.
 - [ ] Validate formatting, linting, tests, and install smoke check.
 
 ## Surprises & Discoveries
@@ -82,16 +83,17 @@ Pending. This section will be updated after implementation.
 
 ## Context and Orientation
 
-The workspace root `Cargo.toml` currently defines a `[[bin]]` named
-`whitaker-installer` that points at `installer/src/main.rs` (around lines
-52-56). The installer package in `installer/Cargo.toml` also defines a
+Before this change, the workspace root `Cargo.toml` defined a `[[bin]]` named
+`whitaker-installer` that pointed at `installer/src/main.rs` (around lines
+52-56). The installer package in `installer/Cargo.toml` also defined a
 `[[bin]]` with the same name pointing at the same source file (around lines
-10-12). This causes the same binary to be compiled twice by different packages,
-which creates boundary ambiguity and doc-tooling friction. The Makefile target
-`install-smoke` runs `cargo install --path . --locked`, which relies on the
+10-12). This caused the same binary to be compiled twice by different packages,
+which created boundary ambiguity and doc-tooling friction. The Makefile target
+`install-smoke` used `cargo install --path . --locked`, which relied on the
 root package exporting a binary. The installer package already contains the
 CLI tests in `installer/tests/behaviour_cli.rs` and the library surface in
-`installer/src/lib.rs`.
+`installer/src/lib.rs`. The plan removes the root binary entry and updates the
+install flow to target the installer package explicitly.
 
 ## Plan of Work
 
@@ -182,3 +184,9 @@ sufficient evidence for validation and troubleshooting.
 - Do not change public CLI arguments or exit codes.
 - Do not add dependencies; use existing workspace tooling and Makefile targets.
 
+## Revision note
+
+2026-01-05: Updated status to IN PROGRESS, marked Stage A and Stage B as
+completed, and aligned context with the new installer ownership. Remaining
+work is validation via the Makefile targets and updating this plan to COMPLETE
+once checks pass.
