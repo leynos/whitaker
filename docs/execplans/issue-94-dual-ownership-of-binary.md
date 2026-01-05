@@ -48,8 +48,7 @@ existing behavioural tests still work, and `make install-smoke` succeeds while
   Severity: medium
   Likelihood: medium
   Mitigation: update `make install-smoke` and any documentation to use
-  `cargo install --path . --package whitaker-installer` (or `--path installer`)
-  and validate with `make install-smoke`.
+  `cargo install --path installer` and validate with `make install-smoke`.
 - Risk: documentation or CI scripts implicitly rely on the duplicate binary.
   Severity: low
   Likelihood: low
@@ -89,11 +88,12 @@ Before this change, the workspace root `Cargo.toml` defined a `[[bin]]` named
 `[[bin]]` with the same name pointing at the same source file (around lines
 10-12). This caused the same binary to be compiled twice by different packages,
 which created boundary ambiguity and doc-tooling friction. The Makefile target
-`install-smoke` used `cargo install --path . --locked`, which relied on the
-root package exporting a binary. The installer package already contains the
-CLI tests in `installer/tests/behaviour_cli.rs` and the library surface in
-`installer/src/lib.rs`. The plan removes the root binary entry and updates the
-install flow to target the installer package explicitly.
+  `install-smoke` used `cargo install --path . --locked`, which relied on the
+  root package exporting a binary. The installer package already contains the
+  CLI tests in `installer/tests/behaviour_cli.rs` and the library surface in
+  `installer/src/lib.rs`. The plan removes the root binary entry and updates the
+  install flow to target the installer package explicitly, using the installer
+  path for `cargo install`.
 
 ## Plan of Work
 
@@ -106,10 +106,10 @@ plan.
 
 Stage B: remove duplicate ownership. Delete the root `[[bin]]` entry and its
 comment in `Cargo.toml`. Update `make install-smoke` to install the installer
-package explicitly (for example, `cargo install --path . --package
-whitaker-installer --locked`), and update any documentation that refers to the
-old install flow. Validation: `cargo metadata --no-deps` or a quick `cargo
-build -p whitaker-installer` should show a single binary owner.
+package explicitly (for example, `cargo install --path installer --locked`),
+and update any documentation that refers to the old install flow. Validation:
+`cargo metadata --no-deps` or a quick `cargo build -p whitaker-installer` should
+show a single binary owner.
 
 Stage C: harden and verify. Run formatting, linting, tests, and documentation
 checks using the required Makefile targets. Finish by running
@@ -128,7 +128,7 @@ checks using the required Makefile targets. Finish by running
 3) Update `Makefile` `install-smoke` to install the installer package
    explicitly. Prefer the workspace-root command so the path remains stable:
 
-    cargo install --path . --package whitaker-installer --root "$$TMP_DIR" --locked
+    cargo install --path installer --root "$$TMP_DIR" --locked
 
 4) If any documentation mentions `cargo install --path .` for the installer,
    update it to use `--package whitaker-installer` (or `--path installer`) and
@@ -163,8 +163,8 @@ Observable behaviour confirming the fix:
 
 - `Cargo.toml` no longer defines `[[bin]]` for `whitaker-installer`.
 - `installer/Cargo.toml` remains the sole owner of the binary.
-- `cargo install --path . --package whitaker-installer --locked` installs the
-  CLI successfully (verified via `make install-smoke`).
+- `cargo install --path installer --locked` installs the CLI successfully
+  (verified via `make install-smoke`).
 
 ## Idempotence and Recovery
 
@@ -190,3 +190,6 @@ sufficient evidence for validation and troubleshooting.
 completed, and aligned context with the new installer ownership. Remaining
 work is validation via the Makefile targets and updating this plan to COMPLETE
 once checks pass.
+2026-01-05: Adjusted install instructions to use `cargo install --path
+installer` after observing `cargo install --path .` rejects the `--package`
+flag. The remaining work stays the same.

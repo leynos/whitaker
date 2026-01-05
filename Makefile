@@ -60,7 +60,7 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
-	$(CARGO) install --path . --package whitaker-installer --root "$$TMP_DIR" --locked; \
+	$(CARGO) install --path installer --root "$$TMP_DIR" --locked; \
 	export PATH="$$TMP_DIR/bin:$$PATH"; \
 	command -v whitaker-installer >/dev/null; \
 	whitaker-installer --help >/dev/null; \
