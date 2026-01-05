@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke
 
 APP ?= whitaker
 CARGO ?= cargo
@@ -55,6 +55,16 @@ nixie:
 
 typecheck:
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS)
+
+install-smoke: ## Install whitaker-installer and verify basic functionality
+	set -eu; \
+	TMP_DIR=$$(mktemp -d); \
+	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
+	$(CARGO) install --path . --root "$$TMP_DIR"; \
+	export PATH="$$TMP_DIR/bin:$$PATH"; \
+	command -v whitaker-installer >/dev/null; \
+	whitaker-installer --help >/dev/null; \
+	whitaker-installer --version >/dev/null
 
 publish-check: ## Build, test, and validate packages before publishing
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
