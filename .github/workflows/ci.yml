@@ -70,6 +70,9 @@ jobs:
         shell: bash
         run: make test
 
+      - name: Installer smoke test
+        run: make install-smoke
+
       - name: Publish dry run
         run: make publish-check
 
