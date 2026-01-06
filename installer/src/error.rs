@@ -141,4 +141,33 @@ mod tests {
         assert!(msg.contains("module_max_lines"));
         assert!(msg.contains("compilation error"));
     }
+
+    #[test]
+    fn git_error_includes_operation_and_message() {
+        let err = InstallerError::Git {
+            operation: "clone",
+            message: "network error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("clone"));
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn dependency_install_error_includes_tool_name() {
+        let err = InstallerError::DependencyInstall {
+            tool: "cargo-dylint",
+            message: "network error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("cargo-dylint"));
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn wrapper_generation_error_includes_message() {
+        let err = InstallerError::WrapperGeneration("permission denied".to_owned());
+        let msg = err.to_string();
+        assert!(msg.contains("permission denied"));
+    }
 }

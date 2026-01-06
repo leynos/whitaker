@@ -5,7 +5,7 @@
 //! This test ensures the lint gracefully handles these cases.
 
 #![warn(function_attrs_follow_docs)]
-#![allow(dead_code)]
+#![expect(dead_code, reason = "UI test fixtures are not executed")]
 
 /// A struct with derive macros that may generate compiler-internal attributes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]

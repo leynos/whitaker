@@ -249,8 +249,11 @@ fn generate_and_report_wrapper(staging_path: &Utf8Path, stderr: &mut dyn Write) 
         write_stderr_line(stderr, "You can now run: whitaker --all");
     } else {
         write_stderr_line(stderr, "");
-        let instructions =
-            path_instructions(result.script_path.parent().unwrap_or(&result.script_path));
+        // The script path is constructed via bin_dir.join("whitaker"), so parent()
+        // should always return the bin directory. Handle the theoretical None case
+        // gracefully by falling back to the script path itself.
+        let bin_dir = result.script_path.parent().unwrap_or(&result.script_path);
+        let instructions = path_instructions(bin_dir);
         write_stderr_line(stderr, instructions);
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, "Then run: whitaker --all");
@@ -332,22 +335,6 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
-    fn base_cli() -> Cli {
-        Cli {
-            target_dir: None,
-            lint: Vec::new(),
-            individual_lints: false,
-            jobs: None,
-            toolchain: None,
-            dry_run: false,
-            verbosity: 0,
-            quiet: false,
-            skip_deps: false,
-            skip_wrapper: false,
-            no_update: false,
-        }
-    }
-
     #[test]
     fn exit_code_for_run_result_returns_zero_on_success() {
         let mut stderr = Vec::new();
@@ -371,13 +358,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default_suite_only(base_cli(), false, true)]
+    #[case::default_suite_only(Cli::default(), false, true)]
     #[case::individual_lints(
-        {
-            let mut cli = base_cli();
-            cli.individual_lints = true;
-            cli
-        },
+        Cli { individual_lints: true, ..Cli::default() },
         true,
         false
     )]
@@ -396,8 +379,10 @@ mod tests {
 
     #[test]
     fn resolve_requested_crates_returns_specific_lints_when_provided() {
-        let mut cli = base_cli();
-        cli.lint = vec!["module_max_lines".to_owned()];
+        let cli = Cli {
+            lint: vec!["module_max_lines".to_owned()],
+            ..Cli::default()
+        };
 
         let crates = resolve_requested_crates(&cli).expect("expected crate resolution to succeed");
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
@@ -405,8 +390,10 @@ mod tests {
 
     #[test]
     fn resolve_requested_crates_rejects_unknown_lints() {
-        let mut cli = base_cli();
-        cli.lint = vec!["nonexistent_lint".to_owned()];
+        let cli = Cli {
+            lint: vec!["nonexistent_lint".to_owned()],
+            ..Cli::default()
+        };
 
         let err = resolve_requested_crates(&cli).expect_err("expected crate resolution to fail");
         assert!(matches!(

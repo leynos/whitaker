@@ -94,13 +94,13 @@ pub struct Cli {
     pub no_update: bool,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    fn base_cli() -> Cli {
-        Cli {
+impl Default for Cli {
+    /// Creates a `Cli` instance with all flags disabled and no lints selected.
+    ///
+    /// This is useful for testing or programmatic construction where only
+    /// specific fields need to be set.
+    fn default() -> Self {
+        Self {
             target_dir: None,
             lint: Vec::new(),
             individual_lints: false,
@@ -114,6 +114,12 @@ mod tests {
             no_update: false,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
 
     #[test]
     fn cli_parses_defaults() {
@@ -179,10 +185,10 @@ mod tests {
         Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");
     }
 
-    /// Verify the base_cli helper produces a valid default configuration.
+    /// Verify the Default impl produces a valid baseline configuration.
     #[test]
-    fn base_cli_is_valid() {
-        let cli = base_cli();
+    fn cli_default_is_valid() {
+        let cli = Cli::default();
         assert!(!cli.individual_lints);
         assert!(!cli.skip_deps);
     }
