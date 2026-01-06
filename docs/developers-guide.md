@@ -1,7 +1,7 @@
 # Whitaker Developer's Guide
 
 This guide is for contributors who want to develop new lints or work on
-Whitaker itself. For using Whitaker lints in your project, see the
+Whitaker itself. For using Whitaker lints in a project, see the
 [User's Guide](users-guide.md).
 
 ## Prerequisites
@@ -49,7 +49,7 @@ cargo run --release -p whitaker-installer
 Or install it globally:
 
 ```sh
-cargo install --path .
+cargo install --path installer
 whitaker-installer
 ```
 

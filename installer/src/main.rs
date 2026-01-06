@@ -37,6 +37,11 @@ fn main() {
 }
 
 fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
+    // Dry-run mode: show what would be done without side effects
+    if cli.dry_run {
+        return run_dry(cli, stderr);
+    }
+
     // Step 1: Check and install Dylint dependencies if needed
     if !cli.skip_deps {
         ensure_dylint_tools(cli.quiet, stderr)?;
@@ -57,11 +62,6 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
         target_dir: &target_dir,
     };
 
-    if cli.dry_run {
-        print_dry_run_info(&context, &crates, stderr);
-        return Ok(());
-    }
-
     // Step 4: Build and stage
     let build_results = perform_build(&context, &crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
@@ -73,6 +73,26 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
         generate_and_report_wrapper(&staging_path, stderr)?;
     }
 
+    Ok(())
+}
+
+/// Runs in dry-run mode, showing configuration without side effects.
+fn run_dry(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
+    use whitaker_installer::workspace::resolve_workspace_path;
+
+    let workspace_root = resolve_workspace_path()?;
+    let crates = resolve_requested_crates(cli)?;
+    let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
+    let target_dir = determine_target_dir(cli.target_dir.clone())?;
+
+    let context = RunContext {
+        cli,
+        workspace_root: &workspace_root,
+        toolchain: &toolchain,
+        target_dir: &target_dir,
+    };
+
+    print_dry_run_info(&context, &crates, stderr);
     Ok(())
 }
 
@@ -100,19 +120,16 @@ fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
 
 /// Ensures a Whitaker workspace is available.
 fn ensure_whitaker_workspace(cli: &Cli, stderr: &mut dyn Write) -> Result<Utf8PathBuf> {
-    use whitaker_installer::workspace::{clone_directory, is_whitaker_workspace};
+    use whitaker_installer::workspace::{clone_directory, is_whitaker_workspace, resolve_workspace_path};
 
-    // Check if we're already in a Whitaker workspace
-    let cwd = std::env::current_dir()?;
-    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::WorkspaceNotFound {
-        reason: format!("current directory is not valid UTF-8: {e}"),
-    })?;
+    let workspace_root = resolve_workspace_path()?;
 
-    if is_whitaker_workspace(&cwd_utf8) {
-        return Ok(cwd_utf8);
+    // If already in a Whitaker workspace, nothing to do.
+    if is_whitaker_workspace(&workspace_root) {
+        return Ok(workspace_root);
     }
 
-    // Need to clone or update the repository
+    // Need to clone or update the repository.
     let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;

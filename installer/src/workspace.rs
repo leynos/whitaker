@@ -115,6 +115,26 @@ where
     Ok(clone_dir)
 }
 
+/// Returns the workspace path without performing any side effects.
+///
+/// If the current directory is a Whitaker workspace, returns it.
+/// Otherwise returns the platform-specific clone directory (which may
+/// not exist yet).
+///
+/// This is useful for dry-run mode where we want to show what would happen
+/// without actually cloning or updating the repository.
+pub fn resolve_workspace_path() -> Result<Utf8PathBuf> {
+    let cwd = current_dir_utf8()?;
+
+    if is_whitaker_workspace(&cwd) {
+        return Ok(cwd);
+    }
+
+    clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
+        reason: "could not determine data directory for cloning".to_owned(),
+    })
+}
+
 /// Gets the current directory as a UTF-8 path.
 fn current_dir_utf8() -> Result<Utf8PathBuf> {
     let cwd = std::env::current_dir()?;
@@ -126,57 +146,47 @@ fn current_dir_utf8() -> Result<Utf8PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
     use std::fs;
     use tempfile::TempDir;
 
-    fn create_whitaker_workspace(dir: &Utf8Path) {
+    /// A temporary directory converted to a UTF-8 path for workspace tests.
+    struct TempWorkspace {
+        _temp: TempDir,
+        path: Utf8PathBuf,
+    }
+
+    #[fixture]
+    fn temp_workspace() -> TempWorkspace {
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let path = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
+        TempWorkspace { _temp: temp, path }
+    }
+
+    fn write_cargo_toml(dir: &Utf8Path, package_name: &str) {
         let cargo_toml = dir.join("Cargo.toml");
         fs::write(
             cargo_toml,
-            r#"[package]
-name = "whitaker"
-version = "0.1.0"
-"#,
+            format!("[package]\nname = \"{package_name}\"\nversion = \"0.1.0\"\n"),
         )
         .expect("failed to write Cargo.toml");
     }
 
-    fn create_other_workspace(dir: &Utf8Path) {
-        let cargo_toml = dir.join("Cargo.toml");
-        fs::write(
-            cargo_toml,
-            r#"[package]
-name = "other-project"
-version = "0.1.0"
-"#,
-        )
-        .expect("failed to write Cargo.toml");
+    #[rstest]
+    fn is_whitaker_workspace_returns_true_for_whitaker(temp_workspace: TempWorkspace) {
+        write_cargo_toml(&temp_workspace.path, "whitaker");
+        assert!(is_whitaker_workspace(&temp_workspace.path));
     }
 
-    #[test]
-    fn is_whitaker_workspace_returns_true_for_whitaker() {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let dir = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-        create_whitaker_workspace(&dir);
-
-        assert!(is_whitaker_workspace(&dir));
+    #[rstest]
+    fn is_whitaker_workspace_returns_false_for_other_project(temp_workspace: TempWorkspace) {
+        write_cargo_toml(&temp_workspace.path, "other-project");
+        assert!(!is_whitaker_workspace(&temp_workspace.path));
     }
 
-    #[test]
-    fn is_whitaker_workspace_returns_false_for_other_project() {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let dir = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-        create_other_workspace(&dir);
-
-        assert!(!is_whitaker_workspace(&dir));
-    }
-
-    #[test]
-    fn is_whitaker_workspace_returns_false_for_empty_dir() {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let dir = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-
-        assert!(!is_whitaker_workspace(&dir));
+    #[rstest]
+    fn is_whitaker_workspace_returns_false_for_empty_dir(temp_workspace: TempWorkspace) {
+        assert!(!is_whitaker_workspace(&temp_workspace.path));
     }
 
     #[test]
@@ -191,15 +201,13 @@ version = "0.1.0"
         );
     }
 
-    #[test]
-    fn ensure_workspace_uses_cwd_when_already_whitaker() {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let dir = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-        create_whitaker_workspace(&dir);
+    #[rstest]
+    fn ensure_workspace_uses_cwd_when_already_whitaker(temp_workspace: TempWorkspace) {
+        write_cargo_toml(&temp_workspace.path, "whitaker");
 
         // Change to temp directory for this test
         let original_cwd = std::env::current_dir().expect("failed to get cwd");
-        std::env::set_current_dir(temp.path()).expect("failed to change cwd");
+        std::env::set_current_dir(&*temp_workspace.path).expect("failed to change cwd");
 
         let result = ensure_workspace(
             false,
@@ -210,6 +218,6 @@ version = "0.1.0"
         std::env::set_current_dir(original_cwd).expect("failed to restore cwd");
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), dir);
+        assert_eq!(result.unwrap(), temp_workspace.path);
     }
 }

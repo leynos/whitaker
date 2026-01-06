@@ -1,7 +1,7 @@
 # Whitaker User's Guide
 
 Whitaker is a collection of opinionated Dylint lints for Rust. This guide
-explains how to integrate the lints into your project and configure them.
+explains how to integrate the lints into a project and configure them.
 
 For contributors who want to develop new lints or work on Whitaker itself, see
 the [Developer's Guide](developers-guide.md).
@@ -19,7 +19,7 @@ cargo install cargo-dylint dylint-link
 ### Standalone installation (recommended)
 
 The simplest way to use Whitaker is via the standalone installer, which handles
-all setup automatically:
+setup automatically:
 
 ```sh
 cargo install whitaker-installer
@@ -40,7 +40,8 @@ After installation, run `whitaker --all` in any Rust project to lint it.
 **Options:**
 
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
-- `--skip-wrapper` — Skip wrapper script generation (prints `DYLINT_LIBRARY_PATH`
+- `--skip-wrapper` — Skip wrapper script generation (prints
+  `DYLINT_LIBRARY_PATH`
   instructions instead)
 - `--no-update` — Don't update existing repository clone
 

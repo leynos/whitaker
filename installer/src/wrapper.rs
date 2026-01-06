@@ -70,7 +70,8 @@ fn generate_unix_script(bin_dir: &Path, library_path: &Utf8Path) -> Result<std::
 
     let script_path = bin_dir.join("whitaker");
     let script_content = format!(
-        r#"#!/bin/bash
+        r#"#!/usr/bin/env bash
+set -euo pipefail
 export DYLINT_LIBRARY_PATH="{library_path}"
 exec cargo dylint "$@"
 "#
