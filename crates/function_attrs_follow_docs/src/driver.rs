@@ -92,18 +92,31 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    fn from_hir(attr: &hir::Attribute) -> Self {
-        let span = attr.span();
+    /// Try to create attribute info from an HIR attribute.
+    ///
+    /// Returns `None` for compiler-generated attributes that don't have source
+    /// spans (e.g., inline hints from derive macros), which would panic if we
+    /// tried to access their span.
+    fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
+        // Doc comments are always safe to process - they come from source.
+        // Other parsed attributes may be compiler-generated (like Inline hints
+        // from derive macros) and can panic when accessing their span. Only
+        // process unparsed attributes or doc comments to be safe.
         let is_doc = attr.doc_str().is_some();
+        if attr.is_parsed_attr() && !is_doc {
+            return None;
+        }
+
+        let span = attr.span();
         let is_outer = attr
             .doc_resolution_scope()
             .is_none_or(|style| matches!(style, AttrStyle::Outer));
 
-        Self {
+        Some(Self {
             span,
             is_doc,
             is_outer,
-        }
+        })
     }
 }
 
@@ -127,7 +140,7 @@ fn check_function_attributes(
     kind: FunctionKind,
     localizer: &Localizer,
 ) {
-    let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
+    let infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;
