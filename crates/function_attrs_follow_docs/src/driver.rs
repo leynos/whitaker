@@ -100,24 +100,28 @@ impl AttrInfo {
     ///
     /// # Behaviour
     ///
-    /// - Doc comments (attributes with `doc_str()`) are always processed.
-    /// - Unparsed attributes (raw token streams) are always processed.
-    /// - Parsed non-doc attributes are skipped as they may be compiler-generated.
+    /// User-written attributes (`#[inline]`, `#[allow]`, etc.) are processed
+    /// normally. Compiler-generated attributes (from derive macros) are detected
+    /// via:
+    /// 1. Catching panics from span access on malformed attributes
+    /// 2. Filtering out dummy spans (sentinel value for generated code)
     ///
-    /// This defensive approach prevents panics when derive macros inject
-    /// attributes without source spans. See `ui/pass_derive_macro_generated.rs`
-    /// for the regression test covering this scenario.
+    /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
+    /// compiler-generated attribute handling.
     fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        // Doc comments are always safe to process - they come from source.
-        // Other parsed attributes may be compiler-generated (like Inline hints
-        // from derive macros) and can panic when accessing their span. Only
-        // process unparsed attributes or doc comments to be safe.
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
         let is_doc = attr.doc_str().is_some();
-        if attr.is_parsed_attr() && !is_doc {
+
+        // Compiler-generated attributes (like inline hints from derive macros)
+        // may panic when accessing their span. Catch such failures gracefully.
+        let span = catch_unwind(AssertUnwindSafe(|| attr.span())).ok()?;
+
+        // Dummy spans indicate compiler-generated code without source location.
+        if span.is_dummy() {
             return None;
         }
 
-        let span = attr.span();
         let is_outer = attr
             .doc_resolution_scope()
             .is_none_or(|style| matches!(style, AttrStyle::Outer));
