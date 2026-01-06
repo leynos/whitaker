@@ -90,6 +90,28 @@ pub enum InstallerError {
     /// An I/O operation failed.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Git clone or update operation failed.
+    #[error("git {operation} failed: {message}")]
+    Git {
+        /// The git operation that failed (clone, pull, etc.).
+        operation: &'static str,
+        /// Description of the failure.
+        message: String,
+    },
+
+    /// Required tool installation failed.
+    #[error("failed to install {tool}: {message}")]
+    DependencyInstall {
+        /// Name of the tool that failed to install.
+        tool: &'static str,
+        /// Description of the installation failure.
+        message: String,
+    },
+
+    /// Wrapper script generation failed.
+    #[error("wrapper script generation failed: {0}")]
+    WrapperGeneration(String),
 }
 
 /// Result type alias using [`InstallerError`].

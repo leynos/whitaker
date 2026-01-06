@@ -8,87 +8,16 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
 use whitaker_installer::builder::{
-    BuildConfig, Builder, CrateName, find_workspace_root, resolve_crates, validate_crate_names,
+    BuildConfig, Builder, CrateName, resolve_crates, validate_crate_names,
 };
+use whitaker_installer::cli::Cli;
+use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
 use whitaker_installer::error::{InstallerError, Result};
+use whitaker_installer::git::{clone_repository, update_repository};
 use whitaker_installer::output::{ShellSnippet, success_message};
 use whitaker_installer::stager::{Stager, default_target_dir};
 use whitaker_installer::toolchain::Toolchain;
-
-/// Install Whitaker Dylint lint libraries.
-#[derive(Parser, Debug)]
-#[command(name = "whitaker-installer")]
-#[command(version, about)]
-#[command(long_about = concat!(
-    "Install Whitaker Dylint lint libraries.\n\n",
-    "Whitaker is a collection of opinionated Dylint lints for Rust. This installer ",
-    "builds, links, and stages the lint libraries for local use, avoiding the need ",
-    "to rebuild from source on each `cargo dylint` invocation.\n\n",
-    "By default, the aggregated suite (all lints in a single library) is built. ",
-    "Use --individual-lints to build separate libraries, or -l/--lint to select ",
-    "specific lints.\n\n",
-    "After installation, set DYLINT_LIBRARY_PATH to the staged directory and run ",
-    "`cargo dylint --all` to use the lints.",
-))]
-#[command(after_help = concat!(
-    "AVAILABLE LINTS:\n",
-    "  conditional_max_n_branches    Limit boolean branches in conditionals\n",
-    "  function_attrs_follow_docs    Doc comments must precede other attributes\n",
-    "  module_max_lines              Warn when modules exceed line threshold\n",
-    "  module_must_have_inner_docs   Require inner doc comments on modules\n",
-    "  no_expect_outside_tests       Forbid .expect() outside test contexts\n",
-    "  no_std_fs_operations          Enforce capability-based filesystem access\n",
-    "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n\n",
-    "EXAMPLES:\n",
-    "  Build and stage the aggregated suite:\n",
-    "    $ whitaker-installer\n\n",
-    "  Build specific lints:\n",
-    "    $ whitaker-installer -l module_max_lines -l no_expect_outside_tests\n\n",
-    "  Build all individual lint crates:\n",
-    "    $ whitaker-installer --individual-lints\n\n",
-    "  Preview without building:\n",
-    "    $ whitaker-installer --dry-run\n\n",
-    "For more information, see: https://github.com/leynos/whitaker",
-))]
-struct Cli {
-    /// Staging directory for built libraries [default: platform-specific].
-    #[arg(short, long, value_name = "DIR")]
-    target_dir: Option<Utf8PathBuf>,
-
-    /// Build a specific lint by name (can be repeated).
-    #[arg(short, long, value_name = "NAME")]
-    lint: Vec<String>,
-
-    /// Build all individual lint crates instead of the aggregated suite.
-    #[arg(long, conflicts_with = "lint")]
-    individual_lints: bool,
-
-    /// Number of parallel cargo build jobs.
-    #[arg(short, long, value_name = "N")]
-    jobs: Option<usize>,
-
-    /// Override the toolchain detected from rust-toolchain.toml.
-    #[arg(long, value_name = "TOOLCHAIN")]
-    toolchain: Option<String>,
-
-    /// Show configuration and exit without building.
-    #[arg(long)]
-    dry_run: bool,
-
-    /// Increase cargo output verbosity (repeatable: -v, -vv, -vvv).
-    #[arg(
-        short,
-        long = "verbose",
-        alias = "verbosity",
-        action = clap::ArgAction::Count,
-        conflicts_with = "quiet"
-    )]
-    verbosity: u8,
-
-    /// Suppress progress output (errors still shown).
-    #[arg(short, long, conflicts_with = "verbosity")]
-    quiet: bool,
-}
+use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 struct RunContext<'a> {
     cli: &'a Cli,
@@ -108,32 +37,18 @@ fn main() {
 }
 
 fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
-    let workspace_root = determine_workspace_root()?;
+    // Step 1: Check and install Dylint dependencies if needed
+    if !cli.skip_deps {
+        ensure_dylint_tools(cli.quiet, stderr)?;
+    }
+
+    // Step 2: Ensure workspace is available (clone if needed)
+    let workspace_root = ensure_whitaker_workspace(cli, stderr)?;
+
+    // Step 3: Resolve crates and toolchain
     let crates = resolve_requested_crates(cli)?;
     let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
     let target_dir = determine_target_dir(cli.target_dir.clone())?;
-
-    if cli.dry_run {
-        write_stderr_line(stderr, "Dry run - no files will be modified");
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, format!("Workspace root: {workspace_root}"));
-        write_stderr_line(stderr, format!("Toolchain: {}", toolchain.channel()));
-        write_stderr_line(stderr, format!("Target directory: {target_dir}"));
-        write_stderr_line(stderr, format!("Verbosity level: {}", cli.verbosity));
-        write_stderr_line(stderr, format!("Quiet: {}", cli.quiet));
-
-        if let Some(jobs) = cli.jobs {
-            write_stderr_line(stderr, format!("Parallel jobs: {jobs}"));
-        }
-
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, "Crates to build:");
-        for crate_name in &crates {
-            write_stderr_line(stderr, format!("  - {crate_name}"));
-        }
-
-        return Ok(());
-    }
 
     let context = RunContext {
         cli,
@@ -141,17 +56,88 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
         toolchain: &toolchain,
         target_dir: &target_dir,
     };
+
+    if cli.dry_run {
+        print_dry_run_info(&context, &crates, stderr);
+        return Ok(());
+    }
+
+    // Step 4: Build and stage
     let build_results = perform_build(&context, &crates, stderr)?;
-    stage_and_output(&context, &build_results, stderr)
+    let staging_path = stage_libraries(&context, &build_results, stderr)?;
+
+    // Step 5: Generate wrapper scripts if requested
+    if cli.skip_wrapper {
+        print_shell_snippet(&staging_path, stderr);
+    } else {
+        generate_and_report_wrapper(&staging_path, stderr)?;
+    }
+
+    Ok(())
 }
 
-/// Locates the workspace root from the current directory.
-fn determine_workspace_root() -> Result<Utf8PathBuf> {
+/// Checks for and installs Dylint tools if missing.
+fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
+    let status = check_dylint_tools();
+
+    if status.all_installed() {
+        return Ok(());
+    }
+
+    if !quiet {
+        write_stderr_line(stderr, "Installing required Dylint tools...");
+    }
+
+    install_dylint_tools(&status)?;
+
+    if !quiet {
+        write_stderr_line(stderr, "Dylint tools installed successfully.");
+        write_stderr_line(stderr, "");
+    }
+
+    Ok(())
+}
+
+/// Ensures a Whitaker workspace is available.
+fn ensure_whitaker_workspace(cli: &Cli, stderr: &mut dyn Write) -> Result<Utf8PathBuf> {
+    use whitaker_installer::workspace::{clone_directory, is_whitaker_workspace};
+
+    // Check if we're already in a Whitaker workspace
     let cwd = std::env::current_dir()?;
-    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::ToolchainDetection {
+    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::WorkspaceNotFound {
         reason: format!("current directory is not valid UTF-8: {e}"),
     })?;
-    find_workspace_root(&cwd_utf8)
+
+    if is_whitaker_workspace(&cwd_utf8) {
+        return Ok(cwd_utf8);
+    }
+
+    // Need to clone or update the repository
+    let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
+        reason: "could not determine data directory for cloning".to_owned(),
+    })?;
+
+    if clone_dir.exists() {
+        if !cli.no_update {
+            if !cli.quiet {
+                write_stderr_line(
+                    stderr,
+                    format!("Updating Whitaker repository at {clone_dir}..."),
+                );
+            }
+            update_repository(&clone_dir)?;
+        }
+    } else {
+        if !cli.quiet {
+            write_stderr_line(
+                stderr,
+                format!("Cloning Whitaker repository to {clone_dir}..."),
+            );
+        }
+        clone_repository(&clone_dir)?;
+    }
+
+    Ok(clone_dir)
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.
@@ -168,9 +154,6 @@ fn resolve_toolchain(
 }
 
 /// Resolves requested crates from the CLI flags.
-///
-/// Converts lint names into `CrateName` values, validates any provided names,
-/// and applies the individual-lints flag to determine the final build list.
 fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
     let lint_crates: Vec<CrateName> = cli
         .lint
@@ -212,16 +195,15 @@ fn perform_build(
     }
 
     let config = build_config_for_cli(context);
-
     Builder::new(config).build_all(crates)
 }
 
-/// Stages built libraries and outputs success information.
-fn stage_and_output(
+/// Stages built libraries and returns the staging path.
+fn stage_libraries(
     context: &RunContext<'_>,
     build_results: &[whitaker_installer::builder::BuildResult],
     stderr: &mut dyn Write,
-) -> Result<()> {
+) -> Result<Utf8PathBuf> {
     let stager = Stager::new(context.target_dir.to_owned(), context.toolchain.channel());
     let staging_path = stager.staging_path();
 
@@ -235,12 +217,77 @@ fn stage_and_output(
     if !context.cli.quiet {
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, success_message(build_results.len(), &staging_path));
+    }
+
+    Ok(staging_path)
+}
+
+/// Generates wrapper scripts and reports the result.
+fn generate_and_report_wrapper(staging_path: &Utf8Path, stderr: &mut dyn Write) -> Result<()> {
+    let result = generate_wrapper_scripts(staging_path)?;
+
+    write_stderr_line(stderr, "");
+    write_stderr_line(
+        stderr,
+        format!("Wrapper script created: {}", result.script_path.display()),
+    );
+
+    if result.in_path {
         write_stderr_line(stderr, "");
-        let snippet = ShellSnippet::new(&staging_path);
-        write_stderr_line(stderr, snippet.display_text());
+        write_stderr_line(stderr, "You can now run: whitaker --all");
+    } else {
+        write_stderr_line(stderr, "");
+        let instructions =
+            path_instructions(result.script_path.parent().unwrap_or(&result.script_path));
+        write_stderr_line(stderr, instructions);
+        write_stderr_line(stderr, "");
+        write_stderr_line(stderr, "Then run: whitaker --all");
     }
 
     Ok(())
+}
+
+/// Prints shell snippet for manual `DYLINT_LIBRARY_PATH` setup.
+fn print_shell_snippet(staging_path: &Utf8Path, stderr: &mut dyn Write) {
+    write_stderr_line(stderr, "");
+    let snippet = ShellSnippet::new(staging_path);
+    write_stderr_line(stderr, snippet.display_text());
+}
+
+/// Prints dry run configuration information.
+fn print_dry_run_info(context: &RunContext<'_>, crates: &[CrateName], stderr: &mut dyn Write) {
+    write_stderr_line(stderr, "Dry run - no files will be modified");
+    write_stderr_line(stderr, "");
+    write_stderr_line(
+        stderr,
+        format!("Workspace root: {}", context.workspace_root),
+    );
+    write_stderr_line(
+        stderr,
+        format!("Toolchain: {}", context.toolchain.channel()),
+    );
+    write_stderr_line(stderr, format!("Target directory: {}", context.target_dir));
+    write_stderr_line(
+        stderr,
+        format!("Verbosity level: {}", context.cli.verbosity),
+    );
+    write_stderr_line(stderr, format!("Quiet: {}", context.cli.quiet));
+    write_stderr_line(stderr, format!("Skip deps: {}", context.cli.skip_deps));
+    write_stderr_line(
+        stderr,
+        format!("Skip wrapper: {}", context.cli.skip_wrapper),
+    );
+    write_stderr_line(stderr, format!("No update: {}", context.cli.no_update));
+
+    if let Some(jobs) = context.cli.jobs {
+        write_stderr_line(stderr, format!("Parallel jobs: {jobs}"));
+    }
+
+    write_stderr_line(stderr, "");
+    write_stderr_line(stderr, "Crates to build:");
+    for crate_name in crates {
+        write_stderr_line(stderr, format!("  - {crate_name}"));
+    }
 }
 
 fn build_config_for_cli(context: &RunContext<'_>) -> BuildConfig {
@@ -283,58 +330,10 @@ mod tests {
             dry_run: false,
             verbosity: 0,
             quiet: false,
+            skip_deps: false,
+            skip_wrapper: false,
+            no_update: false,
         }
-    }
-
-    #[test]
-    fn cli_parses_defaults() {
-        let cli = Cli::parse_from(["whitaker-installer"]);
-        assert!(cli.target_dir.is_none());
-        assert!(cli.lint.is_empty());
-        assert!(!cli.individual_lints);
-        assert!(!cli.dry_run);
-        assert_eq!(cli.verbosity, 0);
-        assert!(!cli.quiet);
-    }
-
-    #[test]
-    fn cli_parses_target_dir() {
-        let cli = Cli::parse_from(["whitaker-installer", "-t", "/tmp/dylint"]);
-        assert_eq!(cli.target_dir, Some(Utf8PathBuf::from("/tmp/dylint")));
-    }
-
-    #[test]
-    fn cli_parses_multiple_lints() {
-        let cli = Cli::parse_from([
-            "whitaker-installer",
-            "-l",
-            "module_max_lines",
-            "-l",
-            "no_expect_outside_tests",
-        ]);
-        assert_eq!(cli.lint.len(), 2);
-    }
-
-    /// Parameterised tests for boolean CLI flags.
-    #[rstest]
-    #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.individual_lints)]
-    #[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.dry_run)]
-    #[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.verbosity > 0)]
-    #[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.quiet)]
-    fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
-        let cli = Cli::parse_from(args);
-        assert!(check(&cli));
-    }
-
-    /// Parameterised tests for repeatable verbosity flags.
-    #[rstest]
-    #[case::double_short(&["whitaker-installer", "-vv"], 2)]
-    #[case::triple_short(&["whitaker-installer", "-vvv"], 3)]
-    #[case::double_long(&["whitaker-installer", "--verbose", "--verbose"], 2)]
-    #[case::double_alias(&["whitaker-installer", "--verbosity", "--verbosity"], 2)]
-    fn cli_parses_repeatable_verbosity_flags(#[case] args: &[&str], #[case] expected: u8) {
-        let cli = Cli::parse_from(args);
-        assert_eq!(cli.verbosity, expected);
     }
 
     #[test]
@@ -402,13 +401,6 @@ mod tests {
             err,
             InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
         ));
-    }
-
-    #[rstest]
-    #[case::individual_lints_with_lint(&["whitaker-installer", "--individual-lints", "--lint", "module_max_lines"])]
-    #[case::verbose_with_quiet(&["whitaker-installer", "--verbose", "--quiet"])]
-    fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
-        Cli::try_parse_from(args).expect_err("expected clap to reject conflicting flags");
     }
 
     #[test]

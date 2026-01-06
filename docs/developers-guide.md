@@ -70,6 +70,9 @@ platform-specific directory:
 - `--dry-run` — Show what would be done without running
 - `-v, --verbose` — Increase output verbosity (repeatable)
 - `-q, --quiet` — Suppress output except errors
+- `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
+- `--skip-wrapper` — Skip wrapper script generation
+- `--no-update` — Don't update existing repository clone
 
 ### Using installed lints
 

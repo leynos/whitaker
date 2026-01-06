@@ -16,6 +16,34 @@ Install `cargo-dylint` and `dylint-link`:
 cargo install cargo-dylint dylint-link
 ```
 
+### Standalone installation (recommended)
+
+The simplest way to use Whitaker is via the standalone installer, which handles
+all setup automatically:
+
+```sh
+cargo install whitaker-installer
+whitaker-installer
+whitaker --all
+```
+
+This:
+
+1. Installs `cargo-dylint` and `dylint-link` if not present
+2. Clones the Whitaker repository to a platform-specific data directory
+3. Builds the lint libraries
+4. Creates a `whitaker` wrapper script that invokes `cargo dylint` with the
+   correct `DYLINT_LIBRARY_PATH`
+
+After installation, run `whitaker --all` in any Rust project to lint it.
+
+**Options:**
+
+- `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
+- `--skip-wrapper` — Skip wrapper script generation (prints `DYLINT_LIBRARY_PATH`
+  instructions instead)
+- `--no-update` — Don't update existing repository clone
+
 ### Adding Whitaker to your project
 
 Add the following to your workspace `Cargo.toml`:
