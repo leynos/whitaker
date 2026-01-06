@@ -25,6 +25,24 @@ impl DylintToolStatus {
 /// Checks whether the Dylint tools are installed.
 ///
 /// Returns a status struct indicating which tools are available.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::deps::check_dylint_tools;
+///
+/// let status = check_dylint_tools();
+/// if status.all_installed() {
+///     println!("All Dylint tools are available");
+/// } else {
+///     if !status.cargo_dylint {
+///         println!("cargo-dylint is missing");
+///     }
+///     if !status.dylint_link {
+///         println!("dylint-link is missing");
+///     }
+/// }
+/// ```
 pub fn check_dylint_tools() -> DylintToolStatus {
     let cargo_dylint = is_cargo_dylint_installed();
     let dylint_link = is_dylint_link_installed();
