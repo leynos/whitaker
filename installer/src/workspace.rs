@@ -72,6 +72,47 @@ pub fn wrapper_bin_directory() -> Option<PathBuf> {
     }
 }
 
+/// Describes the action needed to establish a Whitaker workspace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkspaceAction {
+    /// The current directory is already a Whitaker workspace.
+    UseCurrentDir(Utf8PathBuf),
+    /// The repository needs to be cloned to the given directory.
+    CloneTo(Utf8PathBuf),
+    /// The existing repository at the given directory should be updated.
+    UpdateAt(Utf8PathBuf),
+    /// The repository exists but update was not requested.
+    UseExisting(Utf8PathBuf),
+}
+
+/// Determines what action is needed to establish a Whitaker workspace.
+///
+/// This is a pure function that examines the current directory and clone
+/// directory state to decide what operation (if any) is needed.
+///
+/// # Arguments
+///
+/// * `cwd` - The current working directory.
+/// * `clone_dir` - The platform-specific clone directory.
+/// * `update` - Whether to update an existing clone.
+pub fn decide_workspace_action(
+    cwd: &Utf8Path,
+    clone_dir: &Utf8Path,
+    update: bool,
+) -> WorkspaceAction {
+    if is_whitaker_workspace(cwd) {
+        WorkspaceAction::UseCurrentDir(cwd.to_owned())
+    } else if clone_dir.exists() {
+        if update {
+            WorkspaceAction::UpdateAt(clone_dir.to_owned())
+        } else {
+            WorkspaceAction::UseExisting(clone_dir.to_owned())
+        }
+    } else {
+        WorkspaceAction::CloneTo(clone_dir.to_owned())
+    }
+}
+
 /// Ensures a Whitaker workspace is available, cloning if necessary.
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
@@ -81,38 +122,29 @@ pub fn wrapper_bin_directory() -> Option<PathBuf> {
 /// # Arguments
 ///
 /// * `update` - If `true` and the repository already exists, runs `git pull`.
-/// * `clone_fn` - Function to clone the repository.
-/// * `update_fn` - Function to update an existing repository.
 ///
 /// # Errors
 ///
 /// Returns an error if:
 /// - The clone directory cannot be determined
 /// - Cloning or updating fails
-pub fn ensure_workspace<F, G>(update: bool, clone_fn: F, update_fn: G) -> Result<Utf8PathBuf>
-where
-    F: FnOnce(&Utf8Path) -> Result<()>,
-    G: FnOnce(&Utf8Path) -> Result<()>,
-{
+pub fn ensure_workspace(update: bool) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
-
-    if is_whitaker_workspace(&cwd) {
-        return Ok(cwd);
-    }
-
     let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
-    if clone_dir.exists() {
-        if update {
-            update_fn(&clone_dir)?;
+    match decide_workspace_action(&cwd, &clone_dir, update) {
+        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => Ok(dir),
+        WorkspaceAction::CloneTo(dir) => {
+            crate::git::clone_repository(&dir)?;
+            Ok(dir)
         }
-    } else {
-        clone_fn(&clone_dir)?;
+        WorkspaceAction::UpdateAt(dir) => {
+            crate::git::update_repository(&dir)?;
+            Ok(dir)
+        }
     }
-
-    Ok(clone_dir)
 }
 
 /// Returns the workspace path without performing any side effects.
@@ -202,22 +234,43 @@ mod tests {
     }
 
     #[rstest]
-    fn ensure_workspace_uses_cwd_when_already_whitaker(temp_workspace: TempWorkspace) {
+    fn decide_workspace_action_uses_cwd_when_whitaker(temp_workspace: TempWorkspace) {
         write_cargo_toml(&temp_workspace.path, "whitaker");
+        let clone_dir = Utf8PathBuf::from("/nonexistent/clone/dir");
 
-        // Change to temp directory for this test
-        let original_cwd = std::env::current_dir().expect("failed to get cwd");
-        std::env::set_current_dir(&*temp_workspace.path).expect("failed to change cwd");
+        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
 
-        let result = ensure_workspace(
-            false,
-            |_| panic!("clone_fn should not be called"),
-            |_| panic!("update_fn should not be called"),
-        );
+        assert_eq!(action, WorkspaceAction::UseCurrentDir(temp_workspace.path));
+    }
 
-        std::env::set_current_dir(original_cwd).expect("failed to restore cwd");
+    #[rstest]
+    fn decide_workspace_action_clones_when_empty(temp_workspace: TempWorkspace) {
+        // temp_workspace.path is empty (no Cargo.toml), clone_dir doesn't exist
+        let clone_dir = temp_workspace.path.join("clone_target");
 
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), temp_workspace.path);
+        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
+
+        assert_eq!(action, WorkspaceAction::CloneTo(clone_dir));
+    }
+
+    #[rstest]
+    fn decide_workspace_action_updates_when_clone_exists(temp_workspace: TempWorkspace) {
+        // Create a clone directory (not a whitaker workspace, just exists)
+        let clone_dir = temp_workspace.path.join("clone_target");
+        fs::create_dir(&clone_dir).expect("failed to create clone dir");
+
+        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, true);
+
+        assert_eq!(action, WorkspaceAction::UpdateAt(clone_dir));
+    }
+
+    #[rstest]
+    fn decide_workspace_action_uses_existing_when_no_update(temp_workspace: TempWorkspace) {
+        let clone_dir = temp_workspace.path.join("clone_target");
+        fs::create_dir(&clone_dir).expect("failed to create clone dir");
+
+        let action = decide_workspace_action(&temp_workspace.path, &clone_dir, false);
+
+        assert_eq!(action, WorkspaceAction::UseExisting(clone_dir));
     }
 }

@@ -97,6 +97,16 @@ impl AttrInfo {
     /// Returns `None` for compiler-generated attributes that don't have source
     /// spans (e.g., inline hints from derive macros), which would panic if we
     /// tried to access their span.
+    ///
+    /// # Behaviour
+    ///
+    /// - Doc comments (attributes with `doc_str()`) are always processed.
+    /// - Unparsed attributes (raw token streams) are always processed.
+    /// - Parsed non-doc attributes are skipped as they may be compiler-generated.
+    ///
+    /// This defensive approach prevents panics when derive macros inject
+    /// attributes without source spans. See `ui/pass_derive_macro_generated.rs`
+    /// for the regression test covering this scenario.
     fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
         // Doc comments are always safe to process - they come from source.
         // Other parsed attributes may be compiler-generated (like Inline hints

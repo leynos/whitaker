@@ -120,41 +120,36 @@ fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
 
 /// Ensures a Whitaker workspace is available.
 fn ensure_whitaker_workspace(cli: &Cli, stderr: &mut dyn Write) -> Result<Utf8PathBuf> {
-    use whitaker_installer::workspace::{clone_directory, is_whitaker_workspace, resolve_workspace_path};
+    use whitaker_installer::workspace::{
+        WorkspaceAction, clone_directory, decide_workspace_action,
+    };
 
-    let workspace_root = resolve_workspace_path()?;
+    let cwd = std::env::current_dir()?;
+    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::WorkspaceNotFound {
+        reason: format!("current directory is not valid UTF-8: {e}"),
+    })?;
 
-    // If already in a Whitaker workspace, nothing to do.
-    if is_whitaker_workspace(&workspace_root) {
-        return Ok(workspace_root);
-    }
-
-    // Need to clone or update the repository.
     let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
-    if clone_dir.exists() {
-        if !cli.no_update {
+    match decide_workspace_action(&cwd_utf8, &clone_dir, !cli.no_update) {
+        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => Ok(dir),
+        WorkspaceAction::CloneTo(dir) => {
             if !cli.quiet {
-                write_stderr_line(
-                    stderr,
-                    format!("Updating Whitaker repository at {clone_dir}..."),
-                );
+                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
             }
-            update_repository(&clone_dir)?;
+            clone_repository(&dir)?;
+            Ok(dir)
         }
-    } else {
-        if !cli.quiet {
-            write_stderr_line(
-                stderr,
-                format!("Cloning Whitaker repository to {clone_dir}..."),
-            );
+        WorkspaceAction::UpdateAt(dir) => {
+            if !cli.quiet {
+                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
+            }
+            update_repository(&dir)?;
+            Ok(dir)
         }
-        clone_repository(&clone_dir)?;
     }
-
-    Ok(clone_dir)
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.

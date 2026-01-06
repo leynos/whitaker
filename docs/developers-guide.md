@@ -34,9 +34,9 @@ make fmt        # Apply formatting
 
 ## Using whitaker-installer
 
-The `whitaker-installer` CLI builds, links, and stages Dylint lint libraries
-for local development. This avoids rebuilding from source on each
-`cargo dylint` invocation.
+The `whitaker-installer` command-line interface (CLI) builds, links, and stages
+Dylint lint libraries for local development. This avoids rebuilding from source
+on each `cargo dylint` invocation.
 
 ### Basic usage
 
@@ -129,7 +129,7 @@ and a baseline `src/lib.rs`:
 `LintCrateTemplate::with_ui_tests_directory` targets alternative directories.
 The helper:
 
-- Normalises Windows-style separators to forward slashes
+- Normalizes Windows-style separators to forward slashes
 - Rejects traversal via `..`
 - Fails fast on empty names, uppercase characters, trailing separators, or
   absolute paths
@@ -153,7 +153,7 @@ cargo dylint list --git https://github.com/leynos/whitaker --rev v0.1.0 --all
 Swap `v0.1.0` for the tag to test, or omit `--rev` to use the current branch
 tip.
 
-## Localised Diagnostics
+## Localized Diagnostics
 
 Whitaker supports multiple locales for diagnostic messages. Fluent resources
 are bundled under `locales/`.
@@ -225,7 +225,7 @@ unsupported locales.
 ### Adding translations
 
 Lints source messages directly from Fluent bundles at emission time. Each
-diagnostic assembles structured arguments so translations never depend on
+diagnostic assembles structured arguments, so translations never depend on
 hand-built strings. If a lookup fails, the lint records a delayed span bug and
 falls back to deterministic English text.
 

@@ -41,13 +41,12 @@ After installation, run `whitaker --all` in any Rust project to lint it.
 
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation (prints
-  `DYLINT_LIBRARY_PATH`
-  instructions instead)
+  `DYLINT_LIBRARY_PATH` instructions instead)
 - `--no-update` — Don't update existing repository clone
 
-### Adding Whitaker to your project
+### Adding Whitaker to a project
 
-Add the following to your workspace `Cargo.toml`:
+Add the following to the workspace `Cargo.toml`:
 
 ```toml
 [workspace.metadata.dylint]
@@ -132,7 +131,7 @@ additional_test_attributes = ["my_framework::test", "async_std::test"]
 allow_in_main = true
 ```
 
-## Localised Diagnostics
+## Localized Diagnostics
 
 Whitaker supports multiple languages for diagnostic messages. Set the locale
 via the `DYLINT_LOCALE` environment variable or in `dylint.toml`:
