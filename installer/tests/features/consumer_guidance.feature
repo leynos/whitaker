@@ -13,7 +13,7 @@ Feature: Consumer guidance documentation
     Given a workspace metadata example for individual crates
     When the TOML is parsed
     Then parsing succeeds
-    And the libraries pattern is crates/*
+    And the libraries pattern starts with crates/
 
   Scenario: Version-pinned workspace metadata with tag is valid TOML
     Given a workspace metadata example with tag pinning

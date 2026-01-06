@@ -155,7 +155,7 @@ To integrate Whitaker lints into a project, add the following to the workspace
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*" }
+  { git = "https://github.com/leynos/whitaker", pattern = "suite" }
 ]
 ```
 
@@ -169,18 +169,18 @@ cargo dylint --all
 
 Whitaker offers two ways to load lints:
 
-- **Individual crates** (`pattern = "crates/*"`): Each lint is a separate
-  library. This allows selective loading and independent version pinning but
-  results in more build artifacts.
 - **Aggregated suite** (`pattern = "suite"`): All lints in a single library.
-  Faster to load but all-or-nothing.
+  This is the recommended approach for most projects.
+- **Individual crates**: Specify each lint explicitly by name. This allows
+  selective loading and independent version pinning.
 
-For most projects, the aggregated suite provides the simplest setup:
+To load specific individual lints instead of the full suite:
 
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "suite" }
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/module_max_lines" },
+  { git = "https://github.com/leynos/whitaker", pattern = "crates/no_expect_outside_tests" }
 ]
 ```
 
@@ -209,7 +209,7 @@ For reproducible builds, pin to a specific release tag or commit:
 # Release tag
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", tag = "v0.1.0" }
+  { git = "https://github.com/leynos/whitaker", pattern = "suite", tag = "v0.1.0" }
 ]
 ```
 
@@ -217,7 +217,7 @@ libraries = [
 # Commit hash
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/*", rev = "abc123def456" }
+  { git = "https://github.com/leynos/whitaker", pattern = "suite", rev = "abc123def456" }
 ]
 ```
 
