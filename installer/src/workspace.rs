@@ -17,6 +17,18 @@ const WHITAKER_PACKAGE_NAME: &str = "whitaker";
 ///
 /// A Whitaker workspace is identified by a `Cargo.toml` file with
 /// `package.name = "whitaker"`.
+///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+/// use whitaker_installer::workspace::is_whitaker_workspace;
+///
+/// let dir = Utf8Path::new("/path/to/project");
+/// if is_whitaker_workspace(dir) {
+///     println!("This is a Whitaker workspace");
+/// }
+/// ```
 pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
     let cargo_toml = dir.join("Cargo.toml");
     if !cargo_toml.exists() {
@@ -45,6 +57,16 @@ pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
 /// - Windows: `%LOCALAPPDATA%\whitaker`
 ///
 /// Returns `None` if the platform's data directory cannot be determined.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::workspace::clone_directory;
+///
+/// if let Some(dir) = clone_directory() {
+///     println!("Whitaker will be cloned to: {dir}");
+/// }
+/// ```
 pub fn clone_directory() -> Option<Utf8PathBuf> {
     dirs::data_dir()
         .and_then(|p| Utf8PathBuf::try_from(p).ok())
@@ -57,6 +79,16 @@ pub fn clone_directory() -> Option<Utf8PathBuf> {
 /// - Windows: `%LOCALAPPDATA%\whitaker\bin`
 ///
 /// Returns `None` if the directory cannot be determined.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::workspace::wrapper_bin_directory;
+///
+/// if let Some(bin_dir) = wrapper_bin_directory() {
+///     println!("Wrapper script will be placed in: {}", bin_dir.display());
+/// }
+/// ```
 pub fn wrapper_bin_directory() -> Option<PathBuf> {
     #[cfg(unix)]
     {
@@ -95,6 +127,23 @@ pub enum WorkspaceAction {
 /// * `cwd` - The current working directory.
 /// * `clone_dir` - The platform-specific clone directory.
 /// * `update` - Whether to update an existing clone.
+///
+/// # Examples
+///
+/// ```
+/// use camino::Utf8PathBuf;
+/// use whitaker_installer::workspace::{decide_workspace_action, WorkspaceAction};
+///
+/// let cwd = Utf8PathBuf::from("/some/random/dir");
+/// let clone_dir = Utf8PathBuf::from("/home/user/.local/share/whitaker");
+///
+/// match decide_workspace_action(&cwd, &clone_dir, true) {
+///     WorkspaceAction::UseCurrentDir(dir) => println!("Using CWD: {dir}"),
+///     WorkspaceAction::CloneTo(dir) => println!("Need to clone to: {dir}"),
+///     WorkspaceAction::UpdateAt(dir) => println!("Need to update: {dir}"),
+///     WorkspaceAction::UseExisting(dir) => println!("Using existing: {dir}"),
+/// }
+/// ```
 pub fn decide_workspace_action(
     cwd: &Utf8Path,
     clone_dir: &Utf8Path,
@@ -128,6 +177,17 @@ pub fn decide_workspace_action(
 /// Returns an error if:
 /// - The clone directory cannot be determined
 /// - Cloning or updating fails
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::workspace::ensure_workspace;
+///
+/// // Ensure workspace exists, updating if it already exists
+/// let workspace_path = ensure_workspace(true)?;
+/// println!("Workspace available at: {workspace_path}");
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
 pub fn ensure_workspace(update: bool) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
     let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
@@ -155,6 +215,16 @@ pub fn ensure_workspace(update: bool) -> Result<Utf8PathBuf> {
 ///
 /// This is useful for dry-run mode where we want to show what would happen
 /// without actually cloning or updating the repository.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::workspace::resolve_workspace_path;
+///
+/// let workspace_path = resolve_workspace_path()?;
+/// println!("Would use workspace at: {workspace_path}");
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
 pub fn resolve_workspace_path() -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
 

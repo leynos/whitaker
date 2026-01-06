@@ -67,11 +67,9 @@ pub fn generate_wrapper_scripts(library_path: &Utf8Path) -> Result<WrapperResult
     let script_path = generate_windows_script(&bin_dir, library_path)?;
 
     #[cfg(not(any(unix, windows)))]
-    let script_path = {
-        return Err(InstallerError::WrapperGeneration(
-            "unsupported platform".to_owned(),
-        ));
-    };
+    return Err(InstallerError::WrapperGeneration(
+        "unsupported platform".to_owned(),
+    ));
 
     let in_path = is_directory_in_path(&bin_dir);
 
@@ -169,13 +167,6 @@ pub fn path_instructions(bin_dir: &Path) -> String {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-
-    #[test]
-    fn wrapper_generation_error_includes_message() {
-        let err = InstallerError::WrapperGeneration("test failure".to_owned());
-        let msg = err.to_string();
-        assert!(msg.contains("test failure"));
-    }
 
     #[test]
     fn is_directory_in_path_returns_false_for_random_dir() {

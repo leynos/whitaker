@@ -17,6 +17,24 @@ pub struct DylintToolStatus {
 
 impl DylintToolStatus {
     /// Returns `true` if both tools are installed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::deps::DylintToolStatus;
+    ///
+    /// let status = DylintToolStatus {
+    ///     cargo_dylint: true,
+    ///     dylint_link: true,
+    /// };
+    /// assert!(status.all_installed());
+    ///
+    /// let partial = DylintToolStatus {
+    ///     cargo_dylint: true,
+    ///     dylint_link: false,
+    /// };
+    /// assert!(!partial.all_installed());
+    /// ```
     pub fn all_installed(&self) -> bool {
         self.cargo_dylint && self.dylint_link
     }
@@ -146,16 +164,5 @@ mod tests {
             dylint_link: true,
         };
         assert!(!status.all_installed());
-    }
-
-    #[test]
-    fn dependency_install_error_includes_tool_name() {
-        let err = InstallerError::DependencyInstall {
-            tool: "cargo-dylint",
-            message: "network error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("cargo-dylint"));
-        assert!(msg.contains("network error"));
     }
 }

@@ -99,6 +99,17 @@ impl Default for Cli {
     ///
     /// This is useful for testing or programmatic construction where only
     /// specific fields need to be set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::cli::Cli;
+    ///
+    /// let cli = Cli::default();
+    /// assert!(!cli.individual_lints);
+    /// assert!(!cli.skip_deps);
+    /// assert!(cli.lint.is_empty());
+    /// ```
     fn default() -> Self {
         Self {
             target_dir: None,
