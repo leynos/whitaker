@@ -33,6 +33,24 @@ pub struct WrapperResult {
 /// # Errors
 ///
 /// Returns `InstallerError::WrapperGeneration` if script creation fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+/// use whitaker_installer::wrapper::generate_wrapper_scripts;
+///
+/// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
+/// let result = generate_wrapper_scripts(library_path)?;
+///
+/// println!("Script created at: {}", result.script_path.display());
+/// if result.in_path {
+///     println!("Ready to use: whitaker --all");
+/// } else {
+///     println!("Add the bin directory to your PATH first");
+/// }
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
 pub fn generate_wrapper_scripts(library_path: &Utf8Path) -> Result<WrapperResult> {
     let bin_dir = wrapper_bin_directory().ok_or_else(|| {
         InstallerError::WrapperGeneration("could not determine bin directory".to_owned())
