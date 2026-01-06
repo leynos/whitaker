@@ -1,5 +1,3 @@
-[build]
-# Dylint lint crates link against rustc_private (rustc_driver) which ships as
-# shared libraries; preferring dynamic linkage keeps std/core/alloc from being
-# pulled in twice when building cdylibs during tests.
-rustflags = ["-C", "prefer-dynamic"]
+# NOTE: Dynamic linking for dylint lint crates is handled via RUSTFLAGS in the
+# Makefile's `test` and `typecheck` targets. Do not add workspace-wide
+# rustflags here as it would break `cargo install` for whitaker-installer.
