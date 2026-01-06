@@ -62,6 +62,10 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	$(CARGO) install --path installer --root "$$TMP_DIR" --locked; \
 	export PATH="$$TMP_DIR/bin:$$PATH"; \
+	SYSROOT=$$(rustc --print sysroot); \
+	HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}'); \
+	RUSTLIB_DIR="$$SYSROOT/lib/rustlib/$$HOST_TRIPLE/lib"; \
+	export LD_LIBRARY_PATH="$$RUSTLIB_DIR:$${LD_LIBRARY_PATH:-}"; \
 	command -v whitaker-installer >/dev/null; \
 	whitaker-installer --help >/dev/null; \
 	whitaker-installer --version >/dev/null

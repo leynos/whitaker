@@ -4,9 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
-
-PLANS.md is not present in this repository.
+Status: COMPLETE
 
 ## Purpose / Big Picture
 
@@ -19,7 +17,7 @@ existing behavioural tests still work, and `make install-smoke` succeeds while
 ## Constraints
 
 - Keep the CLI entrypoint at `installer/src/main.rs` and the binary name
-  `whitaker-installer` unchanged so tests in
+  `whitaker-installer` unchanged, so tests in
   `installer/tests/behaviour_cli.rs` keep passing.
 - Do not add new external dependencies.
 - Keep en-GB spelling in documentation updates.
@@ -45,15 +43,16 @@ existing behavioural tests still work, and `make install-smoke` succeeds while
 
 - Risk: removing the root `[[bin]]` breaks `cargo install --path .` workflows
   that assume a binary at the workspace root.
-  Severity: medium
-  Likelihood: medium
-  Mitigation: update `make install-smoke` and any documentation to use
-  `cargo install --path installer` and validate with `make install-smoke`.
-- Risk: documentation or CI scripts implicitly rely on the duplicate binary.
-  Severity: low
-  Likelihood: low
-  Mitigation: search for `cargo install --path .` and `whitaker-installer`
-  references and update as needed.
+  - Severity: medium
+  - Likelihood: medium
+  - Mitigation: update `make install-smoke` and any documentation to use
+    `cargo install --path installer` and validate with `make install-smoke`.
+- Risk: documentation or Continuous Integration (CI) scripts implicitly rely on
+  the duplicate binary.
+  - Severity: low
+  - Likelihood: low
+  - Mitigation: search for `cargo install --path .` and `whitaker-installer`
+    references and update as needed.
 
 ## Progress
 
@@ -61,24 +60,40 @@ existing behavioural tests still work, and `make install-smoke` succeeds while
 - [x] (2026-01-05 00:10Z) Inspect workspace configuration and install flow.
 - [x] (2026-01-05 00:15Z) Remove duplicate binary ownership and adjust install
   workflow.
-- [ ] Validate formatting, linting, tests, and install smoke check.
+- [x] (2026-01-06 00:40Z) Validate formatting, linting, tests, and install
+  smoke check.
+- [x] (2026-01-06 01:10Z) Address install-smoke runtime linker failure by
+  exporting the Rust sysroot library path.
+- [x] (2026-01-06 01:35Z) Revalidate formatting, linting, tests, and install
+  smoke check.
 
 ## Surprises & Discoveries
 
-None yet.
+- Observation: `make install-smoke` failed with a missing `libstd` shared
+  library when running the installed binary.
+  - Evidence: `whitaker-installer: error while loading shared libraries:
+    libstd-*.so: cannot open shared object file`.
+  - Impact: `install-smoke` must set `LD_LIBRARY_PATH` so the dynamically
+    linked standard library is discoverable.
 
 ## Decision Log
 
 - Decision: plan to make the `installer` package the sole owner of the
-  `whitaker-installer` binary and remove the root `[[bin]]` entry.
-  Rationale: the installer crate already defines the binary needed by its
-  tests; removing the root copy eliminates double compilation without changing
-  CLI behaviour.
-  Date/Author: 2026-01-05 / Codex
+  `whitaker-installer` binary and remove the root `[[bin]]` entry. Rationale:
+  the installer crate already defines the binary needed by its tests; removing
+  the root copy eliminates double compilation without changing CLI behaviour.
+  Date/Author: 2026-01-05 / Codex.
+- Decision: extend `install-smoke` to export the Rust sysroot library path when
+  running the installed binary. Rationale: `prefer-dynamic` in
+  `.cargo/config.toml` links `libstd` dynamically, so the loader needs a
+  `LD_LIBRARY_PATH` entry. Date/Author: 2026-01-06 / Codex.
 
 ## Outcomes & Retrospective
 
-Pending. This section will be updated after implementation.
+Completed. The installer binary is owned solely by the installer package, and
+`install-smoke` now installs from the installer path with the Rust sysroot
+library path exported. Validation passes via `make fmt`, `make check-fmt`,
+`make lint`, `make test`, and `make install-smoke`.
 
 ## Context and Orientation
 
@@ -88,28 +103,27 @@ Before this change, the workspace root `Cargo.toml` defined a `[[bin]]` named
 `[[bin]]` with the same name pointing at the same source file (around lines
 10-12). This caused the same binary to be compiled twice by different packages,
 which created boundary ambiguity and doc-tooling friction. The Makefile target
-  `install-smoke` used `cargo install --path . --locked`, which relied on the
-  root package exporting a binary. The installer package already contains the
-  CLI tests in `installer/tests/behaviour_cli.rs` and the library surface in
-  `installer/src/lib.rs`. The plan removes the root binary entry and updates the
-  install flow to target the installer package explicitly, using the installer
-  path for `cargo install`.
+`install-smoke` used `cargo install --path . --locked`, which relied on the
+root package exporting a binary. The installer package already contains the CLI
+tests in `installer/tests/behaviour_cli.rs` and the library surface in
+`installer/src/lib.rs`. The plan removes the root binary entry and updates the
+install flow to target the installer package explicitly, using the installer
+path for `cargo install`.
 
 ## Plan of Work
 
-Stage A: confirm the current ownership and install flow. Inspect
-`Cargo.toml`, `installer/Cargo.toml`, `Makefile`, and any documentation that
-mentions `cargo install --path .` or binary ownership. Decide whether any
-user-facing docs require updates once the root `[[bin]]` is removed.
-Validation: no code changes; knowledge of where to edit is captured in the
-plan.
+Stage A: confirm the current ownership and install flow. Inspect `Cargo.toml`,
+`installer/Cargo.toml`, `Makefile`, and any documentation that mentions
+`cargo install --path .` or binary ownership. Decide whether any user-facing
+docs require updates once the root `[[bin]]` is removed. Validation: no code
+changes; knowledge of where to edit is captured in the plan.
 
 Stage B: remove duplicate ownership. Delete the root `[[bin]]` entry and its
 comment in `Cargo.toml`. Update `make install-smoke` to install the installer
 package explicitly (for example, `cargo install --path installer --locked`),
 and update any documentation that refers to the old install flow. Validation:
-`cargo metadata --no-deps` or a quick `cargo build -p whitaker-installer` should
-show a single binary owner.
+`cargo metadata --no-deps` or a quick `cargo build -p whitaker-installer`
+should show a single binary owner.
 
 Stage C: harden and verify. Run formatting, linting, tests, and documentation
 checks using the required Makefile targets. Finish by running
@@ -131,8 +145,8 @@ checks using the required Makefile targets. Finish by running
     cargo install --path installer --root "$$TMP_DIR" --locked
 
 4) If any documentation mentions `cargo install --path .` for the installer,
-   update it to use `--package whitaker-installer` (or `--path installer`) and
-   keep paragraphs wrapped at 80 columns.
+   update it to use `--path installer` and keep paragraphs wrapped at 80
+   columns.
 
 5) Run validation commands with logs (from the repository root):
 
@@ -144,7 +158,7 @@ checks using the required Makefile targets. Finish by running
     set -o pipefail; make test 2>&1 | tee /tmp/whitaker-test.log
     set -o pipefail; make install-smoke 2>&1 | tee /tmp/whitaker-install.log
 
-   If any command fails, capture the log and stop to reassess before retrying.
+If any command fails, capture the log and stop to reassess before retrying.
 
 ## Validation and Acceptance
 
@@ -179,17 +193,26 @@ sufficient evidence for validation and troubleshooting.
 
 ## Interfaces and Dependencies
 
-- Keep the binary definition only in `installer/Cargo.toml` under `[[bin]]` with
-  name `whitaker-installer` and path `src/main.rs`.
+- Keep the binary definition only in `installer/Cargo.toml` under `[[bin]]`
+  with name `whitaker-installer` and path `src/main.rs`.
 - Do not change public CLI arguments or exit codes.
 - Do not add dependencies; use existing workspace tooling and Makefile targets.
 
 ## Revision note
 
 2026-01-05: Updated status to IN PROGRESS, marked Stage A and Stage B as
-completed, and aligned context with the new installer ownership. Remaining
-work is validation via the Makefile targets and updating this plan to COMPLETE
-once checks pass.
-2026-01-05: Adjusted install instructions to use `cargo install --path
-installer` after observing `cargo install --path .` rejects the `--package`
-flag. The remaining work stays the same.
+completed, and aligned context with the new installer ownership. Remaining work
+is validation via the Makefile targets and updating this plan to COMPLETE once
+checks pass.
+
+2026-01-05: Adjusted install instructions to use
+`cargo install --path installer` after observing `cargo install --path .`
+rejects the `--package` flag. The remaining work stays the same.
+
+2026-01-06: Marked the plan COMPLETE after validation succeeded.
+
+2026-01-06: Reopened the plan after discovering the `install-smoke` runtime
+linker failure and added the follow-up validation step.
+
+2026-01-06: Marked the plan COMPLETE after revalidation and a passing
+`install-smoke` run.
