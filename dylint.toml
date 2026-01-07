@@ -1,0 +1,13 @@
+# Whitaker lint configuration
+#
+# This file configures Whitaker's Dylint-based lints at the workspace level.
+# Lint-specific settings are grouped under tables matching the lint name.
+
+[no_std_fs_operations]
+# Crates excluded from the capability-based filesystem policy.
+#
+# The installer is the CLI entry point where ambient filesystem access begins.
+# The common crate contains test support utilities that require ambient access
+# for fixture management. The whitaker crate contains the UI test harness which
+# needs ambient access to copy compiled lint libraries during test execution.
+excluded_crates = ["whitaker_installer", "common", "whitaker"]

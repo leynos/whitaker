@@ -7,21 +7,36 @@ use crate::usage::{
 };
 use common::i18n::Localizer;
 use common::i18n::get_localizer_for_lint;
+use log::debug;
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
+use serde::Deserialize;
 use whitaker::SharedConfig;
+
+const LINT_NAME: &str = "no_std_fs_operations";
+
+/// Configuration for the `no_std_fs_operations` lint.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct NoStdFsConfig {
+    /// Crate names excluded from the lint. These crates are allowed to use
+    /// `std::fs` operations without triggering diagnostics.
+    pub excluded_crates: Vec<String>,
+}
 
 pub struct NoStdFsOperations {
     localizer: Localizer,
+    excluded: bool,
 }
 
 impl Default for NoStdFsOperations {
     fn default() -> Self {
         Self {
             localizer: Localizer::new(None),
+            excluded: false,
         }
     }
 }
@@ -34,9 +49,25 @@ dylint_linting::impl_late_lint! {
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
-    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         let shared_config = SharedConfig::load();
-        self.localizer = get_localizer_for_lint("no_std_fs_operations", shared_config.locale());
+        self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
+
+        let config = load_configuration();
+        let crate_name_sym = cx.tcx.crate_name(rustc_hir::def_id::LOCAL_CRATE);
+        let crate_name = crate_name_sym.as_str();
+
+        self.excluded = config
+            .excluded_crates
+            .iter()
+            .any(|excluded| excluded == crate_name);
+
+        if self.excluded {
+            debug!(
+                target: LINT_NAME,
+                "crate `{crate_name}` is excluded from no_std_fs_operations lint"
+            );
+        }
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
@@ -84,6 +115,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
 
 impl NoStdFsOperations {
     fn emit_optional(&self, cx: &LateContext<'_>, span: Span, usage: Option<StdFsUsage>) {
+        if self.excluded {
+            return;
+        }
         if let Some(usage) = usage {
             self.emit(cx, span, usage);
         }
@@ -117,5 +151,19 @@ impl NoStdFsOperations {
 
         let operation = format!("{label}::{method}");
         Some(StdFsUsage::new(operation, UsageCategory::Call))
+    }
+}
+
+fn load_configuration() -> NoStdFsConfig {
+    match dylint_linting::config::<NoStdFsConfig>(LINT_NAME) {
+        Ok(Some(config)) => config,
+        Ok(None) => NoStdFsConfig::default(),
+        Err(error) => {
+            debug!(
+                target: LINT_NAME,
+                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
+            );
+            NoStdFsConfig::default()
+        }
     }
 }
