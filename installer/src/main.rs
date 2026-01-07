@@ -144,8 +144,12 @@ fn ensure_whitaker_workspace(
     {
         let cwd = std::env::current_dir()
             .ok()
-            .and_then(|p| Utf8PathBuf::try_from(p).ok())
-            .unwrap_or_default();
+            .and_then(|p| Utf8PathBuf::try_from(p).ok());
+
+        let Some(cwd) = cwd else {
+            // Cannot determine cwd; skip messaging but proceed with workspace resolution
+            return ensure_workspace(dirs, !cli.no_update);
+        };
 
         match decide_workspace_action(&cwd, &clone_dir, !cli.no_update) {
             WorkspaceAction::CloneTo(dir) => {
