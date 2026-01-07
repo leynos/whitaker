@@ -31,6 +31,7 @@ rstest-bdd-macros = "0.2.0"
 tempfile = "3.19.1"
 which = "8.0.0"
 wait-timeout = "0.2.1"
+mockall = "0.13.1"
 clippy_utils = { path = "crates/clippy_utils", version = "0.1.0" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.1.0" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.1.0" }

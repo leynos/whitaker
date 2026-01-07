@@ -9,6 +9,7 @@
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
 //! - [`deps`] - Dylint tool dependency management
+//! - [`dirs`] - Directory resolution abstraction for platform-specific paths
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
 //! - [`output`] - Shell snippet generation for environment configuration
@@ -20,6 +21,7 @@
 pub mod builder;
 pub mod cli;
 pub mod deps;
+pub mod dirs;
 pub mod error;
 pub mod git;
 pub mod output;

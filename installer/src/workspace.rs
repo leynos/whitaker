@@ -3,9 +3,9 @@
 //! This module provides utilities for detecting whether the current directory
 //! is a Whitaker workspace and for resolving platform-specific clone locations.
 
+use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use std::path::PathBuf;
 
 /// Repository URL for cloning Whitaker.
 pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
@@ -61,47 +61,17 @@ pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
 /// # Examples
 ///
 /// ```no_run
+/// use whitaker_installer::dirs::SystemBaseDirs;
 /// use whitaker_installer::workspace::clone_directory;
 ///
-/// if let Some(dir) = clone_directory() {
+/// let dirs = SystemBaseDirs;
+/// if let Some(dir) = clone_directory(&dirs) {
 ///     println!("Whitaker will be cloned to: {dir}");
 /// }
 /// ```
-pub fn clone_directory() -> Option<Utf8PathBuf> {
-    dirs::data_dir()
+pub fn clone_directory(dirs: &dyn BaseDirs) -> Option<Utf8PathBuf> {
+    dirs.whitaker_data_dir()
         .and_then(|p| Utf8PathBuf::try_from(p).ok())
-        .map(|p| p.join("whitaker"))
-}
-
-/// Returns the platform-specific bin directory for wrapper scripts.
-///
-/// - Unix: `~/.local/bin`
-/// - Windows: `%LOCALAPPDATA%\whitaker\bin`
-///
-/// Returns `None` if the directory cannot be determined.
-///
-/// # Examples
-///
-/// ```no_run
-/// use whitaker_installer::workspace::wrapper_bin_directory;
-///
-/// if let Some(bin_dir) = wrapper_bin_directory() {
-///     println!("Wrapper script will be placed in: {}", bin_dir.display());
-/// }
-/// ```
-pub fn wrapper_bin_directory() -> Option<PathBuf> {
-    #[cfg(unix)]
-    {
-        dirs::home_dir().map(|h| h.join(".local").join("bin"))
-    }
-    #[cfg(windows)]
-    {
-        dirs::data_local_dir().map(|d| d.join("whitaker").join("bin"))
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        None
-    }
 }
 
 /// Describes the action needed to establish a Whitaker workspace.
@@ -170,6 +140,7 @@ pub fn decide_workspace_action(
 ///
 /// # Arguments
 ///
+/// * `dirs` - Directory resolver for platform-specific paths.
 /// * `update` - If `true` and the repository already exists, runs `git pull`.
 ///
 /// # Errors
@@ -181,16 +152,18 @@ pub fn decide_workspace_action(
 /// # Examples
 ///
 /// ```no_run
+/// use whitaker_installer::dirs::SystemBaseDirs;
 /// use whitaker_installer::workspace::ensure_workspace;
 ///
+/// let dirs = SystemBaseDirs;
 /// // Ensure workspace exists, updating if it already exists
-/// let workspace_path = ensure_workspace(true)?;
+/// let workspace_path = ensure_workspace(&dirs, true)?;
 /// println!("Workspace available at: {workspace_path}");
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
-pub fn ensure_workspace(update: bool) -> Result<Utf8PathBuf> {
+pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
-    let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
+    let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
@@ -216,23 +189,29 @@ pub fn ensure_workspace(update: bool) -> Result<Utf8PathBuf> {
 /// This is useful for dry-run mode where we want to show what would happen
 /// without actually cloning or updating the repository.
 ///
+/// # Arguments
+///
+/// * `dirs` - Directory resolver for platform-specific paths.
+///
 /// # Examples
 ///
 /// ```no_run
+/// use whitaker_installer::dirs::SystemBaseDirs;
 /// use whitaker_installer::workspace::resolve_workspace_path;
 ///
-/// let workspace_path = resolve_workspace_path()?;
+/// let dirs = SystemBaseDirs;
+/// let workspace_path = resolve_workspace_path(&dirs)?;
 /// println!("Would use workspace at: {workspace_path}");
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
-pub fn resolve_workspace_path() -> Result<Utf8PathBuf> {
+pub fn resolve_workspace_path(dirs: &dyn BaseDirs) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
 
     if is_whitaker_workspace(&cwd) {
         return Ok(cwd);
     }
 
-    clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
+    clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })
 }
@@ -248,6 +227,7 @@ fn current_dir_utf8() -> Result<Utf8PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dirs::SystemBaseDirs;
     use rstest::{fixture, rstest};
     use std::fs;
     use tempfile::TempDir;
@@ -295,10 +275,12 @@ mod tests {
     fn clone_directory_returns_some_on_supported_platforms() {
         // This test may fail on unsupported platforms, but should pass on
         // Linux, macOS, and Windows.
-        let dir = clone_directory();
+        let dirs = SystemBaseDirs;
+        let dir = clone_directory(&dirs);
         assert!(dir.is_some(), "expected clone_directory to return Some");
         assert!(
-            dir.as_ref().unwrap().as_str().contains("whitaker"),
+            dir.as_ref()
+                .is_some_and(|p| p.as_str().contains("whitaker")),
             "expected path to contain 'whitaker'"
         );
     }

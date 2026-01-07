@@ -12,6 +12,7 @@ use whitaker_installer::builder::{
 };
 use whitaker_installer::cli::Cli;
 use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
+use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::git::{clone_repository, update_repository};
 use whitaker_installer::output::{ShellSnippet, success_message};
@@ -37,9 +38,11 @@ fn main() {
 }
 
 fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
+    let dirs = SystemBaseDirs;
+
     // Dry-run mode: show what would be done without side effects
     if cli.dry_run {
-        return run_dry(cli, stderr);
+        return run_dry(cli, &dirs, stderr);
     }
 
     // Step 1: Check and install Dylint dependencies if needed
@@ -48,7 +51,7 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
     }
 
     // Step 2: Ensure workspace is available (clone if needed)
-    let workspace_root = ensure_whitaker_workspace(cli, stderr)?;
+    let workspace_root = ensure_whitaker_workspace(cli, &dirs, stderr)?;
 
     // Step 3: Resolve crates and toolchain
     let crates = resolve_requested_crates(cli)?;
@@ -70,17 +73,17 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
     if cli.skip_wrapper {
         print_shell_snippet(&staging_path, stderr);
     } else {
-        generate_and_report_wrapper(&staging_path, stderr)?;
+        generate_and_report_wrapper(&dirs, &staging_path, stderr)?;
     }
 
     Ok(())
 }
 
 /// Runs in dry-run mode, showing configuration without side effects.
-fn run_dry(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
+fn run_dry(cli: &Cli, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()> {
     use whitaker_installer::workspace::resolve_workspace_path;
 
-    let workspace_root = resolve_workspace_path()?;
+    let workspace_root = resolve_workspace_path(dirs)?;
     let crates = resolve_requested_crates(cli)?;
     let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
     let target_dir = determine_target_dir(cli.target_dir.clone())?;
@@ -119,7 +122,11 @@ fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
 }
 
 /// Ensures a Whitaker workspace is available.
-fn ensure_whitaker_workspace(cli: &Cli, stderr: &mut dyn Write) -> Result<Utf8PathBuf> {
+fn ensure_whitaker_workspace(
+    cli: &Cli,
+    dirs: &dyn BaseDirs,
+    stderr: &mut dyn Write,
+) -> Result<Utf8PathBuf> {
     use whitaker_installer::workspace::{
         WorkspaceAction, clone_directory, decide_workspace_action,
     };
@@ -129,7 +136,7 @@ fn ensure_whitaker_workspace(cli: &Cli, stderr: &mut dyn Write) -> Result<Utf8Pa
         reason: format!("current directory is not valid UTF-8: {e}"),
     })?;
 
-    let clone_dir = clone_directory().ok_or_else(|| InstallerError::WorkspaceNotFound {
+    let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
@@ -235,8 +242,12 @@ fn stage_libraries(
 }
 
 /// Generates wrapper scripts and reports the result.
-fn generate_and_report_wrapper(staging_path: &Utf8Path, stderr: &mut dyn Write) -> Result<()> {
-    let result = generate_wrapper_scripts(staging_path)?;
+fn generate_and_report_wrapper(
+    dirs: &dyn BaseDirs,
+    staging_path: &Utf8Path,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let result = generate_wrapper_scripts(dirs, staging_path)?;
 
     write_stderr_line(stderr, "");
     write_stderr_line(

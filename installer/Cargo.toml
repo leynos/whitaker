@@ -22,6 +22,7 @@ wait-timeout = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
+mockall = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

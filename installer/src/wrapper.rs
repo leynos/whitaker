@@ -3,8 +3,8 @@
 //! This module generates platform-specific scripts that set the
 //! `DYLINT_LIBRARY_PATH` environment variable and invoke `cargo dylint`.
 
+use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
-use crate::workspace::wrapper_bin_directory;
 use camino::Utf8Path;
 use std::path::Path;
 
@@ -24,6 +24,7 @@ pub struct WrapperResult {
 ///
 /// # Arguments
 ///
+/// * `dirs` - Directory resolver for platform-specific paths.
 /// * `library_path` - Path to the staged lint libraries.
 ///
 /// # Returns
@@ -38,10 +39,12 @@ pub struct WrapperResult {
 ///
 /// ```no_run
 /// use camino::Utf8Path;
+/// use whitaker_installer::dirs::SystemBaseDirs;
 /// use whitaker_installer::wrapper::generate_wrapper_scripts;
 ///
+/// let dirs = SystemBaseDirs;
 /// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
-/// let result = generate_wrapper_scripts(library_path)?;
+/// let result = generate_wrapper_scripts(&dirs, library_path)?;
 ///
 /// println!("Script created at: {}", result.script_path.display());
 /// if result.in_path {
@@ -51,8 +54,11 @@ pub struct WrapperResult {
 /// }
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
 /// ```
-pub fn generate_wrapper_scripts(library_path: &Utf8Path) -> Result<WrapperResult> {
-    let bin_dir = wrapper_bin_directory().ok_or_else(|| {
+pub fn generate_wrapper_scripts(
+    dirs: &dyn BaseDirs,
+    library_path: &Utf8Path,
+) -> Result<WrapperResult> {
+    let bin_dir = dirs.bin_dir().ok_or_else(|| {
         InstallerError::WrapperGeneration("could not determine bin directory".to_owned())
     })?;
 
