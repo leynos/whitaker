@@ -1,8 +1,10 @@
-//! Shell snippet generation for `DYLINT_LIBRARY_PATH`.
+//! Output formatting for the installer CLI.
 //!
 //! This module provides utilities to generate shell configuration snippets
-//! that users can add to their shell profile to enable Dylint library discovery.
+//! that users can add to their shell profile to enable Dylint library discovery,
+//! as well as dry-run information formatting.
 
+use crate::builder::CrateName;
 use camino::Utf8Path;
 
 /// Shell configuration snippets for different shells.
@@ -64,6 +66,62 @@ impl ShellSnippet {
 pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
     let plural = if count == 1 { "library" } else { "libraries" };
     format!("Successfully installed {count} lint {plural} to {target_dir}")
+}
+
+/// Configuration information for dry-run output.
+#[derive(Debug)]
+pub struct DryRunInfo<'a> {
+    /// Path to the workspace root.
+    pub workspace_root: &'a Utf8Path,
+    /// Toolchain channel string.
+    pub toolchain: &'a str,
+    /// Target directory for staged libraries.
+    pub target_dir: &'a Utf8Path,
+    /// Verbosity level (0 = normal, 1+ = verbose).
+    pub verbosity: u8,
+    /// Whether quiet mode is enabled.
+    pub quiet: bool,
+    /// Whether dependency installation is skipped.
+    pub skip_deps: bool,
+    /// Whether wrapper script generation is skipped.
+    pub skip_wrapper: bool,
+    /// Whether repository updates are disabled.
+    pub no_update: bool,
+    /// Optional parallel job count.
+    pub jobs: Option<usize>,
+    /// Crates to be built.
+    pub crates: &'a [CrateName],
+}
+
+impl DryRunInfo<'_> {
+    /// Format the dry-run information for display.
+    #[must_use]
+    pub fn display_text(&self) -> String {
+        let mut lines = vec![
+            "Dry run - no files will be modified".to_owned(),
+            String::new(),
+            format!("Workspace root: {}", self.workspace_root),
+            format!("Toolchain: {}", self.toolchain),
+            format!("Target directory: {}", self.target_dir),
+            format!("Verbosity level: {}", self.verbosity),
+            format!("Quiet: {}", self.quiet),
+            format!("Skip deps: {}", self.skip_deps),
+            format!("Skip wrapper: {}", self.skip_wrapper),
+            format!("No update: {}", self.no_update),
+        ];
+
+        if let Some(jobs) = self.jobs {
+            lines.push(format!("Parallel jobs: {jobs}"));
+        }
+
+        lines.push(String::new());
+        lines.push("Crates to build:".to_owned());
+        for crate_name in self.crates {
+            lines.push(format!("  - {crate_name}"));
+        }
+
+        lines.join("\n")
+    }
 }
 
 #[cfg(test)]

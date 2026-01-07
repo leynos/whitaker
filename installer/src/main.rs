@@ -15,7 +15,7 @@ use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::git::{clone_repository, update_repository};
-use whitaker_installer::output::{ShellSnippet, success_message};
+use whitaker_installer::output::{DryRunInfo, ShellSnippet, success_message};
 use whitaker_installer::stager::{Stager, default_target_dir};
 use whitaker_installer::toolchain::Toolchain;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
@@ -73,7 +73,8 @@ fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
 
     // Step 5: Generate wrapper scripts if requested
     if cli.skip_wrapper {
-        print_shell_snippet(&staging_path, stderr);
+        write_stderr_line(stderr, "");
+        write_stderr_line(stderr, ShellSnippet::new(&staging_path).display_text());
     } else {
         generate_and_report_wrapper(&dirs, &staging_path, stderr)?;
     }
@@ -90,14 +91,19 @@ fn run_dry(cli: &Cli, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()>
     let toolchain = resolve_toolchain(&workspace_root, cli.toolchain.as_deref())?;
     let target_dir = determine_target_dir(cli.target_dir.clone())?;
 
-    let context = RunContext {
-        cli,
+    let info = DryRunInfo {
         workspace_root: &workspace_root,
-        toolchain: &toolchain,
+        toolchain: toolchain.channel(),
         target_dir: &target_dir,
+        verbosity: cli.verbosity,
+        quiet: cli.quiet,
+        skip_deps: cli.skip_deps,
+        skip_wrapper: cli.skip_wrapper,
+        no_update: cli.no_update,
+        jobs: cli.jobs,
+        crates: &crates,
     };
-
-    print_dry_run_info(&context, &crates, stderr);
+    write_stderr_line(stderr, info.display_text());
     Ok(())
 }
 
@@ -273,49 +279,6 @@ fn generate_and_report_wrapper(
     }
 
     Ok(())
-}
-
-/// Prints shell snippet for manual `DYLINT_LIBRARY_PATH` setup.
-fn print_shell_snippet(staging_path: &Utf8Path, stderr: &mut dyn Write) {
-    write_stderr_line(stderr, "");
-    let snippet = ShellSnippet::new(staging_path);
-    write_stderr_line(stderr, snippet.display_text());
-}
-
-/// Prints dry run configuration information.
-fn print_dry_run_info(context: &RunContext<'_>, crates: &[CrateName], stderr: &mut dyn Write) {
-    write_stderr_line(stderr, "Dry run - no files will be modified");
-    write_stderr_line(stderr, "");
-    write_stderr_line(
-        stderr,
-        format!("Workspace root: {}", context.workspace_root),
-    );
-    write_stderr_line(
-        stderr,
-        format!("Toolchain: {}", context.toolchain.channel()),
-    );
-    write_stderr_line(stderr, format!("Target directory: {}", context.target_dir));
-    write_stderr_line(
-        stderr,
-        format!("Verbosity level: {}", context.cli.verbosity),
-    );
-    write_stderr_line(stderr, format!("Quiet: {}", context.cli.quiet));
-    write_stderr_line(stderr, format!("Skip deps: {}", context.cli.skip_deps));
-    write_stderr_line(
-        stderr,
-        format!("Skip wrapper: {}", context.cli.skip_wrapper),
-    );
-    write_stderr_line(stderr, format!("No update: {}", context.cli.no_update));
-
-    if let Some(jobs) = context.cli.jobs {
-        write_stderr_line(stderr, format!("Parallel jobs: {jobs}"));
-    }
-
-    write_stderr_line(stderr, "");
-    write_stderr_line(stderr, "Crates to build:");
-    for crate_name in crates {
-        write_stderr_line(stderr, format!("  - {crate_name}"));
-    }
 }
 
 fn build_config_for_cli(context: &RunContext<'_>) -> BuildConfig {
