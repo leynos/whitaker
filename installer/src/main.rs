@@ -38,7 +38,9 @@ fn main() {
 }
 
 fn run(cli: &Cli, stderr: &mut dyn Write) -> Result<()> {
-    let dirs = SystemBaseDirs;
+    let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
+        reason: "could not determine platform directories".to_owned(),
+    })?;
 
     // Dry-run mode: show what would be done without side effects
     if cli.dry_run {

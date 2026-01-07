@@ -3,7 +3,8 @@
 //! This module provides a trait-based abstraction over directory resolution,
 //! enabling dependency injection for testing. The [`BaseDirs`] trait defines
 //! the interface for resolving platform-specific directories, while
-//! [`SystemBaseDirs`] provides the real implementation using the `dirs` crate.
+//! [`SystemBaseDirs`] provides the real implementation using the
+//! `directories-next` crate.
 //!
 //! # Testing
 //!
@@ -23,7 +24,7 @@ use std::path::PathBuf;
 /// ```no_run
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 ///
-/// let dirs = SystemBaseDirs;
+/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
 /// if let Some(bin_dir) = dirs.bin_dir() {
 ///     println!("Executables go in: {}", bin_dir.display());
 /// }
@@ -36,76 +37,70 @@ pub trait BaseDirs {
     /// - Windows: `%USERPROFILE%` or `C:\Users\<user>`
     fn home_dir(&self) -> Option<PathBuf>;
 
-    /// Returns the platform-specific data directory.
-    ///
-    /// - Linux: `~/.local/share`
-    /// - macOS: `~/Library/Application Support`
-    /// - Windows: `%LOCALAPPDATA%`
-    fn data_dir(&self) -> Option<PathBuf>;
-
-    /// Returns the platform-specific local data directory.
-    ///
-    /// On most platforms this is the same as `data_dir()`, but on Windows
-    /// this specifically returns `%LOCALAPPDATA%`.
-    fn data_local_dir(&self) -> Option<PathBuf>;
-
     /// Returns the directory for user executables.
     ///
-    /// - Unix: `~/.local/bin`
-    /// - Windows: `%LOCALAPPDATA%\whitaker\bin`
+    /// Returns `~/.local/bin` on all platforms. This follows the XDG Base
+    /// Directory Specification convention, providing a consistent location
+    /// for user-installed executables across platforms.
     fn bin_dir(&self) -> Option<PathBuf> {
-        #[cfg(unix)]
-        {
-            self.home_dir().map(|h| h.join(".local").join("bin"))
-        }
-        #[cfg(windows)]
-        {
-            self.data_local_dir()
-                .map(|d| d.join("whitaker").join("bin"))
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            None
-        }
+        self.home_dir().map(|h| h.join(".local").join("bin"))
     }
 
     /// Returns the directory for cloning the Whitaker repository.
     ///
-    /// This is `<data_dir>/whitaker` on all platforms.
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        self.data_dir().map(|d| d.join("whitaker"))
-    }
+    /// - Linux: `~/.local/share/whitaker`
+    /// - macOS: `~/Library/Application Support/whitaker`
+    /// - Windows: `%LOCALAPPDATA%\whitaker`
+    fn whitaker_data_dir(&self) -> Option<PathBuf>;
 }
 
-/// Real implementation of [`BaseDirs`] using the `dirs` crate.
+/// Real implementation of [`BaseDirs`] using the `directories-next` crate.
 ///
 /// This implementation resolves actual platform-specific directories
-/// and should be used in production code.
+/// and should be used in production code. It wraps `directories_next::UserDirs`
+/// and `directories_next::ProjectDirs` to provide consistent cross-platform
+/// directory resolution.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 ///
-/// let dirs = SystemBaseDirs;
+/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
 /// let data_dir = dirs.whitaker_data_dir()
 ///     .expect("could not determine data directory");
 /// println!("Whitaker data at: {}", data_dir.display());
 /// ```
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SystemBaseDirs;
+#[derive(Debug, Clone)]
+pub struct SystemBaseDirs {
+    user_dirs: directories_next::UserDirs,
+    project_dirs: directories_next::ProjectDirs,
+}
+
+impl SystemBaseDirs {
+    /// Creates a new `SystemBaseDirs` instance.
+    ///
+    /// Returns `None` if the platform's directory conventions cannot be
+    /// determined (e.g., on unsupported platforms or when environment
+    /// variables are not set correctly).
+    #[must_use]
+    pub fn new() -> Option<Self> {
+        let user_dirs = directories_next::UserDirs::new()?;
+        let project_dirs = directories_next::ProjectDirs::from("", "", "whitaker")?;
+        Some(Self {
+            user_dirs,
+            project_dirs,
+        })
+    }
+}
 
 impl BaseDirs for SystemBaseDirs {
     fn home_dir(&self) -> Option<PathBuf> {
-        dirs::home_dir()
+        Some(self.user_dirs.home_dir().to_owned())
     }
 
-    fn data_dir(&self) -> Option<PathBuf> {
-        dirs::data_dir()
-    }
-
-    fn data_local_dir(&self) -> Option<PathBuf> {
-        dirs::data_local_dir()
+    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+        Some(self.project_dirs.data_dir().to_owned())
     }
 }
 
@@ -115,26 +110,17 @@ mod tests {
 
     #[test]
     fn system_base_dirs_returns_some_on_supported_platforms() {
-        let dirs = SystemBaseDirs;
+        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
 
-        // These should return Some on Linux, macOS, and Windows
         assert!(
             dirs.home_dir().is_some(),
             "expected home_dir to return Some"
-        );
-        assert!(
-            dirs.data_dir().is_some(),
-            "expected data_dir to return Some"
-        );
-        assert!(
-            dirs.data_local_dir().is_some(),
-            "expected data_local_dir to return Some"
         );
     }
 
     #[test]
     fn whitaker_data_dir_contains_whitaker() {
-        let dirs = SystemBaseDirs;
+        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
         let data_dir = dirs.whitaker_data_dir();
 
         assert!(
@@ -149,18 +135,17 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
-    fn bin_dir_is_local_bin_on_unix() {
-        let dirs = SystemBaseDirs;
+    fn bin_dir_is_local_bin() {
+        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
         let bin_dir = dirs.bin_dir();
 
         assert!(bin_dir.is_some(), "expected bin_dir to return Some");
         assert!(
             bin_dir
                 .as_ref()
-                .is_some_and(|p| p.to_string_lossy().contains(".local/bin")),
-            "expected path to contain '.local/bin'"
+                .is_some_and(|p| p.to_string_lossy().contains(".local")),
+            "expected path to contain '.local'"
         );
     }
 }

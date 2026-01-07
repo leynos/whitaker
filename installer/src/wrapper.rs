@@ -39,10 +39,10 @@ pub struct WrapperResult {
 ///
 /// ```no_run
 /// use camino::Utf8Path;
-/// use whitaker_installer::dirs::SystemBaseDirs;
+/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 /// use whitaker_installer::wrapper::generate_wrapper_scripts;
 ///
-/// let dirs = SystemBaseDirs;
+/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
 /// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
 /// let result = generate_wrapper_scripts(&dirs, library_path)?;
 ///

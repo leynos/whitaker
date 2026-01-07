@@ -61,10 +61,10 @@ pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
 /// # Examples
 ///
 /// ```no_run
-/// use whitaker_installer::dirs::SystemBaseDirs;
+/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 /// use whitaker_installer::workspace::clone_directory;
 ///
-/// let dirs = SystemBaseDirs;
+/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
 /// if let Some(dir) = clone_directory(&dirs) {
 ///     println!("Whitaker will be cloned to: {dir}");
 /// }
@@ -152,10 +152,10 @@ pub fn decide_workspace_action(
 /// # Examples
 ///
 /// ```no_run
-/// use whitaker_installer::dirs::SystemBaseDirs;
+/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 /// use whitaker_installer::workspace::ensure_workspace;
 ///
-/// let dirs = SystemBaseDirs;
+/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
 /// // Ensure workspace exists, updating if it already exists
 /// let workspace_path = ensure_workspace(&dirs, true)?;
 /// println!("Workspace available at: {workspace_path}");
@@ -196,10 +196,10 @@ pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf
 /// # Examples
 ///
 /// ```no_run
-/// use whitaker_installer::dirs::SystemBaseDirs;
+/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 /// use whitaker_installer::workspace::resolve_workspace_path;
 ///
-/// let dirs = SystemBaseDirs;
+/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
 /// let workspace_path = resolve_workspace_path(&dirs)?;
 /// println!("Would use workspace at: {workspace_path}");
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
@@ -275,7 +275,7 @@ mod tests {
     fn clone_directory_returns_some_on_supported_platforms() {
         // This test may fail on unsupported platforms, but should pass on
         // Linux, macOS, and Windows.
-        let dirs = SystemBaseDirs;
+        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
         let dir = clone_directory(&dirs);
         assert!(dir.is_some(), "expected clone_directory to return Some");
         assert!(
