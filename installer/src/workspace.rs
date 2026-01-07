@@ -227,9 +227,10 @@ fn current_dir_utf8() -> Result<Utf8PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dirs::SystemBaseDirs;
+    use crate::dirs::{MockBaseDirs, SystemBaseDirs};
     use rstest::{fixture, rstest};
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// A temporary directory converted to a UTF-8 path for workspace tests.
@@ -322,5 +323,64 @@ mod tests {
         let action = decide_workspace_action(&temp_workspace.path, &clone_dir, false);
 
         assert_eq!(action, WorkspaceAction::UseExisting(clone_dir));
+    }
+
+    // -------------------------------------------------------------------------
+    // Behavioural tests for workspace orchestration with mocked dependencies
+    // -------------------------------------------------------------------------
+
+    fn mock_dirs_returning(data_dir: Option<PathBuf>) -> MockBaseDirs {
+        let mut mock = MockBaseDirs::new();
+        mock.expect_whitaker_data_dir().return_const(data_dir);
+        mock
+    }
+
+    #[rstest]
+    fn resolve_workspace_path_returns_clone_dir_when_not_in_workspace(
+        temp_workspace: TempWorkspace,
+    ) {
+        // Mock returns a data directory inside temp workspace
+        let expected_dir = temp_workspace.path.join("data").join("whitaker");
+        let mock = mock_dirs_returning(Some(expected_dir.clone().into_std_path_buf()));
+
+        let result = resolve_workspace_path(&mock);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected_dir);
+    }
+
+    #[rstest]
+    fn resolve_workspace_path_errors_when_data_dir_unavailable(temp_workspace: TempWorkspace) {
+        let _ = temp_workspace; // Ensure fixture is used
+        let mock = mock_dirs_returning(None);
+
+        let result = resolve_workspace_path(&mock);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, InstallerError::WorkspaceNotFound { .. }),
+            "expected WorkspaceNotFound error, got: {err:?}"
+        );
+    }
+
+    #[rstest]
+    fn clone_directory_returns_none_when_data_dir_unavailable() {
+        let mock = mock_dirs_returning(None);
+
+        let result = clone_directory(&mock);
+
+        assert!(result.is_none());
+    }
+
+    #[rstest]
+    fn clone_directory_returns_path_from_mock(temp_workspace: TempWorkspace) {
+        let expected_dir = temp_workspace.path.join("data").join("whitaker");
+        let mock = mock_dirs_returning(Some(expected_dir.clone().into_std_path_buf()));
+
+        let result = clone_directory(&mock);
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), expected_dir);
     }
 }
