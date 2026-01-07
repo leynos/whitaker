@@ -95,21 +95,27 @@ struct AttrInfo {
 impl AttrInfo {
     /// Try to create attribute info from an HIR attribute.
     ///
-    /// Returns `None` for compiler-generated attributes that don't have source
-    /// spans (e.g., inline hints from derive macros).
+    /// Returns `None` for compiler-generated attributes that don't correspond
+    /// to user-written code (e.g., inline hints from derive macros).
     ///
     /// # Behaviour
     ///
-    /// Only `Unparsed` and `DocComment` attributes have accessible spans.
-    /// Other `Parsed` variants (Inline, Coverage, MustUse, etc.) would panic
-    /// if we tried to call `.span()` on them, so we skip them entirely.
+    /// User-written attributes are represented as `Unparsed` (regular attributes
+    /// like `#[inline]` or `#[allow(...)]`) or `DocComment` (doc comments like
+    /// `///` or `//!`). These have source spans pointing to actual code locations
+    /// and are processed by this lint.
+    ///
+    /// Other `Parsed` variants (Inline, Coverage, MustUse, etc.) represent
+    /// compiler-internal information derived from user attributes or generated
+    /// by macros. These don't have source spans corresponding to user-written
+    /// code and would produce misleading diagnostics if included, so we filter
+    /// them out.
     ///
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
     fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        // Extract span safely based on attribute variant.
-        // Only Unparsed and DocComment attributes have accessible spans;
-        // other Parsed variants (Inline, Coverage, MustUse, etc.) would panic.
+        // User-written attributes are Unparsed or DocComment; other Parsed
+        // variants are compiler-internal and lack meaningful source locations.
         let span = match attr {
             hir::Attribute::Unparsed(item) => item.span,
             hir::Attribute::Parsed(AttributeKind::DocComment { span, .. }) => *span,
