@@ -107,44 +107,32 @@ fn get_output(world: &WorkflowWorld) -> std::cell::Ref<'_, Output> {
 // Step definitions
 // ---------------------------------------------------------------------------
 
-/// Constructs dry-run CLI arguments with the specified flag appended.
-fn dry_run_args_with_flag(channel: String, flag: &str) -> Vec<String> {
-    vec![
+fn given_dry_run_with_flag(world: &WorkflowWorld, flag: &str) {
+    let Some(channel) = ensure_required_toolchain_available(world) else {
+        return;
+    };
+
+    world.args.replace(vec![
         "--dry-run".to_owned(),
         "--toolchain".to_owned(),
         channel,
         flag.to_owned(),
-    ]
+    ]);
 }
 
 #[given("the installer is invoked with dry-run and skip-deps")]
 fn given_dry_run_skip_deps(world: &WorkflowWorld) {
-    let Some(channel) = ensure_required_toolchain_available(world) else {
-        return;
-    };
-    world
-        .args
-        .replace(dry_run_args_with_flag(channel, "--skip-deps"));
+    given_dry_run_with_flag(world, "--skip-deps");
 }
 
 #[given("the installer is invoked with dry-run and no-update")]
 fn given_dry_run_no_update(world: &WorkflowWorld) {
-    let Some(channel) = ensure_required_toolchain_available(world) else {
-        return;
-    };
-    world
-        .args
-        .replace(dry_run_args_with_flag(channel, "--no-update"));
+    given_dry_run_with_flag(world, "--no-update");
 }
 
 #[given("the installer is invoked with dry-run and skip-wrapper")]
 fn given_dry_run_skip_wrapper(world: &WorkflowWorld) {
-    let Some(channel) = ensure_required_toolchain_available(world) else {
-        return;
-    };
-    world
-        .args
-        .replace(dry_run_args_with_flag(channel, "--skip-wrapper"));
+    given_dry_run_with_flag(world, "--skip-wrapper");
 }
 
 #[given("the installer is invoked with skip-wrapper to a temporary directory")]
