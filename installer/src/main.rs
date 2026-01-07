@@ -267,9 +267,11 @@ fn generate_and_report_wrapper(
     } else {
         write_stderr_line(stderr, "");
         // The script path is constructed via bin_dir.join("whitaker"), so parent()
-        // should always return the bin directory. Handle the theoretical None case
-        // gracefully by falling back to the script path itself.
-        let bin_dir = result.script_path.parent().unwrap_or(&result.script_path);
+        // always returns the bin directory.
+        let bin_dir = result
+            .script_path
+            .parent()
+            .expect("wrapper script path always has a parent directory");
         let instructions = path_instructions(bin_dir);
         write_stderr_line(stderr, instructions);
         write_stderr_line(stderr, "");
