@@ -13,6 +13,7 @@ use common::i18n::{I18nError, resolve_message_set};
 use rustc_ast::AttrStyle;
 use rustc_ast::attr::AttributeExt;
 use rustc_hir as hir;
+use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
@@ -95,33 +96,32 @@ impl AttrInfo {
     /// Try to create attribute info from an HIR attribute.
     ///
     /// Returns `None` for compiler-generated attributes that don't have source
-    /// spans (e.g., inline hints from derive macros), which would panic if we
-    /// tried to access their span.
+    /// spans (e.g., inline hints from derive macros).
     ///
     /// # Behaviour
     ///
-    /// User-written attributes (`#[inline]`, `#[allow]`, etc.) are processed
-    /// normally. Compiler-generated attributes (from derive macros) are detected
-    /// via:
-    /// 1. Catching panics from span access on malformed attributes
-    /// 2. Filtering out dummy spans (sentinel value for generated code)
+    /// Only `Unparsed` and `DocComment` attributes have accessible spans.
+    /// Other `Parsed` variants (Inline, Coverage, MustUse, etc.) would panic
+    /// if we tried to call `.span()` on them, so we skip them entirely.
     ///
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
     fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        use std::panic::{AssertUnwindSafe, catch_unwind};
-
-        let is_doc = attr.doc_str().is_some();
-
-        // Compiler-generated attributes (like inline hints from derive macros)
-        // may panic when accessing their span. Catch such failures gracefully.
-        let span = catch_unwind(AssertUnwindSafe(|| attr.span())).ok()?;
+        // Extract span safely based on attribute variant.
+        // Only Unparsed and DocComment attributes have accessible spans;
+        // other Parsed variants (Inline, Coverage, MustUse, etc.) would panic.
+        let span = match attr {
+            hir::Attribute::Unparsed(item) => item.span,
+            hir::Attribute::Parsed(AttributeKind::DocComment { span, .. }) => *span,
+            hir::Attribute::Parsed(_) => return None,
+        };
 
         // Dummy spans indicate compiler-generated code without source location.
         if span.is_dummy() {
             return None;
         }
 
+        let is_doc = attr.doc_str().is_some();
         let is_outer = attr
             .doc_resolution_scope()
             .is_none_or(|style| matches!(style, AttrStyle::Outer));
