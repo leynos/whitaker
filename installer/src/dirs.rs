@@ -13,6 +13,14 @@
 
 use std::path::PathBuf;
 
+/// Returns the XDG bin home directory if set and absolute.
+#[cfg(unix)]
+fn xdg_bin_home() -> Option<PathBuf> {
+    std::env::var_os("XDG_BIN_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+}
+
 /// Abstraction for resolving platform-specific base directories.
 ///
 /// This trait enables dependency injection for directory resolution,
@@ -39,12 +47,10 @@ pub trait BaseDirs {
 
     /// Returns the directory for user executables.
     ///
-    /// Returns `~/.local/bin` on all platforms. This follows the XDG Base
-    /// Directory Specification convention, providing a consistent location
-    /// for user-installed executables across platforms.
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.home_dir().map(|h| h.join(".local").join("bin"))
-    }
+    /// On Unix, respects `XDG_BIN_HOME` if set, otherwise falls back to
+    /// `~/.local/bin`. On Windows, returns `~/.local/bin`. This follows the
+    /// XDG Base Directory Specification convention.
+    fn bin_dir(&self) -> Option<PathBuf>;
 
     /// Returns the directory for cloning the Whitaker repository.
     ///
@@ -99,6 +105,14 @@ impl BaseDirs for SystemBaseDirs {
         Some(self.user_dirs.home_dir().to_owned())
     }
 
+    fn bin_dir(&self) -> Option<PathBuf> {
+        #[cfg(unix)]
+        if let Some(path) = xdg_bin_home() {
+            return Some(path);
+        }
+        self.home_dir().map(|h| h.join(".local").join("bin"))
+    }
+
     fn whitaker_data_dir(&self) -> Option<PathBuf> {
         Some(self.project_dirs.data_dir().to_owned())
     }
@@ -136,16 +150,45 @@ mod tests {
     }
 
     #[test]
-    fn bin_dir_is_local_bin() {
-        let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
-        let bin_dir = dirs.bin_dir();
+    fn bin_dir_defaults_to_local_bin() {
+        // Temporarily unset XDG_BIN_HOME to test the fallback
+        temp_env::with_var_unset("XDG_BIN_HOME", || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+            let bin_dir = dirs.bin_dir();
 
-        assert!(bin_dir.is_some(), "expected bin_dir to return Some");
-        assert!(
-            bin_dir
-                .as_ref()
-                .is_some_and(|p| p.to_string_lossy().contains(".local")),
-            "expected path to contain '.local'"
-        );
+            assert!(bin_dir.is_some(), "expected bin_dir to return Some");
+            assert!(
+                bin_dir
+                    .as_ref()
+                    .is_some_and(|p| p.to_string_lossy().contains(".local")),
+                "expected path to contain '.local'"
+            );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bin_dir_respects_xdg_bin_home() {
+        temp_env::with_var("XDG_BIN_HOME", Some("/custom/bin"), || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+            let bin_dir = dirs.bin_dir().expect("expected bin_dir to return Some");
+
+            assert_eq!(bin_dir, PathBuf::from("/custom/bin"));
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bin_dir_ignores_relative_xdg_bin_home() {
+        temp_env::with_var("XDG_BIN_HOME", Some("relative/path"), || {
+            let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
+            let bin_dir = dirs.bin_dir().expect("expected bin_dir to return Some");
+
+            // Should fall back to ~/.local/bin since XDG_BIN_HOME is relative
+            assert!(
+                bin_dir.to_string_lossy().contains(".local"),
+                "expected path to contain '.local' when XDG_BIN_HOME is relative"
+            );
+        });
     }
 }
