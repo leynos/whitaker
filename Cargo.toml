@@ -14,7 +14,7 @@ whitaker-installer = { path = "installer", version = "0.1.0" }
 camino = "1.2.1"
 cargo_metadata = "0.23.0"
 clap = "4.5.38"
-dirs = "6.0.0"
+directories-next = "2.0.0"
 dylint_linting = "5"
 dylint_testing = "5"
 libc = "0.2"
@@ -28,7 +28,11 @@ log = "0.4.28"
 rstest = "0.26.1"
 rstest-bdd = "0.2.0"
 rstest-bdd-macros = "0.2.0"
+temp-env = "0.3.6"
 tempfile = "3.19.1"
+which = "8.0.0"
+wait-timeout = "0.2.1"
+mockall = "0.13.1"
 clippy_utils = { path = "crates/clippy_utils", version = "0.1.0" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.1.0" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.1.0" }
@@ -37,12 +41,6 @@ rustc_lint = { path = "crates/rustc_lint", version = "0.1.0" }
 rustc_middle = { path = "crates/rustc_middle", version = "0.1.0" }
 rustc_session = { path = "crates/rustc_session", version = "0.1.0" }
 rustc_span = { path = "crates/rustc_span", version = "0.1.0" }
-
-[workspace.metadata.dylint]
-libraries = [
-    { git = "https://github.com/leynos/whitaker", pattern = "crates/*" },
-    { git = "https://github.com/leynos/whitaker", pattern = "suite" },
-]
 
 [package]
 name = "whitaker"

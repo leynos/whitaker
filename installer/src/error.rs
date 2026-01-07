@@ -90,6 +90,28 @@ pub enum InstallerError {
     /// An I/O operation failed.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Git clone or update operation failed.
+    #[error("git {operation} failed: {message}")]
+    Git {
+        /// The git operation that failed (clone, pull, etc.).
+        operation: &'static str,
+        /// Description of the failure.
+        message: String,
+    },
+
+    /// Required tool installation failed.
+    #[error("failed to install {tool}: {message}")]
+    DependencyInstall {
+        /// Name of the tool that failed to install.
+        tool: &'static str,
+        /// Description of the installation failure.
+        message: String,
+    },
+
+    /// Wrapper script generation failed.
+    #[error("wrapper script generation failed: {0}")]
+    WrapperGeneration(String),
 }
 
 /// Result type alias using [`InstallerError`].
@@ -118,5 +140,34 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("module_max_lines"));
         assert!(msg.contains("compilation error"));
+    }
+
+    #[test]
+    fn git_error_includes_operation_and_message() {
+        let err = InstallerError::Git {
+            operation: "clone",
+            message: "network error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("clone"));
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn dependency_install_error_includes_tool_name() {
+        let err = InstallerError::DependencyInstall {
+            tool: "cargo-dylint",
+            message: "network error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("cargo-dylint"));
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn wrapper_generation_error_includes_message() {
+        let err = InstallerError::WrapperGeneration("permission denied".to_owned());
+        let msg = err.to_string();
+        assert!(msg.contains("permission denied"));
     }
 }

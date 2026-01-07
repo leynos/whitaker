@@ -13,6 +13,7 @@ use common::i18n::{I18nError, resolve_message_set};
 use rustc_ast::AttrStyle;
 use rustc_ast::attr::AttributeExt;
 use rustc_hir as hir;
+use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
@@ -92,18 +93,50 @@ struct AttrInfo {
 }
 
 impl AttrInfo {
-    fn from_hir(attr: &hir::Attribute) -> Self {
-        let span = attr.span();
+    /// Try to create attribute info from an HIR attribute.
+    ///
+    /// Returns `None` for compiler-generated attributes that don't correspond
+    /// to user-written code (e.g., inline hints from derive macros).
+    ///
+    /// # Behaviour
+    ///
+    /// User-written attributes are represented as `Unparsed` (regular attributes
+    /// like `#[inline]` or `#[allow(...)]`) or `DocComment` (doc comments like
+    /// `///` or `//!`). These have source spans pointing to actual code locations
+    /// and are processed by this lint.
+    ///
+    /// Other `Parsed` variants (Inline, Coverage, MustUse, etc.) represent
+    /// compiler-internal information derived from user attributes or generated
+    /// by macros. These don't have source spans corresponding to user-written
+    /// code and would produce misleading diagnostics if included, so we filter
+    /// them out.
+    ///
+    /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
+    /// compiler-generated attribute handling.
+    fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
+        // User-written attributes are Unparsed or DocComment; other Parsed
+        // variants are compiler-internal and lack meaningful source locations.
+        let span = match attr {
+            hir::Attribute::Unparsed(item) => item.span,
+            hir::Attribute::Parsed(AttributeKind::DocComment { span, .. }) => *span,
+            hir::Attribute::Parsed(_) => return None,
+        };
+
+        // Dummy spans indicate compiler-generated code without source location.
+        if span.is_dummy() {
+            return None;
+        }
+
         let is_doc = attr.doc_str().is_some();
         let is_outer = attr
             .doc_resolution_scope()
             .is_none_or(|style| matches!(style, AttrStyle::Outer));
 
-        Self {
+        Some(Self {
             span,
             is_doc,
             is_outer,
-        }
+        })
     }
 }
 
@@ -127,7 +160,7 @@ fn check_function_attributes(
     kind: FunctionKind,
     localizer: &Localizer,
 ) {
-    let infos: Vec<AttrInfo> = attrs.iter().map(AttrInfo::from_hir).collect();
+    let infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;

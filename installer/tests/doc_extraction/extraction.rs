@@ -6,20 +6,24 @@
 
 use std::sync::LazyLock;
 
-/// Path to the user guide relative to the workspace root.
-pub const USERS_GUIDE_PATH: &str = "docs/users-guide.md";
+/// Paths to documentation files relative to the workspace root.
+const DOC_PATHS: &[&str] = &["docs/users-guide.md", "docs/developers-guide.md"];
 
-/// Extracted TOML code blocks from the user guide, loaded once at test startup.
+/// Extracted TOML code blocks from documentation, loaded once at test startup.
 pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let workspace_root = std::path::Path::new(manifest_dir)
         .parent()
         .expect("installer crate should be in workspace");
-    let guide_path = workspace_root.join(USERS_GUIDE_PATH);
 
-    let content = std::fs::read_to_string(&guide_path).expect("failed to read users-guide.md");
-
-    extract_toml_blocks(&content)
+    let mut all_blocks = Vec::new();
+    for path in DOC_PATHS {
+        let guide_path = workspace_root.join(path);
+        let content = std::fs::read_to_string(&guide_path)
+            .unwrap_or_else(|_| panic!("failed to read {path}"));
+        all_blocks.extend(extract_toml_blocks(&content));
+    }
+    all_blocks
 });
 
 /// Process a single line within a TOML code block, accumulating non-comment lines.
@@ -140,7 +144,7 @@ key = "value"
         // Verify the lazy static loaded successfully
         assert!(
             !DOC_TOML_BLOCKS.is_empty(),
-            "expected TOML blocks from users-guide.md"
+            "expected TOML blocks from documentation"
         );
     }
 }

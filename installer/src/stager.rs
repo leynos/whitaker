@@ -118,14 +118,16 @@ impl Stager {
 
 /// Return the default staging directory for the current platform.
 ///
-/// The base directory comes from `dirs::data_local_dir()`, which resolves to a
-/// per-user, platform-specific local data directory (for example,
+/// Uses the `directories-next` crate to locate the platform-specific local data
+/// directory. This function creates a `directories_next::BaseDirs` instance and
+/// calls its `data_local_dir()` method to obtain the base path (for example,
 /// `~/.local/share` on many Linux distributions, `~/Library/Application Support`
 /// on macOS, and the Local AppData directory on Windows). The installer appends
 /// `dylint/lib` under that directory.
 #[must_use]
 pub fn default_target_dir() -> Option<Utf8PathBuf> {
-    dirs::data_local_dir()
+    directories_next::BaseDirs::new()
+        .map(|dirs| dirs.data_local_dir().to_owned())
         .and_then(|p| Utf8PathBuf::try_from(p).ok())
         .map(|p| p.join("dylint").join("lib"))
 }

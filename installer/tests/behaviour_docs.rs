@@ -47,12 +47,13 @@ fn given_suite_only_metadata(toml_world: &TomlWorld) {
 
 #[given("a workspace metadata example for individual crates")]
 fn given_individual_crates_metadata(toml_world: &TomlWorld) {
-    // Matches the Quick Setup example with pattern = "crates/*"
-    // Use the first block with this pattern (Quick Setup section)
+    // Matches the individual crates example showing explicit lint patterns
     let block = DOC_TOML_BLOCKS
         .iter()
         .find(|b| {
-            b.contains(r#"pattern = "crates/*""#) && !b.contains("tag =") && !b.contains("rev =")
+            b.contains(r#"pattern = "crates/module_max_lines""#)
+                && !b.contains("tag =")
+                && !b.contains("rev =")
         })
         .expect("no individual crates TOML block found")
         .clone();
@@ -161,6 +162,19 @@ fn then_libraries_pattern_is(toml_world: &TomlWorld, expected: String) {
     let pattern = get_library_string_field(table, "pattern");
 
     assert_eq!(pattern, expected);
+}
+
+#[then("the libraries pattern starts with {prefix}")]
+fn then_libraries_pattern_starts_with(toml_world: &TomlWorld, prefix: String) {
+    let parsed = toml_world.parsed.borrow();
+    let table = parsed.as_ref().expect("expected parsed TOML");
+
+    let pattern = get_library_string_field(table, "pattern");
+
+    assert!(
+        pattern.starts_with(&prefix),
+        "expected pattern to start with '{prefix}', got '{pattern}'"
+    );
 }
 
 #[then("the tag field is present")]

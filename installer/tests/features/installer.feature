@@ -79,3 +79,27 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then installation succeeds or is skipped
     And the suite library is staged
+
+  Scenario: Dry-run with skip-deps flag
+    Given the installer is invoked with dry-run and skip-deps
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And dry-run output shows skip_deps is true
+
+  Scenario: Dry-run with no-update flag
+    Given the installer is invoked with dry-run and no-update
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And dry-run output shows no_update is true
+
+  Scenario: Dry-run with skip-wrapper flag
+    Given the installer is invoked with dry-run and skip-wrapper
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And dry-run output shows skip_wrapper is true
+
+  Scenario: Install with skip-wrapper outputs shell snippet
+    Given the installer is invoked with skip-wrapper to a temporary directory
+    When the installer CLI is run
+    Then installation succeeds or is skipped
+    And output includes DYLINT_LIBRARY_PATH instructions
