@@ -255,20 +255,18 @@ mod tests {
     }
 
     #[rstest]
-    fn is_whitaker_workspace_returns_true_for_whitaker(temp_workspace: TempWorkspace) {
-        write_cargo_toml(&temp_workspace.path, "whitaker");
-        assert!(is_whitaker_workspace(&temp_workspace.path));
-    }
-
-    #[rstest]
-    fn is_whitaker_workspace_returns_false_for_other_project(temp_workspace: TempWorkspace) {
-        write_cargo_toml(&temp_workspace.path, "other-project");
-        assert!(!is_whitaker_workspace(&temp_workspace.path));
-    }
-
-    #[rstest]
-    fn is_whitaker_workspace_returns_false_for_empty_dir(temp_workspace: TempWorkspace) {
-        assert!(!is_whitaker_workspace(&temp_workspace.path));
+    #[case::whitaker_project(Some("whitaker"), true)]
+    #[case::other_project(Some("other-project"), false)]
+    #[case::empty_dir(None, false)]
+    fn is_whitaker_workspace_detection(
+        temp_workspace: TempWorkspace,
+        #[case] package_name: Option<&str>,
+        #[case] expected: bool,
+    ) {
+        if let Some(name) = package_name {
+            write_cargo_toml(&temp_workspace.path, name);
+        }
+        assert_eq!(is_whitaker_workspace(&temp_workspace.path), expected);
     }
 
     #[test]

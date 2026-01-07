@@ -69,6 +69,35 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 }
 
 /// Configuration information for dry-run output.
+///
+/// # Example
+///
+/// ```
+/// use camino::Utf8PathBuf;
+/// use whitaker_installer::builder::CrateName;
+/// use whitaker_installer::output::DryRunInfo;
+///
+/// let workspace = Utf8PathBuf::from("/home/user/whitaker");
+/// let target = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
+/// let crates = vec![CrateName::from("suite")];
+///
+/// let info = DryRunInfo {
+///     workspace_root: &workspace,
+///     toolchain: "nightly-2025-01-15",
+///     target_dir: &target,
+///     verbosity: 0,
+///     quiet: false,
+///     skip_deps: false,
+///     skip_wrapper: false,
+///     no_update: false,
+///     jobs: None,
+///     crates: &crates,
+/// };
+///
+/// let output = info.display_text();
+/// assert!(output.contains("Dry run"));
+/// assert!(output.contains("suite"));
+/// ```
 #[derive(Debug)]
 pub struct DryRunInfo<'a> {
     /// Path to the workspace root.

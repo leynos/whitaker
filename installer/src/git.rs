@@ -71,6 +71,9 @@ pub fn update_repository(repo: &Utf8Path) -> Result<()> {
 ///
 /// Returns the command output if it completes within the timeout, or an error
 /// if the command times out or fails to start.
+///
+/// Spawns threads to read stdout and stderr concurrently to avoid potential
+/// deadlocks if the child process produces large output that fills OS buffers.
 fn run_git_with_timeout(
     args: &[&str],
     working_dir: Option<&Utf8Path>,
@@ -85,20 +88,41 @@ fn run_git_with_timeout(
 
     let mut child = cmd.spawn()?;
 
+    // Take ownership of pipes before spawning threads to avoid blocking.
+    // If either pipe is missing, use empty readers.
+    let stdout_pipe = child.stdout.take();
+    let stderr_pipe = child.stderr.take();
+
+    // Spawn threads to read pipes concurrently whilst the process runs.
+    let stdout_thread = std::thread::spawn(move || -> std::io::Result<String> {
+        stdout_pipe
+            .map(std::io::read_to_string)
+            .transpose()
+            .map(|opt| opt.unwrap_or_default())
+    });
+    let stderr_thread = std::thread::spawn(move || -> std::io::Result<String> {
+        stderr_pipe
+            .map(std::io::read_to_string)
+            .transpose()
+            .map(|opt| opt.unwrap_or_default())
+    });
+
     match child.wait_timeout(GIT_TIMEOUT)? {
         Some(status) => {
-            // Command completed within timeout - collect output
-            let stdout = child
-                .stdout
-                .take()
-                .map(std::io::read_to_string)
-                .transpose()?
+            // Command completed within timeout - collect output from threads
+            let stdout = stdout_thread
+                .join()
+                .map_err(|_| InstallerError::Git {
+                    operation,
+                    message: "failed to read stdout".to_owned(),
+                })?
                 .unwrap_or_default();
-            let stderr = child
-                .stderr
-                .take()
-                .map(std::io::read_to_string)
-                .transpose()?
+            let stderr = stderr_thread
+                .join()
+                .map_err(|_| InstallerError::Git {
+                    operation,
+                    message: "failed to read stderr".to_owned(),
+                })?
                 .unwrap_or_default();
 
             Ok(Output {
@@ -108,9 +132,11 @@ fn run_git_with_timeout(
             })
         }
         None => {
-            // Timeout - kill the process
+            // Timeout - kill the process and wait for threads to finish
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stdout_thread.join();
+            let _ = stderr_thread.join();
             Err(InstallerError::Git {
                 operation,
                 message: format!(

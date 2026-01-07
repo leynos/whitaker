@@ -14,7 +14,6 @@ use whitaker_installer::cli::Cli;
 use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::git::{clone_repository, update_repository};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, success_message};
 use whitaker_installer::stager::{Stager, default_target_dir};
 use whitaker_installer::toolchain::Toolchain;
@@ -136,35 +135,30 @@ fn ensure_whitaker_workspace(
     stderr: &mut dyn Write,
 ) -> Result<Utf8PathBuf> {
     use whitaker_installer::workspace::{
-        WorkspaceAction, clone_directory, decide_workspace_action,
+        WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
     };
 
-    let cwd = std::env::current_dir()?;
-    let cwd_utf8 = Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::WorkspaceNotFound {
-        reason: format!("current directory is not valid UTF-8: {e}"),
-    })?;
+    // Emit progress messages for clone/update operations before delegating
+    if !cli.quiet
+        && let Some(clone_dir) = clone_directory(dirs)
+    {
+        let cwd = std::env::current_dir()
+            .ok()
+            .and_then(|p| Utf8PathBuf::try_from(p).ok())
+            .unwrap_or_default();
 
-    let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
-        reason: "could not determine data directory for cloning".to_owned(),
-    })?;
-
-    match decide_workspace_action(&cwd_utf8, &clone_dir, !cli.no_update) {
-        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => Ok(dir),
-        WorkspaceAction::CloneTo(dir) => {
-            if !cli.quiet {
+        match decide_workspace_action(&cwd, &clone_dir, !cli.no_update) {
+            WorkspaceAction::CloneTo(dir) => {
                 write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
             }
-            clone_repository(&dir)?;
-            Ok(dir)
-        }
-        WorkspaceAction::UpdateAt(dir) => {
-            if !cli.quiet {
+            WorkspaceAction::UpdateAt(dir) => {
                 write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
             }
-            update_repository(&dir)?;
-            Ok(dir)
+            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
         }
     }
+
+    ensure_workspace(dirs, !cli.no_update)
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.

@@ -92,7 +92,7 @@ impl SystemBaseDirs {
     #[must_use]
     pub fn new() -> Option<Self> {
         let user_dirs = directories_next::UserDirs::new()?;
-        let project_dirs = directories_next::ProjectDirs::from("", "", "whitaker")?;
+        let project_dirs = directories_next::ProjectDirs::from("io", "github", "whitaker")?;
         Some(Self {
             user_dirs,
             project_dirs,
