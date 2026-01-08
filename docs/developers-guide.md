@@ -121,8 +121,8 @@ New lints should typically start as experimental. To add a lint:
 Once an experimental lint has been:
 
 - Tested across multiple real-world codebases
-- Refined to minimise false positives
-- Stabilised with no breaking changes planned
+- Refined to minimize false positives
+- Stabilized with no breaking changes planned
 
 It can be promoted to standard by:
 

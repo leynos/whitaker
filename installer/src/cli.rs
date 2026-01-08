@@ -198,11 +198,17 @@ impl Cli {
     /// If an `Install` subcommand was provided, returns those arguments.
     /// Otherwise returns the flattened install arguments for backwards
     /// compatibility.
+    ///
+    /// # Note
+    ///
+    /// When `Command::List` is active, this returns the default flattened
+    /// install arguments. Callers should check `self.command` before calling
+    /// this method if the `List` case needs different handling.
     #[must_use]
     pub fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
-            _ => &self.install,
+            Some(Command::List(_)) | None => &self.install,
         }
     }
 }

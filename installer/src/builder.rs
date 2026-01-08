@@ -207,10 +207,23 @@ impl Builder {
     /// For individual lint crates, only the `dylint-driver` feature is needed.
     fn features_for_crate(&self, crate_name: &CrateName) -> String {
         if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
-            "dylint-driver,experimental-bumpy-road".to_owned()
+            format!("dylint-driver,{}", Self::experimental_features())
         } else {
             "dylint-driver".to_owned()
         }
+    }
+
+    /// Generate the comma-separated list of experimental feature flags.
+    ///
+    /// Feature names follow the pattern `experimental-{lint_name_with_hyphens}`,
+    /// derived from `EXPERIMENTAL_LINT_CRATES` to keep the source of truth in one
+    /// place.
+    fn experimental_features() -> String {
+        EXPERIMENTAL_LINT_CRATES
+            .iter()
+            .map(|&name| format!("experimental-{}", name.replace('_', "-")))
+            .collect::<Vec<_>>()
+            .join(",")
     }
 }
 

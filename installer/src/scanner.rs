@@ -105,7 +105,7 @@ fn scan_toolchain_release(
     }
 
     // Sort by crate name for consistent output
-    libraries.sort_by(|a, b| a.crate_name.as_str().cmp(b.crate_name.as_str()));
+    libraries.sort_by_key(|lib| lib.crate_name.as_str().to_owned());
 
     Ok(libraries)
 }
@@ -121,7 +121,7 @@ fn scan_toolchain_release(
 ///
 /// let result = parse_library_filename("libmodule_max_lines@nightly-2025-09-18.so");
 /// assert!(result.is_some());
-/// let (crate_name, toolchain) = result.unwrap();
+/// let (crate_name, toolchain) = result.expect("valid library filename");
 /// assert_eq!(crate_name.as_str(), "module_max_lines");
 /// assert_eq!(toolchain, "nightly-2025-09-18");
 /// ```
@@ -170,7 +170,7 @@ pub fn lints_for_library(crate_name: &CrateName) -> Vec<&'static str> {
     let name = crate_name.as_str();
 
     if name == SUITE_CRATE {
-        // Suite contains all standard lints plus experimental lints (when enabled at build time)
+        // Suite contains all standard lints plus experimental lints
         let mut lints = LINT_CRATES.to_vec();
         lints.extend(EXPERIMENTAL_LINT_CRATES.iter().copied());
         lints
@@ -192,6 +192,15 @@ mod tests {
     use rstest::rstest;
     use tempfile::TempDir;
 
+    /// Skip test execution on non-Linux platforms where library extensions differ.
+    macro_rules! skip_unless_linux {
+        () => {
+            if !cfg!(target_os = "linux") {
+                return;
+            }
+        };
+    }
+
     #[rstest]
     #[case::standard_linux(
         "libmodule_max_lines@nightly-2025-09-18.so",
@@ -209,10 +218,7 @@ mod tests {
         #[case] expected_crate: &str,
         #[case] expected_toolchain: &str,
     ) {
-        // Skip test if not on Linux (extension differs)
-        if !cfg!(target_os = "linux") {
-            return;
-        }
+        skip_unless_linux!();
 
         let result = parse_library_filename(filename);
         assert!(result.is_some(), "expected Some for {filename}");
@@ -230,10 +236,7 @@ mod tests {
     #[case::wrong_extension("libmodule_max_lines@nightly-2025-09-18.dll")]
     #[case::random_file("readme.txt")]
     fn parse_library_filename_invalid(#[case] filename: &str) {
-        // Skip tests that rely on specific extension if not on Linux
-        if !cfg!(target_os = "linux") {
-            return;
-        }
+        skip_unless_linux!();
 
         let result = parse_library_filename(filename);
         assert!(result.is_none(), "expected None for {filename}");
@@ -289,10 +292,7 @@ mod tests {
 
     #[test]
     fn scan_finds_installed_libraries() {
-        // Skip test if not on Linux
-        if !cfg!(target_os = "linux") {
-            return;
-        }
+        skip_unless_linux!();
 
         let temp = TempDir::new().expect("failed to create temp dir");
         let target_dir = Utf8Path::from_path(temp.path()).expect("non-UTF8 path");

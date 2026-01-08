@@ -177,4 +177,14 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("permission denied"));
     }
+
+    #[test]
+    fn scan_failed_includes_reason() {
+        let err = InstallerError::ScanFailed {
+            reason: "directory not found".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("scan"));
+        assert!(msg.contains("directory not found"));
+    }
 }

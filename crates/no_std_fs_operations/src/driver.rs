@@ -19,6 +19,17 @@ use whitaker::SharedConfig;
 const LINT_NAME: &str = "no_std_fs_operations";
 
 /// Configuration for the `no_std_fs_operations` lint.
+///
+/// # TOML Configuration
+///
+/// In `dylint.toml` at your workspace root:
+///
+/// ```toml
+/// [no_std_fs_operations]
+/// excluded_crates = ["my_cli_app", "test_utilities"]
+/// ```
+///
+/// Use Rust crate names (underscores), not Cargo package names (hyphens).
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct NoStdFsConfig {
@@ -154,6 +165,12 @@ impl NoStdFsOperations {
     }
 }
 
+/// Load lint configuration from `dylint.toml`.
+///
+/// Returns the default configuration when:
+/// - No configuration file exists
+/// - No `[no_std_fs_operations]` section is present
+/// - The configuration fails to parse (logged at `warn` level)
 fn load_configuration() -> NoStdFsConfig {
     match dylint_linting::config::<NoStdFsConfig>(LINT_NAME) {
         Ok(Some(config)) => config,
