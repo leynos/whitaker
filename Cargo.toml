@@ -3,9 +3,9 @@ members = ["common", "crates/*", "installer", "suite"]
 resolver = "2"
 
 [workspace.package]
-license = "MIT OR Apache-2.0"
+license = "ISC"
 repository = "https://github.com/leynos/whitaker"
-homepage = "https://github.com/leynos/whitaker"
+homepage = "https://df12.studio/docs.html"
 documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.md"
 
 [workspace.dependencies]
