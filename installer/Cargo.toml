@@ -17,6 +17,7 @@ path = "src/main.rs"
 camino = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 directories-next = { workspace = true }
+log = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

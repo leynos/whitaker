@@ -7,7 +7,7 @@ use crate::usage::{
 };
 use common::i18n::Localizer;
 use common::i18n::get_localizer_for_lint;
-use log::{debug, warn};
+use log::{info, warn};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
@@ -30,6 +30,14 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// ```
 ///
 /// Use Rust crate names (underscores), not Cargo package names (hyphens).
+///
+/// # Strict Validation
+///
+/// This configuration uses `deny_unknown_fields`, meaning any unrecognised
+/// key (such as a typo like `excluded_crate` instead of `excluded_crates`)
+/// will cause configuration parsing to fail. When parsing fails, the lint
+/// falls back to defaults and logs a warning. If exclusions don't work as
+/// expected, check the logs for parse errors.
 ///
 /// # Example
 ///
@@ -97,7 +105,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         self.excluded = config.is_excluded(crate_name);
 
         if self.excluded {
-            debug!(
+            info!(
                 target: LINT_NAME,
                 "crate `{crate_name}` is excluded from no_std_fs_operations lint"
             );
@@ -189,7 +197,8 @@ impl NoStdFsOperations {
 }
 
 /// Trait for loading lint configuration, enabling dependency injection for tests.
-pub trait ConfigReader {
+#[cfg_attr(test, mockall::automock)]
+pub(crate) trait ConfigReader {
     /// Read configuration for the given lint name.
     ///
     /// Returns `Ok(Some(config))` if found, `Ok(None)` if not present, or
@@ -201,7 +210,7 @@ pub trait ConfigReader {
 }
 
 /// Production implementation that reads from `dylint.toml` via `dylint_linting::config`.
-pub struct DylintConfigReader;
+pub(crate) struct DylintConfigReader;
 
 impl ConfigReader for DylintConfigReader {
     fn read_config(
@@ -248,7 +257,7 @@ mod tests {
     //!
     //! # Coverage Strategy
     //!
-    //! Full integration testing of exclusion behavior during lint execution
+    //! Full integration testing of exclusion behaviour during lint execution
     //! is not feasible with the current `dylint_testing` UI harness, as the
     //! crate name is determined by the harness and cannot be controlled.
     //!
@@ -269,40 +278,6 @@ mod tests {
     use super::*;
     use rstest::rstest;
     use std::io;
-
-    /// Mock config reader for testing `load_configuration_with_reader`.
-    enum MockConfigReader {
-        Config(NoStdFsConfig),
-        None,
-        Error(String),
-    }
-
-    impl MockConfigReader {
-        fn returning_config(config: NoStdFsConfig) -> Self {
-            Self::Config(config)
-        }
-
-        fn returning_none() -> Self {
-            Self::None
-        }
-
-        fn returning_error(message: &str) -> Self {
-            Self::Error(message.to_owned())
-        }
-    }
-
-    impl ConfigReader for MockConfigReader {
-        fn read_config(
-            &self,
-            _lint_name: &str,
-        ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>> {
-            match self {
-                Self::Config(config) => Ok(Some(config.clone())),
-                Self::None => Ok(Option::None),
-                Self::Error(msg) => Err(Box::new(io::Error::other(msg.as_str()))),
-            }
-        }
-    }
 
     #[test]
     fn config_default_has_empty_excluded_crates() {
@@ -356,7 +331,7 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Tests for load_configuration_with_reader
+    // Tests for load_configuration_with_reader using mockall
     // -------------------------------------------------------------------------
 
     #[test]
@@ -364,27 +339,32 @@ mod tests {
         let config = NoStdFsConfig {
             excluded_crates: vec!["my_crate".to_owned()],
         };
-        let reader = MockConfigReader::returning_config(config.clone());
+        let mut mock = MockConfigReader::new();
+        mock.expect_read_config()
+            .returning(move |_| Ok(Some(config.clone())));
 
-        let result = load_configuration_with_reader(&reader);
+        let result = load_configuration_with_reader(&mock);
 
         assert_eq!(result.excluded_crates, vec!["my_crate"]);
     }
 
     #[test]
     fn load_configuration_returns_default_when_none() {
-        let reader = MockConfigReader::returning_none();
+        let mut mock = MockConfigReader::new();
+        mock.expect_read_config().returning(|_| Ok(None));
 
-        let result = load_configuration_with_reader(&reader);
+        let result = load_configuration_with_reader(&mock);
 
         assert!(result.excluded_crates.is_empty());
     }
 
     #[test]
     fn load_configuration_returns_default_on_error() {
-        let reader = MockConfigReader::returning_error("parse error");
+        let mut mock = MockConfigReader::new();
+        mock.expect_read_config()
+            .returning(|_| Err(Box::new(io::Error::other("parse error")) as _));
 
-        let result = load_configuration_with_reader(&reader);
+        let result = load_configuration_with_reader(&mock);
 
         assert!(result.excluded_crates.is_empty());
     }

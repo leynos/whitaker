@@ -35,6 +35,7 @@ serde = { workspace = true, optional = true }
 whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+mockall = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
