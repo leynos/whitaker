@@ -104,7 +104,7 @@ fn scan_toolchain_release(
     }
 
     // Sort by crate name for consistent output
-    libraries.sort_by(|a, b| a.crate_name.as_str().cmp(b.crate_name.as_str()));
+    libraries.sort_by_key(|lib| lib.crate_name.as_str().to_owned());
 
     Ok(libraries)
 }
@@ -161,7 +161,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 ///
 /// ```
 /// use whitaker_installer::scanner::lints_for_library;
-/// use whitaker_installer::builder::CrateName;
+/// use whitaker_installer::crate_name::CrateName;
 ///
 /// let suite_lints = lints_for_library(&CrateName::from("suite"));
 /// assert!(suite_lints.len() > 1);

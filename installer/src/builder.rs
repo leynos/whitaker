@@ -199,6 +199,23 @@ pub const fn library_prefix() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
+
+    /// Create a test builder with the given experimental flag.
+    fn test_builder(experimental: bool) -> Builder {
+        Builder {
+            config: BuildConfig {
+                toolchain: Toolchain::with_override(
+                    &Utf8PathBuf::from("/tmp/test"),
+                    "nightly-2025-09-18",
+                ),
+                target_dir: Utf8PathBuf::from("/tmp/target"),
+                jobs: None,
+                verbosity: 0,
+                experimental,
+            },
+        }
+    }
 
     #[test]
     fn library_extension_is_correct() {
@@ -212,5 +229,54 @@ mod tests {
         // Fallback for other Unix-like platforms (e.g., FreeBSD, OpenBSD)
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         assert_eq!(ext, ".so");
+    }
+
+    #[rstest]
+    #[case::non_suite_crate("module_max_lines", false, "dylint-driver")]
+    #[case::non_suite_with_experimental("module_max_lines", true, "dylint-driver")]
+    #[case::suite_without_experimental("suite", false, "dylint-driver")]
+    fn features_for_crate_returns_expected_features(
+        #[case] crate_name: &str,
+        #[case] experimental: bool,
+        #[case] expected: &str,
+    ) {
+        let builder = test_builder(experimental);
+        let result = builder.features_for_crate(&CrateName::from(crate_name));
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn features_for_crate_includes_experimental_for_suite() {
+        let builder = test_builder(true);
+        let result = builder.features_for_crate(&CrateName::from("suite"));
+
+        // Should start with dylint-driver
+        assert!(result.starts_with("dylint-driver"));
+
+        // Should include experimental features
+        assert!(result.contains("experimental-"));
+        // Verify format: experimental-{lint-name-with-hyphens}
+        for lint in EXPERIMENTAL_LINT_CRATES {
+            let expected_feature = format!("experimental-{}", lint.replace('_', "-"));
+            assert!(
+                result.contains(&expected_feature),
+                "expected {expected_feature} in {result}"
+            );
+        }
+    }
+
+    #[test]
+    fn experimental_features_derives_from_experimental_lint_crates() {
+        let features = Builder::experimental_features();
+
+        // Verify comma-separated format
+        let parts: Vec<_> = features.split(',').collect();
+        assert_eq!(parts.len(), EXPERIMENTAL_LINT_CRATES.len());
+
+        // Verify each feature follows the expected pattern
+        for (i, lint) in EXPERIMENTAL_LINT_CRATES.iter().enumerate() {
+            let expected = format!("experimental-{}", lint.replace('_', "-"));
+            assert_eq!(parts[i], expected);
+        }
     }
 }

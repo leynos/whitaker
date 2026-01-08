@@ -42,7 +42,19 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
     }
 }
 
-/// Runs the list command.
+/// Lists installed lint libraries and their associated lints.
+///
+/// Scans the staging directory for installed libraries, detects the active
+/// toolchain from `rust-toolchain.toml` in the current directory (if present),
+/// and formats the output for display.
+///
+/// Output is written to stdout (human-readable by default, JSON with `--json`).
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The staging directory cannot be scanned
+/// - Writing to stdout fails
 fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
     let target_dir = determine_target_dir(args.target_dir.clone())?;
 
@@ -50,12 +62,7 @@ fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
         reason: e.to_string(),
     })?;
 
-    // Try to detect active toolchain from rust-toolchain.toml in current directory
-    let active_toolchain = std::env::current_dir()
-        .ok()
-        .and_then(|p| Utf8PathBuf::try_from(p).ok())
-        .and_then(|p| Toolchain::detect(&p).ok())
-        .map(|t| t.channel().to_owned());
+    let active_toolchain = detect_active_toolchain();
 
     let output = if args.json {
         format_json(&installed, active_toolchain.as_deref())
@@ -68,6 +75,20 @@ fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
     })?;
 
     Ok(())
+}
+
+/// Detect the active toolchain from `rust-toolchain.toml` in the current directory.
+///
+/// Returns `None` if:
+/// - The current directory cannot be determined
+/// - The path is not valid UTF-8
+/// - No `rust-toolchain.toml` file exists
+/// - The toolchain file cannot be parsed
+fn detect_active_toolchain() -> Option<String> {
+    let cwd = std::env::current_dir().ok()?;
+    let utf8_cwd = Utf8PathBuf::try_from(cwd).ok()?;
+    let toolchain = Toolchain::detect(&utf8_cwd).ok()?;
+    Some(toolchain.channel().to_owned())
 }
 
 /// Runs the install command to build and stage lint libraries.

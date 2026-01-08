@@ -59,6 +59,9 @@ pub fn perform_build(
         write_stderr_line(stderr, "");
     }
 
+    // Build artifacts go to {workspace_root}/target (Cargo's standard location),
+    // distinct from context.target_dir which is the user-facing staging directory
+    // (e.g., ~/.local/share/dylint/lib) where final libraries are copied.
     let config = BuildConfig {
         toolchain: context.toolchain.clone(),
         target_dir: context.workspace_root.join("target"),

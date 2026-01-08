@@ -54,6 +54,18 @@ pub struct NoStdFsConfig {
     pub excluded_crates: Vec<String>,
 }
 
+impl NoStdFsConfig {
+    /// Check if the given crate name is excluded from the lint.
+    ///
+    /// Returns `true` if `crate_name` appears in the `excluded_crates` list.
+    #[must_use]
+    pub fn is_excluded(&self, crate_name: &str) -> bool {
+        self.excluded_crates
+            .iter()
+            .any(|excluded| excluded == crate_name)
+    }
+}
+
 pub struct NoStdFsOperations {
     localizer: Localizer,
     excluded: bool,
@@ -84,10 +96,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         let crate_name_sym = cx.tcx.crate_name(rustc_hir::def_id::LOCAL_CRATE);
         let crate_name = crate_name_sym.as_str();
 
-        self.excluded = config
-            .excluded_crates
-            .iter()
-            .any(|excluded| excluded == crate_name);
+        self.excluded = config.is_excluded(crate_name);
 
         if self.excluded {
             debug!(
@@ -187,6 +196,15 @@ impl NoStdFsOperations {
 /// - No configuration file exists
 /// - No `[no_std_fs_operations]` section is present
 /// - The configuration fails to parse (logged at `warn` level)
+///
+/// # Testing
+///
+/// Direct unit testing of this function is infeasible because it relies on
+/// `dylint_linting::config`, which reads from the filesystem and cannot be
+/// injected. Instead, test coverage is provided by:
+/// - `NoStdFsConfig` deserialisation tests (verify TOML parsing)
+/// - `is_excluded` method tests (verify matching logic)
+/// - UI tests with `dylint.toml` fixtures (verify end-to-end behaviour)
 fn load_configuration() -> NoStdFsConfig {
     match dylint_linting::config::<NoStdFsConfig>(LINT_NAME) {
         Ok(Some(config)) => config,
@@ -249,9 +267,9 @@ mod tests {
             excluded_crates: vec!["my_crate".to_owned(), "other_crate".to_owned()],
         };
 
-        assert!(config.excluded_crates.iter().any(|c| c == "my_crate"));
-        assert!(config.excluded_crates.iter().any(|c| c == "other_crate"));
-        assert!(!config.excluded_crates.iter().any(|c| c == "unknown"));
+        assert!(config.is_excluded("my_crate"));
+        assert!(config.is_excluded("other_crate"));
+        assert!(!config.is_excluded("unknown"));
     }
 
     #[test]
@@ -260,8 +278,8 @@ mod tests {
             excluded_crates: vec!["MyCrate".to_owned()],
         };
 
-        assert!(config.excluded_crates.iter().any(|c| c == "MyCrate"));
-        assert!(!config.excluded_crates.iter().any(|c| c == "mycrate"));
-        assert!(!config.excluded_crates.iter().any(|c| c == "MYCRATE"));
+        assert!(config.is_excluded("MyCrate"));
+        assert!(!config.is_excluded("mycrate"));
+        assert!(!config.is_excluded("MYCRATE"));
     }
 }
