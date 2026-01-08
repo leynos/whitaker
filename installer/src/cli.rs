@@ -23,7 +23,7 @@ use clap::Parser;
     "`cargo dylint --all` to use the lints.",
 ))]
 #[command(after_help = concat!(
-    "AVAILABLE LINTS:\n",
+    "DEFAULT LINTS:\n",
     "  conditional_max_n_branches    Limit boolean branches in conditionals\n",
     "  function_attrs_follow_docs    Doc comments must precede other attributes\n",
     "  module_max_lines              Warn when modules exceed line threshold\n",
@@ -31,6 +31,8 @@ use clap::Parser;
     "  no_expect_outside_tests       Forbid .expect() outside test contexts\n",
     "  no_std_fs_operations          Enforce capability-based filesystem access\n",
     "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n\n",
+    "EXPERIMENTAL LINTS (requires --experimental):\n",
+    "  bumpy_road_function           Detect high nesting depth in functions\n\n",
     "EXAMPLES:\n",
     "  Build and stage the aggregated suite:\n",
     "    $ whitaker-installer\n\n",
@@ -38,6 +40,8 @@ use clap::Parser;
     "    $ whitaker-installer -l module_max_lines -l no_expect_outside_tests\n\n",
     "  Build all individual lint crates:\n",
     "    $ whitaker-installer --individual-lints\n\n",
+    "  Include experimental lints in the suite:\n",
+    "    $ whitaker-installer --experimental\n\n",
     "  Preview without building:\n",
     "    $ whitaker-installer --dry-run\n\n",
     "For more information, see: https://github.com/leynos/whitaker",
@@ -54,6 +58,10 @@ pub struct Cli {
     /// Build all individual lint crates instead of the aggregated suite.
     #[arg(long, conflicts_with = "lint")]
     pub individual_lints: bool,
+
+    /// Include experimental lints (e.g., bumpy_road_function).
+    #[arg(long)]
+    pub experimental: bool,
 
     /// Number of parallel cargo build jobs.
     #[arg(short, long, value_name = "N")]
@@ -115,6 +123,7 @@ impl Default for Cli {
             target_dir: None,
             lint: Vec::new(),
             individual_lints: false,
+            experimental: false,
             jobs: None,
             toolchain: None,
             dry_run: false,
@@ -138,6 +147,7 @@ mod tests {
         assert!(cli.target_dir.is_none());
         assert!(cli.lint.is_empty());
         assert!(!cli.individual_lints);
+        assert!(!cli.experimental);
         assert!(!cli.dry_run);
         assert_eq!(cli.verbosity, 0);
         assert!(!cli.quiet);
@@ -167,6 +177,7 @@ mod tests {
     /// Parameterised tests for boolean CLI flags.
     #[rstest]
     #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.individual_lints)]
+    #[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.experimental)]
     #[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.dry_run)]
     #[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.verbosity > 0)]
     #[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.quiet)]
@@ -201,6 +212,7 @@ mod tests {
     fn cli_default_is_valid() {
         let cli = Cli::default();
         assert!(!cli.individual_lints);
+        assert!(!cli.experimental);
         assert!(!cli.skip_deps);
     }
 }

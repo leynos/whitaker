@@ -190,7 +190,11 @@ fn resolve_requested_crates(cli: &Cli) -> Result<Vec<CrateName>> {
         validate_crate_names(&lint_crates)?;
     }
 
-    Ok(resolve_crates(&lint_crates, cli.individual_lints))
+    Ok(resolve_crates(
+        &lint_crates,
+        cli.individual_lints,
+        cli.experimental,
+    ))
 }
 
 /// Determines the target directory from CLI or falls back to the default.
@@ -287,6 +291,7 @@ fn build_config_for_cli(context: &RunContext<'_>) -> BuildConfig {
         target_dir: context.workspace_root.join("target"),
         jobs: context.cli.jobs,
         verbosity: context.cli.verbosity,
+        experimental: context.cli.experimental,
     }
 }
 

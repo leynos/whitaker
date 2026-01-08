@@ -75,6 +75,12 @@ pub const LINT_CRATES: &[&str] = &[
     "no_unwrap_or_else_panic",
 ];
 
+/// Static list of experimental lint crates.
+///
+/// These lints are not included in the default suite but can be enabled via
+/// the `--experimental` flag.
+pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["bumpy_road_function"];
+
 /// The aggregated suite crate name.
 pub const SUITE_CRATE: &str = "suite";
 
@@ -89,6 +95,8 @@ pub struct BuildConfig {
     pub jobs: Option<usize>,
     /// Verbosity level for cargo output.
     pub verbosity: u8,
+    /// Include experimental lints when building the suite.
+    pub experimental: bool,
 }
 
 /// Result of building a single crate.
@@ -121,7 +129,11 @@ impl Builder {
         let mut cmd = Command::new("cargo");
 
         cmd.arg(format!("+{}", self.config.toolchain.channel()));
-        cmd.args(["build", "--release", "--features", "dylint-driver"]);
+        cmd.args(["build", "--release"]);
+
+        let features = self.features_for_crate(crate_name);
+        cmd.args(["--features", &features]);
+
         cmd.args(["-p", crate_name.as_str()]);
 
         if let Some(jobs) = self.config.jobs {
@@ -188,6 +200,18 @@ impl Builder {
 
         self.config.target_dir.join("release").join(lib_name)
     }
+
+    /// Determine which features to enable for a given crate.
+    ///
+    /// For the suite crate, this includes the experimental feature when enabled.
+    /// For individual lint crates, only the `dylint-driver` feature is needed.
+    fn features_for_crate(&self, crate_name: &CrateName) -> String {
+        if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
+            "dylint-driver,experimental-bumpy-road".to_owned()
+        } else {
+            "dylint-driver".to_owned()
+        }
+    }
 }
 
 /// Return the platform-specific library file extension (including the dot).
@@ -224,7 +248,7 @@ pub const fn library_prefix() -> &'static str {
 #[must_use]
 pub fn is_known_crate(name: &CrateName) -> bool {
     let s = name.as_str();
-    LINT_CRATES.contains(&s) || s == SUITE_CRATE
+    LINT_CRATES.contains(&s) || EXPERIMENTAL_LINT_CRATES.contains(&s) || s == SUITE_CRATE
 }
 
 /// Validate that all specified crate names are known lint crates.
@@ -245,23 +269,32 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
 ///
 /// By default, only the aggregated suite is built. Use `individual_lints` to
 /// build all individual lint crates instead, or provide `specific_lints` to
-/// cherry-pick particular lints.
+/// cherry-pick particular lints. When `experimental` is true and
+/// `individual_lints` is set, experimental lint crates are also included.
 ///
 /// Note: This function assumes that `specific_lints` have been validated via
 /// `validate_crate_names()` prior to calling. Callers must validate inputs
 /// first to get proper error messages for unknown names.
 #[must_use]
-pub fn resolve_crates(specific_lints: &[CrateName], individual_lints: bool) -> Vec<CrateName> {
+pub fn resolve_crates(
+    specific_lints: &[CrateName],
+    individual_lints: bool,
+    experimental: bool,
+) -> Vec<CrateName> {
     if !specific_lints.is_empty() {
         // Assumes names have been validated via validate_crate_names().
         return specific_lints.to_vec();
     }
 
     if individual_lints {
-        return LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
+        let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
+        if experimental {
+            crates.extend(EXPERIMENTAL_LINT_CRATES.iter().map(|&c| CrateName::from(c)));
+        }
+        return crates;
     }
 
-    // Default: suite only
+    // Default: suite only (experimental feature is handled by BuildConfig)
     vec![CrateName::from(SUITE_CRATE)]
 }
 
@@ -315,16 +348,20 @@ mod tests {
     /// Test configuration for resolve_crates variants.
     struct ResolveCratesCase {
         individual_lints: bool,
+        experimental: bool,
         expect_lint: bool,
         expect_suite: bool,
+        expect_experimental: bool,
     }
 
     /// Parameterised tests for resolve_crates variants.
     #[rstest]
-    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, expect_lint: false, expect_suite: true })]
-    #[case::individual_lints(ResolveCratesCase { individual_lints: true, expect_lint: true, expect_suite: false })]
+    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_experimental: false })]
+    #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_experimental: false })]
+    #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_experimental: true })]
+    #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_experimental: false })]
     fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
-        let crates = resolve_crates(&[], case.individual_lints);
+        let crates = resolve_crates(&[], case.individual_lints, case.experimental);
 
         assert_eq!(
             crates.contains(&CrateName::from("module_max_lines")),
@@ -336,17 +373,23 @@ mod tests {
             case.expect_suite,
             "suite crate inclusion mismatch"
         );
+        assert_eq!(
+            crates.contains(&CrateName::from("bumpy_road_function")),
+            case.expect_experimental,
+            "experimental crate inclusion mismatch"
+        );
     }
 
     #[test]
     fn resolve_crates_specific_lints() {
         let specific = vec![CrateName::from("module_max_lines")];
-        let crates = resolve_crates(&specific, false);
+        let crates = resolve_crates(&specific, false, false);
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
     }
 
     #[rstest]
     #[case::valid(&["module_max_lines", "suite"], true)]
+    #[case::experimental_lint(&["bumpy_road_function"], true)]
     #[case::unknown(&["nonexistent_lint"], false)]
     fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
         let crate_names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();

@@ -21,6 +21,7 @@ use whitaker_installer::toolchain::parse_toolchain_channel;
 struct CrateResolutionWorld {
     specific_lints: RefCell<Vec<CrateName>>,
     individual_lints: Cell<bool>,
+    experimental: Cell<bool>,
     resolved: RefCell<Vec<CrateName>>,
 }
 
@@ -49,7 +50,11 @@ fn given_specific_lints(crate_world: &CrateResolutionWorld) {
 #[when("the crate list is resolved")]
 fn when_crates_resolved(crate_world: &CrateResolutionWorld) {
     let lints = crate_world.specific_lints.replace(Vec::new());
-    let resolved = resolve_crates(&lints, crate_world.individual_lints.get());
+    let resolved = resolve_crates(
+        &lints,
+        crate_world.individual_lints.get(),
+        crate_world.experimental.get(),
+    );
     crate_world.resolved.replace(resolved);
 }
 
