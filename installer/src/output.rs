@@ -4,7 +4,7 @@
 //! that users can add to their shell profile to enable Dylint library discovery,
 //! as well as dry-run information formatting.
 
-use crate::builder::CrateName;
+use crate::crate_name::CrateName;
 use camino::Utf8Path;
 
 /// Shell configuration snippets for different shells.
@@ -74,7 +74,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// ```
 /// use camino::Utf8PathBuf;
-/// use whitaker_installer::builder::CrateName;
+/// use whitaker_installer::crate_name::CrateName;
 /// use whitaker_installer::output::DryRunInfo;
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");

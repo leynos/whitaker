@@ -8,10 +8,9 @@ use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::builder::{
-    CrateName, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, library_extension,
-    library_prefix,
-};
+use crate::builder::{library_extension, library_prefix};
+use crate::crate_name::CrateName;
+use crate::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
 
 /// Metadata about an installed lint library.
 #[derive(Debug, Clone, PartialEq, Eq)]

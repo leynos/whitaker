@@ -7,11 +7,12 @@ use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
-use whitaker_installer::builder::{
-    CrateName, CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE,
-    resolve_crates, validate_crate_names,
-};
+use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::output::ShellSnippet;
+use whitaker_installer::resolution::{
+    CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
+    validate_crate_names,
+};
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
 // ---------------------------------------------------------------------------

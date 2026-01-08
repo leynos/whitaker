@@ -7,26 +7,21 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
-use whitaker_installer::builder::{
-    BuildConfig, Builder, CrateName, CrateResolutionOptions, resolve_crates, validate_crate_names,
-};
 use whitaker_installer::cli::{Cli, Command, InstallArgs, ListArgs};
+use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::list_output::{format_human, format_json};
-use whitaker_installer::output::{DryRunInfo, ShellSnippet, success_message};
-use whitaker_installer::scanner::{lints_for_library, scan_installed};
-use whitaker_installer::stager::{Stager, default_target_dir};
+use whitaker_installer::output::{DryRunInfo, ShellSnippet};
+use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
+use whitaker_installer::resolution::{
+    CrateResolutionOptions, resolve_crates, validate_crate_names,
+};
+use whitaker_installer::scanner::scan_installed;
+use whitaker_installer::stager::default_target_dir;
 use whitaker_installer::toolchain::Toolchain;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
-
-struct RunContext<'a> {
-    args: &'a InstallArgs,
-    workspace_root: &'a Utf8Path,
-    toolchain: &'a Toolchain,
-    target_dir: &'a Utf8Path,
-}
 
 fn main() {
     let cli = Cli::parse();
@@ -40,7 +35,6 @@ fn main() {
 }
 
 fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
-    // Dispatch based on command
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
         Some(Command::Install(args)) => run_install(args, stderr),
@@ -76,13 +70,40 @@ fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
     Ok(())
 }
 
-/// Runs the install command.
+/// Runs the install command to build and stage lint libraries.
+///
+/// This is the main installation workflow:
+///
+/// 1. **Dependency check**: Ensures `cargo-dylint` and `dylint-link` are
+///    installed (unless `--skip-deps` is set).
+///
+/// 2. **Workspace resolution**: Locates or clones the Whitaker repository.
+///    If running inside a Whitaker checkout, uses that. Otherwise, clones to
+///    the platform-specific data directory (`~/.local/share/whitaker` on
+///    Linux).
+///
+/// 3. **Crate resolution**: Determines which lint crates to build based on
+///    CLI flags (`--individual-lints`, `--experimental`, or `-l <name>`).
+///
+/// 4. **Build**: Compiles the selected crates in release mode with the
+///    required features enabled.
+///
+/// 5. **Staging**: Copies built libraries to the staging directory with
+///    toolchain-suffixed filenames for Dylint discovery.
+///
+/// 6. **Wrapper generation**: Creates a `whitaker` shell script (unless
+///    `--skip-wrapper`) that sets `DYLINT_LIBRARY_PATH` and invokes
+///    `cargo dylint`.
+///
+/// # Errors
+///
+/// Returns an error if any step fails: dependency installation, workspace
+/// resolution, build, staging, or wrapper generation.
 fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
 
-    // Dry-run mode: show what would be done without side effects
     if args.dry_run {
         return run_dry(args, &dirs, stderr);
     }
@@ -100,11 +121,14 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     let target_dir = determine_target_dir(args.target_dir.clone())?;
 
-    let context = RunContext {
-        args,
+    let context = PipelineContext {
         workspace_root: &workspace_root,
         toolchain: &toolchain,
         target_dir: &target_dir,
+        jobs: args.jobs,
+        verbosity: args.verbosity,
+        experimental: args.experimental,
+        quiet: args.quiet,
     };
 
     // Step 4: Build and stage
@@ -179,7 +203,6 @@ fn ensure_whitaker_workspace(
         WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
     };
 
-    // Emit progress messages for clone/update operations before delegating
     if !args.quiet
         && let Some(clone_dir) = clone_directory(dirs)
     {
@@ -188,7 +211,6 @@ fn ensure_whitaker_workspace(
             .and_then(|p| Utf8PathBuf::try_from(p).ok());
 
         let Some(cwd) = cwd else {
-            // Cannot determine cwd; skip messaging but proceed with workspace resolution
             return ensure_workspace(dirs, !args.no_update);
         };
 
@@ -247,66 +269,6 @@ fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> 
         })
 }
 
-/// Builds all requested crates.
-fn perform_build(
-    context: &RunContext<'_>,
-    crates: &[CrateName],
-    stderr: &mut dyn Write,
-) -> Result<Vec<whitaker_installer::builder::BuildResult>> {
-    if !context.args.quiet {
-        write_stderr_line(
-            stderr,
-            format!(
-                "Building {} lint crate(s) with toolchain {}...",
-                crates.len(),
-                context.toolchain.channel()
-            ),
-        );
-        write_stderr_line(stderr, "  Crates to build:");
-        for crate_name in crates {
-            write_stderr_line(stderr, format!("    - {crate_name}"));
-        }
-        write_stderr_line(stderr, "");
-    }
-
-    let config = build_config_for_context(context);
-    Builder::new(config).build_all(crates)
-}
-
-/// Stages built libraries and returns the staging path.
-fn stage_libraries(
-    context: &RunContext<'_>,
-    build_results: &[whitaker_installer::builder::BuildResult],
-    stderr: &mut dyn Write,
-) -> Result<Utf8PathBuf> {
-    let stager = Stager::new(context.target_dir.to_owned(), context.toolchain.channel());
-    let staging_path = stager.staging_path();
-
-    if !context.args.quiet {
-        write_stderr_line(stderr, format!("Staging libraries to {staging_path}..."));
-    }
-
-    stager.prepare()?;
-    stager.stage_all(build_results)?;
-
-    if !context.args.quiet {
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, success_message(build_results.len(), &staging_path));
-
-        // Show installed lints
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, "Installed lints:");
-        for result in build_results {
-            let lint_names = lints_for_library(&result.crate_name);
-            for lint in lint_names {
-                write_stderr_line(stderr, format!("  - {lint}"));
-            }
-        }
-    }
-
-    Ok(staging_path)
-}
-
 /// Generates wrapper scripts and reports the result.
 fn generate_and_report_wrapper(
     dirs: &dyn BaseDirs,
@@ -326,8 +288,6 @@ fn generate_and_report_wrapper(
         write_stderr_line(stderr, "You can now run: whitaker --all");
     } else {
         write_stderr_line(stderr, "");
-        // The script path is constructed via bin_dir.join("whitaker"), so parent()
-        // always returns the bin directory.
         let bin_dir = result
             .script_path
             .parent()
@@ -339,16 +299,6 @@ fn generate_and_report_wrapper(
     }
 
     Ok(())
-}
-
-fn build_config_for_context(context: &RunContext<'_>) -> BuildConfig {
-    BuildConfig {
-        toolchain: context.toolchain.clone(),
-        target_dir: context.workspace_root.join("target"),
-        jobs: context.args.jobs,
-        verbosity: context.args.verbosity,
-        experimental: context.args.experimental,
-    }
 }
 
 fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
@@ -437,23 +387,5 @@ mod tests {
             err,
             InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
         ));
-    }
-
-    #[test]
-    fn build_config_propagates_verbosity_level() {
-        let cli = Cli::parse_from(["whitaker-installer", "-vv"]);
-        let args = cli.install_args();
-        let workspace_root = Utf8PathBuf::from("/tmp");
-        let toolchain = Toolchain::with_override(&workspace_root, "nightly-2025-09-18");
-        let target_dir = Utf8PathBuf::from("/tmp/target");
-        let context = RunContext {
-            args,
-            workspace_root: &workspace_root,
-            toolchain: &toolchain,
-            target_dir: &target_dir,
-        };
-
-        let config = build_config_for_context(&context);
-        assert_eq!(config.verbosity, 2);
     }
 }

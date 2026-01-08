@@ -224,6 +224,48 @@ fn current_dir_utf8() -> Result<Utf8PathBuf> {
     })
 }
 
+/// Find the workspace root by looking for `Cargo.toml` with `[workspace]`.
+///
+/// # Errors
+///
+/// Returns an error if the workspace root cannot be determined, or if a
+/// `Cargo.toml` file cannot be read or parsed.
+pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
+    let mut current = start.to_owned();
+
+    loop {
+        let cargo_toml = current.join("Cargo.toml");
+        if cargo_toml.exists() && is_cargo_workspace_root(&cargo_toml)? {
+            return Ok(current);
+        }
+
+        match current.parent() {
+            Some(parent) => current = parent.to_owned(),
+            None => break,
+        }
+    }
+
+    Err(InstallerError::WorkspaceNotFound {
+        reason: "could not find Cargo.toml with [workspace] section".to_owned(),
+    })
+}
+
+/// Check if a `Cargo.toml` file contains a `[workspace]` section.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or parsed.
+fn is_cargo_workspace_root(cargo_toml: &Utf8Path) -> Result<bool> {
+    let contents = std::fs::read_to_string(cargo_toml)?;
+    let table = contents
+        .parse::<toml::Table>()
+        .map_err(|e| InstallerError::InvalidCargoToml {
+            path: cargo_toml.to_owned(),
+            reason: e.to_string(),
+        })?;
+    Ok(table.contains_key("workspace"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

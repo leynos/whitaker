@@ -3,7 +3,8 @@
 //! This module handles copying built libraries to the target directory with
 //! the toolchain-specific naming convention required by Dylint.
 
-use crate::builder::{BuildResult, CrateName, library_extension, library_prefix};
+use crate::builder::{BuildResult, library_extension, library_prefix};
+use crate::crate_name::CrateName;
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;

@@ -4,7 +4,7 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
-use crate::builder::CrateName;
+use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
 
