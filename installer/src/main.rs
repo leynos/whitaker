@@ -287,7 +287,13 @@ fn generate_and_report_wrapper(
 
     if result.in_path {
         write_stderr_line(stderr, "You can now run: whitaker --all");
-    } else if let Some(bin_dir) = result.script_path.parent() {
+    } else {
+        let bin_dir = result
+            .script_path
+            .parent()
+            .ok_or_else(|| InstallerError::StagingFailed {
+                reason: "wrapper script path has no parent directory".to_owned(),
+            })?;
         write_stderr_line(stderr, path_instructions(bin_dir));
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, "Then run: whitaker --all");

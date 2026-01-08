@@ -60,7 +60,7 @@ impl NoStdFsConfig {
     /// Returns `true` if `crate_name` appears in the `excluded_crates` list.
     #[must_use]
     pub fn is_excluded(&self, crate_name: &str) -> bool {
-        self.excluded_crates.contains(&crate_name.to_owned())
+        self.excluded_crates.iter().any(|c| c == crate_name)
     }
 }
 
