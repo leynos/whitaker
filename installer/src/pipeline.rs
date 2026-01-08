@@ -117,3 +117,81 @@ fn write_stderr_line(stderr: &mut dyn Write, message: impl std::fmt::Display) {
         // Best-effort logging; ignore write failures.
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for pipeline orchestration.
+    //!
+    //! Full integration tests are impractical because `perform_build` and
+    //! `stage_libraries` invoke cargo and perform filesystem operations. These
+    //! tests focus on verifying progress output behaviour and configuration
+    //! construction from `PipelineContext`.
+
+    use super::*;
+    use rstest::rstest;
+
+    fn test_toolchain() -> Toolchain {
+        Toolchain::with_override(&Utf8PathBuf::from("/tmp/test"), "nightly-2025-09-18")
+    }
+
+    fn test_context() -> (Utf8PathBuf, Utf8PathBuf, Toolchain) {
+        let workspace_root = Utf8PathBuf::from("/tmp/workspace");
+        let target_dir = Utf8PathBuf::from("/tmp/target");
+        let toolchain = test_toolchain();
+        (workspace_root, target_dir, toolchain)
+    }
+
+    #[rstest]
+    #[case::quiet_mode(true)]
+    #[case::verbose_mode(false)]
+    fn perform_build_respects_quiet_flag(#[case] quiet: bool) {
+        let (workspace_root, target_dir, toolchain) = test_context();
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet,
+        };
+        let crates = vec![CrateName::from("suite")];
+        let mut stderr = Vec::new();
+
+        // perform_build will fail (no actual cargo build), but we're testing output
+        let _ = perform_build(&context, &crates, &mut stderr);
+
+        let output = String::from_utf8_lossy(&stderr);
+        if quiet {
+            assert!(output.is_empty(), "expected no output in quiet mode");
+        } else {
+            assert!(output.contains("Building"), "expected progress output");
+            assert!(output.contains("suite"), "expected crate name in output");
+        }
+    }
+
+    #[test]
+    fn pipeline_context_fields_are_accessible() {
+        let workspace_root = Utf8PathBuf::from("/workspace");
+        let target_dir = Utf8PathBuf::from("/target");
+        let toolchain = test_toolchain();
+
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: Some(4),
+            verbosity: 2,
+            experimental: true,
+            quiet: false,
+        };
+
+        assert_eq!(context.workspace_root, Utf8Path::new("/workspace"));
+        assert_eq!(context.target_dir, Utf8Path::new("/target"));
+        assert_eq!(context.toolchain.channel(), "nightly-2025-09-18");
+        assert_eq!(context.jobs, Some(4));
+        assert_eq!(context.verbosity, 2);
+        assert!(context.experimental);
+        assert!(!context.quiet);
+    }
+}

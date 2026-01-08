@@ -43,7 +43,7 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// }
 ///
 /// let toml_str = r#"excluded_crates = ["my_cli_app"]"#;
-/// let config: NoStdFsConfig = toml::from_str(toml_str).unwrap();
+/// let config: NoStdFsConfig = toml::from_str(toml_str).expect("valid TOML");
 /// assert_eq!(config.excluded_crates, vec!["my_cli_app"]);
 /// ```
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -190,23 +190,38 @@ impl NoStdFsOperations {
     }
 }
 
-/// Load lint configuration from `dylint.toml`.
+/// Trait for loading lint configuration, enabling dependency injection for tests.
+pub trait ConfigReader {
+    /// Read configuration for the given lint name.
+    ///
+    /// Returns `Ok(Some(config))` if found, `Ok(None)` if not present, or
+    /// `Err` if parsing fails.
+    fn read_config(
+        &self,
+        lint_name: &str,
+    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>>;
+}
+
+/// Production implementation that reads from `dylint.toml` via `dylint_linting::config`.
+pub struct DylintConfigReader;
+
+impl ConfigReader for DylintConfigReader {
+    fn read_config(
+        &self,
+        lint_name: &str,
+    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>> {
+        dylint_linting::config::<NoStdFsConfig>(lint_name).map_err(|e| Box::new(e) as _)
+    }
+}
+
+/// Load lint configuration using the provided reader.
 ///
 /// Returns the default configuration when:
 /// - No configuration file exists
 /// - No `[no_std_fs_operations]` section is present
 /// - The configuration fails to parse (logged at `warn` level)
-///
-/// # Testing
-///
-/// Direct unit testing of this function is infeasible because it relies on
-/// `dylint_linting::config`, which reads from the filesystem and cannot be
-/// injected. Instead, test coverage is provided by:
-/// - `NoStdFsConfig` deserialisation tests (verify TOML parsing)
-/// - `is_excluded` method tests (verify matching logic)
-/// - UI tests with `dylint.toml` fixtures (verify end-to-end behaviour)
-fn load_configuration() -> NoStdFsConfig {
-    match dylint_linting::config::<NoStdFsConfig>(LINT_NAME) {
+fn load_configuration_with_reader(reader: &dyn ConfigReader) -> NoStdFsConfig {
+    match reader.read_config(LINT_NAME) {
         Ok(Some(config)) => config,
         Ok(None) => NoStdFsConfig::default(),
         Err(error) => {
@@ -219,18 +234,78 @@ fn load_configuration() -> NoStdFsConfig {
     }
 }
 
+/// Load lint configuration from `dylint.toml`.
+///
+/// Returns the default configuration when:
+/// - No configuration file exists
+/// - No `[no_std_fs_operations]` section is present
+/// - The configuration fails to parse (logged at `warn` level)
+fn load_configuration() -> NoStdFsConfig {
+    load_configuration_with_reader(&DylintConfigReader)
+}
+
 #[cfg(test)]
 mod tests {
-    //! Unit tests for configuration parsing and exclusion logic.
+    //! Unit tests for configuration parsing, exclusion logic, and config loading.
     //!
-    //! Note: Full integration testing of the exclusion behavior during lint
-    //! execution is not feasible with the current UI test harness, as the crate
-    //! name is determined by dylint_testing and cannot be controlled to match
-    //! an exclusion configuration. These unit tests verify the configuration
-    //! deserialises correctly and the matching logic functions as expected.
+    //! # Coverage Strategy
+    //!
+    //! Full integration testing of exclusion behavior during lint execution
+    //! is not feasible with the current `dylint_testing` UI harness, as the
+    //! crate name is determined by the harness and cannot be controlled.
+    //!
+    //! Instead, we provide layered coverage:
+    //!
+    //! 1. **Configuration parsing** - Verify TOML deserialises correctly
+    //! 2. **Exclusion matching** - Verify `is_excluded` logic (exact match, case)
+    //! 3. **Config loading** - Verify `load_configuration_with_reader` handles
+    //!    all branches (config present, missing, error) via mock injection
+    //!
+    //! The remaining gap is verifying that excluded crates skip diagnostics
+    //! during actual lint execution. This would require either:
+    //! - Extending `dylint_testing` to support controlled crate names
+    //! - Using `std::process::Command` integration tests with fixture projects
+    //!
+    //! For now, the `emit_optional` early return is verified by code inspection.
 
     use super::*;
     use rstest::rstest;
+    use std::io;
+
+    /// Mock config reader for testing `load_configuration_with_reader`.
+    struct MockConfigReader {
+        result: Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>>,
+    }
+
+    impl MockConfigReader {
+        fn returning_config(config: NoStdFsConfig) -> Self {
+            Self {
+                result: Ok(Some(config)),
+            }
+        }
+
+        fn returning_none() -> Self {
+            Self { result: Ok(None) }
+        }
+
+        fn returning_error(message: &str) -> Self {
+            Self {
+                result: Err(Box::new(io::Error::other(message))),
+            }
+        }
+    }
+
+    impl ConfigReader for MockConfigReader {
+        fn read_config(
+            &self,
+            _lint_name: &str,
+        ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>> {
+            match &self.result {
+                Ok(opt) => Ok(opt.clone()),
+                Err(_) => Err(Box::new(io::Error::other("mock error"))),
+            }
+        }
+    }
 
     #[test]
     fn config_default_has_empty_excluded_crates() {
@@ -281,5 +356,39 @@ mod tests {
         assert!(config.is_excluded("MyCrate"));
         assert!(!config.is_excluded("mycrate"));
         assert!(!config.is_excluded("MYCRATE"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Tests for load_configuration_with_reader
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn load_configuration_returns_config_when_present() {
+        let config = NoStdFsConfig {
+            excluded_crates: vec!["my_crate".to_owned()],
+        };
+        let reader = MockConfigReader::returning_config(config.clone());
+
+        let result = load_configuration_with_reader(&reader);
+
+        assert_eq!(result.excluded_crates, vec!["my_crate"]);
+    }
+
+    #[test]
+    fn load_configuration_returns_default_when_none() {
+        let reader = MockConfigReader::returning_none();
+
+        let result = load_configuration_with_reader(&reader);
+
+        assert!(result.excluded_crates.is_empty());
+    }
+
+    #[test]
+    fn load_configuration_returns_default_on_error() {
+        let reader = MockConfigReader::returning_error("parse error");
+
+        let result = load_configuration_with_reader(&reader);
+
+        assert!(result.excluded_crates.is_empty());
     }
 }

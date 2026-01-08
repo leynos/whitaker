@@ -119,6 +119,13 @@ pub enum InstallerError {
         /// Description of the scan failure.
         reason: String,
     },
+
+    /// Failed to write output.
+    #[error("failed to write output: {reason}")]
+    WriteFailed {
+        /// Description of the write failure.
+        reason: String,
+    },
 }
 
 /// Result type alias using [`InstallerError`].
@@ -186,5 +193,15 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("scan"));
         assert!(msg.contains("directory not found"));
+    }
+
+    #[test]
+    fn write_failed_includes_reason() {
+        let err = InstallerError::WriteFailed {
+            reason: "permission denied".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("write"));
+        assert!(msg.contains("permission denied"));
     }
 }

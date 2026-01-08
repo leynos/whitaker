@@ -34,6 +34,7 @@ fn main() {
     }
 }
 
+/// Routes CLI commands to their respective handlers.
 fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> {
     match &cli.command {
         Some(Command::List(args)) => run_list(args, stdout),
@@ -70,7 +71,7 @@ fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
         format_human(&installed, active_toolchain.as_deref())
     };
 
-    writeln!(stdout, "{output}").map_err(|e| InstallerError::ScanFailed {
+    writeln!(stdout, "{output}").map_err(|e| InstallerError::WriteFailed {
         reason: e.to_string(),
     })?;
 
@@ -286,8 +287,7 @@ fn generate_and_report_wrapper(
 
     if result.in_path {
         write_stderr_line(stderr, "You can now run: whitaker --all");
-    } else {
-        let bin_dir = result.script_path.parent().expect("script has parent");
+    } else if let Some(bin_dir) = result.script_path.parent() {
         write_stderr_line(stderr, path_instructions(bin_dir));
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, "Then run: whitaker --all");
