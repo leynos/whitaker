@@ -2,10 +2,12 @@
 name = "whitaker-installer"
 version = "0.1.0"
 edition = "2024"
-publish = false
 description = "Installer CLI for Whitaker Dylint lint libraries"
+readme = "README.md"
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "whitaker-installer"
