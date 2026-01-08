@@ -60,9 +60,7 @@ impl NoStdFsConfig {
     /// Returns `true` if `crate_name` appears in the `excluded_crates` list.
     #[must_use]
     pub fn is_excluded(&self, crate_name: &str) -> bool {
-        self.excluded_crates
-            .iter()
-            .any(|excluded| excluded == crate_name)
+        self.excluded_crates.contains(&crate_name.to_owned())
     }
 }
 
@@ -273,25 +271,23 @@ mod tests {
     use std::io;
 
     /// Mock config reader for testing `load_configuration_with_reader`.
-    struct MockConfigReader {
-        result: Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>>,
+    enum MockConfigReader {
+        Config(NoStdFsConfig),
+        None,
+        Error(String),
     }
 
     impl MockConfigReader {
         fn returning_config(config: NoStdFsConfig) -> Self {
-            Self {
-                result: Ok(Some(config)),
-            }
+            Self::Config(config)
         }
 
         fn returning_none() -> Self {
-            Self { result: Ok(None) }
+            Self::None
         }
 
         fn returning_error(message: &str) -> Self {
-            Self {
-                result: Err(Box::new(io::Error::other(message))),
-            }
+            Self::Error(message.to_owned())
         }
     }
 
@@ -300,9 +296,10 @@ mod tests {
             &self,
             _lint_name: &str,
         ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>> {
-            match &self.result {
-                Ok(opt) => Ok(opt.clone()),
-                Err(_) => Err(Box::new(io::Error::other("mock error"))),
+            match self {
+                Self::Config(config) => Ok(Some(config.clone())),
+                Self::None => Ok(Option::None),
+                Self::Error(msg) => Err(Box::new(io::Error::other(msg.as_str()))),
             }
         }
     }

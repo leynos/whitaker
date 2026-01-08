@@ -15,6 +15,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use std::io::Write;
 
 /// Context for a build/stage pipeline run.
+///
+/// `PipelineContext` aggregates the configuration needed to build lint crates
+/// and stage the resulting libraries. It is passed to [`perform_build`] and
+/// [`stage_libraries`] to coordinate the build pipeline.
+///
+/// All fields are borrowed references to avoid ownership transfer, allowing
+/// the context to be reused across multiple pipeline operations.
 pub struct PipelineContext<'a> {
     /// Workspace root directory.
     pub workspace_root: &'a Utf8Path,
@@ -123,24 +130,30 @@ mod tests {
     //! construction from `PipelineContext`.
 
     use super::*;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
-    fn test_toolchain() -> Toolchain {
+    /// Fixture providing a test toolchain.
+    #[fixture]
+    fn toolchain() -> Toolchain {
         Toolchain::with_override(&Utf8PathBuf::from("/tmp/test"), "nightly-2025-09-18")
     }
 
-    fn test_context() -> (Utf8PathBuf, Utf8PathBuf, Toolchain) {
+    /// Fixture providing paths and toolchain for test context construction.
+    #[fixture]
+    fn context_paths(toolchain: Toolchain) -> (Utf8PathBuf, Utf8PathBuf, Toolchain) {
         let workspace_root = Utf8PathBuf::from("/tmp/workspace");
         let target_dir = Utf8PathBuf::from("/tmp/target");
-        let toolchain = test_toolchain();
         (workspace_root, target_dir, toolchain)
     }
 
     #[rstest]
     #[case::quiet_mode(true)]
     #[case::verbose_mode(false)]
-    fn perform_build_respects_quiet_flag(#[case] quiet: bool) {
-        let (workspace_root, target_dir, toolchain) = test_context();
+    fn perform_build_respects_quiet_flag(
+        context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
+        #[case] quiet: bool,
+    ) {
+        let (workspace_root, target_dir, toolchain) = context_paths;
         let context = PipelineContext {
             workspace_root: &workspace_root,
             toolchain: &toolchain,
@@ -165,11 +178,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn pipeline_context_fields_are_accessible() {
+    #[rstest]
+    fn pipeline_context_fields_are_accessible(toolchain: Toolchain) {
         let workspace_root = Utf8PathBuf::from("/workspace");
         let target_dir = Utf8PathBuf::from("/target");
-        let toolchain = test_toolchain();
 
         let context = PipelineContext {
             workspace_root: &workspace_root,
