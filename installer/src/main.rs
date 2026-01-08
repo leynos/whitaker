@@ -411,8 +411,8 @@ mod tests {
             "expected JSON with 'toolchains' field"
         );
         assert!(
-            output.contains("active_toolchain"),
-            "expected JSON with 'active_toolchain' field"
+            output.contains("\"active\""),
+            "expected JSON with 'active' field in toolchain entries"
         );
     }
 

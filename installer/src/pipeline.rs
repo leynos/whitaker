@@ -4,7 +4,7 @@
 //! staging the resulting libraries. It coordinates between the builder, stager,
 //! and output modules to provide a complete build pipeline.
 
-use crate::builder::{BuildConfig, BuildResult, Builder};
+use crate::builder::{BuildConfig, BuildResult, Builder, CrateBuilder};
 use crate::crate_name::CrateName;
 use crate::error::Result;
 use crate::output::{success_message, write_stderr_line};
@@ -13,6 +13,23 @@ use crate::stager::Stager;
 use crate::toolchain::Toolchain;
 use camino::{Utf8Path, Utf8PathBuf};
 use std::io::Write;
+
+/// Creates a [`BuildConfig`] from the pipeline context.
+///
+/// This extracts the build configuration parameters from the pipeline context
+/// for use with a [`Builder`]. The `target_dir` in the resulting config points
+/// to the cargo target directory (`{workspace_root}/target`), not the staging
+/// directory.
+#[must_use]
+pub fn build_config_from_context(context: &PipelineContext<'_>) -> BuildConfig {
+    BuildConfig {
+        toolchain: context.toolchain.clone(),
+        target_dir: context.workspace_root.join("target"),
+        jobs: context.jobs,
+        verbosity: context.verbosity,
+        experimental: context.experimental,
+    }
+}
 
 /// Context for a build/stage pipeline run.
 ///
@@ -51,6 +68,25 @@ pub fn perform_build(
     crates: &[CrateName],
     stderr: &mut dyn Write,
 ) -> Result<Vec<BuildResult>> {
+    let config = build_config_from_context(context);
+    let builder = Builder::new(config);
+    perform_build_with(context, crates, &builder, stderr)
+}
+
+/// Builds all requested crates using the provided builder.
+///
+/// This is the internal implementation that accepts a [`CrateBuilder`] trait
+/// object for dependency injection, enabling tests to mock the build process.
+///
+/// # Errors
+///
+/// Returns an error if any crate fails to build.
+pub(crate) fn perform_build_with(
+    context: &PipelineContext<'_>,
+    crates: &[CrateName],
+    builder: &dyn CrateBuilder,
+    stderr: &mut dyn Write,
+) -> Result<Vec<BuildResult>> {
     if !context.quiet {
         write_stderr_line(
             stderr,
@@ -67,17 +103,7 @@ pub fn perform_build(
         write_stderr_line(stderr, "");
     }
 
-    // Build artifacts go to {workspace_root}/target (Cargo's standard location),
-    // distinct from context.target_dir which is the user-facing staging directory
-    // (e.g., ~/.local/share/dylint/lib) where final libraries are copied.
-    let config = BuildConfig {
-        toolchain: context.toolchain.clone(),
-        target_dir: context.workspace_root.join("target"),
-        jobs: context.jobs,
-        verbosity: context.verbosity,
-        experimental: context.experimental,
-    };
-    Builder::new(config).build_all(crates)
+    builder.build_all(crates)
 }
 
 /// Stages built libraries and returns the staging path.
@@ -130,12 +156,14 @@ fn log_staging_results(
 mod tests {
     //! Unit tests for pipeline orchestration.
     //!
-    //! Full integration tests are impractical because `perform_build` and
-    //! `stage_libraries` invoke cargo and perform filesystem operations. These
-    //! tests focus on verifying progress output behaviour and configuration
-    //! construction from `PipelineContext`.
+    //! These tests verify that `build_config_from_context` correctly maps
+    //! `PipelineContext` fields to `BuildConfig`, and that `perform_build_with`
+    //! correctly invokes the builder with the provided crates. The mockall-based
+    //! tests use `MockCrateBuilder` to verify builder interactions without
+    //! invoking cargo.
 
     use super::*;
+    use crate::builder::MockCrateBuilder;
     use rstest::{fixture, rstest};
 
     /// Fixture providing a test toolchain.
@@ -152,10 +180,193 @@ mod tests {
         (workspace_root, target_dir, toolchain)
     }
 
+    // -------------------------------------------------------------------------
+    // build_config_from_context tests
+    // -------------------------------------------------------------------------
+
+    #[rstest]
+    fn build_config_from_context_sets_toolchain(toolchain: Toolchain) {
+        let workspace_root = Utf8PathBuf::from("/workspace");
+        let target_dir = Utf8PathBuf::from("/staging");
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet: false,
+        };
+
+        let config = build_config_from_context(&context);
+
+        assert_eq!(config.toolchain.channel(), "nightly-2025-09-18");
+    }
+
+    #[rstest]
+    fn build_config_from_context_sets_target_dir_to_workspace_target(toolchain: Toolchain) {
+        let workspace_root = Utf8PathBuf::from("/my/workspace");
+        let target_dir = Utf8PathBuf::from("/staging/dir");
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet: false,
+        };
+
+        let config = build_config_from_context(&context);
+
+        // target_dir in BuildConfig should be workspace_root/target, NOT the staging dir
+        assert_eq!(config.target_dir, Utf8PathBuf::from("/my/workspace/target"));
+    }
+
+    #[rstest]
+    #[case::no_jobs(None)]
+    #[case::four_jobs(Some(4))]
+    #[case::single_job(Some(1))]
+    fn build_config_from_context_sets_jobs(toolchain: Toolchain, #[case] jobs: Option<usize>) {
+        let workspace_root = Utf8PathBuf::from("/workspace");
+        let target_dir = Utf8PathBuf::from("/staging");
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs,
+            verbosity: 0,
+            experimental: false,
+            quiet: false,
+        };
+
+        let config = build_config_from_context(&context);
+
+        assert_eq!(config.jobs, jobs);
+    }
+
+    #[rstest]
+    #[case::silent(0)]
+    #[case::verbose(1)]
+    #[case::very_verbose(3)]
+    fn build_config_from_context_sets_verbosity(toolchain: Toolchain, #[case] verbosity: u8) {
+        let workspace_root = Utf8PathBuf::from("/workspace");
+        let target_dir = Utf8PathBuf::from("/staging");
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity,
+            experimental: false,
+            quiet: false,
+        };
+
+        let config = build_config_from_context(&context);
+
+        assert_eq!(config.verbosity, verbosity);
+    }
+
+    #[rstest]
+    #[case::stable(false)]
+    #[case::experimental(true)]
+    fn build_config_from_context_sets_experimental(
+        toolchain: Toolchain,
+        #[case] experimental: bool,
+    ) {
+        let workspace_root = Utf8PathBuf::from("/workspace");
+        let target_dir = Utf8PathBuf::from("/staging");
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental,
+            quiet: false,
+        };
+
+        let config = build_config_from_context(&context);
+
+        assert_eq!(config.experimental, experimental);
+    }
+
+    // -------------------------------------------------------------------------
+    // perform_build_with mockall tests
+    // -------------------------------------------------------------------------
+
+    #[rstest]
+    fn perform_build_with_calls_build_all_with_provided_crates(
+        context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
+    ) {
+        let (workspace_root, target_dir, toolchain) = context_paths;
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet: true,
+        };
+        let crates = vec![
+            CrateName::from("suite"),
+            CrateName::from("module_max_lines"),
+        ];
+
+        let mut mock_builder = MockCrateBuilder::new();
+        mock_builder
+            .expect_build_all()
+            .withf(|crates| {
+                crates.len() == 2
+                    && crates[0].as_str() == "suite"
+                    && crates[1].as_str() == "module_max_lines"
+            })
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let mut stderr = Vec::new();
+        let result = perform_build_with(&context, &crates, &mock_builder, &mut stderr);
+
+        assert!(result.is_ok());
+    }
+
+    #[rstest]
+    fn perform_build_with_returns_builder_results(
+        context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
+    ) {
+        let (workspace_root, target_dir, toolchain) = context_paths;
+        let context = PipelineContext {
+            workspace_root: &workspace_root,
+            toolchain: &toolchain,
+            target_dir: &target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet: true,
+        };
+        let crates = vec![CrateName::from("suite")];
+
+        let mut mock_builder = MockCrateBuilder::new();
+        mock_builder.expect_build_all().times(1).returning(|_| {
+            Ok(vec![BuildResult {
+                crate_name: CrateName::from("suite"),
+                library_path: Utf8PathBuf::from("/path/to/libsuite.so"),
+            }])
+        });
+
+        let mut stderr = Vec::new();
+        let result = perform_build_with(&context, &crates, &mock_builder, &mut stderr);
+
+        let results = result.expect("expected success");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].crate_name.as_str(), "suite");
+    }
+
     #[rstest]
     #[case::quiet_mode(true)]
     #[case::verbose_mode(false)]
-    fn perform_build_respects_quiet_flag(
+    fn perform_build_with_respects_quiet_flag(
         context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
         #[case] quiet: bool,
     ) {
@@ -170,10 +381,15 @@ mod tests {
             quiet,
         };
         let crates = vec![CrateName::from("suite")];
-        let mut stderr = Vec::new();
 
-        // perform_build will fail (no actual cargo build), but we're testing output
-        let _ = perform_build(&context, &crates, &mut stderr);
+        let mut mock_builder = MockCrateBuilder::new();
+        mock_builder
+            .expect_build_all()
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let mut stderr = Vec::new();
+        let _ = perform_build_with(&context, &crates, &mock_builder, &mut stderr);
 
         let output = String::from_utf8_lossy(&stderr);
         if quiet {
@@ -183,6 +399,10 @@ mod tests {
             assert!(output.contains("suite"), "expected crate name in output");
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Legacy tests (retained for coverage)
+    // -------------------------------------------------------------------------
 
     #[rstest]
     fn pipeline_context_fields_are_accessible(toolchain: Toolchain) {

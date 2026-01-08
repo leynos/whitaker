@@ -40,6 +40,21 @@ pub struct BuildResult {
     pub library_path: Utf8PathBuf,
 }
 
+/// Trait for building lint crates, enabling dependency injection for tests.
+///
+/// This trait abstracts the build operation so that tests can mock the builder
+/// and verify that `perform_build` constructs the correct configuration without
+/// actually invoking cargo.
+#[cfg_attr(test, mockall::automock)]
+pub trait CrateBuilder {
+    /// Build all specified crates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any crate fails to build.
+    fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>>;
+}
+
 /// Builder for compiling lint crates.
 pub struct Builder {
     config: BuildConfig,
@@ -163,6 +178,21 @@ impl Builder {
             .map(|&name| format!("experimental-{}", name.replace('_', "-")))
             .collect::<Vec<_>>()
             .join(",")
+    }
+
+    /// Returns a reference to the build configuration.
+    ///
+    /// This method is primarily useful for testing to verify that the correct
+    /// configuration was constructed.
+    #[must_use]
+    pub fn config(&self) -> &BuildConfig {
+        &self.config
+    }
+}
+
+impl CrateBuilder for Builder {
+    fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> {
+        self.build_all(crates)
     }
 }
 
