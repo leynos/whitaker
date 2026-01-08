@@ -6,21 +6,18 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
-use log::trace;
 use std::io::Write;
-use whitaker_installer::cli::{Cli, Command, InstallArgs, ListArgs};
+use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::list_output::{format_human, format_json};
+use whitaker_installer::list::{determine_target_dir, run_list};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
-use whitaker_installer::scanner::scan_installed;
-use whitaker_installer::stager::default_target_dir;
 use whitaker_installer::toolchain::Toolchain;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
@@ -42,76 +39,6 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
         Some(Command::Install(args)) => run_install(args, stderr),
         None => run_install(cli.install_args(), stderr),
     }
-}
-
-/// Lists installed lint libraries and their associated lints.
-///
-/// Scans the staging directory for installed libraries, detects the active
-/// toolchain from `rust-toolchain.toml` in the current directory (if present),
-/// and formats the output for display.
-///
-/// Output is written to stdout (human-readable by default, JSON with `--json`).
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The staging directory cannot be scanned
-/// - Writing to stdout fails
-fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
-    let target_dir = determine_target_dir(args.target_dir.clone())?;
-
-    let installed = scan_installed(&target_dir).map_err(|e| InstallerError::ScanFailed {
-        reason: e.to_string(),
-    })?;
-
-    let active_toolchain = detect_active_toolchain();
-
-    let output = if args.json {
-        format_json(&installed, active_toolchain.as_deref())
-    } else {
-        format_human(&installed, active_toolchain.as_deref())
-    };
-
-    writeln!(stdout, "{output}").map_err(|e| InstallerError::WriteFailed {
-        reason: e.to_string(),
-    })?;
-
-    Ok(())
-}
-
-/// Detect the active toolchain from `rust-toolchain.toml` in the current directory.
-///
-/// Returns `None` if:
-/// - The current directory cannot be determined
-/// - The path is not valid UTF-8
-/// - No `rust-toolchain.toml` file exists
-/// - The toolchain file cannot be parsed
-fn detect_active_toolchain() -> Option<String> {
-    let cwd = match std::env::current_dir() {
-        Ok(path) => path,
-        Err(e) => {
-            trace!("detect_active_toolchain: failed to get current dir: {e}");
-            return None;
-        }
-    };
-
-    let utf8_cwd = match Utf8PathBuf::try_from(cwd) {
-        Ok(path) => path,
-        Err(e) => {
-            trace!("detect_active_toolchain: current dir is not valid UTF-8: {e}");
-            return None;
-        }
-    };
-
-    let toolchain = match Toolchain::detect(&utf8_cwd) {
-        Ok(tc) => tc,
-        Err(e) => {
-            trace!("detect_active_toolchain: toolchain detection failed: {e}");
-            return None;
-        }
-    };
-
-    Some(toolchain.channel().to_owned())
 }
 
 /// Runs the install command to build and stage lint libraries.
@@ -284,15 +211,6 @@ fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
     Ok(resolve_crates(&lint_crates, &options))
 }
 
-/// Determines the target directory from CLI or falls back to the default.
-fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
-    cli_target
-        .or_else(default_target_dir)
-        .ok_or_else(|| InstallerError::StagingFailed {
-            reason: "could not determine default target directory".to_owned(),
-        })
-}
-
 /// Generates wrapper scripts and reports the result.
 fn generate_and_report_wrapper(
     dirs: &dyn BaseDirs,
@@ -336,155 +254,8 @@ fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::{fixture, rstest};
-    use std::fs;
-    use tempfile::TempDir;
-    use whitaker_installer::cli::ListArgs;
-
-    // -------------------------------------------------------------------------
-    // Fixtures
-    // -------------------------------------------------------------------------
-
-    /// A temporary directory converted to a UTF-8 path for test isolation.
-    struct TempTarget {
-        _temp: TempDir,
-        path: Utf8PathBuf,
-    }
-
-    #[fixture]
-    fn temp_target() -> TempTarget {
-        let temp = TempDir::new().expect("failed to create temp dir");
-        let path = Utf8PathBuf::try_from(temp.path().to_owned()).expect("non-UTF8 temp path");
-        TempTarget { _temp: temp, path }
-    }
-
-    /// A Write implementation that always fails, for testing error paths.
-    struct FailingWriter;
-
-    impl std::io::Write for FailingWriter {
-        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("simulated write failure"))
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Err(std::io::Error::other("simulated flush failure"))
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // run_list tests
-    // -------------------------------------------------------------------------
-
-    #[rstest]
-    fn run_list_outputs_human_readable_format(temp_target: TempTarget) {
-        let args = ListArgs {
-            json: false,
-            target_dir: Some(temp_target.path.clone()),
-        };
-        let mut stdout = Vec::new();
-
-        let result = run_list(&args, &mut stdout);
-
-        assert!(result.is_ok(), "expected success, got: {result:?}");
-        let output = String::from_utf8_lossy(&stdout);
-        assert!(
-            output.contains("No lints installed"),
-            "expected 'No lints installed' message, got: {output}"
-        );
-    }
-
-    #[rstest]
-    fn run_list_outputs_json_format(temp_target: TempTarget) {
-        let args = ListArgs {
-            json: true,
-            target_dir: Some(temp_target.path.clone()),
-        };
-        let mut stdout = Vec::new();
-
-        let result = run_list(&args, &mut stdout);
-
-        assert!(result.is_ok(), "expected success, got: {result:?}");
-        let output = String::from_utf8_lossy(&stdout);
-        // JSON output should be parseable and contain expected fields
-        assert!(
-            output.contains("toolchains"),
-            "expected JSON with 'toolchains' field"
-        );
-        assert!(
-            output.contains("\"active\""),
-            "expected JSON with 'active' field in toolchain entries"
-        );
-    }
-
-    #[rstest]
-    fn run_list_returns_write_failed_on_stdout_error(temp_target: TempTarget) {
-        let args = ListArgs {
-            json: false,
-            target_dir: Some(temp_target.path.clone()),
-        };
-        let mut failing_stdout = FailingWriter;
-
-        let result = run_list(&args, &mut failing_stdout);
-
-        assert!(result.is_err(), "expected error on write failure");
-        let err = result.unwrap_err();
-        assert!(
-            matches!(err, InstallerError::WriteFailed { .. }),
-            "expected WriteFailed error, got: {err:?}"
-        );
-    }
-
-    #[rstest]
-    fn run_list_scans_installed_libraries(temp_target: TempTarget) {
-        // Create a mock installed library structure
-        let toolchain = "nightly-2025-09-18";
-        let release_dir = temp_target.path.join(toolchain).join("release");
-        fs::create_dir_all(&release_dir).expect("failed to create release dir");
-        fs::write(
-            release_dir.join(format!("libsuite@{toolchain}.so")),
-            b"mock library",
-        )
-        .expect("failed to create mock library");
-
-        let args = ListArgs {
-            json: false,
-            target_dir: Some(temp_target.path.clone()),
-        };
-        let mut stdout = Vec::new();
-
-        let result = run_list(&args, &mut stdout);
-
-        assert!(result.is_ok(), "expected success, got: {result:?}");
-        let output = String::from_utf8_lossy(&stdout);
-        assert!(
-            output.contains("nightly-2025-09-18"),
-            "expected toolchain in output, got: {output}"
-        );
-        assert!(
-            output.contains("suite"),
-            "expected suite crate in output, got: {output}"
-        );
-    }
-
-    // -------------------------------------------------------------------------
-    // detect_active_toolchain tests
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn detect_active_toolchain_returns_none_when_no_toolchain_file() {
-        // In most test environments, there's no rust-toolchain.toml in cwd,
-        // so this should return None. This tests the fallback path.
-        // Note: If running from a workspace with rust-toolchain.toml, this
-        // may return Some - both outcomes are valid for this test.
-        let result = detect_active_toolchain();
-        // We can't assert a specific value since it depends on the environment,
-        // but we can verify the function doesn't panic and returns the expected type.
-        let _ = result; // Type check: Option<String>
-    }
-
-    // -------------------------------------------------------------------------
-    // Existing tests
-    // -------------------------------------------------------------------------
+    use rstest::rstest;
+    use whitaker_installer::cli::InstallArgs;
 
     #[test]
     fn exit_code_for_run_result_returns_zero_on_success() {

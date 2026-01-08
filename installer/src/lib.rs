@@ -13,6 +13,7 @@
 //! - [`dirs`] - Directory resolution abstraction for platform-specific paths
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
+//! - [`list`] - List command implementation
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
 //! - [`pipeline`] - Build and staging pipeline orchestration
@@ -30,6 +31,7 @@ pub mod deps;
 pub mod dirs;
 pub mod error;
 pub mod git;
+pub mod list;
 pub mod list_output;
 pub mod output;
 pub mod pipeline;
