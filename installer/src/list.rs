@@ -274,4 +274,33 @@ channel = "nightly-2025-09-18"
 
         assert_eq!(result, Some("nightly-2025-09-18".to_owned()));
     }
+
+    // -------------------------------------------------------------------------
+    // determine_target_dir tests
+    // -------------------------------------------------------------------------
+
+    #[rstest]
+    fn determine_target_dir_returns_cli_value_when_provided(temp_target: TempTarget) {
+        let result = determine_target_dir(Some(temp_target.path.clone()));
+
+        assert!(result.is_ok(), "expected success, got: {result:?}");
+        assert_eq!(result.expect("already checked"), temp_target.path);
+    }
+
+    #[test]
+    fn determine_target_dir_falls_back_to_default() {
+        // When CLI target is None, falls back to default_target_dir()
+        // This test verifies the function doesn't fail when default is available.
+        // On most systems, default_target_dir() will return Some value.
+        let result = determine_target_dir(None);
+
+        // If default_target_dir() returns Some, result should be Ok
+        // If default_target_dir() returns None, result should be Err
+        // Either outcome is valid depending on system state
+        if crate::stager::default_target_dir().is_some() {
+            assert!(result.is_ok(), "expected Ok when default available");
+        } else {
+            assert!(result.is_err(), "expected Err when no default");
+        }
+    }
 }
