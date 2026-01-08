@@ -155,13 +155,19 @@ mod tests {
 
     /// Helper to create a mock installed library in the target directory for tests
     fn create_mock_library(target_dir: &Utf8PathBuf, toolchain: &str) {
+        use crate::builder::{library_extension, library_prefix};
+
         let release_dir = target_dir.join(toolchain).join("release");
         fs::create_dir_all(&release_dir).expect("failed to create release dir");
-        fs::write(
-            release_dir.join(format!("libsuite@{toolchain}.so")),
-            b"mock library",
-        )
-        .expect("failed to create mock library");
+
+        let filename = format!(
+            "{}suite@{toolchain}{}",
+            library_prefix(),
+            library_extension()
+        );
+
+        fs::write(release_dir.join(filename), b"mock library")
+            .expect("failed to create mock library");
     }
 
     // -------------------------------------------------------------------------
