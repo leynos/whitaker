@@ -105,7 +105,6 @@ pub fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathB
 #[cfg(test)]
 mod tests {
     use super::*;
-    use camino::Utf8Path;
     use rstest::{fixture, rstest};
     use std::fs;
     use tempfile::TempDir;
@@ -144,14 +143,12 @@ mod tests {
     // Helpers
     // -------------------------------------------------------------------------
 
-    const TEST_TOOLCHAIN: &str = "nightly-2025-09-18";
-
-    /// Creates a mock installed library in the given target directory.
-    fn create_mock_library(target_dir: &Utf8Path) {
-        let release_dir = target_dir.join(TEST_TOOLCHAIN).join("release");
+    /// Helper to create a mock installed library in the target directory for tests
+    fn create_mock_library(target_dir: &Utf8PathBuf, toolchain: &str) {
+        let release_dir = target_dir.join(toolchain).join("release");
         fs::create_dir_all(&release_dir).expect("failed to create release dir");
         fs::write(
-            release_dir.join(format!("libsuite@{TEST_TOOLCHAIN}.so")),
+            release_dir.join(format!("libsuite@{toolchain}.so")),
             b"mock library",
         )
         .expect("failed to create mock library");
@@ -178,7 +175,7 @@ mod tests {
 
     #[rstest]
     fn run_list_outputs_json_format(temp_target: TempTarget) {
-        create_mock_library(&temp_target.path);
+        create_mock_library(&temp_target.path, "nightly-2025-09-18");
         let args = ListArgs {
             json: true,
             target_dir: Some(temp_target.path.clone()),
@@ -215,7 +212,7 @@ mod tests {
 
     #[rstest]
     fn run_list_scans_installed_libraries(temp_target: TempTarget) {
-        create_mock_library(&temp_target.path);
+        create_mock_library(&temp_target.path, "nightly-2025-09-18");
         let args = ListArgs {
             json: false,
             target_dir: Some(temp_target.path.clone()),
@@ -227,7 +224,7 @@ mod tests {
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
         assert!(
-            output.contains(TEST_TOOLCHAIN),
+            output.contains("nightly-2025-09-18"),
             "expected toolchain in output, got: {output}"
         );
         assert!(
