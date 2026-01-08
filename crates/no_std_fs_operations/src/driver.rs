@@ -66,6 +66,29 @@ impl NoStdFsConfig {
     /// Check if the given crate name is excluded from the lint.
     ///
     /// Returns `true` if `crate_name` appears in the `excluded_crates` list.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use serde::Deserialize;
+    /// #[derive(Default, Deserialize)]
+    /// struct NoStdFsConfig {
+    ///     excluded_crates: Vec<String>,
+    /// }
+    ///
+    /// impl NoStdFsConfig {
+    ///     fn is_excluded(&self, crate_name: &str) -> bool {
+    ///         self.excluded_crates.iter().any(|c| c == crate_name)
+    ///     }
+    /// }
+    ///
+    /// let config = NoStdFsConfig {
+    ///     excluded_crates: vec!["my_cli".to_owned(), "test_utils".to_owned()],
+    /// };
+    ///
+    /// assert!(config.is_excluded("my_cli"));
+    /// assert!(!config.is_excluded("other_crate"));
+    /// ```
     #[must_use]
     pub fn is_excluded(&self, crate_name: &str) -> bool {
         self.excluded_crates.iter().any(|c| c == crate_name)
@@ -197,6 +220,25 @@ impl NoStdFsOperations {
 }
 
 /// Trait for loading lint configuration, enabling dependency injection for tests.
+///
+/// # Return Values
+///
+/// - `Ok(Some(config))` - Configuration section found and parsed successfully
+/// - `Ok(None)` - No configuration file or section present
+/// - `Err(...)` - Configuration file exists but parsing failed
+///
+/// # Example Usage (in tests)
+///
+/// ```text
+/// let mut mock = MockConfigReader::new();
+/// mock.expect_read_config()
+///     .returning(|_| Ok(Some(NoStdFsConfig {
+///         excluded_crates: vec!["my_crate".to_owned()],
+///     })));
+///
+/// let config = load_configuration_with_reader(&mock);
+/// assert!(config.is_excluded("my_crate"));
+/// ```
 #[cfg_attr(test, mockall::automock)]
 pub(crate) trait ConfigReader {
     /// Read configuration for the given lint name.
@@ -210,6 +252,9 @@ pub(crate) trait ConfigReader {
 }
 
 /// Production implementation that reads from `dylint.toml` via `dylint_linting::config`.
+///
+/// This reader delegates to `dylint_linting::config` to locate and parse
+/// the `dylint.toml` configuration file in the workspace root.
 pub(crate) struct DylintConfigReader;
 
 impl ConfigReader for DylintConfigReader {
@@ -227,6 +272,22 @@ impl ConfigReader for DylintConfigReader {
 /// - No configuration file exists
 /// - No `[no_std_fs_operations]` section is present
 /// - The configuration fails to parse (logged at `warn` level)
+///
+/// # Example Return Cases
+///
+/// ```text
+/// // Case 1: Configuration present
+/// reader.read_config("lint") => Ok(Some(config))
+/// load_configuration_with_reader(&reader) => config
+///
+/// // Case 2: No configuration section
+/// reader.read_config("lint") => Ok(None)
+/// load_configuration_with_reader(&reader) => NoStdFsConfig::default()
+///
+/// // Case 3: Parse error
+/// reader.read_config("lint") => Err(...)
+/// load_configuration_with_reader(&reader) => NoStdFsConfig::default() + logs warning
+/// ```
 fn load_configuration_with_reader(reader: &dyn ConfigReader) -> NoStdFsConfig {
     match reader.read_config(LINT_NAME) {
         Ok(Some(config)) => config,

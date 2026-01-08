@@ -105,6 +105,7 @@ pub fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use camino::Utf8Path;
     use rstest::{fixture, rstest};
     use std::fs;
     use tempfile::TempDir;
@@ -140,6 +141,23 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    const TEST_TOOLCHAIN: &str = "nightly-2025-09-18";
+
+    /// Creates a mock installed library in the given target directory.
+    fn create_mock_library(target_dir: &Utf8Path) {
+        let release_dir = target_dir.join(TEST_TOOLCHAIN).join("release");
+        fs::create_dir_all(&release_dir).expect("failed to create release dir");
+        fs::write(
+            release_dir.join(format!("libsuite@{TEST_TOOLCHAIN}.so")),
+            b"mock library",
+        )
+        .expect("failed to create mock library");
+    }
+
+    // -------------------------------------------------------------------------
     // run_list tests
     // -------------------------------------------------------------------------
 
@@ -155,24 +173,12 @@ mod tests {
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
-        assert!(
-            output.contains("No lints installed"),
-            "expected 'No lints installed' message, got: {output}"
-        );
+        assert!(output.contains("No lints installed"), "got: {output}");
     }
 
     #[rstest]
     fn run_list_outputs_json_format(temp_target: TempTarget) {
-        // Create a mock installed library to ensure toolchain entries exist
-        let toolchain = "nightly-2025-09-18";
-        let release_dir = temp_target.path.join(toolchain).join("release");
-        fs::create_dir_all(&release_dir).expect("failed to create release dir");
-        fs::write(
-            release_dir.join(format!("libsuite@{toolchain}.so")),
-            b"mock library",
-        )
-        .expect("failed to create mock library");
-
+        create_mock_library(&temp_target.path);
         let args = ListArgs {
             json: true,
             target_dir: Some(temp_target.path.clone()),
@@ -183,14 +189,10 @@ mod tests {
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
-        // JSON output should be parseable and contain expected fields
-        assert!(
-            output.contains("toolchains"),
-            "expected JSON with 'toolchains' field"
-        );
+        assert!(output.contains("toolchains"), "expected 'toolchains' field");
         assert!(
             output.contains("\"active\""),
-            "expected JSON with 'active' field in toolchain entries"
+            "expected 'active' field in toolchain entries"
         );
     }
 
@@ -205,25 +207,15 @@ mod tests {
         let result = run_list(&args, &mut failing_stdout);
 
         assert!(result.is_err(), "expected error on write failure");
-        let err = result.unwrap_err();
-        assert!(
-            matches!(err, InstallerError::WriteFailed { .. }),
-            "expected WriteFailed error, got: {err:?}"
-        );
+        assert!(matches!(
+            result.unwrap_err(),
+            InstallerError::WriteFailed { .. }
+        ));
     }
 
     #[rstest]
     fn run_list_scans_installed_libraries(temp_target: TempTarget) {
-        // Create a mock installed library structure
-        let toolchain = "nightly-2025-09-18";
-        let release_dir = temp_target.path.join(toolchain).join("release");
-        fs::create_dir_all(&release_dir).expect("failed to create release dir");
-        fs::write(
-            release_dir.join(format!("libsuite@{toolchain}.so")),
-            b"mock library",
-        )
-        .expect("failed to create mock library");
-
+        create_mock_library(&temp_target.path);
         let args = ListArgs {
             json: false,
             target_dir: Some(temp_target.path.clone()),
@@ -235,7 +227,7 @@ mod tests {
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
         assert!(
-            output.contains("nightly-2025-09-18"),
+            output.contains(TEST_TOOLCHAIN),
             "expected toolchain in output, got: {output}"
         );
         assert!(

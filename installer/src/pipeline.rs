@@ -158,9 +158,7 @@ mod tests {
     //!
     //! These tests verify that `build_config_from_context` correctly maps
     //! `PipelineContext` fields to `BuildConfig`, and that `perform_build_with`
-    //! correctly invokes the builder with the provided crates. The mockall-based
-    //! tests use `MockCrateBuilder` to verify builder interactions without
-    //! invoking cargo.
+    //! correctly invokes the builder with the provided crates.
 
     use super::*;
     use crate::builder::MockCrateBuilder;
@@ -172,12 +170,41 @@ mod tests {
         Toolchain::with_override(&Utf8PathBuf::from("/tmp/test"), "nightly-2025-09-18")
     }
 
-    /// Fixture providing paths and toolchain for test context construction.
+    /// Fixture providing a default test context with paths owned by the returned struct.
+    struct TestContext {
+        workspace_root: Utf8PathBuf,
+        target_dir: Utf8PathBuf,
+        toolchain: Toolchain,
+    }
+
+    impl TestContext {
+        fn new() -> Self {
+            Self {
+                workspace_root: Utf8PathBuf::from("/tmp/workspace"),
+                target_dir: Utf8PathBuf::from("/tmp/target"),
+                toolchain: Toolchain::with_override(
+                    &Utf8PathBuf::from("/tmp/test"),
+                    "nightly-2025-09-18",
+                ),
+            }
+        }
+
+        fn pipeline_context(&self, quiet: bool) -> PipelineContext<'_> {
+            PipelineContext {
+                workspace_root: &self.workspace_root,
+                toolchain: &self.toolchain,
+                target_dir: &self.target_dir,
+                jobs: None,
+                verbosity: 0,
+                experimental: false,
+                quiet,
+            }
+        }
+    }
+
     #[fixture]
-    fn context_paths(toolchain: Toolchain) -> (Utf8PathBuf, Utf8PathBuf, Toolchain) {
-        let workspace_root = Utf8PathBuf::from("/tmp/workspace");
-        let target_dir = Utf8PathBuf::from("/tmp/target");
-        (workspace_root, target_dir, toolchain)
+    fn test_ctx() -> TestContext {
+        TestContext::new()
     }
 
     // -------------------------------------------------------------------------
@@ -185,42 +212,18 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[rstest]
-    fn build_config_from_context_sets_toolchain(toolchain: Toolchain) {
-        let workspace_root = Utf8PathBuf::from("/workspace");
-        let target_dir = Utf8PathBuf::from("/staging");
-        let context = PipelineContext {
-            workspace_root: &workspace_root,
-            toolchain: &toolchain,
-            target_dir: &target_dir,
-            jobs: None,
-            verbosity: 0,
-            experimental: false,
-            quiet: false,
-        };
-
-        let config = build_config_from_context(&context);
-
+    fn build_config_from_context_sets_toolchain(test_ctx: TestContext) {
+        let config = build_config_from_context(&test_ctx.pipeline_context(false));
         assert_eq!(config.toolchain.channel(), "nightly-2025-09-18");
     }
 
     #[rstest]
-    fn build_config_from_context_sets_target_dir_to_workspace_target(toolchain: Toolchain) {
-        let workspace_root = Utf8PathBuf::from("/my/workspace");
-        let target_dir = Utf8PathBuf::from("/staging/dir");
-        let context = PipelineContext {
-            workspace_root: &workspace_root,
-            toolchain: &toolchain,
-            target_dir: &target_dir,
-            jobs: None,
-            verbosity: 0,
-            experimental: false,
-            quiet: false,
-        };
-
-        let config = build_config_from_context(&context);
-
-        // target_dir in BuildConfig should be workspace_root/target, NOT the staging dir
-        assert_eq!(config.target_dir, Utf8PathBuf::from("/my/workspace/target"));
+    fn build_config_from_context_sets_target_dir_to_workspace_target(test_ctx: TestContext) {
+        let config = build_config_from_context(&test_ctx.pipeline_context(false));
+        assert_eq!(
+            config.target_dir,
+            Utf8PathBuf::from("/tmp/workspace/target")
+        );
     }
 
     #[rstest]
@@ -239,10 +242,7 @@ mod tests {
             experimental: false,
             quiet: false,
         };
-
-        let config = build_config_from_context(&context);
-
-        assert_eq!(config.jobs, jobs);
+        assert_eq!(build_config_from_context(&context).jobs, jobs);
     }
 
     #[rstest]
@@ -261,19 +261,13 @@ mod tests {
             experimental: false,
             quiet: false,
         };
-
-        let config = build_config_from_context(&context);
-
-        assert_eq!(config.verbosity, verbosity);
+        assert_eq!(build_config_from_context(&context).verbosity, verbosity);
     }
 
     #[rstest]
     #[case::stable(false)]
     #[case::experimental(true)]
-    fn build_config_from_context_sets_experimental(
-        toolchain: Toolchain,
-        #[case] experimental: bool,
-    ) {
+    fn build_config_from_context_sets_experimental(toolchain: Toolchain, #[case] exp: bool) {
         let workspace_root = Utf8PathBuf::from("/workspace");
         let target_dir = Utf8PathBuf::from("/staging");
         let context = PipelineContext {
@@ -282,13 +276,10 @@ mod tests {
             target_dir: &target_dir,
             jobs: None,
             verbosity: 0,
-            experimental,
+            experimental: exp,
             quiet: false,
         };
-
-        let config = build_config_from_context(&context);
-
-        assert_eq!(config.experimental, experimental);
+        assert_eq!(build_config_from_context(&context).experimental, exp);
     }
 
     // -------------------------------------------------------------------------
@@ -296,59 +287,32 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[rstest]
-    fn perform_build_with_calls_build_all_with_provided_crates(
-        context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
-    ) {
-        let (workspace_root, target_dir, toolchain) = context_paths;
-        let context = PipelineContext {
-            workspace_root: &workspace_root,
-            toolchain: &toolchain,
-            target_dir: &target_dir,
-            jobs: None,
-            verbosity: 0,
-            experimental: false,
-            quiet: true,
-        };
+    fn perform_build_with_calls_build_all_with_provided_crates(test_ctx: TestContext) {
+        let context = test_ctx.pipeline_context(true);
         let crates = vec![
             CrateName::from("suite"),
             CrateName::from("module_max_lines"),
         ];
 
-        let mut mock_builder = MockCrateBuilder::new();
-        mock_builder
-            .expect_build_all()
-            .withf(|crates| {
-                crates.len() == 2
-                    && crates[0].as_str() == "suite"
-                    && crates[1].as_str() == "module_max_lines"
+        let mut mock = MockCrateBuilder::new();
+        mock.expect_build_all()
+            .withf(|c| {
+                c.len() == 2 && c[0].as_str() == "suite" && c[1].as_str() == "module_max_lines"
             })
             .times(1)
             .returning(|_| Ok(vec![]));
 
         let mut stderr = Vec::new();
-        let result = perform_build_with(&context, &crates, &mock_builder, &mut stderr);
-
-        assert!(result.is_ok());
+        assert!(perform_build_with(&context, &crates, &mock, &mut stderr).is_ok());
     }
 
     #[rstest]
-    fn perform_build_with_returns_builder_results(
-        context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
-    ) {
-        let (workspace_root, target_dir, toolchain) = context_paths;
-        let context = PipelineContext {
-            workspace_root: &workspace_root,
-            toolchain: &toolchain,
-            target_dir: &target_dir,
-            jobs: None,
-            verbosity: 0,
-            experimental: false,
-            quiet: true,
-        };
+    fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
+        let context = test_ctx.pipeline_context(true);
         let crates = vec![CrateName::from("suite")];
 
-        let mut mock_builder = MockCrateBuilder::new();
-        mock_builder.expect_build_all().times(1).returning(|_| {
+        let mut mock = MockCrateBuilder::new();
+        mock.expect_build_all().times(1).returning(|_| {
             Ok(vec![BuildResult {
                 crate_name: CrateName::from("suite"),
                 library_path: Utf8PathBuf::from("/path/to/libsuite.so"),
@@ -356,9 +320,7 @@ mod tests {
         });
 
         let mut stderr = Vec::new();
-        let result = perform_build_with(&context, &crates, &mock_builder, &mut stderr);
-
-        let results = result.expect("expected success");
+        let results = perform_build_with(&context, &crates, &mock, &mut stderr).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].crate_name.as_str(), "suite");
     }
@@ -366,30 +328,15 @@ mod tests {
     #[rstest]
     #[case::quiet_mode(true)]
     #[case::verbose_mode(false)]
-    fn perform_build_with_respects_quiet_flag(
-        context_paths: (Utf8PathBuf, Utf8PathBuf, Toolchain),
-        #[case] quiet: bool,
-    ) {
-        let (workspace_root, target_dir, toolchain) = context_paths;
-        let context = PipelineContext {
-            workspace_root: &workspace_root,
-            toolchain: &toolchain,
-            target_dir: &target_dir,
-            jobs: None,
-            verbosity: 0,
-            experimental: false,
-            quiet,
-        };
+    fn perform_build_with_respects_quiet_flag(test_ctx: TestContext, #[case] quiet: bool) {
+        let context = test_ctx.pipeline_context(quiet);
         let crates = vec![CrateName::from("suite")];
 
-        let mut mock_builder = MockCrateBuilder::new();
-        mock_builder
-            .expect_build_all()
-            .times(1)
-            .returning(|_| Ok(vec![]));
+        let mut mock = MockCrateBuilder::new();
+        mock.expect_build_all().times(1).returning(|_| Ok(vec![]));
 
         let mut stderr = Vec::new();
-        let _ = perform_build_with(&context, &crates, &mock_builder, &mut stderr);
+        let _ = perform_build_with(&context, &crates, &mock, &mut stderr);
 
         let output = String::from_utf8_lossy(&stderr);
         if quiet {
@@ -400,15 +347,10 @@ mod tests {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Legacy tests (retained for coverage)
-    // -------------------------------------------------------------------------
-
     #[rstest]
     fn pipeline_context_fields_are_accessible(toolchain: Toolchain) {
         let workspace_root = Utf8PathBuf::from("/workspace");
         let target_dir = Utf8PathBuf::from("/target");
-
         let context = PipelineContext {
             workspace_root: &workspace_root,
             toolchain: &toolchain,
@@ -418,7 +360,6 @@ mod tests {
             experimental: true,
             quiet: false,
         };
-
         assert_eq!(context.workspace_root, Utf8Path::new("/workspace"));
         assert_eq!(context.target_dir, Utf8Path::new("/target"));
         assert_eq!(context.toolchain.channel(), "nightly-2025-09-18");
