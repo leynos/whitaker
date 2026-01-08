@@ -12,7 +12,9 @@
 //! - [`dirs`] - Directory resolution abstraction for platform-specific paths
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
+//! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
+//! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
 //! - [`toolchain`] - Rust toolchain detection and validation
 //! - [`workspace`] - Workspace detection and path resolution
@@ -24,7 +26,9 @@ pub mod deps;
 pub mod dirs;
 pub mod error;
 pub mod git;
+pub mod list_output;
 pub mod output;
+pub mod scanner;
 pub mod stager;
 pub mod toolchain;
 pub mod workspace;

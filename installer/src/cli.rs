@@ -5,7 +5,7 @@
 //! orchestration.
 
 use camino::Utf8PathBuf;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 /// Install Whitaker Dylint lint libraries.
 #[derive(Parser, Debug)]
@@ -42,11 +42,35 @@ use clap::Parser;
     "    $ whitaker-installer --individual-lints\n\n",
     "  Include experimental lints in the suite:\n",
     "    $ whitaker-installer --experimental\n\n",
+    "  List installed lints:\n",
+    "    $ whitaker-installer list\n\n",
     "  Preview without building:\n",
     "    $ whitaker-installer --dry-run\n\n",
     "For more information, see: https://github.com/leynos/whitaker",
 ))]
 pub struct Cli {
+    /// Subcommand to execute.
+    #[command(subcommand)]
+    pub command: Option<Command>,
+
+    /// Install arguments (used when no subcommand is given).
+    #[command(flatten)]
+    pub install: InstallArgs,
+}
+
+/// Available subcommands.
+#[derive(Subcommand, Debug, Clone)]
+pub enum Command {
+    /// Install lint libraries (default when no subcommand given).
+    Install(InstallArgs),
+
+    /// List installed lints.
+    List(ListArgs),
+}
+
+/// Arguments for the install command.
+#[derive(Parser, Debug, Clone)]
+pub struct InstallArgs {
     /// Staging directory for built libraries [default: platform-specific].
     #[arg(short, long, value_name = "DIR")]
     pub target_dir: Option<Utf8PathBuf>,
@@ -102,8 +126,20 @@ pub struct Cli {
     pub no_update: bool,
 }
 
-impl Default for Cli {
-    /// Creates a `Cli` instance with all flags disabled and no lints selected.
+/// Arguments for the list command.
+#[derive(Parser, Debug, Clone)]
+pub struct ListArgs {
+    /// Output in JSON format for scripting.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Staging directory to scan [default: platform-specific].
+    #[arg(short, long, value_name = "DIR")]
+    pub target_dir: Option<Utf8PathBuf>,
+}
+
+impl Default for InstallArgs {
+    /// Creates an `InstallArgs` instance with all flags disabled and no lints selected.
     ///
     /// This is useful for testing or programmatic construction where only
     /// specific fields need to be set.
@@ -111,12 +147,12 @@ impl Default for Cli {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_installer::cli::Cli;
+    /// use whitaker_installer::cli::InstallArgs;
     ///
-    /// let cli = Cli::default();
-    /// assert!(!cli.individual_lints);
-    /// assert!(!cli.skip_deps);
-    /// assert!(cli.lint.is_empty());
+    /// let args = InstallArgs::default();
+    /// assert!(!args.individual_lints);
+    /// assert!(!args.skip_deps);
+    /// assert!(args.lint.is_empty());
     /// ```
     fn default() -> Self {
         Self {
@@ -136,6 +172,41 @@ impl Default for Cli {
     }
 }
 
+impl Default for ListArgs {
+    /// Creates a `ListArgs` instance with default settings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::cli::ListArgs;
+    ///
+    /// let args = ListArgs::default();
+    /// assert!(!args.json);
+    /// assert!(args.target_dir.is_none());
+    /// ```
+    fn default() -> Self {
+        Self {
+            json: false,
+            target_dir: None,
+        }
+    }
+}
+
+impl Cli {
+    /// Returns the effective install arguments.
+    ///
+    /// If an `Install` subcommand was provided, returns those arguments.
+    /// Otherwise returns the flattened install arguments for backwards
+    /// compatibility.
+    #[must_use]
+    pub fn install_args(&self) -> &InstallArgs {
+        match &self.command {
+            Some(Command::Install(args)) => args,
+            _ => &self.install,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,22 +215,26 @@ mod tests {
     #[test]
     fn cli_parses_defaults() {
         let cli = Cli::parse_from(["whitaker-installer"]);
-        assert!(cli.target_dir.is_none());
-        assert!(cli.lint.is_empty());
-        assert!(!cli.individual_lints);
-        assert!(!cli.experimental);
-        assert!(!cli.dry_run);
-        assert_eq!(cli.verbosity, 0);
-        assert!(!cli.quiet);
-        assert!(!cli.skip_deps);
-        assert!(!cli.skip_wrapper);
-        assert!(!cli.no_update);
+        assert!(cli.command.is_none());
+        assert!(cli.install.target_dir.is_none());
+        assert!(cli.install.lint.is_empty());
+        assert!(!cli.install.individual_lints);
+        assert!(!cli.install.experimental);
+        assert!(!cli.install.dry_run);
+        assert_eq!(cli.install.verbosity, 0);
+        assert!(!cli.install.quiet);
+        assert!(!cli.install.skip_deps);
+        assert!(!cli.install.skip_wrapper);
+        assert!(!cli.install.no_update);
     }
 
     #[test]
     fn cli_parses_target_dir() {
         let cli = Cli::parse_from(["whitaker-installer", "-t", "/tmp/dylint"]);
-        assert_eq!(cli.target_dir, Some(Utf8PathBuf::from("/tmp/dylint")));
+        assert_eq!(
+            cli.install.target_dir,
+            Some(Utf8PathBuf::from("/tmp/dylint"))
+        );
     }
 
     #[test]
@@ -171,19 +246,69 @@ mod tests {
             "-l",
             "no_expect_outside_tests",
         ]);
-        assert_eq!(cli.lint.len(), 2);
+        assert_eq!(cli.install.lint.len(), 2);
     }
 
-    /// Parameterised tests for boolean CLI flags.
+    #[test]
+    fn cli_parses_list_subcommand() {
+        let cli = Cli::parse_from(["whitaker-installer", "list"]);
+        assert!(matches!(cli.command, Some(Command::List(_))));
+    }
+
+    #[test]
+    fn cli_parses_list_with_json() {
+        let cli = Cli::parse_from(["whitaker-installer", "list", "--json"]);
+        match cli.command {
+            Some(Command::List(args)) => assert!(args.json),
+            _ => panic!("expected List command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_list_with_target_dir() {
+        let cli = Cli::parse_from(["whitaker-installer", "list", "-t", "/custom/path"]);
+        match cli.command {
+            Some(Command::List(args)) => {
+                assert_eq!(args.target_dir, Some(Utf8PathBuf::from("/custom/path")));
+            }
+            _ => panic!("expected List command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_install_subcommand() {
+        let cli = Cli::parse_from(["whitaker-installer", "install"]);
+        assert!(matches!(cli.command, Some(Command::Install(_))));
+    }
+
+    #[test]
+    fn cli_parses_install_with_args() {
+        let cli = Cli::parse_from([
+            "whitaker-installer",
+            "install",
+            "--experimental",
+            "-l",
+            "module_max_lines",
+        ]);
+        match cli.command {
+            Some(Command::Install(args)) => {
+                assert!(args.experimental);
+                assert_eq!(args.lint, vec!["module_max_lines"]);
+            }
+            _ => panic!("expected Install command"),
+        }
+    }
+
+    /// Parameterised tests for boolean CLI flags (backwards compatibility).
     #[rstest]
-    #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.individual_lints)]
-    #[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.experimental)]
-    #[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.dry_run)]
-    #[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.verbosity > 0)]
-    #[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.quiet)]
-    #[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.skip_deps)]
-    #[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.skip_wrapper)]
-    #[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.no_update)]
+    #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.individual_lints)]
+    #[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.install.experimental)]
+    #[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.install.dry_run)]
+    #[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.install.verbosity > 0)]
+    #[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.install.quiet)]
+    #[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip_deps)]
+    #[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip_wrapper)]
+    #[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.no_update)]
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));
@@ -197,7 +322,7 @@ mod tests {
     #[case::double_alias(&["whitaker-installer", "--verbosity", "--verbosity"], 2)]
     fn cli_parses_repeatable_verbosity_flags(#[case] args: &[&str], #[case] expected: u8) {
         let cli = Cli::parse_from(args);
-        assert_eq!(cli.verbosity, expected);
+        assert_eq!(cli.install.verbosity, expected);
     }
 
     #[rstest]
@@ -209,10 +334,31 @@ mod tests {
 
     /// Verify the Default impl produces a valid baseline configuration.
     #[test]
-    fn cli_default_is_valid() {
-        let cli = Cli::default();
-        assert!(!cli.individual_lints);
-        assert!(!cli.experimental);
-        assert!(!cli.skip_deps);
+    fn install_args_default_is_valid() {
+        let args = InstallArgs::default();
+        assert!(!args.individual_lints);
+        assert!(!args.experimental);
+        assert!(!args.skip_deps);
+    }
+
+    #[test]
+    fn list_args_default_is_valid() {
+        let args = ListArgs::default();
+        assert!(!args.json);
+        assert!(args.target_dir.is_none());
+    }
+
+    #[test]
+    fn install_args_returns_flattened_when_no_subcommand() {
+        let cli = Cli::parse_from(["whitaker-installer", "--experimental"]);
+        let args = cli.install_args();
+        assert!(args.experimental);
+    }
+
+    #[test]
+    fn install_args_returns_subcommand_args_when_present() {
+        let cli = Cli::parse_from(["whitaker-installer", "install", "--dry-run"]);
+        let args = cli.install_args();
+        assert!(args.dry_run);
     }
 }

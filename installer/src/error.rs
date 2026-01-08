@@ -112,6 +112,13 @@ pub enum InstallerError {
     /// Wrapper script generation failed.
     #[error("wrapper script generation failed: {0}")]
     WrapperGeneration(String),
+
+    /// Failed to scan the staging directory for installed lints.
+    #[error("failed to scan staging directory: {reason}")]
+    ScanFailed {
+        /// Description of the scan failure.
+        reason: String,
+    },
 }
 
 /// Result type alias using [`InstallerError`].
