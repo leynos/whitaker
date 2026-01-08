@@ -73,15 +73,25 @@ pub fn detect_active_toolchain() -> Option<String> {
         }
     };
 
-    let toolchain = match Toolchain::detect(&utf8_cwd) {
-        Ok(tc) => tc,
-        Err(e) => {
-            trace!("detect_active_toolchain: toolchain detection failed: {e}");
-            return None;
-        }
-    };
+    detect_active_toolchain_in(&utf8_cwd)
+}
 
-    Some(toolchain.channel().to_owned())
+/// Detect the active toolchain from `rust-toolchain.toml` in the given directory.
+///
+/// This is the internal implementation that accepts a path for testability.
+/// Use [`detect_active_toolchain`] for production code.
+///
+/// Returns `None` if:
+/// - No `rust-toolchain.toml` file exists in the directory
+/// - The toolchain file cannot be parsed
+pub(crate) fn detect_active_toolchain_in(dir: &Utf8PathBuf) -> Option<String> {
+    match Toolchain::detect(dir) {
+        Ok(tc) => Some(tc.channel().to_owned()),
+        Err(e) => {
+            trace!("detect_active_toolchain_in: toolchain detection failed: {e}");
+            None
+        }
+    }
 }
 
 /// Determines the target directory from CLI or falls back to the default.
@@ -234,18 +244,34 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // detect_active_toolchain tests
+    // detect_active_toolchain_in tests
     // -------------------------------------------------------------------------
 
-    #[test]
-    fn detect_active_toolchain_returns_none_when_no_toolchain_file() {
-        // In most test environments, there's no rust-toolchain.toml in cwd,
-        // so this should return None. This tests the fallback path.
-        // Note: If running from a workspace with rust-toolchain.toml, this
-        // may return Some - both outcomes are valid for this test.
-        let result = detect_active_toolchain();
-        // We can't assert a specific value since it depends on the environment,
-        // but we can verify the function doesn't panic and returns the expected type.
-        let _ = result; // Type check: Option<String>
+    #[rstest]
+    fn detect_active_toolchain_in_returns_none_when_no_toolchain_file(temp_target: TempTarget) {
+        let result = detect_active_toolchain_in(&temp_target.path);
+        assert!(
+            result.is_none(),
+            "expected None for directory without rust-toolchain.toml"
+        );
+    }
+
+    #[rstest]
+    fn detect_active_toolchain_in_returns_channel_when_toolchain_file_exists(
+        temp_target: TempTarget,
+    ) {
+        // Create a rust-toolchain.toml file
+        let toolchain_content = r#"[toolchain]
+channel = "nightly-2025-09-18"
+"#;
+        fs::write(
+            temp_target.path.join("rust-toolchain.toml"),
+            toolchain_content,
+        )
+        .expect("failed to write rust-toolchain.toml");
+
+        let result = detect_active_toolchain_in(&temp_target.path);
+
+        assert_eq!(result, Some("nightly-2025-09-18".to_owned()));
     }
 }
