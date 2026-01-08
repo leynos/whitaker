@@ -93,33 +93,13 @@ fn detect_active_toolchain() -> Option<String> {
 
 /// Runs the install command to build and stage lint libraries.
 ///
-/// This is the main installation workflow:
-///
-/// 1. **Dependency check**: Ensures `cargo-dylint` and `dylint-link` are
-///    installed (unless `--skip-deps` is set).
-///
-/// 2. **Workspace resolution**: Locates or clones the Whitaker repository.
-///    If running inside a Whitaker checkout, uses that. Otherwise, clones to
-///    the platform-specific data directory (`~/.local/share/whitaker` on
-///    Linux).
-///
-/// 3. **Crate resolution**: Determines which lint crates to build based on
-///    CLI flags (`--individual-lints`, `--experimental`, or `-l <name>`).
-///
-/// 4. **Build**: Compiles the selected crates in release mode with the
-///    required features enabled.
-///
-/// 5. **Staging**: Copies built libraries to the staging directory with
-///    toolchain-suffixed filenames for Dylint discovery.
-///
-/// 6. **Wrapper generation**: Creates a `whitaker` shell script (unless
-///    `--skip-wrapper`) that sets `DYLINT_LIBRARY_PATH` and invokes
-///    `cargo dylint`.
+/// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
+/// (3) resolve crates from CLI flags, (4) build in release mode, (5) stage
+/// libraries with toolchain-suffixed names, (6) generate wrapper script.
 ///
 /// # Errors
 ///
-/// Returns an error if any step fails: dependency installation, workspace
-/// resolution, build, staging, or wrapper generation.
+/// Returns an error if any step fails.
 fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
@@ -297,28 +277,21 @@ fn generate_and_report_wrapper(
     stderr: &mut dyn Write,
 ) -> Result<()> {
     let result = generate_wrapper_scripts(dirs, staging_path)?;
-
     write_stderr_line(stderr, "");
     write_stderr_line(
         stderr,
         format!("Wrapper script created: {}", result.script_path.display()),
     );
+    write_stderr_line(stderr, "");
 
     if result.in_path {
-        write_stderr_line(stderr, "");
         write_stderr_line(stderr, "You can now run: whitaker --all");
     } else {
-        write_stderr_line(stderr, "");
-        let bin_dir = result
-            .script_path
-            .parent()
-            .expect("wrapper script path always has a parent directory");
-        let instructions = path_instructions(bin_dir);
-        write_stderr_line(stderr, instructions);
+        let bin_dir = result.script_path.parent().expect("script has parent");
+        write_stderr_line(stderr, path_instructions(bin_dir));
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, "Then run: whitaker --all");
     }
-
     Ok(())
 }
 
