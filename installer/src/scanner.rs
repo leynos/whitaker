@@ -170,8 +170,10 @@ pub fn lints_for_library(crate_name: &CrateName) -> Vec<&'static str> {
     let name = crate_name.as_str();
 
     if name == SUITE_CRATE {
-        // Suite contains all standard lints
-        LINT_CRATES.to_vec()
+        // Suite contains all standard lints plus experimental lints (when enabled at build time)
+        let mut lints = LINT_CRATES.to_vec();
+        lints.extend(EXPERIMENTAL_LINT_CRATES.iter().copied());
+        lints
     } else if let Some(&static_name) = LINT_CRATES.iter().find(|&&s| s == name) {
         // Individual lint crate - 1:1 mapping; return static reference
         vec![static_name]
@@ -238,11 +240,16 @@ mod tests {
     }
 
     #[test]
-    fn lints_for_suite_returns_all_standard_lints() {
+    fn lints_for_suite_returns_all_lints_including_experimental() {
         let lints = lints_for_library(&CrateName::from("suite"));
-        assert_eq!(lints.len(), LINT_CRATES.len());
+        let expected_count = LINT_CRATES.len() + EXPERIMENTAL_LINT_CRATES.len();
+        assert_eq!(lints.len(), expected_count);
+
         for lint in LINT_CRATES {
-            assert!(lints.contains(lint), "missing lint: {lint}");
+            assert!(lints.contains(lint), "missing standard lint: {lint}");
+        }
+        for lint in EXPERIMENTAL_LINT_CRATES {
+            assert!(lints.contains(lint), "missing experimental lint: {lint}");
         }
     }
 
