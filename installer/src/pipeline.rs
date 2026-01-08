@@ -7,6 +7,7 @@
 use crate::builder::{BuildConfig, BuildResult, Builder};
 use crate::crate_name::CrateName;
 use crate::error::Result;
+use crate::output::write_stderr_line;
 use crate::scanner::lints_for_library;
 use crate::stager::Stager;
 use crate::toolchain::Toolchain;
@@ -110,12 +111,6 @@ pub fn stage_libraries(
     }
 
     Ok(staging_path)
-}
-
-fn write_stderr_line(stderr: &mut dyn Write, message: impl std::fmt::Display) {
-    if writeln!(stderr, "{message}").is_err() {
-        // Best-effort logging; ignore write failures.
-    }
 }
 
 #[cfg(test)]

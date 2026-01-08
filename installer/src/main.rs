@@ -13,7 +13,7 @@ use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::list_output::{format_human, format_json};
-use whitaker_installer::output::{DryRunInfo, ShellSnippet};
+use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
@@ -302,12 +302,6 @@ fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
             write_stderr_line(stderr, err);
             1
         }
-    }
-}
-
-fn write_stderr_line(stderr: &mut dyn Write, message: impl std::fmt::Display) {
-    if writeln!(stderr, "{message}").is_err() {
-        // Best-effort logging; ignore write failures.
     }
 }
 
