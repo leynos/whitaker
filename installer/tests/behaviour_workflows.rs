@@ -245,22 +245,22 @@ fn then_output_includes_library_path_instructions(world: &WorkflowWorld) {
 // Scenario bindings
 // ---------------------------------------------------------------------------
 
-#[scenario(path = "tests/features/installer.feature", index = 14)]
+#[scenario(path = "tests/features/installer.feature", index = 15)]
 fn scenario_dry_run_skip_deps(world: WorkflowWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 15)]
+#[scenario(path = "tests/features/installer.feature", index = 16)]
 fn scenario_dry_run_no_update(world: WorkflowWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 16)]
+#[scenario(path = "tests/features/installer.feature", index = 17)]
 fn scenario_dry_run_skip_wrapper(world: WorkflowWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 17)]
+#[scenario(path = "tests/features/installer.feature", index = 18)]
 fn scenario_skip_wrapper_outputs_shell_snippet(world: WorkflowWorld) {
     let _ = world;
 }

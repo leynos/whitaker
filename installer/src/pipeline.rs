@@ -7,7 +7,7 @@
 use crate::builder::{BuildConfig, BuildResult, Builder};
 use crate::crate_name::CrateName;
 use crate::error::Result;
-use crate::output::write_stderr_line;
+use crate::output::{success_message, write_stderr_line};
 use crate::scanner::lints_for_library;
 use crate::stager::Stager;
 use crate::toolchain::Toolchain;
@@ -92,8 +92,6 @@ pub fn stage_libraries(
     build_results: &[BuildResult],
     stderr: &mut dyn Write,
 ) -> Result<Utf8PathBuf> {
-    use crate::output::success_message;
-
     let stager = Stager::new(context.target_dir.to_owned(), context.toolchain.channel());
     let staging_path = stager.staging_path();
 
@@ -105,19 +103,27 @@ pub fn stage_libraries(
     stager.stage_all(build_results)?;
 
     if !context.quiet {
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, success_message(build_results.len(), &staging_path));
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, "Installed lints:");
-        for result in build_results {
-            let lint_names = lints_for_library(&result.crate_name);
-            for lint in lint_names {
-                write_stderr_line(stderr, format!("  - {lint}"));
-            }
-        }
+        log_staging_results(stderr, build_results, &staging_path);
     }
 
     Ok(staging_path)
+}
+
+/// Logs the staging results to stderr.
+fn log_staging_results(
+    stderr: &mut dyn Write,
+    build_results: &[BuildResult],
+    staging_path: &Utf8Path,
+) {
+    write_stderr_line(stderr, "");
+    write_stderr_line(stderr, success_message(build_results.len(), staging_path));
+    write_stderr_line(stderr, "");
+    write_stderr_line(stderr, "Installed lints:");
+    for result in build_results {
+        for lint in lints_for_library(&result.crate_name) {
+            write_stderr_line(stderr, format!("  - {lint}"));
+        }
+    }
 }
 
 #[cfg(test)]
