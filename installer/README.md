@@ -61,23 +61,38 @@ whitaker-installer --dry-run
 
 ## Available Lints
 
+Whitaker lints are divided into two categories:
+
+- **Standard lints** are stable, well-tested, and included in the default suite.
+  They are recommended for general use.
+- **Experimental lints** are newer or more aggressive checks that may produce
+  false positives or undergo breaking changes. They require the
+  `--experimental` flag to install.
+
 ### Standard Lints
 
-| Lint | Description |
-|------|-------------|
-| `conditional_max_n_branches` | Limit boolean branches in conditionals |
-| `function_attrs_follow_docs` | Doc comments must precede other attributes |
-| `module_max_lines` | Warn when modules exceed line threshold |
-| `module_must_have_inner_docs` | Require inner doc comments on modules |
-| `no_expect_outside_tests` | Forbid `.expect()` outside test contexts |
-| `no_std_fs_operations` | Enforce capability-based filesystem access |
-| `no_unwrap_or_else_panic` | Deny panicking `unwrap_or_else` fallbacks |
+These lints are included when running `whitaker-installer` without flags:
+
+| Lint                          | Description                                |
+| ----------------------------- | ------------------------------------------ |
+| `conditional_max_n_branches`  | Limit boolean branches in conditionals     |
+| `function_attrs_follow_docs`  | Doc comments must precede other attributes |
+| `module_max_lines`            | Warn when modules exceed line threshold    |
+| `module_must_have_inner_docs` | Require inner doc comments on modules      |
+| `no_expect_outside_tests`     | Forbid `.expect()` outside test contexts   |
+| `no_std_fs_operations`        | Enforce capability-based filesystem access |
+| `no_unwrap_or_else_panic`     | Deny panicking `unwrap_or_else` fallbacks  |
 
 ### Experimental Lints
 
-| Lint | Description |
-|------|-------------|
+These lints require `whitaker-installer --experimental` to install:
+
+| Lint                  | Description                            |
+| --------------------- | -------------------------------------- |
 | `bumpy_road_function` | Detect high nesting depth in functions |
+
+Experimental lints may be promoted to standard in future releases once they
+have been sufficiently tested in real-world codebases.
 
 ## Using the Installed Lints
 

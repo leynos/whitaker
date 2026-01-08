@@ -93,10 +93,31 @@ libraries = [
 ]
 ```
 
-### Experimental lints
+### Standard vs Experimental Lints
 
-Whitaker includes an experimental "Bumpy Road" detector (`bumpy_road_function`)
-which is excluded from the suite by default. To opt in:
+Whitaker lints are divided into two categories:
+
+- **Standard lints** are stable, well-tested, and included in the default suite.
+  They are recommended for general use and have predictable behaviour.
+- **Experimental lints** are newer or more aggressive checks that may produce
+  false positives or undergo breaking changes between releases. They must be
+  explicitly enabled.
+
+The default `suite` pattern includes only standard lints. Experimental lints
+can be added individually or enabled via the `--experimental` flag when using
+the standalone installer.
+
+### Enabling experimental lints
+
+#### Via standalone installer
+
+```sh
+whitaker-installer --experimental
+```
+
+#### Via Cargo.toml
+
+Add experimental lints alongside the suite:
 
 ```toml
 [workspace.metadata.dylint]

@@ -65,6 +65,7 @@ platform-specific directory:
 - `-t, --target-dir DIR` — Staging directory for built libraries
 - `-l, --lint NAME` — Build specific lint (repeatable)
 - `--individual-lints` — Build individual crates instead of the suite
+- `--experimental` — Include experimental lints in the build
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
 - `--dry-run` — Show what would be done without running
@@ -94,6 +95,40 @@ libraries = [
 ```
 
 This skips building entirely, providing faster lint runs during development.
+
+## Standard vs Experimental Lints
+
+Whitaker categorizes lints into two tiers:
+
+- **Standard lints** are stable, well-tested, and included in the default suite.
+  They have predictable behaviour with minimal false positives.
+- **Experimental lints** are newer or more aggressive checks that may produce
+  false positives or undergo breaking changes. They require explicit opt-in via
+  the `--experimental` flag.
+
+### Adding a new lint
+
+New lints should typically start as experimental. To add a lint:
+
+1. Create the lint crate under `crates/` (see
+   [Creating a New Lint](#creating-a-new-lint))
+2. Add the crate name to `EXPERIMENTAL_LINT_CRATES` in
+   `installer/src/lint_crates.rs`
+3. Add a feature flag for the lint in `suite/Cargo.toml` under `[features]`
+
+### Promoting to standard
+
+Once an experimental lint has been:
+
+- Tested across multiple real-world codebases
+- Refined to minimise false positives
+- Stabilised with no breaking changes planned
+
+It can be promoted to standard by:
+
+1. Moving the crate name from `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
+2. Adding the lint to the suite's default features in `suite/Cargo.toml`
+3. Updating documentation to reflect the change
 
 ## Creating a New Lint
 
