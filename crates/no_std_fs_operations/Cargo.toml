@@ -40,3 +40,4 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = "3.1.0"
+toml = { workspace = true }

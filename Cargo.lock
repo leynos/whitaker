@@ -1531,6 +1531,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "serial_test",
+ "toml 0.9.8",
  "whitaker",
 ]
 

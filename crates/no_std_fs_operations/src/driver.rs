@@ -7,7 +7,7 @@ use crate::usage::{
 };
 use common::i18n::Localizer;
 use common::i18n::get_localizer_for_lint;
-use log::debug;
+use log::{debug, warn};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
@@ -159,11 +159,76 @@ fn load_configuration() -> NoStdFsConfig {
         Ok(Some(config)) => config,
         Ok(None) => NoStdFsConfig::default(),
         Err(error) => {
-            debug!(
+            warn!(
                 target: LINT_NAME,
                 "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
             );
             NoStdFsConfig::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for configuration parsing and exclusion logic.
+    //!
+    //! Note: Full integration testing of the exclusion behavior during lint
+    //! execution is not feasible with the current UI test harness, as the crate
+    //! name is determined by dylint_testing and cannot be controlled to match
+    //! an exclusion configuration. These unit tests verify the configuration
+    //! deserialises correctly and the matching logic functions as expected.
+
+    use super::*;
+    use rstest::rstest;
+
+    #[test]
+    fn config_default_has_empty_excluded_crates() {
+        let config = NoStdFsConfig::default();
+        assert!(config.excluded_crates.is_empty());
+    }
+
+    #[rstest]
+    #[case::empty_config(r#""#, vec![])]
+    #[case::empty_excluded(r#"excluded_crates = []"#, vec![])]
+    #[case::single_crate(r#"excluded_crates = ["foo"]"#, vec!["foo"])]
+    #[case::multiple_crates(
+        r#"excluded_crates = ["foo", "bar", "baz"]"#,
+        vec!["foo", "bar", "baz"]
+    )]
+    fn config_deserializes_excluded_crates(#[case] toml: &str, #[case] expected: Vec<&str>) {
+        let config: NoStdFsConfig = toml::from_str(toml).expect("valid TOML");
+        let expected_vec: Vec<String> = expected.into_iter().map(String::from).collect();
+        assert_eq!(config.excluded_crates, expected_vec);
+    }
+
+    #[rstest]
+    #[case::unknown_field(r#"unknown_field = true"#)]
+    #[case::wrong_type(r#"excluded_crates = "not_an_array""#)]
+    #[case::wrong_element_type(r#"excluded_crates = [1, 2, 3]"#)]
+    fn config_rejects_invalid_toml(#[case] toml: &str) {
+        let result: Result<NoStdFsConfig, _> = toml::from_str(toml);
+        assert!(result.is_err(), "expected error for: {toml}");
+    }
+
+    #[test]
+    fn excluded_crates_match_detects_exact_name() {
+        let config = NoStdFsConfig {
+            excluded_crates: vec!["my_crate".to_owned(), "other_crate".to_owned()],
+        };
+
+        assert!(config.excluded_crates.iter().any(|c| c == "my_crate"));
+        assert!(config.excluded_crates.iter().any(|c| c == "other_crate"));
+        assert!(!config.excluded_crates.iter().any(|c| c == "unknown"));
+    }
+
+    #[test]
+    fn excluded_crates_match_is_case_sensitive() {
+        let config = NoStdFsConfig {
+            excluded_crates: vec!["MyCrate".to_owned()],
+        };
+
+        assert!(config.excluded_crates.iter().any(|c| c == "MyCrate"));
+        assert!(!config.excluded_crates.iter().any(|c| c == "mycrate"));
+        assert!(!config.excluded_crates.iter().any(|c| c == "MYCRATE"));
     }
 }

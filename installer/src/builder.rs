@@ -269,8 +269,15 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
 ///
 /// By default, only the aggregated suite is built. Use `individual_lints` to
 /// build all individual lint crates instead, or provide `specific_lints` to
-/// cherry-pick particular lints. When `experimental` is true and
-/// `individual_lints` is set, experimental lint crates are also included.
+/// cherry-pick particular lints.
+///
+/// The `experimental` flag has different effects depending on the mode:
+/// - In `individual_lints` mode, experimental lint crates from
+///   `EXPERIMENTAL_LINT_CRATES` are included in the returned crate list.
+/// - In suite mode (default), the `experimental` flag is used by `BuildConfig`
+///   to enable experimental features when building the suite crate.
+/// - When `specific_lints` are provided, experimental crates are accepted if
+///   present, but the `experimental` flag does not affect the returned list.
 ///
 /// Note: This function assumes that `specific_lints` have been validated via
 /// `validate_crate_names()` prior to calling. Callers must validate inputs
