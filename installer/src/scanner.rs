@@ -105,7 +105,7 @@ fn scan_toolchain_release(
     }
 
     // Sort by crate name for consistent output
-    libraries.sort_by_key(|lib| lib.crate_name.as_str().to_owned());
+    libraries.sort_by(|a, b| a.crate_name.as_str().cmp(b.crate_name.as_str()));
 
     Ok(libraries)
 }
@@ -150,8 +150,13 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 
 /// Return the list of lints provided by a library.
 ///
-/// For the suite library, returns all standard lints. For individual lint
-/// crates, returns a single-element vector with the lint name.
+/// For the suite library, returns all standard lints. Experimental lints are
+/// only reported when installed as individual crates, not when part of the
+/// suite, because the suite may or may not have been built with experimental
+/// features enabled.
+///
+/// For individual lint crates, returns a single-element vector with the lint
+/// name.
 ///
 /// # Examples
 ///
@@ -170,10 +175,9 @@ pub fn lints_for_library(crate_name: &CrateName) -> Vec<&'static str> {
     let name = crate_name.as_str();
 
     if name == SUITE_CRATE {
-        // Suite contains all standard lints plus experimental lints
-        let mut lints = LINT_CRATES.to_vec();
-        lints.extend(EXPERIMENTAL_LINT_CRATES.iter().copied());
-        lints
+        // Suite contains standard lints; experimental lints may or may not be
+        // present depending on build-time flags, so we report only standard.
+        LINT_CRATES.to_vec()
     } else if let Some(&static_name) = LINT_CRATES.iter().find(|&&s| s == name) {
         // Individual lint crate - 1:1 mapping; return static reference
         vec![static_name]
@@ -243,16 +247,19 @@ mod tests {
     }
 
     #[test]
-    fn lints_for_suite_returns_all_lints_including_experimental() {
+    fn lints_for_suite_returns_standard_lints_only() {
         let lints = lints_for_library(&CrateName::from("suite"));
-        let expected_count = LINT_CRATES.len() + EXPERIMENTAL_LINT_CRATES.len();
-        assert_eq!(lints.len(), expected_count);
+        // Suite reports only standard lints; experimental lints depend on build flags
+        assert_eq!(lints.len(), LINT_CRATES.len());
 
         for lint in LINT_CRATES {
             assert!(lints.contains(lint), "missing standard lint: {lint}");
         }
         for lint in EXPERIMENTAL_LINT_CRATES {
-            assert!(lints.contains(lint), "missing experimental lint: {lint}");
+            assert!(
+                !lints.contains(lint),
+                "suite should not report experimental lint: {lint}"
+            );
         }
     }
 

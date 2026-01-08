@@ -8,8 +8,8 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
 use whitaker_installer::builder::{
-    CrateName, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
-    validate_crate_names,
+    CrateName, CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE,
+    resolve_crates, validate_crate_names,
 };
 use whitaker_installer::output::ShellSnippet;
 use whitaker_installer::toolchain::parse_toolchain_channel;
@@ -56,11 +56,11 @@ fn given_experimental_enabled(crate_world: &CrateResolutionWorld) {
 #[when("the crate list is resolved")]
 fn when_crates_resolved(crate_world: &CrateResolutionWorld) {
     let lints = crate_world.specific_lints.replace(Vec::new());
-    let resolved = resolve_crates(
-        &lints,
-        crate_world.individual_lints.get(),
-        crate_world.experimental.get(),
-    );
+    let options = CrateResolutionOptions {
+        individual_lints: crate_world.individual_lints.get(),
+        experimental: crate_world.experimental.get(),
+    };
+    let resolved = resolve_crates(&lints, &options);
     crate_world.resolved.replace(resolved);
 }
 

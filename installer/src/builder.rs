@@ -207,7 +207,12 @@ impl Builder {
     /// For individual lint crates, only the `dylint-driver` feature is needed.
     fn features_for_crate(&self, crate_name: &CrateName) -> String {
         if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
-            format!("dylint-driver,{}", Self::experimental_features())
+            let experimental = Self::experimental_features();
+            if experimental.is_empty() {
+                "dylint-driver".to_owned()
+            } else {
+                format!("dylint-driver,{experimental}")
+            }
         } else {
             "dylint-driver".to_owned()
         }
@@ -218,6 +223,8 @@ impl Builder {
     /// Feature names follow the pattern `experimental-{lint_name_with_hyphens}`,
     /// derived from `EXPERIMENTAL_LINT_CRATES` to keep the source of truth in one
     /// place.
+    ///
+    /// Returns an empty string if `EXPERIMENTAL_LINT_CRATES` is empty.
     fn experimental_features() -> String {
         EXPERIMENTAL_LINT_CRATES
             .iter()
@@ -278,6 +285,15 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
     Ok(())
 }
 
+/// Options controlling crate resolution behaviour.
+#[derive(Debug, Clone, Default)]
+pub struct CrateResolutionOptions {
+    /// Build all individual lint crates instead of the aggregated suite.
+    pub individual_lints: bool,
+    /// Include experimental lint crates when `individual_lints` is true.
+    pub experimental: bool,
+}
+
 /// Build the list of crates to compile based on CLI options.
 ///
 /// By default, only the aggregated suite is built. Use `individual_lints` to
@@ -298,17 +314,16 @@ pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
 #[must_use]
 pub fn resolve_crates(
     specific_lints: &[CrateName],
-    individual_lints: bool,
-    experimental: bool,
+    options: &CrateResolutionOptions,
 ) -> Vec<CrateName> {
     if !specific_lints.is_empty() {
         // Assumes names have been validated via validate_crate_names().
         return specific_lints.to_vec();
     }
 
-    if individual_lints {
+    if options.individual_lints {
         let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
-        if experimental {
+        if options.experimental {
             crates.extend(EXPERIMENTAL_LINT_CRATES.iter().map(|&c| CrateName::from(c)));
         }
         return crates;
@@ -381,7 +396,11 @@ mod tests {
     #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_experimental: true })]
     #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_experimental: false })]
     fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
-        let crates = resolve_crates(&[], case.individual_lints, case.experimental);
+        let options = CrateResolutionOptions {
+            individual_lints: case.individual_lints,
+            experimental: case.experimental,
+        };
+        let crates = resolve_crates(&[], &options);
 
         assert_eq!(
             crates.contains(&CrateName::from("module_max_lines")),
@@ -403,7 +422,7 @@ mod tests {
     #[test]
     fn resolve_crates_specific_lints() {
         let specific = vec![CrateName::from("module_max_lines")];
-        let crates = resolve_crates(&specific, false, false);
+        let crates = resolve_crates(&specific, &CrateResolutionOptions::default());
         assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
     }
 

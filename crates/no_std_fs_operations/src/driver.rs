@@ -30,6 +30,22 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// ```
 ///
 /// Use Rust crate names (underscores), not Cargo package names (hyphens).
+///
+/// # Example
+///
+/// ```
+/// use serde::Deserialize;
+///
+/// #[derive(Clone, Debug, Default, Deserialize)]
+/// #[serde(default, deny_unknown_fields)]
+/// struct NoStdFsConfig {
+///     excluded_crates: Vec<String>,
+/// }
+///
+/// let toml_str = r#"excluded_crates = ["my_cli_app"]"#;
+/// let config: NoStdFsConfig = toml::from_str(toml_str).unwrap();
+/// assert_eq!(config.excluded_crates, vec!["my_cli_app"]);
+/// ```
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct NoStdFsConfig {

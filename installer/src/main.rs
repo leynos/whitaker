@@ -8,7 +8,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
 use whitaker_installer::builder::{
-    BuildConfig, Builder, CrateName, resolve_crates, validate_crate_names,
+    BuildConfig, Builder, CrateName, CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::cli::{Cli, Command, InstallArgs, ListArgs};
 use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
@@ -231,11 +231,11 @@ fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
         validate_crate_names(&lint_crates)?;
     }
 
-    Ok(resolve_crates(
-        &lint_crates,
-        args.individual_lints,
-        args.experimental,
-    ))
+    let options = CrateResolutionOptions {
+        individual_lints: args.individual_lints,
+        experimental: args.experimental,
+    };
+    Ok(resolve_crates(&lint_crates, &options))
 }
 
 /// Determines the target directory from CLI or falls back to the default.
