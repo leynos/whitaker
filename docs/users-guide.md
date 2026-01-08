@@ -256,6 +256,23 @@ ______________________________________________________________________
 Enforces capability-based filesystem access by forbidding direct use of
 `std::fs` operations.
 
+**Configuration:**
+
+```toml
+[no_std_fs_operations]
+excluded_crates = ["my_cli_entrypoint", "my_test_utilities"]
+```
+
+The `excluded_crates` option allows specified crates to use `std::fs` operations
+without triggering diagnostics. This is useful for:
+
+- CLI entry points where ambient filesystem access is the intended boundary
+- Test support utilities that manage fixtures with ambient access
+- Build scripts or code generators that require direct filesystem operations
+
+> **Note:** Use Rust crate names (underscores), not Cargo package names
+> (hyphens). For example, use `my_cli_app` rather than `my-cli-app`.
+
 **How to fix:** Replace `std::fs` with `cap_std`:
 
 ```rust
