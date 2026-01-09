@@ -52,23 +52,10 @@ pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
 
 /// Returns the platform-specific directory for cloning Whitaker.
 ///
-/// - Linux: `~/.local/share/whitaker`
-/// - macOS: `~/Library/Application Support/whitaker`
-/// - Windows: `%LOCALAPPDATA%\whitaker`
+/// Platform paths: Linux `~/.local/share/whitaker`, macOS `~/Library/Application
+/// Support/whitaker`, Windows `%LOCALAPPDATA%\whitaker`.
 ///
 /// Returns `None` if the platform's data directory cannot be determined.
-///
-/// # Examples
-///
-/// ```no_run
-/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-/// use whitaker_installer::workspace::clone_directory;
-///
-/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
-/// if let Some(dir) = clone_directory(&dirs) {
-///     println!("Whitaker will be cloned to: {dir}");
-/// }
-/// ```
 pub fn clone_directory(dirs: &dyn BaseDirs) -> Option<Utf8PathBuf> {
     dirs.whitaker_data_dir()
         .and_then(|p| Utf8PathBuf::try_from(p).ok())
@@ -89,31 +76,10 @@ pub enum WorkspaceAction {
 
 /// Determines what action is needed to establish a Whitaker workspace.
 ///
-/// This is a pure function that examines the current directory and clone
-/// directory state to decide what operation (if any) is needed.
-///
-/// # Arguments
-///
-/// * `cwd` - The current working directory.
-/// * `clone_dir` - The platform-specific clone directory.
-/// * `update` - Whether to update an existing clone.
-///
-/// # Examples
-///
-/// ```
-/// use camino::Utf8PathBuf;
-/// use whitaker_installer::workspace::{decide_workspace_action, WorkspaceAction};
-///
-/// let cwd = Utf8PathBuf::from("/some/random/dir");
-/// let clone_dir = Utf8PathBuf::from("/home/user/.local/share/whitaker");
-///
-/// match decide_workspace_action(&cwd, &clone_dir, true) {
-///     WorkspaceAction::UseCurrentDir(dir) => println!("Using CWD: {dir}"),
-///     WorkspaceAction::CloneTo(dir) => println!("Need to clone to: {dir}"),
-///     WorkspaceAction::UpdateAt(dir) => println!("Need to update: {dir}"),
-///     WorkspaceAction::UseExisting(dir) => println!("Using existing: {dir}"),
-/// }
-/// ```
+/// Examines the current directory and clone directory state to decide what
+/// operation (if any) is needed. Returns `UseCurrentDir` if `cwd` is a
+/// Whitaker workspace, `CloneTo` if `clone_dir` doesn't exist, `UpdateAt`
+/// if `update` is true and the clone exists, or `UseExisting` otherwise.
 pub fn decide_workspace_action(
     cwd: &Utf8Path,
     clone_dir: &Utf8Path,
@@ -136,31 +102,12 @@ pub fn decide_workspace_action(
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
 /// Otherwise, clones or updates the repository in the platform-specific data
-/// directory.
-///
-/// # Arguments
-///
-/// * `dirs` - Directory resolver for platform-specific paths.
-/// * `update` - If `true` and the repository already exists, runs `git pull`.
+/// directory. Set `update` to `true` to run `git pull` on existing clones.
 ///
 /// # Errors
 ///
-/// Returns an error if:
-/// - The clone directory cannot be determined
-/// - Cloning or updating fails
-///
-/// # Examples
-///
-/// ```no_run
-/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-/// use whitaker_installer::workspace::ensure_workspace;
-///
-/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
-/// // Ensure workspace exists, updating if it already exists
-/// let workspace_path = ensure_workspace(&dirs, true)?;
-/// println!("Workspace available at: {workspace_path}");
-/// # Ok::<(), whitaker_installer::error::InstallerError>(())
-/// ```
+/// Returns an error if the clone directory cannot be determined or if
+/// cloning/updating fails.
 pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
     let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
@@ -182,28 +129,9 @@ pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf
 
 /// Returns the workspace path without performing any side effects.
 ///
-/// If the current directory is a Whitaker workspace, returns it.
-/// Otherwise returns the platform-specific clone directory (which may
-/// not exist yet).
-///
-/// This is useful for dry-run mode where we want to show what would happen
-/// without actually cloning or updating the repository.
-///
-/// # Arguments
-///
-/// * `dirs` - Directory resolver for platform-specific paths.
-///
-/// # Examples
-///
-/// ```no_run
-/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-/// use whitaker_installer::workspace::resolve_workspace_path;
-///
-/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
-/// let workspace_path = resolve_workspace_path(&dirs)?;
-/// println!("Would use workspace at: {workspace_path}");
-/// # Ok::<(), whitaker_installer::error::InstallerError>(())
-/// ```
+/// If the current directory is a Whitaker workspace, returns it. Otherwise
+/// returns the platform-specific clone directory (which may not exist yet).
+/// Useful for dry-run mode to show what would happen without cloning.
 pub fn resolve_workspace_path(dirs: &dyn BaseDirs) -> Result<Utf8PathBuf> {
     let cwd = current_dir_utf8()?;
 
@@ -222,6 +150,48 @@ fn current_dir_utf8() -> Result<Utf8PathBuf> {
     Utf8PathBuf::try_from(cwd).map_err(|e| InstallerError::WorkspaceNotFound {
         reason: format!("current directory is not valid UTF-8: {e}"),
     })
+}
+
+/// Find the workspace root by looking for `Cargo.toml` with `[workspace]`.
+///
+/// # Errors
+///
+/// Returns an error if the workspace root cannot be determined, or if a
+/// `Cargo.toml` file cannot be read or parsed.
+pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
+    let mut current = start.to_owned();
+
+    loop {
+        let cargo_toml = current.join("Cargo.toml");
+        if cargo_toml.exists() && is_cargo_workspace_root(&cargo_toml)? {
+            return Ok(current);
+        }
+
+        match current.parent() {
+            Some(parent) => current = parent.to_owned(),
+            None => break,
+        }
+    }
+
+    Err(InstallerError::WorkspaceNotFound {
+        reason: "could not find Cargo.toml with [workspace] section".to_owned(),
+    })
+}
+
+/// Check if a `Cargo.toml` file contains a `[workspace]` section.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or parsed.
+fn is_cargo_workspace_root(cargo_toml: &Utf8Path) -> Result<bool> {
+    let contents = std::fs::read_to_string(cargo_toml)?;
+    let table = contents
+        .parse::<toml::Table>()
+        .map_err(|e| InstallerError::InvalidCargoToml {
+            path: cargo_toml.to_owned(),
+            reason: e.to_string(),
+        })?;
+    Ok(table.contains_key("workspace"))
 }
 
 #[cfg(test)]
@@ -364,23 +334,53 @@ mod tests {
         );
     }
 
-    #[rstest]
+    #[test]
     fn clone_directory_returns_none_when_data_dir_unavailable() {
         let mock = mock_dirs_returning(None);
-
-        let result = clone_directory(&mock);
-
-        assert!(result.is_none());
+        assert!(clone_directory(&mock).is_none());
     }
 
     #[rstest]
     fn clone_directory_returns_path_from_mock(temp_workspace: TempWorkspace) {
-        let expected_dir = temp_workspace.path.join("data").join("whitaker");
-        let mock = mock_dirs_returning(Some(expected_dir.clone().into_std_path_buf()));
+        let expected = temp_workspace.path.join("data").join("whitaker");
+        let mock = mock_dirs_returning(Some(expected.clone().into_std_path_buf()));
+        assert_eq!(clone_directory(&mock), Some(expected));
+    }
 
-        let result = clone_directory(&mock);
+    // Tests for find_workspace_root
 
-        assert!(result.is_some());
-        assert_eq!(result.unwrap(), expected_dir);
+    fn write_workspace_cargo_toml(dir: &Utf8Path) {
+        fs::write(
+            dir.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .expect("failed to write workspace Cargo.toml");
+    }
+
+    #[rstest]
+    fn find_workspace_root_finds_workspace_in_current_dir(temp_workspace: TempWorkspace) {
+        write_workspace_cargo_toml(&temp_workspace.path);
+        assert_eq!(
+            find_workspace_root(&temp_workspace.path).unwrap(),
+            temp_workspace.path
+        );
+    }
+
+    #[rstest]
+    fn find_workspace_root_finds_workspace_in_parent_dir(temp_workspace: TempWorkspace) {
+        write_workspace_cargo_toml(&temp_workspace.path);
+        let subdir = temp_workspace.path.join("crates").join("my_crate");
+        fs::create_dir_all(&subdir).expect("failed to create subdirs");
+        assert_eq!(find_workspace_root(&subdir).unwrap(), temp_workspace.path);
+    }
+
+    #[rstest]
+    fn find_workspace_root_errors_when_no_workspace_found(temp_workspace: TempWorkspace) {
+        write_cargo_toml(&temp_workspace.path, "not_a_workspace");
+        let result = find_workspace_root(&temp_workspace.path);
+        assert!(matches!(
+            result.unwrap_err(),
+            InstallerError::WorkspaceNotFound { .. }
+        ));
     }
 }

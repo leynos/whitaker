@@ -7,10 +7,12 @@ use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
-use whitaker_installer::builder::{
-    CrateName, LINT_CRATES, SUITE_CRATE, resolve_crates, validate_crate_names,
-};
+use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::output::ShellSnippet;
+use whitaker_installer::resolution::{
+    CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
+    validate_crate_names,
+};
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
 // ---------------------------------------------------------------------------
@@ -21,6 +23,7 @@ use whitaker_installer::toolchain::parse_toolchain_channel;
 struct CrateResolutionWorld {
     specific_lints: RefCell<Vec<CrateName>>,
     individual_lints: Cell<bool>,
+    experimental: Cell<bool>,
     resolved: RefCell<Vec<CrateName>>,
 }
 
@@ -46,10 +49,19 @@ fn given_specific_lints(crate_world: &CrateResolutionWorld) {
         .replace(vec![CrateName::from("module_max_lines")]);
 }
 
+#[given("experimental lints are enabled")]
+fn given_experimental_enabled(crate_world: &CrateResolutionWorld) {
+    crate_world.experimental.set(true);
+}
+
 #[when("the crate list is resolved")]
 fn when_crates_resolved(crate_world: &CrateResolutionWorld) {
     let lints = crate_world.specific_lints.replace(Vec::new());
-    let resolved = resolve_crates(&lints, crate_world.individual_lints.get());
+    let options = CrateResolutionOptions {
+        individual_lints: crate_world.individual_lints.get(),
+        experimental: crate_world.experimental.get(),
+    };
+    let resolved = resolve_crates(&lints, &options);
     crate_world.resolved.replace(resolved);
 }
 
@@ -87,6 +99,17 @@ fn then_suite_not_included(crate_world: &CrateResolutionWorld) {
         !resolved.contains(&CrateName::from(SUITE_CRATE)),
         "expected suite to be excluded"
     );
+}
+
+#[then("experimental lints are included")]
+fn then_experimental_included(crate_world: &CrateResolutionWorld) {
+    let resolved = crate_world.resolved.borrow();
+    for lint in EXPERIMENTAL_LINT_CRATES {
+        assert!(
+            resolved.contains(&CrateName::from(*lint)),
+            "expected experimental lint {lint} to be included"
+        );
+    }
 }
 
 #[then("only the requested lints are included")]
@@ -281,36 +304,41 @@ fn scenario_resolve_individual_lints(crate_world: CrateResolutionWorld) {
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 2)]
-fn scenario_resolve_specific_lints(crate_world: CrateResolutionWorld) {
+fn scenario_resolve_individual_lints_with_experimental(crate_world: CrateResolutionWorld) {
     let _ = crate_world;
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 3)]
+fn scenario_resolve_specific_lints(crate_world: CrateResolutionWorld) {
+    let _ = crate_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 4)]
 fn scenario_validate_known_names(validation_world: ValidationWorld) {
     let _ = validation_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 4)]
+#[scenario(path = "tests/features/installer.feature", index = 5)]
 fn scenario_reject_unknown_names(validation_world: ValidationWorld) {
     let _ = validation_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 5)]
+#[scenario(path = "tests/features/installer.feature", index = 6)]
 fn scenario_parse_standard_toolchain(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 6)]
+#[scenario(path = "tests/features/installer.feature", index = 7)]
 fn scenario_parse_top_level_channel(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 7)]
+#[scenario(path = "tests/features/installer.feature", index = 8)]
 fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) {
     let _ = toolchain_world;
 }
 
-#[scenario(path = "tests/features/installer.feature", index = 8)]
+#[scenario(path = "tests/features/installer.feature", index = 9)]
 fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) {
     let _ = snippet_world;
 }

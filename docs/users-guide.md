@@ -93,10 +93,31 @@ libraries = [
 ]
 ```
 
-### Experimental lints
+### Standard vs Experimental Lints
 
-Whitaker includes an experimental "Bumpy Road" detector (`bumpy_road_function`)
-which is excluded from the suite by default. To opt in:
+Whitaker lints are divided into two categories:
+
+- **Standard lints** are stable, well-tested, and included in the default suite.
+  They are recommended for general use and have predictable behaviour.
+- **Experimental lints** are newer or more aggressive checks that may produce
+  false positives or undergo breaking changes between releases. They must be
+  explicitly enabled.
+
+The default `suite` pattern includes only standard lints. Experimental lints
+can be added individually or enabled via the `--experimental` flag when using
+the standalone installer.
+
+### Enabling experimental lints
+
+#### Via standalone installer
+
+```sh
+whitaker-installer --experimental
+```
+
+#### Via Cargo.toml
+
+Add experimental lints alongside the suite:
 
 ```toml
 [workspace.metadata.dylint]
@@ -255,6 +276,23 @@ ______________________________________________________________________
 
 Enforces capability-based filesystem access by forbidding direct use of
 `std::fs` operations.
+
+**Configuration:**
+
+```toml
+[no_std_fs_operations]
+excluded_crates = ["my_cli_entrypoint", "my_test_utilities"]
+```
+
+The `excluded_crates` option allows specified crates to use `std::fs`
+operations without triggering diagnostics. This is useful for:
+
+- CLI entry points where ambient filesystem access is the intended boundary
+- Test support utilities that manage fixtures with ambient access
+- Build scripts or code generators that require direct filesystem operations
+
+> **Note:** Use Rust crate names (underscores), not Cargo package names
+> (hyphens). For example, use `my_cli_app` rather than `my-cli-app`.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

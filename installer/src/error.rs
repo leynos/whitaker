@@ -4,7 +4,7 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
-use crate::builder::CrateName;
+use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
 
@@ -112,6 +112,22 @@ pub enum InstallerError {
     /// Wrapper script generation failed.
     #[error("wrapper script generation failed: {0}")]
     WrapperGeneration(String),
+
+    /// Failed to scan the staging directory for installed lints.
+    #[error("failed to scan staging directory")]
+    ScanFailed {
+        /// The underlying error that caused the scan to fail.
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to write output.
+    #[error("failed to write output")]
+    WriteFailed {
+        /// The underlying error that caused the write to fail.
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 /// Result type alias using [`InstallerError`].
@@ -169,5 +185,27 @@ mod tests {
         let err = InstallerError::WrapperGeneration("permission denied".to_owned());
         let msg = err.to_string();
         assert!(msg.contains("permission denied"));
+    }
+
+    #[test]
+    fn scan_failed_includes_reason() {
+        let source = std::io::Error::other("directory not found");
+        let err = InstallerError::ScanFailed { source };
+        let msg = err.to_string();
+        assert!(msg.contains("scan"));
+        // Verify the source error is preserved via the Error trait
+        let source_err = std::error::Error::source(&err);
+        assert!(source_err.is_some());
+    }
+
+    #[test]
+    fn write_failed_includes_reason() {
+        let source = std::io::Error::other("permission denied");
+        let err = InstallerError::WriteFailed { source };
+        let msg = err.to_string();
+        assert!(msg.contains("write"));
+        // Verify the source error is preserved via the Error trait
+        let source_err = std::error::Error::source(&err);
+        assert!(source_err.is_some());
     }
 }

@@ -7,21 +7,100 @@ use crate::usage::{
 };
 use common::i18n::Localizer;
 use common::i18n::get_localizer_for_lint;
+use log::{info, warn};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
+use serde::Deserialize;
+use std::collections::HashSet;
 use whitaker::SharedConfig;
+
+const LINT_NAME: &str = "no_std_fs_operations";
+
+/// Configuration for the `no_std_fs_operations` lint.
+///
+/// # TOML Configuration
+///
+/// In `dylint.toml` at your workspace root:
+///
+/// ```toml
+/// [no_std_fs_operations]
+/// excluded_crates = ["my_cli_app", "test_utilities"]
+/// ```
+///
+/// Use Rust crate names (underscores), not Cargo package names (hyphens).
+///
+/// # Strict Validation
+///
+/// This configuration uses `deny_unknown_fields`, meaning any unrecognised
+/// key (such as a typo like `excluded_crate` instead of `excluded_crates`)
+/// will cause configuration parsing to fail. When parsing fails, the lint
+/// falls back to defaults and logs a warning. If exclusions don't work as
+/// expected, check the logs for parse errors.
+///
+/// # Examples
+///
+/// ```rust
+/// # use no_std_fs_operations::driver::NoStdFsConfig;
+/// # use std::collections::HashSet;
+/// let config = NoStdFsConfig {
+///     excluded_crates: HashSet::from(["my_cli_app".to_owned()]),
+/// };
+/// assert!(config.is_excluded("my_cli_app"));
+/// assert!(!config.is_excluded("other_crate"));
+/// ```
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct NoStdFsConfig {
+    /// Crate names excluded from the lint. These crates are allowed to use
+    /// `std::fs` operations without triggering diagnostics.
+    #[serde(deserialize_with = "deserialize_excluded_crates")]
+    pub excluded_crates: HashSet<String>,
+}
+
+fn deserialize_excluded_crates<'de, D>(deserializer: D) -> Result<HashSet<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let vec: Vec<String> = Vec::deserialize(deserializer)?;
+    Ok(vec.into_iter().collect())
+}
+
+impl NoStdFsConfig {
+    /// Check if the given crate name is excluded from the lint.
+    ///
+    /// Returns `true` if `crate_name` appears in the `excluded_crates` set.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use no_std_fs_operations::driver::NoStdFsConfig;
+    /// # use std::collections::HashSet;
+    /// let config = NoStdFsConfig {
+    ///     excluded_crates: HashSet::from(["my_cli".to_owned(), "test_utils".to_owned()]),
+    /// };
+    ///
+    /// assert!(config.is_excluded("my_cli"));
+    /// assert!(!config.is_excluded("other_crate"));
+    /// ```
+    #[must_use]
+    pub fn is_excluded(&self, crate_name: &str) -> bool {
+        self.excluded_crates.contains(crate_name)
+    }
+}
 
 pub struct NoStdFsOperations {
     localizer: Localizer,
+    excluded: bool,
 }
 
 impl Default for NoStdFsOperations {
     fn default() -> Self {
         Self {
             localizer: Localizer::new(None),
+            excluded: false,
         }
     }
 }
@@ -34,12 +113,28 @@ dylint_linting::impl_late_lint! {
 }
 
 impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
-    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
+    fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         let shared_config = SharedConfig::load();
-        self.localizer = get_localizer_for_lint("no_std_fs_operations", shared_config.locale());
+        self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
+
+        let config = load_configuration();
+        let crate_name_sym = cx.tcx.crate_name(rustc_hir::def_id::LOCAL_CRATE);
+        let crate_name = crate_name_sym.as_str();
+
+        self.excluded = config.is_excluded(crate_name);
+
+        if self.excluded {
+            info!(
+                target: LINT_NAME,
+                "crate `{crate_name}` is excluded from no_std_fs_operations lint"
+            );
+        }
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
+        if self.should_skip() {
+            return;
+        }
         if let hir::ItemKind::Use(path, ..) = item.kind {
             for res in path.res.present_items() {
                 let usage = classify_res(cx, res, UsageCategory::Import);
@@ -49,6 +144,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
+        if self.should_skip() {
+            return;
+        }
         match &expr.kind {
             hir::ExprKind::Path(qpath) => {
                 let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
@@ -75,6 +173,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, AmbigArg>) {
+        if self.should_skip() {
+            return;
+        }
         if let hir::TyKind::Path(qpath) = &ty.kind {
             let usage = classify_qpath(cx, qpath, ty.hir_id, UsageCategory::Type);
             self.emit_optional(cx, ty.span, usage);
@@ -83,7 +184,16 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
 }
 
 impl NoStdFsOperations {
+    /// Centralises exclusion logic for all lint pass methods.
+    #[inline]
+    fn should_skip(&self) -> bool {
+        self.excluded
+    }
+
     fn emit_optional(&self, cx: &LateContext<'_>, span: Span, usage: Option<StdFsUsage>) {
+        if self.should_skip() {
+            return;
+        }
         if let Some(usage) = usage {
             self.emit(cx, span, usage);
         }
@@ -119,3 +229,101 @@ impl NoStdFsOperations {
         Some(StdFsUsage::new(operation, UsageCategory::Call))
     }
 }
+
+/// Trait for loading lint configuration, enabling dependency injection for tests.
+///
+/// # Return Values
+///
+/// - `Ok(Some(config))` - Configuration section found and parsed successfully
+/// - `Ok(None)` - No configuration file or section present
+/// - `Err(...)` - Configuration file exists but parsing failed
+///
+/// # Example Usage (in tests)
+///
+/// ```text
+/// let mut mock = MockConfigReader::new();
+/// mock.expect_read_config()
+///     .returning(|_| Ok(Some(NoStdFsConfig {
+///         excluded_crates: vec!["my_crate".to_owned()],
+///     })));
+///
+/// let config = load_configuration_with_reader(&mock);
+/// assert!(config.is_excluded("my_crate"));
+/// ```
+#[cfg_attr(test, mockall::automock)]
+pub(crate) trait ConfigReader {
+    /// Read configuration for the given lint name.
+    ///
+    /// Returns `Ok(Some(config))` if found, `Ok(None)` if not present, or
+    /// `Err` if parsing fails.
+    fn read_config(
+        &self,
+        lint_name: &str,
+    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error + Send + Sync + 'static>>;
+}
+
+/// Production implementation that reads from `dylint.toml` via `dylint_linting::config`.
+///
+/// This reader delegates to `dylint_linting::config` to locate and parse
+/// the `dylint.toml` configuration file in the workspace root.
+pub(crate) struct DylintConfigReader;
+
+impl ConfigReader for DylintConfigReader {
+    fn read_config(
+        &self,
+        lint_name: &str,
+    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+        type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+        dylint_linting::config::<NoStdFsConfig>(lint_name).map_err(|e| -> BoxError { Box::new(e) })
+    }
+}
+
+/// Load lint configuration using the provided reader.
+///
+/// Returns the default configuration when:
+/// - No configuration file exists
+/// - No `[no_std_fs_operations]` section is present
+/// - The configuration fails to parse (logged at `warn` level)
+///
+/// # Example Return Cases
+///
+/// ```text
+/// // Case 1: Configuration present
+/// reader.read_config("lint") => Ok(Some(config))
+/// load_configuration_with_reader(&reader) => config
+///
+/// // Case 2: No configuration section
+/// reader.read_config("lint") => Ok(None)
+/// load_configuration_with_reader(&reader) => NoStdFsConfig::default()
+///
+/// // Case 3: Parse error
+/// reader.read_config("lint") => Err(...)
+/// load_configuration_with_reader(&reader) => NoStdFsConfig::default() + logs warning
+/// ```
+fn load_configuration_with_reader(reader: &dyn ConfigReader) -> NoStdFsConfig {
+    match reader.read_config(LINT_NAME) {
+        Ok(Some(config)) => config,
+        Ok(None) => NoStdFsConfig::default(),
+        Err(error) => {
+            warn!(
+                target: LINT_NAME,
+                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
+            );
+            NoStdFsConfig::default()
+        }
+    }
+}
+
+/// Load lint configuration from `dylint.toml`.
+///
+/// Returns the default configuration when:
+/// - No configuration file exists
+/// - No `[no_std_fs_operations]` section is present
+/// - The configuration fails to parse (logged at `warn` level)
+fn load_configuration() -> NoStdFsConfig {
+    load_configuration_with_reader(&DylintConfigReader)
+}
+
+#[cfg(test)]
+#[path = "driver_tests.rs"]
+mod tests;

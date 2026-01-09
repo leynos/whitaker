@@ -145,6 +145,12 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     }
 
     fn push_segment(&mut self, span: Span, value: f64) {
+        // Skip spans from macro expansions; their line numbers can point to
+        // locations outside the function (e.g., the macro definition site).
+        if span.from_expansion() {
+            return;
+        }
+
         let source_map = self.cx.tcx.sess.source_map();
         let Some(lines) = span_line_range(source_map, span) else {
             return;

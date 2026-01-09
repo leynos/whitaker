@@ -4,8 +4,20 @@
 //! that users can add to their shell profile to enable Dylint library discovery,
 //! as well as dry-run information formatting.
 
-use crate::builder::CrateName;
+use crate::crate_name::CrateName;
 use camino::Utf8Path;
+use std::io::Write;
+
+/// Write a line to stderr, ignoring write failures.
+///
+/// This is a best-effort logging helper that silently ignores write errors.
+/// Use this for progress messages and diagnostics where failure to write
+/// should not abort the operation.
+pub fn write_stderr_line(stderr: &mut dyn Write, message: impl std::fmt::Display) {
+    if writeln!(stderr, "{message}").is_err() {
+        // Best-effort logging; ignore write failures.
+    }
+}
 
 /// Shell configuration snippets for different shells.
 #[derive(Debug, Clone)]
@@ -74,7 +86,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// ```
 /// use camino::Utf8PathBuf;
-/// use whitaker_installer::builder::CrateName;
+/// use whitaker_installer::crate_name::CrateName;
 /// use whitaker_installer::output::DryRunInfo;
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");

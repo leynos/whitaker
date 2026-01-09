@@ -17,6 +17,7 @@ dylint-driver = [
     "dep:rustc_middle",
     "dep:rustc_session",
     "dep:rustc_span",
+    "dep:serde",
     "dep:whitaker"
 ]
 constituent = ["dylint-driver", "dylint_linting/constituent"]
@@ -30,11 +31,15 @@ rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 common = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+cargo_metadata = { workspace = true }
+mockall = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 serial_test = "3.1.0"
+toml = { workspace = true }

@@ -14,6 +14,14 @@ Feature: Whitaker lint library installer
     Then all lint crates are included
     And the suite crate is not included
 
+  Scenario: Resolve individual lints with experimental
+    Given individual lints mode is enabled
+    And experimental lints are enabled
+    When the crate list is resolved
+    Then all lint crates are included
+    And experimental lints are included
+    And the suite crate is not included
+
   Scenario: Resolve specific lints
     Given specific lints are requested
     When the crate list is resolved

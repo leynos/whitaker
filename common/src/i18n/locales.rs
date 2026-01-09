@@ -1,3 +1,9 @@
+//! Locale enumeration and validation.
+//!
+//! This module exposes the set of available locales embedded in the Fluent
+//! bundles and provides utilities for checking whether a given locale tag is
+//! supported.
+
 use once_cell::sync::Lazy;
 
 use fluent_templates::{Loader, loader::LanguageIdentifier};

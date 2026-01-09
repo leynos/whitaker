@@ -1,3 +1,9 @@
+//! Localisation message loading and retrieval.
+//!
+//! This module defines the [`Localizer`] struct for resolving translated
+//! messages from Fluent bundles, along with supporting types for arguments
+//! and lookup errors.
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::str::FromStr;

@@ -1,3 +1,9 @@
+//! Helper functions for localisation workflows.
+//!
+//! This module provides high-level conveniences for constructing localisers,
+//! rendering locale-aware phrases, and safely resolving diagnostic message sets
+//! with fallback support.
+
 use std::env;
 
 use log::debug;

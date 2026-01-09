@@ -1,3 +1,9 @@
+//! Test doubles and utilities for localisation tests.
+//!
+//! This module provides test doubles such as [`FailingLookup`] and
+//! [`RecordingEmitter`] for exercising error paths and verifying diagnostic
+//! output during localisation tests.
+
 use std::borrow::Cow;
 use std::cell::RefCell;
 

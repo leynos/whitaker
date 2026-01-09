@@ -2,10 +2,12 @@
 name = "whitaker-installer"
 version = "0.1.0"
 edition = "2024"
-publish = false
 description = "Installer CLI for Whitaker Dylint lint libraries"
+readme = "README.md"
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "whitaker-installer"
@@ -15,6 +17,9 @@ path = "src/main.rs"
 camino = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 directories-next = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 wait-timeout = { workspace = true }

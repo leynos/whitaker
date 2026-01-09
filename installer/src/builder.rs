@@ -5,78 +5,16 @@
 
 use crate::error::{InstallerError, Result};
 use crate::toolchain::Toolchain;
-use camino::{Utf8Path, Utf8PathBuf};
-use std::fmt;
+use camino::Utf8PathBuf;
 use std::process::Command;
 
-/// A semantic crate name for lint libraries.
-///
-/// This newtype wrapper provides type safety for crate names, ensuring they are
-/// passed explicitly rather than as raw strings. Validation is performed by
-/// [`validate_crate_names`] and related helpers, not by this type itself.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CrateName(String);
-
-impl CrateName {
-    /// Create a new crate name.
-    #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    /// Get the crate name as a string slice.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Consume the wrapper and return the inner string.
-    #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-}
-
-impl AsRef<str> for CrateName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<&str> for CrateName {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
-}
-
-impl From<String> for CrateName {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl fmt::Display for CrateName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-/// Static list of lint crates available for building.
-///
-/// This list includes all individual lint crates. The aggregated suite is
-/// defined separately as [`SUITE_CRATE`].
-pub const LINT_CRATES: &[&str] = &[
-    "conditional_max_n_branches",
-    "function_attrs_follow_docs",
-    "module_max_lines",
-    "module_must_have_inner_docs",
-    "no_expect_outside_tests",
-    "no_std_fs_operations",
-    "no_unwrap_or_else_panic",
-];
-
-/// The aggregated suite crate name.
-pub const SUITE_CRATE: &str = "suite";
+// Re-export from submodules for backwards compatibility
+pub use crate::crate_name::CrateName;
+pub use crate::resolution::{
+    CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, is_known_crate,
+    resolve_crates, validate_crate_names,
+};
+pub use crate::workspace::find_workspace_root;
 
 /// Configuration for the build process.
 #[derive(Debug, Clone)]
@@ -89,6 +27,8 @@ pub struct BuildConfig {
     pub jobs: Option<usize>,
     /// Verbosity level for cargo output.
     pub verbosity: u8,
+    /// Include experimental lints when building the suite.
+    pub experimental: bool,
 }
 
 /// Result of building a single crate.
@@ -98,6 +38,21 @@ pub struct BuildResult {
     pub crate_name: CrateName,
     /// Path to the compiled library.
     pub library_path: Utf8PathBuf,
+}
+
+/// Trait for building lint crates, enabling dependency injection for tests.
+///
+/// This trait abstracts the build operation so that tests can mock the builder
+/// and verify that `perform_build` constructs the correct configuration without
+/// actually invoking cargo.
+#[cfg_attr(test, mockall::automock)]
+pub trait CrateBuilder {
+    /// Build all specified crates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any crate fails to build.
+    fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>>;
 }
 
 /// Builder for compiling lint crates.
@@ -121,7 +76,11 @@ impl Builder {
         let mut cmd = Command::new("cargo");
 
         cmd.arg(format!("+{}", self.config.toolchain.channel()));
-        cmd.args(["build", "--release", "--features", "dylint-driver"]);
+        cmd.args(["build", "--release"]);
+
+        let features = self.features_for_crate(crate_name);
+        cmd.args(["--features", &features]);
+
         cmd.args(["-p", crate_name.as_str()]);
 
         if let Some(jobs) = self.config.jobs {
@@ -188,6 +147,53 @@ impl Builder {
 
         self.config.target_dir.join("release").join(lib_name)
     }
+
+    /// Determine which features to enable for a given crate.
+    ///
+    /// For the suite crate, this includes the experimental feature when enabled.
+    /// For individual lint crates, only the `dylint-driver` feature is needed.
+    fn features_for_crate(&self, crate_name: &CrateName) -> String {
+        if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
+            let experimental = Self::experimental_features();
+            if experimental.is_empty() {
+                "dylint-driver".to_owned()
+            } else {
+                format!("dylint-driver,{experimental}")
+            }
+        } else {
+            "dylint-driver".to_owned()
+        }
+    }
+
+    /// Generate the comma-separated list of experimental feature flags.
+    ///
+    /// Feature names follow the pattern `experimental-{lint_name_with_hyphens}`,
+    /// derived from `EXPERIMENTAL_LINT_CRATES` to keep the source of truth in one
+    /// place.
+    ///
+    /// Returns an empty string if `EXPERIMENTAL_LINT_CRATES` is empty.
+    fn experimental_features() -> String {
+        EXPERIMENTAL_LINT_CRATES
+            .iter()
+            .map(|&name| format!("experimental-{}", name.replace('_', "-")))
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+
+    /// Returns a reference to the build configuration.
+    ///
+    /// This method is primarily useful for testing to verify that the correct
+    /// configuration was constructed.
+    #[must_use]
+    pub fn config(&self) -> &BuildConfig {
+        &self.config
+    }
+}
+
+impl CrateBuilder for Builder {
+    fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> {
+        self.build_all(crates)
+    }
 }
 
 /// Return the platform-specific library file extension (including the dot).
@@ -220,145 +226,24 @@ pub const fn library_prefix() -> &'static str {
     }
 }
 
-/// Check whether a crate name is a known lint crate or the suite.
-#[must_use]
-pub fn is_known_crate(name: &CrateName) -> bool {
-    let s = name.as_str();
-    LINT_CRATES.contains(&s) || s == SUITE_CRATE
-}
-
-/// Validate that all specified crate names are known lint crates.
-///
-/// # Errors
-///
-/// Returns an error if any crate name is not recognised.
-pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
-    for name in names {
-        if !is_known_crate(name) {
-            return Err(InstallerError::LintCrateNotFound { name: name.clone() });
-        }
-    }
-    Ok(())
-}
-
-/// Build the list of crates to compile based on CLI options.
-///
-/// By default, only the aggregated suite is built. Use `individual_lints` to
-/// build all individual lint crates instead, or provide `specific_lints` to
-/// cherry-pick particular lints.
-///
-/// Note: This function assumes that `specific_lints` have been validated via
-/// `validate_crate_names()` prior to calling. Callers must validate inputs
-/// first to get proper error messages for unknown names.
-#[must_use]
-pub fn resolve_crates(specific_lints: &[CrateName], individual_lints: bool) -> Vec<CrateName> {
-    if !specific_lints.is_empty() {
-        // Assumes names have been validated via validate_crate_names().
-        return specific_lints.to_vec();
-    }
-
-    if individual_lints {
-        return LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
-    }
-
-    // Default: suite only
-    vec![CrateName::from(SUITE_CRATE)]
-}
-
-/// Find the workspace root by looking for `Cargo.toml` with `[workspace]`.
-///
-/// # Errors
-///
-/// Returns an error if the workspace root cannot be determined, or if a
-/// `Cargo.toml` file cannot be read or parsed.
-pub fn find_workspace_root(start: &Utf8Path) -> Result<Utf8PathBuf> {
-    let mut current = start.to_owned();
-
-    loop {
-        let cargo_toml = current.join("Cargo.toml");
-        if cargo_toml.exists() && is_workspace_root(&cargo_toml)? {
-            return Ok(current);
-        }
-
-        match current.parent() {
-            Some(parent) => current = parent.to_owned(),
-            None => break,
-        }
-    }
-
-    Err(InstallerError::WorkspaceNotFound {
-        reason: "could not find Cargo.toml with [workspace] section".to_owned(),
-    })
-}
-
-/// Check if a `Cargo.toml` file contains a `[workspace]` section.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be read or parsed.
-fn is_workspace_root(cargo_toml: &Utf8Path) -> Result<bool> {
-    let contents = std::fs::read_to_string(cargo_toml)?;
-    let table = contents
-        .parse::<toml::Table>()
-        .map_err(|e| InstallerError::InvalidCargoToml {
-            path: cargo_toml.to_owned(),
-            reason: e.to_string(),
-        })?;
-    Ok(table.contains_key("workspace"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
 
-    /// Test configuration for resolve_crates variants.
-    struct ResolveCratesCase {
-        individual_lints: bool,
-        expect_lint: bool,
-        expect_suite: bool,
-    }
-
-    /// Parameterised tests for resolve_crates variants.
-    #[rstest]
-    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, expect_lint: false, expect_suite: true })]
-    #[case::individual_lints(ResolveCratesCase { individual_lints: true, expect_lint: true, expect_suite: false })]
-    fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
-        let crates = resolve_crates(&[], case.individual_lints);
-
-        assert_eq!(
-            crates.contains(&CrateName::from("module_max_lines")),
-            case.expect_lint,
-            "lint crate inclusion mismatch"
-        );
-        assert_eq!(
-            crates.contains(&CrateName::from(SUITE_CRATE)),
-            case.expect_suite,
-            "suite crate inclusion mismatch"
-        );
-    }
-
-    #[test]
-    fn resolve_crates_specific_lints() {
-        let specific = vec![CrateName::from("module_max_lines")];
-        let crates = resolve_crates(&specific, false);
-        assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
-    }
-
-    #[rstest]
-    #[case::valid(&["module_max_lines", "suite"], true)]
-    #[case::unknown(&["nonexistent_lint"], false)]
-    fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
-        let crate_names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();
-        let res = validate_crate_names(&crate_names);
-        if expect_ok {
-            assert!(res.is_ok());
-        } else {
-            let err = res.expect_err("expected validation failure");
-            assert!(
-                matches!(&err, InstallerError::LintCrateNotFound { name } if *name == crate_names[0]),
-                "unexpected error: {err:?}"
-            );
+    /// Create a test builder with the given experimental flag.
+    fn test_builder(experimental: bool) -> Builder {
+        Builder {
+            config: BuildConfig {
+                toolchain: Toolchain::with_override(
+                    &Utf8PathBuf::from("/tmp/test"),
+                    "nightly-2025-09-18",
+                ),
+                target_dir: Utf8PathBuf::from("/tmp/target"),
+                jobs: None,
+                verbosity: 0,
+                experimental,
+            },
         }
     }
 
@@ -374,5 +259,54 @@ mod tests {
         // Fallback for other Unix-like platforms (e.g., FreeBSD, OpenBSD)
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         assert_eq!(ext, ".so");
+    }
+
+    #[rstest]
+    #[case::non_suite_crate("module_max_lines", false, "dylint-driver")]
+    #[case::non_suite_with_experimental("module_max_lines", true, "dylint-driver")]
+    #[case::suite_without_experimental("suite", false, "dylint-driver")]
+    fn features_for_crate_returns_expected_features(
+        #[case] crate_name: &str,
+        #[case] experimental: bool,
+        #[case] expected: &str,
+    ) {
+        let builder = test_builder(experimental);
+        let result = builder.features_for_crate(&CrateName::from(crate_name));
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn features_for_crate_includes_experimental_for_suite() {
+        let builder = test_builder(true);
+        let result = builder.features_for_crate(&CrateName::from("suite"));
+
+        // Should start with dylint-driver
+        assert!(result.starts_with("dylint-driver"));
+
+        // Should include experimental features
+        assert!(result.contains("experimental-"));
+        // Verify format: experimental-{lint-name-with-hyphens}
+        for lint in EXPERIMENTAL_LINT_CRATES {
+            let expected_feature = format!("experimental-{}", lint.replace('_', "-"));
+            assert!(
+                result.contains(&expected_feature),
+                "expected {expected_feature} in {result}"
+            );
+        }
+    }
+
+    #[test]
+    fn experimental_features_derives_from_experimental_lint_crates() {
+        let features = Builder::experimental_features();
+
+        // Verify comma-separated format
+        let parts: Vec<_> = features.split(',').collect();
+        assert_eq!(parts.len(), EXPERIMENTAL_LINT_CRATES.len());
+
+        // Verify each feature follows the expected pattern
+        for (i, lint) in EXPERIMENTAL_LINT_CRATES.iter().enumerate() {
+            let expected = format!("experimental-{}", lint.replace('_', "-"));
+            assert_eq!(parts[i], expected);
+        }
     }
 }
