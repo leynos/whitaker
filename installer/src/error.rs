@@ -114,17 +114,19 @@ pub enum InstallerError {
     WrapperGeneration(String),
 
     /// Failed to scan the staging directory for installed lints.
-    #[error("failed to scan staging directory: {reason}")]
+    #[error("failed to scan staging directory")]
     ScanFailed {
-        /// Description of the scan failure.
-        reason: String,
+        /// The underlying error that caused the scan to fail.
+        #[source]
+        source: std::io::Error,
     },
 
     /// Failed to write output.
-    #[error("failed to write output: {reason}")]
+    #[error("failed to write output")]
     WriteFailed {
-        /// Description of the write failure.
-        reason: String,
+        /// The underlying error that caused the write to fail.
+        #[source]
+        source: std::io::Error,
     },
 }
 
@@ -187,21 +189,23 @@ mod tests {
 
     #[test]
     fn scan_failed_includes_reason() {
-        let err = InstallerError::ScanFailed {
-            reason: "directory not found".to_owned(),
-        };
+        let source = std::io::Error::other("directory not found");
+        let err = InstallerError::ScanFailed { source };
         let msg = err.to_string();
         assert!(msg.contains("scan"));
-        assert!(msg.contains("directory not found"));
+        // Verify the source error is preserved via the Error trait
+        let source_err = std::error::Error::source(&err);
+        assert!(source_err.is_some());
     }
 
     #[test]
     fn write_failed_includes_reason() {
-        let err = InstallerError::WriteFailed {
-            reason: "permission denied".to_owned(),
-        };
+        let source = std::io::Error::other("permission denied");
+        let err = InstallerError::WriteFailed { source };
         let msg = err.to_string();
         assert!(msg.contains("write"));
-        assert!(msg.contains("permission denied"));
+        // Verify the source error is preserved via the Error trait
+        let source_err = std::error::Error::source(&err);
+        assert!(source_err.is_some());
     }
 }

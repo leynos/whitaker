@@ -10,6 +10,10 @@ use crate::builder::MockCrateBuilder;
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
+// -------------------------------------------------------------------------
+// TestContext for build_config and perform_build tests
+// -------------------------------------------------------------------------
+
 /// Fixture providing a default test context with paths owned by the returned struct.
 struct TestContext {
     workspace_root: Utf8PathBuf,
@@ -295,7 +299,8 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
     } else {
         assert!(
             output.contains("Staging libraries to"),
-            "expected progress message, got: {output}"
+            "expected progress message, got: {}",
+            output
         );
     }
 }

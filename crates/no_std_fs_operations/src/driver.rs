@@ -42,17 +42,12 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// # Example
 ///
 /// ```rust,ignore
-/// use serde::Deserialize;
-///
-/// #[derive(Clone, Debug, Default, Deserialize)]
-/// #[serde(default, deny_unknown_fields)]
-/// struct NoStdFsConfig {
-///     excluded_crates: Vec<String>,
-/// }
-///
-/// let toml_str = r#"excluded_crates = ["my_cli_app"]"#;
-/// let config: NoStdFsConfig = toml::from_str(toml_str).expect("valid TOML");
-/// assert_eq!(config.excluded_crates, vec!["my_cli_app"]);
+/// # use no_std_fs_operations::driver::NoStdFsConfig;
+/// let config = NoStdFsConfig {
+///     excluded_crates: vec!["my_cli_app".to_owned()],
+/// };
+/// assert!(config.is_excluded("my_cli_app"));
+/// assert!(!config.is_excluded("other_crate"));
 /// ```
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

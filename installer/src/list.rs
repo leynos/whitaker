@@ -28,13 +28,20 @@ use crate::toolchain::Toolchain;
 /// - The staging directory cannot be scanned
 /// - Writing to stdout fails
 pub fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
+    run_list_with(args, stdout, detect_active_toolchain)
+}
+
+/// Internal implementation with injectable toolchain detection for testability.
+fn run_list_with<F>(args: &ListArgs, stdout: &mut dyn Write, detect_toolchain: F) -> Result<()>
+where
+    F: FnOnce() -> Option<String>,
+{
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
-    let installed = scan_installed(&target_dir).map_err(|e| InstallerError::ScanFailed {
-        reason: e.to_string(),
-    })?;
+    let installed =
+        scan_installed(&target_dir).map_err(|e| InstallerError::ScanFailed { source: e })?;
 
-    let active_toolchain = detect_active_toolchain();
+    let active_toolchain = detect_toolchain();
 
     let output = if args.json {
         format_json(&installed, active_toolchain.as_deref())
@@ -42,9 +49,7 @@ pub fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
         format_human(&installed, active_toolchain.as_deref())
     };
 
-    writeln!(stdout, "{output}").map_err(|e| InstallerError::WriteFailed {
-        reason: e.to_string(),
-    })?;
+    writeln!(stdout, "{output}").map_err(|e| InstallerError::WriteFailed { source: e })?;
 
     Ok(())
 }
@@ -191,7 +196,7 @@ mod tests {
         };
         let mut stdout = Vec::new();
 
-        let result = run_list(&args, &mut stdout);
+        let result = run_list_with(&args, &mut stdout, || None);
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
@@ -213,7 +218,7 @@ mod tests {
         };
         let mut stdout = Vec::new();
 
-        let result = run_list(&args, &mut stdout);
+        let result = run_list_with(&args, &mut stdout, || Some("nightly-2025-09-18".to_owned()));
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
@@ -233,7 +238,7 @@ mod tests {
         };
         let mut failing_stdout = FailingWriter;
 
-        let result = run_list(&args, &mut failing_stdout);
+        let result = run_list_with(&args, &mut failing_stdout, || None);
 
         let err = result.expect_err("expected error on write failure");
         assert!(
@@ -310,7 +315,7 @@ channel = "nightly-2025-09-18"
     #[rstest]
     fn determine_target_dir_prefers_cli_over_default(temp_target: TempTarget) {
         let cli_path = temp_target.path.clone();
-        let default_path = Utf8PathBuf::from("/should/not/be/used");
+        let default_path = temp_target.path.join("should_not_be_used");
 
         let result = determine_target_dir_with(Some(&cli_path), || Some(default_path));
 
