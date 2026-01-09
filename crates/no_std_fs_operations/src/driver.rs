@@ -14,6 +14,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
 use serde::Deserialize;
+use std::collections::HashSet;
 use whitaker::SharedConfig;
 
 const LINT_NAME: &str = "no_std_fs_operations";
@@ -39,12 +40,13 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// falls back to defaults and logs a warning. If exclusions don't work as
 /// expected, check the logs for parse errors.
 ///
-/// # Example
+/// # Examples
 ///
-/// ```no_run
+/// ```rust
 /// # use no_std_fs_operations::driver::NoStdFsConfig;
+/// # use std::collections::HashSet;
 /// let config = NoStdFsConfig {
-///     excluded_crates: vec!["my_cli_app".to_owned()],
+///     excluded_crates: HashSet::from(["my_cli_app".to_owned()]),
 /// };
 /// assert!(config.is_excluded("my_cli_app"));
 /// assert!(!config.is_excluded("other_crate"));
@@ -54,20 +56,30 @@ const LINT_NAME: &str = "no_std_fs_operations";
 pub struct NoStdFsConfig {
     /// Crate names excluded from the lint. These crates are allowed to use
     /// `std::fs` operations without triggering diagnostics.
-    pub excluded_crates: Vec<String>,
+    #[serde(deserialize_with = "deserialize_excluded_crates")]
+    pub excluded_crates: HashSet<String>,
+}
+
+fn deserialize_excluded_crates<'de, D>(deserializer: D) -> Result<HashSet<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let vec: Vec<String> = Vec::deserialize(deserializer)?;
+    Ok(vec.into_iter().collect())
 }
 
 impl NoStdFsConfig {
     /// Check if the given crate name is excluded from the lint.
     ///
-    /// Returns `true` if `crate_name` appears in the `excluded_crates` list.
+    /// Returns `true` if `crate_name` appears in the `excluded_crates` set.
     ///
-    /// # Example
+    /// # Examples
     ///
-    /// ```
+    /// ```rust
     /// # use no_std_fs_operations::driver::NoStdFsConfig;
+    /// # use std::collections::HashSet;
     /// let config = NoStdFsConfig {
-    ///     excluded_crates: vec!["my_cli".to_owned(), "test_utils".to_owned()],
+    ///     excluded_crates: HashSet::from(["my_cli".to_owned(), "test_utils".to_owned()]),
     /// };
     ///
     /// assert!(config.is_excluded("my_cli"));
@@ -75,7 +87,7 @@ impl NoStdFsConfig {
     /// ```
     #[must_use]
     pub fn is_excluded(&self, crate_name: &str) -> bool {
-        self.excluded_crates.iter().any(|c| c == crate_name)
+        self.excluded_crates.contains(crate_name)
     }
 }
 
@@ -120,7 +132,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
-        if self.excluded {
+        if self.should_skip() {
             return;
         }
         if let hir::ItemKind::Use(path, ..) = item.kind {
@@ -132,7 +144,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
-        if self.excluded {
+        if self.should_skip() {
             return;
         }
         match &expr.kind {
@@ -161,7 +173,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, AmbigArg>) {
-        if self.excluded {
+        if self.should_skip() {
             return;
         }
         if let hir::TyKind::Path(qpath) = &ty.kind {
@@ -172,8 +184,14 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
 }
 
 impl NoStdFsOperations {
+    /// Centralises exclusion logic for all lint pass methods.
+    #[inline]
+    fn should_skip(&self) -> bool {
+        self.excluded
+    }
+
     fn emit_optional(&self, cx: &LateContext<'_>, span: Span, usage: Option<StdFsUsage>) {
-        if self.excluded {
+        if self.should_skip() {
             return;
         }
         if let Some(usage) = usage {

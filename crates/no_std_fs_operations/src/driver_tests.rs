@@ -26,6 +26,7 @@
 
 use super::*;
 use rstest::rstest;
+use std::collections::HashSet;
 use std::io;
 
 #[test]
@@ -34,15 +35,18 @@ fn config_default_has_empty_excluded_crates() {
 }
 
 #[rstest]
-#[case::empty_config(r#""#, vec![])]
-#[case::empty_excluded(r#"excluded_crates = []"#, vec![])]
-#[case::single_crate(r#"excluded_crates = ["foo"]"#, vec!["foo"])]
-#[case::multiple_crates(r#"excluded_crates = ["foo", "bar", "baz"]"#, vec!["foo", "bar", "baz"])]
-fn config_deserializes_excluded_crates(#[case] toml: &str, #[case] expected: Vec<&str>) {
+#[case::empty_config(r#""#, &[])]
+#[case::empty_excluded(r#"excluded_crates = []"#, &[])]
+#[case::single_crate(r#"excluded_crates = ["foo"]"#, &["foo"])]
+#[case::multiple_crates(r#"excluded_crates = ["foo", "bar", "baz"]"#, &["foo", "bar", "baz"])]
+fn config_deserializes_excluded_crates(#[case] toml: &str, #[case] expected: &[&str]) {
     let config: NoStdFsConfig = toml::from_str(toml).expect("valid TOML");
     assert_eq!(
         config.excluded_crates,
-        expected.into_iter().map(String::from).collect::<Vec<_>>()
+        expected
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<HashSet<_>>()
     );
 }
 
@@ -78,14 +82,14 @@ fn is_excluded_matches_correctly(
 #[test]
 fn load_configuration_returns_config_when_present() {
     let config = NoStdFsConfig {
-        excluded_crates: vec!["my_crate".to_owned()],
+        excluded_crates: HashSet::from(["my_crate".to_owned()]),
     };
     let mut mock = MockConfigReader::new();
     mock.expect_read_config()
         .returning(move |_| Ok(Some(config.clone())));
     assert_eq!(
         load_configuration_with_reader(&mock).excluded_crates,
-        vec!["my_crate"]
+        HashSet::from(["my_crate".to_owned()])
     );
 }
 
