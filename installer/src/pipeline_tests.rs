@@ -5,8 +5,11 @@
 //! correctly invokes the builder with the provided crates, and that
 //! `stage_libraries` correctly stages build results.
 
-use super::*;
-use crate::builder::MockCrateBuilder;
+use super::{PipelineContext, build_config_from_context, perform_build_with, stage_libraries};
+use crate::builder::{BuildResult, MockCrateBuilder};
+use crate::crate_name::CrateName;
+use crate::toolchain::Toolchain;
+use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
@@ -27,13 +30,11 @@ struct TestContext {
 
 impl TestContext {
     fn new() -> Self {
+        let base = Utf8PathBuf::from("test_workspace");
         Self {
-            workspace_root: Utf8PathBuf::from("/tmp/workspace"),
-            target_dir: Utf8PathBuf::from("/tmp/target"),
-            toolchain: Toolchain::with_override(
-                &Utf8PathBuf::from("/tmp/test"),
-                "nightly-2025-09-18",
-            ),
+            workspace_root: base.clone(),
+            target_dir: base.join("target"),
+            toolchain: Toolchain::with_override(&base, "nightly-2025-09-18"),
             jobs: None,
             verbosity: 0,
             experimental: false,
@@ -95,7 +96,7 @@ fn build_config_from_context_sets_target_dir_to_workspace_target(test_ctx: TestC
     let config = build_config_from_context(&test_ctx.pipeline_context());
     assert_eq!(
         config.target_dir,
-        Utf8PathBuf::from("/tmp/workspace/target")
+        Utf8PathBuf::from("test_workspace/target")
     );
 }
 
@@ -187,7 +188,8 @@ fn perform_build_with_respects_quiet_flag(test_ctx: TestContext, #[case] quiet: 
     mock.expect_build_all().times(1).returning(|_| Ok(vec![]));
 
     let mut stderr = Vec::new();
-    let _ = perform_build_with(&ctx.pipeline_context(), &crates, &mock, &mut stderr);
+    perform_build_with(&ctx.pipeline_context(), &crates, &mock, &mut stderr)
+        .expect("build should succeed");
 
     let output = String::from_utf8_lossy(&stderr);
     if quiet {
@@ -206,8 +208,8 @@ fn pipeline_context_fields_are_accessible() {
         .with_experimental(true);
     let context = ctx.pipeline_context();
 
-    assert_eq!(context.workspace_root, Utf8Path::new("/tmp/workspace"));
-    assert_eq!(context.target_dir, Utf8Path::new("/tmp/target"));
+    assert_eq!(context.workspace_root, Utf8Path::new("test_workspace"));
+    assert_eq!(context.target_dir, Utf8Path::new("test_workspace/target"));
     assert_eq!(context.toolchain.channel(), "nightly-2025-09-18");
     assert_eq!(context.jobs, Some(4));
     assert_eq!(context.verbosity, 2);
@@ -221,7 +223,7 @@ fn pipeline_context_fields_are_accessible() {
 
 /// Fixture providing a temporary directory for staging tests.
 ///
-/// Wraps a `TestContext` and adds a temporary directory for real filesystem
+/// Wraps a `TestContext` and adds a temporary directory for real file system
 /// operations during staging tests.
 struct StagingTestContext {
     _temp_dir: TempDir,
@@ -293,7 +295,7 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
     let build_results = vec![];
     let mut stderr = Vec::new();
 
-    let _ = stage_libraries(&context, &build_results, &mut stderr);
+    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
 
     let output = String::from_utf8_lossy(&stderr);
     if quiet {
