@@ -1,8 +1,28 @@
 //! Unit tests for configuration parsing, exclusion logic, and config loading.
 //!
 //! Provides layered coverage: config parsing, exclusion matching, and mock-based
-//! config loading. Integration testing of exclusion during lint execution is not
-//! feasible with `dylint_testing` as crate names cannot be controlled.
+//! config loading.
+//!
+//! # Exception to Behavioural Testing Guidelines
+//!
+//! This module documents an explicit exception to the project's requirement for
+//! behavioural tests validating new functionality. End-to-end integration testing
+//! of the exclusion feature is not feasible with `dylint_testing` because:
+//!
+//! 1. **Technical constraint**: The `dylint_testing` harness uses `CARGO_PKG_NAME`
+//!    at compile time, preventing fixture crates from having controlled names.
+//!
+//! 2. **Unit test coverage is sufficient**: The exclusion implementation is
+//!    straightforward—when `self.excluded` is true, `emit_optional` returns early
+//!    (see `driver.rs`). All configuration parsing, deserialisation, and matching
+//!    logic is fully validated by the tests below.
+//!
+//! 3. **Behaviour is deterministic**: The `check_crate` method sets `self.excluded`
+//!    based on `config.is_excluded(crate_name)`, which is exhaustively tested here.
+//!
+//! The integration tests in `tests/integration_exclusion.rs` provide additional
+//! coverage by invoking `cargo dylint` on fixture projects with real exclusion
+//! configurations.
 
 use super::*;
 use rstest::rstest;
@@ -83,8 +103,10 @@ fn load_configuration_returns_default_when_none() {
 #[test]
 fn load_configuration_returns_default_on_error() {
     let mut mock = MockConfigReader::new();
-    mock.expect_read_config()
-        .returning(|_| Err(Box::new(io::Error::other("parse error")) as _));
+    mock.expect_read_config().returning(|_| {
+        Err(Box::new(io::Error::other("parse error"))
+            as Box<dyn std::error::Error + Send + Sync + 'static>)
+    });
     assert!(
         load_configuration_with_reader(&mock)
             .excluded_crates

@@ -1,12 +1,14 @@
 //! Unit tests for pipeline orchestration.
 //!
 //! These tests verify that `build_config_from_context` correctly maps
-//! `PipelineContext` fields to `BuildConfig`, and that `perform_build_with`
-//! correctly invokes the builder with the provided crates.
+//! `PipelineContext` fields to `BuildConfig`, that `perform_build_with`
+//! correctly invokes the builder with the provided crates, and that
+//! `stage_libraries` correctly stages build results.
 
 use super::*;
 use crate::builder::MockCrateBuilder;
 use rstest::{fixture, rstest};
+use tempfile::TempDir;
 
 /// Fixture providing a default test context with paths owned by the returned struct.
 struct TestContext {
@@ -68,6 +70,7 @@ impl TestContext {
     }
 }
 
+/// Returns a default TestContext with owned paths and default settings for pipeline unit tests.
 #[fixture]
 fn test_ctx() -> TestContext {
     TestContext::new()
@@ -206,4 +209,93 @@ fn pipeline_context_fields_are_accessible() {
     assert_eq!(context.verbosity, 2);
     assert!(context.experimental);
     assert!(!context.quiet);
+}
+
+// -------------------------------------------------------------------------
+// stage_libraries tests
+// -------------------------------------------------------------------------
+
+/// Fixture providing a temporary directory for staging tests.
+struct StagingTestContext {
+    _temp_dir: TempDir,
+    target_dir: Utf8PathBuf,
+    workspace_root: Utf8PathBuf,
+    toolchain: Toolchain,
+}
+
+impl StagingTestContext {
+    fn new() -> Self {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let target_dir =
+            Utf8PathBuf::try_from(temp_dir.path().to_owned()).expect("non-UTF8 temp path");
+        Self {
+            _temp_dir: temp_dir,
+            target_dir,
+            workspace_root: Utf8PathBuf::from("/tmp/workspace"),
+            toolchain: Toolchain::with_override(
+                &Utf8PathBuf::from("/tmp/test"),
+                "nightly-2025-09-18",
+            ),
+        }
+    }
+
+    fn pipeline_context(&self, quiet: bool) -> PipelineContext<'_> {
+        PipelineContext {
+            workspace_root: &self.workspace_root,
+            toolchain: &self.toolchain,
+            target_dir: &self.target_dir,
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet,
+        }
+    }
+}
+
+#[fixture]
+fn staging_ctx() -> StagingTestContext {
+    StagingTestContext::new()
+}
+
+#[rstest]
+fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext) {
+    let context = staging_ctx.pipeline_context(true);
+    let build_results = vec![];
+    let mut stderr = Vec::new();
+
+    let result = stage_libraries(&context, &build_results, &mut stderr);
+
+    assert!(result.is_ok(), "expected success, got: {result:?}");
+    let staging_path = result.expect("already checked");
+
+    // Verify the path matches the expected Stager::staging_path() format
+    let expected_path = staging_ctx
+        .target_dir
+        .join("nightly-2025-09-18")
+        .join("release");
+    assert_eq!(
+        staging_path, expected_path,
+        "staging path should match Stager format"
+    );
+}
+
+#[rstest]
+#[case::quiet_mode(true)]
+#[case::verbose_mode(false)]
+fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] quiet: bool) {
+    let context = staging_ctx.pipeline_context(quiet);
+    let build_results = vec![];
+    let mut stderr = Vec::new();
+
+    let _ = stage_libraries(&context, &build_results, &mut stderr);
+
+    let output = String::from_utf8_lossy(&stderr);
+    if quiet {
+        assert!(output.is_empty(), "expected no output in quiet mode");
+    } else {
+        assert!(
+            output.contains("Staging libraries to"),
+            "expected progress message, got: {output}"
+        );
+    }
 }

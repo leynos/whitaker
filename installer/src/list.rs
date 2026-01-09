@@ -237,11 +237,11 @@ mod tests {
 
         let result = run_list(&args, &mut failing_stdout);
 
-        assert!(result.is_err(), "expected error on write failure");
-        assert!(matches!(
-            result.unwrap_err(),
-            InstallerError::WriteFailed { .. }
-        ));
+        let err = result.expect_err("expected error on write failure");
+        assert!(
+            matches!(err, InstallerError::WriteFailed { .. }),
+            "expected WriteFailed error, got: {err:?}"
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -302,11 +302,11 @@ channel = "nightly-2025-09-18"
     fn determine_target_dir_returns_error_when_no_default_available() {
         let result = determine_target_dir_with(None, || None);
 
-        assert!(result.is_err(), "expected error when no default");
-        assert!(matches!(
-            result.unwrap_err(),
-            InstallerError::StagingFailed { .. }
-        ));
+        let err = result.expect_err("expected error when no default");
+        assert!(
+            matches!(err, InstallerError::StagingFailed { .. }),
+            "expected StagingFailed error, got: {err:?}"
+        );
     }
 
     #[rstest]

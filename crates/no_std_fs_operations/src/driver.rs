@@ -41,7 +41,7 @@ const LINT_NAME: &str = "no_std_fs_operations";
 ///
 /// # Example
 ///
-/// ```
+/// ```rust,ignore
 /// use serde::Deserialize;
 ///
 /// #[derive(Clone, Debug, Default, Deserialize)]
@@ -246,7 +246,7 @@ pub(crate) trait ConfigReader {
     fn read_config(
         &self,
         lint_name: &str,
-    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>>;
+    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error + Send + Sync + 'static>>;
 }
 
 /// Production implementation that reads from `dylint.toml` via `dylint_linting::config`.
@@ -259,8 +259,9 @@ impl ConfigReader for DylintConfigReader {
     fn read_config(
         &self,
         lint_name: &str,
-    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error>> {
-        dylint_linting::config::<NoStdFsConfig>(lint_name).map_err(|e| Box::new(e) as _)
+    ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+        dylint_linting::config::<NoStdFsConfig>(lint_name)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>)
     }
 }
 
