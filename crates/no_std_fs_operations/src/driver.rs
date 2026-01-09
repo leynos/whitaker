@@ -41,7 +41,7 @@ const LINT_NAME: &str = "no_std_fs_operations";
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```no_run
 /// # use no_std_fs_operations::driver::NoStdFsConfig;
 /// let config = NoStdFsConfig {
 ///     excluded_crates: vec!["my_cli_app".to_owned()],

@@ -11,7 +11,9 @@ use std::path::Path;
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```no_run
+/// use excluded_project::open_file;
+///
 /// // Open existing file - returns Ok with file handle
 /// let file = open_file("Cargo.toml").expect("file should exist");
 ///

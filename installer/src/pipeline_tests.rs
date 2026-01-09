@@ -220,11 +220,12 @@ fn pipeline_context_fields_are_accessible() {
 // -------------------------------------------------------------------------
 
 /// Fixture providing a temporary directory for staging tests.
+///
+/// Wraps a `TestContext` and adds a temporary directory for real filesystem
+/// operations during staging tests.
 struct StagingTestContext {
     _temp_dir: TempDir,
-    target_dir: Utf8PathBuf,
-    workspace_root: Utf8PathBuf,
-    toolchain: Toolchain,
+    ctx: TestContext,
 }
 
 impl StagingTestContext {
@@ -234,25 +235,24 @@ impl StagingTestContext {
             Utf8PathBuf::try_from(temp_dir.path().to_owned()).expect("non-UTF8 temp path");
         Self {
             _temp_dir: temp_dir,
-            target_dir,
-            workspace_root: Utf8PathBuf::from("/tmp/workspace"),
-            toolchain: Toolchain::with_override(
-                &Utf8PathBuf::from("/tmp/test"),
-                "nightly-2025-09-18",
-            ),
+            ctx: TestContext {
+                target_dir,
+                ..TestContext::new()
+            },
         }
     }
 
-    fn pipeline_context(&self, quiet: bool) -> PipelineContext<'_> {
-        PipelineContext {
-            workspace_root: &self.workspace_root,
-            toolchain: &self.toolchain,
-            target_dir: &self.target_dir,
-            jobs: None,
-            verbosity: 0,
-            experimental: false,
-            quiet,
-        }
+    fn target_dir(&self) -> &Utf8Path {
+        &self.ctx.target_dir
+    }
+
+    fn with_quiet(mut self, quiet: bool) -> Self {
+        self.ctx.quiet = quiet;
+        self
+    }
+
+    fn pipeline_context(&self) -> PipelineContext<'_> {
+        self.ctx.pipeline_context()
     }
 }
 
@@ -263,7 +263,8 @@ fn staging_ctx() -> StagingTestContext {
 
 #[rstest]
 fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext) {
-    let context = staging_ctx.pipeline_context(true);
+    let staging_ctx = staging_ctx.with_quiet(true);
+    let context = staging_ctx.pipeline_context();
     let build_results = vec![];
     let mut stderr = Vec::new();
 
@@ -274,7 +275,7 @@ fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext)
 
     // Verify the path matches the expected Stager::staging_path() format
     let expected_path = staging_ctx
-        .target_dir
+        .target_dir()
         .join("nightly-2025-09-18")
         .join("release");
     assert_eq!(
@@ -287,7 +288,8 @@ fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext)
 #[case::quiet_mode(true)]
 #[case::verbose_mode(false)]
 fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] quiet: bool) {
-    let context = staging_ctx.pipeline_context(quiet);
+    let staging_ctx = staging_ctx.with_quiet(quiet);
+    let context = staging_ctx.pipeline_context();
     let build_results = vec![];
     let mut stderr = Vec::new();
 
