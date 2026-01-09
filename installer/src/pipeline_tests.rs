@@ -235,58 +235,76 @@ fn pipeline_context_fields_are_accessible() {
 
 /// Fixture providing a temporary directory for staging tests.
 ///
-/// Wraps a `TestContext` and adds a temporary directory for real file system
-/// operations during staging tests.
+/// Contains its own fields for real file system operations during staging tests,
+/// mirroring `TestContext` but with a real temporary directory for `target_dir`.
 struct StagingTestContext {
     _temp_dir: TempDir,
-    ctx: TestContext,
+    target_dir: Utf8PathBuf,
+    workspace_root: Utf8PathBuf,
+    toolchain: Toolchain,
+    jobs: Option<usize>,
+    verbosity: u8,
+    experimental: bool,
+    quiet: bool,
 }
 
 impl StagingTestContext {
     fn new() -> Self {
-        let temp_dir = TempDir::new().expect("failed to create temporary directory for staging");
-        let target_dir = Utf8PathBuf::try_from(temp_dir.path().to_owned())
-            .expect("temporary directory path should be valid UTF-8");
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let target_dir =
+            Utf8PathBuf::try_from(temp_dir.path().to_owned()).expect("non-UTF8 temp path");
         Self {
             _temp_dir: temp_dir,
-            ctx: TestContext {
-                target_dir,
-                ..TestContext::new()
-            },
+            target_dir,
+            workspace_root: Utf8PathBuf::from("/tmp/workspace"),
+            toolchain: Toolchain::with_override(
+                &Utf8PathBuf::from("/tmp/test"),
+                "nightly-2025-09-18",
+            ),
+            jobs: None,
+            verbosity: 0,
+            experimental: false,
+            quiet: false,
         }
     }
 
     fn target_dir(&self) -> &Utf8Path {
-        &self.ctx.target_dir
+        &self.target_dir
     }
 
     fn with_quiet(mut self, quiet: bool) -> Self {
-        self.ctx.quiet = quiet;
+        self.quiet = quiet;
         self
     }
 
     #[expect(dead_code, reason = "API parity with TestContext for future test use")]
     fn with_jobs(mut self, jobs: Option<usize>) -> Self {
-        self.ctx.jobs = jobs;
+        self.jobs = jobs;
         self
     }
 
     #[expect(dead_code, reason = "API parity with TestContext for future test use")]
     fn with_verbosity(mut self, verbosity: u8) -> Self {
-        self.ctx.verbosity = verbosity;
+        self.verbosity = verbosity;
         self
     }
 
     #[expect(dead_code, reason = "API parity with TestContext for future test use")]
     fn with_experimental(mut self, experimental: bool) -> Self {
-        self.ctx.experimental = experimental;
+        self.experimental = experimental;
         self
     }
-}
 
-impl PipelineContextProvider for StagingTestContext {
     fn pipeline_context(&self) -> PipelineContext<'_> {
-        self.ctx.pipeline_context()
+        PipelineContext {
+            workspace_root: &self.workspace_root,
+            toolchain: &self.toolchain,
+            target_dir: &self.target_dir,
+            jobs: self.jobs,
+            verbosity: self.verbosity,
+            experimental: self.experimental,
+            quiet: self.quiet,
+        }
     }
 }
 
