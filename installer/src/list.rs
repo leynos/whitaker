@@ -201,10 +201,16 @@ mod tests {
     }
 
     #[rstest]
-    fn run_list_outputs_json_format(temp_target: TempTarget) {
+    #[case::json_format(true, &["toolchains", "\"active\""])]
+    #[case::human_format(false, &["nightly-2025-09-18", "suite"])]
+    fn run_list_with_installed_library_includes_expected_output(
+        temp_target: TempTarget,
+        #[case] json: bool,
+        #[case] expected: &[&str],
+    ) {
         create_mock_library(&temp_target.path, "nightly-2025-09-18");
         let args = ListArgs {
-            json: true,
+            json,
             target_dir: Some(temp_target.path.clone()),
         };
         let mut stdout = Vec::new();
@@ -213,11 +219,12 @@ mod tests {
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
-        assert!(output.contains("toolchains"), "expected 'toolchains' field");
-        assert!(
-            output.contains("\"active\""),
-            "expected 'active' field in toolchain entries"
-        );
+        for needle in expected {
+            assert!(
+                output.contains(needle),
+                "expected '{needle}' in output: {output}"
+            );
+        }
     }
 
     #[rstest]
@@ -235,29 +242,6 @@ mod tests {
             result.unwrap_err(),
             InstallerError::WriteFailed { .. }
         ));
-    }
-
-    #[rstest]
-    fn run_list_scans_installed_libraries(temp_target: TempTarget) {
-        create_mock_library(&temp_target.path, "nightly-2025-09-18");
-        let args = ListArgs {
-            json: false,
-            target_dir: Some(temp_target.path.clone()),
-        };
-        let mut stdout = Vec::new();
-
-        let result = run_list(&args, &mut stdout);
-
-        assert!(result.is_ok(), "expected success, got: {result:?}");
-        let output = String::from_utf8_lossy(&stdout);
-        assert!(
-            output.contains("nightly-2025-09-18"),
-            "expected toolchain in output, got: {output}"
-        );
-        assert!(
-            output.contains("suite"),
-            "expected suite crate in output, got: {output}"
-        );
     }
 
     // -------------------------------------------------------------------------
