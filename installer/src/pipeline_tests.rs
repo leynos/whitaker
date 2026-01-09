@@ -264,6 +264,24 @@ impl StagingTestContext {
         self.ctx.quiet = quiet;
         self
     }
+
+    #[expect(dead_code, reason = "API parity with TestContext for future test use")]
+    fn with_jobs(mut self, jobs: Option<usize>) -> Self {
+        self.ctx.jobs = jobs;
+        self
+    }
+
+    #[expect(dead_code, reason = "API parity with TestContext for future test use")]
+    fn with_verbosity(mut self, verbosity: u8) -> Self {
+        self.ctx.verbosity = verbosity;
+        self
+    }
+
+    #[expect(dead_code, reason = "API parity with TestContext for future test use")]
+    fn with_experimental(mut self, experimental: bool) -> Self {
+        self.ctx.experimental = experimental;
+        self
+    }
 }
 
 impl PipelineContextProvider for StagingTestContext {
@@ -361,7 +379,7 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
 }
 
 #[rstest]
-fn stage_libraries_logs_installed_lints_when_verbose(staging_ctx: StagingTestContext) {
+fn stage_libraries_logs_installed_lints_when_not_quiet(staging_ctx: StagingTestContext) {
     let context = staging_ctx.pipeline_context();
     let build_results = vec![];
     let mut stderr = Vec::new();
