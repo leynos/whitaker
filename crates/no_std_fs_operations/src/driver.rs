@@ -70,18 +70,7 @@ impl NoStdFsConfig {
     /// # Example
     ///
     /// ```
-    /// # use serde::Deserialize;
-    /// #[derive(Default, Deserialize)]
-    /// struct NoStdFsConfig {
-    ///     excluded_crates: Vec<String>,
-    /// }
-    ///
-    /// impl NoStdFsConfig {
-    ///     fn is_excluded(&self, crate_name: &str) -> bool {
-    ///         self.excluded_crates.iter().any(|c| c == crate_name)
-    ///     }
-    /// }
-    ///
+    /// # use no_std_fs_operations::driver::NoStdFsConfig;
     /// let config = NoStdFsConfig {
     ///     excluded_crates: vec!["my_cli".to_owned(), "test_utils".to_owned()],
     /// };

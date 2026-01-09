@@ -3,7 +3,7 @@
 //! This module provides the `run_list` command handler and supporting functions
 //! for querying and displaying installed lint libraries.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use log::trace;
 use std::io::Write;
 
@@ -84,7 +84,7 @@ pub fn detect_active_toolchain() -> Option<String> {
 /// Returns `None` if:
 /// - No `rust-toolchain.toml` file exists in the directory
 /// - The toolchain file cannot be parsed
-pub(crate) fn detect_active_toolchain_in(dir: &Utf8PathBuf) -> Option<String> {
+pub(crate) fn detect_active_toolchain_in(dir: &Utf8Path) -> Option<String> {
     match Toolchain::detect(dir) {
         Ok(tc) => Some(tc.channel().to_owned()),
         Err(e) => {
@@ -105,8 +105,19 @@ pub(crate) fn detect_active_toolchain_in(dir: &Utf8PathBuf) -> Option<String> {
 /// Returns [`InstallerError::StagingFailed`] if no target directory can be
 /// determined (neither provided nor default available).
 pub fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
+    determine_target_dir_with(cli_target, default_target_dir)
+}
+
+/// Internal implementation with injectable default provider for testability.
+fn determine_target_dir_with<F>(
+    cli_target: Option<Utf8PathBuf>,
+    default_fn: F,
+) -> Result<Utf8PathBuf>
+where
+    F: FnOnce() -> Option<Utf8PathBuf>,
+{
     cli_target
-        .or_else(default_target_dir)
+        .or_else(default_fn)
         .ok_or_else(|| InstallerError::StagingFailed {
             reason: "could not determine default target directory".to_owned(),
         })
@@ -287,26 +298,41 @@ channel = "nightly-2025-09-18"
 
     #[rstest]
     fn determine_target_dir_returns_cli_value_when_provided(temp_target: TempTarget) {
-        let result = determine_target_dir(Some(temp_target.path.clone()));
+        let result = determine_target_dir_with(Some(temp_target.path.clone()), || None);
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         assert_eq!(result.expect("already checked"), temp_target.path);
     }
 
-    #[test]
-    fn determine_target_dir_falls_back_to_default() {
-        // When CLI target is None, falls back to default_target_dir()
-        // This test verifies the function doesn't fail when default is available.
-        // On most systems, default_target_dir() will return Some value.
-        let result = determine_target_dir(None);
+    #[rstest]
+    fn determine_target_dir_falls_back_to_default_when_cli_is_none(temp_target: TempTarget) {
+        let default_path = temp_target.path.clone();
 
-        // If default_target_dir() returns Some, result should be Ok
-        // If default_target_dir() returns None, result should be Err
-        // Either outcome is valid depending on system state
-        if crate::stager::default_target_dir().is_some() {
-            assert!(result.is_ok(), "expected Ok when default available");
-        } else {
-            assert!(result.is_err(), "expected Err when no default");
-        }
+        let result = determine_target_dir_with(None, || Some(default_path.clone()));
+
+        assert!(result.is_ok(), "expected success, got: {result:?}");
+        assert_eq!(result.expect("already checked"), default_path);
+    }
+
+    #[test]
+    fn determine_target_dir_returns_error_when_no_default_available() {
+        let result = determine_target_dir_with(None, || None);
+
+        assert!(result.is_err(), "expected error when no default");
+        assert!(matches!(
+            result.unwrap_err(),
+            InstallerError::StagingFailed { .. }
+        ));
+    }
+
+    #[rstest]
+    fn determine_target_dir_prefers_cli_over_default(temp_target: TempTarget) {
+        let cli_path = temp_target.path.clone();
+        let default_path = Utf8PathBuf::from("/should/not/be/used");
+
+        let result = determine_target_dir_with(Some(cli_path.clone()), || Some(default_path));
+
+        assert!(result.is_ok(), "expected success, got: {result:?}");
+        assert_eq!(result.expect("already checked"), cli_path);
     }
 }
