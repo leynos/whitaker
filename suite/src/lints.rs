@@ -68,7 +68,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// # Examples
 ///
 /// ```
-/// # use suite::suite_lint_names;
+/// # use whitaker_suite::suite_lint_names;
 /// let names: Vec<_> = suite_lint_names().collect();
 /// for expected in [
 ///     "function_attrs_follow_docs",

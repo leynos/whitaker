@@ -1,7 +1,7 @@
 //! Aggregated Whitaker Dylint suite.
 //!
 //! This crate bundles the individual Whitaker lint crates into a single
-//! cdylib. Consumers can load `suite` to enable every shipped lint without
+//! cdylib. Consumers can load `whitaker_suite` to enable every shipped lint without
 //! configuring each crate separately. The exported helpers mirror the
 //! dylint entrypoint so the library can register itself through
 //! `register_lints` while also exposing a pure-Rust view of the wiring for

@@ -296,7 +296,10 @@ mod tests {
             crates.contains(&CrateName::from("module_max_lines")),
             expect_lint
         );
-        assert_eq!(crates.contains(&CrateName::from("suite")), expect_suite);
+        assert_eq!(
+            crates.contains(&CrateName::from("whitaker_suite")),
+            expect_suite
+        );
     }
 
     #[test]

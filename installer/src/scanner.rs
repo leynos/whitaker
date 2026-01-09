@@ -163,7 +163,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 /// use whitaker_installer::scanner::lints_for_library;
 /// use whitaker_installer::crate_name::CrateName;
 ///
-/// let suite_lints = lints_for_library(&CrateName::from("suite"));
+/// let suite_lints = lints_for_library(&CrateName::from("whitaker_suite"));
 /// assert!(suite_lints.len() > 1);
 ///
 /// let single_lint = lints_for_library(&CrateName::from("module_max_lines"));
@@ -210,7 +210,11 @@ mod tests {
         "module_max_lines",
         "nightly-2025-09-18"
     )]
-    #[case::suite("libsuite@nightly-2025-09-18.so", "suite", "nightly-2025-09-18")]
+    #[case::suite(
+        "libwhitaker_suite@nightly-2025-09-18.so",
+        "whitaker_suite",
+        "nightly-2025-09-18"
+    )]
     #[case::stable_toolchain(
         "libno_expect_outside_tests@stable-1.80.0.so",
         "no_expect_outside_tests",
@@ -247,7 +251,7 @@ mod tests {
 
     #[test]
     fn lints_for_suite_returns_standard_lints_only() {
-        let lints = lints_for_library(&CrateName::from("suite"));
+        let lints = lints_for_library(&CrateName::from("whitaker_suite"));
         // Suite reports only standard lints; experimental lints depend on build flags
         assert_eq!(lints.len(), LINT_CRATES.len());
 
@@ -309,7 +313,7 @@ mod tests {
         std::fs::create_dir_all(&release_dir).expect("failed to create dirs");
 
         // Create fake library files
-        let lib_name = format!("libsuite@{toolchain}.so");
+        let lib_name = format!("libwhitaker_suite@{toolchain}.so");
         std::fs::write(release_dir.join(&lib_name), b"fake").expect("failed to write file");
 
         let result = scan_installed(target_dir).expect("scan should succeed");
@@ -321,7 +325,7 @@ mod tests {
             .get(toolchain)
             .expect("toolchain should exist");
         assert_eq!(libs.len(), 1);
-        assert_eq!(libs[0].crate_name.as_str(), "suite");
+        assert_eq!(libs[0].crate_name.as_str(), "whitaker_suite");
         assert_eq!(libs[0].toolchain, toolchain);
     }
 }

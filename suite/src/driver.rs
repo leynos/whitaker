@@ -52,7 +52,7 @@ define_suite_pass!(BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::de
 ///
 /// ```ignore
 /// # use rustc_lint::LintStore;
-/// # use suite::register_suite_lints;
+/// # use whitaker_suite::register_suite_lints;
 /// let mut store = LintStore::new();
 /// register_suite_lints(&mut store);
 /// let expected = if cfg!(feature = "experimental-bumpy-road") { 8 } else { 7 };
@@ -68,7 +68,7 @@ pub fn register_suite_lints(store: &mut LintStore) {
 /// # Examples
 ///
 /// ```ignore
-/// # use suite::suite_lint_decls;
+/// # use whitaker_suite::suite_lint_decls;
 /// let names: Vec<_> = suite_lint_decls()
 ///     .iter()
 ///     .map(|lint| lint.name_lower())

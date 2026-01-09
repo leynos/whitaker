@@ -155,13 +155,15 @@ fn build_config_from_context_sets_experimental(#[case] exp: bool) {
 fn perform_build_with_calls_build_all_with_provided_crates(test_ctx: TestContext) {
     let ctx = test_ctx.with_quiet(true);
     let crates = vec![
-        CrateName::from("suite"),
+        CrateName::from("whitaker_suite"),
         CrateName::from("module_max_lines"),
     ];
 
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all()
-        .withf(|c| c.len() == 2 && c[0].as_str() == "suite" && c[1].as_str() == "module_max_lines")
+        .withf(|c| {
+            c.len() == 2 && c[0].as_str() == "whitaker_suite" && c[1].as_str() == "module_max_lines"
+        })
         .times(1)
         .returning(|_| Ok(vec![]));
 
@@ -172,13 +174,13 @@ fn perform_build_with_calls_build_all_with_provided_crates(test_ctx: TestContext
 #[rstest]
 fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
     let ctx = test_ctx.with_quiet(true);
-    let crates = vec![CrateName::from("suite")];
+    let crates = vec![CrateName::from("whitaker_suite")];
 
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all().times(1).returning(|_| {
         Ok(vec![BuildResult {
-            crate_name: CrateName::from("suite"),
-            library_path: Utf8PathBuf::from("/path/to/libsuite.so"),
+            crate_name: CrateName::from("whitaker_suite"),
+            library_path: Utf8PathBuf::from("/path/to/libwhitaker_suite.so"),
         }])
     });
 
@@ -186,7 +188,7 @@ fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
     let results = perform_build_with(&ctx.pipeline_context(), &crates, &mock, &mut stderr)
         .expect("build should succeed");
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].crate_name.as_str(), "suite");
+    assert_eq!(results[0].crate_name.as_str(), "whitaker_suite");
 }
 
 #[rstest]
@@ -194,7 +196,7 @@ fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
 #[case::verbose_mode(false)]
 fn perform_build_with_respects_quiet_flag(test_ctx: TestContext, #[case] quiet: bool) {
     let ctx = test_ctx.with_quiet(quiet);
-    let crates = vec![CrateName::from("suite")];
+    let crates = vec![CrateName::from("whitaker_suite")];
 
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all().times(1).returning(|_| Ok(vec![]));
@@ -208,7 +210,10 @@ fn perform_build_with_respects_quiet_flag(test_ctx: TestContext, #[case] quiet: 
         assert!(output.is_empty(), "expected no output in quiet mode");
     } else {
         assert!(output.contains("Building"), "expected progress output");
-        assert!(output.contains("suite"), "expected crate name in output");
+        assert!(
+            output.contains("whitaker_suite"),
+            "expected crate name in output"
+        );
     }
 }
 
@@ -375,7 +380,7 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
     fs::write(&library_path, b"mock library content").expect("failed to write mock library");
 
     let build_results = vec![BuildResult {
-        crate_name: CrateName::from("suite"),
+        crate_name: CrateName::from("whitaker_suite"),
         library_path: library_path.clone(),
     }];
     let mut stderr = Vec::new();
@@ -385,7 +390,7 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
 
     // Verify the library was staged to the correct location
     let staged_filename = format!(
-        "{}suite@nightly-2025-09-18{}",
+        "{}whitaker_suite@nightly-2025-09-18{}",
         library_prefix(),
         library_extension()
     );

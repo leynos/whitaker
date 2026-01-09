@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / Big Picture
 
@@ -64,11 +64,12 @@ installer can still build, stage, and list the suite without regressions.
 
 - [x] (2026-01-09 00:00Z) Draft ExecPlan for issue #110.
 - [x] (2026-01-09 00:20Z) Update plan to avoid `whitaker list` references.
-- [ ] Confirm where `cargo dylint list` output originates and which name is
-  used.
-- [ ] Decide the new suite identifier and document the rationale.
-- [ ] Update suite naming across build, staging, and resolution logic.
-- [ ] Update tests and documentation, then validate all checks.
+- [x] (2026-01-09 01:05Z) Confirm `cargo dylint list` uses library filenames
+  for the displayed crate name.
+- [x] (2026-01-09 01:10Z) Select `whitaker_suite` as the new suite identifier.
+- [x] (2026-01-09 01:40Z) Update suite naming across build, staging, and
+  resolution logic.
+- [x] (2026-01-09 02:10Z) Update tests/docs and run validation checks.
 
 ## Surprises & Discoveries
 
@@ -80,16 +81,29 @@ None yet.
   references to `whitaker list`. Rationale: the `whitaker` subcommand is
   unnecessary, and the output source is Dylint's built-in listing. Date/Author:
   2026-01-09 / Codex.
+- Decision: rename the aggregated suite crate to `whitaker_suite`. Rationale:
+  the name is explicit in `cargo dylint list`, matches Rust crate naming
+  conventions, and avoids ambiguity with other suites. Date/Author: 2026-01-09
+  / Codex.
+- Decision: do not add automated cleanup for legacy `libsuite@<toolchain>`
+  libraries. Rationale: new installs stage `libwhitaker_suite@<toolchain>`
+  alongside any legacy files, and the migration can be handled via a manual
+  cleanup note if needed. Date/Author: 2026-01-09 / Codex.
 
 ## Outcomes & Retrospective
 
-Pending.
+Completed. The aggregated suite crate now ships as `whitaker_suite`, the
+installer and tests reflect the new identifier, and documentation examples use
+the updated pattern. Validation passes via `make fmt`, `make markdownlint`,
+`make nixie`, `make check-fmt`, `make lint`, and `make test`. The primary
+follow-up is user cleanup of any legacy `libsuite@<toolchain>` libraries if
+they want to avoid dual entries in `cargo dylint list`.
 
 ## Context and Orientation
 
 `cargo dylint list` displays the crate name embedded in the staged library
 filename. The suite crate currently lives in `suite/` with `suite/Cargo.toml`
-declaring `name = "suite"`. The installer stages libraries using
+declaring `name = "whitaker_suite"`. The installer stages libraries using
 `installer/src/stager.rs`, which applies the Dylint naming convention
 `{prefix}{crate_name}@{toolchain}{extension}` based on `CrateName` values from
 `installer/src/resolution.rs`. The suite crate name is also referenced by
@@ -210,14 +224,17 @@ identifier.
 
 ## Interfaces and Dependencies
 
-- Preferred suite identifier: decide and record in `Decision Log` before
-  coding. If the chosen identifier is `whitaker_suite`, ensure:
+- Suite identifier: `whitaker_suite`.
   - `suite/Cargo.toml` uses `name = "whitaker_suite"`.
-  - `installer/src/resolution.rs` updates `SUITE_CRATE` to the same value.
+  - `installer/src/resolution.rs` sets `SUITE_CRATE` to the same value.
   - All installer logic and tests compare against the updated name.
 - Do not add new dependencies; use existing installer modules and constants.
 
 ## Revision note
+
+2026-01-09: Marked the plan COMPLETE, recorded the `whitaker_suite` naming
+decision, and updated progress/outcomes to reflect the completed rename and
+validation run.
 
 2026-01-09: Removed `whitaker list` references and clarified that listing
 validation uses `cargo dylint list` directly; no behavioural change to the
