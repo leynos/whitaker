@@ -125,6 +125,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
+        if self.excluded {
+            return;
+        }
         if let hir::ItemKind::Use(path, ..) = item.kind {
             for res in path.res.present_items() {
                 let usage = classify_res(cx, res, UsageCategory::Import);
@@ -134,6 +137,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
+        if self.excluded {
+            return;
+        }
         match &expr.kind {
             hir::ExprKind::Path(qpath) => {
                 let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
@@ -160,6 +166,9 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
     }
 
     fn check_ty(&mut self, cx: &LateContext<'tcx>, ty: &'tcx hir::Ty<'tcx, AmbigArg>) {
+        if self.excluded {
+            return;
+        }
         if let hir::TyKind::Path(qpath) = &ty.kind {
             let usage = classify_qpath(cx, qpath, ty.hir_id, UsageCategory::Type);
             self.emit_optional(cx, ty.span, usage);
