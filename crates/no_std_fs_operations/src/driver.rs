@@ -260,8 +260,8 @@ impl ConfigReader for DylintConfigReader {
         &self,
         lint_name: &str,
     ) -> Result<Option<NoStdFsConfig>, Box<dyn std::error::Error + Send + Sync + 'static>> {
-        dylint_linting::config::<NoStdFsConfig>(lint_name)
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>)
+        type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+        dylint_linting::config::<NoStdFsConfig>(lint_name).map_err(|e| -> BoxError { Box::new(e) })
     }
 }
 

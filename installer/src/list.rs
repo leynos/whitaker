@@ -28,7 +28,7 @@ use crate::toolchain::Toolchain;
 /// - The staging directory cannot be scanned
 /// - Writing to stdout fails
 pub fn run_list(args: &ListArgs, stdout: &mut dyn Write) -> Result<()> {
-    let target_dir = determine_target_dir(args.target_dir.clone())?;
+    let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     let installed = scan_installed(&target_dir).map_err(|e| InstallerError::ScanFailed {
         reason: e.to_string(),
@@ -104,19 +104,17 @@ pub(crate) fn detect_active_toolchain_in(dir: &Utf8Path) -> Option<String> {
 ///
 /// Returns [`InstallerError::StagingFailed`] if no target directory can be
 /// determined (neither provided nor default available).
-pub fn determine_target_dir(cli_target: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
+pub fn determine_target_dir(cli_target: Option<&Utf8Path>) -> Result<Utf8PathBuf> {
     determine_target_dir_with(cli_target, default_target_dir)
 }
 
 /// Internal implementation with injectable default provider for testability.
-fn determine_target_dir_with<F>(
-    cli_target: Option<Utf8PathBuf>,
-    default_fn: F,
-) -> Result<Utf8PathBuf>
+fn determine_target_dir_with<F>(cli_target: Option<&Utf8Path>, default_fn: F) -> Result<Utf8PathBuf>
 where
     F: FnOnce() -> Option<Utf8PathBuf>,
 {
     cli_target
+        .map(Utf8Path::to_owned)
         .or_else(default_fn)
         .ok_or_else(|| InstallerError::StagingFailed {
             reason: "could not determine default target directory".to_owned(),
@@ -164,7 +162,7 @@ mod tests {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// Helper to create a mock installed library in the target directory for tests
+    /// Helper to create a mock installed library in the target directory for tests.
     fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
         use crate::builder::{library_extension, library_prefix};
 
@@ -282,7 +280,7 @@ channel = "nightly-2025-09-18"
 
     #[rstest]
     fn determine_target_dir_returns_cli_value_when_provided(temp_target: TempTarget) {
-        let result = determine_target_dir_with(Some(temp_target.path.clone()), || None);
+        let result = determine_target_dir_with(Some(&temp_target.path), || None);
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         assert_eq!(result.expect("already checked"), temp_target.path);
@@ -314,7 +312,7 @@ channel = "nightly-2025-09-18"
         let cli_path = temp_target.path.clone();
         let default_path = Utf8PathBuf::from("/should/not/be/used");
 
-        let result = determine_target_dir_with(Some(cli_path.clone()), || Some(default_path));
+        let result = determine_target_dir_with(Some(&cli_path), || Some(default_path));
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         assert_eq!(result.expect("already checked"), cli_path);

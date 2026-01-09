@@ -70,7 +70,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Step 3: Resolve crates and toolchain
     let crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    let target_dir = determine_target_dir(args.target_dir.clone())?;
+    let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     let context = PipelineContext {
         workspace_root: &workspace_root,
@@ -104,7 +104,7 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
     let workspace_root = resolve_workspace_path(dirs)?;
     let crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    let target_dir = determine_target_dir(args.target_dir.clone())?;
+    let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     let info = DryRunInfo {
         workspace_root: &workspace_root,

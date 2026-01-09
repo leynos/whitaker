@@ -29,8 +29,23 @@ fn build_lint_library() -> PathBuf {
         .exec()
         .expect("failed to fetch cargo metadata");
 
-    let mut command = Command::new("cargo");
-    command
+    let output = run_lint_crate_build(metadata.workspace_root.as_std_path());
+    let package_id = find_package_id(&metadata, LINT_CRATE_NAME);
+    let cdylib_path = find_cdylib_in_artifacts(&output, &package_id);
+
+    let release_dir = cdylib_path
+        .parent()
+        .expect("cdylib should have a parent directory")
+        .to_path_buf();
+
+    stage_toolchain_qualified_library(&cdylib_path, &release_dir);
+
+    release_dir
+}
+
+/// Executes `cargo build` for the lint crate and returns the build output.
+fn run_lint_crate_build(workspace_root: &Path) -> Vec<u8> {
+    let output = Command::new("cargo")
         .arg("build")
         .arg("--lib")
         .arg("--quiet")
@@ -39,9 +54,9 @@ fn build_lint_library() -> PathBuf {
         .arg(LINT_CRATE_NAME)
         .arg("--features")
         .arg("dylint-driver")
-        .current_dir(metadata.workspace_root.as_std_path());
-
-    let output = command.output().expect("failed to execute cargo build");
+        .current_dir(workspace_root)
+        .output()
+        .expect("failed to execute cargo build");
 
     assert!(
         output.status.success(),
@@ -49,15 +64,11 @@ fn build_lint_library() -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let package_id = find_package_id(&metadata, LINT_CRATE_NAME);
-    let cdylib_path = find_cdylib_in_artifacts(&output.stdout, &package_id);
+    output.stdout
+}
 
-    let release_dir = cdylib_path
-        .parent()
-        .expect("cdylib should have a parent directory")
-        .to_path_buf();
-
-    // Prepare toolchain-qualified library name
+/// Copies the built library to a toolchain-qualified filename for Dylint discovery.
+fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
     let toolchain = env::var("RUSTUP_TOOLCHAIN")
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
@@ -75,11 +86,10 @@ fn build_lint_library() -> PathBuf {
     );
 
     let target_path = release_dir.join(&target_name);
-    std::fs::copy(&cdylib_path, &target_path).expect("failed to copy lint library");
-
-    release_dir
+    std::fs::copy(cdylib_path, &target_path).expect("failed to copy lint library");
 }
 
+/// Locates the package ID for a workspace member by crate name.
 fn find_package_id(metadata: &Metadata, crate_name: &str) -> cargo_metadata::PackageId {
     metadata
         .packages
@@ -95,6 +105,7 @@ fn find_package_id(metadata: &Metadata, crate_name: &str) -> cargo_metadata::Pac
         .expect("lint crate not found in workspace")
 }
 
+/// Extracts the cdylib path from cargo build JSON output for a given package.
 fn find_cdylib_in_artifacts(stdout: &[u8], package_id: &cargo_metadata::PackageId) -> PathBuf {
     for message in Message::parse_stream(Cursor::new(stdout)) {
         let Ok(Message::CompilerArtifact(artifact)) = message else {
@@ -140,6 +151,7 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> (bool, String, S
     (output.status.success(), stdout, stderr)
 }
 
+/// Returns the path to a named fixture project under `tests/fixtures/`.
 fn fixture_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
