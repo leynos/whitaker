@@ -14,6 +14,16 @@ use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
 // -------------------------------------------------------------------------
+// Common trait for test context providers
+// -------------------------------------------------------------------------
+
+/// Common interface for test context fixtures that provide pipeline contexts.
+trait PipelineContextProvider {
+    /// Returns a pipeline context with borrowed references to internal state.
+    fn pipeline_context(&self) -> PipelineContext<'_>;
+}
+
+// -------------------------------------------------------------------------
 // TestContext for build_config and perform_build tests
 // -------------------------------------------------------------------------
 
@@ -61,7 +71,9 @@ impl TestContext {
         self.quiet = quiet;
         self
     }
+}
 
+impl PipelineContextProvider for TestContext {
     fn pipeline_context(&self) -> PipelineContext<'_> {
         PipelineContext {
             workspace_root: &self.workspace_root,
@@ -232,9 +244,9 @@ struct StagingTestContext {
 
 impl StagingTestContext {
     fn new() -> Self {
-        let temp_dir = TempDir::new().expect("failed to create temp dir");
-        let target_dir =
-            Utf8PathBuf::try_from(temp_dir.path().to_owned()).expect("non-UTF8 temp path");
+        let temp_dir = TempDir::new().expect("failed to create temporary directory for staging");
+        let target_dir = Utf8PathBuf::try_from(temp_dir.path().to_owned())
+            .expect("temporary directory path should be valid UTF-8");
         Self {
             _temp_dir: temp_dir,
             ctx: TestContext {
@@ -252,7 +264,9 @@ impl StagingTestContext {
         self.ctx.quiet = quiet;
         self
     }
+}
 
+impl PipelineContextProvider for StagingTestContext {
     fn pipeline_context(&self) -> PipelineContext<'_> {
         self.ctx.pipeline_context()
     }
@@ -307,4 +321,56 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
             output
         );
     }
+}
+
+#[rstest]
+fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
+    use crate::builder::{library_extension, library_prefix};
+    use std::fs;
+
+    let staging_ctx = staging_ctx.with_quiet(true);
+    let context = staging_ctx.pipeline_context();
+
+    // Create a mock library file in a source location
+    let source_dir = staging_ctx.target_dir().join("source");
+    fs::create_dir_all(&source_dir).expect("failed to create source directory");
+    let source_filename = format!("{}suite{}", library_prefix(), library_extension());
+    let library_path = source_dir.join(&source_filename);
+    fs::write(&library_path, b"mock library content").expect("failed to write mock library");
+
+    let build_results = vec![BuildResult {
+        crate_name: CrateName::from("suite"),
+        library_path: library_path.clone(),
+    }];
+    let mut stderr = Vec::new();
+
+    let staging_path =
+        stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+
+    // Verify the library was staged to the correct location
+    let staged_filename = format!(
+        "{}suite@nightly-2025-09-18{}",
+        library_prefix(),
+        library_extension()
+    );
+    let staged_library = staging_path.join(&staged_filename);
+    assert!(
+        staged_library.exists(),
+        "expected staged library at {staged_library}"
+    );
+}
+
+#[rstest]
+fn stage_libraries_logs_installed_lints_when_verbose(staging_ctx: StagingTestContext) {
+    let context = staging_ctx.pipeline_context();
+    let build_results = vec![];
+    let mut stderr = Vec::new();
+
+    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+
+    let output = String::from_utf8_lossy(&stderr);
+    assert!(
+        output.contains("Installed lints:"),
+        "expected installed lints section in verbose output"
+    );
 }
