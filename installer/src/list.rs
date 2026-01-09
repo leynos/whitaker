@@ -165,7 +165,7 @@ mod tests {
     // -------------------------------------------------------------------------
 
     /// Helper to create a mock installed library in the target directory for tests
-    fn create_mock_library(target_dir: &Utf8PathBuf, toolchain: &str) {
+    fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
         use crate::builder::{library_extension, library_prefix};
 
         let release_dir = target_dir.join(toolchain).join("release");
