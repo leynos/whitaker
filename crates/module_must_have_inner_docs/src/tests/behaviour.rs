@@ -103,6 +103,11 @@ fn scenario_misordered_docs(world: ModuleWorld) {
 }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 3)]
+fn scenario_inner_attribute_only(world: ModuleWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/module_docs.feature", index = 4)]
 fn scenario_outer_docs(world: ModuleWorld) {
     let _ = world;
 }
