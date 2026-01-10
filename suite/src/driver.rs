@@ -14,7 +14,7 @@ use no_expect_outside_tests::NoExpectOutsideTests;
 use no_std_fs_operations::NoStdFsOperations;
 use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
 
-#[cfg(feature = "experimental-bumpy-road")]
+#[cfg(feature = "experimental-bumpy-road-function")]
 use bumpy_road_function::BumpyRoadFunction;
 
 dylint_library!();
@@ -37,10 +37,10 @@ macro_rules! define_suite_pass {
     };
 }
 
-#[cfg(not(feature = "experimental-bumpy-road"))]
+#[cfg(not(feature = "experimental-bumpy-road-function"))]
 define_suite_pass!();
 
-#[cfg(feature = "experimental-bumpy-road")]
+#[cfg(feature = "experimental-bumpy-road-function")]
 define_suite_pass!(BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::default(),);
 
 /// Registers the suite lints into the provided lint store.
@@ -55,7 +55,7 @@ define_suite_pass!(BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::de
 /// # use whitaker_suite::register_suite_lints;
 /// let mut store = LintStore::new();
 /// register_suite_lints(&mut store);
-/// let expected = if cfg!(feature = "experimental-bumpy-road") { 8 } else { 7 };
+/// let expected = if cfg!(feature = "experimental-bumpy-road-function") { 8 } else { 7 };
 /// assert_eq!(store.get_lints().len(), expected);
 /// ```
 pub fn register_suite_lints(store: &mut LintStore) {

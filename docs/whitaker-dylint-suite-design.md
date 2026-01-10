@@ -1082,8 +1082,9 @@ highlight the top two intervals in the diagnostic.
   negative weights), fall back to defaults and log at debug level rather than
   panicking.
 - Exclude the lint from the aggregated `whitaker_suite` crate by default;
-  enable it via the `whitaker_suite` feature flag `experimental-bumpy-road`, or
-  load the lint crate directly when opting into experimental checks.
+  enable it via the `whitaker_suite` feature flag
+  `experimental-bumpy-road-function`, or load the lint crate directly when
+  opting into experimental checks.
 
 **Algorithm sketch.**
 
