@@ -1,0 +1,56 @@
+# Publishing the Whitaker installer
+
+This guide explains how to publish the Whitaker installer to crates.io. The
+installer is published under the crate name `whitaker-installer`.
+
+## Preconditions
+
+- You have a crates.io token and have run `cargo login`.
+- The working tree is clean and the release version is agreed.
+- The release notes and changelog (if maintained) are up to date.
+
+## Version and metadata
+
+1. Bump the version in `installer/Cargo.toml`.
+2. Update the workspace dependency version in `Cargo.toml` so the workspace
+   points at the same installer version.
+3. Regenerate the lockfile if needed.
+
+## Pre-publish validation
+
+Run the project publish gate to ensure production-like builds and packaging
+succeed:
+
+```sh
+make publish-check PUBLISH_PACKAGES=whitaker-installer
+```
+
+This target builds the workspace, runs tests with the pinned toolchain, and
+packages the installer crate for inspection.
+
+## Dry run
+
+Perform a dry run to see the exact artefacts that would be uploaded:
+
+```sh
+cargo publish -p whitaker-installer --dry-run
+```
+
+Review the package contents in the output. If you need to exclude or include
+files, adjust `installer/Cargo.toml` with `include` or `exclude` settings and
+repeat the dry run.
+
+## Publish
+
+When ready, publish from the repository root:
+
+```sh
+cargo publish -p whitaker-installer
+```
+
+## After publishing
+
+- Confirm the new release appears on crates.io for
+  `whitaker-installer`.
+- Tag the release if you are maintaining Git tags for published versions.
+- Share the published version with the team and update any release notes.
