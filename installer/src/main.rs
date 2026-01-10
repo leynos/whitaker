@@ -219,24 +219,28 @@ fn generate_and_report_wrapper(
 ) -> Result<()> {
     let result = generate_wrapper_scripts(dirs, staging_path)?;
     write_stderr_line(stderr, "");
-    write_stderr_line(
-        stderr,
-        format!("Wrapper script created: {}", result.script_path.display()),
-    );
+    write_stderr_line(stderr, "Wrapper scripts created:");
+    write_stderr_line(stderr, format!("  - {}", result.whitaker_path.display()));
+    write_stderr_line(stderr, format!("  - {}", result.whitaker_ls_path.display()));
     write_stderr_line(stderr, "");
 
     if result.in_path {
-        write_stderr_line(stderr, "You can now run: whitaker --all");
+        write_stderr_line(stderr, "You can now run:");
+        write_stderr_line(stderr, "  whitaker --all");
+        write_stderr_line(stderr, "  whitaker-ls");
     } else {
-        let bin_dir = result
-            .script_path
-            .parent()
-            .ok_or_else(|| InstallerError::StagingFailed {
-                reason: "wrapper script path has no parent directory".to_owned(),
-            })?;
+        let bin_dir =
+            result
+                .whitaker_path
+                .parent()
+                .ok_or_else(|| InstallerError::StagingFailed {
+                    reason: "wrapper script path has no parent directory".to_owned(),
+                })?;
         write_stderr_line(stderr, path_instructions(bin_dir));
         write_stderr_line(stderr, "");
-        write_stderr_line(stderr, "Then run: whitaker --all");
+        write_stderr_line(stderr, "Then run:");
+        write_stderr_line(stderr, "  whitaker --all");
+        write_stderr_line(stderr, "  whitaker-ls");
     }
     Ok(())
 }

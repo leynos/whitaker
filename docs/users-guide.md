@@ -32,10 +32,12 @@ This:
 1. Installs `cargo-dylint` and `dylint-link` if not present
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
-4. Creates a `whitaker` wrapper script that invokes `cargo dylint` with the
-   correct `DYLINT_LIBRARY_PATH`
+4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
+   `cargo dylint` with the correct `DYLINT_LIBRARY_PATH`, and `whitaker-ls`
+   lists installed Whitaker suite libraries
 
-After installation, run `whitaker --all` in any Rust project to lint it.
+After installation, run `whitaker --all` in any Rust project to lint it. Use
+`whitaker-ls` to list the installed Whitaker suite libraries.
 
 **Options:**
 

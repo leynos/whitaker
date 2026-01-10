@@ -11,16 +11,19 @@ use std::path::Path;
 /// Result of wrapper script generation.
 #[derive(Debug)]
 pub struct WrapperResult {
-    /// Path to the generated script.
-    pub script_path: std::path::PathBuf,
+    /// Path to the `whitaker` wrapper script.
+    pub whitaker_path: std::path::PathBuf,
+    /// Path to the `whitaker-ls` wrapper script.
+    pub whitaker_ls_path: std::path::PathBuf,
     /// Whether the bin directory is in PATH.
     pub in_path: bool,
 }
 
 /// Generates wrapper scripts for invoking Whitaker lints.
 ///
-/// Creates a `whitaker` script (shell on Unix, PowerShell on Windows) that
-/// sets `DYLINT_LIBRARY_PATH` and invokes `cargo dylint` with all arguments.
+/// Creates `whitaker` and `whitaker-ls` scripts (shell on Unix, PowerShell on
+/// Windows). `whitaker` forwards to `cargo dylint`, while `whitaker-ls` filters
+/// `cargo dylint list` output to the Whitaker suite.
 ///
 /// # Arguments
 ///
@@ -29,7 +32,7 @@ pub struct WrapperResult {
 ///
 /// # Returns
 ///
-/// Information about the generated script and PATH status.
+/// Information about the generated scripts and PATH status.
 ///
 /// # Errors
 ///
@@ -46,7 +49,7 @@ pub struct WrapperResult {
 /// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
 /// let result = generate_wrapper_scripts(&dirs, library_path)?;
 ///
-/// println!("Script created at: {}", result.script_path.display());
+/// println!("Script created at: {}", result.whitaker_path.display());
 /// if result.in_path {
 ///     println!("Ready to use: whitaker --all");
 /// } else {
@@ -67,10 +70,10 @@ pub fn generate_wrapper_scripts(
     })?;
 
     #[cfg(unix)]
-    let script_path = generate_unix_script(&bin_dir, library_path)?;
+    let (whitaker_path, whitaker_ls_path) = generate_unix_scripts(&bin_dir, library_path)?;
 
     #[cfg(windows)]
-    let script_path = generate_windows_script(&bin_dir, library_path)?;
+    let (whitaker_path, whitaker_ls_path) = generate_windows_scripts(&bin_dir, library_path)?;
 
     #[cfg(not(any(unix, windows)))]
     return Err(InstallerError::WrapperGeneration(
@@ -80,54 +83,86 @@ pub fn generate_wrapper_scripts(
     let in_path = is_directory_in_path(&bin_dir);
 
     Ok(WrapperResult {
-        script_path,
+        whitaker_path,
+        whitaker_ls_path,
         in_path,
     })
 }
 
-/// Generates the Unix shell script.
 #[cfg(unix)]
-fn generate_unix_script(bin_dir: &Path, library_path: &Utf8Path) -> Result<std::path::PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let script_path = bin_dir.join("whitaker");
-    let script_content = format!(
+fn generate_unix_scripts(
+    bin_dir: &Path,
+    library_path: &Utf8Path,
+) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
+    let whitaker_path = bin_dir.join("whitaker");
+    let whitaker_content = format!(
         r#"#!/usr/bin/env bash
 set -euo pipefail
 export DYLINT_LIBRARY_PATH="{library_path}"
 exec cargo dylint "$@"
 "#
     );
+    write_unix_script(&whitaker_path, &whitaker_content)?;
 
-    std::fs::write(&script_path, script_content)
+    let whitaker_ls_path = bin_dir.join("whitaker-ls");
+    let whitaker_ls_content = format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+export DYLINT_LIBRARY_PATH="{library_path}"
+cargo dylint list | awk '$1 == "whitaker_suite" {{ print }}'
+"#
+    );
+    write_unix_script(&whitaker_ls_path, &whitaker_ls_content)?;
+
+    Ok((whitaker_path, whitaker_ls_path))
+}
+
+/// Writes an executable Unix shell script.
+#[cfg(unix)]
+fn write_unix_script(path: &Path, content: &str) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::write(path, content)
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
 
     // Make executable (rwxr-xr-x)
-    let mut perms = std::fs::metadata(&script_path)
+    let mut perms = std::fs::metadata(path)
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to read permissions: {e}")))?
         .permissions();
     perms.set_mode(0o755);
-    std::fs::set_permissions(&script_path, perms).map_err(|e| {
+    std::fs::set_permissions(path, perms).map_err(|e| {
         InstallerError::WrapperGeneration(format!("failed to set permissions: {e}"))
     })?;
 
-    Ok(script_path)
+    Ok(())
 }
 
-/// Generates the Windows PowerShell script.
 #[cfg(windows)]
-fn generate_windows_script(bin_dir: &Path, library_path: &Utf8Path) -> Result<std::path::PathBuf> {
-    let script_path = bin_dir.join("whitaker.ps1");
-    let script_content = format!(
+fn generate_windows_scripts(
+    bin_dir: &Path,
+    library_path: &Utf8Path,
+) -> Result<(std::path::PathBuf, std::path::PathBuf)> {
+    let whitaker_path = bin_dir.join("whitaker.ps1");
+    let whitaker_content = format!(
         r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
 cargo dylint @args
 "#
     );
 
-    std::fs::write(&script_path, script_content)
+    std::fs::write(&whitaker_path, whitaker_content)
         .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
 
-    Ok(script_path)
+    let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
+    let whitaker_ls_content = format!(
+        r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
+cargo dylint list | Where-Object {{ $_ -match '^\s*whitaker_suite\s' }}
+"#
+    );
+
+    std::fs::write(&whitaker_ls_path, whitaker_ls_content)
+        .map_err(|e| InstallerError::WrapperGeneration(format!("failed to write script: {e}")))?;
+
+    Ok((whitaker_path, whitaker_ls_path))
 }
 
 /// Checks if a directory is in the PATH environment variable.
@@ -182,27 +217,35 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn generate_unix_script_creates_executable() {
+    fn generate_unix_scripts_create_executables() {
         use camino::Utf8PathBuf;
         use std::os::unix::fs::PermissionsExt;
 
         let temp = TempDir::new().expect("failed to create temp dir");
         let library_path = Utf8PathBuf::from("/tmp/dylint/lib");
 
-        let script_path =
-            generate_unix_script(temp.path(), &library_path).expect("failed to generate script");
+        let (whitaker_path, whitaker_ls_path) =
+            generate_unix_scripts(temp.path(), &library_path).expect("failed to generate scripts");
 
-        assert!(script_path.exists());
+        assert!(whitaker_path.exists());
+        assert!(whitaker_ls_path.exists());
 
-        let perms = std::fs::metadata(&script_path)
+        let perms = std::fs::metadata(&whitaker_path)
             .expect("failed to read metadata")
             .permissions();
         assert_eq!(perms.mode() & 0o111, 0o111, "script should be executable");
 
-        let content = std::fs::read_to_string(&script_path).expect("failed to read script");
-        assert!(content.contains("DYLINT_LIBRARY_PATH"));
-        assert!(content.contains("cargo dylint"));
-        assert!(content.contains("$@"));
+        let whitaker_content =
+            std::fs::read_to_string(&whitaker_path).expect("failed to read script");
+        assert!(whitaker_content.contains("DYLINT_LIBRARY_PATH"));
+        assert!(whitaker_content.contains("cargo dylint"));
+        assert!(whitaker_content.contains("$@"));
+
+        let whitaker_ls_content =
+            std::fs::read_to_string(&whitaker_ls_path).expect("failed to read script");
+        assert!(whitaker_ls_content.contains("DYLINT_LIBRARY_PATH"));
+        assert!(whitaker_ls_content.contains("cargo dylint list"));
+        assert!(whitaker_ls_content.contains("whitaker_suite"));
     }
 
     #[test]
