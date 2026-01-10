@@ -294,7 +294,6 @@ impl StagingTestContext {
         self
     }
 
-    #[expect(dead_code, reason = "API parity with TestContext for future test use")]
     fn with_experimental(mut self, experimental: bool) -> Self {
         self.experimental = experimental;
         self
@@ -310,6 +309,22 @@ impl StagingTestContext {
             experimental: self.experimental,
             quiet: self.quiet,
         }
+    }
+}
+
+fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> BuildResult {
+    use crate::builder::{library_extension, library_prefix};
+    use std::fs;
+
+    let source_dir = target_dir.join("source");
+    fs::create_dir_all(&source_dir).expect("failed to create source directory");
+    let filename = format!("{}{}{}", library_prefix(), crate_name, library_extension());
+    let library_path = source_dir.join(&filename);
+    fs::write(&library_path, b"mock library content").expect("failed to write mock library");
+
+    BuildResult {
+        crate_name: CrateName::from(crate_name),
+        library_path,
     }
 }
 
@@ -367,22 +382,13 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
 #[rstest]
 fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
     use crate::builder::{library_extension, library_prefix};
-    use std::fs;
 
     let staging_ctx = staging_ctx.with_quiet(true);
     let context = staging_ctx.pipeline_context();
-
-    // Create a mock library file in a source location
-    let source_dir = staging_ctx.target_dir().join("source");
-    fs::create_dir_all(&source_dir).expect("failed to create source directory");
-    let source_filename = format!("{}suite{}", library_prefix(), library_extension());
-    let library_path = source_dir.join(&source_filename);
-    fs::write(&library_path, b"mock library content").expect("failed to write mock library");
-
-    let build_results = vec![BuildResult {
-        crate_name: CrateName::from("whitaker_suite"),
-        library_path: library_path.clone(),
-    }];
+    let build_results = vec![create_mock_library(
+        staging_ctx.target_dir(),
+        "whitaker_suite",
+    )];
     let mut stderr = Vec::new();
 
     let staging_path =
@@ -413,5 +419,43 @@ fn stage_libraries_logs_installed_lints_when_not_quiet(staging_ctx: StagingTestC
     assert!(
         output.contains("Installed lints:"),
         "expected installed lints section in verbose output"
+    );
+}
+
+#[rstest]
+fn stage_libraries_includes_experimental_lints_when_enabled(staging_ctx: StagingTestContext) {
+    let staging_ctx = staging_ctx.with_experimental(true);
+    let context = staging_ctx.pipeline_context();
+    let build_results = vec![create_mock_library(
+        staging_ctx.target_dir(),
+        "whitaker_suite",
+    )];
+    let mut stderr = Vec::new();
+
+    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+
+    let output = String::from_utf8_lossy(&stderr);
+    assert!(
+        output.contains("bumpy_road_function"),
+        "expected experimental lint in output, got: {output}"
+    );
+}
+
+#[rstest]
+fn stage_libraries_excludes_experimental_lints_when_disabled(staging_ctx: StagingTestContext) {
+    let staging_ctx = staging_ctx.with_experimental(false);
+    let context = staging_ctx.pipeline_context();
+    let build_results = vec![create_mock_library(
+        staging_ctx.target_dir(),
+        "whitaker_suite",
+    )];
+    let mut stderr = Vec::new();
+
+    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+
+    let output = String::from_utf8_lossy(&stderr);
+    assert!(
+        !output.contains("bumpy_road_function"),
+        "did not expect experimental lint in output, got: {output}"
     );
 }
