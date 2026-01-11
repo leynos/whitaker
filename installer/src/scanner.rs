@@ -163,7 +163,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 /// use whitaker_installer::scanner::lints_for_library;
 /// use whitaker_installer::crate_name::CrateName;
 ///
-/// let suite_lints = lints_for_library(&CrateName::from("suite"));
+/// let suite_lints = lints_for_library(&CrateName::from("whitaker_suite"));
 /// assert!(suite_lints.len() > 1);
 ///
 /// let single_lint = lints_for_library(&CrateName::from("module_max_lines"));
@@ -171,12 +171,37 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 /// ```
 #[must_use]
 pub fn lints_for_library(crate_name: &CrateName) -> Vec<&'static str> {
+    lints_for_library_with_experimental(crate_name, false)
+}
+
+/// Return the list of lints provided by a library with experimental opt-in.
+///
+/// When `include_experimental` is true and the library is the suite crate,
+/// the returned list includes experimental lints that are bundled into the
+/// suite. For non-suite crates, the behaviour matches [`lints_for_library`].
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::scanner::lints_for_library_with_experimental;
+/// use whitaker_installer::crate_name::CrateName;
+///
+/// let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
+/// assert!(lints.contains(&"bumpy_road_function"));
+/// ```
+#[must_use]
+pub fn lints_for_library_with_experimental(
+    crate_name: &CrateName,
+    include_experimental: bool,
+) -> Vec<&'static str> {
     let name = crate_name.as_str();
 
     if name == SUITE_CRATE {
-        // Suite contains standard lints; experimental lints may or may not be
-        // present depending on build-time flags, so we report only standard.
-        LINT_CRATES.to_vec()
+        let mut lints = LINT_CRATES.to_vec();
+        if include_experimental {
+            lints.extend(EXPERIMENTAL_LINT_CRATES);
+        }
+        lints
     } else if let Some(&static_name) = LINT_CRATES.iter().find(|&&s| s == name) {
         // Individual lint crate - 1:1 mapping; return static reference
         vec![static_name]
@@ -210,7 +235,11 @@ mod tests {
         "module_max_lines",
         "nightly-2025-09-18"
     )]
-    #[case::suite("libsuite@nightly-2025-09-18.so", "suite", "nightly-2025-09-18")]
+    #[case::suite(
+        "libwhitaker_suite@nightly-2025-09-18.so",
+        "whitaker_suite",
+        "nightly-2025-09-18"
+    )]
     #[case::stable_toolchain(
         "libno_expect_outside_tests@stable-1.80.0.so",
         "no_expect_outside_tests",
@@ -247,7 +276,7 @@ mod tests {
 
     #[test]
     fn lints_for_suite_returns_standard_lints_only() {
-        let lints = lints_for_library(&CrateName::from("suite"));
+        let lints = lints_for_library(&CrateName::from("whitaker_suite"));
         // Suite reports only standard lints; experimental lints depend on build flags
         assert_eq!(lints.len(), LINT_CRATES.len());
 
@@ -258,6 +287,26 @@ mod tests {
             assert!(
                 !lints.contains(lint),
                 "suite should not report experimental lint: {lint}"
+            );
+        }
+    }
+
+    #[test]
+    fn lints_for_suite_includes_experimental_when_requested() {
+        let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
+
+        assert_eq!(
+            lints.len(),
+            LINT_CRATES.len() + EXPERIMENTAL_LINT_CRATES.len(),
+            "suite should report standard and experimental lints"
+        );
+        for lint in LINT_CRATES {
+            assert!(lints.contains(lint), "missing standard lint: {lint}");
+        }
+        for lint in EXPERIMENTAL_LINT_CRATES {
+            assert!(
+                lints.contains(lint),
+                "suite should include experimental lint when requested: {lint}"
             );
         }
     }
@@ -309,7 +358,7 @@ mod tests {
         std::fs::create_dir_all(&release_dir).expect("failed to create dirs");
 
         // Create fake library files
-        let lib_name = format!("libsuite@{toolchain}.so");
+        let lib_name = format!("libwhitaker_suite@{toolchain}.so");
         std::fs::write(release_dir.join(&lib_name), b"fake").expect("failed to write file");
 
         let result = scan_installed(target_dir).expect("scan should succeed");
@@ -321,7 +370,7 @@ mod tests {
             .get(toolchain)
             .expect("toolchain should exist");
         assert_eq!(libs.len(), 1);
-        assert_eq!(libs[0].crate_name.as_str(), "suite");
+        assert_eq!(libs[0].crate_name.as_str(), "whitaker_suite");
         assert_eq!(libs[0].toolchain, toolchain);
     }
 }

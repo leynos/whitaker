@@ -1,5 +1,5 @@
 [package]
-name = "suite"
+name = "whitaker_suite"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-experimental-bumpy-road = ["dylint-driver", "dep:bumpy_road_function"]
+experimental-bumpy-road-function = ["dylint-driver", "dep:bumpy_road_function"]
 dylint-driver = [
     "dep:dylint_linting",
     "dep:function_attrs_follow_docs",

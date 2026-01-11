@@ -155,13 +155,15 @@ fn build_config_from_context_sets_experimental(#[case] exp: bool) {
 fn perform_build_with_calls_build_all_with_provided_crates(test_ctx: TestContext) {
     let ctx = test_ctx.with_quiet(true);
     let crates = vec![
-        CrateName::from("suite"),
+        CrateName::from("whitaker_suite"),
         CrateName::from("module_max_lines"),
     ];
 
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all()
-        .withf(|c| c.len() == 2 && c[0].as_str() == "suite" && c[1].as_str() == "module_max_lines")
+        .withf(|c| {
+            c.len() == 2 && c[0].as_str() == "whitaker_suite" && c[1].as_str() == "module_max_lines"
+        })
         .times(1)
         .returning(|_| Ok(vec![]));
 
@@ -172,13 +174,13 @@ fn perform_build_with_calls_build_all_with_provided_crates(test_ctx: TestContext
 #[rstest]
 fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
     let ctx = test_ctx.with_quiet(true);
-    let crates = vec![CrateName::from("suite")];
+    let crates = vec![CrateName::from("whitaker_suite")];
 
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all().times(1).returning(|_| {
         Ok(vec![BuildResult {
-            crate_name: CrateName::from("suite"),
-            library_path: Utf8PathBuf::from("/path/to/libsuite.so"),
+            crate_name: CrateName::from("whitaker_suite"),
+            library_path: Utf8PathBuf::from("/path/to/libwhitaker_suite.so"),
         }])
     });
 
@@ -186,7 +188,7 @@ fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
     let results = perform_build_with(&ctx.pipeline_context(), &crates, &mock, &mut stderr)
         .expect("build should succeed");
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].crate_name.as_str(), "suite");
+    assert_eq!(results[0].crate_name.as_str(), "whitaker_suite");
 }
 
 #[rstest]
@@ -194,7 +196,7 @@ fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
 #[case::verbose_mode(false)]
 fn perform_build_with_respects_quiet_flag(test_ctx: TestContext, #[case] quiet: bool) {
     let ctx = test_ctx.with_quiet(quiet);
-    let crates = vec![CrateName::from("suite")];
+    let crates = vec![CrateName::from("whitaker_suite")];
 
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all().times(1).returning(|_| Ok(vec![]));
@@ -208,7 +210,10 @@ fn perform_build_with_respects_quiet_flag(test_ctx: TestContext, #[case] quiet: 
         assert!(output.is_empty(), "expected no output in quiet mode");
     } else {
         assert!(output.contains("Building"), "expected progress output");
-        assert!(output.contains("suite"), "expected crate name in output");
+        assert!(
+            output.contains("whitaker_suite"),
+            "expected crate name in output"
+        );
     }
 }
 
@@ -289,7 +294,6 @@ impl StagingTestContext {
         self
     }
 
-    #[expect(dead_code, reason = "API parity with TestContext for future test use")]
     fn with_experimental(mut self, experimental: bool) -> Self {
         self.experimental = experimental;
         self
@@ -308,9 +312,50 @@ impl StagingTestContext {
     }
 }
 
+fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> BuildResult {
+    use crate::builder::{library_extension, library_prefix};
+    use std::fs;
+
+    let source_dir = target_dir.join("source");
+    fs::create_dir_all(&source_dir).expect("failed to create source directory");
+    let filename = format!("{}{}{}", library_prefix(), crate_name, library_extension());
+    let library_path = source_dir.join(&filename);
+    fs::write(&library_path, b"mock library content").expect("failed to write mock library");
+
+    BuildResult {
+        crate_name: CrateName::from(crate_name),
+        library_path,
+    }
+}
+
 #[fixture]
 fn staging_ctx() -> StagingTestContext {
     StagingTestContext::new()
+}
+
+fn assert_experimental_lint_in_staging_output(experimental: bool, expect_experimental: bool) {
+    let staging_ctx = StagingTestContext::new().with_experimental(experimental);
+    let context = staging_ctx.pipeline_context();
+    let build_results = vec![create_mock_library(
+        staging_ctx.target_dir(),
+        "whitaker_suite",
+    )];
+    let mut stderr = Vec::new();
+
+    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+
+    let output = String::from_utf8_lossy(&stderr);
+    if expect_experimental {
+        assert!(
+            output.contains("bumpy_road_function"),
+            "expected experimental lint in output, got: {output}"
+        );
+    } else {
+        assert!(
+            !output.contains("bumpy_road_function"),
+            "did not expect experimental lint in output, got: {output}"
+        );
+    }
 }
 
 #[rstest]
@@ -362,22 +407,13 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
 #[rstest]
 fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
     use crate::builder::{library_extension, library_prefix};
-    use std::fs;
 
     let staging_ctx = staging_ctx.with_quiet(true);
     let context = staging_ctx.pipeline_context();
-
-    // Create a mock library file in a source location
-    let source_dir = staging_ctx.target_dir().join("source");
-    fs::create_dir_all(&source_dir).expect("failed to create source directory");
-    let source_filename = format!("{}suite{}", library_prefix(), library_extension());
-    let library_path = source_dir.join(&source_filename);
-    fs::write(&library_path, b"mock library content").expect("failed to write mock library");
-
-    let build_results = vec![BuildResult {
-        crate_name: CrateName::from("suite"),
-        library_path: library_path.clone(),
-    }];
+    let build_results = vec![create_mock_library(
+        staging_ctx.target_dir(),
+        "whitaker_suite",
+    )];
     let mut stderr = Vec::new();
 
     let staging_path =
@@ -385,7 +421,7 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
 
     // Verify the library was staged to the correct location
     let staged_filename = format!(
-        "{}suite@nightly-2025-09-18{}",
+        "{}whitaker_suite@nightly-2025-09-18{}",
         library_prefix(),
         library_extension()
     );
@@ -409,4 +445,14 @@ fn stage_libraries_logs_installed_lints_when_not_quiet(staging_ctx: StagingTestC
         output.contains("Installed lints:"),
         "expected installed lints section in verbose output"
     );
+}
+
+#[rstest]
+fn stage_libraries_includes_experimental_lints_when_enabled() {
+    assert_experimental_lint_in_staging_output(true, true);
+}
+
+#[rstest]
+fn stage_libraries_excludes_experimental_lints_when_disabled() {
+    assert_experimental_lint_in_staging_output(false, false);
 }

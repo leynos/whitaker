@@ -175,7 +175,7 @@ mod tests {
         fs::create_dir_all(&release_dir).expect("failed to create release dir");
 
         let filename = format!(
-            "{}suite@{toolchain}{}",
+            "{}whitaker_suite@{toolchain}{}",
             library_prefix(),
             library_extension()
         );
@@ -205,7 +205,7 @@ mod tests {
 
     #[rstest]
     #[case::json_format(true, &["toolchains", "\"active\""])]
-    #[case::human_format(false, &["nightly-2025-09-18", "suite"])]
+    #[case::human_format(false, &["nightly-2025-09-18", "whitaker_suite"])]
     fn run_list_with_installed_library_includes_expected_output(
         temp_target: TempTarget,
         #[case] json: bool,
