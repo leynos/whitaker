@@ -7,7 +7,7 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_lint::LintStore;
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use suite::{register_suite_lints, suite_lint_decls, suite_lint_names};
+use whitaker_suite::{register_suite_lints, suite_lint_decls, suite_lint_names};
 
 struct RegistrationWorld {
     store: RefCell<LintStore>,

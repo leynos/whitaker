@@ -106,6 +106,12 @@ cargo dylint --all
 The installer generates wrapper scripts and provides shell configuration
 snippets to simplify this setup.
 
+The wrappers are:
+
+- `whitaker` — runs `cargo dylint` with the staged library path.
+- `whitaker-ls` — lists installed Whitaker suite libraries for the staged
+  path.
+
 ## Licence
 
 ISC

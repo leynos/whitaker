@@ -39,7 +39,7 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         name: "no_std_fs_operations",
         crate_name: "no_std_fs_operations",
     },
-    #[cfg(feature = "experimental-bumpy-road")]
+    #[cfg(feature = "experimental-bumpy-road-function")]
     LintDescriptor {
         name: "bumpy_road_function",
         crate_name: "bumpy_road_function",
@@ -59,7 +59,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     module_max_lines::MODULE_MAX_LINES,
     no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
     no_std_fs_operations::NO_STD_FS_OPERATIONS,
-    #[cfg(feature = "experimental-bumpy-road")]
+    #[cfg(feature = "experimental-bumpy-road-function")]
     bumpy_road_function::BUMPY_ROAD_FUNCTION,
 ];
 
@@ -68,7 +68,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// # Examples
 ///
 /// ```
-/// # use suite::suite_lint_names;
+/// # use whitaker_suite::suite_lint_names;
 /// let names: Vec<_> = suite_lint_names().collect();
 /// for expected in [
 ///     "function_attrs_follow_docs",

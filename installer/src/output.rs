@@ -91,7 +91,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");
 /// let target = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
-/// let crates = vec![CrateName::from("suite")];
+/// let crates = vec![CrateName::from("whitaker_suite")];
 ///
 /// let info = DryRunInfo {
 ///     workspace_root: &workspace,
@@ -108,7 +108,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// let output = info.display_text();
 /// assert!(output.contains("Dry run"));
-/// assert!(output.contains("suite"));
+/// assert!(output.contains("whitaker_suite"));
 /// ```
 #[derive(Debug)]
 pub struct DryRunInfo<'a> {

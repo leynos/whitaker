@@ -41,7 +41,7 @@ fn set_toml_content(toml_world: &TomlWorld, content: &str) {
 #[given("a workspace metadata example for suite-only")]
 fn given_suite_only_metadata(toml_world: &TomlWorld) {
     // Matches the "aggregated suite provides the simplest setup" example
-    let block = find_block_containing(r#"pattern = "suite""#);
+    let block = find_block_containing(r#"pattern = "whitaker_suite""#);
     set_toml_content(toml_world, &block);
 }
 

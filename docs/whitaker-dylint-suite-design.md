@@ -821,16 +821,16 @@ libraries = [
   decisions across production, test, doctest, and `main` contexts; UI tests
   document both the enforced and allowed configurations.
 
-## 5) Aggregated library (`suite`) — optional
+## 5) Aggregated library (`whitaker_suite`) — optional
 
-Bundle all lint crates for users who prefer a single dynamic library. The suite
-enables the `constituent` feature on each lint dependency so their individual
-dylint entrypoints stay dormant while the combined pass exposes a single
-`register_lints` symbol.
+Bundle all lint crates for users who prefer a single dynamic library. The
+`whitaker_suite` crate enables the `constituent` feature on each lint
+dependency so their individual dylint entrypoints stay dormant while the
+combined pass exposes a single `register_lints` symbol.
 
 ```toml
 [package]
-name = "suite"
+name = "whitaker_suite"
 version = "0.1.0"
 edition = "2024"
 
@@ -1081,9 +1081,10 @@ highlight the top two intervals in the diagnostic.
 - When configuration values are invalid (negative threshold, even/zero window,
   negative weights), fall back to defaults and log at debug level rather than
   panicking.
-- Exclude the lint from the aggregated `suite` crate by default; enable it via
-  the `suite` feature flag `experimental-bumpy-road`, or load the lint crate
-  directly when opting into experimental checks.
+- Exclude the lint from the aggregated `whitaker_suite` crate by default;
+  enable it via the `whitaker_suite` feature flag
+  `experimental-bumpy-road-function`, or load the lint crate directly when
+  opting into experimental checks.
 
 **Algorithm sketch.**
 
@@ -1138,7 +1139,8 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 ## 13) Maintenance policy
 
 - Treat nightly pin as a floor; bump alongside `dylint_linting`.
-- Version each lint crate independently; offer `suite` for convenience.
+- Version each lint crate independently; offer `whitaker_suite` for
+  convenience.
 - Keep a changelog; document behaviour changes (e.g., conditional lint
   semantics).
 
@@ -1146,7 +1148,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 
 - [ ] Seven `cdylib` crates under `crates/*` with skeletons.
 - [ ] `common` helpers.
-- [ ] Optional `suite` aggregated crate.
+- [ ] Optional `whitaker_suite` aggregated crate.
 - [ ] Optional `installer` CLI.
 - [ ] UI tests per crate.
 - [ ] CI workflows.
@@ -1195,7 +1197,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 
 ### Phase 4 — Aggregated suite (optional)
 
-- `suite` cdylib with all lints as constituents; combined pass macro.
+- `whitaker_suite` cdylib with all lints as constituents; combined pass macro.
 - UI test verifying registration via `cargo dylint`.
 
 ### Phase 5 — Installer CLI (optional)
@@ -1299,7 +1301,7 @@ flowchart TD
     A_start[Start: Want Whitaker lints in project] --> B_decide_mode{Prefer simplest setup
     and all lints enabled?}
     B_decide_mode -->|Yes| C_suite[Use aggregated suite
-    pattern = suite]
+    pattern = whitaker_suite]
     B_decide_mode -->|No| D_selective{Require selective lints or
     independent version pinning?}
 

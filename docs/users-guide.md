@@ -32,10 +32,12 @@ This:
 1. Installs `cargo-dylint` and `dylint-link` if not present
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
-4. Creates a `whitaker` wrapper script that invokes `cargo dylint` with the
-   correct `DYLINT_LIBRARY_PATH`
+4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
+   `cargo dylint` with the correct `DYLINT_LIBRARY_PATH`, and `whitaker-ls`
+   lists installed Whitaker suite libraries
 
-After installation, run `whitaker --all` in any Rust project to lint it.
+After installation, run `whitaker --all` in any Rust project to lint it. Use
+`whitaker-ls` to list the installed Whitaker suite libraries.
 
 **Options:**
 
@@ -51,7 +53,7 @@ Add the following to the workspace `Cargo.toml`:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "suite" }
+  { git = "https://github.com/leynos/whitaker", pattern = "whitaker_suite" }
 ]
 ```
 
@@ -68,7 +70,7 @@ For reproducible builds, pin to a specific release tag or commit:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "suite", tag = "v0.1.0" }
+  { git = "https://github.com/leynos/whitaker", pattern = "whitaker_suite", tag = "v0.1.0" }
 ]
 ```
 
@@ -77,7 +79,7 @@ Or pin to a specific commit:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "suite", rev = "abc123def456" }
+  { git = "https://github.com/leynos/whitaker", pattern = "whitaker_suite", rev = "abc123def456" }
 ]
 ```
 
@@ -103,9 +105,9 @@ Whitaker lints are divided into two categories:
   false positives or undergo breaking changes between releases. They must be
   explicitly enabled.
 
-The default `suite` pattern includes only standard lints. Experimental lints
-can be added individually or enabled via the `--experimental` flag when using
-the standalone installer.
+The default `whitaker_suite` pattern includes only standard lints. Experimental
+lints can be added individually or enabled via the `--experimental` flag when
+using the standalone installer.
 
 ### Enabling experimental lints
 
@@ -122,7 +124,7 @@ Add experimental lints alongside the suite:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "suite" },
+  { git = "https://github.com/leynos/whitaker", pattern = "whitaker_suite" },
   { git = "https://github.com/leynos/whitaker", pattern = "crates/bumpy_road_function" }
 ]
 ```

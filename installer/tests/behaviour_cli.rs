@@ -214,7 +214,7 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
     assert!(stderr.contains(&format!("Toolchain: {toolchain}")));
     assert!(stderr.contains("Crates to build:"));
     // Default is suite-only, so we expect only the suite crate.
-    assert!(stderr.contains("suite"));
+    assert!(stderr.contains("whitaker_suite"));
     // Ensure individual lint crates are NOT present in suite-only mode.
     assert!(
         !stderr.contains("module_max_lines"),
@@ -284,7 +284,7 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect::<Vec<_>>();
 
-    let expected_substring = format!("suite@{channel}");
+    let expected_substring = format!("whitaker_suite@{channel}");
     let matches = entries
         .iter()
         .filter(|name| name.contains(&expected_substring))

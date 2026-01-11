@@ -264,7 +264,7 @@ mod tests {
     #[rstest]
     #[case::non_suite_crate("module_max_lines", false, "dylint-driver")]
     #[case::non_suite_with_experimental("module_max_lines", true, "dylint-driver")]
-    #[case::suite_without_experimental("suite", false, "dylint-driver")]
+    #[case::suite_without_experimental("whitaker_suite", false, "dylint-driver")]
     fn features_for_crate_returns_expected_features(
         #[case] crate_name: &str,
         #[case] experimental: bool,
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn features_for_crate_includes_experimental_for_suite() {
         let builder = test_builder(true);
-        let result = builder.features_for_crate(&CrateName::from("suite"));
+        let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
 
         // Should start with dylint-driver
         assert!(result.starts_with("dylint-driver"));

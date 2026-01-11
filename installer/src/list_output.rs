@@ -144,9 +144,9 @@ mod tests {
         by_toolchain.insert(
             "nightly-2025-09-18".to_owned(),
             vec![InstalledLibrary {
-                crate_name: CrateName::from("suite"),
+                crate_name: CrateName::from("whitaker_suite"),
                 toolchain: "nightly-2025-09-18".to_owned(),
-                path: Utf8PathBuf::from("/fake/path/libsuite@nightly-2025-09-18.so"),
+                path: Utf8PathBuf::from("/fake/path/libwhitaker_suite@nightly-2025-09-18.so"),
             }],
         );
         InstalledLints { by_toolchain }
@@ -167,7 +167,7 @@ mod tests {
 
         assert!(output.contains("Installed lints:"));
         assert!(output.contains("Toolchain: nightly-2025-09-18"));
-        assert!(output.contains("suite"));
+        assert!(output.contains("whitaker_suite"));
         assert!(output.contains("module_max_lines"));
     }
 
@@ -206,7 +206,7 @@ mod tests {
         assert!(json.contains("\"libraries\""));
         assert!(json.contains("\"name\""));
         assert!(json.contains("\"lints\""));
-        assert!(json.contains("\"suite\""));
+        assert!(json.contains("\"whitaker_suite\""));
     }
 
     #[test]

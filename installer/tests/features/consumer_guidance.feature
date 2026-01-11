@@ -7,7 +7,7 @@ Feature: Consumer guidance documentation
     Given a workspace metadata example for suite-only
     When the TOML is parsed
     Then parsing succeeds
-    And the libraries pattern is suite
+    And the libraries pattern is whitaker_suite
 
   Scenario: Individual crates workspace metadata is valid TOML
     Given a workspace metadata example for individual crates

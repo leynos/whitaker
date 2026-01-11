@@ -27,7 +27,7 @@ pub const LINT_CRATES: &[&str] = &[
 pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["bumpy_road_function"];
 
 /// The aggregated suite crate name.
-pub const SUITE_CRATE: &str = "suite";
+pub const SUITE_CRATE: &str = "whitaker_suite";
 
 /// Options controlling crate resolution behaviour.
 #[derive(Debug, Clone, Default)]
@@ -150,7 +150,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valid(&["module_max_lines", "suite"], true)]
+    #[case::valid(&["module_max_lines", "whitaker_suite"], true)]
     #[case::experimental_lint(&["bumpy_road_function"], true)]
     #[case::unknown(&["nonexistent_lint"], false)]
     fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {

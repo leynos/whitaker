@@ -2231,28 +2231,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "suite"
-version = "0.1.0"
-dependencies = [
- "bumpy_road_function",
- "conditional_max_n_branches",
- "dylint_linting",
- "function_attrs_follow_docs",
- "module_max_lines",
- "module_must_have_inner_docs",
- "no_expect_outside_tests",
- "no_std_fs_operations",
- "no_unwrap_or_else_panic",
- "rstest",
- "rstest-bdd",
- "rstest-bdd-macros",
- "rustc_hir",
- "rustc_lint",
- "rustc_session",
- "rustc_span",
-]
-
-[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2738,6 +2716,28 @@ dependencies = [
  "toml 0.9.8",
  "wait-timeout",
  "which",
+]
+
+[[package]]
+name = "whitaker_suite"
+version = "0.1.0"
+dependencies = [
+ "bumpy_road_function",
+ "conditional_max_n_branches",
+ "dylint_linting",
+ "function_attrs_follow_docs",
+ "module_max_lines",
+ "module_must_have_inner_docs",
+ "no_expect_outside_tests",
+ "no_std_fs_operations",
+ "no_unwrap_or_else_panic",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_session",
+ "rustc_span",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ use crate::builder::{BuildConfig, BuildResult, Builder, CrateBuilder};
 use crate::crate_name::CrateName;
 use crate::error::Result;
 use crate::output::{success_message, write_stderr_line};
-use crate::scanner::lints_for_library;
+use crate::scanner::lints_for_library_with_experimental;
 use crate::stager::Stager;
 use crate::toolchain::Toolchain;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -180,7 +180,7 @@ pub fn stage_libraries(
     stager.stage_all(build_results)?;
 
     if !context.quiet {
-        log_staging_results(stderr, build_results, &staging_path);
+        log_staging_results(stderr, build_results, &staging_path, context.experimental);
     }
 
     Ok(staging_path)
@@ -191,13 +191,14 @@ fn log_staging_results(
     stderr: &mut dyn Write,
     build_results: &[BuildResult],
     staging_path: &Utf8Path,
+    include_experimental: bool,
 ) {
     write_stderr_line(stderr, "");
     write_stderr_line(stderr, success_message(build_results.len(), staging_path));
     write_stderr_line(stderr, "");
     write_stderr_line(stderr, "Installed lints:");
     for result in build_results {
-        for lint in lints_for_library(&result.crate_name) {
+        for lint in lints_for_library_with_experimental(&result.crate_name, include_experimental) {
             write_stderr_line(stderr, format!("  - {lint}"));
         }
     }
