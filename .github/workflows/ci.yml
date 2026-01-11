@@ -27,7 +27,7 @@ jobs:
           - os: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c366af3e25f7cfb318dccfe58a92d6df5dffdf17
