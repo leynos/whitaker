@@ -5,7 +5,7 @@
 //! whitespace before parsing. It looks for doc tokens (`//!` line comments and
 //! `#![doc = \"...\"]` style attributes) while ignoring commas inside nested
 //! parentheses when dissecting meta lists. Key helpers:
-//! - `skip_leading_whitespace`: advances a text cursor past ASCII whitespace.
+//! - `skip_leading_whitespace`: advances a text cursor past Unicode whitespace.
 //! - `is_doc_comment`: recognises leading doc comments or doc attributes,
 //!   including those wrapped in `cfg_attr`.
 //!
@@ -14,7 +14,7 @@
 
 use crate::{AttributeBody, MetaList, ParseInput};
 
-/// Skips leading ASCII whitespace in the input.
+/// Skips leading Unicode whitespace in the input.
 ///
 /// Returns the byte offset of the first non-whitespace character and the
 /// remaining input after whitespace. If the input is entirely whitespace or
@@ -32,12 +32,17 @@ use crate::{AttributeBody, MetaList, ParseInput};
 /// ```
 pub(super) fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, ParseInput<'a>) {
     let snippet_str = snippet.as_str();
-    let bytes = snippet_str.as_bytes();
-    let mut offset = 0;
-    while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
-        offset += 1;
+    let mut byte_offset = 0;
+
+    for (idx, ch) in snippet_str.char_indices() {
+        if ch.is_whitespace() {
+            byte_offset = idx + ch.len_utf8();
+        } else {
+            break;
+        }
     }
-    (offset, ParseInput::from(&snippet_str[offset..]))
+
+    (byte_offset, ParseInput::from(&snippet_str[byte_offset..]))
 }
 
 /// Determines whether the input starts with a module-level doc comment.
@@ -218,4 +223,28 @@ fn process_char_for_doc_after_first(
 
 fn segment_is_doc(segment: &str) -> bool {
     is_doc_ident(ParseInput::from(segment))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::skip_leading_whitespace;
+    use crate::ParseInput;
+
+    #[test]
+    fn skip_leading_whitespace_handles_unicode() {
+        let input = ParseInput::from("\u{00A0}\u{2003}//! docs");
+        let (offset, rest) = skip_leading_whitespace(input);
+
+        assert_eq!(offset, "\u{00A0}\u{2003}".len());
+        assert_eq!(rest.as_str(), "//! docs");
+    }
+
+    #[test]
+    fn skip_leading_whitespace_handles_all_whitespace() {
+        let input = ParseInput::from("\u{00A0}\u{2003}\t\n");
+        let (offset, rest) = skip_leading_whitespace(input);
+
+        assert_eq!(offset, "\u{00A0}\u{2003}\t\n".len());
+        assert_eq!(rest.as_str(), "");
+    }
 }
