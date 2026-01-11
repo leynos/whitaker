@@ -1,11 +1,13 @@
 # Publishing the Whitaker installer
 
-This guide explains how to publish the Whitaker installer to crates.io. The
-installer is published under the crate name `whitaker-installer`.
+This guide explains how to publish the Whitaker installer to
+[crates.io](https://crates.io). The installer is published under the crate name
+[whitaker-installer](https://crates.io/crates/whitaker-installer).
 
 ## Preconditions
 
-- A crates.io token is available, and `cargo login` has been run.
+- A [crates.io](https://crates.io) token is available, and `cargo login` has
+  been run.
 - The working tree is clean, and the release version is agreed.
 - The release notes and changelog (if maintained) are up-to-date.
 
@@ -50,7 +52,13 @@ cargo publish -p whitaker-installer
 
 ## After publishing
 
-- Confirm the new release appears on crates.io for
-  `whitaker-installer`.
+- Confirm the new release appears on
+  [crates.io](https://crates.io/crates/whitaker-installer).
 - Tag the release if Git tags are maintained for published versions.
-- Share the published version with the team and update any release notes.
+- Announce the release through the agreed channels (team chat, mailing list,
+  or social updates).
+- Verify documentation links for the installer still resolve (for example, the
+  `documentation` URL in `Cargo.toml`).
+- Update related documentation that references the published version (for
+  example, Whitaker suite integration guidance) if applicable.
+- Update any release notes and changelog entries.
