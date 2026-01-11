@@ -317,7 +317,8 @@ ______________________________________________________________________
 
 ### `no_unwrap_or_else_panic`
 
-Denies panicking `unwrap_or_else` fallbacks on `Option`/`Result` outside tests.
+Denies panicking `unwrap_or_else` fallbacks on `Option`/`Result`, including
+tests. Doctest runs remain exempt.
 
 **Configuration:**
 

@@ -35,6 +35,10 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
     if let Some(config) = env.take_config() {
         test.dylint_toml(config);
     }
+    if fixture_name == "bad_in_test.rs" {
+        // Compile with the test harness so #[test] items remain in the HIR.
+        test.rustc_flags(["--test"]);
+    }
 
     run_test_runner(fixture_name, || test.run())
 }

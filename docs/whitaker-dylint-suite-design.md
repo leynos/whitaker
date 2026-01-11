@@ -672,7 +672,7 @@ crates/no_unwrap_or_else_panic/
 ├─ Cargo.toml
 └─ src/
    ├─ lib.rs           # feature gating, public surface
-   ├─ context.rs       # test/main/doctest detection
+   ├─ context.rs       # context detection (tests/main/doctest)
    ├─ policy.rs        # pure decision logic (unit tested)
    ├─ panic_detector.rs# shared panic + unwrap/expect detector
    └─ diagnostics.rs   # localisation + emission
@@ -681,7 +681,7 @@ crates/no_unwrap_or_else_panic/ui/
   ├─ bad_unwrap_or_else_panic_any.rs   # panic_any
   ├─ bad_unwrap_or_else_unwrap.rs      # inner unwrap panic
   ├─ bad_main.rs                       # main panics without allow
-  ├─ ok_in_test.rs                     # test context allowed
+  ├─ bad_in_test.rs                    # test context denied
   ├─ ok_main_allowed.rs                # allow_in_main config
   ├─ ok_map_err.rs                     # propagates errors
   ├─ ok_unwrap_or_else_safe.rs         # safe fallback
@@ -739,7 +739,7 @@ dylint_testing = { workspace = true }
   heuristics.
 - Context guard:
   - skips doctests (`UNSTABLE_RUSTDOC_TEST_PATH` present),
-  - skips test-like scopes (including `#[cfg(test)]` and common test attrs),
+  - test-like scopes are linted (no exemption),
   - optional `allow_in_main` config (default: false).
 - Policy is a pure function (`policy::should_flag`) with unit tests covering all
   branches.
@@ -749,14 +749,15 @@ dylint_testing = { workspace = true }
 - **Unit:** policy matrix (`should_flag`), panic detector path matching,
   `receiver_is_option_or_result`.
 - **UI:** panicking closures (direct panic, `panic_any`, inner unwrap), allowed
-  paths (map_err, safe fallback, test context, allow_in_main), scope guards
-  (plain unwrap/expect, non-Option/Result receivers).
+  paths (map_err, safe fallback, allow_in_main), scope guards (plain
+  unwrap/expect, non-Option/Result receivers), plus panics inside tests.
 - **Build guard:** integration test ensures `.cargo/config.toml` retains
   `-C prefer-dynamic` to prevent duplicate std/core during lint cdylib builds.
 
 ### Behaviour
 
-- Emits on panicking `unwrap_or_else` outside tests/doctests.
+- Emits on panicking `unwrap_or_else` in tests and production code; doctests
+  remain exempt.
 - Suggests propagating errors or using `expect` with a message; the lint does
   **not** flag plain `unwrap` / `expect`.
 - Config: `no_unwrap_or_else_panic.allow_in_main = true` permits panics in
@@ -767,7 +768,7 @@ dylint_testing = { workspace = true }
 ```text
 bad_unwrap_or_else_panic.rs   # warns on inline panic
 ok_map_err.rs                 # ok: propagates errors via map_err/Result
-ok_in_test.rs                 # ok: tests may panic intentionally
+bad_in_test.rs                # warns inside #[test]
 bad_indirect_panic.rs         # document limitation: helper fn panics indirectly
 ```
 
