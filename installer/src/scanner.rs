@@ -295,6 +295,14 @@ mod tests {
     fn lints_for_suite_includes_experimental_when_requested() {
         let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
 
+        assert_eq!(
+            lints.len(),
+            LINT_CRATES.len() + EXPERIMENTAL_LINT_CRATES.len(),
+            "suite should report standard and experimental lints"
+        );
+        for lint in LINT_CRATES {
+            assert!(lints.contains(lint), "missing standard lint: {lint}");
+        }
         for lint in EXPERIMENTAL_LINT_CRATES {
             assert!(
                 lints.contains(lint),

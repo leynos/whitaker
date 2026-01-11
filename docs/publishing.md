@@ -5,15 +5,15 @@ installer is published under the crate name `whitaker-installer`.
 
 ## Preconditions
 
-- You have a crates.io token and have run `cargo login`.
+- A crates.io token is available, and `cargo login` has been run.
 - The working tree is clean and the release version is agreed.
-- The release notes and changelog (if maintained) are up to date.
+- The release notes and changelog (if maintained) are up-to-date.
 
 ## Version and metadata
 
 1. Bump the version in `installer/Cargo.toml`.
 2. Update the workspace dependency version in `Cargo.toml` so the workspace
-   points at the same installer version.
+   points to the same installer version.
 3. Regenerate the lockfile if needed.
 
 ## Pre-publish validation
@@ -36,9 +36,9 @@ Perform a dry run to see the exact artefacts that would be uploaded:
 cargo publish -p whitaker-installer --dry-run
 ```
 
-Review the package contents in the output. If you need to exclude or include
-files, adjust `installer/Cargo.toml` with `include` or `exclude` settings and
-repeat the dry run.
+Review the package contents in the output. If files need to be excluded or
+included, adjust `installer/Cargo.toml` with `include` or `exclude` settings
+and repeat the dry run.
 
 ## Publish
 
@@ -52,5 +52,5 @@ cargo publish -p whitaker-installer
 
 - Confirm the new release appears on crates.io for
   `whitaker-installer`.
-- Tag the release if you are maintaining Git tags for published versions.
+- Tag the release if Git tags are maintained for published versions.
 - Share the published version with the team and update any release notes.

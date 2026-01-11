@@ -1,8 +1,9 @@
 # Clarify Whitaker suite name in `dylint` listing
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This execution plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -113,8 +114,8 @@ constants and tests in the installer (`SUITE_CRATE` in
 notes in `docs/whitaker-dylint-suite-design.md` discuss the aggregated suite
 crate by name and must remain accurate.
 
-Issue context: the ambiguity is reported in issue #110 and a linked PR
-comment.[^1][^2]
+Issue context: the ambiguity is reported in issue #110 and a linked pull
+request (PR) comment.[^1][^2]
 
 ## Plan of Work
 

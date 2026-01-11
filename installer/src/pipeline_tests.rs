@@ -448,13 +448,11 @@ fn stage_libraries_logs_installed_lints_when_not_quiet(staging_ctx: StagingTestC
 }
 
 #[rstest]
-fn stage_libraries_includes_experimental_lints_when_enabled(staging_ctx: StagingTestContext) {
-    drop(staging_ctx);
+fn stage_libraries_includes_experimental_lints_when_enabled() {
     assert_experimental_lint_in_staging_output(true, true);
 }
 
 #[rstest]
-fn stage_libraries_excludes_experimental_lints_when_disabled(staging_ctx: StagingTestContext) {
-    drop(staging_ctx);
+fn stage_libraries_excludes_experimental_lints_when_disabled() {
     assert_experimental_lint_in_staging_output(false, false);
 }

@@ -6,6 +6,7 @@
 
 use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
+use crate::resolution::SUITE_CRATE;
 use camino::Utf8Path;
 use std::path::Path;
 
@@ -110,8 +111,9 @@ exec cargo dylint "$@"
         r#"#!/usr/bin/env bash
 set -euo pipefail
 export DYLINT_LIBRARY_PATH="{library_path}"
-cargo dylint list | awk '$1 == "whitaker_suite" {{ print }}'
-"#
+cargo dylint list --color never | awk -v suite="{suite_crate}" '$0 ~ "^" suite "([[:space:]]|$)" {{ print }}'
+"#,
+        suite_crate = SUITE_CRATE,
     );
     write_unix_script(&whitaker_ls_path, &whitaker_ls_content)?;
 
@@ -156,8 +158,12 @@ cargo dylint @args
     let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
     let whitaker_ls_content = format!(
         r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
-cargo dylint list | Where-Object {{ $_ -match '^\s*whitaker_suite\s' }}
-"#
+$suite = "{suite_crate}"
+cargo dylint list --color never | Where-Object {{
+    $_ -match ("^\\s*" + [regex]::Escape($suite) + "(\\s|$)")
+}}
+"#,
+        suite_crate = SUITE_CRATE,
     );
 
     std::fs::write(&whitaker_ls_path, whitaker_ls_content)
