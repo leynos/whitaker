@@ -6,7 +6,7 @@ installer is published under the crate name `whitaker-installer`.
 ## Preconditions
 
 - A crates.io token is available, and `cargo login` has been run.
-- The working tree is clean and the release version is agreed.
+- The working tree is clean, and the release version is agreed.
 - The release notes and changelog (if maintained) are up-to-date.
 
 ## Version and metadata
