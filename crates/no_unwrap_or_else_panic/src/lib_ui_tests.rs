@@ -4,6 +4,7 @@ use camino::Utf8Path;
 use common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 use dylint_testing::ui::Test;
 use std::path::Path;
+use std::{fs, io};
 
 #[test]
 fn ui() {
@@ -35,10 +36,29 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
     if let Some(config) = env.take_config() {
         test.dylint_toml(config);
     }
-    if fixture_name == "bad_in_test.rs" {
-        // Compile with the test harness so #[test] items remain in the HIR.
-        test.rustc_flags(["--test"]);
+    if let Some(flags) = read_rustc_flags(source)
+        .map_err(|error| format!("failed to load rustc flags for {fixture_name}: {error}"))?
+    {
+        test.rustc_flags(flags);
     }
 
     run_test_runner(fixture_name, || test.run())
+}
+
+fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
+    let path = source.with_extension("rustc-flags");
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let contents = fs::read_to_string(&path)?;
+    let flags = contents
+        .lines()
+        .filter_map(|line| line.split('#').next())
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .flat_map(|line| line.split_whitespace().map(str::to_owned))
+        .collect();
+
+    Ok(Some(flags))
 }

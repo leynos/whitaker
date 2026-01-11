@@ -682,6 +682,7 @@ crates/no_unwrap_or_else_panic/ui/
   ├─ bad_unwrap_or_else_unwrap.rs      # inner unwrap panic
   ├─ bad_main.rs                       # main panics without allow
   ├─ bad_in_test.rs                    # test context denied
+  ├─ ok_in_test.rs                     # safe fallback in tests
   ├─ ok_main_allowed.rs                # allow_in_main config
   ├─ ok_map_err.rs                     # propagates errors
   ├─ ok_unwrap_or_else_safe.rs         # safe fallback
@@ -750,7 +751,8 @@ dylint_testing = { workspace = true }
   `receiver_is_option_or_result`.
 - **UI:** panicking closures (direct panic, `panic_any`, inner unwrap), allowed
   paths (map_err, safe fallback, allow_in_main), scope guards (plain
-  unwrap/expect, non-Option/Result receivers), plus panics inside tests.
+  unwrap/expect, non-Option/Result receivers), plus panicking and safe
+  fallbacks inside tests.
 - **Build guard:** integration test ensures `.cargo/config.toml` retains
   `-C prefer-dynamic` to prevent duplicate std/core during lint cdylib builds.
 
@@ -769,6 +771,7 @@ dylint_testing = { workspace = true }
 bad_unwrap_or_else_panic.rs   # warns on inline panic
 ok_map_err.rs                 # ok: propagates errors via map_err/Result
 bad_in_test.rs                # warns inside #[test]
+ok_in_test.rs                 # ok: safe fallback inside #[test]
 bad_indirect_panic.rs         # document limitation: helper fn panics indirectly
 ```
 
