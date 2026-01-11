@@ -327,6 +327,12 @@ tests. Doctest runs remain exempt.
 allow_in_main = true
 ```
 
+**What is allowed:**
+
+- Panicking fallbacks inside doctests
+- Panicking fallbacks inside `main` when `allow_in_main = true`
+- Non-panicking `unwrap_or_else` fallbacks
+
 **What is denied:**
 
 - `unwrap_or_else(|| panic!(..))`

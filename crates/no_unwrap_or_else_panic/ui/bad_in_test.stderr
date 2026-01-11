@@ -1,13 +1,13 @@
 error: Replace unwrap_or_else on `std::result::Result<(), &str>` with a non-panicking fallback.
   --> $DIR/bad_in_test.rs:7:13
    |
-LL |     let _ = value.unwrap_or_else(|err| panic!("err: {err}", err = err));
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |     let _ = value.unwrap_or_else(|err| panic!("{}", err));
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The closure supplied to unwrap_or_else triggers a panic.
   --> $DIR/bad_in_test.rs:7:13
    |
-LL |     let _ = value.unwrap_or_else(|err| panic!("err: {err}", err = err));
+LL |     let _ = value.unwrap_or_else(|err| panic!("{}", err));
    |             ^^^^^
    = help: Propagate the error or use expect with a descriptive message instead of panicking.
 note: the lint level is defined here

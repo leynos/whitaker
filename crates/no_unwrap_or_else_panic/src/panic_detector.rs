@@ -17,15 +17,18 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["core", "panicking", "panic_str"],
     &["core", "panicking", "panic_any"],
     &["core", "panicking", "begin_panic"],
+    &["core", "panicking", "panic_display"],
     // std::panicking re-exports
     &["std", "panicking", "panic"],
     &["std", "panicking", "panic_fmt"],
     &["std", "panicking", "panic_any"],
     &["std", "panicking", "begin_panic"],
+    &["std", "panicking", "panic_display"],
     // std::panic re-exports
     &["std", "panic", "panic_any"],
     // std::rt wrappers
     &["std", "rt", "panic_fmt"],
+    &["std", "rt", "panic_display"],
     &["std", "rt", "begin_panic"],
     &["std", "rt", "begin_panic_fmt"],
 ];

@@ -45,6 +45,10 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
     run_test_runner(fixture_name, || test.run())
 }
 
+/// Load optional rustc flags from a `.rustc-flags` sidecar file.
+///
+/// Each non-empty line is treated as whitespace-delimited flags. Lines may
+/// include comments after `#`, which are stripped before parsing.
 fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
     let path = source.with_extension("rustc-flags");
     if !path.exists() {
@@ -54,7 +58,7 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
     let contents = fs::read_to_string(&path)?;
     let flags = contents
         .lines()
-        .filter_map(|line| line.split('#').next())
+        .map(|line| line.split('#').next().unwrap_or_default())
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .flat_map(|line| line.split_whitespace().map(str::to_owned))
