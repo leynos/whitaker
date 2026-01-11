@@ -1319,6 +1319,12 @@ layout keeps configuration minimal and reduces release automation complexity.
 
 **Release workflow requirements:**
 
+- Build and publish release archives for the supported target triples:
+  - `x86_64-unknown-linux-gnu`
+  - `aarch64-unknown-linux-gnu`
+  - `x86_64-apple-darwin`
+  - `aarch64-apple-darwin`
+  - `x86_64-pc-windows-msvc`
 - Build the installer binary for each supported target triple using
   `cargo build -p whitaker-installer --release --target <triple>`.
 - Package each build into an archive named
@@ -1335,6 +1341,9 @@ layout keeps configuration minimal and reduces release automation complexity.
   defaults matching the archive naming scheme.
 - Add a Windows override to use `pkg-fmt = "zip"` for the
   `x86_64-pc-windows-msvc` target.
+- `v<version>` must match the crate `package.version` exactly; if a
+  pre-release identifier is used (for example, `0.2.0-rc.1`), mirror it in the
+  release tag and asset names without adding extra suffixes or prefixes.
 
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
