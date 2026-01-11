@@ -49,12 +49,7 @@ pub(super) fn emit_diagnostic(
     let messages = safe_resolve_message_set(
         localizer,
         resolution,
-        |message| {
-            cx.tcx
-                .sess
-                .dcx()
-                .span_delayed_bug(input.primary_span, message);
-        },
+        |_message| {},
         || fallback_messages(input.name, input.bumps.len(), input.settings.threshold),
     );
 
