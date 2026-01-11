@@ -9,7 +9,9 @@ use clap::Parser;
 use std::io::Write;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
+use whitaker_installer::deps::{
+    SystemCommandExecutor, check_dylint_tools, install_dylint_tools,
+};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::list::{determine_target_dir, run_list};
@@ -124,7 +126,8 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
 
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
-    let status = check_dylint_tools();
+    let executor = SystemCommandExecutor::default();
+    let status = check_dylint_tools(&executor);
 
     if status.all_installed() {
         return Ok(());
@@ -134,7 +137,7 @@ fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
         write_stderr_line(stderr, "Installing required Dylint tools...");
     }
 
-    install_dylint_tools(&status)?;
+    install_dylint_tools(&executor, &status)?;
 
     if !quiet {
         write_stderr_line(stderr, "Dylint tools installed successfully.");
