@@ -1,7 +1,8 @@
-//! Wrapper script generation for easy Whitaker invocation.
+//! Wrapper scripts generation for easy Whitaker invocation.
 //!
-//! This module generates platform-specific scripts that set the
-//! `DYLINT_LIBRARY_PATH` environment variable and invoke `cargo dylint`.
+//! This module generates platform-specific `whitaker` and `whitaker-ls` scripts
+//! that set the `DYLINT_LIBRARY_PATH` environment variable and invoke
+//! `cargo dylint`.
 
 use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
