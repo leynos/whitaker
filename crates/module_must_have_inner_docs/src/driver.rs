@@ -296,8 +296,41 @@ fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent 
         return LeadingContent::Missing;
     }
 
+    if !has_inner_doc(rest) {
+        return LeadingContent::Missing;
+    }
+
     let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
     LeadingContent::Misordered { offset, len }
+}
+
+fn has_inner_doc(rest: ParseInput<'_>) -> bool {
+    let snippet = rest.as_str();
+    let mut line_start = 0;
+
+    while line_start < snippet.len() {
+        let line_end = snippet[line_start..]
+            .find('\n')
+            .map(|idx| line_start + idx)
+            .unwrap_or(snippet.len());
+        let line = &snippet[line_start..line_end];
+        let trimmed = line.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+
+        if trimmed.starts_with("//!") {
+            return true;
+        }
+
+        if trimmed.starts_with("#!") {
+            let offset = line_start + (line.len() - trimmed.len());
+            if parser::is_doc_comment(ParseInput::from(&snippet[offset..])) {
+                return true;
+            }
+        }
+
+        line_start = line_end.saturating_add(1);
+    }
+
+    false
 }
 
 #[cfg(test)]
