@@ -333,6 +333,31 @@ fn staging_ctx() -> StagingTestContext {
     StagingTestContext::new()
 }
 
+fn assert_experimental_lint_in_staging_output(experimental: bool, expect_experimental: bool) {
+    let staging_ctx = StagingTestContext::new().with_experimental(experimental);
+    let context = staging_ctx.pipeline_context();
+    let build_results = vec![create_mock_library(
+        staging_ctx.target_dir(),
+        "whitaker_suite",
+    )];
+    let mut stderr = Vec::new();
+
+    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+
+    let output = String::from_utf8_lossy(&stderr);
+    if expect_experimental {
+        assert!(
+            output.contains("bumpy_road_function"),
+            "expected experimental lint in output, got: {output}"
+        );
+    } else {
+        assert!(
+            !output.contains("bumpy_road_function"),
+            "did not expect experimental lint in output, got: {output}"
+        );
+    }
+}
+
 #[rstest]
 fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext) {
     let staging_ctx = staging_ctx.with_quiet(true);
@@ -424,38 +449,12 @@ fn stage_libraries_logs_installed_lints_when_not_quiet(staging_ctx: StagingTestC
 
 #[rstest]
 fn stage_libraries_includes_experimental_lints_when_enabled(staging_ctx: StagingTestContext) {
-    let staging_ctx = staging_ctx.with_experimental(true);
-    let context = staging_ctx.pipeline_context();
-    let build_results = vec![create_mock_library(
-        staging_ctx.target_dir(),
-        "whitaker_suite",
-    )];
-    let mut stderr = Vec::new();
-
-    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
-
-    let output = String::from_utf8_lossy(&stderr);
-    assert!(
-        output.contains("bumpy_road_function"),
-        "expected experimental lint in output, got: {output}"
-    );
+    drop(staging_ctx);
+    assert_experimental_lint_in_staging_output(true, true);
 }
 
 #[rstest]
 fn stage_libraries_excludes_experimental_lints_when_disabled(staging_ctx: StagingTestContext) {
-    let staging_ctx = staging_ctx.with_experimental(false);
-    let context = staging_ctx.pipeline_context();
-    let build_results = vec![create_mock_library(
-        staging_ctx.target_dir(),
-        "whitaker_suite",
-    )];
-    let mut stderr = Vec::new();
-
-    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
-
-    let output = String::from_utf8_lossy(&stderr);
-    assert!(
-        !output.contains("bumpy_road_function"),
-        "did not expect experimental lint in output, got: {output}"
-    );
+    drop(staging_ctx);
+    assert_experimental_lint_in_staging_output(false, false);
 }
