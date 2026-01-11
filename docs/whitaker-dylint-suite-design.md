@@ -1273,6 +1273,43 @@ examples ensures documentation does not drift from valid syntax over time. The
 tests are lightweight (parsing only) and run quickly as part of the standard
 test suite.
 
+### Installer packaging and distribution
+
+**Decision:** Distribute `whitaker-installer` as a standalone Cargo crate and
+make `cargo install whitaker-installer` the primary end-user workflow. For
+contributors and CI, install from source via
+`cargo install --path installer --locked`. The workspace root does not expose
+the binary; ownership lives solely in the installer crate. The design does not
+promise prebuilt binaries yet.
+
+**Rationale:** Publishing the installer as its own crate keeps the CLI
+discoverable in standard Rust tooling and avoids coupling the binary to the
+workspace root. A single owner for the binary eliminates duplicated builds,
+boundary ambiguity, and documentation tooling friction. Installing from the
+installer crate path preserves a straightforward local workflow while keeping
+the package boundary clear.
+
+**Trade-offs considered:**
+
+- **Workspace-root binary exposure** — simplifies `cargo install --path .` but
+  reintroduces dual ownership and blurs package boundaries; discarded to keep
+  the CLI owned by exactly one crate.
+- **Installer-crate-only** — requires `--path installer` for local source
+  installs but keeps ownership clear and aligns with the published crate.
+- **Separate distribution (prebuilt binaries or bespoke installer)** — offers
+  faster installs but adds release automation, platform support, and signing
+  responsibilities that are out of scope for Phase 3.
+
+**User impact:** End users follow the same workflow documented in the user's
+guide (`cargo install whitaker-installer`), while contributors use an explicit
+path install. The installer remains an optional convenience layer; users can
+still rely on workspace metadata and the suite without installing the CLI. The
+decision records the Phase 3 packaging model and guards against regressions to
+workspace-root binary exposure.[^1][^2]
+
+[^1]: <https://github.com/leynos/whitaker/pull/93>
+[^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
+
 ### Workspace metadata example selection
 
 **Decision:** Include examples for suite-only, individual crates,
