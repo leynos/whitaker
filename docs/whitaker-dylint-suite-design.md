@@ -1307,6 +1307,35 @@ still rely on workspace metadata and the suite without installing the CLI. The
 decision records the Phase 3 packaging model and guards against regressions to
 workspace-root binary exposure.[^1][^2]
 
+### Installer release artefacts (cargo-binstall)
+
+**Decision:** Support `cargo binstall whitaker-installer` by publishing
+GitHub Release assets that follow cargo-binstall defaults and by adding
+`[package.metadata.binstall]` entries to `installer/Cargo.toml`.
+
+**Rationale:** cargo-binstall provides a faster install path for users who do
+not want to compile from source. Matching the default binstall naming and
+layout keeps configuration minimal and reduces release automation complexity.
+
+**Release workflow requirements:**
+
+- Build the installer binary for each supported target triple using
+  `cargo build -p whitaker-installer --release --target <triple>`.
+- Package each build into an archive named
+  `whitaker-installer-<target>-v<version>.tgz` (use `.zip` for Windows).
+- Ensure the archive contains a top-level directory named
+  `whitaker-installer-<target>-v<version>/` with the binary inside
+  (`whitaker-installer` or `whitaker-installer.exe`).
+- Publish the archives as assets on a GitHub Release tagged `v<version>` so
+  binstall can resolve the `pkg-url` template.
+
+**Installer metadata:**
+
+- Add `[package.metadata.binstall]` with `pkg-url`, `bin-dir`, and `pkg-fmt`
+  defaults matching the archive naming scheme.
+- Add a Windows override to use `pkg-fmt = "zip"` for the
+  `x86_64-pc-windows-msvc` target.
+
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 

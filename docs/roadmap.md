@@ -55,6 +55,11 @@
   - [ ] Add markdownlint, nixie, and other doc/tooling checks to the pipeline.
   - [ ] Enforce lint-level deny rules and fail builds on warnings across the
         workspace.
+  - [ ] Add cargo-binstall metadata to `installer/Cargo.toml` for published
+        release artefacts.
+  - [ ] Implement a release workflow that builds `whitaker-installer` for each
+        supported target, packages `.tgz`/`.zip` archives, and uploads them to
+        GitHub Releases tagged `v<version>`.
 
 - [x] Phase 5 — Experimental Bumpy Road lint
   - [x] Implement the per-line complexity signal builder and smoothing window
