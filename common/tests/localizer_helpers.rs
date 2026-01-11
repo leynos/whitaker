@@ -331,3 +331,27 @@ fn repeated_failures_record_all_bugs() {
             .all(|message| message.contains("missing-key"))
     );
 }
+
+#[test]
+fn missing_key_with_noop_reporter_uses_fallback() {
+    let localizer = Localizer::new(Some("en-GB"));
+    let args: Arguments<'static> = Arguments::default();
+    let fallback = DiagnosticMessageSet::new(
+        "Fallback primary".into(),
+        "Fallback note".into(),
+        "Fallback help".into(),
+    );
+    let resolution = MessageResolution {
+        lint_name: "helper-tests",
+        key: MessageKey::new("missing-key"),
+        args: &args,
+    };
+
+    let messages = safe_resolve_message_set(&localizer, resolution, |_message| {}, || {
+        fallback.clone()
+    });
+
+    assert_eq!(messages.primary(), fallback.primary());
+    assert_eq!(messages.note(), fallback.note());
+    assert_eq!(messages.help(), fallback.help());
+}
