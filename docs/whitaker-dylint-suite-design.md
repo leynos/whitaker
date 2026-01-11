@@ -166,16 +166,16 @@ Utilities shared by lints:
   configuration, emits a debug summary, and returns the resolved `Localizer`.
 - Wrap message resolution with `common::i18n::safe_resolve_message_set`, which
   delegates to `resolve_message_set` and captures failures in a single place.
-  The wrapper emits a `span_delayed_bug` through the lint context, logs the
-  missing key, and returns deterministic English strings so lints can continue
-  emitting diagnostics without panicking.
+  The wrapper logs the missing key at debug level and returns deterministic
+  English strings so lints can continue emitting diagnostics without
+  panicking.
 - Cache a `Localizer` inside each lint pass, so diagnostics can resolve
   translations at emission time without repeatedly negotiating locales. The
   lints supply structured arguments such as the offending attribute snippet or
   receiver type, keeping Fluent bundles free from ad hoc string formatting.
-- When lookups fail, report the missing message via `delay_span_bug` and fall
-  back to deterministic English strings, so the lint still emits actionable
-  output whilst flagging the translation defect for developers.
+- When lookups fail, log the missing message and fall back to deterministic
+  English strings, so the lint still emits actionable output without treating
+  localisation gaps as compiler bugs.
 - Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
   `fluent_templates::static_loader!`. The loader resides in `common::i18n` and
   exposes a `FluentBundle` facade that lint crates invoke through helper

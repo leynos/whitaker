@@ -402,12 +402,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
     let messages = safe_resolve_message_set(
         localizer,
         resolution,
-        |message| {
-            cx.tcx
-                .sess
-                .dcx()
-                .span_delayed_bug(context.primary_span, message);
-        },
+        |_message| {},
         || fallback_messages(module_name),
     );
 

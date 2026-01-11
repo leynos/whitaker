@@ -170,7 +170,6 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
                 "missing localisation for `{}`: {message}; using fallback strings",
                 LINT_NAME
             );
-            cx.tcx.sess.dcx().span_delayed_bug(info.item_span, message);
         },
         || fallback_messages(module_name, info.lines, info.limit),
     );

@@ -269,12 +269,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
     let messages = safe_resolve_message_set(
         localizer,
         resolution,
-        |message| {
-            cx.tcx
-                .sess
-                .dcx()
-                .span_delayed_bug(context.doc_span, message);
-        },
+        |_message| {},
         {
             let kind = context.kind;
             move || fallback_messages(kind, attribute.as_str())
