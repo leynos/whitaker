@@ -33,7 +33,10 @@ use rstest::rstest;
     "#[doc = \"module docs\"]\npub fn demo() {}",
     ModuleDocDisposition::MissingDocs
 )]
-#[case("#![allow(undocumented_unsafe_blocks)]", ModuleDocDisposition::MissingDocs)]
+#[case(
+    "#![allow(undocumented_unsafe_blocks)]",
+    ModuleDocDisposition::MissingDocs
+)]
 #[case("#![documentation = \"text\"]", ModuleDocDisposition::MissingDocs)]
 fn snippet_yields_expected_disposition(
     #[case] snippet: &str,
