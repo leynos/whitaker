@@ -329,8 +329,9 @@ allow_in_main = true
 
 **What is allowed:**
 
-- Panicking fallbacks inside doctests
-- Panicking fallbacks inside `main` when `allow_in_main = true`
+- Panicking `unwrap_or_else` fallbacks inside doctests
+- Panicking `unwrap_or_else` fallbacks inside `main` when
+  `allow_in_main = true`
 - Non-panicking `unwrap_or_else` fallbacks
 
 **What is denied:**
@@ -339,4 +340,6 @@ allow_in_main = true
 - `unwrap_or_else(|| value.unwrap())`
 
 **How to fix:** Propagate errors with `?` or use `.expect()` with a clear
-message if a panic is truly intended.
+message if a panic is truly intended. In tests, replace
+`unwrap_or_else(|| panic!("msg"))` with `.expect("msg")` for clarity and
+brevity.
