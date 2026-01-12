@@ -42,9 +42,6 @@ rustc_middle = { path = "crates/rustc_middle", version = "0.1.0" }
 rustc_session = { path = "crates/rustc_session", version = "0.1.0" }
 rustc_span = { path = "crates/rustc_span", version = "0.1.0" }
 
-[workspace.dev-dependencies]
-mockall = "0.13.1"
-
 [package]
 name = "whitaker"
 version = "0.1.0"

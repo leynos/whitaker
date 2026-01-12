@@ -124,7 +124,7 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
 
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
-    let executor = SystemCommandExecutor::default();
+    let executor = SystemCommandExecutor;
     let status = check_dylint_tools(&executor);
 
     if status.all_installed() {

@@ -20,12 +20,12 @@ pub trait CommandExecutor {
     /// ```no_run
     /// use whitaker_installer::deps::{CommandExecutor, SystemCommandExecutor};
     ///
-    /// let executor = SystemCommandExecutor::default();
+    /// let executor = SystemCommandExecutor;
     /// let output = executor.run("cargo", &["--version"])?;
     /// assert!(output.status.success());
     /// # Ok::<(), whitaker_installer::error::InstallerError>(())
     /// ```
-    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output>;
+    fn run<'a>(&self, cmd: &str, args: &[&'a str]) -> Result<Output>;
 }
 
 /// Executes commands on the host system.
@@ -35,7 +35,7 @@ pub trait CommandExecutor {
 /// ```no_run
 /// use whitaker_installer::deps::{CommandExecutor, SystemCommandExecutor};
 ///
-/// let executor = SystemCommandExecutor::default();
+/// let executor = SystemCommandExecutor;
 /// let output = executor.run("cargo", &["--version"])?;
 /// assert!(output.status.success());
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
@@ -44,7 +44,7 @@ pub trait CommandExecutor {
 pub struct SystemCommandExecutor;
 
 impl CommandExecutor for SystemCommandExecutor {
-    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
+    fn run<'a>(&self, cmd: &str, args: &[&'a str]) -> Result<Output> {
         Command::new(cmd)
             .args(args)
             .output()
@@ -95,7 +95,7 @@ impl DylintToolStatus {
 /// ```no_run
 /// use whitaker_installer::deps::{check_dylint_tools, SystemCommandExecutor};
 ///
-/// let executor = SystemCommandExecutor::default();
+/// let executor = SystemCommandExecutor;
 /// let status = check_dylint_tools(&executor);
 /// if status.all_installed() {
 ///     println!("All Dylint tools are available");
@@ -136,7 +136,7 @@ pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> DylintToolStatus {
 /// ```no_run
 /// use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools, SystemCommandExecutor};
 ///
-/// let executor = SystemCommandExecutor::default();
+/// let executor = SystemCommandExecutor;
 /// let status = check_dylint_tools(&executor);
 /// install_dylint_tools(&executor, &status)?;
 /// # Ok::<(), whitaker_installer::error::InstallerError>(())
