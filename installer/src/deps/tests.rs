@@ -2,6 +2,7 @@
 
 use super::*;
 use mockall::Sequence;
+use std::ffi::{OsStr, OsString};
 use std::process::ExitStatus;
 
 #[cfg(unix)]
@@ -32,6 +33,16 @@ fn failure_output(stderr: &str) -> Output {
         stdout: Vec::new(),
         stderr: stderr.as_bytes().to_vec(),
     }
+}
+
+fn args_match(args: &[OsString], expected: &[&str]) -> bool {
+    if args.len() != expected.len() {
+        return false;
+    }
+
+    args.iter()
+        .zip(expected)
+        .all(|(arg, value)| arg.as_os_str() == OsStr::new(value))
 }
 
 #[derive(Debug)]
@@ -97,11 +108,11 @@ fn clone_installer_error(err: &InstallerError) -> InstallerError {
             InstallerError::Io(std::io::Error::new(source.kind(), source.to_string()))
         }
         InstallerError::Git { operation, message } => InstallerError::Git {
-            operation: *operation,
+            operation,
             message: message.clone(),
         },
         InstallerError::DependencyInstall { tool, message } => InstallerError::DependencyInstall {
-            tool: *tool,
+            tool,
             message: message.clone(),
         },
         InstallerError::WrapperGeneration(message) => {
@@ -129,13 +140,13 @@ fn test_check_dylint_tools_with_outcomes(
 
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["dylint", "--version"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["dylint", "--version"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(move |_, _| cargo_dylint_result.clone().into_inner());
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "dylint-link" && args == ["--version"])
+        .withf(|cmd, args| cmd == "dylint-link" && args_match(args, &["--version"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(move |_, _| dylint_link_result.clone().into_inner());
@@ -200,19 +211,19 @@ fn install_dylint_tools_uses_binstall_when_available() {
 
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["binstall", "--version"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "--version"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(success_output()));
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["binstall", "-y", "cargo-dylint"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "-y", "cargo-dylint"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(success_output()));
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["binstall", "-y", "dylint-link"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "-y", "dylint-link"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(success_output()));
@@ -234,13 +245,13 @@ fn install_dylint_tools_falls_back_to_cargo_install() {
 
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["binstall", "--version"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "--version"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(failure_output("no binstall")));
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["install", "cargo-dylint"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["install", "cargo-dylint"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(success_output()));
@@ -262,13 +273,13 @@ fn install_dylint_tools_reports_install_failure() {
 
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["binstall", "--version"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "--version"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(success_output()));
     executor
         .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args == ["binstall", "-y", "cargo-dylint"])
+        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "-y", "cargo-dylint"]))
         .times(1)
         .in_sequence(&mut sequence)
         .returning(|_, _| Ok(failure_output("network down")));
