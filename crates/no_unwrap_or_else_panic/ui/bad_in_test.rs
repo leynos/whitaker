@@ -4,7 +4,7 @@
 #[test]
 fn flags_panicking_fallbacks_in_tests() {
     let value: Result<(), &str> = Err("boom");
-    let _ = value.unwrap_or_else(|err| panic!("{}", err));
+    let _ = value.unwrap_or_else(|err| panic!("err: {err}"));
 }
 
 fn main() {}
