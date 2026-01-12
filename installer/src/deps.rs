@@ -7,7 +7,7 @@ use crate::error::{InstallerError, Result};
 use std::process::{Command, Output};
 
 /// Abstraction for running external commands.
-#[cfg_attr(test, mockall::automock)]
+#[cfg_attr(test, for<'a> mockall::automock)]
 pub trait CommandExecutor {
     /// Runs a command with arguments and returns the captured output.
     ///
@@ -25,7 +25,7 @@ pub trait CommandExecutor {
     /// assert!(output.status.success());
     /// # Ok::<(), whitaker_installer::error::InstallerError>(())
     /// ```
-    fn run<'a>(&self, cmd: &str, args: &[&'a str]) -> Result<Output>;
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output>;
 }
 
 /// Executes commands on the host system.
@@ -44,7 +44,7 @@ pub trait CommandExecutor {
 pub struct SystemCommandExecutor;
 
 impl CommandExecutor for SystemCommandExecutor {
-    fn run<'a>(&self, cmd: &str, args: &[&'a str]) -> Result<Output> {
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
         Command::new(cmd)
             .args(args)
             .output()
