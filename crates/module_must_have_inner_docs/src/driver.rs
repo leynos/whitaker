@@ -324,6 +324,11 @@ fn has_inner_doc(rest: ParseInput<'_>) -> bool {
     false
 }
 
+/// Reports whether a line contains an inner doc marker.
+///
+/// `snippet` is the full text so we can slice from the computed offset when
+/// delegating to the parser. `line` is the current line slice, and
+/// `line_start` is the byte offset of that line within `snippet`.
 fn check_line_for_inner_doc(snippet: &str, line: &str, line_start: usize) -> bool {
     let trimmed = line.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
 
@@ -331,12 +336,17 @@ fn check_line_for_inner_doc(snippet: &str, line: &str, line_start: usize) -> boo
         return true;
     }
 
-    if !trimmed.starts_with("#!") {
-        return false;
+    let mut search_start = 0;
+    while let Some(local_idx) = line[search_start..].find("#!") {
+        let absolute_idx = search_start + local_idx;
+        let offset = line_start + absolute_idx;
+        if parser::is_doc_comment(ParseInput::from(&snippet[offset..])) {
+            return true;
+        }
+        search_start = absolute_idx + 2;
     }
 
-    let offset = line_start + (line.len() - trimmed.len());
-    parser::is_doc_comment(ParseInput::from(&snippet[offset..]))
+    false
 }
 
 #[cfg(test)]
