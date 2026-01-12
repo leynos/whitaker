@@ -1309,8 +1309,8 @@ workspace-root binary exposure.[^1][^2]
 
 ### Installer release artefacts (cargo-binstall)
 
-**Decision:** Support `cargo binstall whitaker-installer` by publishing
-GitHub Release assets that follow cargo-binstall defaults and by adding
+**Decision:** Support `cargo binstall whitaker-installer` by publishing GitHub
+Release assets that follow cargo-binstall defaults and by adding
 `[package.metadata.binstall]` entries to `installer/Cargo.toml`.
 
 **Rationale:** cargo-binstall provides a faster install path for users who do
