@@ -83,9 +83,9 @@ fn clone_installer_error(err: &InstallerError) -> InstallerError {
             path: path.clone(),
             reason: reason.clone(),
         },
-        InstallerError::LintCrateNotFound { name } => InstallerError::LintCrateNotFound {
-            name: name.clone(),
-        },
+        InstallerError::LintCrateNotFound { name } => {
+            InstallerError::LintCrateNotFound { name: name.clone() }
+        }
         InstallerError::WorkspaceNotFound { reason } => InstallerError::WorkspaceNotFound {
             reason: reason.clone(),
         },

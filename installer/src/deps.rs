@@ -45,7 +45,10 @@ pub struct SystemCommandExecutor;
 
 impl CommandExecutor for SystemCommandExecutor {
     fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
-        Command::new(cmd).args(args).output().map_err(InstallerError::from)
+        Command::new(cmd)
+            .args(args)
+            .output()
+            .map_err(InstallerError::from)
     }
 }
 

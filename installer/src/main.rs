@@ -9,9 +9,7 @@ use clap::Parser;
 use std::io::Write;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    SystemCommandExecutor, check_dylint_tools, install_dylint_tools,
-};
+use whitaker_installer::deps::{SystemCommandExecutor, check_dylint_tools, install_dylint_tools};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::list::{determine_target_dir, run_list};
