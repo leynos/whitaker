@@ -314,23 +314,29 @@ fn has_inner_doc(rest: ParseInput<'_>) -> bool {
             .map(|idx| line_start + idx)
             .unwrap_or(snippet.len());
         let line = &snippet[line_start..line_end];
-        let trimmed = line.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
-
-        if trimmed.starts_with("//!") {
+        if check_line_for_inner_doc(snippet, line, line_start) {
             return true;
-        }
-
-        if trimmed.starts_with("#!") {
-            let offset = line_start + (line.len() - trimmed.len());
-            if parser::is_doc_comment(ParseInput::from(&snippet[offset..])) {
-                return true;
-            }
         }
 
         line_start = line_end.saturating_add(1);
     }
 
     false
+}
+
+fn check_line_for_inner_doc(snippet: &str, line: &str, line_start: usize) -> bool {
+    let trimmed = line.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+
+    if trimmed.starts_with("//!") {
+        return true;
+    }
+
+    if !trimmed.starts_with("#!") {
+        return false;
+    }
+
+    let offset = line_start + (line.len() - trimmed.len());
+    parser::is_doc_comment(ParseInput::from(&snippet[offset..]))
 }
 
 #[cfg(test)]
