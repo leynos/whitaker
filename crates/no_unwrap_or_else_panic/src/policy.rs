@@ -39,7 +39,7 @@ pub(crate) fn should_flag(
         return false;
     }
 
-    if is_doctest || summary.is_test {
+    if is_doctest {
         return false;
     }
 
@@ -79,8 +79,8 @@ mod tests {
     }
 
     #[test]
-    fn skips_in_tests() {
-        assert!(!should_flag(
+    fn flags_in_tests() {
+        assert!(should_flag(
             &LintPolicy::new(false),
             &summary(true, false),
             true,

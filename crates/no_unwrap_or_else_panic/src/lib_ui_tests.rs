@@ -4,6 +4,7 @@ use camino::Utf8Path;
 use common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 use dylint_testing::ui::Test;
 use std::path::Path;
+use std::{fs, io};
 
 #[test]
 fn ui() {
@@ -35,6 +36,53 @@ fn run_fixture(crate_name: &str, directory: &Utf8Path, source: &Path) -> Result<
     if let Some(config) = env.take_config() {
         test.dylint_toml(config);
     }
+    if let Some(flags) = read_rustc_flags(source)
+        .map_err(|error| format!("failed to load rustc flags for {fixture_name}: {error}"))?
+    {
+        test.rustc_flags(flags);
+    }
 
     run_test_runner(fixture_name, || test.run())
+}
+
+/// Load optional rustc flags from a `.rustc-flags` sidecar file.
+///
+/// Each non-empty line is treated as whitespace-delimited flags. Lines may
+/// include comments after `#`, which are stripped before parsing.
+///
+/// # Example
+///
+/// ```ignore
+/// # use std::path::Path;
+/// # use crate::read_rustc_flags;
+/// // fixtures/case.rs has a fixtures/case.rustc-flags sidecar file containing:
+/// // --test
+/// // -C opt-level=1
+/// let flags = read_rustc_flags(Path::new("fixtures/case.rs"))?;
+/// assert_eq!(
+///     flags,
+///     Some(vec!["--test".into(), "-C".into(), "opt-level=1".into()])
+/// );
+/// # Ok::<(), std::io::Error>(())
+/// ```
+fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
+    let path = source.with_extension("rustc-flags");
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let contents = fs::read_to_string(&path)?;
+    let flags: Vec<String> = contents
+        .lines()
+        .map(|line| line.split('#').next().unwrap_or_default())
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .flat_map(|line| line.split_whitespace().map(str::to_owned))
+        .collect();
+
+    if flags.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(flags))
 }
