@@ -244,6 +244,7 @@ mod tests {
     #[case("", 0, "")]
     #[case(" \t\n", " \t\n".len(), "")]
     #[case("//! docs", 0, "//! docs")]
+    #[case("\u{2003}x", "\u{2003}".len(), "x")]
     #[case("\u{00A0}\u{2003}//! docs", "\u{00A0}\u{2003}".len(), "//! docs")]
     #[case("\u{00A0}\u{2003}\t\n", "\u{00A0}\u{2003}\t\n".len(), "")]
     fn skip_leading_whitespace_handles_unicode(
