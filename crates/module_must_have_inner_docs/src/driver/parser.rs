@@ -227,31 +227,20 @@ mod tests {
 
     use super::skip_leading_whitespace;
     use crate::ParseInput;
-    use rstest::{fixture, rstest};
-
-    struct ParseInputFactory;
-
-    impl ParseInputFactory {
-        fn from<'a>(&self, snippet: &'a str) -> ParseInput<'a> {
-            ParseInput::from(snippet)
-        }
-    }
-
-    #[fixture]
-    fn parse_input_factory() -> ParseInputFactory {
-        ParseInputFactory
-    }
+    use rstest::rstest;
 
     #[rstest]
+    #[case("", 0, "")]
+    #[case(" \t\n", " \t\n".len(), "")]
+    #[case("//! docs", 0, "//! docs")]
     #[case("\u{00A0}\u{2003}//! docs", "\u{00A0}\u{2003}".len(), "//! docs")]
     #[case("\u{00A0}\u{2003}\t\n", "\u{00A0}\u{2003}\t\n".len(), "")]
     fn skip_leading_whitespace_handles_unicode(
         #[case] input: &str,
         #[case] expected_offset: usize,
         #[case] expected_rest: &str,
-        parse_input_factory: ParseInputFactory,
     ) {
-        let (offset, rest) = skip_leading_whitespace(parse_input_factory.from(input));
+        let (offset, rest) = skip_leading_whitespace(ParseInput::from(input));
 
         assert_eq!(offset, expected_offset);
         assert_eq!(rest.as_str(), expected_rest);
