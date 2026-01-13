@@ -347,9 +347,8 @@ fn missing_key_with_noop_reporter_uses_fallback() {
         args: &args,
     };
 
-    let messages = safe_resolve_message_set(&localizer, resolution, |_message| {}, || {
-        fallback.clone()
-    });
+    let messages =
+        safe_resolve_message_set(&localizer, resolution, |_message| {}, || fallback.clone());
 
     assert_eq!(messages.primary(), fallback.primary());
     assert_eq!(messages.note(), fallback.note());

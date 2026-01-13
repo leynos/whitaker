@@ -167,8 +167,7 @@ Utilities shared by lints:
 - Wrap message resolution with `common::i18n::safe_resolve_message_set`, which
   delegates to `resolve_message_set` and captures failures in a single place.
   The wrapper logs the missing key at debug level and returns deterministic
-  English strings so lints can continue emitting diagnostics without
-  panicking.
+  English strings so lints can continue emitting diagnostics without panicking.
 - Cache a `Localizer` inside each lint pass, so diagnostics can resolve
   translations at emission time without repeatedly negotiating locales. The
   lints supply structured arguments such as the offending attribute snippet or
