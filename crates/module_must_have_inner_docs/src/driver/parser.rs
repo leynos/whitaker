@@ -20,6 +20,9 @@ use crate::{AttributeBody, MetaList, ParseInput};
 /// remaining input after whitespace. If the input is entirely whitespace or
 /// empty, the offset equals the input length and the remaining input is empty.
 ///
+/// This uses `trim_start_matches` to compute the leading whitespace span while
+/// preserving the original byte offsets.
+///
 /// # Examples
 ///
 /// ```
@@ -32,17 +35,10 @@ use crate::{AttributeBody, MetaList, ParseInput};
 /// ```
 pub(super) fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, ParseInput<'a>) {
     let snippet_str = snippet.as_str();
-    let mut byte_offset = 0;
+    let trimmed = snippet_str.trim_start_matches(char::is_whitespace);
+    let byte_offset = snippet_str.len().saturating_sub(trimmed.len());
 
-    for (idx, ch) in snippet_str.char_indices() {
-        if ch.is_whitespace() {
-            byte_offset = idx + ch.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    (byte_offset, ParseInput::from(&snippet_str[byte_offset..]))
+    (byte_offset, ParseInput::from(trimmed))
 }
 
 /// Determines whether the input starts with a module-level doc comment.
@@ -227,24 +223,37 @@ fn segment_is_doc(segment: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for parsing helpers.
+
     use super::skip_leading_whitespace;
     use crate::ParseInput;
+    use rstest::{fixture, rstest};
 
-    #[test]
-    fn skip_leading_whitespace_handles_unicode() {
-        let input = ParseInput::from("\u{00A0}\u{2003}//! docs");
-        let (offset, rest) = skip_leading_whitespace(input);
+    struct ParseInputFactory;
 
-        assert_eq!(offset, "\u{00A0}\u{2003}".len());
-        assert_eq!(rest.as_str(), "//! docs");
+    impl ParseInputFactory {
+        fn from<'a>(&self, snippet: &'a str) -> ParseInput<'a> {
+            ParseInput::from(snippet)
+        }
     }
 
-    #[test]
-    fn skip_leading_whitespace_handles_all_whitespace() {
-        let input = ParseInput::from("\u{00A0}\u{2003}\t\n");
-        let (offset, rest) = skip_leading_whitespace(input);
+    #[fixture]
+    fn parse_input_factory() -> ParseInputFactory {
+        ParseInputFactory
+    }
 
-        assert_eq!(offset, "\u{00A0}\u{2003}\t\n".len());
-        assert_eq!(rest.as_str(), "");
+    #[rstest]
+    #[case("\u{00A0}\u{2003}//! docs", "\u{00A0}\u{2003}".len(), "//! docs")]
+    #[case("\u{00A0}\u{2003}\t\n", "\u{00A0}\u{2003}\t\n".len(), "")]
+    fn skip_leading_whitespace_handles_unicode(
+        #[case] input: &str,
+        #[case] expected_offset: usize,
+        #[case] expected_rest: &str,
+        parse_input_factory: ParseInputFactory,
+    ) {
+        let (offset, rest) = skip_leading_whitespace(parse_input_factory.from(input));
+
+        assert_eq!(offset, expected_offset);
+        assert_eq!(rest.as_str(), expected_rest);
     }
 }

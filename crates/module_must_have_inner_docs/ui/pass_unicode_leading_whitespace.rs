@@ -2,8 +2,8 @@
 #![warn(module_must_have_inner_docs)]
 
 mod documented {
-    // The next line begins with U+2028 (line separator) before the inner doc.
-     //! Unicode whitespace should be skipped before docs.
+     //! Module docs after Unicode whitespace (U+2028 before //!).
+    // The line above starts with a literal U+2028 line separator.
 
     pub fn value() -> usize {
         7
