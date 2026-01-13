@@ -33,6 +33,17 @@ use crate::{AttributeBody, MetaList, ParseInput};
 /// assert_eq!(offset, 2);
 /// assert_eq!(rest.as_str(), "hello");
 /// ```
+///
+/// Unicode whitespace is also handled:
+///
+/// ```
+/// # use module_must_have_inner_docs::ParseInput;
+/// # use module_must_have_inner_docs::parser::skip_leading_whitespace;
+/// let input = ParseInput::from("\u{00A0}\u{2003}hello");
+/// let (offset, rest) = skip_leading_whitespace(input);
+/// assert_eq!(offset, 5); // 2 bytes + 3 bytes.
+/// assert_eq!(rest.as_str(), "hello");
+/// ```
 pub(super) fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, ParseInput<'a>) {
     let snippet_str = snippet.as_str();
     let trimmed = snippet_str.trim_start_matches(char::is_whitespace);
