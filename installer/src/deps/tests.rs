@@ -1,8 +1,8 @@
 //! Tests for Dylint tool dependency checks.
 
 use super::*;
-use mockall::Sequence;
-use std::ffi::{OsStr, OsString};
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::process::ExitStatus;
 
 #[cfg(unix)]
@@ -35,95 +35,42 @@ fn failure_output(stderr: &str) -> Output {
     }
 }
 
-fn args_match(args: &[OsString], expected: &[&str]) -> bool {
-    if args.len() != expected.len() {
-        return false;
-    }
-
-    args.iter()
-        .zip(expected)
-        .all(|(arg, value)| arg.as_os_str() == OsStr::new(value))
+#[derive(Debug)]
+struct ExpectedCall {
+    cmd: &'static str,
+    args: Vec<&'static str>,
+    result: Result<Output>,
 }
 
 #[derive(Debug)]
-struct CloneableResult(Result<Output>);
+struct StubExecutor {
+    expected: RefCell<VecDeque<ExpectedCall>>,
+}
 
-impl CloneableResult {
-    fn new(result: Result<Output>) -> Self {
-        Self(result)
+impl StubExecutor {
+    fn new(expected: Vec<ExpectedCall>) -> Self {
+        Self {
+            expected: RefCell::new(expected.into()),
+        }
     }
 
-    fn into_inner(self) -> Result<Output> {
-        self.0
+    fn assert_finished(&self) {
+        assert!(
+            self.expected.borrow().is_empty(),
+            "expected no further command invocations"
+        );
     }
 }
 
-impl Clone for CloneableResult {
-    fn clone(&self) -> Self {
-        Self(match &self.0 {
-            Ok(output) => Ok(output.clone()),
-            Err(err) => Err(clone_installer_error(err)),
-        })
-    }
-}
+impl CommandExecutor for StubExecutor {
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
+        let mut expected = self.expected.borrow_mut();
+        let call = expected.pop_front().expect("unexpected command invocation");
 
-fn clone_installer_error(err: &InstallerError) -> InstallerError {
-    match err {
-        InstallerError::ToolchainDetection { reason } => InstallerError::ToolchainDetection {
-            reason: reason.clone(),
-        },
-        InstallerError::ToolchainFileNotFound { path } => {
-            InstallerError::ToolchainFileNotFound { path: path.clone() }
-        }
-        InstallerError::InvalidToolchainFile { reason } => InstallerError::InvalidToolchainFile {
-            reason: reason.clone(),
-        },
-        InstallerError::ToolchainNotInstalled { toolchain } => {
-            InstallerError::ToolchainNotInstalled {
-                toolchain: toolchain.clone(),
-            }
-        }
-        InstallerError::BuildFailed { crate_name, reason } => InstallerError::BuildFailed {
-            crate_name: crate_name.clone(),
-            reason: reason.clone(),
-        },
-        InstallerError::StagingFailed { reason } => InstallerError::StagingFailed {
-            reason: reason.clone(),
-        },
-        InstallerError::TargetNotWritable { path, reason } => InstallerError::TargetNotWritable {
-            path: path.clone(),
-            reason: reason.clone(),
-        },
-        InstallerError::LintCrateNotFound { name } => {
-            InstallerError::LintCrateNotFound { name: name.clone() }
-        }
-        InstallerError::WorkspaceNotFound { reason } => InstallerError::WorkspaceNotFound {
-            reason: reason.clone(),
-        },
-        InstallerError::InvalidCargoToml { path, reason } => InstallerError::InvalidCargoToml {
-            path: path.clone(),
-            reason: reason.clone(),
-        },
-        InstallerError::Io(source) => {
-            InstallerError::Io(std::io::Error::new(source.kind(), source.to_string()))
-        }
-        InstallerError::Git { operation, message } => InstallerError::Git {
-            operation,
-            message: message.clone(),
-        },
-        InstallerError::DependencyInstall { tool, message } => InstallerError::DependencyInstall {
-            tool,
-            message: message.clone(),
-        },
-        InstallerError::WrapperGeneration(message) => {
-            InstallerError::WrapperGeneration(message.clone())
-        }
-        InstallerError::ScanFailed { source } => InstallerError::ScanFailed {
-            source: std::io::Error::new(source.kind(), source.to_string()),
-        },
-        InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
-            source: std::io::Error::new(source.kind(), source.to_string()),
-        },
+        assert_eq!(call.cmd, cmd);
+        assert_eq!(call.args.as_slice(), args);
+
+        call.result
     }
 }
 
@@ -132,28 +79,23 @@ fn test_check_dylint_tools_with_outcomes(
     dylint_link_result: Result<Output>,
     expected_status: DylintToolStatus,
 ) {
-    let mut executor = MockCommandExecutor::new();
-    let mut sequence = Sequence::new();
-
-    let cargo_dylint_result = CloneableResult::new(cargo_dylint_result);
-    let dylint_link_result = CloneableResult::new(dylint_link_result);
-
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["dylint", "--version"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(move |_, _| cargo_dylint_result.clone().into_inner());
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "dylint-link" && args_match(args, &["--version"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(move |_, _| dylint_link_result.clone().into_inner());
+    let executor = StubExecutor::new(vec![
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["dylint", "--version"],
+            result: cargo_dylint_result,
+        },
+        ExpectedCall {
+            cmd: "dylint-link",
+            args: vec!["--version"],
+            result: dylint_link_result,
+        },
+    ]);
 
     let status = check_dylint_tools(&executor);
 
     assert_eq!(status, expected_status);
+    executor.assert_finished();
 }
 
 #[test]
@@ -181,6 +123,64 @@ fn dylint_tool_status_not_all_installed_when_one_missing() {
 }
 
 #[test]
+fn command_succeeds_returns_true_on_success() {
+    let executor = StubExecutor::new(vec![ExpectedCall {
+        cmd: "cargo",
+        args: vec!["dylint", "--version"],
+        result: Ok(success_output()),
+    }]);
+
+    assert!(command_succeeds(
+        &executor,
+        "cargo",
+        &["dylint", "--version"]
+    ));
+    executor.assert_finished();
+}
+
+#[test]
+fn command_succeeds_returns_false_on_failure_output() {
+    let executor = StubExecutor::new(vec![ExpectedCall {
+        cmd: "cargo",
+        args: vec!["dylint", "--version"],
+        result: Ok(failure_output("no dylint")),
+    }]);
+
+    assert!(!command_succeeds(
+        &executor,
+        "cargo",
+        &["dylint", "--version"]
+    ));
+    executor.assert_finished();
+}
+
+#[test]
+fn command_succeeds_returns_false_on_error() {
+    let executor = StubExecutor::new(vec![ExpectedCall {
+        cmd: "cargo",
+        args: vec!["dylint", "--version"],
+        result: Err(std::io::Error::other("missing dylint").into()),
+    }]);
+
+    assert!(!command_succeeds(
+        &executor,
+        "cargo",
+        &["dylint", "--version"]
+    ));
+    executor.assert_finished();
+}
+
+#[test]
+fn system_command_executor_runs_command() {
+    let executor = SystemCommandExecutor;
+    let output = executor
+        .run("cargo", &["--version"])
+        .expect("expected cargo to be available");
+
+    assert!(output.status.success());
+}
+
+#[test]
 fn check_dylint_tools_reports_installed_tools() {
     test_check_dylint_tools_with_outcomes(
         Ok(success_output()),
@@ -205,28 +205,48 @@ fn check_dylint_tools_reports_missing_tools() {
 }
 
 #[test]
-fn install_dylint_tools_uses_binstall_when_available() {
-    let mut executor = MockCommandExecutor::new();
-    let mut sequence = Sequence::new();
+fn check_dylint_tools_reports_missing_dylint_link() {
+    test_check_dylint_tools_with_outcomes(
+        Ok(success_output()),
+        Ok(failure_output("missing dylint-link")),
+        DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: false,
+        },
+    );
+}
 
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "--version"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(success_output()));
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "-y", "cargo-dylint"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(success_output()));
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "-y", "dylint-link"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(success_output()));
+#[test]
+fn check_dylint_tools_reports_missing_cargo_dylint() {
+    test_check_dylint_tools_with_outcomes(
+        Ok(failure_output("missing cargo-dylint")),
+        Ok(success_output()),
+        DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: true,
+        },
+    );
+}
+
+#[test]
+fn install_dylint_tools_uses_binstall_when_available() {
+    let executor = StubExecutor::new(vec![
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "--version"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "-y", "cargo-dylint"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "-y", "dylint-link"],
+            result: Ok(success_output()),
+        },
+    ]);
 
     let status = DylintToolStatus {
         cargo_dylint: false,
@@ -236,25 +256,23 @@ fn install_dylint_tools_uses_binstall_when_available() {
     let result = install_dylint_tools(&executor, &status);
 
     assert!(result.is_ok());
+    executor.assert_finished();
 }
 
 #[test]
 fn install_dylint_tools_falls_back_to_cargo_install() {
-    let mut executor = MockCommandExecutor::new();
-    let mut sequence = Sequence::new();
-
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "--version"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(failure_output("no binstall")));
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["install", "cargo-dylint"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(success_output()));
+    let executor = StubExecutor::new(vec![
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "--version"],
+            result: Ok(failure_output("no binstall")),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", "cargo-dylint"],
+            result: Ok(success_output()),
+        },
+    ]);
 
     let status = DylintToolStatus {
         cargo_dylint: false,
@@ -264,25 +282,49 @@ fn install_dylint_tools_falls_back_to_cargo_install() {
     let result = install_dylint_tools(&executor, &status);
 
     assert!(result.is_ok());
+    executor.assert_finished();
+}
+
+#[test]
+fn install_dylint_tools_falls_back_to_cargo_install_on_binstall_error() {
+    let executor = StubExecutor::new(vec![
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "--version"],
+            result: Err(std::io::Error::other("failed to execute cargo binstall").into()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", "cargo-dylint"],
+            result: Ok(success_output()),
+        },
+    ]);
+
+    let status = DylintToolStatus {
+        cargo_dylint: false,
+        dylint_link: true,
+    };
+
+    let result = install_dylint_tools(&executor, &status);
+
+    assert!(result.is_ok());
+    executor.assert_finished();
 }
 
 #[test]
 fn install_dylint_tools_reports_install_failure() {
-    let mut executor = MockCommandExecutor::new();
-    let mut sequence = Sequence::new();
-
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "--version"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(success_output()));
-    executor
-        .expect_run()
-        .withf(|cmd, args| cmd == "cargo" && args_match(args, &["binstall", "-y", "cargo-dylint"]))
-        .times(1)
-        .in_sequence(&mut sequence)
-        .returning(|_, _| Ok(failure_output("network down")));
+    let executor = StubExecutor::new(vec![
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "--version"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "-y", "cargo-dylint"],
+            result: Ok(failure_output("network down")),
+        },
+    ]);
 
     let status = DylintToolStatus {
         cargo_dylint: false,
@@ -301,4 +343,45 @@ fn install_dylint_tools_reports_install_failure() {
         }
         other => panic!("unexpected error: {other}"),
     }
+    executor.assert_finished();
+}
+
+#[test]
+fn install_dylint_tools_reports_dylint_link_install_failure() {
+    let executor = StubExecutor::new(vec![
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "--version"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "-y", "cargo-dylint"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["binstall", "-y", "dylint-link"],
+            result: Ok(failure_output("dylint-link failed")),
+        },
+    ]);
+
+    let status = DylintToolStatus {
+        cargo_dylint: false,
+        dylint_link: false,
+    };
+
+    let err = match install_dylint_tools(&executor, &status) {
+        Ok(()) => panic!("expected install failure"),
+        Err(err) => err,
+    };
+
+    match err {
+        InstallerError::DependencyInstall { tool, message } => {
+            assert_eq!(tool, "dylint-link");
+            assert_eq!(message, "dylint-link failed");
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+    executor.assert_finished();
 }

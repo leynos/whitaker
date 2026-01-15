@@ -4,11 +4,9 @@
 //! `cargo-dylint` and `dylint-link` tools.
 
 use crate::error::{InstallerError, Result};
-use std::ffi::OsString;
 use std::process::{Command, Output};
 
 /// Abstraction for running external commands.
-#[cfg_attr(test, mockall::automock)]
 pub trait CommandExecutor {
     /// Runs a command with arguments and returns the captured output.
     ///
@@ -26,7 +24,7 @@ pub trait CommandExecutor {
     /// assert!(output.status.success());
     /// # Ok::<(), whitaker_installer::error::InstallerError>(())
     /// ```
-    fn run(&self, cmd: &str, args: &[OsString]) -> Result<Output>;
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output>;
 }
 
 /// Executes commands on the host system.
@@ -45,7 +43,7 @@ pub trait CommandExecutor {
 pub struct SystemCommandExecutor;
 
 impl CommandExecutor for SystemCommandExecutor {
-    fn run(&self, cmd: &str, args: &[OsString]) -> Result<Output> {
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
         Command::new(cmd)
             .args(args)
             .output()
@@ -181,9 +179,9 @@ fn install_tool(
     use_binstall: bool,
 ) -> Result<()> {
     let output = if use_binstall {
-        run_command(executor, "cargo", &["binstall", "-y", name])?
+        executor.run("cargo", &["binstall", "-y", name])?
     } else {
-        run_command(executor, "cargo", &["install", name])?
+        executor.run("cargo", &["install", name])?
     };
 
     if !output.status.success() {
@@ -198,16 +196,7 @@ fn install_tool(
 }
 
 fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: &[&str]) -> bool {
-    run_command(executor, cmd, args).is_ok_and(|o| o.status.success())
-}
-
-fn run_command(executor: &dyn CommandExecutor, cmd: &str, args: &[&str]) -> Result<Output> {
-    let args = args_to_os_strings(args);
-    executor.run(cmd, &args)
-}
-
-fn args_to_os_strings(args: &[&str]) -> Vec<OsString> {
-    args.iter().map(OsString::from).collect()
+    executor.run(cmd, args).is_ok_and(|o| o.status.success())
 }
 
 #[cfg(test)]
