@@ -1,11 +1,16 @@
+// force-host
+// no-prefer-dynamic
 #![crate_type = "proc-macro"]
 
-//! Tokio UI aux crate: exposes a pass-through `#[tokio::test]` for fixtures.
+//! Tokio UI aux crate: emits `#[test]` to mark functions as test contexts.
 
+extern crate proc_macro;
 use proc_macro::TokenStream;
 
-/// Pass-through attribute used in UI tests to emulate `tokio::test`.
+/// Emits `#[test]` before the item to mark it as a test context.
 #[proc_macro_attribute]
 pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+    let mut output: TokenStream = "#[test]".parse().unwrap();
+    output.extend(item);
+    output
 }

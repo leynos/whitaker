@@ -2,7 +2,7 @@ error: Avoid calling expect on `std::option::Option<i32>` outside test-only code
   --> $DIR/fail_expect_with_cfg_attr.rs:6:13
    |
 LL |     let _ = value.expect("handler should not ignore errors");
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: The call originates within function `handler` which is not recognised as a test.
    = help: Handle the `None` case for `std::option::Option<i32>` or move the code into a test.
@@ -12,5 +12,5 @@ note: the lint level is defined here
 LL | #![deny(no_expect_outside_tests)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^
 
-error: aborting due to previous error
+error: aborting due to 1 previous error
 
