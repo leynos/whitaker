@@ -54,6 +54,7 @@ fn path_is_doc(#[case] path: AttributePath, #[case] expected: bool) {
 #[case::test("test", true)]
 #[case::tokio_test("tokio::test", true)]
 #[case::async_std("async_std::test", true)]
+#[case::gpui_test("gpui::test", true)]
 #[case::rstest("rstest", true)]
 #[case::rstest_qualified("rstest::rstest", true)]
 #[case::case_imported("case", true)]
