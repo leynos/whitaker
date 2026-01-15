@@ -18,6 +18,11 @@ Feature: Module inner documentation
     When I validate the module documentation requirements
     Then documentation is reported after other attributes
 
+  Scenario: Documentation follows other inner attributes on the same line
+    Given the module contains an inner configuration attribute and inline documentation
+    When I validate the module documentation requirements
+    Then documentation is reported after other attributes
+
   Scenario: Module contains only an inner configuration attribute
     Given the module contains an inner configuration attribute
     When I validate the module documentation requirements

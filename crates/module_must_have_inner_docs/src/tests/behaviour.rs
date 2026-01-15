@@ -59,6 +59,11 @@ fn given_doc_after(world: &ModuleWorld) {
     world.push("//! trailing docs\n");
 }
 
+#[given("the module contains an inner configuration attribute and inline documentation")]
+fn given_inline_attr_doc(world: &ModuleWorld) {
+    world.push("#![allow(dead_code)] #![doc = \"module docs\"]\n");
+}
+
 #[given("the module declares only outer documentation")]
 fn given_outer_doc(world: &ModuleWorld) {
     world.push("/// outer docs\n");
@@ -103,11 +108,16 @@ fn scenario_misordered_docs(world: ModuleWorld) {
 }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 3)]
-fn scenario_inner_attribute_only(world: ModuleWorld) {
+fn scenario_inline_attr_doc(world: ModuleWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/module_docs.feature", index = 4)]
+fn scenario_inner_attribute_only(world: ModuleWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/module_docs.feature", index = 5)]
 fn scenario_outer_docs(world: ModuleWorld) {
     let _ = world;
 }

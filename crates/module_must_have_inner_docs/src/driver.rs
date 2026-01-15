@@ -330,13 +330,16 @@ fn has_inner_doc(rest: ParseInput<'_>) -> bool {
 /// delegating to the parser. `line` is the current line slice, and
 /// `line_start` is the byte offset of that line within `snippet`.
 fn check_line_for_inner_doc(snippet: &str, line: &str, line_start: usize) -> bool {
-    let trimmed = line.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
-
-    if trimmed.starts_with("//!") {
+    let (offset, trimmed) = parser::skip_leading_whitespace(ParseInput::from(line));
+    if parser::is_doc_comment(trimmed) {
         return true;
     }
 
-    let mut search_start = 0;
+    let mut search_start = offset;
+    if trimmed.starts_with("#!") {
+        search_start = offset.saturating_add(2);
+    }
+
     while let Some(local_idx) = line[search_start..].find("#!") {
         let absolute_idx = search_start + local_idx;
         let offset = line_start + absolute_idx;
