@@ -13,6 +13,8 @@ pub(super) const TEST_LIKE_PATHS: &[&[&str]] = &[
     &["tokio", "test"],
     &["async_std", "test"],
     &["rstest"],
+    &["rstest", "rstest"],
+    &["case"],
     &["rstest", "case"],
 ];
 
