@@ -9,6 +9,9 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
+use std::ffi::OsStr;
+use std::path::Component;
+
 use common::{AttributePath, Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
@@ -190,9 +193,12 @@ fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>)
         .span_to_filename(span)
         .into_local_path()
     {
-        let path_str = filename.to_string_lossy();
-        // Integration tests are in tests/ directory
-        if path_str.contains("/tests/") || path_str.starts_with("tests/") {
+        // Integration tests are in tests/ directory; use path components for
+        // cross-platform compatibility (Windows uses backslashes)
+        let has_tests_component = filename
+            .components()
+            .any(|c| matches!(c, Component::Normal(s) if s == OsStr::new("tests")));
+        if has_tests_component {
             return true;
         }
     }
@@ -225,6 +231,13 @@ fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
     attrs.iter().any(is_test_attribute)
 }
 
+/// Detect test framework attributes.
+///
+/// Test attributes (`#[test]`, `#[rstest]`, `#[tokio::test]`, etc.) are
+/// represented as `Unparsed` HIR attributes. The `Parsed` variant is reserved
+/// for compiler-internal attributes like `#[must_use]` and `#[doc]`, not for
+/// test framework annotations. This function therefore only inspects `Unparsed`
+/// attributes.
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
     let hir::Attribute::Unparsed(_) = attr else {
         return false;
@@ -235,11 +248,22 @@ fn is_test_attribute(attr: &hir::Attribute) -> bool {
         return false;
     }
 
-    // Check for #[test] attribute (symbol match)
+    // Check for built-in #[test] attribute via symbol comparison (fast path)
     if path.len() == 1 && path[0] == sym::test {
         return true;
     }
 
-    // Check for common test attribute patterns
-    matches!(path[0].as_str(), "test" | "rstest" | "tokio")
+    // Match against known test attribute patterns (must match full paths to
+    // avoid false positives like #[tokio::main] or #[rstest::fixture])
+    let segments: Vec<&str> = path.iter().map(|s| s.as_str()).collect();
+    matches!(
+        segments.as_slice(),
+        ["rstest"]
+            | ["rstest", "rstest"]
+            | ["tokio", "test"]
+            | ["async_std", "test"]
+            | ["gpui", "test"]
+            | ["case"]
+            | ["rstest", "case"]
+    )
 }
