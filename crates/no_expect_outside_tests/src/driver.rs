@@ -226,25 +226,20 @@ fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
 }
 
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
-    // Check for Unparsed #[test] attribute
-    if let hir::Attribute::Unparsed(_) = attr {
-        let path = attr.path();
-        if path.len() == 1 && path[0] == sym::test {
-            return true;
-        }
+    let hir::Attribute::Unparsed(_) = attr else {
+        return false;
+    };
+
+    let path = attr.path();
+    if path.is_empty() {
+        return false;
     }
 
-    // Also check for other test-like attributes that might be present
-    if let hir::Attribute::Unparsed(_) = attr {
-        let path = attr.path();
-        // Check for common test attribute patterns
-        if !path.is_empty() {
-            let first = path[0].as_str();
-            if first == "test" || first == "rstest" || first == "tokio" {
-                return true;
-            }
-        }
+    // Check for #[test] attribute (symbol match)
+    if path.len() == 1 && path[0] == sym::test {
+        return true;
     }
 
-    false
+    // Check for common test attribute patterns
+    matches!(path[0].as_str(), "test" | "rstest" | "tokio")
 }
