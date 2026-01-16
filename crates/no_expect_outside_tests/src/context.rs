@@ -33,9 +33,11 @@ pub(crate) fn collect_context<'tcx>(
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        if attrs.iter().any(is_cfg_test_attribute) {
-            has_cfg_test = true;
-        }
+        has_cfg_test = has_cfg_test || attrs.iter().any(is_cfg_test_attribute);
+
+        // For module items, also check the owner's attributes which may include
+        // #[cfg(test)] from the module declaration
+        has_cfg_test = has_cfg_test || is_cfg_test_module(cx, node);
 
         if let Some(entry) = context_entry_for(node, attrs) {
             entries.push(entry);
@@ -148,6 +150,18 @@ where
         MetaItemInner::MetaItem(inner) => meta_contains_test_cfg(&inner),
         MetaItemInner::Lit(_) => false,
     })
+}
+
+/// Check if a module node has `#[cfg(test)]` on it by checking the owner's attributes.
+fn is_cfg_test_module(cx: &LateContext<'_>, node: Node<'_>) -> bool {
+    let Node::Item(item) = node else {
+        return false;
+    };
+    if !matches!(item.kind, hir::ItemKind::Mod { .. }) {
+        return false;
+    }
+    let owner_attrs = cx.tcx.hir_attrs(item.hir_id());
+    owner_attrs.iter().any(is_cfg_test_attribute)
 }
 
 fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
