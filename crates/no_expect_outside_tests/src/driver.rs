@@ -154,11 +154,11 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
     cx.tcx.is_diagnostic_item(sym::Option, def_id) || cx.tcx.is_diagnostic_item(sym::Result, def_id)
 }
 
-/// Check if the expression is inside a function that appears to be a test.
-///
-/// This is a fallback for when the standard attribute detection doesn't find
-/// `#[test]` (which may happen in integration test crates where the test harness
-/// processes attributes differently).
+// Check if the expression is inside a function that appears to be a test.
+//
+// This is a fallback for when the standard attribute detection doesn't find
+// #[test] (which may happen in integration test crates where the test harness
+// processes attributes differently).
 fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>) -> bool {
     // First, check if any enclosing function has a test attribute
     let has_test_attr = cx
@@ -216,7 +216,7 @@ fn is_test_named_module(node: hir::Node<'_>) -> bool {
     let Some(ident) = item.kind.ident() else {
         return false;
     };
-    ident.name.as_str() == "tests"
+    matches!(ident.name.as_str(), "test" | "tests")
 }
 
 fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
@@ -226,18 +226,17 @@ fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
     matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(item)
 }
 
-/// Check if any attribute is `#[test]`.
+// Check if any attribute is #[test].
 fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
     attrs.iter().any(is_test_attribute)
 }
 
-/// Detect test framework attributes.
-///
-/// Test attributes (`#[test]`, `#[rstest]`, `#[tokio::test]`, etc.) are
-/// represented as `Unparsed` HIR attributes. The `Parsed` variant is reserved
-/// for compiler-internal attributes like `#[must_use]` and `#[doc]`, not for
-/// test framework annotations. This function therefore only inspects `Unparsed`
-/// attributes.
+// Detect test framework attributes.
+//
+// Test attributes (#[test], #[rstest], #[tokio::test], etc.) are represented as
+// Unparsed HIR attributes. The Parsed variant is reserved for compiler-internal
+// attributes like #[must_use] and #[doc], not for test framework annotations.
+// This function therefore only inspects Unparsed attributes.
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
     let hir::Attribute::Unparsed(_) = attr else {
         return false;

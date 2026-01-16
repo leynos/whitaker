@@ -379,6 +379,17 @@ production-only functions that merely relax warnings or lints under test builds
 from being misclassified as test code, eliminating a class of false negatives
 observed during feature rollout.
 
+**Test harness fallback.** When compiled with `--test` (typically for
+integration test crates), functions bearing `#[test]` may not be detected via
+the standard attribute traversal if the test framework processes them
+differently. A fallback heuristic supplements standard detection by checking:
+(1) whether any enclosing function has a recognised test attribute, (2) whether
+the code lives inside a module named `test` or `tests`, and (3) whether the
+source file resides in a `tests/` directory. This fallback only activates when
+`rustc` is running with the test harness flag (`--test`), ensuring production
+builds remain strict. The file-path check uses platform-agnostic path component
+comparison for Windows compatibility.
+
 Behaviour-driven unit tests exercise the summarizer in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
 paths added via configuration. UI fixtures demonstrate the denial emitted for
