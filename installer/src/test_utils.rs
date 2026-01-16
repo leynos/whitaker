@@ -7,6 +7,18 @@ use std::collections::VecDeque;
 use std::process::{ExitStatus, Output};
 
 /// Creates an `ExitStatus` from an exit code (Unix implementation).
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::exit_status;
+///
+/// let success = exit_status(0);
+/// assert!(success.success());
+///
+/// let failure = exit_status(1);
+/// assert!(!failure.success());
+/// ```
 #[cfg(unix)]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
@@ -15,6 +27,18 @@ pub fn exit_status(code: i32) -> ExitStatus {
 }
 
 /// Creates an `ExitStatus` from an exit code (Windows implementation).
+///
+/// # Examples
+///
+/// ```ignore
+/// use whitaker_installer::test_utils::exit_status;
+///
+/// let success = exit_status(0);
+/// assert!(success.success());
+///
+/// let failure = exit_status(1);
+/// assert!(!failure.success());
+/// ```
 #[cfg(windows)]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
@@ -23,6 +47,17 @@ pub fn exit_status(code: i32) -> ExitStatus {
 }
 
 /// Creates a successful command `Output` with empty stdout and stderr.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::success_output;
+///
+/// let output = success_output();
+/// assert!(output.status.success());
+/// assert!(output.stdout.is_empty());
+/// assert!(output.stderr.is_empty());
+/// ```
 pub fn success_output() -> Output {
     Output {
         status: exit_status(0),
@@ -32,6 +67,17 @@ pub fn success_output() -> Output {
 }
 
 /// Creates a failed command `Output` with the given stderr message.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::failure_output;
+///
+/// let output = failure_output("command failed");
+/// assert!(!output.status.success());
+/// assert!(output.stdout.is_empty());
+/// assert_eq!(output.stderr, b"command failed");
+/// ```
 pub fn failure_output(stderr: &str) -> Output {
     Output {
         status: exit_status(1),
@@ -41,6 +87,22 @@ pub fn failure_output(stderr: &str) -> Output {
 }
 
 /// Represents an expected command invocation for testing.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::{ExpectedCall, success_output};
+///
+/// let call = ExpectedCall {
+///     cmd: "cargo",
+///     args: vec!["build", "--release"],
+///     result: Ok(success_output()),
+/// };
+///
+/// assert_eq!(call.cmd, "cargo");
+/// assert_eq!(call.args, vec!["build", "--release"]);
+/// assert!(call.result.is_ok());
+/// ```
 #[derive(Debug)]
 pub struct ExpectedCall {
     /// The command to execute (e.g., "cargo").
@@ -55,6 +117,26 @@ pub struct ExpectedCall {
 ///
 /// Records expected command invocations and returns predefined results,
 /// allowing tests to verify command execution without side effects.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::deps::CommandExecutor;
+/// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+///
+/// let executor = StubExecutor::new(vec![
+///     ExpectedCall {
+///         cmd: "cargo",
+///         args: vec!["--version"],
+///         result: Ok(success_output()),
+///     },
+/// ]);
+///
+/// let output = executor.run("cargo", &["--version"]).expect("command failed");
+/// assert!(output.status.success());
+///
+/// executor.assert_finished();
+/// ```
 #[derive(Debug)]
 pub struct StubExecutor {
     expected: RefCell<VecDeque<ExpectedCall>>,
@@ -62,6 +144,20 @@ pub struct StubExecutor {
 
 impl StubExecutor {
     /// Creates a new `StubExecutor` with the given expected calls.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+    ///
+    /// let executor = StubExecutor::new(vec![
+    ///     ExpectedCall {
+    ///         cmd: "cargo",
+    ///         args: vec!["build"],
+    ///         result: Ok(success_output()),
+    ///     },
+    /// ]);
+    /// ```
     pub fn new(expected: Vec<ExpectedCall>) -> Self {
         Self {
             expected: RefCell::new(expected.into()),
@@ -73,6 +169,27 @@ impl StubExecutor {
     /// # Panics
     ///
     /// Panics if there are remaining expected calls that were not invoked.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::deps::CommandExecutor;
+    /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+    ///
+    /// let executor = StubExecutor::new(vec![
+    ///     ExpectedCall {
+    ///         cmd: "cargo",
+    ///         args: vec!["test"],
+    ///         result: Ok(success_output()),
+    ///     },
+    /// ]);
+    ///
+    /// // Execute the expected command
+    /// let _ = executor.run("cargo", &["test"]);
+    ///
+    /// // Verify all expected calls were consumed
+    /// executor.assert_finished();
+    /// ```
     pub fn assert_finished(&self) {
         assert!(
             self.expected.borrow().is_empty(),
