@@ -143,14 +143,21 @@ fn ensure_dylint_tools_installs_missing_tools(
 
     assert!(result.is_ok());
     let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
-    assert!(
-        stderr_text.starts_with(expected_start),
-        "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
-    );
-    assert!(
-        stderr_text.ends_with(expected_end),
-        "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
-    );
+    if quiet {
+        assert!(
+            stderr_text.is_empty(),
+            "expected stderr to be empty when quiet, got {stderr_text:?}"
+        );
+    } else {
+        assert!(
+            stderr_text.starts_with(expected_start),
+            "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
+        );
+        assert!(
+            stderr_text.ends_with(expected_end),
+            "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
+        );
+    }
     executor.assert_finished();
 }
 
