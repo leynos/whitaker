@@ -6,7 +6,9 @@ use rstest::rstest;
 #[rstest]
 #[case("\n  \n", ModuleDocDisposition::MissingDocs)]
 #[case("//! module docs", ModuleDocDisposition::HasLeadingDoc)]
+#[case("   //! module docs", ModuleDocDisposition::HasLeadingDoc)]
 #[case("#![doc = \"text\"]", ModuleDocDisposition::HasLeadingDoc)]
+#[case("   #![doc = \"module docs\"]", ModuleDocDisposition::HasLeadingDoc)]
 #[case(
     "#![cfg_attr(feature = \"docs\", doc = \"text\")]",
     ModuleDocDisposition::HasLeadingDoc
@@ -33,6 +35,11 @@ use rstest::rstest;
     "#[doc = \"module docs\"]\npub fn demo() {}",
     ModuleDocDisposition::MissingDocs
 )]
+#[case(
+    "#![allow(undocumented_unsafe_blocks)]",
+    ModuleDocDisposition::MissingDocs
+)]
+#[case("#![documentation = \"text\"]", ModuleDocDisposition::MissingDocs)]
 fn snippet_yields_expected_disposition(
     #[case] snippet: &str,
     #[case] expected: ModuleDocDisposition,
@@ -64,8 +71,8 @@ fn accepts_nested_cfg_attr_doc() {
 
 #[rstest]
 #[case("#![allow(dead_code)]\n//! doc")]
-#[case("#![allow(undocumented_unsafe_blocks)]")]
-#[case("#![documentation = \"text\"]")]
+#[case("#![allow(dead_code)]\n   //! doc")]
+#[case("#![allow(dead_code)] #![doc = \"module docs\"]")]
 fn snippet_yields_first_inner_is_not_doc(#[case] snippet: &str) {
     assert!(matches!(
         detect_module_docs_from_snippet(snippet.into()),

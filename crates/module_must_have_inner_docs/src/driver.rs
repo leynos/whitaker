@@ -296,8 +296,60 @@ fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent 
         return LeadingContent::Missing;
     }
 
+    if !has_inner_doc(rest) {
+        return LeadingContent::Missing;
+    }
+
     let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
     LeadingContent::Misordered { offset, len }
+}
+
+fn has_inner_doc(rest: ParseInput<'_>) -> bool {
+    let snippet = rest.as_str();
+    let mut line_start = 0;
+
+    while line_start < snippet.len() {
+        let line_end = snippet[line_start..]
+            .find('\n')
+            .map(|idx| line_start + idx)
+            .unwrap_or(snippet.len());
+        let line = &snippet[line_start..line_end];
+        if check_line_for_inner_doc(snippet, line, line_start) {
+            return true;
+        }
+
+        line_start = line_end.saturating_add(1);
+    }
+
+    false
+}
+
+/// Reports whether a line contains an inner doc marker.
+///
+/// `snippet` is the full text so we can slice from the computed offset when
+/// delegating to the parser. `line` is the current line slice, and
+/// `line_start` is the byte offset of that line within `snippet`.
+fn check_line_for_inner_doc(snippet: &str, line: &str, line_start: usize) -> bool {
+    let (offset, trimmed) = parser::skip_leading_whitespace(ParseInput::from(line));
+    if parser::is_doc_comment(trimmed) {
+        return true;
+    }
+
+    let mut search_start = offset;
+    if trimmed.starts_with("#!") {
+        search_start = offset.saturating_add(2);
+    }
+
+    while let Some(local_idx) = line[search_start..].find("#!") {
+        let absolute_idx = search_start + local_idx;
+        let offset = line_start + absolute_idx;
+        if parser::is_doc_comment(ParseInput::from(&snippet[offset..])) {
+            return true;
+        }
+        search_start = absolute_idx + 2;
+    }
+
+    false
 }
 
 #[cfg(test)]
