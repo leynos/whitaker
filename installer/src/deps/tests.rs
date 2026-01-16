@@ -13,16 +13,8 @@ fn test_check_dylint_tools_with_outcomes(
     expected_status: DylintToolStatus,
 ) {
     let executor = StubExecutor::new(vec![
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: cargo_dylint_result,
-        },
-        ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result: dylint_link_result,
-        },
+        cargo_dylint_version_check(cargo_dylint_result),
+        dylint_link_version_check(dylint_link_result),
     ]);
 
     let status = check_dylint_tools(&executor);
@@ -36,11 +28,7 @@ fn test_check_dylint_tools_with_outcomes(
 /// Sets up a `StubExecutor` with a single expected call for "cargo dylint --version" using
 /// the provided result, then asserts the return value matches the expected boolean.
 fn test_command_succeeds_with_result(command_result: Result<Output>, expected: bool) {
-    let executor = StubExecutor::new(vec![ExpectedCall {
-        cmd: "cargo",
-        args: vec!["dylint", "--version"],
-        result: command_result,
-    }]);
+    let executor = StubExecutor::new(vec![cargo_dylint_version_check(command_result)]);
 
     assert_eq!(
         command_succeeds(&executor, "cargo", &["dylint", "--version"]),
@@ -86,6 +74,72 @@ fn test_install_dylint_tools_failure(
         other => panic!("unexpected error: {other}"),
     }
     executor.assert_finished();
+}
+
+/// Constructs an `ExpectedCall` for checking if cargo-binstall is available.
+///
+/// Returns an `ExpectedCall` with cmd="cargo", args=["binstall", "--version"].
+fn binstall_version_check(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["binstall", "--version"],
+        result,
+    }
+}
+
+/// Constructs an `ExpectedCall` for installing cargo-dylint via binstall.
+///
+/// Returns an `ExpectedCall` with cmd="cargo", args=["binstall", "-y", "cargo-dylint"].
+fn binstall_install_cargo_dylint(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["binstall", "-y", "cargo-dylint"],
+        result,
+    }
+}
+
+/// Constructs an `ExpectedCall` for installing dylint-link via binstall.
+///
+/// Returns an `ExpectedCall` with cmd="cargo", args=["binstall", "-y", "dylint-link"].
+fn binstall_install_dylint_link(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["binstall", "-y", "dylint-link"],
+        result,
+    }
+}
+
+/// Constructs an `ExpectedCall` for installing cargo-dylint via cargo install.
+///
+/// Returns an `ExpectedCall` with cmd="cargo", args=["install", "cargo-dylint"].
+fn cargo_install_cargo_dylint(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["install", "cargo-dylint"],
+        result,
+    }
+}
+
+/// Constructs an `ExpectedCall` for checking if cargo-dylint is available.
+///
+/// Returns an `ExpectedCall` with cmd="cargo", args=["dylint", "--version"].
+fn cargo_dylint_version_check(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["dylint", "--version"],
+        result,
+    }
+}
+
+/// Constructs an `ExpectedCall` for checking if dylint-link is available.
+///
+/// Returns an `ExpectedCall` with cmd="dylint-link", args=["--version"].
+fn dylint_link_version_check(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "dylint-link",
+        args: vec!["--version"],
+        result,
+    }
 }
 
 #[test]
@@ -189,21 +243,9 @@ fn check_dylint_tools_reports_missing_cargo_dylint() {
 fn install_dylint_tools_uses_binstall_when_available() {
     test_install_dylint_tools_success(
         vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "-y", "cargo-dylint"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "-y", "dylint-link"],
-                result: Ok(success_output()),
-            },
+            binstall_version_check(Ok(success_output())),
+            binstall_install_cargo_dylint(Ok(success_output())),
+            binstall_install_dylint_link(Ok(success_output())),
         ],
         DylintToolStatus {
             cargo_dylint: false,
@@ -216,16 +258,8 @@ fn install_dylint_tools_uses_binstall_when_available() {
 fn install_dylint_tools_falls_back_to_cargo_install() {
     test_install_dylint_tools_success(
         vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Ok(failure_output("no binstall")),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", "cargo-dylint"],
-                result: Ok(success_output()),
-            },
+            binstall_version_check(Ok(failure_output("no binstall"))),
+            cargo_install_cargo_dylint(Ok(success_output())),
         ],
         DylintToolStatus {
             cargo_dylint: false,
@@ -238,16 +272,11 @@ fn install_dylint_tools_falls_back_to_cargo_install() {
 fn install_dylint_tools_falls_back_to_cargo_install_on_binstall_error() {
     test_install_dylint_tools_success(
         vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Err(std::io::Error::other("failed to execute cargo binstall").into()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", "cargo-dylint"],
-                result: Ok(success_output()),
-            },
+            binstall_version_check(Err(std::io::Error::other(
+                "failed to execute cargo binstall",
+            )
+            .into())),
+            cargo_install_cargo_dylint(Ok(success_output())),
         ],
         DylintToolStatus {
             cargo_dylint: false,
@@ -260,16 +289,8 @@ fn install_dylint_tools_falls_back_to_cargo_install_on_binstall_error() {
 fn install_dylint_tools_reports_install_failure() {
     test_install_dylint_tools_failure(
         vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "-y", "cargo-dylint"],
-                result: Ok(failure_output("network down")),
-            },
+            binstall_version_check(Ok(success_output())),
+            binstall_install_cargo_dylint(Ok(failure_output("network down"))),
         ],
         DylintToolStatus {
             cargo_dylint: false,
@@ -284,21 +305,9 @@ fn install_dylint_tools_reports_install_failure() {
 fn install_dylint_tools_reports_dylint_link_install_failure() {
     test_install_dylint_tools_failure(
         vec![
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "--version"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "-y", "cargo-dylint"],
-                result: Ok(success_output()),
-            },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["binstall", "-y", "dylint-link"],
-                result: Ok(failure_output("dylint-link failed")),
-            },
+            binstall_version_check(Ok(success_output())),
+            binstall_install_cargo_dylint(Ok(success_output())),
+            binstall_install_dylint_link(Ok(failure_output("dylint-link failed"))),
         ],
         DylintToolStatus {
             cargo_dylint: false,
