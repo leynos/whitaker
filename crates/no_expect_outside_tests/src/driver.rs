@@ -37,6 +37,7 @@ struct Config {
 /// Lint pass that tracks contexts while checking method calls.
 pub struct NoExpectOutsideTests {
     is_doctest: bool,
+    is_test_harness: bool,
     additional_test_attributes: Vec<AttributePath>,
     localizer: Localizer,
 }
@@ -45,6 +46,7 @@ impl Default for NoExpectOutsideTests {
     fn default() -> Self {
         Self {
             is_doctest: false,
+            is_test_harness: false,
             additional_test_attributes: Vec::new(),
             localizer: Localizer::new(None),
         }
@@ -57,6 +59,7 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .tcx
             .env_var_os("UNSTABLE_RUSTDOC_TEST_PATH".as_ref())
             .is_some();
+        self.is_test_harness = cx.tcx.sess.opts.test;
         let config_name = "no_expect_outside_tests";
         let config = match dylint_linting::config::<Config>(config_name) {
             Ok(Some(config)) => config,
@@ -111,6 +114,14 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             return;
         }
 
+        // Fallback: when compiled with --test (integration test crates), functions
+        // with #[test] may not be detected via attributes if the test framework
+        // processes them differently. Allow expect() in functions that appear to
+        // be tests based on the harness context.
+        if self.is_test_harness && is_likely_test_function(cx, expr) {
+            return;
+        }
+
         let diagnostic_context = DiagnosticContext::new(&summary, &self.localizer);
         emit_diagnostic(cx, expr, receiver, &diagnostic_context);
     }
@@ -138,4 +149,102 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 
     let def_id = adt.did();
     cx.tcx.is_diagnostic_item(sym::Option, def_id) || cx.tcx.is_diagnostic_item(sym::Result, def_id)
+}
+
+/// Check if the expression is inside a function that appears to be a test.
+///
+/// This is a fallback for when the standard attribute detection doesn't find
+/// `#[test]` (which may happen in integration test crates where the test harness
+/// processes attributes differently).
+fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>) -> bool {
+    // First, check if any enclosing function has a test attribute
+    let has_test_attr = cx
+        .tcx
+        .hir_parent_iter(expr.hir_id)
+        .filter_map(|(_, node)| extract_function_item(node))
+        .any(|item| {
+            let attrs = cx.tcx.hir_attrs(item.hir_id());
+            has_test_attribute(attrs)
+        });
+
+    if has_test_attr {
+        return true;
+    }
+
+    // Check if we're inside a module named "tests" (common convention for unit tests)
+    let in_test_module = cx
+        .tcx
+        .hir_parent_iter(expr.hir_id)
+        .any(|(_, node)| is_test_named_module(node));
+
+    if in_test_module {
+        return true;
+    }
+
+    // Fallback: check if the source file looks like a test file
+    let span = expr.span;
+    if let Some(filename) = cx
+        .tcx
+        .sess
+        .source_map()
+        .span_to_filename(span)
+        .into_local_path()
+    {
+        let path_str = filename.to_string_lossy();
+        // Integration tests are in tests/ directory
+        if path_str.contains("/tests/") || path_str.starts_with("tests/") {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn is_test_named_module(node: hir::Node<'_>) -> bool {
+    let hir::Node::Item(item) = node else {
+        return false;
+    };
+    let hir::ItemKind::Mod { .. } = item.kind else {
+        return false;
+    };
+    let Some(ident) = item.kind.ident() else {
+        return false;
+    };
+    ident.name.as_str() == "tests"
+}
+
+fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
+    let hir::Node::Item(item) = node else {
+        return None;
+    };
+    matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(item)
+}
+
+/// Check if any attribute is `#[test]`.
+fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
+    attrs.iter().any(is_test_attribute)
+}
+
+fn is_test_attribute(attr: &hir::Attribute) -> bool {
+    // Check for Unparsed #[test] attribute
+    if let hir::Attribute::Unparsed(_) = attr {
+        let path = attr.path();
+        if path.len() == 1 && path[0] == sym::test {
+            return true;
+        }
+    }
+
+    // Also check for other test-like attributes that might be present
+    if let hir::Attribute::Unparsed(_) = attr {
+        let path = attr.path();
+        // Check for common test attribute patterns
+        if !path.is_empty() {
+            let first = path[0].as_str();
+            if first == "test" || first == "rstest" || first == "tokio" {
+                return true;
+            }
+        }
+    }
+
+    false
 }
