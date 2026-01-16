@@ -2,79 +2,8 @@
 
 use super::*;
 use rstest::rstest;
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::process::{ExitStatus, Output};
 use whitaker_installer::cli::InstallArgs;
-
-#[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-
-    ExitStatus::from_raw(code << 8)
-}
-
-#[cfg(windows)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-
-    ExitStatus::from_raw(code as u32)
-}
-
-fn success_output() -> Output {
-    Output {
-        status: exit_status(0),
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-    }
-}
-
-fn failure_output(stderr: &str) -> Output {
-    Output {
-        status: exit_status(1),
-        stdout: Vec::new(),
-        stderr: stderr.as_bytes().to_vec(),
-    }
-}
-
-#[derive(Debug)]
-struct ExpectedCall {
-    cmd: &'static str,
-    args: Vec<&'static str>,
-    result: Result<Output>,
-}
-
-#[derive(Debug)]
-struct StubExecutor {
-    expected: RefCell<VecDeque<ExpectedCall>>,
-}
-
-impl StubExecutor {
-    fn new(expected: Vec<ExpectedCall>) -> Self {
-        Self {
-            expected: RefCell::new(expected.into()),
-        }
-    }
-
-    fn assert_finished(&self) {
-        assert!(
-            self.expected.borrow().is_empty(),
-            "expected no further command invocations"
-        );
-    }
-}
-
-impl CommandExecutor for StubExecutor {
-    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
-        let mut expected = self.expected.borrow_mut();
-        let call = expected.pop_front().expect("unexpected command invocation");
-
-        assert_eq!(call.cmd, cmd);
-        assert_eq!(call.args.as_slice(), args);
-
-        call.result
-    }
-}
+use whitaker_installer::test_utils::*;
 
 #[test]
 fn exit_code_for_run_result_returns_zero_on_success() {

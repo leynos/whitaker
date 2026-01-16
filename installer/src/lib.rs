@@ -41,3 +41,7 @@ pub mod stager;
 pub mod toolchain;
 pub mod workspace;
 pub mod wrapper;
+
+/// Test utilities - only available in test builds.
+#[doc(hidden)]
+pub mod test_utils;
