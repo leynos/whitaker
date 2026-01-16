@@ -169,8 +169,12 @@ fn ensure_dylint_tools_skips_install_when_installed() {
     executor.assert_finished();
 }
 
-#[test]
-fn ensure_dylint_tools_installs_missing_tools_and_logs() {
+/// Helper to test `ensure_dylint_tools_with_executor` when tools are missing and need installing.
+///
+/// Sets up a `StubExecutor` with the expected calls for detecting missing cargo-dylint and
+/// dylint-link, then installing both via cargo-binstall. Executes the function under test and
+/// validates the result, delegating stderr assertions to the provided closure.
+fn test_ensure_dylint_tools_installation(quiet: bool, stderr_assertion: impl FnOnce(&[u8])) {
     let executor = StubExecutor::new(vec![
         ExpectedCall {
             cmd: "cargo",
@@ -200,54 +204,28 @@ fn ensure_dylint_tools_installs_missing_tools_and_logs() {
     ]);
 
     let mut stderr = Vec::new();
-    let result = ensure_dylint_tools_with_executor(&executor, false, &mut stderr);
+    let result = ensure_dylint_tools_with_executor(&executor, quiet, &mut stderr);
 
     assert!(result.is_ok());
-
-    let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
-    assert!(stderr_text.contains("Installing required Dylint tools..."));
-    assert!(stderr_text.contains("Dylint tools installed successfully."));
-    assert!(stderr_text.ends_with("\n\n"));
-
+    stderr_assertion(&stderr);
     executor.assert_finished();
 }
 
 #[test]
+fn ensure_dylint_tools_installs_missing_tools_and_logs() {
+    test_ensure_dylint_tools_installation(false, |stderr| {
+        let stderr_text = String::from_utf8(stderr.to_vec()).expect("stderr was not UTF-8");
+        assert!(stderr_text.contains("Installing required Dylint tools..."));
+        assert!(stderr_text.contains("Dylint tools installed successfully."));
+        assert!(stderr_text.ends_with("\n\n"));
+    });
+}
+
+#[test]
 fn ensure_dylint_tools_quiet_suppresses_output() {
-    let executor = StubExecutor::new(vec![
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: Ok(failure_output("missing cargo-dylint")),
-        },
-        ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result: Ok(failure_output("missing dylint-link")),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "--version"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "-y", "cargo-dylint"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "-y", "dylint-link"],
-            result: Ok(success_output()),
-        },
-    ]);
-
-    let mut stderr = Vec::new();
-    let result = ensure_dylint_tools_with_executor(&executor, true, &mut stderr);
-
-    assert!(result.is_ok());
-    assert!(stderr.is_empty());
-    executor.assert_finished();
+    test_ensure_dylint_tools_installation(true, |stderr| {
+        assert!(stderr.is_empty());
+    });
 }
 
 #[test]
