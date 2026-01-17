@@ -95,19 +95,17 @@ fn assert_has_test_attribute(attr_segments: &[&[&str]], expected: bool) {
     });
 }
 
-#[test]
-fn has_test_attribute_returns_true_when_test_present() {
-    assert_has_test_attribute(&[&["inline"], &["test"]], true);
-}
-
-#[test]
-fn has_test_attribute_returns_true_for_rstest() {
-    assert_has_test_attribute(&[&["rstest"]], true);
-}
-
-#[test]
-fn has_test_attribute_returns_true_for_tokio_test() {
-    assert_has_test_attribute(&[&["tokio", "test"]], true);
+#[rstest]
+#[case::inline_and_test(0)]
+#[case::rstest_only(1)]
+#[case::tokio_test(2)]
+fn has_test_attribute_detects_test_attributes(#[case] case_index: usize) {
+    let test_cases: &[&[&[&str]]] = &[
+        &[&["inline"], &["test"]],
+        &[&["rstest"]],
+        &[&["tokio", "test"]],
+    ];
+    assert_has_test_attribute(test_cases[case_index], true);
 }
 
 #[test]
