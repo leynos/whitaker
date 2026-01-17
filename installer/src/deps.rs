@@ -2,6 +2,12 @@
 //!
 //! This module provides functions for checking and installing the required
 //! `cargo-dylint` and `dylint-link` tools.
+//!
+//! # Usage
+//!
+//! Call [`check_dylint_tools`] to discover missing tools, then pass the status to
+//! [`install_dylint_tools`] to install any gaps. This module runs external
+//! commands and may modify the host toolchain.
 
 use crate::error::{InstallerError, Result};
 use std::process::{Command, Output};
