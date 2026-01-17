@@ -188,6 +188,7 @@ fn install_tool(
     Ok(())
 }
 
+/// Returns true if the given command executes successfully.
 fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: &[&str]) -> bool {
     executor.run(cmd, args).is_ok_and(|o| o.status.success())
 }
