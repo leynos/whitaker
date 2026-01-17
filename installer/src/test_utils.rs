@@ -1,7 +1,7 @@
 //! Shared test utilities for the installer crate.
 
 use crate::deps::CommandExecutor;
-use crate::error::Result;
+use crate::error::{InstallerError, Result};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::process::{ExitStatus, Output};
@@ -201,10 +201,26 @@ impl StubExecutor {
 impl CommandExecutor for StubExecutor {
     fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
         let mut expected = self.expected.borrow_mut();
-        let call = expected.pop_front().expect("unexpected command invocation");
+        let call = expected
+            .pop_front()
+            .ok_or_else(|| InstallerError::StubMismatch {
+                message: format!("unexpected command invocation: {cmd} {}", args.join(" ")),
+            })?;
 
-        assert_eq!(call.cmd, cmd);
-        assert_eq!(call.args.as_slice(), args);
+        if call.cmd != cmd {
+            return Err(InstallerError::StubMismatch {
+                message: format!("command mismatch: expected {}, got {cmd}", call.cmd),
+            });
+        }
+
+        if call.args.as_slice() != args {
+            return Err(InstallerError::StubMismatch {
+                message: format!(
+                    "argument mismatch for {cmd}: expected {:?}, got {args:?}",
+                    call.args
+                ),
+            });
+        }
 
         call.result
     }

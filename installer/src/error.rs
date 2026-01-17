@@ -128,6 +128,13 @@ pub enum InstallerError {
         #[source]
         source: std::io::Error,
     },
+
+    /// Test stub received an unexpected or mismatched command invocation.
+    #[error("stub mismatch: {message}")]
+    StubMismatch {
+        /// Description of what was expected versus what was received.
+        message: String,
+    },
 }
 
 impl Clone for InstallerError {
@@ -193,6 +200,9 @@ impl Clone for InstallerError {
             },
             InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
                 source: std::io::Error::new(source.kind(), source.to_string()),
+            },
+            InstallerError::StubMismatch { message } => InstallerError::StubMismatch {
+                message: message.clone(),
             },
         }
     }
