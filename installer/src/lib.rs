@@ -42,6 +42,9 @@ pub mod toolchain;
 pub mod workspace;
 pub mod wrapper;
 
-/// Test utilities - only available in test builds.
+/// Test utilities for stubbing command execution in integration tests.
+///
+/// This module is public to allow the binary crate's tests to import it,
+/// but hidden from generated documentation as it is not part of the public API.
 #[doc(hidden)]
 pub mod test_utils;

@@ -130,16 +130,9 @@ pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> DylintToolStatus {
 ///
 /// Returns `InstallerError::DependencyInstall` if installation fails.
 ///
-/// # Examples
+/// # Usage
 ///
-/// ```no_run
-/// use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools, SystemCommandExecutor};
-///
-/// let executor = SystemCommandExecutor;
-/// let status = check_dylint_tools(&executor);
-/// install_dylint_tools(&executor, &status)?;
-/// # Ok::<(), whitaker_installer::error::InstallerError>(())
-/// ```
+/// See the module-level documentation for usage patterns and side-effect context.
 pub fn install_dylint_tools(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
