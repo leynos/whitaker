@@ -1,0 +1,19 @@
+warning: Doc comments on functions must precede other outer attributes
+  --> $DIR/fail_doc_after_fixture.rs:10:1
+   |
+LL | /// Factory fixture used by tests.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: The outer attribute #[fixture] appears before the doc comment.
+  --> $DIR/fail_doc_after_fixture.rs:9:1
+   |
+LL | #[fixture]
+   | ^^^^^^^^^^
+   = help: Move the doc comment so it appears before #[fixture] on the item.
+note: the lint level is defined here
+  --> $DIR/fail_doc_after_fixture.rs:3:9
+   |
+LL | #![warn(function_attrs_follow_docs)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
