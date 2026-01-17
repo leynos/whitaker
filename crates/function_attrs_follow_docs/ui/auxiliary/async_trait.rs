@@ -19,9 +19,9 @@ fn transform_stream(stream: TokenStream, attribute_span: Span) -> TokenStream {
 
     while let Some(token) = iter.next() {
         match &token {
-            TokenTree::Group(group) => output.push(transform_group(group, attribute_span)),
+            TokenTree::Group(group) => output.push(process_group_token(group, attribute_span)),
             TokenTree::Punct(punct) if punct.as_char() == '#' => {
-                handle_doc_attribute_insertion(&mut iter, attribute_span, &mut output);
+                process_hash_token(&mut iter, attribute_span, &mut output);
                 output.push(token);
             }
             _ => output.push(token),
@@ -31,7 +31,7 @@ fn transform_stream(stream: TokenStream, attribute_span: Span) -> TokenStream {
     output.into_iter().collect()
 }
 
-fn transform_group(group: &Group, attribute_span: Span) -> TokenTree {
+fn process_group_token(group: &Group, attribute_span: Span) -> TokenTree {
     let delimiter = group.delimiter();
     let nested = transform_stream(group.stream(), attribute_span);
     let mut new_group = Group::new(delimiter, nested);
@@ -39,7 +39,7 @@ fn transform_group(group: &Group, attribute_span: Span) -> TokenTree {
     TokenTree::Group(new_group)
 }
 
-fn handle_doc_attribute_insertion(
+fn process_hash_token(
     iter: &mut std::iter::Peekable<proc_macro::token_stream::IntoIter>,
     attribute_span: Span,
     output: &mut Vec<TokenTree>,
@@ -48,9 +48,13 @@ fn handle_doc_attribute_insertion(
         return;
     };
 
-    if group.delimiter() == Delimiter::Bracket && is_doc_attribute(group.stream()) {
+    if should_insert_attribute(group) {
         output.extend(build_attribute(attribute_span));
     }
+}
+
+fn should_insert_attribute(group: &Group) -> bool {
+    group.delimiter() == Delimiter::Bracket && is_doc_attribute(group.stream())
 }
 
 fn is_doc_attribute(stream: TokenStream) -> bool {
