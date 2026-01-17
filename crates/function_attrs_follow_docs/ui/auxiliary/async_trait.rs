@@ -21,7 +21,7 @@ fn transform_stream(stream: TokenStream, attribute_span: Span) -> TokenStream {
         match &token {
             TokenTree::Group(group) => output.push(transform_group(group, attribute_span)),
             TokenTree::Punct(punct) if punct.as_char() == '#' => {
-                handle_hash_punct(&mut output, &mut iter, attribute_span);
+                handle_doc_attribute_insertion(&mut iter, attribute_span, &mut output);
                 output.push(token);
             }
             _ => output.push(token),
@@ -39,10 +39,10 @@ fn transform_group(group: &Group, attribute_span: Span) -> TokenTree {
     TokenTree::Group(new_group)
 }
 
-fn handle_hash_punct(
-    output: &mut Vec<TokenTree>,
+fn handle_doc_attribute_insertion(
     iter: &mut std::iter::Peekable<proc_macro::token_stream::IntoIter>,
     attribute_span: Span,
+    output: &mut Vec<TokenTree>,
 ) {
     let Some(TokenTree::Group(group)) = iter.peek() else {
         return;
