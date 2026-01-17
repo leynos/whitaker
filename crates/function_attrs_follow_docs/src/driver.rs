@@ -49,21 +49,39 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Function, &self.localizer);
+            check_function_attributes(FunctionAttributeCheck {
+                cx,
+                attrs,
+                item_span: item.span,
+                kind: FunctionKind::Function,
+                localizer: &self.localizer,
+            });
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::Method, &self.localizer);
+            check_function_attributes(FunctionAttributeCheck {
+                cx,
+                attrs,
+                item_span: item.span,
+                kind: FunctionKind::Method,
+                localizer: &self.localizer,
+            });
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(cx, attrs, FunctionKind::TraitMethod, &self.localizer);
+            check_function_attributes(FunctionAttributeCheck {
+                cx,
+                attrs,
+                item_span: item.span,
+                kind: FunctionKind::TraitMethod,
+                localizer: &self.localizer,
+            });
         }
     }
 }
@@ -90,6 +108,14 @@ struct AttrInfo {
     span: Span,
     is_doc: bool,
     is_outer: bool,
+}
+
+struct FunctionAttributeCheck<'a, 'tcx> {
+    cx: &'a LateContext<'tcx>,
+    attrs: &'a [hir::Attribute],
+    item_span: Span,
+    kind: FunctionKind,
+    localizer: &'a Localizer,
 }
 
 impl AttrInfo {
@@ -159,13 +185,13 @@ impl OrderedAttribute for AttrInfo {
     }
 }
 
-fn check_function_attributes(
-    cx: &LateContext<'_>,
-    attrs: &[hir::Attribute],
-    kind: FunctionKind,
-    localizer: &Localizer,
-) {
-    let mut infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
+fn check_function_attributes(context: FunctionAttributeCheck<'_, '_>) {
+    let mut infos: Vec<AttrInfo> = context
+        .attrs
+        .iter()
+        .filter_map(AttrInfo::try_from_hir)
+        .collect();
+    infos.retain(|info| attribute_within_item(info.span(), context.item_span));
     // Attribute macros can reorder attributes in HIR; rely on source order instead.
     infos.sort_by_key(|info| info.source_order_key());
 
@@ -175,12 +201,22 @@ fn check_function_attributes(
 
     let doc = &infos[doc_index];
     let offending = &infos[offending_index];
-    let context = DiagnosticContext {
+    let diagnostic_context = DiagnosticContext {
         doc_span: doc.span(),
         offending_span: offending.span(),
-        kind,
+        kind: context.kind,
     };
-    emit_diagnostic(cx, context, localizer);
+    emit_diagnostic(context.cx, diagnostic_context, context.localizer);
+}
+
+fn attribute_within_item(attribute_span: Span, item_span: Span) -> bool {
+    if item_span.is_dummy() {
+        return true;
+    }
+
+    let attribute_span = attribute_span.source_callsite();
+    let item_span = item_span.source_callsite();
+    attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi()
 }
 
 #[derive(Copy, Clone)]
