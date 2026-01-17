@@ -317,39 +317,33 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[rstest]
-    #[case::test(&["test"], true)]
-    #[case::rstest(&["rstest"], true)]
-    #[case::case(&["case"], true)]
-    #[case::tokio_test(&["tokio", "test"], true)]
-    #[case::async_std_test(&["async_std", "test"], true)]
-    #[case::gpui_test(&["gpui", "test"], true)]
-    #[case::rstest_rstest(&["rstest", "rstest"], true)]
-    #[case::rstest_case(&["rstest", "case"], true)]
-    fn is_test_attribute_recognises_test_attributes(
-        #[case] segments: &[&str],
-        #[case] expected: bool,
-    ) {
+    #[case::builtin_test(&["test"])]
+    #[case::rstest_single(&["rstest"])]
+    #[case::case_single(&["case"])]
+    #[case::tokio_test(&["tokio", "test"])]
+    #[case::async_std_test(&["async_std", "test"])]
+    #[case::gpui_test(&["gpui", "test"])]
+    #[case::rstest_rstest(&["rstest", "rstest"])]
+    #[case::rstest_case(&["rstest", "case"])]
+    fn is_test_attribute_accepts_test_patterns(#[case] segments: &[&str]) {
         create_default_session_globals_then(|| {
             let attr = hir_attribute_from_segments(segments);
-            assert_eq!(is_test_attribute(&attr), expected);
+            assert!(is_test_attribute(&attr));
         });
     }
 
     #[rstest]
-    #[case::tokio_main(&["tokio", "main"], false)]
-    #[case::rstest_fixture(&["rstest", "fixture"], false)]
-    #[case::inline(&["inline"], false)]
-    #[case::derive(&["derive"], false)]
-    #[case::allow(&["allow"], false)]
-    #[case::cfg(&["cfg"], false)]
-    #[case::three_segments(&["foo", "bar", "test"], false)]
-    fn is_test_attribute_rejects_non_test_attributes(
-        #[case] segments: &[&str],
-        #[case] expected: bool,
-    ) {
+    #[case::tokio_main(&["tokio", "main"])]
+    #[case::rstest_fixture(&["rstest", "fixture"])]
+    #[case::inline(&["inline"])]
+    #[case::derive(&["derive"])]
+    #[case::allow(&["allow"])]
+    #[case::cfg(&["cfg"])]
+    #[case::three_segments(&["foo", "bar", "test"])]
+    fn is_test_attribute_rejects_non_test_attributes(#[case] segments: &[&str]) {
         create_default_session_globals_then(|| {
             let attr = hir_attribute_from_segments(segments);
-            assert_eq!(is_test_attribute(&attr), expected);
+            assert!(!is_test_attribute(&attr));
         });
     }
 
