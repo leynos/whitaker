@@ -137,19 +137,29 @@ fn has_test_attribute_handles_parsed_attributes() {
 }
 
 // -------------------------------------------------------------------------
-// Tests for is_test_named_module and extract_function_item
+// Coverage notes for is_test_named_module, extract_function_item, and
+// the is_likely_test_function fallback
 //
-// These functions operate on hir::Node and hir::Item types which require
-// complex HIR context to construct (owner IDs, def IDs, etc.). They are
-// part of the `is_likely_test_function` fallback which only activates when
-// rustc runs with the `--test` flag (integration test crates). The pattern
-// matching logic is straightforward:
+// These helpers require full HIR context (hir::Node, hir::Item) which cannot
+// be constructed in unit tests without mocking the entire compiler
+// infrastructure. The fallback logic (is_likely_test_function) also requires
+// the --test harness flag which isn't set during UI test compilation.
 //
-// - is_test_named_module: checks if a module is named "test" or "tests"
-// - extract_function_item: extracts function items from HIR nodes
+// Behavioural coverage is achieved through:
 //
-// Full unit testing would require mocking the entire HIR infrastructure,
-// which provides diminishing returns given the simplicity of the logic.
-// The fallback behaviour is validated by running integration tests that
-// use `.expect()` in test crates compiled with `--test`.
+// 1. UI tests for attribute detection (is_test_attribute, has_test_attribute):
+//    - pass_expect_in_test.rs, pass_expect_in_rstest.rs, pass_expect_in_tokio_test.rs
+//    - These verify that test attributes are recognised without the fallback
+//
+// 2. UI tests for cfg(test) module detection:
+//    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
+//    - These verify #[cfg(test)] mod test/tests detection
+//
+// 3. Real-world validation: The lint is used on this repository's own
+//    integration tests (compiled with --test), validating the fallback works
+//    correctly for tests/ directory detection and module-name heuristics.
+//
+// The individual helper functions have straightforward pattern matching:
+// - is_test_named_module: matches!(name, "test" | "tests")
+// - extract_function_item: matches!(item.kind, ItemKind::Fn { .. })
 // -------------------------------------------------------------------------
