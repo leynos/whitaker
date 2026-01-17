@@ -138,6 +138,11 @@ impl AttrInfo {
             is_outer,
         })
     }
+
+    fn source_order_key(&self) -> (rustc_span::BytePos, rustc_span::BytePos) {
+        let span = self.span.source_callsite();
+        (span.lo(), span.hi())
+    }
 }
 
 impl OrderedAttribute for AttrInfo {
@@ -160,7 +165,9 @@ fn check_function_attributes(
     kind: FunctionKind,
     localizer: &Localizer,
 ) {
-    let infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
+    let mut infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
+    // Attribute macros can reorder attributes in HIR; rely on source order instead.
+    infos.sort_by_key(|info| info.source_order_key());
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;
