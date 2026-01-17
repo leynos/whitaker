@@ -5,3 +5,5 @@ fn handler() {
     let value = Some(1);
     let _ = value.expect("handler should not ignore errors");
 }
+
+fn main() {}

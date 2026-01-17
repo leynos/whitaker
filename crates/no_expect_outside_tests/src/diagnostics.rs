@@ -88,7 +88,7 @@ impl ReceiverCategory {
     fn fallback_help(self, receiver: &ReceiverLabel) -> String {
         match self {
             Self::Option => {
-                format!("Handle the `None` case for {receiver} or move the code into a test.")
+                format!("Handle the `None` variant of {receiver} or move the code into a test.")
             }
             Self::Result => {
                 format!("Handle the `Err` variant of {receiver} or move the code into a test.")
