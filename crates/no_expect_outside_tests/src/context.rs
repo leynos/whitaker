@@ -33,9 +33,7 @@ pub(crate) fn collect_context<'tcx>(
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        if attrs.iter().any(is_cfg_test_attribute) {
-            has_cfg_test = true;
-        }
+        has_cfg_test = has_cfg_test || attrs.iter().any(is_cfg_test_attribute);
 
         if let Some(entry) = context_entry_for(node, attrs) {
             entries.push(entry);

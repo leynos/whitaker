@@ -379,6 +379,17 @@ production-only functions that merely relax warnings or lints under test builds
 from being misclassified as test code, eliminating a class of false negatives
 observed during feature rollout.
 
+**Test harness fallback.** When compiled with `--test` (typically for
+integration test crates), functions bearing `#[test]` may not be detected via
+the standard attribute traversal if the test framework processes them
+differently. A fallback heuristic supplements standard detection by checking:
+(1) whether any enclosing function has a recognised test attribute, (2) whether
+the code lives inside a module named `test` or `tests`, and (3) whether the
+source file resides in a `tests/` directory. This fallback only activates when
+`rustc` is running with the test harness flag (`--test`), ensuring production
+builds remain strict. The file-path check uses platform-agnostic path component
+comparison for Windows compatibility.
+
 Behaviour-driven unit tests exercise the summarizer in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
 paths added via configuration. UI fixtures demonstrate the denial emitted for
@@ -413,11 +424,11 @@ attribute marker (`#`) before any doc, the lint emits `FirstInnerIsNotDoc` when
 a later inner doc exists; if no inner doc appears at all (including a lone
 inner attribute), it falls back to `MissingDocs` so the diagnostic targets the
 module start. A doc-less `cfg_attr` wrapper also maps to `MissingDocs`. The
-shared span helpers from
-`whitaker::hir` supply consistent ranges for inline and file modules. Localized
-strings pull from `locales/*/module_must_have_inner_docs.ftl`, passing the
-module name via the Fluent argument map, and fall back to a deterministic
-English message whenever localisation fails.
+shared span helpers from `whitaker::hir` supply consistent ranges for inline
+and file modules. Localized strings pull from
+`locales/*/module_must_have_inner_docs.ftl`, passing the module name via the
+Fluent argument map, and fall back to a deterministic English message whenever
+localisation fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
