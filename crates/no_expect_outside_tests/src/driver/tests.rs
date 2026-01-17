@@ -85,31 +85,29 @@ fn is_test_attribute_returns_false_for_parsed_attributes() {
 // Tests for has_test_attribute
 // -------------------------------------------------------------------------
 
+fn assert_has_test_attribute(attr_segments: &[&[&str]], expected: bool) {
+    create_default_session_globals_then(|| {
+        let attrs: Vec<hir::Attribute> = attr_segments
+            .iter()
+            .map(|segments| hir_attribute_from_segments(segments))
+            .collect();
+        assert_eq!(has_test_attribute(&attrs), expected);
+    });
+}
+
 #[test]
 fn has_test_attribute_returns_true_when_test_present() {
-    create_default_session_globals_then(|| {
-        let attrs = [
-            hir_attribute_from_segments(&["inline"]),
-            hir_attribute_from_segments(&["test"]),
-        ];
-        assert!(has_test_attribute(&attrs));
-    });
+    assert_has_test_attribute(&[&["inline"], &["test"]], true);
 }
 
 #[test]
 fn has_test_attribute_returns_true_for_rstest() {
-    create_default_session_globals_then(|| {
-        let attrs = [hir_attribute_from_segments(&["rstest"])];
-        assert!(has_test_attribute(&attrs));
-    });
+    assert_has_test_attribute(&[&["rstest"]], true);
 }
 
 #[test]
 fn has_test_attribute_returns_true_for_tokio_test() {
-    create_default_session_globals_then(|| {
-        let attrs = [hir_attribute_from_segments(&["tokio", "test"])];
-        assert!(has_test_attribute(&attrs));
-    });
+    assert_has_test_attribute(&[&["tokio", "test"]], true);
 }
 
 #[test]
@@ -120,14 +118,7 @@ fn has_test_attribute_returns_false_for_empty_array() {
 
 #[test]
 fn has_test_attribute_returns_false_for_non_test_attributes() {
-    create_default_session_globals_then(|| {
-        let attrs = [
-            hir_attribute_from_segments(&["inline"]),
-            hir_attribute_from_segments(&["derive"]),
-            hir_attribute_from_segments(&["tokio", "main"]),
-        ];
-        assert!(!has_test_attribute(&attrs));
-    });
+    assert_has_test_attribute(&[&["inline"], &["derive"], &["tokio", "main"]], false);
 }
 
 #[test]
