@@ -1,17 +1,17 @@
-//! Positive UI fixture: allow `.expect(...)` inside a `mod tests` block.
+//! Positive UI fixture: allow `.expect(...)` inside a `#[cfg(test)] mod tests` block.
 //!
-//! This exercises the fallback detection that checks for modules named "tests"
-//! (plural), the conventional name for unit test modules.
+//! This exercises detection of test modules marked with `#[cfg(test)]`,
+//! the conventional pattern for unit test modules.
 #![deny(no_expect_outside_tests)]
 
+#[cfg(test)]
 mod tests {
-    pub fn check_fallback_detection() {
+    #[test]
+    fn check_cfg_test_detection() {
         let option = Some("ok");
-        // Should be allowed because we're inside a module named "tests"
-        option.expect("tests module permits expect");
+        // Should be allowed because we're inside a #[cfg(test)] module with #[test]
+        option.expect("cfg(test) module with test attribute permits expect");
     }
 }
 
-fn main() {
-    tests::check_fallback_detection();
-}
+fn main() {}
