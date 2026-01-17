@@ -19,19 +19,9 @@ fn transform_stream(stream: TokenStream, attribute_span: Span) -> TokenStream {
 
     while let Some(token) = iter.next() {
         match &token {
-            TokenTree::Group(group) => {
-                let delimiter = group.delimiter();
-                let nested = transform_stream(group.stream(), attribute_span);
-                let mut new_group = Group::new(delimiter, nested);
-                new_group.set_span(group.span());
-                output.push(TokenTree::Group(new_group));
-            }
+            TokenTree::Group(group) => output.push(process_group(group, attribute_span)),
             TokenTree::Punct(punct) if punct.as_char() == '#' => {
-                if let Some(TokenTree::Group(group)) = iter.peek() {
-                    if group.delimiter() == Delimiter::Bracket && is_doc_attribute(group.stream()) {
-                        output.extend(build_attribute(attribute_span));
-                    }
-                }
+                process_punct_token(&mut iter, attribute_span, &mut output);
                 output.push(token);
             }
             _ => output.push(token),
@@ -39,6 +29,26 @@ fn transform_stream(stream: TokenStream, attribute_span: Span) -> TokenStream {
     }
 
     output.into_iter().collect()
+}
+
+fn process_group(group: &Group, attribute_span: Span) -> TokenTree {
+    let delimiter = group.delimiter();
+    let nested = transform_stream(group.stream(), attribute_span);
+    let mut new_group = Group::new(delimiter, nested);
+    new_group.set_span(group.span());
+    TokenTree::Group(new_group)
+}
+
+fn process_punct_token(
+    iter: &mut std::iter::Peekable<impl Iterator<Item = TokenTree>>,
+    attribute_span: Span,
+    output: &mut Vec<TokenTree>,
+) {
+    if let Some(TokenTree::Group(group)) = iter.peek() {
+        if group.delimiter() == Delimiter::Bracket && is_doc_attribute(group.stream()) {
+            output.extend(build_attribute(attribute_span));
+        }
+    }
 }
 
 fn is_doc_attribute(stream: TokenStream) -> bool {

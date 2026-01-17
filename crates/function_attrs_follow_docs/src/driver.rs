@@ -48,41 +48,43 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
-            let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(FunctionAttributeCheck {
-                cx,
-                attrs,
-                item_span: item.span,
-                kind: FunctionKind::Function,
-                localizer: &self.localizer,
-            });
+            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::Function);
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
-            let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(FunctionAttributeCheck {
-                cx,
-                attrs,
-                item_span: item.span,
-                kind: FunctionKind::Method,
-                localizer: &self.localizer,
-            });
+            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::Method);
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
-            let attrs = cx.tcx.hir_attrs(item.hir_id());
-            check_function_attributes(FunctionAttributeCheck {
-                cx,
-                attrs,
-                item_span: item.span,
-                kind: FunctionKind::TraitMethod,
-                localizer: &self.localizer,
-            });
+            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::TraitMethod);
         }
+    }
+}
+
+impl FunctionAttrsFollowDocs {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "helper signature mirrors the required lint entry points"
+    )]
+    fn check_item_attributes<'tcx>(
+        &self,
+        cx: &LateContext<'tcx>,
+        hir_id: hir::HirId,
+        item_span: Span,
+        kind: FunctionKind,
+    ) {
+        let attrs = cx.tcx.hir_attrs(hir_id);
+        check_function_attributes(FunctionAttributeCheck {
+            cx,
+            attrs,
+            item_span,
+            kind,
+            localizer: &self.localizer,
+        });
     }
 }
 
