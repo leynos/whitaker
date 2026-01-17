@@ -243,9 +243,6 @@ fn is_test_attribute(attr: &hir::Attribute) -> bool {
     };
 
     let path = attr.path();
-    if path.is_empty() {
-        return false;
-    }
 
     // Check for built-in #[test] attribute via symbol comparison (fast path)
     if path.len() == 1 && path[0] == sym::test {
@@ -253,16 +250,22 @@ fn is_test_attribute(attr: &hir::Attribute) -> bool {
     }
 
     // Match against known test attribute patterns (must match full paths to
-    // avoid false positives like #[tokio::main] or #[rstest::fixture])
-    let segments: Vec<&str> = path.iter().map(|s| s.as_str()).collect();
-    matches!(
-        segments.as_slice(),
-        ["rstest"]
-            | ["rstest", "rstest"]
-            | ["tokio", "test"]
-            | ["async_std", "test"]
-            | ["gpui", "test"]
-            | ["case"]
-            | ["rstest", "case"]
-    )
+    // avoid false positives like #[tokio::main] or #[rstest::fixture]).
+    // Use direct length and element checks to avoid per-attribute allocation.
+    match path.len() {
+        1 => matches!(path[0].as_str(), "rstest" | "case"),
+        2 => {
+            let first = path[0].as_str();
+            let second = path[1].as_str();
+            matches!(
+                (first, second),
+                ("rstest", "rstest")
+                    | ("rstest", "case")
+                    | ("tokio", "test")
+                    | ("async_std", "test")
+                    | ("gpui", "test")
+            )
+        }
+        _ => false,
+    }
 }
