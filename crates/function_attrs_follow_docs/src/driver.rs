@@ -65,12 +65,12 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     }
 }
 
-impl FunctionAttrsFollowDocs {
+impl<'tcx> FunctionAttrsFollowDocs {
     #[allow(
         clippy::too_many_arguments,
         reason = "helper signature mirrors the required lint entry points"
     )]
-    fn check_item_attributes<'tcx>(
+    fn check_item_attributes(
         &self,
         cx: &LateContext<'tcx>,
         hir_id: hir::HirId,
