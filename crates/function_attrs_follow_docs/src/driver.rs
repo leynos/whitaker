@@ -48,37 +48,49 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
-            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::Function);
+            self.check_item_attributes(
+                cx,
+                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Function),
+            );
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
-            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::Method);
+            self.check_item_attributes(
+                cx,
+                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Method),
+            );
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
-            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::TraitMethod);
+            self.check_item_attributes(
+                cx,
+                ItemInfo::new(item.hir_id(), item.span, FunctionKind::TraitMethod),
+            );
         }
     }
 }
 
+/// Information about a function or method item to be checked.
+struct ItemInfo {
+    hir_id: hir::HirId,
+    span: Span,
+    kind: FunctionKind,
+}
+
+impl ItemInfo {
+    fn new(hir_id: hir::HirId, span: Span, kind: FunctionKind) -> Self {
+        Self { hir_id, span, kind }
+    }
+}
+
 impl<'tcx> FunctionAttrsFollowDocs {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "entry points pass explicit HIR details for clarity"
-    )]
-    fn check_item_attributes(
-        &self,
-        cx: &LateContext<'tcx>,
-        hir_id: hir::HirId,
-        item_span: Span,
-        kind: FunctionKind,
-    ) {
-        let attrs = cx.tcx.hir_attrs(hir_id);
-        check_function_attributes(cx, attrs, item_span, kind, &self.localizer);
+    fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: ItemInfo) {
+        let attrs = cx.tcx.hir_attrs(item.hir_id);
+        check_function_attributes(cx, attrs, item.span, item.kind, &self.localizer);
     }
 }
 
