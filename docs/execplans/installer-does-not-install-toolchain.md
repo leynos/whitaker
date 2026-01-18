@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No PLANS.md file exists in the repository root, so no additional plan
 constraints apply.
@@ -55,14 +55,15 @@ and seeing it complete without manual rustup steps.
 
 ## Progress
 
-- [ ] (2026-01-18 00:00Z) Review current installer flow and toolchain detection
+- [x] (2026-01-18 00:20Z) Review current installer flow and toolchain detection
       in `installer/src/toolchain.rs` and `installer/src/main.rs`.
-- [ ] Add toolchain install logic (plus component handling) with unit tests.
-- [ ] Update user-facing output and any documentation describing installer
-      prerequisites.
-- [ ] Run `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
-      `make lint`, and `make test` with captured logs.
-- [ ] Commit the change with a clear message.
+- [x] (2026-01-18 00:45Z) Add toolchain install logic (plus component handling)
+      with unit tests.
+- [x] (2026-01-18 00:48Z) Update user-facing output and documentation
+      describing installer prerequisites.
+- [x] (2026-01-18 01:12Z) Run `make fmt`, `make markdownlint`, `make nixie`,
+      `make check-fmt`, `make lint`, and `make test` with captured logs.
+- [x] (2026-01-18 01:30Z) Commit the change with a clear message.
 
 ## Surprises & Discoveries
 
@@ -74,9 +75,20 @@ None yet.
   Rationale: ExecPlan workflow requires explicit approval. Date/Author:
   2026-01-18 (Codex)
 
+- Decision: Install pinned toolchain components using `rustup component add`
+  after ensuring the toolchain is present, and keep CLI toolchain overrides
+  free of additional `rust-toolchain.toml` validation to preserve current
+  override behaviour. Rationale: Component installation is idempotent and
+  ensures required toolchain parts exist, while avoiding new errors for
+  explicit overrides. Date/Author: 2026-01-18 (Codex)
+
 ## Outcomes & Retrospective
 
-Not started.
+The installer now auto-installs the pinned toolchain and required components
+via rustup, reports toolchain install success, and provides unit tests for the
+new behaviour. Documentation now reflects the auto-install behaviour. The
+approach kept override behaviour unchanged while ensuring components are
+installed for detected toolchains.
 
 ## Context and Orientation
 
@@ -177,7 +189,6 @@ recovers.
 
 Example log (expected after change):
 
-    Installing required toolchain nightly-2025-09-18 via rustup…
     Toolchain nightly-2025-09-18 installed successfully.
 
 ## Interfaces and Dependencies
@@ -196,4 +207,7 @@ behaviour:
 
 ## Revision note
 
-Initial plan created for toolchain auto-install behaviour.
+Initial plan created for toolchain auto-install behaviour. 2026-01-18: Updated
+status, recorded decisions, and marked implementation progress to reflect
+toolchain install and documentation updates. 2026-01-18: Recorded validation
+completion and marked the plan complete after committing the changes.

@@ -5,13 +5,48 @@
 
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// Represents a detected Rust toolchain configuration.
 #[derive(Debug, Clone)]
 pub struct Toolchain {
     channel: String,
+    components: Vec<String>,
     workspace_root: Utf8PathBuf,
+}
+
+/// Status describing whether a toolchain install occurred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolchainInstallStatus {
+    installed_toolchain: bool,
+}
+
+impl ToolchainInstallStatus {
+    /// Returns true if the toolchain was installed during this run.
+    #[must_use]
+    pub fn installed_toolchain(&self) -> bool {
+        self.installed_toolchain
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToolchainConfig {
+    channel: String,
+    components: Vec<String>,
+}
+
+/// Abstraction for running external commands.
+#[cfg_attr(test, mockall::automock)]
+trait CommandRunner {
+    fn run(&self, program: &str, args: &[String]) -> std::io::Result<Output>;
+}
+
+struct SystemCommandRunner;
+
+impl CommandRunner for SystemCommandRunner {
+    fn run(&self, program: &str, args: &[String]) -> std::io::Result<Output> {
+        Command::new(program).args(args).output()
+    }
 }
 
 impl Toolchain {
@@ -30,10 +65,11 @@ impl Toolchain {
         }
 
         let contents = std::fs::read_to_string(&toolchain_path)?;
-        let channel = parse_toolchain_channel(&contents)?;
+        let config = parse_toolchain_config(&contents)?;
 
         Ok(Self {
-            channel,
+            channel: config.channel,
+            components: config.components,
             workspace_root: workspace_root.to_owned(),
         })
     }
@@ -46,6 +82,7 @@ impl Toolchain {
     pub fn with_override(workspace_root: &Utf8Path, channel: &str) -> Self {
         Self {
             channel: channel.to_owned(),
+            components: Vec::new(),
             workspace_root: workspace_root.to_owned(),
         }
     }
@@ -56,19 +93,46 @@ impl Toolchain {
     ///
     /// Returns an error if rustup is not found or the toolchain is not installed.
     pub fn verify_installed(&self) -> Result<()> {
-        let output = Command::new("rustup")
-            .args(["run", &self.channel, "rustc", "--version"])
-            .output()
-            .map_err(|e| InstallerError::ToolchainDetection {
-                reason: format!("failed to run rustup: {e}"),
-            })?;
+        let runner = SystemCommandRunner;
+        if self.is_installed_with(&runner)? {
+            Ok(())
+        } else {
+            Err(InstallerError::ToolchainNotInstalled {
+                toolchain: self.channel.clone(),
+            })
+        }
+    }
 
-        if output.status.success() {
-            return Ok(());
+    /// Install the toolchain via rustup if it is missing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rustup fails to install the toolchain or required
+    /// components.
+    pub fn ensure_installed(&self) -> Result<ToolchainInstallStatus> {
+        let runner = SystemCommandRunner;
+        self.ensure_installed_with(&runner)
+    }
+
+    fn ensure_installed_with(&self, runner: &dyn CommandRunner) -> Result<ToolchainInstallStatus> {
+        let is_installed = self.is_installed_with(runner)?;
+        let mut installed_toolchain = false;
+
+        if !is_installed {
+            self.install_toolchain_with(runner)?;
+            installed_toolchain = true;
         }
 
-        Err(InstallerError::ToolchainNotInstalled {
-            toolchain: self.channel.clone(),
+        self.install_components_with(runner)?;
+
+        if !is_installed && !self.is_installed_with(runner)? {
+            return Err(InstallerError::ToolchainNotInstalled {
+                toolchain: self.channel.clone(),
+            });
+        }
+
+        Ok(ToolchainInstallStatus {
+            installed_toolchain,
         })
     }
 
@@ -83,6 +147,49 @@ impl Toolchain {
     pub fn workspace_root(&self) -> &Utf8Path {
         &self.workspace_root
     }
+
+    fn is_installed_with(&self, runner: &dyn CommandRunner) -> Result<bool> {
+        let args = to_owned_args(&["run", self.channel.as_str(), "rustc", "--version"]);
+        let output = run_rustup(runner, &args)?;
+        Ok(output.status.success())
+    }
+
+    fn install_toolchain_with(&self, runner: &dyn CommandRunner) -> Result<()> {
+        let args = to_owned_args(&["toolchain", "install", self.channel.as_str()]);
+        let output = run_rustup(runner, &args)?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        Err(InstallerError::ToolchainInstallFailed {
+            toolchain: self.channel.clone(),
+            message: stderr_message(&output),
+        })
+    }
+
+    fn install_components_with(&self, runner: &dyn CommandRunner) -> Result<()> {
+        if self.components.is_empty() {
+            return Ok(());
+        }
+
+        let mut args = to_owned_args(&["component", "add", "--toolchain", self.channel.as_str()]);
+        for component in &self.components {
+            args.push(component.clone());
+        }
+
+        let output = run_rustup(runner, &args)?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        Err(InstallerError::ToolchainComponentInstallFailed {
+            toolchain: self.channel.clone(),
+            components: self.components.join(", "),
+            message: stderr_message(&output),
+        })
+    }
 }
 
 /// Parse the channel from `rust-toolchain.toml` contents.
@@ -95,6 +202,10 @@ impl Toolchain {
 ///
 /// Returns an error if the TOML is invalid or no channel field is found.
 pub fn parse_toolchain_channel(contents: &str) -> Result<String> {
+    parse_toolchain_config(contents).map(|config| config.channel)
+}
+
+fn parse_toolchain_config(contents: &str) -> Result<ToolchainConfig> {
     let table: toml::Table =
         contents
             .parse()
@@ -102,7 +213,16 @@ pub fn parse_toolchain_channel(contents: &str) -> Result<String> {
                 reason: format!("TOML parse error: {e}"),
             })?;
 
-    // Try [toolchain].channel first (standard format)
+    let channel = parse_channel_from_table(&table)?;
+    let components = parse_components_from_table(&table)?;
+
+    Ok(ToolchainConfig {
+        channel,
+        components,
+    })
+}
+
+fn parse_channel_from_table(table: &toml::Table) -> Result<String> {
     let channel_from_toolchain = table
         .get("toolchain")
         .and_then(|t| t.get("channel"))
@@ -112,7 +232,6 @@ pub fn parse_toolchain_channel(contents: &str) -> Result<String> {
         return Ok(s.to_owned());
     }
 
-    // Fall back to top-level channel key
     let channel_from_top = table.get("channel").and_then(|c| c.as_str());
 
     if let Some(s) = channel_from_top {
@@ -124,44 +243,62 @@ pub fn parse_toolchain_channel(contents: &str) -> Result<String> {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_standard_toolchain_format() {
-        let contents = r#"
-[toolchain]
-channel = "nightly-2025-09-18"
-components = ["rust-src", "rustc-dev"]
-"#;
-        let channel = parse_toolchain_channel(contents);
-        assert!(channel.is_ok());
-        assert_eq!(channel.ok(), Some("nightly-2025-09-18".to_owned()));
+fn parse_components_from_table(table: &toml::Table) -> Result<Vec<String>> {
+    if let Some(value) = table
+        .get("toolchain")
+        .and_then(|toolchain| toolchain.get("components"))
+    {
+        return parse_components_value(value);
     }
 
-    #[test]
-    fn parses_simple_channel_format() {
-        let contents = r#"channel = "stable""#;
-        let channel = parse_toolchain_channel(contents);
-        assert!(channel.is_ok());
-        assert_eq!(channel.ok(), Some("stable".to_owned()));
+    if let Some(value) = table.get("components") {
+        return parse_components_value(value);
     }
 
-    #[test]
-    fn rejects_missing_channel() {
-        let contents = r#"
-[toolchain]
-components = ["rust-src"]
-"#;
-        let result = parse_toolchain_channel(contents);
-        assert!(result.is_err());
+    Ok(Vec::new())
+}
+
+fn parse_components_value(value: &toml::Value) -> Result<Vec<String>> {
+    let components = value
+        .as_array()
+        .ok_or_else(|| InstallerError::InvalidToolchainFile {
+            reason: "components must be an array of strings".to_owned(),
+        })?;
+
+    let mut parsed = Vec::with_capacity(components.len());
+    for component in components {
+        let component = component
+            .as_str()
+            .ok_or_else(|| InstallerError::InvalidToolchainFile {
+                reason: "components must be an array of strings".to_owned(),
+            })?;
+        parsed.push(component.to_owned());
     }
 
-    #[test]
-    fn rejects_invalid_toml() {
-        let contents = "this is not valid toml {{{";
-        let result = parse_toolchain_channel(contents);
-        assert!(result.is_err());
+    Ok(parsed)
+}
+
+fn run_rustup(runner: &dyn CommandRunner, args: &[String]) -> Result<Output> {
+    runner
+        .run("rustup", args)
+        .map_err(|e| InstallerError::ToolchainDetection {
+            reason: format!("failed to run rustup: {e}"),
+        })
+}
+
+fn to_owned_args(args: &[&str]) -> Vec<String> {
+    args.iter().map(|arg| (*arg).to_owned()).collect()
+}
+
+fn stderr_message(output: &Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let trimmed = stderr.trim();
+    if trimmed.is_empty() {
+        "unknown error".to_owned()
+    } else {
+        trimmed.to_owned()
     }
 }
+
+#[cfg(test)]
+mod tests;

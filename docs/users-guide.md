@@ -35,6 +35,7 @@ This:
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
    `cargo dylint` with the correct `DYLINT_LIBRARY_PATH`, and `whitaker-ls`
    lists installed Whitaker suite libraries
+5. Ensures the pinned Rust toolchain and components are installed via rustup
 
 After installation, run `whitaker --all` in any Rust project to lint it. Use
 `whitaker-ls` to list the installed Whitaker suite libraries.

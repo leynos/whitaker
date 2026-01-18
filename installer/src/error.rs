@@ -39,6 +39,26 @@ pub enum InstallerError {
         toolchain: String,
     },
 
+    /// The toolchain install command failed.
+    #[error("toolchain {toolchain} installation failed: {message}")]
+    ToolchainInstallFailed {
+        /// The toolchain channel that failed to install.
+        toolchain: String,
+        /// The rustup error message.
+        message: String,
+    },
+
+    /// Installing required toolchain components failed.
+    #[error("toolchain {toolchain} component install failed for {components}: {message}")]
+    ToolchainComponentInstallFailed {
+        /// The toolchain channel for the component install.
+        toolchain: String,
+        /// The component list requested during install.
+        components: String,
+        /// The rustup error message.
+        message: String,
+    },
+
     /// A cargo build command failed for a lint crate.
     #[error("cargo build failed for {crate_name}: {reason}")]
     BuildFailed {
@@ -145,6 +165,30 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("rustup toolchain install"));
         assert!(msg.contains("nightly-2025-09-18"));
+    }
+
+    #[test]
+    fn toolchain_install_failed_includes_toolchain_and_message() {
+        let err = InstallerError::ToolchainInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            message: "network error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn toolchain_component_install_failed_includes_components() {
+        let err = InstallerError::ToolchainComponentInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            components: "rust-src, rustc-dev".to_owned(),
+            message: "component error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("rust-src, rustc-dev"));
+        assert!(msg.contains("component error"));
     }
 
     #[test]
