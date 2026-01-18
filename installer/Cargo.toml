@@ -14,8 +14,31 @@ name = "whitaker-installer"
 path = "src/main.rs"
 
 [features]
-## Exposes test utilities (`StubExecutor`, `StubMismatch`) for use by external
-## test suites. Not intended for production use.
+## Exposes test utilities for use by external test suites.
+##
+## This feature gates the following API surface:
+##
+## - `StubExecutor`: A mock `CommandExecutor` implementation that returns
+##   predefined responses for stubbed command invocations.
+## - `StubMismatch`: An `InstallerError` variant returned when a stub receives
+##   an unexpected or mismatched command invocation.
+##
+## ## When to enable
+##
+## Enable this feature only in `[dev-dependencies]` when writing integration
+## tests that exercise installer logic without invoking real system commands:
+##
+## ```toml
+## [dev-dependencies]
+## whitaker-installer = { version = "0.1", features = ["test-support"] }
+## ```
+##
+## ## Caveats
+##
+## - **Not for production use**: These utilities are designed solely for
+##   testing and are excluded from release builds.
+## - **API stability**: The test-support surface is not covered by semver
+##   guarantees and may change between minor releases.
 test-support = []
 
 [dependencies]
