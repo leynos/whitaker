@@ -1,7 +1,6 @@
 // aux-build: rstest.rs
 //! UI fixture: doc comments stay before `#[fixture]` attributes.
 #![warn(function_attrs_follow_docs)]
-#![allow(dead_code)]
 
 extern crate rstest;
 use rstest::fixture;
@@ -12,4 +11,6 @@ use rstest::fixture;
 #[fixture]
 fn message_factory() {}
 
-fn main() {}
+fn main() {
+    message_factory();
+}

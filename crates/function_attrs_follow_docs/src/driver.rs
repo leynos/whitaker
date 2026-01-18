@@ -39,19 +39,6 @@ dylint_linting::impl_late_lint! {
     FunctionAttrsFollowDocs::default()
 }
 
-/// Information about a function or method item to be checked.
-struct ItemInfo {
-    hir_id: hir::HirId,
-    span: Span,
-    kind: FunctionKind,
-}
-
-impl ItemInfo {
-    fn new(hir_id: hir::HirId, span: Span, kind: FunctionKind) -> Self {
-        Self { hir_id, span, kind }
-    }
-}
-
 impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         let shared_config = SharedConfig::load();
@@ -61,42 +48,37 @@ impl<'tcx> LateLintPass<'tcx> for FunctionAttrsFollowDocs {
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
         if let hir::ItemKind::Fn { .. } = item.kind {
-            self.check_item_attributes(
-                cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Function),
-            );
+            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::Function);
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
-            self.check_item_attributes(
-                cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::Method),
-            );
+            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::Method);
         }
     }
 
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
-            self.check_item_attributes(
-                cx,
-                ItemInfo::new(item.hir_id(), item.span, FunctionKind::TraitMethod),
-            );
+            self.check_item_attributes(cx, item.hir_id(), item.span, FunctionKind::TraitMethod);
         }
     }
 }
 
 impl<'tcx> FunctionAttrsFollowDocs {
-    fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: ItemInfo) {
-        let attrs = cx.tcx.hir_attrs(item.hir_id);
-        check_function_attributes(FunctionAttributeCheck {
-            cx,
-            attrs,
-            item_span: item.span,
-            kind: item.kind,
-            localizer: &self.localizer,
-        });
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "entry points pass explicit HIR details for clarity"
+    )]
+    fn check_item_attributes(
+        &self,
+        cx: &LateContext<'tcx>,
+        hir_id: hir::HirId,
+        item_span: Span,
+        kind: FunctionKind,
+    ) {
+        let attrs = cx.tcx.hir_attrs(hir_id);
+        check_function_attributes(cx, attrs, item_span, kind, &self.localizer);
     }
 }
 
@@ -122,14 +104,6 @@ struct AttrInfo {
     span: Span,
     is_doc: bool,
     is_outer: bool,
-}
-
-struct FunctionAttributeCheck<'a, 'tcx> {
-    cx: &'a LateContext<'tcx>,
-    attrs: &'a [hir::Attribute],
-    item_span: Span,
-    kind: FunctionKind,
-    localizer: &'a Localizer,
 }
 
 impl AttrInfo {
@@ -179,6 +153,10 @@ impl AttrInfo {
         })
     }
 
+    /// Returns a source-order key using callsite spans for macro expansions.
+    ///
+    /// This normalises the locations so reordered HIR attributes sort by the
+    /// original source positions.
     fn source_order_key(&self) -> (rustc_span::BytePos, rustc_span::BytePos) {
         let span = self.span.source_callsite();
         (span.lo(), span.hi())
@@ -199,13 +177,19 @@ impl OrderedAttribute for AttrInfo {
     }
 }
 
-fn check_function_attributes(context: FunctionAttributeCheck<'_, '_>) {
-    let mut infos: Vec<AttrInfo> = context
-        .attrs
-        .iter()
-        .filter_map(AttrInfo::try_from_hir)
-        .collect();
-    infos.retain(|info| attribute_within_item(info.span(), context.item_span));
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit parameters keep attribute handling easy to follow"
+)]
+fn check_function_attributes(
+    cx: &LateContext<'_>,
+    attrs: &[hir::Attribute],
+    item_span: Span,
+    kind: FunctionKind,
+    localizer: &Localizer,
+) {
+    let mut infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
+    infos.retain(|info| attribute_within_item(info.span(), item_span));
     // Attribute macros can reorder attributes in HIR; rely on source order instead.
     infos.sort_by_key(|info| info.source_order_key());
 
@@ -218,11 +202,15 @@ fn check_function_attributes(context: FunctionAttributeCheck<'_, '_>) {
     let diagnostic_context = DiagnosticContext {
         doc_span: doc.span(),
         offending_span: offending.span(),
-        kind: context.kind,
+        kind,
     };
-    emit_diagnostic(context.cx, diagnostic_context, context.localizer);
+    emit_diagnostic(cx, diagnostic_context, localizer);
 }
 
+/// Returns true when the attribute span falls within the item span.
+///
+/// Dummy spans are treated as in-bounds, and callsite spans are used to
+/// normalise macro expansion locations.
 fn attribute_within_item(attribute_span: Span, item_span: Span) -> bool {
     if item_span.is_dummy() {
         return true;

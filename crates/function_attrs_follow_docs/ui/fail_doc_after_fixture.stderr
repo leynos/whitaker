@@ -1,11 +1,11 @@
 warning: Doc comments on functions must precede other outer attributes
-  --> $DIR/fail_doc_after_fixture.rs:10:1
+  --> $DIR/fail_doc_after_fixture.rs:9:1
    |
 LL | /// Factory fixture used by tests.
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The outer attribute #[fixture] appears before the doc comment.
-  --> $DIR/fail_doc_after_fixture.rs:9:1
+  --> $DIR/fail_doc_after_fixture.rs:8:1
    |
 LL | #[fixture]
    | ^^^^^^^^^^
