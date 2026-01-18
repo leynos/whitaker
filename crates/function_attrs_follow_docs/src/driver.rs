@@ -90,7 +90,13 @@ impl ItemInfo {
 impl<'tcx> FunctionAttrsFollowDocs {
     fn check_item_attributes(&self, cx: &LateContext<'tcx>, item: ItemInfo) {
         let attrs = cx.tcx.hir_attrs(item.hir_id);
-        check_function_attributes(cx, attrs, item.span, item.kind, &self.localizer);
+        check_function_attributes(FunctionAttributeCheck {
+            cx,
+            attrs,
+            item_span: item.span,
+            kind: item.kind,
+            localizer: &self.localizer,
+        });
     }
 }
 
@@ -189,19 +195,22 @@ impl OrderedAttribute for AttrInfo {
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "explicit parameters keep attribute handling easy to follow"
-)]
-fn check_function_attributes(
-    cx: &LateContext<'_>,
-    attrs: &[hir::Attribute],
+/// Context for checking function attributes.
+struct FunctionAttributeCheck<'tcx, 'a> {
+    cx: &'a LateContext<'tcx>,
+    attrs: &'a [hir::Attribute],
     item_span: Span,
     kind: FunctionKind,
-    localizer: &Localizer,
-) {
-    let mut infos: Vec<AttrInfo> = attrs.iter().filter_map(AttrInfo::try_from_hir).collect();
-    infos.retain(|info| attribute_within_item(info.span(), item_span));
+    localizer: &'a Localizer,
+}
+
+fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
+    let mut infos: Vec<AttrInfo> = check
+        .attrs
+        .iter()
+        .filter_map(AttrInfo::try_from_hir)
+        .collect();
+    infos.retain(|info| attribute_within_item(info.span(), check.item_span));
     // Attribute macros can reorder attributes in HIR; rely on source order instead.
     infos.sort_by_key(|info| info.source_order_key());
 
@@ -214,9 +223,9 @@ fn check_function_attributes(
     let diagnostic_context = DiagnosticContext {
         doc_span: doc.span(),
         offending_span: offending.span(),
-        kind,
+        kind: check.kind,
     };
-    emit_diagnostic(cx, diagnostic_context, localizer);
+    emit_diagnostic(check.cx, diagnostic_context, check.localizer);
 }
 
 /// Returns true when the attribute span falls within the item span.
