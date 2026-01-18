@@ -1,7 +1,10 @@
 //! Shared test utilities for the installer crate.
 
+#[cfg(any(test, feature = "test-support"))]
 use crate::deps::CommandExecutor;
-use crate::error::{InstallerError, Result};
+#[cfg(any(test, feature = "test-support"))]
+use crate::error::InstallerError;
+use crate::error::Result;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::process::{ExitStatus, Output};
@@ -198,6 +201,7 @@ impl StubExecutor {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl CommandExecutor for StubExecutor {
     fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
         let mut expected = self.expected.borrow_mut();

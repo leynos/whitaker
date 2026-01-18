@@ -13,6 +13,11 @@ documentation.workspace = true
 name = "whitaker-installer"
 path = "src/main.rs"
 
+[features]
+## Exposes test utilities (`StubExecutor`, `StubMismatch`) for use by external
+## test suites. Not intended for production use.
+test-support = []
+
 [dependencies]
 camino = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
@@ -32,6 +37,7 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 temp-env = { workspace = true }
 tempfile = { workspace = true }
+whitaker-installer = { path = ".", features = ["test-support"] }
 
 [lints]
 workspace = true

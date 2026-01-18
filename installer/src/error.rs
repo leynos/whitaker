@@ -130,6 +130,7 @@ pub enum InstallerError {
     },
 
     /// Test stub received an unexpected or mismatched command invocation.
+    #[cfg(any(test, feature = "test-support"))]
     #[error("stub mismatch: {message}")]
     StubMismatch {
         /// Description of what was expected versus what was received.
@@ -179,6 +180,9 @@ impl Clone for InstallerError {
                 path: path.clone(),
                 reason: reason.clone(),
             },
+            // Lossy: only ErrorKind and formatted message are preserved; any
+            // original source chain is discarded because std::io::Error cannot
+            // be cloned directly.
             InstallerError::Io(source) => {
                 InstallerError::Io(std::io::Error::new(source.kind(), source.to_string()))
             }
@@ -201,6 +205,7 @@ impl Clone for InstallerError {
             InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
                 source: std::io::Error::new(source.kind(), source.to_string()),
             },
+            #[cfg(any(test, feature = "test-support"))]
             InstallerError::StubMismatch { message } => InstallerError::StubMismatch {
                 message: message.clone(),
             },
