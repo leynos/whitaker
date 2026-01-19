@@ -33,6 +33,33 @@ fn output_with_stderr(code: i32, stderr: &str) -> Output {
     }
 }
 
+fn matches_rustc_version_check(program: &str, args: &[String], channel: &str) -> bool {
+    program == "rustup"
+        && args.len() == 4
+        && args[0] == "run"
+        && args[1] == channel
+        && args[2] == "rustc"
+        && args[3] == "--version"
+}
+
+fn matches_toolchain_install(program: &str, args: &[String], channel: &str) -> bool {
+    program == "rustup"
+        && args.len() == 3
+        && args[0] == "toolchain"
+        && args[1] == "install"
+        && args[2] == channel
+}
+
+fn matches_component_add(program: &str, args: &[String], channel: &str, component: &str) -> bool {
+    program == "rustup"
+        && args.len() == 5
+        && args[0] == "component"
+        && args[1] == "add"
+        && args[2] == "--toolchain"
+        && args[3] == channel
+        && args[4] == component
+}
+
 #[test]
 fn parses_standard_toolchain_format() {
     let contents = r#"
@@ -97,8 +124,9 @@ components = "rust-src"
 
 #[test]
 fn ensure_installed_installs_missing_toolchain() {
+    let channel = "nightly-2025-09-18";
     let toolchain = Toolchain {
-        channel: "nightly-2025-09-18".to_owned(),
+        channel: channel.to_owned(),
         components: Vec::new(),
         workspace_root: Utf8PathBuf::from("."),
     };
@@ -108,41 +136,21 @@ fn ensure_installed_installs_missing_toolchain() {
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == "nightly-2025-09-18"
-                && args[2] == "rustc"
-                && args[3] == "--version"
-        })
+        .withf(move |program, args| matches_rustc_version_check(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(1)));
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 3
-                && args[0] == "toolchain"
-                && args[1] == "install"
-                && args[2] == "nightly-2025-09-18"
-        })
+        .withf(move |program, args| matches_toolchain_install(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == "nightly-2025-09-18"
-                && args[2] == "rustc"
-                && args[3] == "--version"
-        })
+        .withf(move |program, args| matches_rustc_version_check(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
@@ -156,9 +164,11 @@ fn ensure_installed_installs_missing_toolchain() {
 
 #[test]
 fn ensure_installed_adds_components_when_present() {
+    let channel = "nightly-2025-09-18";
+    let component = "rust-src";
     let toolchain = Toolchain {
-        channel: "nightly-2025-09-18".to_owned(),
-        components: vec!["rust-src".to_owned()],
+        channel: channel.to_owned(),
+        components: vec![component.to_owned()],
         workspace_root: Utf8PathBuf::from("."),
     };
 
@@ -167,29 +177,14 @@ fn ensure_installed_adds_components_when_present() {
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == "nightly-2025-09-18"
-                && args[2] == "rustc"
-                && args[3] == "--version"
-        })
+        .withf(move |program, args| matches_rustc_version_check(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 5
-                && args[0] == "component"
-                && args[1] == "add"
-                && args[2] == "--toolchain"
-                && args[3] == "nightly-2025-09-18"
-                && args[4] == "rust-src"
-        })
+        .withf(move |program, args| matches_component_add(program, args, channel, component))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
@@ -203,8 +198,9 @@ fn ensure_installed_adds_components_when_present() {
 
 #[test]
 fn ensure_installed_reports_toolchain_install_failure() {
+    let channel = "nightly-2025-09-18";
     let toolchain = Toolchain {
-        channel: "nightly-2025-09-18".to_owned(),
+        channel: channel.to_owned(),
         components: Vec::new(),
         workspace_root: Utf8PathBuf::from("."),
     };
@@ -214,27 +210,14 @@ fn ensure_installed_reports_toolchain_install_failure() {
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == "nightly-2025-09-18"
-                && args[2] == "rustc"
-                && args[3] == "--version"
-        })
+        .withf(move |program, args| matches_rustc_version_check(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(1)));
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 3
-                && args[0] == "toolchain"
-                && args[1] == "install"
-                && args[2] == "nightly-2025-09-18"
-        })
+        .withf(move |program, args| matches_toolchain_install(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_stderr(1, "network down")));
@@ -255,9 +238,11 @@ fn ensure_installed_reports_toolchain_install_failure() {
 
 #[test]
 fn ensure_installed_reports_component_install_failure() {
+    let channel = "nightly-2025-09-18";
+    let component = "rust-src";
     let toolchain = Toolchain {
-        channel: "nightly-2025-09-18".to_owned(),
-        components: vec!["rust-src".to_owned()],
+        channel: channel.to_owned(),
+        components: vec![component.to_owned()],
         workspace_root: Utf8PathBuf::from("."),
     };
 
@@ -266,29 +251,14 @@ fn ensure_installed_reports_component_install_failure() {
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == "nightly-2025-09-18"
-                && args[2] == "rustc"
-                && args[3] == "--version"
-        })
+        .withf(move |program, args| matches_rustc_version_check(program, args, channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 5
-                && args[0] == "component"
-                && args[1] == "add"
-                && args[2] == "--toolchain"
-                && args[3] == "nightly-2025-09-18"
-                && args[4] == "rust-src"
-        })
+        .withf(move |program, args| matches_component_add(program, args, channel, component))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
