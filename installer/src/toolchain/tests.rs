@@ -226,20 +226,17 @@ fn ensure_installed_installs_missing_toolchain() {
 
 #[test]
 fn ensure_installed_adds_components_when_present() {
-    let channel = "nightly-2025-09-18";
-    let component = "rust-src";
-    let toolchain = test_toolchain(channel, vec![component.to_owned()]);
-
+    let toolchain = test_toolchain("nightly-2025-09-18", vec!["rust-src".to_owned()]);
     let mut runner = MockCommandRunner::new();
     let mut seq = mockall::Sequence::new();
 
-    expect_rustc_version(&mut runner, &mut seq, channel, 0);
+    expect_rustc_version(&mut runner, &mut seq, "nightly-2025-09-18", 0);
     expect_component_add(
         &mut runner,
         &mut seq,
         ComponentAddExpectation {
-            channel,
-            component,
+            channel: "nightly-2025-09-18",
+            component: "rust-src",
             exit_code: 0,
             stderr: None,
         },
