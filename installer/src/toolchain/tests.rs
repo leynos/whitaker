@@ -33,36 +33,40 @@ fn output_with_stderr(code: i32, stderr: &str) -> Output {
     }
 }
 
-fn matches_rustup_run_rustc(program: &str, args: &[String], channel: &str) -> bool {
-    program == "rustup"
-        && args.len() == 4
-        && args[0] == "run"
-        && args[1] == channel
-        && args[2] == "rustc"
-        && args[3] == "--version"
+fn matches_rustup_run(channel: &str) -> impl Fn(&str, &[String]) -> bool + '_ {
+    move |program, args| {
+        program == "rustup"
+            && args.len() == 4
+            && args[0] == "run"
+            && args[1] == channel
+            && args[2] == "rustc"
+            && args[3] == "--version"
+    }
 }
 
-fn matches_rustup_toolchain_install(program: &str, args: &[String], channel: &str) -> bool {
-    program == "rustup"
-        && args.len() == 3
-        && args[0] == "toolchain"
-        && args[1] == "install"
-        && args[2] == channel
+fn matches_toolchain_install(channel: &str) -> impl Fn(&str, &[String]) -> bool + '_ {
+    move |program, args| {
+        program == "rustup"
+            && args.len() == 3
+            && args[0] == "toolchain"
+            && args[1] == "install"
+            && args[2] == channel
+    }
 }
 
-fn matches_rustup_component_add(
-    program: &str,
-    args: &[String],
-    channel: &str,
-    component: &str,
-) -> bool {
-    program == "rustup"
-        && args.len() == 5
-        && args[0] == "component"
-        && args[1] == "add"
-        && args[2] == "--toolchain"
-        && args[3] == channel
-        && args[4] == component
+fn matches_component_add<'a>(
+    channel: &'a str,
+    component: &'a str,
+) -> impl Fn(&str, &[String]) -> bool + 'a {
+    move |program, args| {
+        program == "rustup"
+            && args.len() == 5
+            && args[0] == "component"
+            && args[1] == "add"
+            && args[2] == "--toolchain"
+            && args[3] == channel
+            && args[4] == component
+    }
 }
 
 #[test]
@@ -141,21 +145,21 @@ fn ensure_installed_installs_missing_toolchain() {
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_run_rustc(program, args, channel))
+        .withf(matches_rustup_run(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(1)));
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_toolchain_install(program, args, channel))
+        .withf(matches_toolchain_install(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_run_rustc(program, args, channel))
+        .withf(matches_rustup_run(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
@@ -182,14 +186,14 @@ fn ensure_installed_adds_components_when_present() {
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_run_rustc(program, args, channel))
+        .withf(matches_rustup_run(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_component_add(program, args, channel, component))
+        .withf(matches_component_add(channel, component))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
@@ -215,14 +219,14 @@ fn ensure_installed_reports_toolchain_install_failure() {
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_run_rustc(program, args, channel))
+        .withf(matches_rustup_run(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(1)));
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_toolchain_install(program, args, channel))
+        .withf(matches_toolchain_install(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_stderr(1, "network down")));
@@ -256,14 +260,14 @@ fn ensure_installed_reports_component_install_failure() {
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_run_rustc(program, args, channel))
+        .withf(matches_rustup_run(channel))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     runner
         .expect_run()
-        .withf(move |program, args| matches_rustup_component_add(program, args, channel, component))
+        .withf(matches_component_add(channel, component))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
