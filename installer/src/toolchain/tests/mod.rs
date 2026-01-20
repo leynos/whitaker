@@ -1,157 +1,13 @@
 //! Tests for toolchain detection and installation.
 
+mod test_helpers;
+
 use super::*;
-use std::process::ExitStatus;
-
-#[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-
-    ExitStatusExt::from_raw(code << 8)
-}
-
-#[cfg(windows)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-
-    ExitStatusExt::from_raw(code as u32)
-}
-
-fn output_with_status(code: i32) -> Output {
-    Output {
-        status: exit_status(code),
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-    }
-}
-
-fn output_with_stderr(code: i32, stderr: &str) -> Output {
-    Output {
-        status: exit_status(code),
-        stdout: Vec::new(),
-        stderr: stderr.as_bytes().to_vec(),
-    }
-}
-
-fn test_toolchain(channel: &str, components: Vec<String>) -> Toolchain {
-    Toolchain {
-        channel: channel.to_owned(),
-        components,
-        workspace_root: Utf8PathBuf::from("."),
-    }
-}
-
-struct ToolchainInstallExpectation<'a> {
-    channel: &'a str,
-    exit_code: i32,
-    stderr: Option<&'a str>,
-}
-
-struct ComponentAddExpectation<'a> {
-    channel: &'a str,
-    component: &'a str,
-    exit_code: i32,
-    stderr: Option<&'a str>,
-}
-
-fn expect_rustc_version(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    channel: &str,
-    exit_code: i32,
-) {
-    let channel = channel.to_owned();
-    runner
-        .expect_run()
-        .withf(move |program, args| {
-            program == "rustup"
-                && args.len() == 4
-                && args[0] == "run"
-                && args[1] == channel
-                && args[2] == "rustc"
-                && args[3] == "--version"
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| Ok(output_with_status(exit_code)));
-}
-
-fn expect_toolchain_install(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    expectation: ToolchainInstallExpectation<'_>,
-) {
-    let channel = expectation.channel.to_owned();
-    let stderr = expectation.stderr.map(str::to_owned);
-    let exit_code = expectation.exit_code;
-    runner
-        .expect_run()
-        .withf(move |program, args| {
-            program == "rustup"
-                && args.len() == 3
-                && args[0] == "toolchain"
-                && args[1] == "install"
-                && args[2] == channel
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
-            Ok(output)
-        });
-}
-
-fn expect_component_add(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    expectation: ComponentAddExpectation<'_>,
-) {
-    let channel = expectation.channel.to_owned();
-    let component = expectation.component.to_owned();
-    let stderr = expectation.stderr.map(str::to_owned);
-    let exit_code = expectation.exit_code;
-    runner
-        .expect_run()
-        .withf(move |program, args| {
-            program == "rustup"
-                && args.len() == 5
-                && args[0] == "component"
-                && args[1] == "add"
-                && args[2] == "--toolchain"
-                && args[3] == channel
-                && args[4] == component
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
-            Ok(output)
-        });
-}
-
-/// Helper to test that ensure_installed fails with the expected error.
-fn assert_install_fails_with<F, E>(toolchain: Toolchain, setup_mocks: F, error_matcher: E)
-where
-    F: FnOnce(&mut MockCommandRunner, &mut mockall::Sequence),
-    E: FnOnce(InstallerError),
-{
-    let mut runner = MockCommandRunner::new();
-    let mut seq = mockall::Sequence::new();
-
-    setup_mocks(&mut runner, &mut seq);
-
-    let err = toolchain
-        .ensure_installed_with(&runner)
-        .expect_err("expected installation failure");
-
-    error_matcher(err);
-}
+use test_helpers::{
+    ComponentAddExpectation, ToolchainInstallExpectation, assert_install_fails_with,
+    expect_component_add, expect_rustc_version, expect_toolchain_install, output_with_status,
+    output_with_stderr, test_toolchain,
+};
 
 #[test]
 fn parses_standard_toolchain_format() {
@@ -160,17 +16,16 @@ fn parses_standard_toolchain_format() {
 channel = "nightly-2025-09-18"
 components = ["rust-src", "rustc-dev"]
 "#;
-    let channel = parse_toolchain_channel(contents);
-    assert!(channel.is_ok());
-    assert_eq!(channel.ok(), Some("nightly-2025-09-18".to_owned()));
+    let channel =
+        parse_toolchain_channel(contents).expect("should parse standard toolchain format");
+    assert_eq!(channel, "nightly-2025-09-18");
 }
 
 #[test]
 fn parses_simple_channel_format() {
     let contents = r#"channel = "stable""#;
-    let channel = parse_toolchain_channel(contents);
-    assert!(channel.is_ok());
-    assert_eq!(channel.ok(), Some("stable".to_owned()));
+    let channel = parse_toolchain_channel(contents).expect("should parse simple channel format");
+    assert_eq!(channel, "stable");
 }
 
 #[test]

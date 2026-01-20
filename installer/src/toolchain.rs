@@ -115,24 +115,28 @@ impl Toolchain {
     }
 
     fn ensure_installed_with(&self, runner: &dyn CommandRunner) -> Result<ToolchainInstallStatus> {
-        let is_installed = self.is_installed_with(runner)?;
-        let mut installed_toolchain = false;
+        let already_installed = self.is_installed_with(runner)?;
 
-        if !is_installed {
-            self.install_toolchain_with(runner)?;
-            installed_toolchain = true;
+        if already_installed {
+            self.install_components_with(runner)?;
+            return Ok(ToolchainInstallStatus {
+                installed_toolchain: false,
+            });
         }
 
+        // Toolchain not installed - attempt installation
+        self.install_toolchain_with(runner)?;
         self.install_components_with(runner)?;
 
-        if !is_installed && !self.is_installed_with(runner)? {
+        // Verify toolchain is usable after installation
+        if !self.is_installed_with(runner)? {
             return Err(InstallerError::ToolchainNotInstalled {
                 toolchain: self.channel.clone(),
             });
         }
 
         Ok(ToolchainInstallStatus {
-            installed_toolchain,
+            installed_toolchain: true,
         })
     }
 
