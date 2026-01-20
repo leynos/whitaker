@@ -41,18 +41,23 @@ pub fn test_toolchain(channel: &str, components: Vec<String>) -> Toolchain {
     }
 }
 
+/// Common expectation fields for rustup commands.
+pub struct RustupExpectation<'a> {
+    pub exit_code: i32,
+    pub stderr: Option<&'a str>,
+}
+
 /// Generic helper to expect a rustup command with custom validation.
-#[allow(clippy::too_many_arguments)]
 fn expect_rustup_command<F>(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
-    exit_code: i32,
-    stderr: Option<&str>,
+    expectation: RustupExpectation<'_>,
     matcher: F,
 ) where
     F: Fn(&str, &[String]) -> bool + Send + 'static,
 {
-    let stderr = stderr.map(str::to_owned);
+    let stderr = expectation.stderr.map(str::to_owned);
+    let exit_code = expectation.exit_code;
     runner
         .expect_run()
         .withf(matcher)
@@ -111,8 +116,10 @@ pub fn expect_toolchain_install(
     expect_rustup_command(
         runner,
         seq,
-        expectation.exit_code,
-        expectation.stderr,
+        RustupExpectation {
+            exit_code: expectation.exit_code,
+            stderr: expectation.stderr,
+        },
         move |program, args| {
             program == "rustup"
                 && args.len() == 3
@@ -133,8 +140,10 @@ pub fn expect_component_add(
     expect_rustup_command(
         runner,
         seq,
-        expectation.exit_code,
-        expectation.stderr,
+        RustupExpectation {
+            exit_code: expectation.exit_code,
+            stderr: expectation.stderr,
+        },
         move |program, args| {
             program == "rustup"
                 && args.len() == 5

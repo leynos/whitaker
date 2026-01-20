@@ -41,8 +41,11 @@ components = ["rust-src"]
 #[test]
 fn rejects_invalid_toml() {
     let contents = "this is not valid toml {{{";
-    let result = parse_toolchain_channel(contents);
-    assert!(result.is_err());
+    let err = parse_toolchain_channel(contents).expect_err("should reject invalid TOML");
+    assert!(
+        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("TOML")),
+        "expected InvalidToolchainFile error with TOML message, got {err:?}"
+    );
 }
 
 #[test]
@@ -66,8 +69,11 @@ fn rejects_invalid_components() {
 channel = "nightly-2025-09-18"
 components = "rust-src"
 "#;
-    let result = parse_toolchain_config(contents);
-    assert!(result.is_err());
+    let err = parse_toolchain_config(contents).expect_err("should reject non-array components");
+    assert!(
+        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("array")),
+        "expected InvalidToolchainFile error about array, got {err:?}"
+    );
 }
 
 #[test]
@@ -250,8 +256,11 @@ fn rejects_non_string_component_elements() {
 channel = "stable"
 components = [123, "rust-src"]
 "#;
-    let result = parse_toolchain_config(contents);
-    assert!(result.is_err());
+    let err = parse_toolchain_config(contents).expect_err("should reject non-string components");
+    assert!(
+        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("array of strings")),
+        "expected InvalidToolchainFile error about array of strings, got {err:?}"
+    );
 }
 
 #[test]

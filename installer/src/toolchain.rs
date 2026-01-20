@@ -23,6 +23,19 @@ pub struct ToolchainInstallStatus {
 
 impl ToolchainInstallStatus {
     /// Returns true if the toolchain was installed during this run.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use whitaker_installer::toolchain::Toolchain;
+    /// use camino::Utf8Path;
+    ///
+    /// let toolchain = Toolchain::detect(Utf8Path::new("/path/to/workspace")).unwrap();
+    /// let status = toolchain.ensure_installed().unwrap();
+    /// if status.installed_toolchain() {
+    ///     println!("Toolchain was freshly installed");
+    /// }
+    /// ```
     #[must_use]
     pub fn installed_toolchain(&self) -> bool {
         self.installed_toolchain
@@ -120,20 +133,19 @@ impl Toolchain {
     }
 
     fn ensure_installed_with(&self, runner: &dyn CommandRunner) -> Result<ToolchainInstallStatus> {
-        let already_installed = self.is_installed_with(runner)?;
-
-        if already_installed {
+        if self.is_installed_with(runner)? {
+            // Toolchain already present - just ensure components are installed
             self.install_components_with(runner)?;
             return Ok(ToolchainInstallStatus {
                 installed_toolchain: false,
             });
         }
 
-        // Toolchain not installed - attempt installation
+        // Toolchain not installed - attempt installation then verify
         self.install_toolchain_with(runner)?;
         self.install_components_with(runner)?;
 
-        // Verify toolchain is usable after installation
+        // Verify the newly installed toolchain is actually usable
         if !self.is_installed_with(runner)? {
             return Err(InstallerError::ToolchainNotInstalled {
                 toolchain: self.channel.clone(),
@@ -218,6 +230,19 @@ impl Toolchain {
 /// This function supports two formats:
 /// 1. Standard format with `[toolchain].channel`
 /// 2. Simple format with a top-level `channel` key
+///
+/// # Example
+///
+/// ```
+/// use whitaker_installer::toolchain::parse_toolchain_channel;
+///
+/// let contents = r#"
+/// [toolchain]
+/// channel = "nightly-2025-09-18"
+/// "#;
+/// let channel = parse_toolchain_channel(contents).unwrap();
+/// assert_eq!(channel, "nightly-2025-09-18");
+/// ```
 ///
 /// # Errors
 ///

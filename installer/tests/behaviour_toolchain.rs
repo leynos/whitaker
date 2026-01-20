@@ -20,13 +20,26 @@ use whitaker_installer::toolchain::parse_toolchain_channel;
 /// This channel name is intentionally invalid to trigger rustup installation failure.
 const FAKE_TOOLCHAIN: &str = "nonexistent-toolchain-xyz-12345";
 
+/// Output marker indicating successful library staging.
+/// The installer outputs this text when libraries are being staged to the target directory.
+const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
+
+/// Canonical error marker for toolchain installation failures or missing toolchains.
+/// The installer uses this phrase when the toolchain is not available.
+const TOOLCHAIN_ERROR_MARKER: &str = "not installed";
+
+/// Maximum number of output lines expected in quiet mode error scenarios.
+/// Quiet mode should suppress progress messages, leaving only the error itself.
+/// This threshold accounts for: error message line(s), blank lines, and minimal context.
+const QUIET_MODE_MAX_LINES: usize = 5;
+
 #[derive(Default)]
 struct ToolchainWorld {
     args: RefCell<Vec<String>>,
     output: RefCell<Option<Output>>,
     skip_assertions: Cell<bool>,
-    expect_failure: Cell<bool>,
-    _temp_dir: RefCell<Option<TempDir>>,
+    /// Holds the temp directory to prevent cleanup until the test completes.
+    temp_dir: RefCell<Option<TempDir>>,
 }
 
 #[fixture]
@@ -82,7 +95,7 @@ fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
 fn setup_temp_dir(world: &ToolchainWorld) -> String {
     let temp_dir = TempDir::new().expect("failed to create temp dir");
     let target_dir = temp_dir.path().to_string_lossy().to_string();
-    world._temp_dir.replace(Some(temp_dir));
+    world.temp_dir.replace(Some(temp_dir));
     target_dir
 }
 
@@ -119,7 +132,6 @@ fn setup_auto_detect_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
 fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     let target_dir = setup_temp_dir(world);
 
-    world.expect_failure.set(true);
     let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
     args.extend([
         "--toolchain".to_owned(),
@@ -227,14 +239,12 @@ fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) {
 fn then_suite_library_is_staged(world: &ToolchainWorld) {
     skip_if_needed!(world);
 
-    // Just verify the output indicates staging occurred
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // The installer outputs "Staged:" when libraries are staged
     assert!(
-        stderr.contains("Staged:") || stderr.contains("whitaker_suite"),
-        "expected staging output, stderr: {stderr}"
+        stderr.contains(STAGING_OUTPUT_MARKER),
+        "expected '{STAGING_OUTPUT_MARKER}' in staging output, stderr: {stderr}"
     );
 }
 
@@ -256,10 +266,9 @@ fn then_error_mentions_install_failure(world: &ToolchainWorld) {
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // The installer should report that installation failed
     assert!(
-        stderr.contains("installation failed") || stderr.contains("not installed"),
-        "expected toolchain install failure message in stderr: {stderr}"
+        stderr.contains(TOOLCHAIN_ERROR_MARKER),
+        "expected '{TOOLCHAIN_ERROR_MARKER}' in stderr: {stderr}"
     );
 }
 
@@ -283,12 +292,10 @@ fn then_error_output_is_minimal(world: &ToolchainWorld) {
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // In quiet mode, we should still get the error but without verbose output
-    // The error message should be present but without extra progress messages
     let line_count = stderr.lines().count();
     assert!(
-        line_count <= 5,
-        "expected minimal output in quiet mode, got {line_count} lines: {stderr}"
+        line_count <= QUIET_MODE_MAX_LINES,
+        "expected at most {QUIET_MODE_MAX_LINES} lines in quiet mode, got {line_count}: {stderr}"
     );
 }
 
