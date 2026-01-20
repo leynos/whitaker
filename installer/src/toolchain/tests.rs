@@ -162,6 +162,24 @@ fn expect_component_add(
     );
 }
 
+/// Helper to test that ensure_installed fails with the expected error.
+fn assert_install_fails_with<F, E>(toolchain: Toolchain, setup_mocks: F, error_matcher: E)
+where
+    F: FnOnce(&mut MockCommandRunner, &mut mockall::Sequence),
+    E: FnOnce(InstallerError),
+{
+    let mut runner = MockCommandRunner::new();
+    let mut seq = mockall::Sequence::new();
+
+    setup_mocks(&mut runner, &mut seq);
+
+    let err = toolchain
+        .ensure_installed_with(&runner)
+        .expect_err("expected installation failure");
+
+    error_matcher(err);
+}
+
 #[test]
 fn parses_standard_toolchain_format() {
     let contents = r#"
@@ -281,31 +299,30 @@ fn ensure_installed_reports_toolchain_install_failure() {
     let channel = "nightly-2025-09-18";
     let toolchain = test_toolchain(channel, Vec::new());
 
-    let mut runner = MockCommandRunner::new();
-    let mut seq = mockall::Sequence::new();
-
-    expect_rustc_version(&mut runner, &mut seq, channel, 1);
-    expect_toolchain_install(
-        &mut runner,
-        &mut seq,
-        ToolchainInstallExpectation {
-            channel,
-            exit_code: 1,
-            stderr: Some("network down"),
+    assert_install_fails_with(
+        toolchain,
+        |runner, seq| {
+            expect_rustc_version(runner, seq, channel, 1);
+            expect_toolchain_install(
+                runner,
+                seq,
+                ToolchainInstallExpectation {
+                    channel,
+                    exit_code: 1,
+                    stderr: Some("network down"),
+                },
+            );
         },
-    );
-
-    let err = toolchain
-        .ensure_installed_with(&runner)
-        .expect_err("expected toolchain install failure");
-
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
-                if toolchain == "nightly-2025-09-18" && message.contains("network down")
-        ),
-        "unexpected error: {err}"
+        |err| {
+            assert!(
+                matches!(
+                    err,
+                    InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
+                        if toolchain == "nightly-2025-09-18" && message.contains("network down")
+                ),
+                "unexpected error: {err}"
+            );
+        },
     );
 }
 
@@ -315,31 +332,30 @@ fn ensure_installed_reports_component_install_failure() {
     let component = "rust-src";
     let toolchain = test_toolchain(channel, vec![component.to_owned()]);
 
-    let mut runner = MockCommandRunner::new();
-    let mut seq = mockall::Sequence::new();
-
-    expect_rustc_version(&mut runner, &mut seq, channel, 0);
-    expect_component_add(
-        &mut runner,
-        &mut seq,
-        ComponentAddExpectation {
-            channel,
-            component,
-            exit_code: 1,
-            stderr: Some("component failed"),
+    assert_install_fails_with(
+        toolchain,
+        |runner, seq| {
+            expect_rustc_version(runner, seq, channel, 0);
+            expect_component_add(
+                runner,
+                seq,
+                ComponentAddExpectation {
+                    channel,
+                    component,
+                    exit_code: 1,
+                    stderr: Some("component failed"),
+                },
+            );
         },
-    );
-
-    let err = toolchain
-        .ensure_installed_with(&runner)
-        .expect_err("expected component install failure");
-
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainComponentInstallFailed { ref toolchain, ref message, .. }
-                if toolchain == "nightly-2025-09-18" && message.contains("component failed")
-        ),
-        "unexpected error: {err}"
+        |err| {
+            assert!(
+                matches!(
+                    err,
+                    InstallerError::ToolchainComponentInstallFailed { ref toolchain, ref message, .. }
+                        if toolchain == "nightly-2025-09-18" && message.contains("component failed")
+                ),
+                "unexpected error: {err}"
+            );
+        },
     );
 }
