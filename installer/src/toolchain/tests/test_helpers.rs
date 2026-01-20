@@ -41,6 +41,32 @@ pub fn test_toolchain(channel: &str, components: Vec<String>) -> Toolchain {
     }
 }
 
+/// Generic helper to expect a rustup command with custom validation.
+#[allow(clippy::too_many_arguments)]
+fn expect_rustup_command<F>(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    exit_code: i32,
+    stderr: Option<&str>,
+    matcher: F,
+) where
+    F: Fn(&str, &[String]) -> bool + Send + 'static,
+{
+    let stderr = stderr.map(str::to_owned);
+    runner
+        .expect_run()
+        .withf(matcher)
+        .times(1)
+        .in_sequence(seq)
+        .returning(move |_, _| {
+            let output = match stderr.as_deref() {
+                Some(message) => output_with_stderr(exit_code, message),
+                None => output_with_status(exit_code),
+            };
+            Ok(output)
+        });
+}
+
 pub struct ToolchainInstallExpectation<'a> {
     pub channel: &'a str,
     pub exit_code: i32,
@@ -82,26 +108,19 @@ pub fn expect_toolchain_install(
     expectation: ToolchainInstallExpectation<'_>,
 ) {
     let channel = expectation.channel.to_owned();
-    let stderr = expectation.stderr.map(str::to_owned);
-    let exit_code = expectation.exit_code;
-    runner
-        .expect_run()
-        .withf(move |program, args| {
+    expect_rustup_command(
+        runner,
+        seq,
+        expectation.exit_code,
+        expectation.stderr,
+        move |program, args| {
             program == "rustup"
                 && args.len() == 3
                 && args[0] == "toolchain"
                 && args[1] == "install"
                 && args[2] == channel
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
-            Ok(output)
-        });
+        },
+    );
 }
 
 pub fn expect_component_add(
@@ -111,11 +130,12 @@ pub fn expect_component_add(
 ) {
     let channel = expectation.channel.to_owned();
     let component = expectation.component.to_owned();
-    let stderr = expectation.stderr.map(str::to_owned);
-    let exit_code = expectation.exit_code;
-    runner
-        .expect_run()
-        .withf(move |program, args| {
+    expect_rustup_command(
+        runner,
+        seq,
+        expectation.exit_code,
+        expectation.stderr,
+        move |program, args| {
             program == "rustup"
                 && args.len() == 5
                 && args[0] == "component"
@@ -123,16 +143,8 @@ pub fn expect_component_add(
                 && args[2] == "--toolchain"
                 && args[3] == channel
                 && args[4] == component
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
-            Ok(output)
-        });
+        },
+    );
 }
 
 /// Helper to test that ensure_installed fails with the expected error.

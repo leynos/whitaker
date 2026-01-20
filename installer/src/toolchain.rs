@@ -36,6 +36,11 @@ struct ToolchainConfig {
 }
 
 /// Abstraction for running external commands.
+///
+/// Note: The signature uses `&[String]` rather than the more efficient `&[&str]`
+/// due to mockall limitations with lifetime parameters in trait methods. The
+/// mockall crate cannot generate mock implementations for `&[&str]` without
+/// explicit lifetime annotations, which would complicate the trait definition.
 #[cfg_attr(test, mockall::automock)]
 trait CommandRunner {
     fn run(&self, program: &str, args: &[String]) -> std::io::Result<Output>;
@@ -260,36 +265,25 @@ fn parse_channel_from_table(table: &toml::Table) -> Result<String> {
 }
 
 fn parse_components_from_table(table: &toml::Table) -> Result<Vec<String>> {
-    if let Some(value) = table
+    // Prefer [toolchain].components, then top-level components
+    let value = table
         .get("toolchain")
         .and_then(|toolchain| toolchain.get("components"))
-    {
-        return parse_components_value(value);
-    }
+        .or_else(|| table.get("components"));
 
-    if let Some(value) = table.get("components") {
-        return parse_components_value(value);
-    }
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
 
-    Ok(Vec::new())
-}
+    let error = || InstallerError::InvalidToolchainFile {
+        reason: "components must be an array of strings".to_owned(),
+    };
 
-fn parse_components_value(value: &toml::Value) -> Result<Vec<String>> {
-    let components = value
-        .as_array()
-        .ok_or_else(|| InstallerError::InvalidToolchainFile {
-            reason: "components must be an array of strings".to_owned(),
-        })?;
+    let array = value.as_array().ok_or_else(error)?;
 
-    components
+    array
         .iter()
-        .map(|component| {
-            component.as_str().map(str::to_owned).ok_or_else(|| {
-                InstallerError::InvalidToolchainFile {
-                    reason: "components must be an array of strings".to_owned(),
-                }
-            })
-        })
+        .map(|component| component.as_str().map(str::to_owned).ok_or_else(error))
         .collect()
 }
 
