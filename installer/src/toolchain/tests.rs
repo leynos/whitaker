@@ -41,6 +41,57 @@ fn test_toolchain(channel: &str, components: Vec<String>) -> Toolchain {
     }
 }
 
+struct CommandOutcome<'a> {
+    exit_code: i32,
+    stderr: Option<&'a str>,
+}
+
+fn expect_rustup_command<F>(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    outcome: CommandOutcome<'_>,
+    matcher: F,
+) where
+    F: Fn(&str, &[String]) -> bool + Send + 'static,
+{
+    let stderr = outcome.stderr.map(str::to_owned);
+    let exit_code = outcome.exit_code;
+    runner
+        .expect_run()
+        .withf(move |program, args| matcher(program, args))
+        .times(1)
+        .in_sequence(seq)
+        .returning(move |_, _| {
+            let output = match stderr.as_deref() {
+                Some(message) => output_with_stderr(exit_code, message),
+                None => output_with_status(exit_code),
+            };
+            Ok(output)
+        });
+}
+
+fn matches_toolchain_install(channel: String) -> impl Fn(&str, &[String]) -> bool {
+    move |program, args| {
+        program == "rustup"
+            && args.len() == 3
+            && args[0] == "toolchain"
+            && args[1] == "install"
+            && args[2] == channel
+    }
+}
+
+fn matches_component_add(channel: String, component: String) -> impl Fn(&str, &[String]) -> bool {
+    move |program, args| {
+        program == "rustup"
+            && args.len() == 5
+            && args[0] == "component"
+            && args[1] == "add"
+            && args[2] == "--toolchain"
+            && args[3] == channel
+            && args[4] == component
+    }
+}
+
 struct ToolchainInstallExpectation<'a> {
     channel: &'a str,
     exit_code: i32,
@@ -81,27 +132,15 @@ fn expect_toolchain_install(
     seq: &mut mockall::Sequence,
     expectation: ToolchainInstallExpectation<'_>,
 ) {
-    let channel = expectation.channel.to_owned();
-    let stderr = expectation.stderr.map(str::to_owned);
-    let exit_code = expectation.exit_code;
-    runner
-        .expect_run()
-        .withf(move |program, args| {
-            program == "rustup"
-                && args.len() == 3
-                && args[0] == "toolchain"
-                && args[1] == "install"
-                && args[2] == channel
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
-            Ok(output)
-        });
+    expect_rustup_command(
+        runner,
+        seq,
+        CommandOutcome {
+            exit_code: expectation.exit_code,
+            stderr: expectation.stderr,
+        },
+        matches_toolchain_install(expectation.channel.to_owned()),
+    );
 }
 
 fn expect_component_add(
@@ -109,30 +148,18 @@ fn expect_component_add(
     seq: &mut mockall::Sequence,
     expectation: ComponentAddExpectation<'_>,
 ) {
-    let channel = expectation.channel.to_owned();
-    let component = expectation.component.to_owned();
-    let stderr = expectation.stderr.map(str::to_owned);
-    let exit_code = expectation.exit_code;
-    runner
-        .expect_run()
-        .withf(move |program, args| {
-            program == "rustup"
-                && args.len() == 5
-                && args[0] == "component"
-                && args[1] == "add"
-                && args[2] == "--toolchain"
-                && args[3] == channel
-                && args[4] == component
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(move |_, _| {
-            let output = match stderr.as_deref() {
-                Some(message) => output_with_stderr(exit_code, message),
-                None => output_with_status(exit_code),
-            };
-            Ok(output)
-        });
+    expect_rustup_command(
+        runner,
+        seq,
+        CommandOutcome {
+            exit_code: expectation.exit_code,
+            stderr: expectation.stderr,
+        },
+        matches_component_add(
+            expectation.channel.to_owned(),
+            expectation.component.to_owned(),
+        ),
+    );
 }
 
 #[test]
