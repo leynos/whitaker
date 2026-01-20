@@ -9,7 +9,9 @@ use clap::Parser;
 use std::io::Write;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{check_dylint_tools, install_dylint_tools};
+use whitaker_installer::deps::{
+    CommandExecutor, SystemCommandExecutor, check_dylint_tools, install_dylint_tools,
+};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::list::{determine_target_dir, run_list};
@@ -124,7 +126,16 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
 
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
-    let status = check_dylint_tools();
+    let executor = SystemCommandExecutor;
+    ensure_dylint_tools_with_executor(&executor, quiet, stderr)
+}
+
+fn ensure_dylint_tools_with_executor(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let status = check_dylint_tools(executor);
 
     if status.all_installed() {
         return Ok(());
@@ -134,7 +145,7 @@ fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
         write_stderr_line(stderr, "Installing required Dylint tools...");
     }
 
-    install_dylint_tools(&status)?;
+    install_dylint_tools(executor, &status)?;
 
     if !quiet {
         write_stderr_line(stderr, "Dylint tools installed successfully.");
@@ -256,78 +267,4 @@ fn exit_code_for_run_result(result: Result<()>, stderr: &mut dyn Write) -> i32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-    use whitaker_installer::cli::InstallArgs;
-
-    #[test]
-    fn exit_code_for_run_result_returns_zero_on_success() {
-        let mut stderr = Vec::new();
-        let exit_code = exit_code_for_run_result(Ok(()), &mut stderr);
-        assert_eq!(exit_code, 0);
-        assert!(stderr.is_empty());
-    }
-
-    #[test]
-    fn exit_code_for_run_result_prints_error_and_returns_one() {
-        let err = InstallerError::LintCrateNotFound {
-            name: CrateName::from("nonexistent_lint"),
-        };
-
-        let mut stderr = Vec::new();
-        let exit_code = exit_code_for_run_result(Err(err), &mut stderr);
-        assert_eq!(exit_code, 1);
-
-        let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
-        assert!(stderr_text.contains("lint crate nonexistent_lint not found"));
-    }
-
-    #[rstest]
-    #[case::default_suite_only(InstallArgs::default(), false, true)]
-    #[case::individual_lints(
-        InstallArgs { individual_lints: true, ..InstallArgs::default() },
-        true,
-        false
-    )]
-    fn resolve_requested_crates_respects_individual_lints_flag(
-        #[case] args: InstallArgs,
-        #[case] expect_lint: bool,
-        #[case] expect_suite: bool,
-    ) {
-        let crates = resolve_requested_crates(&args).expect("expected crate resolution to succeed");
-        assert_eq!(
-            crates.contains(&CrateName::from("module_max_lines")),
-            expect_lint
-        );
-        assert_eq!(
-            crates.contains(&CrateName::from("whitaker_suite")),
-            expect_suite
-        );
-    }
-
-    #[test]
-    fn resolve_requested_crates_returns_specific_lints_when_provided() {
-        let args = InstallArgs {
-            lint: vec!["module_max_lines".to_owned()],
-            ..InstallArgs::default()
-        };
-
-        let crates = resolve_requested_crates(&args).expect("expected crate resolution to succeed");
-        assert_eq!(crates, vec![CrateName::from("module_max_lines")]);
-    }
-
-    #[test]
-    fn resolve_requested_crates_rejects_unknown_lints() {
-        let args = InstallArgs {
-            lint: vec!["nonexistent_lint".to_owned()],
-            ..InstallArgs::default()
-        };
-
-        let err = resolve_requested_crates(&args).expect_err("expected crate resolution to fail");
-        assert!(matches!(
-            err,
-            InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
-        ));
-    }
-}
+mod tests;

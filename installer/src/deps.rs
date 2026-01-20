@@ -2,9 +2,60 @@
 //!
 //! This module provides functions for checking and installing the required
 //! `cargo-dylint` and `dylint-link` tools.
+//!
+//! # Usage
+//!
+//! Call [`check_dylint_tools`] to discover missing tools, then pass the status to
+//! [`install_dylint_tools`] to install any gaps. This module runs external
+//! commands and may modify the host toolchain.
 
 use crate::error::{InstallerError, Result};
-use std::process::Command;
+use std::process::{Command, Output};
+
+/// Abstraction for running external commands.
+pub trait CommandExecutor {
+    /// Runs a command with arguments and returns the captured output.
+    ///
+    /// # Errors
+    ///
+    /// Returns any I/O errors encountered while spawning or running the command.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use whitaker_installer::deps::{CommandExecutor, SystemCommandExecutor};
+    ///
+    /// let executor = SystemCommandExecutor;
+    /// let output = executor.run("cargo", &["--version"])?;
+    /// assert!(output.status.success());
+    /// # Ok::<(), whitaker_installer::error::InstallerError>(())
+    /// ```
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output>;
+}
+
+/// Executes commands on the host system.
+///
+/// # Examples
+///
+/// ```no_run
+/// use whitaker_installer::deps::{CommandExecutor, SystemCommandExecutor};
+///
+/// let executor = SystemCommandExecutor;
+/// let output = executor.run("cargo", &["--version"])?;
+/// assert!(output.status.success());
+/// # Ok::<(), whitaker_installer::error::InstallerError>(())
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemCommandExecutor;
+
+impl CommandExecutor for SystemCommandExecutor {
+    fn run(&self, cmd: &str, args: &[&str]) -> Result<Output> {
+        Command::new(cmd)
+            .args(args)
+            .output()
+            .map_err(InstallerError::from)
+    }
+}
 
 /// Status of Dylint tool availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,9 +98,10 @@ impl DylintToolStatus {
 /// # Examples
 ///
 /// ```no_run
-/// use whitaker_installer::deps::check_dylint_tools;
+/// use whitaker_installer::deps::{check_dylint_tools, SystemCommandExecutor};
 ///
-/// let status = check_dylint_tools();
+/// let executor = SystemCommandExecutor;
+/// let status = check_dylint_tools(&executor);
 /// if status.all_installed() {
 ///     println!("All Dylint tools are available");
 /// } else {
@@ -61,9 +113,9 @@ impl DylintToolStatus {
 ///     }
 /// }
 /// ```
-pub fn check_dylint_tools() -> DylintToolStatus {
-    let cargo_dylint = is_cargo_dylint_installed();
-    let dylint_link = is_dylint_link_installed();
+pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> DylintToolStatus {
+    let cargo_dylint = is_cargo_dylint_installed(executor);
+    let dylint_link = is_dylint_link_installed(executor);
     DylintToolStatus {
         cargo_dylint,
         dylint_link,
@@ -77,54 +129,58 @@ pub fn check_dylint_tools() -> DylintToolStatus {
 ///
 /// # Arguments
 ///
+/// * `executor` - Command executor for running install checks and installers.
 /// * `status` - Current tool status from [`check_dylint_tools`].
 ///
 /// # Errors
 ///
 /// Returns `InstallerError::DependencyInstall` if installation fails.
-pub fn install_dylint_tools(status: &DylintToolStatus) -> Result<()> {
-    let use_binstall = is_binstall_available();
+///
+/// # Usage
+///
+/// See the module-level documentation for usage patterns and side-effect context.
+pub fn install_dylint_tools(
+    executor: &dyn CommandExecutor,
+    status: &DylintToolStatus,
+) -> Result<()> {
+    let use_binstall = is_binstall_available(executor);
 
     if !status.cargo_dylint {
-        install_tool("cargo-dylint", use_binstall)?;
+        install_tool(executor, "cargo-dylint", use_binstall)?;
     }
 
     if !status.dylint_link {
-        install_tool("dylint-link", use_binstall)?;
+        install_tool(executor, "dylint-link", use_binstall)?;
     }
 
     Ok(())
 }
 
 /// Checks if `cargo dylint` is available.
-fn is_cargo_dylint_installed() -> bool {
-    Command::new("cargo")
-        .args(["dylint", "--version"])
-        .output()
-        .is_ok_and(|o| o.status.success())
+fn is_cargo_dylint_installed(executor: &dyn CommandExecutor) -> bool {
+    command_succeeds(executor, "cargo", &["dylint", "--version"])
 }
 
 /// Checks if `dylint-link` is in PATH.
-fn is_dylint_link_installed() -> bool {
-    which::which("dylint-link").is_ok()
+fn is_dylint_link_installed(executor: &dyn CommandExecutor) -> bool {
+    command_succeeds(executor, "dylint-link", &["--version"])
 }
 
 /// Checks if `cargo binstall` is available.
-fn is_binstall_available() -> bool {
-    Command::new("cargo")
-        .args(["binstall", "--version"])
-        .output()
-        .is_ok_and(|o| o.status.success())
+fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
+    command_succeeds(executor, "cargo", &["binstall", "--version"])
 }
 
 /// Installs a single tool using binstall or cargo install.
-fn install_tool(name: &'static str, use_binstall: bool) -> Result<()> {
+fn install_tool(
+    executor: &dyn CommandExecutor,
+    name: &'static str,
+    use_binstall: bool,
+) -> Result<()> {
     let output = if use_binstall {
-        Command::new("cargo")
-            .args(["binstall", "-y", name])
-            .output()?
+        executor.run("cargo", &["binstall", "-y", name])?
     } else {
-        Command::new("cargo").args(["install", name]).output()?
+        executor.run("cargo", &["install", name])?
     };
 
     if !output.status.success() {
@@ -138,31 +194,10 @@ fn install_tool(name: &'static str, use_binstall: bool) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dylint_tool_status_all_installed_when_both_present() {
-        let status = DylintToolStatus {
-            cargo_dylint: true,
-            dylint_link: true,
-        };
-        assert!(status.all_installed());
-    }
-
-    #[test]
-    fn dylint_tool_status_not_all_installed_when_one_missing() {
-        let status = DylintToolStatus {
-            cargo_dylint: true,
-            dylint_link: false,
-        };
-        assert!(!status.all_installed());
-
-        let status = DylintToolStatus {
-            cargo_dylint: false,
-            dylint_link: true,
-        };
-        assert!(!status.all_installed());
-    }
+/// Returns true if the given command executes successfully.
+fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: &[&str]) -> bool {
+    executor.run(cmd, args).is_ok_and(|o| o.status.success())
 }
+
+#[cfg(test)]
+mod tests;
