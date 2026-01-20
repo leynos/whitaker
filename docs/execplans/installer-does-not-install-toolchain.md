@@ -1,8 +1,9 @@
 # Install pinned toolchain automatically
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -32,7 +33,8 @@ and seeing it complete without manual rustup steps.
 
 - Scope: if the implementation requires edits to more than 8 files or more
   than 250 net new lines of code, stop and escalate.
-- Interface: if a public API or CLI flag must change, stop and escalate.
+- Interface: if a public application programming interface (API) or
+  command-line interface (CLI) flag must change, stop and escalate.
 - Dependencies: if a new external dependency is needed, stop and escalate.
 - Tests: if the tests still fail after 2 iterations, stop and escalate.
 - Ambiguity: if it is unclear whether components should be installed (not just

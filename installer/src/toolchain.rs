@@ -265,17 +265,16 @@ fn parse_components_value(value: &toml::Value) -> Result<Vec<String>> {
             reason: "components must be an array of strings".to_owned(),
         })?;
 
-    let mut parsed = Vec::with_capacity(components.len());
-    for component in components {
-        let component = component
-            .as_str()
-            .ok_or_else(|| InstallerError::InvalidToolchainFile {
-                reason: "components must be an array of strings".to_owned(),
-            })?;
-        parsed.push(component.to_owned());
-    }
-
-    Ok(parsed)
+    components
+        .iter()
+        .map(|component| {
+            component.as_str().map(str::to_owned).ok_or_else(|| {
+                InstallerError::InvalidToolchainFile {
+                    reason: "components must be an array of strings".to_owned(),
+                }
+            })
+        })
+        .collect()
 }
 
 fn run_rustup(runner: &dyn CommandRunner, args: &[String]) -> Result<Output> {
