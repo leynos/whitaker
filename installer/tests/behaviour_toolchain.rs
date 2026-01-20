@@ -100,83 +100,63 @@ macro_rules! skip_if_needed {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario setup helpers
+// ---------------------------------------------------------------------------
+
+/// Sets up an auto-detect scenario that requires the pinned toolchain to be installed.
+fn setup_auto_detect_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
+    let channel = pinned_toolchain_channel();
+    skip_scenario_when_toolchain_missing(world, &channel);
+
+    let target_dir = setup_temp_dir(world);
+
+    let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
+    args.extend(["--target-dir".to_owned(), target_dir]);
+    world.args.replace(args);
+}
+
+/// Sets up a failure scenario using a non-existent toolchain.
+fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
+    let target_dir = setup_temp_dir(world);
+
+    world.expect_failure.set(true);
+    let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
+    args.extend([
+        "--toolchain".to_owned(),
+        FAKE_TOOLCHAIN.to_owned(),
+        "--target-dir".to_owned(),
+        target_dir,
+    ]);
+    world.args.replace(args);
+}
+
+// ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
 
 #[given("the installer is invoked with auto-detect toolchain")]
 fn given_auto_detect_toolchain(world: &ToolchainWorld) {
-    let channel = pinned_toolchain_channel();
-    skip_scenario_when_toolchain_missing(world, &channel);
-
-    let target_dir = setup_temp_dir(world);
-
-    // No --toolchain flag - let the installer detect from rust-toolchain.toml
-    world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    setup_auto_detect_scenario(world, &["--dry-run"]);
 }
 
 #[given("the installer is invoked with auto-detect toolchain in quiet mode")]
 fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) {
-    let channel = pinned_toolchain_channel();
-    skip_scenario_when_toolchain_missing(world, &channel);
-
-    let target_dir = setup_temp_dir(world);
-
-    world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--quiet".to_owned(),
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    setup_auto_detect_scenario(world, &["--dry-run", "--quiet"]);
 }
 
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
 fn given_auto_detect_toolchain_install(world: &ToolchainWorld) {
-    let channel = pinned_toolchain_channel();
-    skip_scenario_when_toolchain_missing(world, &channel);
-
-    let target_dir = setup_temp_dir(world);
-
-    // No --toolchain flag - use auto-detected toolchain
-    world.args.replace(vec![
-        "--jobs".to_owned(),
-        "1".to_owned(),
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    setup_auto_detect_scenario(world, &["--jobs", "1"]);
 }
 
 #[given("the installer is invoked with a non-existent toolchain")]
 fn given_nonexistent_toolchain(world: &ToolchainWorld) {
-    let target_dir = setup_temp_dir(world);
-
-    // Use a fake toolchain that doesn't exist to trigger auto-install failure
-    world.expect_failure.set(true);
-    world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--toolchain".to_owned(),
-        FAKE_TOOLCHAIN.to_owned(),
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    setup_failure_scenario(world, &["--dry-run"]);
 }
 
 #[given("the installer is invoked with a non-existent toolchain in quiet mode")]
 fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) {
-    let target_dir = setup_temp_dir(world);
-
-    world.expect_failure.set(true);
-    world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--quiet".to_owned(),
-        "--toolchain".to_owned(),
-        FAKE_TOOLCHAIN.to_owned(),
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    setup_failure_scenario(world, &["--dry-run", "--quiet"]);
 }
 
 #[when("the installer CLI is run")]
