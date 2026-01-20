@@ -149,13 +149,22 @@ impl Toolchain {
     }
 
     fn is_installed_with(&self, runner: &dyn CommandRunner) -> Result<bool> {
-        let args = to_owned_args(&["run", self.channel.as_str(), "rustc", "--version"]);
+        let args = vec![
+            "run".to_owned(),
+            self.channel.clone(),
+            "rustc".to_owned(),
+            "--version".to_owned(),
+        ];
         let output = run_rustup(runner, &args)?;
         Ok(output.status.success())
     }
 
     fn install_toolchain_with(&self, runner: &dyn CommandRunner) -> Result<()> {
-        let args = to_owned_args(&["toolchain", "install", self.channel.as_str()]);
+        let args = vec![
+            "toolchain".to_owned(),
+            "install".to_owned(),
+            self.channel.clone(),
+        ];
         let output = run_rustup(runner, &args)?;
 
         if output.status.success() {
@@ -173,10 +182,13 @@ impl Toolchain {
             return Ok(());
         }
 
-        let mut args = to_owned_args(&["component", "add", "--toolchain", self.channel.as_str()]);
-        for component in &self.components {
-            args.push(component.clone());
-        }
+        let mut args = vec![
+            "component".to_owned(),
+            "add".to_owned(),
+            "--toolchain".to_owned(),
+            self.channel.clone(),
+        ];
+        args.extend(self.components.iter().cloned());
 
         let output = run_rustup(runner, &args)?;
 
@@ -283,10 +295,6 @@ fn run_rustup(runner: &dyn CommandRunner, args: &[String]) -> Result<Output> {
         .map_err(|e| InstallerError::ToolchainDetection {
             reason: format!("failed to run rustup: {e}"),
         })
-}
-
-fn to_owned_args(args: &[&str]) -> Vec<String> {
-    args.iter().map(|arg| (*arg).to_owned()).collect()
 }
 
 fn stderr_message(output: &Output) -> String {
