@@ -13,7 +13,7 @@ global-timeout = "30m"
 # Install-related tests build the lint suite and may download/install rust
 # toolchains, which can take several minutes per test.
 [[profile.default.overrides]]
-filter = "test(/scenario.*install/) | test(/scenario_skip_wrapper/)"
+filter = "test(/scenario.*install/)"
 slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
 
 [profile.long]

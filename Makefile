@@ -26,6 +26,7 @@ clean: ## Remove build artifacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors
+	@command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	# linkage pitfalls when building cdylib-based lints; `publish-check` omits
 	# this flag to exercise production-like linking behaviour.
@@ -71,6 +72,7 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	whitaker-installer --version >/dev/null
 
 publish-check: ## Build, test, and validate packages before publishing
+	@command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
 	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
 	ORIG_DIR="$(CURDIR)"; \
