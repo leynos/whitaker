@@ -1,0 +1,37 @@
+# Configuration for cargo-nextest test runner.
+#
+# This file configures test execution behaviour, particularly for tests that
+# require toolchain installation or other slow operations.
+
+[profile.default]
+# Kill any test once it crosses configured duration.
+slow-timeout = { period = "180s", terminate-after = 1, grace-period = "5s" }
+
+# Put a hard ceiling on the whole run.
+global-timeout = "30m"
+
+# Serialize tests that compete for resources when run in parallel.
+[test-groups]
+# Toolchain auto-install tests download the same toolchain.
+toolchain-install = { max-threads = 1 }
+# UI tests invoke the compiler and compete for CPU cores.
+compiler-ui = { max-threads = 1 }
+
+# Toolchain auto-install tests download full toolchains (~2GB) and must run
+# serially to avoid redundant downloads.
+[[profile.default.overrides]]
+filter = "test(/scenario_auto_install/)"
+test-group = "toolchain-install"
+slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
+
+# Install-related tests build the lint suite but don't download toolchains.
+[[profile.default.overrides]]
+filter = "test(/scenario.*(install|skip_wrapper_outputs)/) - test(/scenario_auto_install/)"
+slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
+
+# UI tests invoke the compiler for each fixture and compete for CPU cores.
+# Matches: ui, ui::ui, driver::ui::ui, driver::ui::ui_runs_in_welsh_locale
+[[profile.default.overrides]]
+filter = "test(/^ui$/) | test(/ui::ui/)"
+test-group = "compiler-ui"
+slow-timeout = { period = "300s", terminate-after = 1, grace-period = "10s" }

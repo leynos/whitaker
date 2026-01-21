@@ -72,6 +72,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Step 3: Resolve crates and toolchain
     let crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
+    ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     let context = PipelineContext {
@@ -106,6 +107,7 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
     let workspace_root = resolve_workspace_path(dirs)?;
     let crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
+    toolchain.verify_installed()?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     let info = DryRunInfo {
@@ -195,12 +197,26 @@ fn resolve_toolchain(
     workspace_root: &Utf8Path,
     override_channel: Option<&str>,
 ) -> Result<Toolchain> {
-    let toolchain = match override_channel {
-        Some(channel) => Toolchain::with_override(workspace_root, channel),
-        None => Toolchain::detect(workspace_root)?,
-    };
-    toolchain.verify_installed()?;
-    Ok(toolchain)
+    match override_channel {
+        Some(channel) => Ok(Toolchain::with_override(workspace_root, channel)),
+        None => Toolchain::detect(workspace_root),
+    }
+}
+
+fn ensure_toolchain_installed(
+    toolchain: &Toolchain,
+    quiet: bool,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let status = toolchain.ensure_installed()?;
+    if status.installed_toolchain() && !quiet {
+        write_stderr_line(
+            stderr,
+            format!("Toolchain {} installed successfully.", toolchain.channel()),
+        );
+        write_stderr_line(stderr, "");
+    }
+    Ok(())
 }
 
 /// Resolves requested crates from the CLI flags.

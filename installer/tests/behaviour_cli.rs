@@ -167,12 +167,14 @@ fn given_suite_install(cli_world: &CliWorld) {
 
     // Suite-only is the default, so no extra flag is needed.
     // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
+    // Use --skip-deps to avoid slow dependency downloads during test.
     cli_world.args.replace(vec![
         "--jobs".to_owned(),
         "1".to_owned(),
         "--target-dir".to_owned(),
         target_dir,
         "--skip-wrapper".to_owned(),
+        "--skip-deps".to_owned(),
     ]);
 }
 

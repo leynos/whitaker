@@ -39,6 +39,26 @@ pub enum InstallerError {
         toolchain: String,
     },
 
+    /// The toolchain install command failed.
+    #[error("toolchain {toolchain} installation failed: {message}")]
+    ToolchainInstallFailed {
+        /// The toolchain channel that failed to install.
+        toolchain: String,
+        /// The rustup error message.
+        message: String,
+    },
+
+    /// Installing required toolchain components failed.
+    #[error("toolchain {toolchain} component install failed for {components}: {message}")]
+    ToolchainComponentInstallFailed {
+        /// The toolchain channel for the component install.
+        toolchain: String,
+        /// The component list requested during install.
+        components: String,
+        /// The rustup error message.
+        message: String,
+    },
+
     /// A cargo build command failed for a lint crate.
     #[error("cargo build failed for {crate_name}: {reason}")]
     BuildFailed {
@@ -140,6 +160,12 @@ pub enum InstallerError {
 
 impl Clone for InstallerError {
     fn clone(&self) -> Self {
+        // Helper to clone io::Error by preserving ErrorKind and formatted message.
+        // This is lossy: the original source chain is discarded.
+        fn clone_io_error(source: &std::io::Error) -> std::io::Error {
+            std::io::Error::new(source.kind(), source.to_string())
+        }
+
         match self {
             InstallerError::ToolchainDetection { reason } => InstallerError::ToolchainDetection {
                 reason: reason.clone(),
@@ -157,6 +183,21 @@ impl Clone for InstallerError {
                     toolchain: toolchain.clone(),
                 }
             }
+            InstallerError::ToolchainInstallFailed { toolchain, message } => {
+                InstallerError::ToolchainInstallFailed {
+                    toolchain: toolchain.clone(),
+                    message: message.clone(),
+                }
+            }
+            InstallerError::ToolchainComponentInstallFailed {
+                toolchain,
+                components,
+                message,
+            } => InstallerError::ToolchainComponentInstallFailed {
+                toolchain: toolchain.clone(),
+                components: components.clone(),
+                message: message.clone(),
+            },
             InstallerError::BuildFailed { crate_name, reason } => InstallerError::BuildFailed {
                 crate_name: crate_name.clone(),
                 reason: reason.clone(),
@@ -180,12 +221,7 @@ impl Clone for InstallerError {
                 path: path.clone(),
                 reason: reason.clone(),
             },
-            // Lossy: only ErrorKind and formatted message are preserved; any
-            // original source chain is discarded because std::io::Error cannot
-            // be cloned directly.
-            InstallerError::Io(source) => {
-                InstallerError::Io(std::io::Error::new(source.kind(), source.to_string()))
-            }
+            InstallerError::Io(source) => InstallerError::Io(clone_io_error(source)),
             InstallerError::Git { operation, message } => InstallerError::Git {
                 operation,
                 message: message.clone(),
@@ -200,10 +236,10 @@ impl Clone for InstallerError {
                 InstallerError::WrapperGeneration(message.clone())
             }
             InstallerError::ScanFailed { source } => InstallerError::ScanFailed {
-                source: std::io::Error::new(source.kind(), source.to_string()),
+                source: clone_io_error(source),
             },
             InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
-                source: std::io::Error::new(source.kind(), source.to_string()),
+                source: clone_io_error(source),
             },
             #[cfg(any(test, feature = "test-support"))]
             InstallerError::StubMismatch { message } => InstallerError::StubMismatch {
@@ -228,6 +264,30 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("rustup toolchain install"));
         assert!(msg.contains("nightly-2025-09-18"));
+    }
+
+    #[test]
+    fn toolchain_install_failed_includes_toolchain_and_message() {
+        let err = InstallerError::ToolchainInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            message: "network error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn toolchain_component_install_failed_includes_components() {
+        let err = InstallerError::ToolchainComponentInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            components: "rust-src, rustc-dev".to_owned(),
+            message: "component error".to_owned(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("rust-src, rustc-dev"));
+        assert!(msg.contains("component error"));
     }
 
     #[test]

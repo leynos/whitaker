@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@aebb3f5b831102e2a10ef909c83d7d50ea86c332
+        uses: leynos/shared-actions/.github/actions/setup-rust@235d2d07b9a321364a742310873f6732d7228e72
 
       - name: Install bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
@@ -68,7 +68,10 @@ jobs:
 
       - name: Test
         shell: bash
-        run: make test
+        run: |
+          set -euxo pipefail
+          cargo binstall --no-confirm cargo-nextest
+          make test
 
       - name: Installer smoke test
         run: make install-smoke
@@ -78,7 +81,7 @@ jobs:
 
       - name: Upload coverage data to CodeScene
         if: ${{ matrix.coverage && env.CS_ACCESS_TOKEN && vars.CODESCENE_CLI_SHA256 }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@aebb3f5b831102e2a10ef909c83d7d50ea86c332
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@235d2d07b9a321364a742310873f6732d7228e72
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
