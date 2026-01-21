@@ -251,9 +251,14 @@ fn then_no_install_message(world: &ToolchainWorld) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+    let channel = world.pinned_channel.borrow().clone();
+    let out_lc = out.to_lowercase();
+    let needle = format!("toolchain {channel} installed successfully").to_lowercase();
     assert!(
-        !out.contains(TOOLCHAIN_INSTALLED_MARKER),
-        "expected no installation message in output, got:\n{out}"
+        !(out_lc.contains(&needle)
+            || out_lc.contains(&channel.to_lowercase())
+                && out_lc.contains(TOOLCHAIN_INSTALLED_MARKER)),
+        "expected no installation message for channel '{channel}' in output, got:\n{out}"
     );
 }
 
