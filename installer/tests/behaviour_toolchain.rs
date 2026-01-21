@@ -47,14 +47,6 @@ struct ToolchainWorld {
     pinned_channel: RefCell<String>,
 }
 
-impl Drop for ToolchainWorld {
-    fn drop(&mut self) {
-        self.temp_dir.take();
-        self.rustup_home.take();
-        self.cargo_home.take();
-    }
-}
-
 fn get_output(world: &ToolchainWorld) -> std::cell::Ref<'_, Output> {
     let output = world.output.borrow();
     std::cell::Ref::map(output, |opt| opt.as_ref().expect("output not set"))
