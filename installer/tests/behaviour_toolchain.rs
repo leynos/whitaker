@@ -22,7 +22,7 @@ use support::{
 use tempfile::TempDir;
 
 /// Non-existent toolchain channel used to exercise auto-install failure paths.
-const FAKE_TOOLCHAIN: &str = "nonexistent-toolchain-xyz-12345";
+const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
 
 /// Output marker indicating successful library staging.
 const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";

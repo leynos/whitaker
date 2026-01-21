@@ -59,12 +59,15 @@ pub struct IsolatedRustupEnv {
 ///
 /// This creates the necessary settings files that rustup expects to exist.
 /// The function sets RUSTUP_AUTO_INSTALL=0 to prevent auto-installing any
-/// toolchain during initialisation, and clears RUSTUP_TOOLCHAIN to avoid
-/// rust-toolchain.toml files affecting the initialisation.
+/// toolchain during initialisation, clears RUSTUP_TOOLCHAIN to avoid
+/// rust-toolchain.toml files affecting the initialisation, and runs from
+/// rustup_home as the current directory to prevent rustup from walking up
+/// to the workspace and discovering the project's rust-toolchain.toml (which
+/// would affect toolchain selection).
 fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
     let init_output = Command::new("rustup")
         .arg("show")
-        .current_dir(rustup_home)
+        .current_dir(rustup_home) // Prevent rustup from discovering workspace rust-toolchain.toml
         .env("RUSTUP_HOME", rustup_home)
         .env("CARGO_HOME", cargo_home)
         .env("RUSTUP_AUTO_INSTALL", "0")
@@ -79,13 +82,8 @@ fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
     );
 }
 
-/// Locates the system rustup binary path.
-#[cfg(unix)]
-fn find_system_rustup() -> String {
-    let output = Command::new("which")
-        .arg("rustup")
-        .output()
-        .expect("failed to run which rustup");
+/// Parses the output of a command that locates rustup, extracting the first path.
+fn parse_rustup_location_output(output: &std::process::Output, _command_name: &str) -> String {
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
@@ -94,18 +92,23 @@ fn find_system_rustup() -> String {
         .to_string()
 }
 
+/// Locates the system rustup binary path.
+#[cfg(unix)]
+fn find_system_rustup() -> String {
+    let output = Command::new("which")
+        .arg("rustup")
+        .output()
+        .expect("failed to run which rustup");
+    parse_rustup_location_output(&output, "which")
+}
+
 #[cfg(windows)]
 fn find_system_rustup() -> String {
     let output = Command::new("where")
         .arg("rustup")
         .output()
         .expect("failed to run where rustup");
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .next()
-        .expect("rustup not found in PATH")
-        .trim()
-        .to_string()
+    parse_rustup_location_output(&output, "where")
 }
 
 /// Installs rustup into the isolated cargo_bin directory.
