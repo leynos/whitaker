@@ -40,11 +40,14 @@ struct ToolchainConfig {
     channel: String,
 }
 
-// Abstraction for running external commands.
+/// Abstraction for running external commands.
 #[cfg_attr(test, mockall::automock)]
 trait CommandRunner {
-    // mockall requires explicit lifetimes for nested references in trait methods;
-    // eliding causes E0106 when the automock attribute generates mock code.
+    /// Runs a program with the given arguments and returns the output.
+    ///
+    /// Note: mockall requires explicit lifetimes for nested references in trait
+    /// methods; eliding causes E0106 when the automock attribute generates mock
+    /// code.
     #[expect(
         clippy::needless_lifetimes,
         reason = "mockall requires explicit lifetime for &[&str]"

@@ -101,8 +101,19 @@ fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
 }
 
 fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
+    // Use isolated rustup environment so the install failure path is exercised
+    // without affecting the host system.
+    let env = setup_isolated_rustup();
+    world.rustup_home.replace(Some(env.rustup_home));
+    world.cargo_home.replace(Some(env.cargo_home));
+
     let target_dir = setup_temp_dir(world);
-    let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
+    // Filter out --dry-run to exercise the real install path
+    let mut args: Vec<String> = extra_args
+        .iter()
+        .filter(|s| **s != "--dry-run")
+        .map(|s| (*s).to_owned())
+        .collect();
     args.extend([
         "--toolchain".to_owned(),
         FAKE_TOOLCHAIN.to_owned(),
@@ -149,7 +160,7 @@ fn setup_auto_install_scenario(world: &ToolchainWorld) {
     if cfg!(windows) {
         eprintln!("Skipping auto-install scenario on Windows (toolchain downloads too slow).");
         world.skip_assertions.set(true);
-        return;
+        rstest_bdd::skip!("auto-install tests skipped on Windows");
     }
     setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
 }
@@ -171,12 +182,12 @@ fn given_isolated_rustup_quiet(world: &ToolchainWorld) {
 
 #[given("the installer is invoked with a non-existent toolchain")]
 fn given_nonexistent_toolchain(world: &ToolchainWorld) {
-    setup_failure_scenario(world, &["--dry-run"]);
+    setup_failure_scenario(world, &[]);
 }
 
 #[given("the installer is invoked with a non-existent toolchain in quiet mode")]
 fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) {
-    setup_failure_scenario(world, &["--dry-run", "--quiet"]);
+    setup_failure_scenario(world, &["--quiet"]);
 }
 
 #[when("the installer CLI is run")]
