@@ -177,6 +177,21 @@ impl Clone for InstallerError {
                     toolchain: toolchain.clone(),
                 }
             }
+            InstallerError::ToolchainInstallFailed { toolchain, message } => {
+                InstallerError::ToolchainInstallFailed {
+                    toolchain: toolchain.clone(),
+                    message: message.clone(),
+                }
+            }
+            InstallerError::ToolchainComponentInstallFailed {
+                toolchain,
+                components,
+                message,
+            } => InstallerError::ToolchainComponentInstallFailed {
+                toolchain: toolchain.clone(),
+                components: components.clone(),
+                message: message.clone(),
+            },
             InstallerError::BuildFailed { crate_name, reason } => InstallerError::BuildFailed {
                 crate_name: crate_name.clone(),
                 reason: reason.clone(),
