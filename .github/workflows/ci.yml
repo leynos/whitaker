@@ -69,7 +69,8 @@ jobs:
       - name: Test
         shell: bash
         run: |
-          cargo binstall cargo-nextest
+          set -euxo pipefail
+          cargo binstall --no-confirm cargo-nextest
           make test
 
       - name: Installer smoke test
