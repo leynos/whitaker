@@ -5,9 +5,9 @@ mod test_helpers;
 use super::*;
 use rstest::rstest;
 use test_helpers::{
-    ComponentAddExpectation, ToolchainInstallExpectation, assert_install_fails_with,
-    expect_component_add, expect_rustc_version, expect_toolchain_install,
-    matches_multi_component_add, output_with_status, output_with_stderr, test_toolchain,
+    ToolchainInstallExpectation, assert_install_fails_with, expect_rustc_version,
+    expect_toolchain_install, matches_multi_component_add, output_with_status, output_with_stderr,
+    test_toolchain,
 };
 
 // Asserts that a parsing function rejects invalid contents with an
@@ -47,67 +47,17 @@ fn parses_simple_channel_format() {
     assert_eq!(channel, "stable");
 }
 
-// Identifies which parse function to use in parameterized tests.
-#[derive(Debug, Clone, Copy)]
-enum ParseTarget {
-    Channel,
-    Config,
-}
-
-fn run_parse_and_check(contents: &str, expected_reason: &str, target: ParseTarget) {
-    match target {
-        ParseTarget::Channel => {
-            assert_parse_fails_with_reason(contents, expected_reason, parse_toolchain_channel)
-        }
-        ParseTarget::Config => {
-            assert_parse_fails_with_reason(contents, expected_reason, parse_toolchain_config)
-        }
-    }
-}
-
 #[rstest]
-#[case::missing_channel(
-    ParseTarget::Channel,
-    "[toolchain]\ncomponents = [\"rust-src\"]\n",
-    "channel"
-)]
-#[case::invalid_toml(ParseTarget::Channel, "this is not valid toml {{{", "TOML")]
-#[case::invalid_components_type(
-    ParseTarget::Config,
-    "[toolchain]\nchannel = \"nightly-2025-09-18\"\ncomponents = \"rust-src\"\n",
-    "array"
-)]
-#[case::non_string_component_elements(
-    ParseTarget::Config,
-    "[toolchain]\nchannel = \"stable\"\ncomponents = [123, \"rust-src\"]\n",
-    "array of strings"
-)]
-fn rejects_invalid_toolchain_file(
-    #[case] target: ParseTarget,
-    #[case] contents: &str,
-    #[case] expected_reason: &str,
-) {
-    run_parse_and_check(contents, expected_reason, target);
-}
-
-#[test]
-fn parses_components_from_toolchain_table() {
-    let contents = r#"
-[toolchain]
-channel = "nightly-2025-09-18"
-components = ["rust-src", "rustc-dev"]
-"#;
-    let config = parse_toolchain_config(contents).expect("config should parse");
-    assert_eq!(
-        config.components,
-        vec!["rust-src".to_owned(), "rustc-dev".to_owned()]
-    );
+#[case::missing_channel("[toolchain]\ncomponents = [\"rust-src\"]\n", "channel")]
+#[case::invalid_toml("this is not valid toml {{{", "TOML")]
+fn rejects_invalid_toolchain_file(#[case] contents: &str, #[case] expected_reason: &str) {
+    assert_parse_fails_with_reason(contents, expected_reason, parse_toolchain_channel);
 }
 
 #[test]
 fn ensure_installed_installs_missing_toolchain() {
     let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel, Vec::new());
+    let toolchain = test_toolchain(channel);
 
     let mut runner = MockCommandRunner::new();
     let mut seq = mockall::Sequence::new();
@@ -122,6 +72,15 @@ fn ensure_installed_installs_missing_toolchain() {
             stderr: None,
         },
     );
+
+    // Expect required components to be installed
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, REQUIRED_COMPONENTS))
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(|_, _| Ok(output_with_status(0)));
+
     expect_rustc_version(&mut runner, &mut seq, channel, 0);
 
     let status = toolchain
@@ -132,22 +91,21 @@ fn ensure_installed_installs_missing_toolchain() {
 }
 
 #[test]
-fn ensure_installed_adds_components_when_present() {
-    let toolchain = test_toolchain("nightly-2025-09-18", vec!["rust-src".to_owned()]);
+fn ensure_installed_adds_required_components_when_toolchain_present() {
+    let channel = "nightly-2025-09-18";
+    let toolchain = test_toolchain(channel);
     let mut runner = MockCommandRunner::new();
     let mut seq = mockall::Sequence::new();
 
-    expect_rustc_version(&mut runner, &mut seq, "nightly-2025-09-18", 0);
-    expect_component_add(
-        &mut runner,
-        &mut seq,
-        ComponentAddExpectation {
-            channel: "nightly-2025-09-18",
-            component: "rust-src",
-            exit_code: 0,
-            stderr: None,
-        },
-    );
+    expect_rustc_version(&mut runner, &mut seq, channel, 0);
+
+    // Expect required components to be installed
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, REQUIRED_COMPONENTS))
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(|_, _| Ok(output_with_status(0)));
 
     let status = toolchain
         .ensure_installed_with(&runner)
@@ -185,16 +143,17 @@ fn setup_failure_mocks(
         }
         InstallFailure::ComponentAdd => {
             expect_rustc_version(runner, seq, channel, 0);
-            expect_component_add(
-                runner,
-                seq,
-                ComponentAddExpectation {
-                    channel,
-                    component: "rust-src",
-                    exit_code: 1,
-                    stderr: Some("component failed"),
-                },
-            );
+            runner
+                .expect_run()
+                .withf(|program, args| {
+                    program == "rustup"
+                        && args.len() >= 4
+                        && args[0] == "component"
+                        && args[1] == "add"
+                })
+                .times(1)
+                .in_sequence(seq)
+                .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
         }
         InstallFailure::ToolchainUnusableAfterInstall => {
             expect_rustc_version(runner, seq, channel, 1);
@@ -207,6 +166,17 @@ fn setup_failure_mocks(
                     stderr: None,
                 },
             );
+            runner
+                .expect_run()
+                .withf(|program, args| {
+                    program == "rustup"
+                        && args.len() >= 4
+                        && args[0] == "component"
+                        && args[1] == "add"
+                })
+                .times(1)
+                .in_sequence(seq)
+                .returning(|_, _| Ok(output_with_status(0)));
             expect_rustc_version(runner, seq, channel, 1);
         }
     }
@@ -248,15 +218,12 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
 }
 
 #[rstest]
-#[case::toolchain_install_fails(InstallFailure::ToolchainInstall, Vec::new())]
-#[case::component_add_fails(InstallFailure::ComponentAdd, vec!["rust-src".to_owned()])]
-#[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall, Vec::new())]
-fn ensure_installed_reports_failure(
-    #[case] failure: InstallFailure,
-    #[case] components: Vec<String>,
-) {
+#[case::toolchain_install_fails(InstallFailure::ToolchainInstall)]
+#[case::component_add_fails(InstallFailure::ComponentAdd)]
+#[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall)]
+fn ensure_installed_reports_failure(#[case] failure: InstallFailure) {
     let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel, components);
+    let toolchain = test_toolchain(channel);
 
     assert_install_fails_with(
         toolchain,
@@ -279,34 +246,17 @@ fn stderr_message_extracts_error(#[case] stderr: Option<&str>, #[case] expected:
 }
 
 #[test]
-fn parses_top_level_components() {
-    let contents = r#"
-channel = "stable"
-components = ["rust-src"]
-"#;
-    let config = parse_toolchain_config(contents).expect("config should parse");
-    assert_eq!(config.components, vec!["rust-src".to_owned()]);
-}
-
-#[test]
-fn parses_empty_components_array() {
+fn parses_toolchain_file_ignoring_components() {
+    // The installer ignores components from rust-toolchain.toml and uses
+    // REQUIRED_COMPONENTS instead. This test verifies parsing succeeds even
+    // with components present in the file.
     let contents = r#"
 [toolchain]
 channel = "stable"
-components = []
+components = ["rustfmt", "clippy"]
 "#;
     let config = parse_toolchain_config(contents).expect("config should parse");
-    assert!(config.components.is_empty());
-}
-
-#[test]
-fn parses_missing_components_as_empty() {
-    let contents = r#"
-[toolchain]
-channel = "stable"
-"#;
-    let config = parse_toolchain_config(contents).expect("config should parse");
-    assert!(config.components.is_empty());
+    assert_eq!(config.channel, "stable");
 }
 
 #[test]
@@ -325,30 +275,4 @@ fn run_rustup_propagates_io_error_as_toolchain_detection_error() {
         matches!(result, Err(InstallerError::ToolchainDetection { .. })),
         "expected ToolchainDetection error, got {result:?}"
     );
-}
-
-#[test]
-fn ensure_installed_adds_multiple_components() {
-    let components = vec!["rust-src".to_owned(), "rustc-dev".to_owned()];
-    let toolchain = test_toolchain("nightly-2025-09-18", components.clone());
-    let mut runner = MockCommandRunner::new();
-    let mut seq = mockall::Sequence::new();
-
-    expect_rustc_version(&mut runner, &mut seq, "nightly-2025-09-18", 0);
-
-    runner
-        .expect_run()
-        .withf(matches_multi_component_add(
-            "nightly-2025-09-18",
-            &["rust-src", "rustc-dev"],
-        ))
-        .times(1)
-        .in_sequence(&mut seq)
-        .returning(|_, _| Ok(output_with_status(0)));
-
-    let status = toolchain
-        .ensure_installed_with(&runner)
-        .expect("toolchain should be ready");
-
-    assert!(!status.installed_toolchain());
 }

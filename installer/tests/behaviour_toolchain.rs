@@ -143,6 +143,14 @@ fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) {
 }
 
 fn setup_auto_install_scenario(world: &ToolchainWorld) {
+    // Skip auto-install tests on Windows - toolchain downloads are extremely slow
+    // due to Windows Defender scanning and larger binaries. The code path is
+    // identical to Linux; we're testing rustup behaviour rather than installer logic.
+    if cfg!(windows) {
+        eprintln!("Skipping auto-install scenario on Windows (toolchain downloads too slow).");
+        world.skip_assertions.set(true);
+        return;
+    }
     setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
 }
 

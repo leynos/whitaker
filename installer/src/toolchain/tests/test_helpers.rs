@@ -33,10 +33,9 @@ pub fn output_with_stderr(code: i32, stderr: &str) -> Output {
     }
 }
 
-pub fn test_toolchain(channel: &str, components: Vec<String>) -> Toolchain {
+pub fn test_toolchain(channel: &str) -> Toolchain {
     Toolchain {
         channel: channel.to_owned(),
-        components,
         workspace_root: Utf8PathBuf::from("."),
     }
 }
@@ -74,13 +73,6 @@ fn expect_rustup_command<F>(
 
 pub struct ToolchainInstallExpectation<'a> {
     pub channel: &'a str,
-    pub exit_code: i32,
-    pub stderr: Option<&'a str>,
-}
-
-pub struct ComponentAddExpectation<'a> {
-    pub channel: &'a str,
-    pub component: &'a str,
     pub exit_code: i32,
     pub stderr: Option<&'a str>,
 }
@@ -126,32 +118,6 @@ pub fn expect_toolchain_install(
                 && args[0] == "toolchain"
                 && args[1] == "install"
                 && args[2] == channel
-        },
-    );
-}
-
-pub fn expect_component_add(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    expectation: ComponentAddExpectation<'_>,
-) {
-    let channel = expectation.channel.to_owned();
-    let component = expectation.component.to_owned();
-    expect_rustup_command(
-        runner,
-        seq,
-        RustupExpectation {
-            exit_code: expectation.exit_code,
-            stderr: expectation.stderr,
-        },
-        move |program, args| {
-            program == "rustup"
-                && args.len() == 5
-                && args[0] == "component"
-                && args[1] == "add"
-                && args[2] == "--toolchain"
-                && args[3] == channel
-                && args[4] == component
         },
     );
 }

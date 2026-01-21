@@ -7,11 +7,17 @@ use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::process::{Command, Output};
 
+/// Components required for building dylint lints.
+///
+/// Only these components are installed by the installer, regardless of what
+/// rust-toolchain.toml specifies. Development tools like rustfmt, clippy, and
+/// llvm-tools-preview are not needed for building lints.
+const REQUIRED_COMPONENTS: &[&str] = &["rust-src", "rustc-dev"];
+
 /// Represents a detected Rust toolchain configuration.
 #[derive(Debug, Clone)]
 pub struct Toolchain {
     channel: String,
-    components: Vec<String>,
     workspace_root: Utf8PathBuf,
 }
 
@@ -32,7 +38,6 @@ impl ToolchainInstallStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ToolchainConfig {
     channel: String,
-    components: Vec<String>,
 }
 
 // Abstraction for running external commands.
@@ -76,7 +81,6 @@ impl Toolchain {
 
         Ok(Self {
             channel: config.channel,
-            components: config.components,
             workspace_root: workspace_root.to_owned(),
         })
     }
@@ -89,7 +93,6 @@ impl Toolchain {
     pub fn with_override(workspace_root: &Utf8Path, channel: &str) -> Self {
         Self {
             channel: channel.to_owned(),
-            components: Vec::new(),
             workspace_root: workspace_root.to_owned(),
         }
     }
@@ -177,12 +180,8 @@ impl Toolchain {
     }
 
     fn install_components_with(&self, runner: &dyn CommandRunner) -> Result<()> {
-        if self.components.is_empty() {
-            return Ok(());
-        }
-
         let mut args: Vec<&str> = vec!["component", "add", "--toolchain", &self.channel];
-        args.extend(self.components.iter().map(String::as_str));
+        args.extend(REQUIRED_COMPONENTS);
 
         let output = run_rustup(runner, &args)?;
 
@@ -192,7 +191,7 @@ impl Toolchain {
 
         Err(InstallerError::ToolchainComponentInstallFailed {
             toolchain: self.channel.clone(),
-            components: self.components.join(", "),
+            components: REQUIRED_COMPONENTS.join(", "),
             message: stderr_message(&output),
         })
     }
@@ -233,12 +232,8 @@ fn parse_toolchain_config(contents: &str) -> Result<ToolchainConfig> {
             })?;
 
     let channel = parse_channel_from_table(&table)?;
-    let components = parse_components_from_table(&table)?;
 
-    Ok(ToolchainConfig {
-        channel,
-        components,
-    })
+    Ok(ToolchainConfig { channel })
 }
 
 fn parse_channel_from_table(table: &toml::Table) -> Result<String> {
@@ -260,29 +255,6 @@ fn parse_channel_from_table(table: &toml::Table) -> Result<String> {
     Err(InstallerError::InvalidToolchainFile {
         reason: "no channel field found in rust-toolchain.toml".to_owned(),
     })
-}
-
-fn parse_components_from_table(table: &toml::Table) -> Result<Vec<String>> {
-    // Prefer [toolchain].components, then top-level components
-    let value = table
-        .get("toolchain")
-        .and_then(|toolchain| toolchain.get("components"))
-        .or_else(|| table.get("components"));
-
-    let Some(value) = value else {
-        return Ok(Vec::new());
-    };
-
-    let error = || InstallerError::InvalidToolchainFile {
-        reason: "components must be an array of strings".to_owned(),
-    };
-
-    let array = value.as_array().ok_or_else(error)?;
-
-    array
-        .iter()
-        .map(|component| component.as_str().map(str::to_owned).ok_or_else(error))
-        .collect()
 }
 
 fn run_rustup(runner: &dyn CommandRunner, args: &[&str]) -> Result<Output> {
