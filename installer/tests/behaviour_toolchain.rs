@@ -119,6 +119,7 @@ fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
         FAKE_TOOLCHAIN.to_owned(),
         "--target-dir".to_owned(),
         target_dir,
+        "--skip-deps".to_owned(),
     ]);
     world.args.replace(args);
 }
