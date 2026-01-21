@@ -9,6 +9,20 @@ use test_helpers::{
     output_with_stderr, test_toolchain,
 };
 
+/// Helper to assert that parse_toolchain_config rejects invalid contents
+/// with an InvalidToolchainFile error containing the expected reason substring.
+fn assert_parse_config_fails_with_reason(contents: &str, expected_reason_substring: &str) {
+    let err = parse_toolchain_config(contents).expect_err("should reject invalid toolchain config");
+    assert!(
+        matches!(
+            err,
+            InstallerError::InvalidToolchainFile { ref reason }
+                if reason.contains(expected_reason_substring)
+        ),
+        "expected InvalidToolchainFile error containing '{expected_reason_substring}', got {err:?}"
+    );
+}
+
 #[test]
 fn parses_standard_toolchain_format() {
     let contents = r#"
@@ -72,11 +86,7 @@ fn rejects_invalid_components() {
 channel = "nightly-2025-09-18"
 components = "rust-src"
 "#;
-    let err = parse_toolchain_config(contents).expect_err("should reject non-array components");
-    assert!(
-        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("array")),
-        "expected InvalidToolchainFile error about array, got {err:?}"
-    );
+    assert_parse_config_fails_with_reason(contents, "array");
 }
 
 #[test]
@@ -259,11 +269,7 @@ fn rejects_non_string_component_elements() {
 channel = "stable"
 components = [123, "rust-src"]
 "#;
-    let err = parse_toolchain_config(contents).expect_err("should reject non-string components");
-    assert!(
-        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("array of strings")),
-        "expected InvalidToolchainFile error about array of strings, got {err:?}"
-    );
+    assert_parse_config_fails_with_reason(contents, "array of strings");
 }
 
 #[test]
