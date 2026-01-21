@@ -27,6 +27,10 @@ const FAKE_TOOLCHAIN: &str = "nonexistent-toolchain-xyz-12345";
 /// The installer outputs this text when libraries are being staged to the target directory.
 const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
 
+/// Output marker indicating successful toolchain installation.
+/// The installer emits this message when a toolchain was auto-installed.
+const TOOLCHAIN_INSTALLED_MARKER: &str = "installed successfully";
+
 /// Canonical error marker for toolchain installation failures or missing toolchains.
 /// The installer uses this phrase when the toolchain is not available.
 const TOOLCHAIN_ERROR_MARKER: &str = "not installed";
@@ -112,6 +116,43 @@ fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
 fn setup_isolated_rustup(world: &ToolchainWorld) {
     let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
     let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
+
+    // Initialize the isolated rustup environment by running `rustup show`.
+    // This creates the necessary settings files that rustup expects to exist.
+    // We set RUSTUP_AUTO_INSTALL=0 to prevent rustup from auto-installing
+    // any toolchain during initialization.
+    // We also clear RUSTUP_TOOLCHAIN and run from the temp directory to avoid
+    // rust-toolchain.toml files affecting the initialization.
+    let init_output = Command::new("rustup")
+        .arg("show")
+        .current_dir(rustup_home.path())
+        .env("RUSTUP_HOME", rustup_home.path())
+        .env("CARGO_HOME", cargo_home.path())
+        .env("RUSTUP_AUTO_INSTALL", "0")
+        .env_remove("RUSTUP_TOOLCHAIN")
+        .output()
+        .expect("failed to initialize isolated rustup environment");
+
+    assert!(
+        init_output.status.success(),
+        "failed to initialize isolated rustup: {}",
+        String::from_utf8_lossy(&init_output.stderr)
+    );
+
+    // Rustup expects to find itself at $CARGO_HOME/bin/rustup. Create a symlink
+    // to the system rustup so that toolchain install succeeds.
+    let cargo_bin = cargo_home.path().join("bin");
+    std::fs::create_dir_all(&cargo_bin).expect("failed to create CARGO_HOME/bin");
+    let rustup_path_output = Command::new("which")
+        .arg("rustup")
+        .output()
+        .expect("failed to run which rustup");
+    let rustup_path = String::from_utf8_lossy(&rustup_path_output.stdout)
+        .trim()
+        .to_string();
+    std::os::unix::fs::symlink(&rustup_path, cargo_bin.join("rustup"))
+        .expect("failed to symlink rustup to CARGO_HOME/bin");
+
     world.rustup_home.replace(Some(rustup_home));
     world.cargo_home.replace(Some(cargo_home));
 }
@@ -194,7 +235,17 @@ fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) {
 
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
 fn given_auto_detect_toolchain_install(world: &ToolchainWorld) {
-    setup_install_scenario(world, &["--jobs", "1"]);
+    setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
+}
+
+#[given("the installer is invoked with isolated rustup to force auto-install")]
+fn given_isolated_rustup_auto_install(world: &ToolchainWorld) {
+    setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
+}
+
+#[given("the installer is invoked with isolated rustup in quiet mode")]
+fn given_isolated_rustup_quiet(world: &ToolchainWorld) {
+    setup_install_scenario(world, &["--jobs", "1", "--quiet", "--skip-deps"]);
 }
 
 #[given("the installer is invoked with a non-existent toolchain")]
@@ -219,6 +270,12 @@ fn when_installer_cli_run(world: &ToolchainWorld) {
     // Set isolated rustup environment if configured for this scenario
     if let Some(ref rustup_home) = *world.rustup_home.borrow() {
         cmd.env("RUSTUP_HOME", rustup_home.path());
+        // Disable rustup's auto-install feature so that the installer's
+        // is_installed check doesn't silently install the toolchain. This
+        // ensures the explicit install_toolchain_with call is triggered.
+        cmd.env("RUSTUP_AUTO_INSTALL", "0");
+        // Clear RUSTUP_TOOLCHAIN which may be inherited from the test runner.
+        cmd.env_remove("RUSTUP_TOOLCHAIN");
     }
     if let Some(ref cargo_home) = *world.cargo_home.borrow() {
         cmd.env("CARGO_HOME", cargo_home.path());
@@ -262,8 +319,21 @@ fn then_no_install_message(world: &ToolchainWorld) {
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(
-        !stderr.contains("installed successfully"),
+        !stderr.contains(TOOLCHAIN_INSTALLED_MARKER),
         "expected no installation message in output, stderr: {stderr}"
+    );
+}
+
+#[then("the toolchain installation message is shown")]
+fn then_install_message_shown(world: &ToolchainWorld) {
+    skip_if_needed!(world);
+
+    let output = get_output(world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stderr.contains(TOOLCHAIN_INSTALLED_MARKER),
+        "expected '{TOOLCHAIN_INSTALLED_MARKER}' in output, stderr: {stderr}"
     );
 }
 
@@ -279,6 +349,17 @@ fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) {
     );
 
     // Verify the toolchain was actually installed in the isolated environment
+    assert_toolchain_installed_in_isolated_env(world);
+}
+
+#[then("the toolchain is installed in the isolated environment")]
+fn then_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
+    skip_if_needed!(world);
+    assert_toolchain_installed_in_isolated_env(world);
+}
+
+// Helper to verify the toolchain is installed in the isolated rustup environment.
+fn assert_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
     let rustup_home = world.rustup_home.borrow();
     let cargo_home = world.cargo_home.borrow();
     assert!(
@@ -378,11 +459,21 @@ fn scenario_auto_detect_toolchain_install(world: ToolchainWorld) {
 }
 
 #[scenario(path = "tests/features/toolchain.feature", index = 3)]
-fn scenario_auto_install_failure_reports_error(world: ToolchainWorld) {
+fn scenario_auto_install_success_emits_message(world: ToolchainWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/toolchain.feature", index = 4)]
+fn scenario_auto_install_success_quiet_mode(world: ToolchainWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/toolchain.feature", index = 5)]
+fn scenario_auto_install_failure_reports_error(world: ToolchainWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/toolchain.feature", index = 6)]
 fn scenario_auto_install_failure_quiet_mode(world: ToolchainWorld) {
     let _ = world;
 }
