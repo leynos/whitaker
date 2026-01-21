@@ -156,7 +156,7 @@ pub fn expect_component_add(
     );
 }
 
-/// Helper to test that ensure_installed fails with the expected error.
+// Helper to test that ensure_installed fails with the expected error.
 pub fn assert_install_fails_with<F, E>(toolchain: Toolchain, setup_mocks: F, error_matcher: E)
 where
     F: FnOnce(&mut MockCommandRunner, &mut mockall::Sequence),
@@ -172,4 +172,22 @@ where
         .expect_err("expected installation failure");
 
     error_matcher(err);
+}
+
+// Returns a predicate that matches a rustup component add command with multiple components.
+pub fn matches_multi_component_add(
+    channel: &str,
+    components: &[&str],
+) -> impl Fn(&str, &[String]) -> bool {
+    let channel = channel.to_owned();
+    let components: Vec<String> = components.iter().map(|s| (*s).to_owned()).collect();
+    move |program, args| {
+        program == "rustup"
+            && args.len() == 4 + components.len()
+            && args[0] == "component"
+            && args[1] == "add"
+            && args[2] == "--toolchain"
+            && args[3] == channel
+            && args[4..] == components
+    }
 }

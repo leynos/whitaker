@@ -6,8 +6,8 @@ use super::*;
 use rstest::rstest;
 use test_helpers::{
     ComponentAddExpectation, ToolchainInstallExpectation, assert_install_fails_with,
-    expect_component_add, expect_rustc_version, expect_toolchain_install, output_with_status,
-    output_with_stderr, test_toolchain,
+    expect_component_add, expect_rustc_version, expect_toolchain_install,
+    matches_multi_component_add, output_with_status, output_with_stderr, test_toolchain,
 };
 
 // Asserts that a parsing function rejects invalid contents with an
@@ -265,28 +265,17 @@ fn ensure_installed_reports_failure(
     );
 }
 
-#[test]
-fn stderr_message_empty_stderr_returns_unknown_error() {
-    let output = output_with_status(1);
-    assert_eq!(stderr_message(&output), "unknown error");
-}
-
-#[test]
-fn stderr_message_whitespace_only_returns_unknown_error() {
-    let output = output_with_stderr(1, "  \n\t  ");
-    assert_eq!(stderr_message(&output), "unknown error");
-}
-
-#[test]
-fn stderr_message_trims_trailing_whitespace() {
-    let output = output_with_stderr(1, "some error message   \n\n");
-    assert_eq!(stderr_message(&output), "some error message");
-}
-
-#[test]
-fn stderr_message_handles_multiline_utf8() {
-    let output = output_with_stderr(1, "line one\nline two\n");
-    assert_eq!(stderr_message(&output), "line one\nline two");
+#[rstest]
+#[case::empty_stderr(None, "unknown error")]
+#[case::whitespace_only(Some("  \n\t  "), "unknown error")]
+#[case::trailing_whitespace(Some("some error message   \n\n"), "some error message")]
+#[case::multiline_utf8(Some("line one\nline two\n"), "line one\nline two")]
+fn stderr_message_extracts_error(#[case] stderr: Option<&str>, #[case] expected: &str) {
+    let output = match stderr {
+        Some(s) => output_with_stderr(1, s),
+        None => output_with_status(1),
+    };
+    assert_eq!(stderr_message(&output), expected);
 }
 
 #[test]
@@ -348,19 +337,12 @@ fn ensure_installed_adds_multiple_components() {
 
     expect_rustc_version(&mut runner, &mut seq, "nightly-2025-09-18", 0);
 
-    // Expect a single component add call with both components
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup"
-                && args.len() == 6
-                && args[0] == "component"
-                && args[1] == "add"
-                && args[2] == "--toolchain"
-                && args[3] == "nightly-2025-09-18"
-                && args[4] == "rust-src"
-                && args[5] == "rustc-dev"
-        })
+        .withf(matches_multi_component_add(
+            "nightly-2025-09-18",
+            &["rust-src", "rustc-dev"],
+        ))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
