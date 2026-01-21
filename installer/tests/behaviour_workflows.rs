@@ -143,12 +143,14 @@ fn given_skip_wrapper_install(world: &WorkflowWorld) {
 
     let target_dir = setup_temp_dir(world);
 
+    // Use --skip-deps to avoid slow dependency downloads during test.
     world.args.replace(vec![
         "--jobs".to_owned(),
         "1".to_owned(),
         "--target-dir".to_owned(),
         target_dir,
         "--skip-wrapper".to_owned(),
+        "--skip-deps".to_owned(),
     ]);
 }
 
