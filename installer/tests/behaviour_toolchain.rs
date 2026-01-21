@@ -4,9 +4,12 @@
 //! auto-installs the pinned toolchain from rust-toolchain.toml.
 //!
 //! The tests include:
-//! - Auto-detection scenarios that require the pinned toolchain to be installed
-//! - Auto-install failure scenarios that exercise the install code path with a
-//!   non-existent toolchain, verifying proper error handling
+//! - Dry-run scenarios that test toolchain detection (skipped if toolchain missing)
+//! - Install scenarios that exercise auto-install using an isolated rustup
+//!   environment (RUSTUP_HOME/CARGO_HOME set to temp directories)
+//! - Failure scenarios that test error handling with a non-existent toolchain
+//!
+//! Note: The install scenario downloads toolchains from the network and may be slow.
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -38,8 +41,12 @@ struct ToolchainWorld {
     args: RefCell<Vec<String>>,
     output: RefCell<Option<Output>>,
     skip_assertions: Cell<bool>,
-    /// Holds the temp directory to prevent cleanup until the test completes.
+    /// Holds the target temp directory to prevent cleanup until the test completes.
     temp_dir: RefCell<Option<TempDir>>,
+    /// Isolated RUSTUP_HOME directory for auto-install scenarios.
+    rustup_home: RefCell<Option<TempDir>>,
+    /// Isolated CARGO_HOME directory for auto-install scenarios.
+    cargo_home: RefCell<Option<TempDir>>,
 }
 
 #[fixture]
@@ -69,6 +76,8 @@ fn is_toolchain_installed(channel: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Marks the scenario to be skipped if the pinned toolchain is not installed.
+/// Used for dry-run scenarios that test detection rather than installation.
 fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         eprintln!(
@@ -81,6 +90,15 @@ fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
             channel = channel
         );
     }
+}
+
+/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for the scenario.
+/// This ensures the auto-install code path is exercised regardless of host state.
+fn setup_isolated_rustup(world: &ToolchainWorld) {
+    let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
+    let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
+    world.rustup_home.replace(Some(rustup_home));
+    world.cargo_home.replace(Some(cargo_home));
 }
 
 fn setup_temp_dir(world: &ToolchainWorld) -> String {
@@ -107,11 +125,23 @@ macro_rules! skip_if_needed {
 // Scenario setup helpers
 // ---------------------------------------------------------------------------
 
-/// Sets up an auto-detect scenario that requires the pinned toolchain to be installed.
-fn setup_auto_detect_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
+/// Sets up a dry-run scenario that requires the pinned toolchain to be installed.
+/// Skips the scenario if the toolchain is missing since dry-run does not install.
+fn setup_dry_run_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     let channel = pinned_toolchain_channel();
     skip_scenario_when_toolchain_missing(world, &channel);
 
+    let target_dir = setup_temp_dir(world);
+
+    let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
+    args.extend(["--target-dir".to_owned(), target_dir]);
+    world.args.replace(args);
+}
+
+/// Sets up an install scenario with isolated rustup environment.
+/// The isolated environment ensures the auto-install code path is exercised.
+fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
+    setup_isolated_rustup(world);
     let target_dir = setup_temp_dir(world);
 
     let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
@@ -139,17 +169,17 @@ fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
 
 #[given("the installer is invoked with auto-detect toolchain")]
 fn given_auto_detect_toolchain(world: &ToolchainWorld) {
-    setup_auto_detect_scenario(world, &["--dry-run"]);
+    setup_dry_run_scenario(world, &["--dry-run"]);
 }
 
 #[given("the installer is invoked with auto-detect toolchain in quiet mode")]
 fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) {
-    setup_auto_detect_scenario(world, &["--dry-run", "--quiet"]);
+    setup_dry_run_scenario(world, &["--dry-run", "--quiet"]);
 }
 
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
 fn given_auto_detect_toolchain_install(world: &ToolchainWorld) {
-    setup_auto_detect_scenario(world, &["--jobs", "1"]);
+    setup_install_scenario(world, &["--jobs", "1"]);
 }
 
 #[given("the installer is invoked with a non-existent toolchain")]
@@ -170,6 +200,14 @@ fn when_installer_cli_run(world: &ToolchainWorld) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
+
+    // Set isolated rustup environment if configured for this scenario
+    if let Some(ref rustup_home) = *world.rustup_home.borrow() {
+        cmd.env("RUSTUP_HOME", rustup_home.path());
+    }
+    if let Some(ref cargo_home) = *world.cargo_home.borrow() {
+        cmd.env("CARGO_HOME", cargo_home.path());
+    }
 
     let output = cmd.output().expect("failed to run whitaker-installer");
     world.output.replace(Some(output));

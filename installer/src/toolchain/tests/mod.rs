@@ -9,11 +9,12 @@ use test_helpers::{
     output_with_stderr, test_toolchain,
 };
 
-/// Helper to assert that a parsing function rejects invalid contents
-/// with an InvalidToolchainFile error containing the expected reason substring.
-fn assert_parse_fails_with_reason<F>(contents: &str, expected_reason: &str, parse_fn: F)
+// Asserts that a parsing function rejects invalid contents with an
+// InvalidToolchainFile error containing the expected reason substring.
+fn assert_parse_fails_with_reason<F, T>(contents: &str, expected_reason: &str, parse_fn: F)
 where
-    F: FnOnce(&str) -> Result<()>,
+    F: FnOnce(&str) -> Result<T>,
+    T: std::fmt::Debug,
 {
     let err = parse_fn(contents).expect_err("should reject invalid toolchain file");
     assert!(
@@ -51,15 +52,13 @@ fn rejects_missing_channel() {
 [toolchain]
 components = ["rust-src"]
 "#;
-    assert_parse_fails_with_reason(contents, "channel", |c| {
-        parse_toolchain_channel(c).map(|_| ())
-    });
+    assert_parse_fails_with_reason(contents, "channel", parse_toolchain_channel);
 }
 
 #[test]
 fn rejects_invalid_toml() {
     let contents = "this is not valid toml {{{";
-    assert_parse_fails_with_reason(contents, "TOML", |c| parse_toolchain_channel(c).map(|_| ()));
+    assert_parse_fails_with_reason(contents, "TOML", parse_toolchain_channel);
 }
 
 #[test]
@@ -83,7 +82,7 @@ fn rejects_invalid_components() {
 channel = "nightly-2025-09-18"
 components = "rust-src"
 "#;
-    assert_parse_fails_with_reason(contents, "array", |c| parse_toolchain_config(c).map(|_| ()));
+    assert_parse_fails_with_reason(contents, "array", parse_toolchain_config);
 }
 
 #[test]
@@ -266,9 +265,7 @@ fn rejects_non_string_component_elements() {
 channel = "stable"
 components = [123, "rust-src"]
 "#;
-    assert_parse_fails_with_reason(contents, "array of strings", |c| {
-        parse_toolchain_config(c).map(|_| ())
-    });
+    assert_parse_fails_with_reason(contents, "array of strings", parse_toolchain_config);
 }
 
 #[test]
