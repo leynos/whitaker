@@ -79,73 +79,63 @@ fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
     );
 }
 
-/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing.
-///
-/// This ensures the auto-install code path is exercised regardless of host state.
-/// The function initialises rustup in the isolated environment and creates a
-/// symlink to the system rustup binary.
-///
-/// # Panics
-///
-/// Panics if the isolated environment cannot be created or initialised.
+/// Locates the system rustup binary path.
 #[cfg(unix)]
-pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
-    let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
-    let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
-
-    init_isolated_rustup(rustup_home.path(), cargo_home.path());
-
-    // Rustup expects to find itself at $CARGO_HOME/bin/rustup. Create a symlink
-    // to the system rustup so that toolchain install succeeds.
-    let cargo_bin = cargo_home.path().join("bin");
-    std::fs::create_dir_all(&cargo_bin).expect("failed to create CARGO_HOME/bin");
-    let rustup_path_output = Command::new("which")
+fn find_system_rustup() -> String {
+    let output = Command::new("which")
         .arg("rustup")
         .output()
         .expect("failed to run which rustup");
-    let rustup_path = String::from_utf8_lossy(&rustup_path_output.stdout)
-        .trim()
-        .to_string();
-    std::os::unix::fs::symlink(&rustup_path, cargo_bin.join("rustup"))
-        .expect("failed to symlink rustup to CARGO_HOME/bin");
-
-    IsolatedRustupEnv {
-        rustup_home,
-        cargo_home,
-    }
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing (Windows).
-///
-/// This ensures the auto-install code path is exercised regardless of host state.
-/// On Windows, we copy the rustup binary instead of creating a symlink.
-///
-/// # Panics
-///
-/// Panics if the isolated environment cannot be created or initialised.
 #[cfg(windows)]
-pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
-    let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
-    let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
-
-    init_isolated_rustup(rustup_home.path(), cargo_home.path());
-
-    // Rustup expects to find itself at $CARGO_HOME/bin/rustup.exe. Copy the
-    // system rustup binary so that toolchain install succeeds.
-    let cargo_bin = cargo_home.path().join("bin");
-    std::fs::create_dir_all(&cargo_bin).expect("failed to create CARGO_HOME/bin");
-    let rustup_path_output = Command::new("where")
+fn find_system_rustup() -> String {
+    let output = Command::new("where")
         .arg("rustup")
         .output()
         .expect("failed to run where rustup");
-    let rustup_path = String::from_utf8_lossy(&rustup_path_output.stdout)
+    String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
         .expect("rustup not found in PATH")
         .trim()
-        .to_string();
-    std::fs::copy(&rustup_path, cargo_bin.join("rustup.exe"))
+        .to_string()
+}
+
+/// Installs rustup into the isolated cargo_bin directory.
+#[cfg(unix)]
+fn install_rustup_to_cargo_bin(rustup_path: &str, cargo_bin: &Path) {
+    std::os::unix::fs::symlink(rustup_path, cargo_bin.join("rustup"))
+        .expect("failed to symlink rustup to CARGO_HOME/bin");
+}
+
+#[cfg(windows)]
+fn install_rustup_to_cargo_bin(rustup_path: &str, cargo_bin: &Path) {
+    std::fs::copy(rustup_path, cargo_bin.join("rustup.exe"))
         .expect("failed to copy rustup to CARGO_HOME/bin");
+}
+
+/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing.
+///
+/// This ensures the auto-install code path is exercised regardless of host state.
+/// The function initialises rustup in the isolated environment and makes the system
+/// rustup binary available (via symlink on Unix, copy on Windows).
+///
+/// # Panics
+///
+/// Panics if the isolated environment cannot be created or initialised.
+pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
+    let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
+    let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
+
+    init_isolated_rustup(rustup_home.path(), cargo_home.path());
+
+    let cargo_bin = cargo_home.path().join("bin");
+    std::fs::create_dir_all(&cargo_bin).expect("failed to create CARGO_HOME/bin");
+
+    let rustup_path = find_system_rustup();
+    install_rustup_to_cargo_bin(&rustup_path, &cargo_bin);
 
     IsolatedRustupEnv {
         rustup_home,
