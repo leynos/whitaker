@@ -30,7 +30,8 @@ filter = "test(/scenario.*(install|skip_wrapper_outputs)/) - test(/scenario_auto
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "10s" }
 
 # UI tests invoke the compiler for each fixture and compete for CPU cores.
+# Matches: ui, ui::ui, driver::ui::ui, driver::ui::ui_runs_in_welsh_locale
 [[profile.default.overrides]]
-filter = "test(/^ui$/)"
+filter = "test(/^ui$/) | test(/ui::ui/)"
 test-group = "compiler-ui"
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "10s" }
