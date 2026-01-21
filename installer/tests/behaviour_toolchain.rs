@@ -20,6 +20,8 @@ use support::{
     setup_isolated_rustup, workspace_root,
 };
 use tempfile::TempDir;
+use whitaker_installer::toolchain::parse_toolchain_channel;
+use whitaker_installer::toolchain::parse_toolchain_channel;
 
 /// Non-existent toolchain channel used to exercise auto-install failure paths.
 const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
@@ -44,11 +46,7 @@ struct ToolchainWorld {
     temp_dir: RefCell<Option<TempDir>>,
     rustup_home: RefCell<Option<TempDir>>,
     cargo_home: RefCell<Option<TempDir>>,
-}
-
-#[fixture]
-fn world() -> ToolchainWorld {
-    ToolchainWorld::default()
+    pinned_channel: String,
 }
 
 fn get_output(world: &ToolchainWorld) -> std::cell::Ref<'_, Output> {
@@ -200,10 +198,13 @@ fn when_installer_cli_run(world: &ToolchainWorld) {
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
 
+    // Sanitise rustup environment to prevent host settings from leaking
+    // into tests: always disable auto-install and remove toolchain overrides
+    cmd.env("RUSTUP_AUTO_INSTALL", "0");
+    cmd.env_remove("RUSTUP_TOOLCHAIN");
+
     if let Some(ref rustup_home) = *world.rustup_home.borrow() {
         cmd.env("RUSTUP_HOME", rustup_home.path());
-        cmd.env("RUSTUP_AUTO_INSTALL", "0");
-        cmd.env_remove("RUSTUP_TOOLCHAIN");
     }
     if let Some(ref cargo_home) = *world.cargo_home.borrow() {
         cmd.env("CARGO_HOME", cargo_home.path());
@@ -228,8 +229,7 @@ fn then_cli_exits_successfully(world: &ToolchainWorld) {
 fn then_dry_run_shows_toolchain(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let expected_channel = pinned_toolchain_channel();
+    let expected_channel = world.pinned_channel.clone();
     assert!(
         stderr.contains(&expected_channel),
         "expected toolchain '{expected_channel}' in output, stderr: {stderr}"
@@ -252,9 +252,11 @@ fn then_install_message_shown(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected_channel = world.pinned_channel.clone();
+    let expected_message = format!("{} {}", TOOLCHAIN_INSTALLED_MARKER, expected_channel);
     assert!(
-        stderr.contains(TOOLCHAIN_INSTALLED_MARKER),
-        "expected '{TOOLCHAIN_INSTALLED_MARKER}' in output, stderr: {stderr}"
+        stderr.contains(&expected_message),
+        "expected '{expected_message}' in output, stderr: {stderr}"
     );
 }
 
@@ -302,9 +304,10 @@ fn then_error_mentions_install_failure(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected_marker = format!("{} {}", TOOLCHAIN_ERROR_MARKER, world.pinned_channel);
     assert!(
-        stderr.contains(TOOLCHAIN_ERROR_MARKER),
-        "expected '{TOOLCHAIN_ERROR_MARKER}' in stderr: {stderr}"
+        stderr.contains(&expected_marker),
+        "expected '{expected_marker}' in stderr: {stderr}"
     );
 }
 

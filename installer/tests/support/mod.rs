@@ -11,10 +11,7 @@ use whitaker_installer::toolchain::parse_toolchain_channel;
 
 /// Returns the workspace root directory (parent of the installer crate).
 pub fn workspace_root() -> PathBuf {
-    PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("manifest dir should have parent")
-        .to_owned()
+    common::workspace_root()
 }
 
 /// Parses and returns the toolchain channel from rust-toolchain.toml.
@@ -35,6 +32,9 @@ pub fn is_toolchain_installed(channel: &str) -> bool {
 }
 
 /// Checks if a toolchain is installed in an isolated rustup environment.
+///
+/// Sanitises rustup environment by always setting RUSTUP_AUTO_INSTALL=0 and
+/// RUSTUP_TOOLCHAIN to prevent host settings from leaking into tests.
 pub fn is_toolchain_installed_in_env(
     channel: &str,
     rustup_home: &TempDir,
@@ -44,6 +44,8 @@ pub fn is_toolchain_installed_in_env(
         .args(["run", channel, "rustc", "--version"])
         .env("RUSTUP_HOME", rustup_home.path())
         .env("CARGO_HOME", cargo_home.path())
+        .env("RUSTUP_AUTO_INSTALL", "0")
+        .env_remove("RUSTUP_TOOLCHAIN")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
@@ -57,13 +59,13 @@ pub struct IsolatedRustupEnv {
 
 /// Initialises an isolated rustup environment by running `rustup show`.
 ///
-/// This creates the necessary settings files that rustup expects to exist.
+/// This creates necessary settings files that rustup expects to exist.
 /// The function sets RUSTUP_AUTO_INSTALL=0 to prevent auto-installing any
 /// toolchain during initialisation, clears RUSTUP_TOOLCHAIN to avoid
-/// rust-toolchain.toml files affecting the initialisation, and runs from
-/// rustup_home as the current directory to prevent rustup from walking up
-/// to the workspace and discovering the project's rust-toolchain.toml (which
-/// would affect toolchain selection).
+/// rust-toolchain.toml files affecting initialisation, and runs from
+/// rustup_home as a current directory to prevent rustup from walking up
+/// to the workspace and discovering a project's rust-toolchain.toml
+/// (which would affect toolchain selection).
 fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
     let init_output = Command::new("rustup")
         .arg("show")
@@ -83,7 +85,7 @@ fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
 }
 
 /// Parses the output of a command that locates rustup, extracting the first path.
-fn parse_rustup_location_output(output: &std::process::Output, _command_name: &str) -> String {
+fn parse_rustup_location_output(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
