@@ -40,7 +40,7 @@ const QUIET_MODE_MAX_LINES: usize = 5;
 struct ToolchainWorld {
     args: RefCell<Vec<String>>,
     output: RefCell<Option<Output>>,
-    skip_assertions: Cell<bool>,
+    should_skip_assertions: Cell<bool>,
     temp_dir: RefCell<Option<TempDir>>,
     rustup_home: RefCell<Option<TempDir>>,
     cargo_home: RefCell<Option<TempDir>>,
@@ -54,7 +54,7 @@ fn get_output(world: &ToolchainWorld) -> std::cell::Ref<'_, Output> {
 
 macro_rules! skip_if_needed {
     ($world:expr) => {
-        if $world.skip_assertions.get() {
+        if $world.should_skip_assertions.get() {
             return;
         }
     };
@@ -63,7 +63,7 @@ macro_rules! skip_if_needed {
 fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         eprintln!("Skipping scenario: toolchain '{channel}' not installed.");
-        world.skip_assertions.set(true);
+        world.should_skip_assertions.set(true);
         rstest_bdd::skip!("toolchain '{channel}' is not installed.", channel = channel);
     }
 }
@@ -163,7 +163,7 @@ fn setup_auto_install_scenario(world: &ToolchainWorld) {
     // identical to Linux; we're testing rustup behaviour rather than installer logic.
     if cfg!(windows) {
         eprintln!("Skipping auto-install scenario on Windows (toolchain downloads too slow).");
-        world.skip_assertions.set(true);
+        world.should_skip_assertions.set(true);
         rstest_bdd::skip!("auto-install tests skipped on Windows");
     }
     setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
