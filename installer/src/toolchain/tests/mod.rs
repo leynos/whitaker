@@ -319,8 +319,7 @@ fn run_rustup_propagates_io_error_as_toolchain_detection_error() {
         .expect_run()
         .returning(|_, _| Err(io::Error::other("boom")));
 
-    let args = vec!["toolchain".to_owned(), "list".to_owned()];
-    let result = run_rustup(&runner, &args);
+    let result = run_rustup(&runner, &["toolchain", "list"]);
 
     assert!(
         matches!(result, Err(InstallerError::ToolchainDetection { .. })),

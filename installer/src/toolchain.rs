@@ -35,21 +35,23 @@ struct ToolchainConfig {
     components: Vec<String>,
 }
 
-/// Abstraction for running external commands.
-///
-/// Note: The signature uses `&[String]` rather than the more efficient `&[&str]`
-/// due to mockall limitations with lifetime parameters in trait methods. The
-/// mockall crate cannot generate mock implementations for `&[&str]` without
-/// explicit lifetime annotations, which would complicate the trait definition.
+// Abstraction for running external commands.
 #[cfg_attr(test, mockall::automock)]
 trait CommandRunner {
-    fn run(&self, program: &str, args: &[String]) -> std::io::Result<Output>;
+    // mockall requires explicit lifetimes for nested references in trait methods;
+    // eliding causes E0106 when the automock attribute generates mock code.
+    #[expect(
+        clippy::needless_lifetimes,
+        reason = "mockall requires explicit lifetime for &[&str]"
+    )]
+    fn run<'a>(&self, program: &str, args: &[&'a str]) -> std::io::Result<Output>;
 }
 
 struct SystemCommandRunner;
 
 impl CommandRunner for SystemCommandRunner {
-    fn run(&self, program: &str, args: &[String]) -> std::io::Result<Output> {
+    #[expect(clippy::needless_lifetimes, reason = "signature must match trait")]
+    fn run<'a>(&self, program: &str, args: &[&'a str]) -> std::io::Result<Output> {
         Command::new(program).args(args).output()
     }
 }
@@ -157,23 +159,12 @@ impl Toolchain {
     }
 
     fn is_installed_with(&self, runner: &dyn CommandRunner) -> Result<bool> {
-        let args = vec![
-            "run".to_owned(),
-            self.channel.clone(),
-            "rustc".to_owned(),
-            "--version".to_owned(),
-        ];
-        let output = run_rustup(runner, &args)?;
+        let output = run_rustup(runner, &["run", &self.channel, "rustc", "--version"])?;
         Ok(output.status.success())
     }
 
     fn install_toolchain_with(&self, runner: &dyn CommandRunner) -> Result<()> {
-        let args = vec![
-            "toolchain".to_owned(),
-            "install".to_owned(),
-            self.channel.clone(),
-        ];
-        let output = run_rustup(runner, &args)?;
+        let output = run_rustup(runner, &["toolchain", "install", &self.channel])?;
 
         if output.status.success() {
             return Ok(());
@@ -190,13 +181,8 @@ impl Toolchain {
             return Ok(());
         }
 
-        let mut args = vec![
-            "component".to_owned(),
-            "add".to_owned(),
-            "--toolchain".to_owned(),
-            self.channel.clone(),
-        ];
-        args.extend(self.components.iter().cloned());
+        let mut args: Vec<&str> = vec!["component", "add", "--toolchain", &self.channel];
+        args.extend(self.components.iter().map(String::as_str));
 
         let output = run_rustup(runner, &args)?;
 
@@ -299,7 +285,7 @@ fn parse_components_from_table(table: &toml::Table) -> Result<Vec<String>> {
         .collect()
 }
 
-fn run_rustup(runner: &dyn CommandRunner, args: &[String]) -> Result<Output> {
+fn run_rustup(runner: &dyn CommandRunner, args: &[&str]) -> Result<Output> {
     runner
         .run("rustup", args)
         .map_err(|e| InstallerError::ToolchainDetection {

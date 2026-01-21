@@ -47,14 +47,14 @@ pub struct RustupExpectation<'a> {
     pub stderr: Option<&'a str>,
 }
 
-/// Generic helper to expect a rustup command with custom validation.
+// Generic helper to expect a rustup command with custom validation.
 fn expect_rustup_command<F>(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
     expectation: RustupExpectation<'_>,
     matcher: F,
 ) where
-    F: Fn(&str, &[String]) -> bool + Send + 'static,
+    F: Fn(&str, &[&str]) -> bool + Send + 'static,
 {
     let stderr = expectation.stderr.map(str::to_owned);
     let exit_code = expectation.exit_code;
@@ -178,7 +178,7 @@ where
 pub fn matches_multi_component_add(
     channel: &str,
     components: &[&str],
-) -> impl Fn(&str, &[String]) -> bool {
+) -> impl Fn(&str, &[&str]) -> bool {
     let channel = channel.to_owned();
     let components: Vec<String> = components.iter().map(|s| (*s).to_owned()).collect();
     move |program, args| {
@@ -188,6 +188,6 @@ pub fn matches_multi_component_add(
             && args[1] == "add"
             && args[2] == "--toolchain"
             && args[3] == channel
-            && args[4..] == components
+            && args[4..].iter().zip(&components).all(|(a, b)| *a == b)
     }
 }
