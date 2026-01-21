@@ -11,7 +11,10 @@ use whitaker_installer::toolchain::parse_toolchain_channel;
 
 /// Returns the workspace root directory (parent of the installer crate).
 pub fn workspace_root() -> PathBuf {
-    common::workspace_root()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("installer crate is not at workspace root")
+        .to_path_buf()
 }
 
 /// Parses and returns the toolchain channel from rust-toolchain.toml.
@@ -101,7 +104,7 @@ fn find_system_rustup() -> String {
         .arg("rustup")
         .output()
         .expect("failed to run which rustup");
-    parse_rustup_location_output(&output, "which")
+    parse_rustup_location_output(&output)
 }
 
 #[cfg(windows)]
@@ -110,7 +113,7 @@ fn find_system_rustup() -> String {
         .arg("rustup")
         .output()
         .expect("failed to run where rustup");
-    parse_rustup_location_output(&output, "where")
+    parse_rustup_location_output(&output)
 }
 
 /// Installs rustup into the isolated cargo_bin directory.

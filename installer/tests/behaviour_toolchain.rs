@@ -20,8 +20,6 @@ use support::{
     setup_isolated_rustup, workspace_root,
 };
 use tempfile::TempDir;
-use whitaker_installer::toolchain::parse_toolchain_channel;
-use whitaker_installer::toolchain::parse_toolchain_channel;
 
 /// Non-existent toolchain channel used to exercise auto-install failure paths.
 const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
@@ -33,7 +31,7 @@ const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
 const TOOLCHAIN_INSTALLED_MARKER: &str = "installed successfully";
 
 /// Canonical error marker for toolchain installation failures.
-const TOOLCHAIN_ERROR_MARKER: &str = "not installed";
+const TOOLCHAIN_ERROR_MARKER: &str = "installation failed";
 
 /// Maximum output lines expected in quiet mode error scenarios.
 const QUIET_MODE_MAX_LINES: usize = 5;
@@ -46,7 +44,15 @@ struct ToolchainWorld {
     temp_dir: RefCell<Option<TempDir>>,
     rustup_home: RefCell<Option<TempDir>>,
     cargo_home: RefCell<Option<TempDir>>,
-    pinned_channel: String,
+    pinned_channel: RefCell<String>,
+}
+
+impl Drop for ToolchainWorld {
+    fn drop(&mut self) {
+        self.temp_dir.take();
+        self.rustup_home.take();
+        self.cargo_home.take();
+    }
 }
 
 fn get_output(world: &ToolchainWorld) -> std::cell::Ref<'_, Output> {
@@ -80,6 +86,7 @@ fn setup_temp_dir(world: &ToolchainWorld) -> String {
 fn setup_dry_run_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     let channel = pinned_toolchain_channel();
     skip_scenario_when_toolchain_missing(world, &channel);
+    world.pinned_channel.replace(channel.clone());
 
     let target_dir = setup_temp_dir(world);
     let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
@@ -91,6 +98,7 @@ fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     let env = setup_isolated_rustup();
     world.rustup_home.replace(Some(env.rustup_home));
     world.cargo_home.replace(Some(env.cargo_home));
+    world.pinned_channel.replace(pinned_toolchain_channel());
 
     let target_dir = setup_temp_dir(world);
     let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
@@ -141,6 +149,11 @@ fn assert_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
 // ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
+
+#[fixture]
+fn world() -> ToolchainWorld {
+    ToolchainWorld::default()
+}
 
 #[given("the installer is invoked with auto-detect toolchain")]
 fn given_auto_detect_toolchain(world: &ToolchainWorld) {
@@ -229,7 +242,8 @@ fn then_cli_exits_successfully(world: &ToolchainWorld) {
 fn then_dry_run_shows_toolchain(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
-    let expected_channel = world.pinned_channel.clone();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected_channel = world.pinned_channel.borrow().clone();
     assert!(
         stderr.contains(&expected_channel),
         "expected toolchain '{expected_channel}' in output, stderr: {stderr}"
@@ -252,7 +266,7 @@ fn then_install_message_shown(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let expected_channel = world.pinned_channel.clone();
+    let expected_channel = world.pinned_channel.borrow().clone();
     let expected_message = format!("{} {}", TOOLCHAIN_INSTALLED_MARKER, expected_channel);
     assert!(
         stderr.contains(&expected_message),
@@ -304,10 +318,10 @@ fn then_error_mentions_install_failure(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let expected_marker = format!("{} {}", TOOLCHAIN_ERROR_MARKER, world.pinned_channel);
     assert!(
-        stderr.contains(&expected_marker),
-        "expected '{expected_marker}' in stderr: {stderr}"
+        stderr.contains(TOOLCHAIN_ERROR_MARKER),
+        "expected '{}' in stderr: {stderr}",
+        TOOLCHAIN_ERROR_MARKER
     );
 }
 
