@@ -9,17 +9,20 @@ use test_helpers::{
     output_with_stderr, test_toolchain,
 };
 
-/// Helper to assert that parse_toolchain_config rejects invalid contents
+/// Helper to assert that a parsing function rejects invalid contents
 /// with an InvalidToolchainFile error containing the expected reason substring.
-fn assert_parse_config_fails_with_reason(contents: &str, expected_reason_substring: &str) {
-    let err = parse_toolchain_config(contents).expect_err("should reject invalid toolchain config");
+fn assert_parse_fails_with_reason<F>(contents: &str, expected_reason: &str, parse_fn: F)
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    let err = parse_fn(contents).expect_err("should reject invalid toolchain file");
     assert!(
         matches!(
             err,
             InstallerError::InvalidToolchainFile { ref reason }
-                if reason.contains(expected_reason_substring)
+                if reason.contains(expected_reason)
         ),
-        "expected InvalidToolchainFile error containing '{expected_reason_substring}', got {err:?}"
+        "expected InvalidToolchainFile error containing '{expected_reason}', got {err:?}"
     );
 }
 
@@ -48,21 +51,15 @@ fn rejects_missing_channel() {
 [toolchain]
 components = ["rust-src"]
 "#;
-    let err = parse_toolchain_channel(contents).expect_err("should reject missing channel");
-    assert!(
-        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("channel")),
-        "expected InvalidToolchainFile error about channel, got {err:?}"
-    );
+    assert_parse_fails_with_reason(contents, "channel", |c| {
+        parse_toolchain_channel(c).map(|_| ())
+    });
 }
 
 #[test]
 fn rejects_invalid_toml() {
     let contents = "this is not valid toml {{{";
-    let err = parse_toolchain_channel(contents).expect_err("should reject invalid TOML");
-    assert!(
-        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("TOML")),
-        "expected InvalidToolchainFile error with TOML message, got {err:?}"
-    );
+    assert_parse_fails_with_reason(contents, "TOML", |c| parse_toolchain_channel(c).map(|_| ()));
 }
 
 #[test]
@@ -86,7 +83,7 @@ fn rejects_invalid_components() {
 channel = "nightly-2025-09-18"
 components = "rust-src"
 "#;
-    assert_parse_config_fails_with_reason(contents, "array");
+    assert_parse_fails_with_reason(contents, "array", |c| parse_toolchain_config(c).map(|_| ()));
 }
 
 #[test]
@@ -269,7 +266,9 @@ fn rejects_non_string_component_elements() {
 channel = "stable"
 components = [123, "rust-src"]
 "#;
-    assert_parse_config_fails_with_reason(contents, "array of strings");
+    assert_parse_fails_with_reason(contents, "array of strings", |c| {
+        parse_toolchain_config(c).map(|_| ())
+    });
 }
 
 #[test]
