@@ -34,8 +34,11 @@ fn rejects_missing_channel() {
 [toolchain]
 components = ["rust-src"]
 "#;
-    let result = parse_toolchain_channel(contents);
-    assert!(result.is_err());
+    let err = parse_toolchain_channel(contents).expect_err("should reject missing channel");
+    assert!(
+        matches!(err, InstallerError::InvalidToolchainFile { ref reason } if reason.contains("channel")),
+        "expected InvalidToolchainFile error about channel, got {err:?}"
+    );
 }
 
 #[test]

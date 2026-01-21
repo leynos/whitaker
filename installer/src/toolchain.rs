@@ -23,19 +23,6 @@ pub struct ToolchainInstallStatus {
 
 impl ToolchainInstallStatus {
     /// Returns true if the toolchain was installed during this run.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use whitaker_installer::toolchain::Toolchain;
-    /// use camino::Utf8Path;
-    ///
-    /// let toolchain = Toolchain::detect(Utf8Path::new("/path/to/workspace")).unwrap();
-    /// let status = toolchain.ensure_installed().unwrap();
-    /// if status.installed_toolchain() {
-    ///     println!("Toolchain was freshly installed");
-    /// }
-    /// ```
     #[must_use]
     pub fn installed_toolchain(&self) -> bool {
         self.installed_toolchain
