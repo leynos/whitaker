@@ -47,19 +47,47 @@ fn parses_simple_channel_format() {
     assert_eq!(channel, "stable");
 }
 
-#[test]
-fn rejects_missing_channel() {
-    let contents = r#"
-[toolchain]
-components = ["rust-src"]
-"#;
-    assert_parse_fails_with_reason(contents, "channel", parse_toolchain_channel);
+// Identifies which parse function to use in parameterized tests.
+#[derive(Debug, Clone, Copy)]
+enum ParseTarget {
+    Channel,
+    Config,
 }
 
-#[test]
-fn rejects_invalid_toml() {
-    let contents = "this is not valid toml {{{";
-    assert_parse_fails_with_reason(contents, "TOML", parse_toolchain_channel);
+fn run_parse_and_check(contents: &str, expected_reason: &str, target: ParseTarget) {
+    match target {
+        ParseTarget::Channel => {
+            assert_parse_fails_with_reason(contents, expected_reason, parse_toolchain_channel)
+        }
+        ParseTarget::Config => {
+            assert_parse_fails_with_reason(contents, expected_reason, parse_toolchain_config)
+        }
+    }
+}
+
+#[rstest]
+#[case::missing_channel(
+    ParseTarget::Channel,
+    "[toolchain]\ncomponents = [\"rust-src\"]\n",
+    "channel"
+)]
+#[case::invalid_toml(ParseTarget::Channel, "this is not valid toml {{{", "TOML")]
+#[case::invalid_components_type(
+    ParseTarget::Config,
+    "[toolchain]\nchannel = \"nightly-2025-09-18\"\ncomponents = \"rust-src\"\n",
+    "array"
+)]
+#[case::non_string_component_elements(
+    ParseTarget::Config,
+    "[toolchain]\nchannel = \"stable\"\ncomponents = [123, \"rust-src\"]\n",
+    "array of strings"
+)]
+fn rejects_invalid_toolchain_file(
+    #[case] target: ParseTarget,
+    #[case] contents: &str,
+    #[case] expected_reason: &str,
+) {
+    run_parse_and_check(contents, expected_reason, target);
 }
 
 #[test]
@@ -74,16 +102,6 @@ components = ["rust-src", "rustc-dev"]
         config.components,
         vec!["rust-src".to_owned(), "rustc-dev".to_owned()]
     );
-}
-
-#[test]
-fn rejects_invalid_components() {
-    let contents = r#"
-[toolchain]
-channel = "nightly-2025-09-18"
-components = "rust-src"
-"#;
-    assert_parse_fails_with_reason(contents, "array", parse_toolchain_config);
 }
 
 #[test]
@@ -300,16 +318,6 @@ channel = "stable"
 "#;
     let config = parse_toolchain_config(contents).expect("config should parse");
     assert!(config.components.is_empty());
-}
-
-#[test]
-fn rejects_non_string_component_elements() {
-    let contents = r#"
-[toolchain]
-channel = "stable"
-components = [123, "rust-src"]
-"#;
-    assert_parse_fails_with_reason(contents, "array of strings", parse_toolchain_config);
 }
 
 #[test]
