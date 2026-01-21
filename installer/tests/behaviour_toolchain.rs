@@ -76,7 +76,7 @@ fn is_toolchain_installed(channel: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Checks if a toolchain is installed in an isolated rustup environment.
+// Checks if a toolchain is installed in an isolated rustup environment.
 fn is_toolchain_installed_in_env(
     channel: &str,
     rustup_home: &TempDir,
@@ -91,8 +91,8 @@ fn is_toolchain_installed_in_env(
         .unwrap_or(false)
 }
 
-/// Marks the scenario to be skipped if the pinned toolchain is not installed.
-/// Used for dry-run scenarios that test detection rather than installation.
+// Marks the scenario to be skipped if the pinned toolchain is not installed.
+// Used for dry-run scenarios that test detection rather than installation.
 fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         eprintln!(
@@ -107,8 +107,8 @@ fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
     }
 }
 
-/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for the scenario.
-/// This ensures the auto-install code path is exercised regardless of host state.
+// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for the scenario.
+// This ensures the auto-install code path is exercised regardless of host state.
 fn setup_isolated_rustup(world: &ToolchainWorld) {
     let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
     let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
@@ -140,8 +140,8 @@ macro_rules! skip_if_needed {
 // Scenario setup helpers
 // ---------------------------------------------------------------------------
 
-/// Sets up a dry-run scenario that requires the pinned toolchain to be installed.
-/// Skips the scenario if the toolchain is missing since dry-run does not install.
+// Sets up a dry-run scenario that requires the pinned toolchain to be installed.
+// Skips the scenario if the toolchain is missing since dry-run does not install.
 fn setup_dry_run_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     let channel = pinned_toolchain_channel();
     skip_scenario_when_toolchain_missing(world, &channel);
@@ -153,8 +153,8 @@ fn setup_dry_run_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     world.args.replace(args);
 }
 
-/// Sets up an install scenario with isolated rustup environment.
-/// The isolated environment ensures the auto-install code path is exercised.
+// Sets up an install scenario with isolated rustup environment.
+// The isolated environment ensures the auto-install code path is exercised.
 fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     setup_isolated_rustup(world);
     let target_dir = setup_temp_dir(world);
@@ -164,7 +164,7 @@ fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     world.args.replace(args);
 }
 
-/// Sets up a failure scenario using a non-existent toolchain.
+// Sets up a failure scenario using a non-existent toolchain.
 fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
     let target_dir = setup_temp_dir(world);
 
@@ -281,13 +281,17 @@ fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) {
     // Verify the toolchain was actually installed in the isolated environment
     let rustup_home = world.rustup_home.borrow();
     let cargo_home = world.cargo_home.borrow();
-    if let (Some(rustup), Some(cargo)) = (rustup_home.as_ref(), cargo_home.as_ref()) {
-        let channel = pinned_toolchain_channel();
-        assert!(
-            is_toolchain_installed_in_env(&channel, rustup, cargo),
-            "toolchain '{channel}' was not installed in isolated environment"
-        );
-    }
+    assert!(
+        rustup_home.is_some() && cargo_home.is_some(),
+        "isolated rustup environment must be configured for install scenario"
+    );
+    let rustup = rustup_home.as_ref().expect("rustup_home");
+    let cargo = cargo_home.as_ref().expect("cargo_home");
+    let channel = pinned_toolchain_channel();
+    assert!(
+        is_toolchain_installed_in_env(&channel, rustup, cargo),
+        "toolchain '{channel}' was not installed in isolated environment"
+    );
 }
 
 #[then("the suite library is staged")]
