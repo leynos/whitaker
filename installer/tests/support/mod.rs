@@ -4,7 +4,7 @@
 //! including workspace path resolution, toolchain detection, and isolated rustup
 //! environment setup.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 use whitaker_installer::toolchain::parse_toolchain_channel;
@@ -55,31 +55,18 @@ pub struct IsolatedRustupEnv {
     pub cargo_home: TempDir,
 }
 
-/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing.
+/// Initialises an isolated rustup environment by running `rustup show`.
 ///
-/// This ensures the auto-install code path is exercised regardless of host state.
-/// The function initialises rustup in the isolated environment and creates the
-/// necessary symlinks (Unix) or copies (Windows) for rustup to function correctly.
-///
-/// # Panics
-///
-/// Panics if the isolated environment cannot be created or initialised.
-#[cfg(unix)]
-pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
-    let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
-    let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
-
-    // Initialise the isolated rustup environment by running `rustup show`.
-    // This creates the necessary settings files that rustup expects to exist.
-    // We set RUSTUP_AUTO_INSTALL=0 to prevent rustup from auto-installing
-    // any toolchain during initialisation.
-    // We also clear RUSTUP_TOOLCHAIN and run from the temp directory to avoid
-    // rust-toolchain.toml files affecting the initialisation.
+/// This creates the necessary settings files that rustup expects to exist.
+/// The function sets RUSTUP_AUTO_INSTALL=0 to prevent auto-installing any
+/// toolchain during initialisation, and clears RUSTUP_TOOLCHAIN to avoid
+/// rust-toolchain.toml files affecting the initialisation.
+fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
     let init_output = Command::new("rustup")
         .arg("show")
-        .current_dir(rustup_home.path())
-        .env("RUSTUP_HOME", rustup_home.path())
-        .env("CARGO_HOME", cargo_home.path())
+        .current_dir(rustup_home)
+        .env("RUSTUP_HOME", rustup_home)
+        .env("CARGO_HOME", cargo_home)
         .env("RUSTUP_AUTO_INSTALL", "0")
         .env_remove("RUSTUP_TOOLCHAIN")
         .output()
@@ -90,6 +77,23 @@ pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
         "failed to initialise isolated rustup: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
+}
+
+/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing.
+///
+/// This ensures the auto-install code path is exercised regardless of host state.
+/// The function initialises rustup in the isolated environment and creates a
+/// symlink to the system rustup binary.
+///
+/// # Panics
+///
+/// Panics if the isolated environment cannot be created or initialised.
+#[cfg(unix)]
+pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
+    let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
+    let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
+
+    init_isolated_rustup(rustup_home.path(), cargo_home.path());
 
     // Rustup expects to find itself at $CARGO_HOME/bin/rustup. Create a symlink
     // to the system rustup so that toolchain install succeeds.
@@ -124,27 +128,7 @@ pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
     let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
     let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");
 
-    // Initialise the isolated rustup environment by running `rustup show`.
-    // This creates the necessary settings files that rustup expects to exist.
-    // We set RUSTUP_AUTO_INSTALL=0 to prevent rustup from auto-installing
-    // any toolchain during initialisation.
-    // We also clear RUSTUP_TOOLCHAIN and run from the temp directory to avoid
-    // rust-toolchain.toml files affecting the initialisation.
-    let init_output = Command::new("rustup")
-        .arg("show")
-        .current_dir(rustup_home.path())
-        .env("RUSTUP_HOME", rustup_home.path())
-        .env("CARGO_HOME", cargo_home.path())
-        .env("RUSTUP_AUTO_INSTALL", "0")
-        .env_remove("RUSTUP_TOOLCHAIN")
-        .output()
-        .expect("failed to initialise isolated rustup environment");
-
-    assert!(
-        init_output.status.success(),
-        "failed to initialise isolated rustup: {}",
-        String::from_utf8_lossy(&init_output.stderr)
-    );
+    init_isolated_rustup(rustup_home.path(), cargo_home.path());
 
     // Rustup expects to find itself at $CARGO_HOME/bin/rustup.exe. Copy the
     // system rustup binary so that toolchain install succeeds.

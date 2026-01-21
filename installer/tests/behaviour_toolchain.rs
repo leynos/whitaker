@@ -142,14 +142,18 @@ fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) {
     setup_dry_run_scenario(world, &["--dry-run", "--quiet"]);
 }
 
+fn setup_auto_install_scenario(world: &ToolchainWorld) {
+    setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
+}
+
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
 fn given_auto_detect_toolchain_install(world: &ToolchainWorld) {
-    setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
+    setup_auto_install_scenario(world);
 }
 
 #[given("the installer is invoked with isolated rustup to force auto-install")]
 fn given_isolated_rustup_auto_install(world: &ToolchainWorld) {
-    setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
+    setup_auto_install_scenario(world);
 }
 
 #[given("the installer is invoked with isolated rustup in quiet mode")]
