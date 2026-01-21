@@ -1,0 +1,21 @@
+# Configuration for cargo-nextest test runner.
+#
+# This file configures test execution behaviour, particularly for tests that
+# require toolchain installation or other slow operations.
+
+[profile.default]
+# Kill any test once it crosses 60s.
+slow-timeout = { period = "60s", terminate-after = 1, grace-period = "5s" }
+
+# Put a hard ceiling on the whole run.
+global-timeout = "30m"
+
+# Install-related tests build the lint suite and may download/install rust
+# toolchains, which can take several minutes per test.
+[[profile.default.overrides]]
+filter = "test(/scenario.*install/) | test(/scenario_skip_wrapper/)"
+slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
+
+[profile.long]
+slow-timeout = { period = "300s", terminate-after = 1, grace-period = "5s" }
+global-timeout = "60m"
