@@ -246,10 +246,14 @@ fn then_dry_run_shows_toolchain(world: &ToolchainWorld) {
 fn then_no_install_message(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let out = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
     assert!(
-        !stderr.contains(TOOLCHAIN_INSTALLED_MARKER),
-        "expected no installation message in output, stderr: {stderr}"
+        !out.contains(TOOLCHAIN_INSTALLED_MARKER),
+        "expected no installation message in output, got:\n{out}"
     );
 }
 

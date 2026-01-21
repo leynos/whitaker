@@ -26,9 +26,14 @@ pub fn pinned_toolchain_channel() -> String {
 }
 
 /// Checks if a toolchain is installed on the host system.
+///
+/// Sanitises rustup environment by always setting RUSTUP_AUTO_INSTALL=0 and
+/// RUSTUP_TOOLCHAIN to prevent host settings from leaking into tests.
 pub fn is_toolchain_installed(channel: &str) -> bool {
     Command::new("rustup")
         .args(["run", channel, "rustc", "--version"])
+        .env("RUSTUP_AUTO_INSTALL", "0")
+        .env_remove("RUSTUP_TOOLCHAIN")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
@@ -36,8 +41,8 @@ pub fn is_toolchain_installed(channel: &str) -> bool {
 
 /// Checks if a toolchain is installed in an isolated rustup environment.
 ///
-/// Sanitises rustup environment by always setting RUSTUP_AUTO_INSTALL=0 and
-/// RUSTUP_TOOLCHAIN to prevent host settings from leaking into tests.
+/// Uses the same environment sanitization as `is_toolchain_installed` to prevent
+/// host settings from affecting test behaviour.
 pub fn is_toolchain_installed_in_env(
     channel: &str,
     rustup_home: &TempDir,
