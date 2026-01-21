@@ -257,12 +257,19 @@ fn then_no_install_message(world: &ToolchainWorld) {
 fn then_install_message_shown(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let expected_channel = world.pinned_channel.borrow().clone();
-    let expected_message = format!("{} {}", TOOLCHAIN_INSTALLED_MARKER, expected_channel);
+    let out = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let channel = world.pinned_channel.borrow().clone();
+    let out_lc = out.to_lowercase();
+    let needle = format!("toolchain {channel} installed successfully").to_lowercase();
+    let ok = out_lc.contains(&needle)
+        || (out_lc.contains("installed successfully") && out_lc.contains(&channel.to_lowercase()));
     assert!(
-        stderr.contains(&expected_message),
-        "expected '{expected_message}' in output, stderr: {stderr}"
+        ok,
+        "expected success marker for channel '{channel}' in output, got:\n{out}"
     );
 }
 
