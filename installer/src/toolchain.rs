@@ -10,9 +10,9 @@ use std::process::{Command, Output};
 /// Components required for building dylint lints.
 ///
 /// Only these components are installed by the installer, regardless of what
-/// rust-toolchain.toml specifies. Development tools like rustfmt, clippy, and
-/// llvm-tools-preview are not needed for building lints.
-const REQUIRED_COMPONENTS: &[&str] = &["rust-src", "rustc-dev"];
+/// rust-toolchain.toml specifies. Development tools like rustfmt and clippy
+/// are not needed for building lints.
+const REQUIRED_COMPONENTS: &[&str] = &["rust-src", "rustc-dev", "llvm-tools-preview"];
 
 /// Represents a detected Rust toolchain configuration.
 #[derive(Debug, Clone)]
