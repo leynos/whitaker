@@ -10,8 +10,19 @@ slow-timeout = { period = "180s", terminate-after = 1, grace-period = "5s" }
 # Put a hard ceiling on the whole run.
 global-timeout = "30m"
 
-# Install-related tests build the lint suite and may download/install rust
-# toolchains, which can take several minutes per test.
+# Serialize toolchain auto-install tests to prevent parallel downloads of the
+# same toolchain, which wastes bandwidth and can cause timeouts.
+[test-groups]
+toolchain-install = { max-threads = 1 }
+
+# Toolchain auto-install tests download full toolchains (~2GB) and must run
+# serially to avoid redundant downloads.
 [[profile.default.overrides]]
-filter = "test(/scenario.*(install|skip_wrapper_outputs)/)"
+filter = "test(/scenario_auto_install/)"
+test-group = "toolchain-install"
+slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
+
+# Install-related tests build the lint suite but don't download toolchains.
+[[profile.default.overrides]]
+filter = "test(/scenario.*(install|skip_wrapper_outputs)/) - test(/scenario_auto_install/)"
 slow-timeout = { period = "300s", terminate-after = 1, grace-period = "10s" }
