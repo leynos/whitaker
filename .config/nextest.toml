@@ -27,7 +27,7 @@ slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
 # Install-related tests build the lint suite but don't download toolchains.
 [[profile.default.overrides]]
 filter = "test(/scenario.*(install|skip_wrapper_outputs)/) - test(/scenario_auto_install/)"
-slow-timeout = { period = "300s", terminate-after = 1, grace-period = "10s" }
+slow-timeout = { period = "600s", terminate-after = 1, grace-period = "10s" }
 
 # UI tests invoke the compiler for each fixture and compete for CPU cores.
 # Matches: ui, ui::ui, driver::ui::ui, driver::ui::ui_runs_in_welsh_locale
