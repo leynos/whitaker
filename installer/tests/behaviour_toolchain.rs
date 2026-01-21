@@ -76,6 +76,21 @@ fn is_toolchain_installed(channel: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Checks if a toolchain is installed in an isolated rustup environment.
+fn is_toolchain_installed_in_env(
+    channel: &str,
+    rustup_home: &TempDir,
+    cargo_home: &TempDir,
+) -> bool {
+    Command::new("rustup")
+        .args(["run", channel, "rustc", "--version"])
+        .env("RUSTUP_HOME", rustup_home.path())
+        .env("CARGO_HOME", cargo_home.path())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Marks the scenario to be skipped if the pinned toolchain is not installed.
 /// Used for dry-run scenarios that test detection rather than installation.
 fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
@@ -262,6 +277,17 @@ fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) {
         "installation failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+
+    // Verify the toolchain was actually installed in the isolated environment
+    let rustup_home = world.rustup_home.borrow();
+    let cargo_home = world.cargo_home.borrow();
+    if let (Some(rustup), Some(cargo)) = (rustup_home.as_ref(), cargo_home.as_ref()) {
+        let channel = pinned_toolchain_channel();
+        assert!(
+            is_toolchain_installed_in_env(&channel, rustup, cargo),
+            "toolchain '{channel}' was not installed in isolated environment"
+        );
+    }
 }
 
 #[then("the suite library is staged")]

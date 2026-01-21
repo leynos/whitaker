@@ -3,6 +3,7 @@
 mod test_helpers;
 
 use super::*;
+use rstest::rstest;
 use test_helpers::{
     ComponentAddExpectation, ToolchainInstallExpectation, assert_install_fails_with,
     expect_component_add, expect_rustc_version, expect_toolchain_install, output_with_status,
@@ -137,14 +138,22 @@ fn ensure_installed_adds_components_when_present() {
     assert!(!status.installed_toolchain());
 }
 
-#[test]
-fn ensure_installed_reports_toolchain_install_failure() {
-    let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel, Vec::new());
+// Describes the type of installation failure being tested.
+#[derive(Debug, Clone, Copy)]
+enum InstallFailure {
+    ToolchainInstall,
+    ComponentAdd,
+    ToolchainUnusableAfterInstall,
+}
 
-    assert_install_fails_with(
-        toolchain,
-        |runner, seq| {
+fn setup_failure_mocks(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    channel: &str,
+    failure: InstallFailure,
+) {
+    match failure {
+        InstallFailure::ToolchainInstall => {
             expect_rustc_version(runner, seq, channel, 1);
             expect_toolchain_install(
                 runner,
@@ -155,51 +164,86 @@ fn ensure_installed_reports_toolchain_install_failure() {
                     stderr: Some("network down"),
                 },
             );
-        },
-        |err| {
-            assert!(
-                matches!(
-                    err,
-                    InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
-                        if toolchain == "nightly-2025-09-18" && message.contains("network down")
-                ),
-                "unexpected error: {err}"
-            );
-        },
-    );
-}
-
-#[test]
-fn ensure_installed_reports_component_install_failure() {
-    let channel = "nightly-2025-09-18";
-    let component = "rust-src";
-    let toolchain = test_toolchain(channel, vec![component.to_owned()]);
-
-    assert_install_fails_with(
-        toolchain,
-        |runner, seq| {
+        }
+        InstallFailure::ComponentAdd => {
             expect_rustc_version(runner, seq, channel, 0);
             expect_component_add(
                 runner,
                 seq,
                 ComponentAddExpectation {
                     channel,
-                    component,
+                    component: "rust-src",
                     exit_code: 1,
                     stderr: Some("component failed"),
                 },
             );
-        },
-        |err| {
+        }
+        InstallFailure::ToolchainUnusableAfterInstall => {
+            expect_rustc_version(runner, seq, channel, 1);
+            expect_toolchain_install(
+                runner,
+                seq,
+                ToolchainInstallExpectation {
+                    channel,
+                    exit_code: 0,
+                    stderr: None,
+                },
+            );
+            expect_rustc_version(runner, seq, channel, 1);
+        }
+    }
+}
+
+fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
+    match failure {
+        InstallFailure::ToolchainInstall => {
+            assert!(
+                matches!(
+                    err,
+                    InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
+                        if toolchain == channel && message.contains("network down")
+                ),
+                "expected ToolchainInstallFailed error, got {err:?}"
+            );
+        }
+        InstallFailure::ComponentAdd => {
             assert!(
                 matches!(
                     err,
                     InstallerError::ToolchainComponentInstallFailed { ref toolchain, ref message, .. }
-                        if toolchain == "nightly-2025-09-18" && message.contains("component failed")
+                        if toolchain == channel && message.contains("component failed")
                 ),
-                "unexpected error: {err}"
+                "expected ToolchainComponentInstallFailed error, got {err:?}"
             );
-        },
+        }
+        InstallFailure::ToolchainUnusableAfterInstall => {
+            assert!(
+                matches!(
+                    err,
+                    InstallerError::ToolchainNotInstalled { ref toolchain }
+                        if toolchain == channel
+                ),
+                "expected ToolchainNotInstalled error, got {err:?}"
+            );
+        }
+    }
+}
+
+#[rstest]
+#[case::toolchain_install_fails(InstallFailure::ToolchainInstall, Vec::new())]
+#[case::component_add_fails(InstallFailure::ComponentAdd, vec!["rust-src".to_owned()])]
+#[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall, Vec::new())]
+fn ensure_installed_reports_failure(
+    #[case] failure: InstallFailure,
+    #[case] components: Vec<String>,
+) {
+    let channel = "nightly-2025-09-18";
+    let toolchain = test_toolchain(channel, components);
+
+    assert_install_fails_with(
+        toolchain,
+        |runner, seq| setup_failure_mocks(runner, seq, channel, failure),
+        |err| assert_failure_error(err, channel, failure),
     );
 }
 
@@ -284,39 +328,6 @@ fn run_rustup_propagates_io_error_as_toolchain_detection_error() {
     assert!(
         matches!(result, Err(InstallerError::ToolchainDetection { .. })),
         "expected ToolchainDetection error, got {result:?}"
-    );
-}
-
-#[test]
-fn ensure_installed_fails_when_toolchain_unusable_after_install() {
-    let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel, Vec::new());
-
-    assert_install_fails_with(
-        toolchain,
-        |runner, seq| {
-            // First rustc --version fails -> triggers installation
-            expect_rustc_version(runner, seq, channel, 1);
-            // Installation succeeds
-            expect_toolchain_install(
-                runner,
-                seq,
-                ToolchainInstallExpectation {
-                    channel,
-                    exit_code: 0,
-                    stderr: None,
-                },
-            );
-            // Second rustc --version still fails -> toolchain unusable
-            expect_rustc_version(runner, seq, channel, 1);
-        },
-        |err| {
-            assert!(
-                matches!(err, InstallerError::ToolchainNotInstalled { ref toolchain }
-                    if toolchain == "nightly-2025-09-18"),
-                "expected ToolchainNotInstalled error, got {err:?}"
-            );
-        },
     );
 }
 
