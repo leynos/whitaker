@@ -70,6 +70,9 @@
 
 - [x] 3.2.1. Implement the installer CLI that builds, links, and stages all lint
   libraries.
+- [x] 3.2.2. Add `test-support` Cargo feature exposing `StubExecutor` and
+  `StubMismatch` for external test suites. See `installer/Cargo.toml` feature
+  documentation for usage guidance and caveats.
 
 ### 3.3. Documentation examples
 

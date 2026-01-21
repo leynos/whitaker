@@ -148,6 +148,89 @@ pub enum InstallerError {
         #[source]
         source: std::io::Error,
     },
+
+    /// Test stub received an unexpected or mismatched command invocation.
+    #[cfg(any(test, feature = "test-support"))]
+    #[error("stub mismatch: {message}")]
+    StubMismatch {
+        /// Description of what was expected versus what was received.
+        message: String,
+    },
+}
+
+impl Clone for InstallerError {
+    fn clone(&self) -> Self {
+        match self {
+            InstallerError::ToolchainDetection { reason } => InstallerError::ToolchainDetection {
+                reason: reason.clone(),
+            },
+            InstallerError::ToolchainFileNotFound { path } => {
+                InstallerError::ToolchainFileNotFound { path: path.clone() }
+            }
+            InstallerError::InvalidToolchainFile { reason } => {
+                InstallerError::InvalidToolchainFile {
+                    reason: reason.clone(),
+                }
+            }
+            InstallerError::ToolchainNotInstalled { toolchain } => {
+                InstallerError::ToolchainNotInstalled {
+                    toolchain: toolchain.clone(),
+                }
+            }
+            InstallerError::BuildFailed { crate_name, reason } => InstallerError::BuildFailed {
+                crate_name: crate_name.clone(),
+                reason: reason.clone(),
+            },
+            InstallerError::StagingFailed { reason } => InstallerError::StagingFailed {
+                reason: reason.clone(),
+            },
+            InstallerError::TargetNotWritable { path, reason } => {
+                InstallerError::TargetNotWritable {
+                    path: path.clone(),
+                    reason: reason.clone(),
+                }
+            }
+            InstallerError::LintCrateNotFound { name } => {
+                InstallerError::LintCrateNotFound { name: name.clone() }
+            }
+            InstallerError::WorkspaceNotFound { reason } => InstallerError::WorkspaceNotFound {
+                reason: reason.clone(),
+            },
+            InstallerError::InvalidCargoToml { path, reason } => InstallerError::InvalidCargoToml {
+                path: path.clone(),
+                reason: reason.clone(),
+            },
+            // Lossy: only ErrorKind and formatted message are preserved; any
+            // original source chain is discarded because std::io::Error cannot
+            // be cloned directly.
+            InstallerError::Io(source) => {
+                InstallerError::Io(std::io::Error::new(source.kind(), source.to_string()))
+            }
+            InstallerError::Git { operation, message } => InstallerError::Git {
+                operation,
+                message: message.clone(),
+            },
+            InstallerError::DependencyInstall { tool, message } => {
+                InstallerError::DependencyInstall {
+                    tool,
+                    message: message.clone(),
+                }
+            }
+            InstallerError::WrapperGeneration(message) => {
+                InstallerError::WrapperGeneration(message.clone())
+            }
+            InstallerError::ScanFailed { source } => InstallerError::ScanFailed {
+                source: std::io::Error::new(source.kind(), source.to_string()),
+            },
+            InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
+                source: std::io::Error::new(source.kind(), source.to_string()),
+            },
+            #[cfg(any(test, feature = "test-support"))]
+            InstallerError::StubMismatch { message } => InstallerError::StubMismatch {
+                message: message.clone(),
+            },
+        }
+    }
 }
 
 /// Result type alias using [`InstallerError`].
