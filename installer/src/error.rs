@@ -160,6 +160,12 @@ pub enum InstallerError {
 
 impl Clone for InstallerError {
     fn clone(&self) -> Self {
+        // Helper to clone io::Error by preserving ErrorKind and formatted message.
+        // This is lossy: the original source chain is discarded.
+        fn clone_io_error(source: &std::io::Error) -> std::io::Error {
+            std::io::Error::new(source.kind(), source.to_string())
+        }
+
         match self {
             InstallerError::ToolchainDetection { reason } => InstallerError::ToolchainDetection {
                 reason: reason.clone(),
@@ -215,12 +221,7 @@ impl Clone for InstallerError {
                 path: path.clone(),
                 reason: reason.clone(),
             },
-            // Lossy: only ErrorKind and formatted message are preserved; any
-            // original source chain is discarded because std::io::Error cannot
-            // be cloned directly.
-            InstallerError::Io(source) => {
-                InstallerError::Io(std::io::Error::new(source.kind(), source.to_string()))
-            }
+            InstallerError::Io(source) => InstallerError::Io(clone_io_error(source)),
             InstallerError::Git { operation, message } => InstallerError::Git {
                 operation,
                 message: message.clone(),
@@ -235,10 +236,10 @@ impl Clone for InstallerError {
                 InstallerError::WrapperGeneration(message.clone())
             }
             InstallerError::ScanFailed { source } => InstallerError::ScanFailed {
-                source: std::io::Error::new(source.kind(), source.to_string()),
+                source: clone_io_error(source),
             },
             InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
-                source: std::io::Error::new(source.kind(), source.to_string()),
+                source: clone_io_error(source),
             },
             #[cfg(any(test, feature = "test-support"))]
             InstallerError::StubMismatch { message } => InstallerError::StubMismatch {
