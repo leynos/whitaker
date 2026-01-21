@@ -86,7 +86,12 @@ fn find_system_rustup() -> String {
         .arg("rustup")
         .output()
         .expect("failed to run which rustup");
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .expect("rustup not found in PATH")
+        .trim()
+        .to_string()
 }
 
 #[cfg(windows)]
