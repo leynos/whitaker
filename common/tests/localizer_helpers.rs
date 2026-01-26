@@ -115,6 +115,10 @@ impl HelperWorld {
             .clone()
     }
 
+    fn ensure_arguments(&self) -> Arguments<'static> {
+        self.arguments.borrow().clone()
+    }
+
     fn clear_arguments(&self) {
         *self.arguments.borrow_mut() = Arguments::default();
     }
@@ -340,7 +344,7 @@ fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) {
     world.set_fallback_messages();
 
     let localizer = world.ensure_localizer();
-    let args = world.arguments.borrow().clone();
+    let args = world.ensure_arguments();
     let fallback = world.ensure_fallback();
     let resolution = MessageResolution {
         lint_name: "helper-tests",
