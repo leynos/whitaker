@@ -7,7 +7,7 @@ on:
 
 jobs:
   dependabot-automerge:
-    uses: leynos/shared-actions/.github/workflows/dependabot-automerge.yml@235d2d07b9a321364a742310873f6732d7228e72
+    uses: leynos/shared-actions/.github/workflows/dependabot-automerge.yml@98246364002def859ab550fe01ab3bca55dcfd61
     permissions:
       contents: write
       pull-requests: write
@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@235d2d07b9a321364a742310873f6732d7228e72
+        uses: leynos/shared-actions/.github/actions/setup-rust@98246364002def859ab550fe01ab3bca55dcfd61
 
       - name: Install bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
@@ -88,7 +88,7 @@ jobs:
 
       - name: Upload coverage data to CodeScene
         if: ${{ matrix.coverage && env.CS_ACCESS_TOKEN && vars.CODESCENE_CLI_SHA256 }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@235d2d07b9a321364a742310873f6732d7228e72
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@98246364002def859ab550fe01ab3bca55dcfd61
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
