@@ -150,7 +150,7 @@ Utilities shared by lints:
 - Adopt the rstest-bdd 0.1.0 stable release to eliminate alpha regressions
   whilst keeping compile-time validation consistent across lint crates.
 
-### Localisation infrastructure
+### Localization infrastructure
 
 - Adopt `fluent-templates` and `once_cell` as workspace dependencies,
   so each lint crate can load translated diagnostics without manual resource
@@ -174,7 +174,7 @@ Utilities shared by lints:
   receiver type, keeping Fluent bundles free from ad hoc string formatting.
 - When lookups fail, log the missing message and fall back to deterministic
   English strings, so the lint still emits actionable output without treating
-  localisation gaps as compiler bugs.
+  localization gaps as compiler bugs.
 - Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
   `fluent_templates::static_loader!`. The loader resides in `common::i18n` and
   exposes a `FluentBundle` facade that lint crates invoke through helper
@@ -188,7 +188,7 @@ Utilities shared by lints:
 - Keep Fluent resources compatible with the `fluent-syntax 0.12` parser shipped
   by `fluent-templates 0.13`. Named term arguments triggered parser failures in
   the Welsh bundles, so the `cy` resources now inline select expressions and
-  avoid helper terms when plural logic is required. This keeps localisation
+  avoid helper terms when plural logic is required. This keeps localization
   coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
   alongside it and are discovered dynamically when the loader initialises.
@@ -217,7 +217,7 @@ Utilities shared by lints:
   `function_attrs_follow_docs` fixtures under `DYLINT_LOCALE=cy`. The harness
   continues to execute via `dylint_testing`'s JSON output to keep diagnostics
   machine-readable while proving non-English locales work end to end.
-- Exercise localisation helpers with `rstest-bdd` behaviour tests, using stub
+- Exercise localization helpers with `rstest-bdd` behaviour tests, using stub
   lookups to simulate missing translations alongside happy paths in English,
   Welsh, and Gaelic. This guarantees the Fluent arguments remain stable and
   protects the fallback code paths from regression.
@@ -419,15 +419,15 @@ documented. The attribute parser tolerates spacing after the `#!` marker and
 traces the first-level `cfg_attr` meta list to find `doc` entries, which avoids
 substring-based false positives such as `#![allow(undocumented_unsafe_blocks)]`
 and misclassifying `documentation = "…"`. If the snippet starts with an inner
-attribute marker (`#`) before any doc, the lint emits `FirstInnerIsNotDoc` when
-a later inner doc exists; if no inner doc appears at all (including a lone
-inner attribute), it falls back to `MissingDocs` so the diagnostic targets the
-module start. A doc-less `cfg_attr` wrapper also maps to `MissingDocs`. The
-shared span helpers from `whitaker::hir` supply consistent ranges for inline
-and file modules. Localized strings pull from
-`locales/*/module_must_have_inner_docs.ftl`, passing the module name via the
-Fluent argument map, and fall back to a deterministic English message whenever
-localisation fails.
+attribute marker (`#`) before any doc, the lint emits `FirstInnerIsNotDoc` and
+highlights the offending token when a later inner doc exists; if no inner doc
+appears at all (including a lone inner attribute), it falls back to
+`MissingDocs` so the diagnostic targets the module start. A doc-less `cfg_attr`
+wrapper also maps to `MissingDocs`. The shared span helpers from
+`whitaker::hir` supply consistent ranges for inline and file modules.
+Localized strings pull from `locales/*/module_must_have_inner_docs.ftl`,
+passing the module name via the Fluent argument map, and fall back to a
+deterministic English message whenever localization fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
@@ -462,7 +462,7 @@ extracting the predicate into a function with a domain-flavoured name. When a
 function is overkill, bind the expression to a local variable and branch on
 that name.
 
-**Design decision (2025-11-14).** Localisation relies on a shared
+**Design decision (2025-11-14).** Localization relies on a shared
 `common::i18n::branch_phrase` helper to render both the current branch count
 and the configured limit. This keeps Fluent resources and diagnostics in sync
 across English, Welsh, and Scottish Gaelic without duplicating mutation rules.
@@ -543,7 +543,7 @@ impl_late_lint! {
 }
 ```
 
-The runtime implementation tracks the configured limit, loads localisation via
+The runtime implementation tracks the configured limit, loads localization via
 `SharedConfig`, and feeds both `branches` and `limit` plus their rendered
 phrases into Fluent, so diagnostics remain idiomatic across locales.
 
@@ -654,7 +654,7 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   `std::fs::File::open`, `std::fs::remove_file`, bare module references, and
   renamed imports all register as `StdFsUsage` while `cap_std::fs` remains
   untouched.
-- Behaviour-driven tests (via `rstest-bdd 0.1.0`) exercise localisation, failure
+- Behaviour-driven tests (via `rstest-bdd 0.1.0`) exercise localization, failure
   fallbacks, and the world state used to model capability hints. Scenarios
   cover en-GB, cy, and gd locales, as well as missing-message paths.
 - UI fixtures demonstrate unhappy paths (imports, function calls, and type
@@ -686,7 +686,7 @@ crates/no_unwrap_or_else_panic/
    ├─ context.rs       # context detection (tests/main/doctest)
    ├─ policy.rs        # pure decision logic (unit tested)
    ├─ panic_detector.rs# shared panic + unwrap/expect detector
-   └─ diagnostics.rs   # localisation + emission
+   └─ diagnostics.rs   # localization + emission
 crates/no_unwrap_or_else_panic/ui/
   ├─ bad_unwrap_or_else_panic.rs       # direct panic
   ├─ bad_unwrap_or_else_panic_any.rs   # panic_any
@@ -824,7 +824,7 @@ libraries = [
 ### Implementation decisions (2025-11-27)
 
 - The lint now ships in `crates/no_unwrap_or_else_panic` with a
-  default **deny** level and localisation wired through the shared Fluent
+  default **deny** level and localization wired through the shared Fluent
   bundles.
 - A new `allow_in_main` boolean configuration controls whether panicking
   fallbacks are permitted inside `main`; the default keeps panics forbidden.
