@@ -6,13 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  dependabot-automerge:
-    uses: leynos/shared-actions/.github/workflows/dependabot-automerge.yml@98246364002def859ab550fe01ab3bca55dcfd61
-    permissions:
-      contents: write
-      pull-requests: write
-    secrets: inherit
-
   build-test:
     runs-on: ${{ matrix.os }}
     defaults:
