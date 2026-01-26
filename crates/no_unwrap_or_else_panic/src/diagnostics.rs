@@ -3,7 +3,7 @@
 use crate::{LINT_NAME, NO_UNWRAP_OR_ELSE_PANIC};
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    safe_resolve_message_set,
+    noop_reporter, safe_resolve_message_set,
 };
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
@@ -40,14 +40,9 @@ pub(crate) fn emit_diagnostic(
         args: &args,
     };
 
-    let messages = safe_resolve_message_set(
-        localizer,
-        resolution,
-        |message| {
-            cx.tcx.sess.dcx().span_delayed_bug(expr.span, message);
-        },
-        || fallback_messages(&receiver_label),
-    );
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, || {
+        fallback_messages(&receiver_label)
+    });
 
     cx.span_lint(NO_UNWRAP_OR_ELSE_PANIC, expr.span, |lint| {
         lint.primary_message(messages.primary().to_string());

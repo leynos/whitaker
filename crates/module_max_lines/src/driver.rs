@@ -6,7 +6,7 @@
 //! infrastructure so diagnostics match the suite's tone across locales.
 use common::i18n::{
     Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, safe_resolve_message_set,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 use log::debug;
 use rustc_hir as hir;
@@ -161,19 +161,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
         key: MESSAGE_KEY,
         args: &args,
     };
-    let messages = safe_resolve_message_set(
-        localizer,
-        resolution,
-        |message| {
-            debug!(
-                target: LINT_NAME,
-                "missing localisation for `{}`: {message}; using fallback strings",
-                LINT_NAME
-            );
-            cx.tcx.sess.dcx().span_delayed_bug(info.item_span, message);
-        },
-        || fallback_messages(module_name, info.lines, info.limit),
-    );
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, || {
+        fallback_messages(module_name, info.lines, info.limit)
+    });
 
     cx.span_lint(MODULE_MAX_LINES, info.ident.span, |lint| {
         lint.primary_message(messages.primary().to_string());
