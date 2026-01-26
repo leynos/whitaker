@@ -45,7 +45,8 @@ pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
 };
 pub use helpers::{
-    MessageResolution, branch_phrase, get_localizer_for_lint, safe_resolve_message_set,
+    MessageResolution, branch_phrase, get_localizer_for_lint, noop_reporter,
+    safe_resolve_message_set,
 };
 pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};

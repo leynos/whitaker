@@ -8,7 +8,7 @@ use std::ops::RangeInclusive;
 
 use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 use common::i18n::DiagnosticMessageSet;
-use common::{Arguments, Localizer, MessageResolution, safe_resolve_message_set};
+use common::{Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set};
 use fluent_templates::fluent_bundle::FluentValue;
 use rustc_lint::{LateContext, LintContext};
 use rustc_span::{BytePos, Span};
@@ -46,12 +46,9 @@ pub(super) fn emit_diagnostic(
         key: MESSAGE_KEY,
         args: &args,
     };
-    let messages = safe_resolve_message_set(
-        localizer,
-        resolution,
-        |_message| {},
-        || fallback_messages(input.name, input.bumps.len(), input.settings.threshold),
-    );
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, || {
+        fallback_messages(input.name, input.bumps.len(), input.settings.threshold)
+    });
 
     let highlighted = top_two_bumps(input.bumps);
     let bump_spans = build_bump_spans(cx, input.body_span, &input.function_lines, &highlighted);

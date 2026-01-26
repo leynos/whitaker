@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use common::i18n::{DiagnosticMessageSet, MessageKey};
 use common::{
     Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,
-    get_localizer_for_lint, safe_resolve_message_set,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 use fluent_templates::fluent_bundle::FluentValue;
 use log::debug;
@@ -230,12 +230,9 @@ fn emit_diagnostic(
         key: MESSAGE_KEY,
         args: &args,
     };
-    let messages = safe_resolve_message_set(
-        localizer,
-        resolution,
-        |_message| {},
-        || fallback_messages(metadata.kind, metadata.branches, limit),
-    );
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, || {
+        fallback_messages(metadata.kind, metadata.branches, limit)
+    });
 
     let primary = normalise_isolation_marks(messages.primary());
     let note = normalise_isolation_marks(messages.note());

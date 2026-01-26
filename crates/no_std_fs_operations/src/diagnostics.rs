@@ -4,7 +4,7 @@ use crate::NO_STD_FS_OPERATIONS;
 use crate::usage::StdFsUsage;
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    safe_resolve_message_set,
+    noop_reporter, safe_resolve_message_set,
 };
 #[cfg(test)]
 use common::i18n::{BundleLookup, I18nError, resolve_message_set};
@@ -32,12 +32,9 @@ pub(crate) fn emit_diagnostic(
         args: &args,
     };
 
-    let messages = safe_resolve_message_set(
-        localizer,
-        resolution,
-        |_message| {},
-        move || fallback_messages(&fallback_operation),
-    );
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, move || {
+        fallback_messages(&fallback_operation)
+    });
 
     cx.span_lint(NO_STD_FS_OPERATIONS, span, move |lint| {
         lint.primary_message(sanitize_message(messages.primary().to_string()));

@@ -10,7 +10,7 @@ use std::borrow::Cow;
 
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, safe_resolve_message_set,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 use log::debug;
 use newt_hype::base_newtype;
@@ -399,12 +399,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
         key: MESSAGE_KEY,
         args: &args,
     };
-    let messages = safe_resolve_message_set(
-        localizer,
-        resolution,
-        |_message| {},
-        || fallback_messages(module_name),
-    );
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, || {
+        fallback_messages(module_name)
+    });
 
     cx.span_lint(MODULE_MUST_HAVE_INNER_DOCS, context.primary_span, |lint| {
         lint.primary_message(messages.primary().to_string());

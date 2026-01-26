@@ -6,11 +6,11 @@
 use common::i18n::testing::RecordingEmitter;
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, safe_resolve_message_set,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 use common::test_support::LocaleOverride;
 use logtest::Logger;
-use rstest::fixture;
+use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -332,15 +332,16 @@ fn repeated_failures_record_all_bugs() {
     );
 }
 
-#[test]
-fn missing_key_with_noop_reporter_uses_fallback() {
-    let localizer = Localizer::new(Some("en-GB"));
-    let args: Arguments<'static> = Arguments::default();
-    let fallback = DiagnosticMessageSet::new(
-        "Fallback primary".into(),
-        "Fallback note".into(),
-        "Fallback help".into(),
-    );
+#[rstest]
+fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) {
+    world.set_environment(None);
+    world.set_configuration(None);
+    world.request_localizer("no_expect_outside_tests");
+    world.set_fallback_messages();
+
+    let localizer = world.ensure_localizer();
+    let args = world.arguments.borrow().clone();
+    let fallback = world.ensure_fallback();
     let resolution = MessageResolution {
         lint_name: "helper-tests",
         key: MessageKey::new("missing-key"),
@@ -348,7 +349,7 @@ fn missing_key_with_noop_reporter_uses_fallback() {
     };
 
     let messages =
-        safe_resolve_message_set(&localizer, resolution, |_message| {}, || fallback.clone());
+        safe_resolve_message_set(&localizer, resolution, noop_reporter, || fallback.clone());
 
     assert_eq!(messages.primary(), fallback.primary());
     assert_eq!(messages.note(), fallback.note());

@@ -89,6 +89,38 @@ fn welsh_branch_phrase(branches: usize) -> String {
     }
 }
 
+/// Report localisation failures by discarding the message.
+///
+/// Use this helper with [`safe_resolve_message_set`] when a lint only needs
+/// deterministic fallback strings and does not want to surface missing
+/// localisation details as bug reports.
+///
+/// # Examples
+///
+/// ```
+/// use common::i18n::{
+///     Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
+///     noop_reporter, safe_resolve_message_set,
+/// };
+///
+/// let localizer = Localizer::new(Some("en-GB"));
+/// let args: Arguments<'static> = Arguments::default();
+/// let resolution = MessageResolution {
+///     lint_name: "demo-lint",
+///     key: MessageKey::new("missing-key"),
+///     args: &args,
+/// };
+/// let fallback = DiagnosticMessageSet::new(
+///     "Fallback primary".into(),
+///     "Fallback note".into(),
+///     "Fallback help".into(),
+/// );
+///
+/// let messages = safe_resolve_message_set(&localizer, resolution, noop_reporter, || fallback);
+/// assert_eq!(messages.primary(), "Fallback primary");
+/// ```
+pub fn noop_reporter(_message: String) {}
+
 /// Resolve a diagnostic message set while logging localisation failures.
 ///
 /// When lookups fail the helper invokes the supplied bug reporter, records the

@@ -6,7 +6,7 @@
 //! by implementation details such as `#[inline]` or `#[allow]` attributes.
 use common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
-    MessageResolution, get_localizer_for_lint, safe_resolve_message_set,
+    MessageResolution, get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
 #[cfg(test)]
 use common::i18n::{I18nError, resolve_message_set};
@@ -266,7 +266,7 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
         key: MESSAGE_KEY,
         args: &args,
     };
-    let messages = safe_resolve_message_set(localizer, resolution, |_message| {}, {
+    let messages = safe_resolve_message_set(localizer, resolution, noop_reporter, {
         let kind = context.kind;
         move || fallback_messages(kind, attribute.as_str())
     });
