@@ -29,20 +29,35 @@ fn has_case_incorrect_doc_in_meta_list(list: &str) -> bool {
     let mut start = 0;
 
     for (idx, ch) in list.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                if segment_has_case_incorrect_doc(&list[start..idx]) {
-                    return true;
-                }
-                start = idx + 1;
-            }
-            _ => {}
+        if handle_character(ch, &mut depth, list, &mut start, idx) {
+            return true;
         }
     }
 
     segment_has_case_incorrect_doc(&list[start..])
+}
+
+// Extracted to reduce nested complexity in `has_case_incorrect_doc_in_meta_list`.
+#[allow(clippy::too_many_arguments)]
+fn handle_character(
+    ch: char,
+    depth: &mut usize,
+    list: &str,
+    start: &mut usize,
+    idx: usize,
+) -> bool {
+    match ch {
+        '(' => *depth += 1,
+        ')' => *depth = depth.saturating_sub(1),
+        ',' if *depth == 0 => {
+            if segment_has_case_incorrect_doc(&list[*start..idx]) {
+                return true;
+            }
+            *start = idx + 1;
+        }
+        _ => {}
+    }
+    false
 }
 
 fn cfg_attr_has_case_incorrect_doc(rest: ParseInput<'_>) -> bool {
