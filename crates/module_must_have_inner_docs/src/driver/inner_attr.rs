@@ -108,6 +108,21 @@ fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
 
 /// Detects inner attributes like `#![DOC = ...]` or `#![cfg_attr(..., Doc = ...)]`
 /// where casing of `doc` is wrong.
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::ParseInput;
+/// use crate::driver::inner_attr::is_case_incorrect_doc_inner_attr;
+///
+/// // Incorrect casing returns true
+/// let input = ParseInput::from("#![DOC = \"example\"]");
+/// assert!(is_case_incorrect_doc_inner_attr(input));
+///
+/// // Correct casing returns false
+/// let input = ParseInput::from("#![doc = \"example\"]");
+/// assert!(!is_case_incorrect_doc_inner_attr(input));
+/// ```
 pub(super) fn is_case_incorrect_doc_inner_attr(rest: ParseInput<'_>) -> bool {
     let Some(body) = inner_attribute_body(rest) else {
         return false;
@@ -116,6 +131,22 @@ pub(super) fn is_case_incorrect_doc_inner_attr(rest: ParseInput<'_>) -> bool {
     segment_has_case_incorrect_doc(*body)
 }
 
+/// Checks whether a `cfg_attr` inner attribute omits any `doc` attribute.
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::ParseInput;
+/// use crate::driver::inner_attr::is_cfg_attr_without_doc;
+///
+/// // cfg_attr without doc returns true
+/// let input = ParseInput::from("#![cfg_attr(feature = \"x\", inline)]");
+/// assert!(is_cfg_attr_without_doc(input));
+///
+/// // cfg_attr with doc returns false
+/// let input = ParseInput::from("#![cfg_attr(feature = \"x\", doc = \"example\")]");
+/// assert!(!is_cfg_attr_without_doc(input));
+/// ```
 pub(super) fn is_cfg_attr_without_doc(rest: ParseInput<'_>) -> bool {
     let Some(body) = inner_attribute_body(rest) else {
         return false;
