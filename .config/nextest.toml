@@ -1,5 +1,5 @@
 # Extend the timeout for toolchain auto-install behavioural tests, since the
 # isolated rustup setup may need to download and install a full nightly toolchain.
 [[profile.default.overrides]]
-filter = "test(behaviour_toolchain)"
+filter = "binary(behaviour_toolchain)"
 slow-timeout = { period = "20m", terminate-after = 1 }

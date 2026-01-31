@@ -103,6 +103,8 @@ fn inner_attribute_body(rest: ParseInput<'_>) -> Option<AttributeBody<'_>> {
     let (_, tail) = parser::skip_leading_whitespace(ParseInput::from(after_bang));
     let body = tail.strip_prefix('[')?;
 
+    // Missing `]` is tolerated here: downstream identifier parsing will
+    // gracefully reject malformed content by failing to match expected patterns.
     let attr_end = body.find(']').unwrap_or(body.len());
     Some(AttributeBody::from(&body[..attr_end]))
 }
