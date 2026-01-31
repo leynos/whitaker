@@ -24,36 +24,33 @@ fn segment_has_case_incorrect_doc(segment: &str) -> bool {
     false
 }
 
+struct ParserState {
+    depth: usize,
+    start: usize,
+}
+
 fn has_case_incorrect_doc_in_meta_list(list: &str) -> bool {
-    let mut depth: usize = 0;
-    let mut start = 0;
+    let mut state = ParserState { depth: 0, start: 0 };
 
     for (idx, ch) in list.char_indices() {
-        if handle_character(ch, &mut depth, list, &mut start, idx) {
+        if handle_character(ch, &mut state, list, idx) {
             return true;
         }
     }
 
-    segment_has_case_incorrect_doc(&list[start..])
+    segment_has_case_incorrect_doc(&list[state.start..])
 }
 
 // Extracted to reduce nested complexity in `has_case_incorrect_doc_in_meta_list`.
-#[allow(clippy::too_many_arguments)]
-fn handle_character(
-    ch: char,
-    depth: &mut usize,
-    list: &str,
-    start: &mut usize,
-    idx: usize,
-) -> bool {
+fn handle_character(ch: char, state: &mut ParserState, list: &str, idx: usize) -> bool {
     match ch {
-        '(' => *depth += 1,
-        ')' => *depth = depth.saturating_sub(1),
-        ',' if *depth == 0 => {
-            if segment_has_case_incorrect_doc(&list[*start..idx]) {
+        '(' => state.depth += 1,
+        ')' => state.depth = state.depth.saturating_sub(1),
+        ',' if state.depth == 0 => {
+            if segment_has_case_incorrect_doc(&list[state.start..idx]) {
                 return true;
             }
-            *start = idx + 1;
+            state.start = idx + 1;
         }
         _ => {}
     }
