@@ -32,10 +32,6 @@ use rstest::rstest;
 )]
 #[case("/// doc", ModuleDocDisposition::MissingDocs)]
 #[case(
-    "#[doc = \"module docs\"]\npub fn demo() {}",
-    ModuleDocDisposition::MissingDocs
-)]
-#[case(
     "#![allow(undocumented_unsafe_blocks)]",
     ModuleDocDisposition::MissingDocs
 )]
@@ -73,6 +69,7 @@ fn accepts_nested_cfg_attr_doc() {
 #[case("#![allow(dead_code)]\n//! doc")]
 #[case("#![allow(dead_code)]\n   //! doc")]
 #[case("#![allow(dead_code)] #![doc = \"module docs\"]")]
+#[case("#[doc = \"module docs\"]\npub fn demo() {}")]
 fn snippet_yields_first_inner_is_not_doc(#[case] snippet: &str) {
     assert!(matches!(
         detect_module_docs_from_snippet(snippet.into()),

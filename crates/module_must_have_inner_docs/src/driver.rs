@@ -143,7 +143,8 @@ fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
 
 fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
-        return LeadingContent::Missing;
+        let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
+        return LeadingContent::Misordered { offset, len };
     }
     if !rest.starts_with('#') {
         return LeadingContent::Missing;

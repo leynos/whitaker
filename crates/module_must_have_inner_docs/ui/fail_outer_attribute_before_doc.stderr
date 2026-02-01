@@ -1,0 +1,20 @@
+warning: Module outer_attr must start with an inner doc comment.
+  --> $DIR/fail_outer_attribute_before_doc.rs:5:5
+   |
+LL |     #[doc = "This is an outer doc attribute, not an inner one."]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: The first item in the module is not a `//!` style comment.
+  --> $DIR/fail_outer_attribute_before_doc.rs:4:1
+   |
+LL | mod outer_attr {
+   | ^^^^^^^^^^^^^^
+   = help: Explain the purpose of outer_attr by adding an inner doc comment at the top.
+note: the lint level is defined here
+  --> $DIR/fail_outer_attribute_before_doc.rs:2:9
+   |
+LL | #![warn(module_must_have_inner_docs)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+
