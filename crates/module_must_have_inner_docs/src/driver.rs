@@ -141,6 +141,16 @@ fn classify_leading_content(snippet: SourceSnippet<'_>) -> LeadingContent {
     check_attribute_order(rest, offset)
 }
 
+/// Classifies the leading content after whitespace has been stripped.
+///
+/// The caller (`classify_leading_content`) strips leading whitespace before
+/// invoking this function, so `rest` begins with the first non-whitespace
+/// character. Block comments preceding attributes are not stripped; if the
+/// module body starts with `/* comment */ #[attr]`, the content is classified
+/// as `Missing` because the first token is a comment, not an attribute.
+///
+/// Span lengths exclude trailing newlines to match rustc's standard diagnostic
+/// highlighting behaviour for single-line constructs.
 fn check_attribute_order(rest: ParseInput<'_>, offset: usize) -> LeadingContent {
     if rest.starts_with("#[") {
         let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
