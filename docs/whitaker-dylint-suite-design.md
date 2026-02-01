@@ -424,10 +424,10 @@ highlights the offending token when a later inner doc exists; if no inner doc
 appears at all (including a lone inner attribute), it falls back to
 `MissingDocs` so the diagnostic targets the module start. A doc-less `cfg_attr`
 wrapper also maps to `MissingDocs`. The shared span helpers from
-`whitaker::hir` supply consistent ranges for inline and file modules.
-Localized strings pull from `locales/*/module_must_have_inner_docs.ftl`,
-passing the module name via the Fluent argument map, and fall back to a
-deterministic English message whenever localization fails.
+`whitaker::hir` supply consistent ranges for inline and file modules. Localized
+strings pull from `locales/*/module_must_have_inner_docs.ftl`, passing the
+module name via the Fluent argument map, and fall back to a deterministic
+English message whenever localization fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
 snippet classifier, covering happy paths, missing docs, inner attributes that
@@ -1331,6 +1331,9 @@ Release assets that follow cargo-binstall defaults and by adding
 **Rationale:** cargo-binstall provides a faster install path for users who do
 not want to compile from source. Matching the default binstall naming and
 layout keeps configuration minimal and reduces release automation complexity.
+Because cargo-binstall resolves the latest version from crates.io, every
+published version must have a corresponding GitHub Release with matching
+assets, otherwise `cargo binstall` will fail for the most recent version.
 
 **Release workflow requirements:**
 
@@ -1349,6 +1352,9 @@ layout keeps configuration minimal and reduces release automation complexity.
   (`whitaker-installer` or `whitaker-installer.exe`).
 - Publish the archives as assets on a GitHub Release tagged `v<version>` so
   binstall can resolve the `pkg-url` template.
+- Publish `whitaker-installer` to crates.io with the same `version` used for
+  the release tag and asset names; cargo-binstall resolves the latest version
+  from the registry before downloading GitHub assets.
 
 **Installer metadata:**
 
@@ -1359,6 +1365,20 @@ layout keeps configuration minimal and reduces release automation complexity.
 - `v<version>` must match the crate `package.version` exactly; if a
   pre-release identifier is used (for example, `0.2.0-rc.1`), mirror it in the
   release tag and asset names without adding extra suffixes or prefixes.
+- The metadata should mirror the archive layout explicitly. Example:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
+bin-dir = "{name}-{target}-v{version}/{bin}"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+```
+
+This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
+`{target}`, `{archive-format}`, and `{bin}`.
 
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
