@@ -1333,7 +1333,7 @@ not want to compile from source. Matching the default binstall naming and
 layout keeps configuration minimal and reduces release automation complexity.
 Because cargo-binstall resolves the latest version from crates.io, every
 published version must have a corresponding GitHub Release with matching
-assets, otherwise `cargo binstall` will fail for the most recent version.
+assets; otherwise `cargo binstall` will fail for the most recent version.
 
 **Release workflow requirements:**
 
