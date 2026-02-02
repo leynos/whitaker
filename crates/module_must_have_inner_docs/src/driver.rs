@@ -92,12 +92,8 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
 
         let module_body = module_body_span(cx, item, module);
         let disposition = detect_module_docs_in_span(cx, module_body);
-        if disposition == ModuleDocDisposition::HasLeadingDoc {
-            return;
-        }
-
         let primary_span = match disposition {
-            ModuleDocDisposition::HasLeadingDoc => return,
+            ModuleDocDisposition::HasLeadingDoc | ModuleDocDisposition::Unknown => return,
             ModuleDocDisposition::MissingDocs => module_body.shrink_to_lo(),
             ModuleDocDisposition::FirstInnerIsNotDoc(span) => span,
         };
@@ -121,6 +117,10 @@ pub(crate) enum ModuleDocDisposition {
     MissingDocs,
     /// The first inner attribute is not a doc comment.
     FirstInnerIsNotDoc(Span),
+    /// The module source could not be inspected (e.g., macro-expanded or
+    /// generated code with spans that cannot be resolved to source text).
+    /// The lint should skip analysis rather than report a false positive.
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -231,7 +231,7 @@ struct ModuleDiagnosticContext {
 fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> ModuleDocDisposition {
     let source_map = cx.tcx.sess.source_map();
     let Ok(snippet) = source_map.span_to_snippet(module_body) else {
-        return ModuleDocDisposition::MissingDocs;
+        return ModuleDocDisposition::Unknown;
     };
 
     match classify_leading_content(SourceSnippet::from(snippet.as_str())) {
