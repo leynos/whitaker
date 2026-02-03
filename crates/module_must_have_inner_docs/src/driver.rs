@@ -18,6 +18,7 @@ use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
 use rustc_span::DUMMY_SP;
+use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
@@ -91,15 +92,10 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
         }
 
         let module_body = module_body_span(cx, item, module);
-        let disposition = detect_module_docs_in_span(cx, module_body);
-        if disposition == ModuleDocDisposition::HasLeadingDoc {
+        let source_map = cx.tcx.sess.source_map();
+        let disposition = detect_module_docs_in_span(source_map, module_body);
+        let Some(primary_span) = primary_span_for_disposition(disposition, module_body) else {
             return;
-        }
-
-        let primary_span = match disposition {
-            ModuleDocDisposition::HasLeadingDoc => return,
-            ModuleDocDisposition::MissingDocs => module_body.shrink_to_lo(),
-            ModuleDocDisposition::FirstInnerIsNotDoc(span) => span,
         };
         let header_span = module_header_span(item.span, ident.span);
         let context = ModuleDiagnosticContext {
@@ -121,6 +117,10 @@ pub(crate) enum ModuleDocDisposition {
     MissingDocs,
     /// The first inner attribute is not a doc comment.
     FirstInnerIsNotDoc(Span),
+    /// The module source could not be inspected (e.g., macro-expanded or
+    /// generated code with spans that cannot be resolved to source text).
+    /// The lint should skip analysis rather than report a false positive.
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -250,10 +250,9 @@ struct ModuleDiagnosticContext {
     header_span: Span,
 }
 
-fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> ModuleDocDisposition {
-    let source_map = cx.tcx.sess.source_map();
+fn detect_module_docs_in_span(source_map: &SourceMap, module_body: Span) -> ModuleDocDisposition {
     let Ok(snippet) = source_map.span_to_snippet(module_body) else {
-        return ModuleDocDisposition::MissingDocs;
+        return ModuleDocDisposition::Unknown;
     };
 
     match classify_leading_content(SourceSnippet::from(snippet.as_str())) {
@@ -262,6 +261,22 @@ fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> Module
         LeadingContent::Misordered { offset, len } => {
             ModuleDocDisposition::FirstInnerIsNotDoc(first_token_span(module_body, offset, len))
         }
+    }
+}
+
+/// Maps a module doc disposition to the primary diagnostic span.
+///
+/// Returns `None` for `HasLeadingDoc` and `Unknown`,
+/// `Some(module_body.shrink_to_lo())` for `MissingDocs`, and `Some(span)` for
+/// `FirstInnerIsNotDoc(span)`.
+fn primary_span_for_disposition(
+    disposition: ModuleDocDisposition,
+    module_body: Span,
+) -> Option<Span> {
+    match disposition {
+        ModuleDocDisposition::HasLeadingDoc | ModuleDocDisposition::Unknown => None,
+        ModuleDocDisposition::MissingDocs => Some(module_body.shrink_to_lo()),
+        ModuleDocDisposition::FirstInnerIsNotDoc(span) => Some(span),
     }
 }
 
@@ -317,3 +332,7 @@ mod ui;
 #[cfg(test)]
 #[path = "tests/classifier.rs"]
 mod classifier;
+
+#[cfg(test)]
+#[path = "tests/span_to_snippet.rs"]
+mod span_to_snippet;
