@@ -242,6 +242,11 @@ fn detect_module_docs_in_span(source_map: &SourceMap, module_body: Span) -> Modu
     }
 }
 
+/// Maps a module doc disposition to the primary diagnostic span.
+///
+/// Returns `None` for `HasLeadingDoc` and `Unknown`,
+/// `Some(module_body.shrink_to_lo())` for `MissingDocs`, and `Some(span)` for
+/// `FirstInnerIsNotDoc(span)`.
 fn primary_span_for_disposition(
     disposition: ModuleDocDisposition,
     module_body: Span,
