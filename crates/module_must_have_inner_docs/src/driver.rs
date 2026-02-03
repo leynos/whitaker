@@ -94,10 +94,8 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
         let module_body = module_body_span(cx, item, module);
         let source_map = cx.tcx.sess.source_map();
         let disposition = detect_module_docs_in_span(source_map, module_body);
-        let primary_span = match disposition {
-            ModuleDocDisposition::HasLeadingDoc | ModuleDocDisposition::Unknown => return,
-            ModuleDocDisposition::MissingDocs => module_body.shrink_to_lo(),
-            ModuleDocDisposition::FirstInnerIsNotDoc(span) => span,
+        let Some(primary_span) = primary_span_for_disposition(disposition, module_body) else {
+            return;
         };
         let header_span = module_header_span(item.span, ident.span);
         let context = ModuleDiagnosticContext {
@@ -241,6 +239,17 @@ fn detect_module_docs_in_span(source_map: &SourceMap, module_body: Span) -> Modu
         LeadingContent::Misordered { offset, len } => {
             ModuleDocDisposition::FirstInnerIsNotDoc(first_token_span(module_body, offset, len))
         }
+    }
+}
+
+fn primary_span_for_disposition(
+    disposition: ModuleDocDisposition,
+    module_body: Span,
+) -> Option<Span> {
+    match disposition {
+        ModuleDocDisposition::HasLeadingDoc | ModuleDocDisposition::Unknown => None,
+        ModuleDocDisposition::MissingDocs => Some(module_body.shrink_to_lo()),
+        ModuleDocDisposition::FirstInnerIsNotDoc(span) => Some(span),
     }
 }
 
