@@ -1383,6 +1383,21 @@ This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 
+### Prebuilt Dylint lint library distribution
+
+**Decision:** Distribute prebuilt lint libraries as rolling release assets
+built with the pinned toolchain. The installer prefers a verified download,
+extracts to `~/.local/share/whitaker/lints/<toolchain>/<target>/lib`, and falls
+back to local compilation when no matching artefact is available.
+
+**Rationale:** This reduces first-run latency on common platforms while keeping
+toolchain alignment and a deterministic fallback. A rolling release tag keeps
+the latest assets discoverable without tagging every commit.
+
+**Scope notes:** Linux builds target a conservative glibc baseline; musl
+artefacts remain optional. The decision is recorded in
+`docs/adr-001-prebuilt-dylint-libraries.md` (Accepted 2026-02-03).
+
 ### Workspace metadata example selection
 
 **Decision:** Include examples for suite-only, individual crates,

@@ -79,6 +79,21 @@
 - [x] 3.3.1. Provide consumer guidance and workspace metadata examples in
   documentation.
 
+### 3.4. Prebuilt lint libraries
+
+- [ ] 3.4.1. Define artefact naming, manifest schema, and verification policy.
+  See `docs/adr-001-prebuilt-dylint-libraries.md`.
+- [ ] 3.4.2. Build CI automation to compile lint libraries for the supported
+  target matrix and publish `.tar.zst` assets to the rolling release.
+- [ ] 3.4.3. Emit `manifest.json` for each artefact with git SHA, toolchain,
+  target triple, build time, and SHA256.
+- [ ] 3.4.4. Extend the installer to download and verify prebuilt artefacts
+  before local compilation, falling back on failure.
+- [ ] 3.4.5. Extract libraries to
+  `~/.local/share/whitaker/lints/<toolchain>/<target>/lib` and set
+  `DYLINT_LIBRARY_PATH`.
+- [ ] 3.4.6. Record download-versus-build rates and total install time.
+
 ## 4. Quality gates and automation
 
 ### 4.1. Continuous integration
