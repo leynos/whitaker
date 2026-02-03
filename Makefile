@@ -16,6 +16,8 @@ PUBLISH_PACKAGES ?=
 LINT_CRATES ?= conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests no_std_fs_operations no_unwrap_or_else_panic suite
 CARGO_DYLINT_VERSION ?= 5.0.0
 DYLINT_LINK_VERSION ?= 5.0.0
+WHITAKER_SCRIPT := $(HOME)/.local/bin/whitaker
+WHITAKER_BACKUP := /tmp/.whitaker-test-backup
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -27,10 +29,27 @@ clean: ## Remove build artifacts
 
 test: ## Run tests with warnings treated as errors
 	@command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	@# Back up whitaker script if it exists to detect accidental modification
+	@rm -f "$(WHITAKER_BACKUP)"
+	@if [ -f "$(WHITAKER_SCRIPT)" ]; then cp "$(WHITAKER_SCRIPT)" "$(WHITAKER_BACKUP)"; fi
 	# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	# linkage pitfalls when building cdylib-based lints; `publish-check` omits
 	# this flag to exercise production-like linking behaviour.
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
+	@# Verify tests did not modify ~/.local/bin/whitaker
+	@if [ -f "$(WHITAKER_BACKUP)" ]; then \
+		if ! diff -q "$(WHITAKER_SCRIPT)" "$(WHITAKER_BACKUP)" >/dev/null 2>&1; then \
+			echo "ERROR: Tests modified ~/.local/bin/whitaker - restoring backup"; \
+			cp "$(WHITAKER_BACKUP)" "$(WHITAKER_SCRIPT)"; \
+			rm -f "$(WHITAKER_BACKUP)"; \
+			exit 1; \
+		fi; \
+		rm -f "$(WHITAKER_BACKUP)"; \
+	elif [ -f "$(WHITAKER_SCRIPT)" ]; then \
+		echo "ERROR: Tests created ~/.local/bin/whitaker (file did not exist before tests)"; \
+		rm -f "$(WHITAKER_SCRIPT)"; \
+		exit 1; \
+	fi
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)

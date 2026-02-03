@@ -166,7 +166,8 @@ fn setup_auto_install_scenario(world: &ToolchainWorld) {
         world.should_skip_assertions.set(true);
         rstest_bdd::skip!("auto-install tests skipped on Windows");
     }
-    setup_install_scenario(world, &["--jobs", "1", "--skip-deps"]);
+    // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
+    setup_install_scenario(world, &["--jobs", "1", "--skip-deps", "--skip-wrapper"]);
 }
 
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
@@ -181,7 +182,11 @@ fn given_isolated_rustup_auto_install(world: &ToolchainWorld) {
 
 #[given("the installer is invoked with isolated rustup in quiet mode")]
 fn given_isolated_rustup_quiet(world: &ToolchainWorld) {
-    setup_install_scenario(world, &["--jobs", "1", "--quiet", "--skip-deps"]);
+    // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
+    setup_install_scenario(
+        world,
+        &["--jobs", "1", "--quiet", "--skip-deps", "--skip-wrapper"],
+    );
 }
 
 #[given("the installer is invoked with a non-existent toolchain")]
