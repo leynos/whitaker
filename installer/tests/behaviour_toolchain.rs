@@ -15,7 +15,9 @@ mod toolchain_steps;
 use rstest_bdd_macros::scenario;
 use toolchain_steps::{ToolchainWorld, world};
 
-// Re-export step definitions so rstest-bdd can discover them
+// Import step definitions so rstest-bdd's scenario macro can discover them.
+// These imports appear unused to clippy because they're consumed by macro
+// expansion, not direct source-level calls.
 #[allow(unused_imports)]
 use toolchain_steps::{
     given_auto_detect_toolchain, given_auto_detect_toolchain_install,
