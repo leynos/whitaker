@@ -13,12 +13,12 @@ download-first installer flow and a local compilation fallback.
 ## Context and problem statement
 
 Whitaker's first-run experience currently requires building every Dylint lint
-library locally, which is slow on common developer machines and in CI. Dylint
-lint libraries are dynamic libraries that must be built with the exact Rust
-toolchain version used by the consumer. The workspace already pins a nightly
-toolchain in `rust-toolchain.toml`, and the installer is responsible for
-installing it. On Linux, compatibility also depends on the glibc baseline of
-the build environment.
+library locally, which is slow on common developer machines and in continuous
+integration (CI). Dylint lint libraries are dynamic libraries that must be
+built with the exact Rust toolchain version used by the consumer. The workspace
+already pins a nightly toolchain in `rust-toolchain.toml`, and the installer is
+responsible for installing it. On Linux, compatibility also depends on the GNU
+C Library (glibc) baseline of the build environment.
 
 The problem is to reduce installation and update time without sacrificing
 correctness or portability. The solution must honour the pinned toolchain,
@@ -103,6 +103,7 @@ Screen reader note: The following JSON snippet illustrates the manifest format.
 ```json
 {
   "git_sha": "abc1234",
+  "schema_version": 1,
   "toolchain": "nightly-2025-09-18",
   "target": "x86_64-unknown-linux-gnu",
   "generated_at": "2026-02-03T00:00:00Z",
@@ -118,6 +119,13 @@ Screen reader note: The following JSON snippet illustrates the manifest format.
   extract to `~/.local/share/whitaker/lints/<toolchain>/<target>/lib`, and set
   `DYLINT_LIBRARY_PATH` to that directory. Failures trigger a local build and a
   warning.
+- When the pinned toolchain changes, the installer treats the toolchain version
+  as part of the cache key. Existing cached lint libraries remain on disk, but
+  only artefacts matching the current `rust-toolchain.toml` toolchain are used.
+- The manifest schema is versioned. Additive changes increment
+  `schema_version` while keeping backward compatibility; breaking changes
+  require a new installer release that can read both the old and new schema
+  versions during the transition.
 
 ## Goals and non-goals
 
@@ -141,7 +149,7 @@ Non-goals:
    assets.
 3. Extend the installer to perform download, verification, extraction, and
    fallback compilation.
-4. Record download-versus-build metrics and total install time.
+4. Record download-versus-build metrics and total installation time.
 
 ## Known risks and limitations
 

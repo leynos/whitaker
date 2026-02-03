@@ -84,15 +84,23 @@
 - [ ] 3.4.1. Define artefact naming, manifest schema, and verification policy.
   See `docs/adr-001-prebuilt-dylint-libraries.md`.
 - [ ] 3.4.2. Build CI automation to compile lint libraries for the supported
-  target matrix and publish `.tar.zst` assets to the rolling release.
+  target matrix and publish `.tar.zst` assets to the rolling release. See
+  `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
+  direction.
 - [ ] 3.4.3. Emit `manifest.json` for each artefact with git SHA, toolchain,
-  target triple, build time, and SHA256.
+  target triple, build time, and SHA256. See
+  `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
+  direction.
 - [ ] 3.4.4. Extend the installer to download and verify prebuilt artefacts
-  before local compilation, falling back on failure.
+  before local compilation, falling back on failure. See
+  `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
+  direction.
 - [ ] 3.4.5. Extract libraries to
   `~/.local/share/whitaker/lints/<toolchain>/<target>/lib` and set
-  `DYLINT_LIBRARY_PATH`.
-- [ ] 3.4.6. Record download-versus-build rates and total install time.
+  `DYLINT_LIBRARY_PATH`. See `docs/adr-001-prebuilt-dylint-libraries.md`
+  §Decision outcome / proposed direction.
+- [ ] 3.4.6. Record download-versus-build rates and total installation time.
+  See `docs/adr-001-prebuilt-dylint-libraries.md` §Migration plan.
 
 ## 4. Quality gates and automation
 
