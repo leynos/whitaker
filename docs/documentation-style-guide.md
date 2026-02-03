@@ -275,16 +275,16 @@ Proposed.
 
 YYYY-MM-DD.
 
-## Context and Problem Statement
+## Context and problem statement
 
 <Describe the situation, constraints, and the question being addressed.>
 
-## Decision Drivers
+## Decision drivers
 
 - <Driver 1>
 - <Driver 2>
 
-## Options Considered
+## Options considered
 
 ### Option A: <Name>
 
@@ -300,16 +300,16 @@ YYYY-MM-DD.
 
 _Table 1: Comparison of options._
 
-## Decision Outcome / Proposed Direction
+## Decision outcome / proposed direction
 
 <State the chosen or recommended approach and summarise the rationale.>
 
-## Known Risks and Limitations
+## Known risks and limitations
 
 - <Risk or limitation 1>
 - <Risk or limitation 2>
 
-## Outstanding Decisions
+## Outstanding decisions
 
 - <Open question 1>
 - <Open question 2>
