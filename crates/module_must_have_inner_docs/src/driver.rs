@@ -18,6 +18,7 @@ use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 #[cfg(test)]
 use rustc_span::DUMMY_SP;
+use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
@@ -91,7 +92,8 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMustHaveInnerDocs {
         }
 
         let module_body = module_body_span(cx, item, module);
-        let disposition = detect_module_docs_in_span(cx, module_body);
+        let source_map = cx.tcx.sess.source_map();
+        let disposition = detect_module_docs_in_span(source_map, module_body);
         let primary_span = match disposition {
             ModuleDocDisposition::HasLeadingDoc | ModuleDocDisposition::Unknown => return,
             ModuleDocDisposition::MissingDocs => module_body.shrink_to_lo(),
@@ -228,8 +230,7 @@ struct ModuleDiagnosticContext {
     header_span: Span,
 }
 
-fn detect_module_docs_in_span(cx: &LateContext<'_>, module_body: Span) -> ModuleDocDisposition {
-    let source_map = cx.tcx.sess.source_map();
+fn detect_module_docs_in_span(source_map: &SourceMap, module_body: Span) -> ModuleDocDisposition {
     let Ok(snippet) = source_map.span_to_snippet(module_body) else {
         return ModuleDocDisposition::Unknown;
     };
@@ -295,3 +296,7 @@ mod ui;
 #[cfg(test)]
 #[path = "tests/classifier.rs"]
 mod classifier;
+
+#[cfg(test)]
+#[path = "tests/span_to_snippet.rs"]
+mod span_to_snippet;
