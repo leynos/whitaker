@@ -41,7 +41,7 @@ test: ## Run tests with warnings treated as errors
 		if [ -n "$$WHITAKER_BACKUP" ] && [ -f "$$WHITAKER_BACKUP" ]; then \
 			if [ "$$HAD_WHITAKER" = "true" ]; then \
 				if ! diff -q "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP" >/dev/null 2>&1; then \
-					echo "ERROR: Tests modified ~/.local/bin/whitaker - restoring backup"; \
+					echo "ERROR: Tests modified $(WHITAKER_SCRIPT) - restoring backup"; \
 					cp "$$WHITAKER_BACKUP" "$(WHITAKER_SCRIPT)"; \
 					rm -f "$$WHITAKER_BACKUP"; \
 					exit 1; \
@@ -49,12 +49,12 @@ test: ## Run tests with warnings treated as errors
 			fi; \
 			rm -f "$$WHITAKER_BACKUP"; \
 		elif [ "$$HAD_WHITAKER" = "false" ] && [ -f "$(WHITAKER_SCRIPT)" ]; then \
-			echo "ERROR: Tests created ~/.local/bin/whitaker (file did not exist before tests)"; \
+			echo "ERROR: Tests created $(WHITAKER_SCRIPT) (file did not exist before tests)"; \
 			if [ -n "$${CI:-}" ] || [ -n "$${WHITAKER_TEST_STRICT:-}" ]; then \
-				echo "Cleaning up ~/.local/bin/whitaker because strict test mode is enabled (CI/WHITAKER_TEST_STRICT)"; \
+				echo "Cleaning up $(WHITAKER_SCRIPT) because strict test mode is enabled (CI/WHITAKER_TEST_STRICT)"; \
 				rm -f "$(WHITAKER_SCRIPT)"; \
 			else \
-				echo "Leaving ~/.local/bin/whitaker in place (not running under CI; set WHITAKER_TEST_STRICT=1 to enforce cleanup)"; \
+				echo "Leaving $(WHITAKER_SCRIPT) in place (not running under CI; set WHITAKER_TEST_STRICT=1 to enforce cleanup)"; \
 			fi; \
 			exit 1; \
 		fi; \
