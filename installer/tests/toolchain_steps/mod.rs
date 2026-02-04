@@ -45,6 +45,20 @@ fn get_output(world: &ToolchainWorld) -> std::cell::Ref<'_, Output> {
     std::cell::Ref::map(output, |opt| opt.as_ref().expect("output not set"))
 }
 
+fn get_combined_output_string(world: &ToolchainWorld) -> String {
+    let output = get_output(world);
+    format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    )
+}
+
+fn get_stderr_string(world: &ToolchainWorld) -> String {
+    let output = get_output(world);
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
 macro_rules! skip_if_needed {
     ($world:expr) => {
         if $world.should_skip_assertions.get() {
@@ -255,12 +269,7 @@ pub fn then_dry_run_shows_toolchain(world: &ToolchainWorld) {
 #[then("no toolchain installation message is shown")]
 pub fn then_no_install_message(world: &ToolchainWorld) {
     skip_if_needed!(world);
-    let output = get_output(world);
-    let out = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    let out = get_combined_output_string(world);
     let channel = world.pinned_channel.borrow().clone();
     let out_lc = out.to_lowercase();
     let needle = format!("toolchain {channel} installed successfully").to_lowercase();
@@ -275,12 +284,7 @@ pub fn then_no_install_message(world: &ToolchainWorld) {
 #[then("the toolchain installation message is shown")]
 pub fn then_install_message_shown(world: &ToolchainWorld) {
     skip_if_needed!(world);
-    let output = get_output(world);
-    let out = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    let out = get_combined_output_string(world);
     let channel = world.pinned_channel.borrow().clone();
     let out_lc = out.to_lowercase();
     let needle = format!("toolchain {channel} installed successfully").to_lowercase();
@@ -334,8 +338,7 @@ pub fn then_cli_exits_with_error(world: &ToolchainWorld) {
 #[then("the error mentions toolchain installation failure")]
 pub fn then_error_mentions_install_failure(world: &ToolchainWorld) {
     skip_if_needed!(world);
-    let output = get_output(world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = get_stderr_string(world);
     assert!(
         stderr.contains(TOOLCHAIN_ERROR_MARKER),
         "expected '{}' in stderr: {stderr}",
@@ -346,8 +349,7 @@ pub fn then_error_mentions_install_failure(world: &ToolchainWorld) {
 #[then("the error includes the toolchain name")]
 pub fn then_error_includes_toolchain_name(world: &ToolchainWorld) {
     skip_if_needed!(world);
-    let output = get_output(world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = get_stderr_string(world);
     assert!(
         stderr.contains(FAKE_TOOLCHAIN),
         "expected toolchain name '{FAKE_TOOLCHAIN}' in error output, stderr: {stderr}"
