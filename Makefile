@@ -63,7 +63,7 @@ test: ## Run tests with warnings treated as errors
 	trap cleanup EXIT; \
 	if [ -f "$(WHITAKER_SCRIPT)" ]; then \
 		HAD_WHITAKER=true; \
-		WHITAKER_BACKUP=$$(mktemp /tmp/.whitaker-test-backup-XXXXXX); \
+		WHITAKER_BACKUP=$$(mktemp "$${TMPDIR:-/tmp}/.whitaker-test-backup-XXXXXX"); \
 		cp "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP"; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
