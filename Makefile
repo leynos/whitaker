@@ -40,7 +40,7 @@ test: ## Run tests with warnings treated as errors
 		EXIT_CODE=$$?; \
 		if [ -n "$$WHITAKER_BACKUP" ] && [ -f "$$WHITAKER_BACKUP" ]; then \
 			if [ "$$HAD_WHITAKER" = "true" ]; then \
-				if ! diff -q "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP" >/dev/null 2>&1; then \
+				if [ ! -f "$(WHITAKER_SCRIPT)" ] || ! diff -q "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP" >/dev/null 2>&1; then \
 					echo "ERROR: Tests modified $(WHITAKER_SCRIPT) - restoring backup"; \
 					cp "$$WHITAKER_BACKUP" "$(WHITAKER_SCRIPT)"; \
 					rm -f "$$WHITAKER_BACKUP"; \
@@ -61,10 +61,12 @@ test: ## Run tests with warnings treated as errors
 		exit $$EXIT_CODE; \
 	}; \
 	trap cleanup EXIT; \
-	if [ -f "$(WHITAKER_SCRIPT)" ]; then \
+	WHITAKER_BACKUP=$$(mktemp "$${TMPDIR:-/tmp}/.whitaker-test-backup-XXXXXX"); \
+	if cp "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP" 2>/dev/null; then \
 		HAD_WHITAKER=true; \
-		WHITAKER_BACKUP=$$(mktemp "$${TMPDIR:-/tmp}/.whitaker-test-backup-XXXXXX"); \
-		cp "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP"; \
+	else \
+		rm -f "$$WHITAKER_BACKUP"; \
+		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
 
