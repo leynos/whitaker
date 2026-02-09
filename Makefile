@@ -16,6 +16,7 @@ PUBLISH_PACKAGES ?=
 LINT_CRATES ?= conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests no_std_fs_operations no_unwrap_or_else_panic suite
 CARGO_DYLINT_VERSION ?= 5.0.0
 DYLINT_LINK_VERSION ?= 5.0.0
+WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -27,9 +28,46 @@ clean: ## Remove build artifacts
 
 test: ## Run tests with warnings treated as errors
 	@command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
-	# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
-	# linkage pitfalls when building cdylib-based lints; `publish-check` omits
-	# this flag to exercise production-like linking behaviour.
+	@# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
+	@# linkage pitfalls when building cdylib-based lints; `publish-check` omits
+	@# this flag to exercise production-like linking behaviour.
+	@# Run tests with backup/restore safeguard in a single shell with trap
+	@# to ensure cleanup runs even when tests fail.
+	@set -eu; \
+	WHITAKER_BACKUP=""; \
+	HAD_WHITAKER=false; \
+	cleanup() { \
+		EXIT_CODE=$$?; \
+		if [ -n "$$WHITAKER_BACKUP" ] && [ -f "$$WHITAKER_BACKUP" ]; then \
+			if [ "$$HAD_WHITAKER" = "true" ]; then \
+				if [ ! -f "$(WHITAKER_SCRIPT)" ] || ! diff -q "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP" >/dev/null 2>&1; then \
+					echo "ERROR: Tests modified $(WHITAKER_SCRIPT) - restoring backup"; \
+					cp "$$WHITAKER_BACKUP" "$(WHITAKER_SCRIPT)"; \
+					rm -f "$$WHITAKER_BACKUP"; \
+					exit 1; \
+				fi; \
+			fi; \
+			rm -f "$$WHITAKER_BACKUP"; \
+		elif [ "$$HAD_WHITAKER" = "false" ] && [ -f "$(WHITAKER_SCRIPT)" ]; then \
+			echo "ERROR: Tests created $(WHITAKER_SCRIPT) (file did not exist before tests)"; \
+			if [ -n "$${CI:-}" ] || [ -n "$${WHITAKER_TEST_STRICT:-}" ]; then \
+				echo "Cleaning up $(WHITAKER_SCRIPT) because strict test mode is enabled (CI/WHITAKER_TEST_STRICT)"; \
+				rm -f "$(WHITAKER_SCRIPT)"; \
+			else \
+				echo "Leaving $(WHITAKER_SCRIPT) in place (not running under CI; set WHITAKER_TEST_STRICT=1 to enforce cleanup)"; \
+			fi; \
+			exit 1; \
+		fi; \
+		exit $$EXIT_CODE; \
+	}; \
+	trap cleanup EXIT; \
+	WHITAKER_BACKUP=$$(mktemp "$${TMPDIR:-/tmp}/.whitaker-test-backup-XXXXXX"); \
+	if cp "$(WHITAKER_SCRIPT)" "$$WHITAKER_BACKUP" 2>/dev/null; then \
+		HAD_WHITAKER=true; \
+	else \
+		rm -f "$$WHITAKER_BACKUP"; \
+		WHITAKER_BACKUP=""; \
+	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS)
 
 target/%/$(APP): ## Build binary in debug or release mode
