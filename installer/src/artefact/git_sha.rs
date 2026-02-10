@@ -20,7 +20,7 @@ const MAX_LEN: usize = 40;
 /// ```
 /// use whitaker_installer::artefact::git_sha::GitSha;
 ///
-/// let sha: GitSha = "abc1234".try_into().unwrap();
+/// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
 /// assert_eq!(sha.as_str(), "abc1234");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -53,7 +53,8 @@ impl TryFrom<String> for GitSha {
     type Error = ArtefactError;
 
     fn try_from(value: String) -> Result<Self> {
-        validate_git_sha(&value)?;
+        // Delegate to the &str implementation for validation.
+        let _ = Self::try_from(value.as_str())?;
         Ok(Self(value))
     }
 }
@@ -96,16 +97,18 @@ fn validate_git_sha(value: &str) -> Result<()> {
             ),
         });
     }
-    if let Some(bad) = value.chars().find(|c| !c.is_ascii_hexdigit()) {
+    if let Some(bad) = value
+        .chars()
+        .find(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase())
+    {
+        let reason = if bad.is_ascii_uppercase() {
+            "SHA must be lowercase".to_owned()
+        } else {
+            format!("non-hex character '{bad}'")
+        };
         return Err(ArtefactError::InvalidGitSha {
             value: value.to_owned(),
-            reason: format!("non-hex character '{bad}'"),
-        });
-    }
-    if value.chars().any(|c| c.is_ascii_uppercase()) {
-        return Err(ArtefactError::InvalidGitSha {
-            value: value.to_owned(),
-            reason: "SHA must be lowercase".to_owned(),
+            reason,
         });
     }
     Ok(())

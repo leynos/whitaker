@@ -27,9 +27,13 @@ const ARTEFACT_EXTENSION: &str = ".tar.zst";
 /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 /// use whitaker_installer::artefact::target::TargetTriple;
 ///
-/// let sha: GitSha = "abc1234".try_into().unwrap();
-/// let toolchain: ToolchainChannel = "nightly-2025-09-18".try_into().unwrap();
-/// let target: TargetTriple = "x86_64-unknown-linux-gnu".try_into().unwrap();
+/// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
+/// let toolchain: ToolchainChannel = "nightly-2025-09-18"
+///     .try_into()
+///     .expect("valid toolchain channel");
+/// let target: TargetTriple = "x86_64-unknown-linux-gnu"
+///     .try_into()
+///     .expect("valid target triple");
 ///
 /// let name = ArtefactName::new(sha, toolchain, target);
 /// assert_eq!(
@@ -93,7 +97,9 @@ impl fmt::Display for ArtefactName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
 
+    #[fixture]
     fn sample_name() -> ArtefactName {
         ArtefactName::new(
             GitSha::try_from("abc1234").expect("valid sha"),
@@ -102,11 +108,10 @@ mod tests {
         )
     }
 
-    #[test]
-    fn display_matches_adr_format() {
-        let name = sample_name();
+    #[rstest]
+    fn display_matches_adr_format(sample_name: ArtefactName) {
         assert_eq!(
-            name.to_string(),
+            sample_name.to_string(),
             concat!(
                 "whitaker-lints-abc1234-nightly-2025-09-18",
                 "-x86_64-unknown-linux-gnu.tar.zst"
@@ -114,21 +119,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn filename_matches_display() {
-        let name = sample_name();
-        assert_eq!(name.filename(), name.to_string());
+    #[rstest]
+    fn filename_matches_display(sample_name: ArtefactName) {
+        assert_eq!(sample_name.filename(), sample_name.to_string());
     }
 
-    #[test]
-    fn accessors_return_components() {
-        let name = sample_name();
-        assert_eq!(name.git_sha().as_str(), "abc1234");
-        assert_eq!(name.toolchain().as_str(), "nightly-2025-09-18");
-        assert_eq!(name.target().as_str(), "x86_64-unknown-linux-gnu");
+    #[rstest]
+    fn accessors_return_components(sample_name: ArtefactName) {
+        assert_eq!(sample_name.git_sha().as_str(), "abc1234");
+        assert_eq!(sample_name.toolchain().as_str(), "nightly-2025-09-18");
+        assert_eq!(sample_name.target().as_str(), "x86_64-unknown-linux-gnu");
     }
 
-    #[test]
+    #[rstest]
     fn different_targets_produce_different_names() {
         let sha = GitSha::try_from("abc1234").expect("valid");
         let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("valid");

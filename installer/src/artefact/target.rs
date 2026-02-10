@@ -17,15 +17,6 @@ const SUPPORTED_TARGETS: &[&str] = &[
     "x86_64-pc-windows-msvc",
 ];
 
-/// Comma-separated list for error messages.
-const SUPPORTED_TARGETS_DISPLAY: &str = concat!(
-    "x86_64-unknown-linux-gnu, ",
-    "aarch64-unknown-linux-gnu, ",
-    "x86_64-apple-darwin, ",
-    "aarch64-apple-darwin, ",
-    "x86_64-pc-windows-msvc"
-);
-
 /// A validated target triple from the ADR-001 supported set.
 ///
 /// Construction via [`TryFrom`] rejects any triple not in the supported set.
@@ -35,7 +26,9 @@ const SUPPORTED_TARGETS_DISPLAY: &str = concat!(
 /// ```
 /// use whitaker_installer::artefact::target::TargetTriple;
 ///
-/// let triple: TargetTriple = "x86_64-unknown-linux-gnu".try_into().unwrap();
+/// let triple: TargetTriple = "x86_64-unknown-linux-gnu"
+///     .try_into()
+///     .expect("valid target triple");
 /// assert_eq!(triple.as_str(), "x86_64-unknown-linux-gnu");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -70,7 +63,7 @@ impl TryFrom<&str> for TargetTriple {
         } else {
             Err(ArtefactError::UnsupportedTarget {
                 value: value.to_owned(),
-                expected: SUPPORTED_TARGETS_DISPLAY,
+                expected: SUPPORTED_TARGETS.join(", "),
             })
         }
     }
@@ -113,7 +106,7 @@ mod tests {
     fn rejects_unsupported_target() {
         let result = TargetTriple::try_from("wasm32-unknown-unknown");
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("expected rejection of unsupported target");
         assert!(
             matches!(err, ArtefactError::UnsupportedTarget { .. }),
             "expected UnsupportedTarget, got {err:?}"

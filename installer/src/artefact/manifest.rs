@@ -71,15 +71,18 @@ pub struct ManifestContent {
 /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 ///
 /// let provenance = ManifestProvenance {
-///     git_sha: GitSha::try_from("abc1234").unwrap(),
+///     git_sha: GitSha::try_from("abc1234").expect("valid git SHA"),
 ///     schema_version: SchemaVersion::current(),
-///     toolchain: ToolchainChannel::try_from("nightly-2025-09-18").unwrap(),
-///     target: TargetTriple::try_from("x86_64-unknown-linux-gnu").unwrap(),
+///     toolchain: ToolchainChannel::try_from("nightly-2025-09-18")
+///         .expect("valid toolchain channel"),
+///     target: TargetTriple::try_from("x86_64-unknown-linux-gnu")
+///         .expect("valid target triple"),
 /// };
 /// let content = ManifestContent {
 ///     generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
 ///     files: vec!["libwhitaker_lints.so".to_owned()],
-///     sha256: Sha256Digest::try_from(&"a".repeat(64) as &str).unwrap(),
+///     sha256: Sha256Digest::try_from(&"a".repeat(64) as &str)
+///         .expect("valid SHA-256 digest"),
 /// };
 /// let manifest = Manifest::new(provenance, content);
 /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
@@ -100,12 +103,30 @@ pub struct GeneratedAt(String);
 
 impl GeneratedAt {
     /// Create a new timestamp wrapper.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::manifest::GeneratedAt;
+    ///
+    /// let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
+    /// assert_eq!(ts.as_str(), "2026-02-03T00:00:00Z");
+    /// ```
     #[must_use]
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
 
     /// Return the timestamp as a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::manifest::GeneratedAt;
+    ///
+    /// let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
+    /// assert_eq!(ts.as_str(), "2026-02-03T00:00:00Z");
+    /// ```
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
@@ -118,8 +139,49 @@ impl fmt::Display for GeneratedAt {
     }
 }
 
+/// Helper macro for manifest doc examples — constructs a sample
+/// [`Manifest`] bound to `manifest`.
+///
+/// Not public; exists only to keep per-function doc examples concise.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _manifest_doc_setup {
+    ($manifest:ident) => {
+        use whitaker_installer::artefact::git_sha::GitSha;
+        use whitaker_installer::artefact::manifest::{
+            GeneratedAt, Manifest, ManifestContent, ManifestProvenance,
+        };
+        use whitaker_installer::artefact::schema_version::SchemaVersion;
+        use whitaker_installer::artefact::sha256_digest::Sha256Digest;
+        use whitaker_installer::artefact::target::TargetTriple;
+        use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
+
+        let provenance = ManifestProvenance {
+            git_sha: GitSha::try_from("abc1234").expect("valid git SHA"),
+            schema_version: SchemaVersion::current(),
+            toolchain: ToolchainChannel::try_from("nightly-2025-09-18")
+                .expect("valid toolchain channel"),
+            target: TargetTriple::try_from("x86_64-unknown-linux-gnu")
+                .expect("valid target triple"),
+        };
+        let content = ManifestContent {
+            generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
+            files: vec!["libwhitaker_lints.so".to_owned()],
+            sha256: Sha256Digest::try_from(&"a".repeat(64) as &str).expect("valid SHA-256 digest"),
+        };
+        let $manifest = Manifest::new(provenance, content);
+    };
+}
+
 impl Manifest {
     /// Construct a manifest from provenance and content groups.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
+    /// ```
     #[must_use]
     pub fn new(provenance: ManifestProvenance, content: ManifestContent) -> Self {
         Self {
@@ -129,42 +191,91 @@ impl Manifest {
     }
 
     /// Return the git SHA.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
+    /// ```
     #[must_use]
     pub fn git_sha(&self) -> &GitSha {
         &self.provenance.git_sha
     }
 
     /// Return the schema version.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(u32::from(manifest.schema_version()), 1);
+    /// ```
     #[must_use]
     pub fn schema_version(&self) -> SchemaVersion {
         self.provenance.schema_version
     }
 
     /// Return the toolchain channel.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.toolchain().as_str(), "nightly-2025-09-18");
+    /// ```
     #[must_use]
     pub fn toolchain(&self) -> &ToolchainChannel {
         &self.provenance.toolchain
     }
 
     /// Return the target triple.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.target().as_str(), "x86_64-unknown-linux-gnu");
+    /// ```
     #[must_use]
     pub fn target(&self) -> &TargetTriple {
         &self.provenance.target
     }
 
     /// Return the build timestamp.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.generated_at().as_str(), "2026-02-03T00:00:00Z");
+    /// ```
     #[must_use]
     pub fn generated_at(&self) -> &GeneratedAt {
         &self.content.generated_at
     }
 
     /// Return the list of files in the archive.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.files(), &["libwhitaker_lints.so"]);
+    /// ```
     #[must_use]
     pub fn files(&self) -> &[String] {
         &self.content.files
     }
 
     /// Return the SHA-256 digest of the archive.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// whitaker_installer::_manifest_doc_setup!(manifest);
+    /// assert_eq!(manifest.sha256().as_str().len(), 64);
+    /// ```
     #[must_use]
     pub fn sha256(&self) -> &Sha256Digest {
         &self.content.sha256
@@ -174,7 +285,9 @@ impl Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
 
+    #[fixture]
     fn sample_provenance() -> ManifestProvenance {
         ManifestProvenance {
             git_sha: GitSha::try_from("abc1234").expect("valid sha"),
@@ -184,6 +297,7 @@ mod tests {
         }
     }
 
+    #[fixture]
     fn sample_content() -> ManifestContent {
         ManifestContent {
             generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
@@ -194,29 +308,38 @@ mod tests {
         }
     }
 
-    fn sample_manifest() -> Manifest {
-        Manifest::new(sample_provenance(), sample_content())
+    #[fixture]
+    fn sample_manifest(
+        sample_provenance: ManifestProvenance,
+        sample_content: ManifestContent,
+    ) -> Manifest {
+        Manifest::new(sample_provenance, sample_content)
     }
 
-    #[test]
-    fn accessors_return_all_fields() {
-        let m = sample_manifest();
-        assert_eq!(m.git_sha().as_str(), "abc1234");
-        assert_eq!(m.schema_version().as_u32(), 1);
-        assert_eq!(m.toolchain().as_str(), "nightly-2025-09-18");
-        assert_eq!(m.target().as_str(), "x86_64-unknown-linux-gnu");
-        assert_eq!(m.generated_at().as_str(), "2026-02-03T00:00:00Z");
-        assert_eq!(m.files().len(), 1);
-        assert_eq!(m.sha256().as_str().len(), 64);
+    #[rstest]
+    fn accessors_return_all_fields(sample_manifest: Manifest) {
+        assert_eq!(sample_manifest.git_sha().as_str(), "abc1234");
+        assert_eq!(sample_manifest.schema_version().as_u32(), 1);
+        assert_eq!(sample_manifest.toolchain().as_str(), "nightly-2025-09-18");
+        assert_eq!(
+            sample_manifest.target().as_str(),
+            "x86_64-unknown-linux-gnu"
+        );
+        assert_eq!(
+            sample_manifest.generated_at().as_str(),
+            "2026-02-03T00:00:00Z"
+        );
+        assert_eq!(sample_manifest.files().len(), 1);
+        assert_eq!(sample_manifest.sha256().as_str().len(), 64);
     }
 
-    #[test]
+    #[rstest]
     fn generated_at_display() {
         let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
         assert_eq!(format!("{ts}"), "2026-02-03T00:00:00Z");
     }
 
-    #[test]
+    #[rstest]
     fn manifest_with_multiple_files() {
         let provenance = ManifestProvenance {
             git_sha: GitSha::try_from("deadbeef").expect("valid"),

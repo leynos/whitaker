@@ -14,7 +14,7 @@ pub enum ArtefactError {
         /// The rejected triple string.
         value: String,
         /// Comma-separated list of accepted triples.
-        expected: &'static str,
+        expected: String,
     },
 
     /// A toolchain channel string is empty or syntactically invalid.

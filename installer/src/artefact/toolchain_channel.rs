@@ -1,8 +1,9 @@
 //! Toolchain channel newtype for artefact naming.
 //!
 //! Validates that the channel string is non-empty and contains only
-//! ASCII alphanumeric characters, hyphens, and dots — the characters
-//! permitted in Rust toolchain channel specifiers.
+//! ASCII alphanumeric characters, hyphens, dots, and underscores — the
+//! characters permitted in Rust toolchain channel specifiers, including
+//! host-qualified names such as `nightly-2025-09-18-x86_64-unknown-linux-gnu`.
 
 use super::error::{ArtefactError, Result};
 use std::fmt;
@@ -14,15 +15,19 @@ use std::fmt;
 /// ```
 /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 ///
-/// let channel: ToolchainChannel = "nightly-2025-09-18".try_into().unwrap();
+/// let channel: ToolchainChannel = "nightly-2025-09-18"
+///     .try_into()
+///     .expect("valid toolchain channel");
 /// assert_eq!(channel.as_str(), "nightly-2025-09-18");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ToolchainChannel(String);
 
-/// Check that every byte is ASCII alphanumeric, a hyphen, or a dot.
+/// Check that every byte is ASCII alphanumeric, a hyphen, a dot, or an
+/// underscore.  Underscores appear in host-qualified toolchain names
+/// (e.g. `nightly-2025-09-18-x86_64-unknown-linux-gnu`).
 fn is_valid_channel_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '-' || c == '.'
+    c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_'
 }
 
 impl ToolchainChannel {
@@ -126,6 +131,12 @@ mod tests {
     fn display_shows_inner_value() {
         let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("known good");
         assert_eq!(format!("{ch}"), "nightly-2025-09-18");
+    }
+
+    #[test]
+    fn accepts_host_qualified_channel_with_underscores() {
+        let ch = ToolchainChannel::try_from("nightly-2025-09-18-x86_64-unknown-linux-gnu");
+        assert!(ch.is_ok());
     }
 
     #[test]
