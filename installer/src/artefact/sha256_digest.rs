@@ -50,7 +50,8 @@ impl TryFrom<String> for Sha256Digest {
     type Error = ArtefactError;
 
     fn try_from(value: String) -> Result<Self> {
-        validate_sha256(&value)?;
+        // Delegate to the &str implementation for validation.
+        let _ = Self::try_from(value.as_str())?;
         Ok(Self(value))
     }
 }

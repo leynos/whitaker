@@ -142,7 +142,7 @@ mod tests {
     fn rejects_too_short() {
         let result = GitSha::try_from("abc123");
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("expected rejection of too-short SHA");
         assert!(matches!(err, ArtefactError::InvalidGitSha { .. }));
     }
 

@@ -111,7 +111,7 @@ mod tests {
     fn rejects_empty_string() {
         let result = ToolchainChannel::try_from("");
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("expected rejection of empty channel");
         assert!(matches!(err, ArtefactError::InvalidToolchainChannel { .. }),);
     }
 
