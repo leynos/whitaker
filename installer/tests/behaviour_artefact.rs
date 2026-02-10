@@ -43,6 +43,23 @@ fn world() -> ArtefactWorld {
     ArtefactWorld::default()
 }
 
+/// Helper to assert that an error option contains a specific ArtefactError variant.
+fn assert_error_matches<F>(error: &Option<ArtefactError>, field_name: &str, predicate: F)
+where
+    F: FnOnce(&ArtefactError) -> bool,
+{
+    assert!(
+        error.is_some(),
+        "expected {} validation to fail",
+        field_name
+    );
+    assert!(
+        predicate(error.as_ref().expect("checked above")),
+        "error variant mismatch for {}",
+        field_name
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
@@ -83,14 +100,9 @@ fn given_invalid_target(world: &mut ArtefactWorld, triple: String) {
 
 #[then("the target triple is rejected")]
 fn then_target_rejected(world: &mut ArtefactWorld) {
-    assert!(
-        world.target_error.is_some(),
-        "expected target validation to fail"
-    );
-    assert!(matches!(
-        world.target_error.as_ref().expect("checked above"),
-        ArtefactError::UnsupportedTarget { .. }
-    ));
+    assert_error_matches(&world.target_error, "target", |e| {
+        matches!(e, ArtefactError::UnsupportedTarget { .. })
+    });
 }
 
 #[given("all supported target triples")]
@@ -113,11 +125,9 @@ fn given_invalid_sha(world: &mut ArtefactWorld, sha: String) {
 
 #[then("the git SHA is rejected")]
 fn then_sha_rejected(world: &mut ArtefactWorld) {
-    assert!(world.sha_error.is_some(), "expected SHA validation to fail");
-    assert!(matches!(
-        world.sha_error.as_ref().expect("checked above"),
-        ArtefactError::InvalidGitSha { .. }
-    ));
+    assert_error_matches(&world.sha_error, "SHA", |e| {
+        matches!(e, ArtefactError::InvalidGitSha { .. })
+    });
 }
 
 #[given("an empty toolchain channel")]
@@ -127,14 +137,9 @@ fn given_empty_channel(world: &mut ArtefactWorld) {
 
 #[then("the toolchain channel is rejected")]
 fn then_channel_rejected(world: &mut ArtefactWorld) {
-    assert!(
-        world.channel_error.is_some(),
-        "expected channel validation to fail"
-    );
-    assert!(matches!(
-        world.channel_error.as_ref().expect("checked above"),
-        ArtefactError::InvalidToolchainChannel { .. }
-    ));
+    assert_error_matches(&world.channel_error, "channel", |e| {
+        matches!(e, ArtefactError::InvalidToolchainChannel { .. })
+    });
 }
 
 #[given("a complete set of manifest fields")]

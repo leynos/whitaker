@@ -80,14 +80,7 @@ impl TryFrom<String> for TargetTriple {
     type Error = ArtefactError;
 
     fn try_from(value: String) -> Result<Self> {
-        if SUPPORTED_TARGETS.contains(&value.as_str()) {
-            Ok(Self(value))
-        } else {
-            Err(ArtefactError::UnsupportedTarget {
-                value,
-                expected: SUPPORTED_TARGETS_DISPLAY,
-            })
-        }
+        Self::try_from(value.as_str())
     }
 }
 
