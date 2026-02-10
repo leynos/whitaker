@@ -32,12 +32,35 @@ fn is_valid_channel_char(c: char) -> bool {
 
 impl ToolchainChannel {
     /// Return the channel as a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
+    ///
+    /// let channel: ToolchainChannel = "stable"
+    ///     .try_into()
+    ///     .expect("valid toolchain channel");
+    /// assert_eq!(channel.as_str(), "stable");
+    /// ```
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// Consume the wrapper and return the inner string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
+    ///
+    /// let channel: ToolchainChannel = "nightly-2025-09-18"
+    ///     .try_into()
+    ///     .expect("valid toolchain channel");
+    /// let inner: String = channel.into_inner();
+    /// assert_eq!(inner, "nightly-2025-09-18");
+    /// ```
     #[must_use]
     pub fn into_inner(self) -> String {
         self.0
@@ -87,56 +110,35 @@ impl fmt::Display for ToolchainChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn accepts_nightly_with_date() {
-        let ch = ToolchainChannel::try_from("nightly-2025-09-18");
-        assert!(ch.is_ok());
-        assert_eq!(ch.expect("checked above").as_str(), "nightly-2025-09-18");
+    #[rstest]
+    #[case::nightly_with_date("nightly-2025-09-18")]
+    #[case::stable("stable")]
+    #[case::version_with_dots("1.75.0")]
+    #[case::host_qualified("nightly-2025-09-18-x86_64-unknown-linux-gnu")]
+    fn accepts_valid_channel(#[case] input: &str) {
+        let ch = ToolchainChannel::try_from(input).expect("expected valid channel");
+        assert_eq!(ch.as_str(), input);
     }
 
-    #[test]
-    fn accepts_stable() {
-        let ch = ToolchainChannel::try_from("stable");
-        assert!(ch.is_ok());
-    }
-
-    #[test]
-    fn accepts_version_with_dots() {
-        let ch = ToolchainChannel::try_from("1.75.0");
-        assert!(ch.is_ok());
-    }
-
-    #[test]
-    fn rejects_empty_string() {
-        let result = ToolchainChannel::try_from("");
-        assert!(result.is_err());
-        let err = result.expect_err("expected rejection of empty channel");
-        assert!(matches!(err, ArtefactError::InvalidToolchainChannel { .. }),);
-    }
-
-    #[test]
-    fn rejects_whitespace() {
-        let result = ToolchainChannel::try_from("nightly 2025");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn rejects_slashes() {
-        let result = ToolchainChannel::try_from("nightly/latest");
-        assert!(result.is_err());
+    #[rstest]
+    #[case::empty("", "empty")]
+    #[case::whitespace("nightly 2025", "whitespace")]
+    #[case::slashes("nightly/latest", "slashes")]
+    fn rejects_invalid_channel(#[case] input: &str, #[case] label: &str) {
+        let err =
+            ToolchainChannel::try_from(input).expect_err("expected rejection of invalid channel");
+        assert!(
+            matches!(err, ArtefactError::InvalidToolchainChannel { .. }),
+            "expected InvalidToolchainChannel for {label}, got {err:?}"
+        );
     }
 
     #[test]
     fn display_shows_inner_value() {
         let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("known good");
         assert_eq!(format!("{ch}"), "nightly-2025-09-18");
-    }
-
-    #[test]
-    fn accepts_host_qualified_channel_with_underscores() {
-        let ch = ToolchainChannel::try_from("nightly-2025-09-18-x86_64-unknown-linux-gnu");
-        assert!(ch.is_ok());
     }
 
     #[test]

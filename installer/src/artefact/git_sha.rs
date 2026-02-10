@@ -101,10 +101,10 @@ fn validate_git_sha(value: &str) -> Result<()> {
         .chars()
         .find(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase())
     {
-        let reason = if bad.is_ascii_uppercase() {
-            "SHA must be lowercase".to_owned()
-        } else {
+        let reason = if !bad.is_ascii_hexdigit() {
             format!("non-hex character '{bad}'")
+        } else {
+            "SHA must be lowercase".to_owned()
         };
         return Err(ArtefactError::InvalidGitSha {
             value: value.to_owned(),
@@ -117,6 +117,7 @@ fn validate_git_sha(value: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn accepts_seven_char_abbreviated_sha() {
@@ -132,37 +133,24 @@ mod tests {
         assert!(sha.is_ok());
     }
 
-    #[test]
-    fn rejects_empty_string() {
-        let result = GitSha::try_from("");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn rejects_too_short() {
-        let result = GitSha::try_from("abc123");
-        assert!(result.is_err());
-        let err = result.expect_err("expected rejection of too-short SHA");
-        assert!(matches!(err, ArtefactError::InvalidGitSha { .. }));
+    #[rstest]
+    #[case::empty("", "empty")]
+    #[case::too_short("abc123", "too short")]
+    #[case::non_hex("abc123g", "non-hex character")]
+    #[case::uppercase("ABC1234", "uppercase")]
+    fn rejects_invalid_sha(#[case] input: &str, #[case] label: &str) {
+        let err = GitSha::try_from(input).expect_err("expected rejection of invalid SHA");
+        assert!(
+            matches!(err, ArtefactError::InvalidGitSha { .. }),
+            "expected InvalidGitSha for {label}, got {err:?}"
+        );
     }
 
     #[test]
     fn rejects_too_long() {
         let long = "a".repeat(41);
-        let result = GitSha::try_from(long.as_str());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn rejects_non_hex_characters() {
-        let result = GitSha::try_from("abc123g");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn rejects_uppercase_hex() {
-        let result = GitSha::try_from("ABC1234");
-        assert!(result.is_err());
+        let err = GitSha::try_from(long.as_str()).expect_err("expected rejection of too-long SHA");
+        assert!(matches!(err, ArtefactError::InvalidGitSha { .. }));
     }
 
     #[test]

@@ -82,10 +82,10 @@ fn validate_sha256(value: &str) -> Result<()> {
         .chars()
         .find(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase())
     {
-        let reason = if bad.is_ascii_uppercase() {
-            "digest must be lowercase".to_owned()
-        } else {
+        let reason = if !bad.is_ascii_hexdigit() {
             format!("non-hex character '{bad}'")
+        } else {
+            "digest must be lowercase".to_owned()
         };
         return Err(ArtefactError::InvalidSha256Digest { reason });
     }
@@ -108,32 +108,34 @@ mod tests {
         assert!(digest.is_ok());
     }
 
-    #[rstest]
-    fn rejects_too_short() {
-        let result = Sha256Digest::try_from("abcdef");
-        assert!(result.is_err());
+    /// Build an invalid digest string for the given test case.
+    fn invalid_digest(label: &str) -> String {
+        match label {
+            "too_short" => "abcdef".to_owned(),
+            "too_long" => "a".repeat(65),
+            "non_hex" => {
+                let mut s = "a".repeat(63);
+                s.push('g');
+                s
+            }
+            "uppercase" => "A".repeat(64),
+            other => panic!("unknown case: {other}"),
+        }
     }
 
     #[rstest]
-    fn rejects_too_long() {
-        let long = "a".repeat(65);
-        let result = Sha256Digest::try_from(long.as_str());
-        assert!(result.is_err());
-    }
-
-    #[rstest]
-    fn rejects_non_hex_characters() {
-        let mut bad = "a".repeat(63);
-        bad.push('g');
-        let result = Sha256Digest::try_from(bad.as_str());
-        assert!(result.is_err());
-    }
-
-    #[rstest]
-    fn rejects_uppercase_hex() {
-        let bad = "A".repeat(64);
-        let result = Sha256Digest::try_from(bad.as_str());
-        assert!(result.is_err());
+    #[case::too_short("too_short")]
+    #[case::too_long("too_long")]
+    #[case::non_hex("non_hex")]
+    #[case::uppercase("uppercase")]
+    fn rejects_invalid_digest(#[case] label: &str) {
+        let input = invalid_digest(label);
+        let err = Sha256Digest::try_from(input.as_str())
+            .expect_err("expected rejection of invalid digest");
+        assert!(
+            matches!(err, ArtefactError::InvalidSha256Digest { .. }),
+            "expected InvalidSha256Digest for {label}, got {err:?}"
+        );
     }
 
     #[rstest]
