@@ -202,6 +202,7 @@ Each built library is then copied with a toolchain-stamped name.
 
 **BDD testing**: Uses `rstest-bdd` v0.5.0 with Gherkin feature files. The
 existing artefact BDD tests are in:
+
 - `installer/tests/behaviour_artefact.rs` (step definitions + scenario
   bindings)
 - `installer/tests/features/artefact_policy.feature` (8 scenarios)
@@ -230,6 +231,7 @@ their inner string value. `SchemaVersion` should serialise as its inner
 `u32`. `GeneratedAt` should serialise as its inner string.
 
 Files modified:
+
 - `installer/src/artefact/git_sha.rs` — added `Serialize`
 - `installer/src/artefact/toolchain_channel.rs` — added `Serialize`
 - `installer/src/artefact/target.rs` — added `Serialize`
@@ -289,6 +291,7 @@ definitions and scenario bindings.
 ### Stage E — GitHub Actions workflow
 
 Created `.github/workflows/rolling-release.yml` with:
+
 - Build matrix for all 5 targets across ubuntu/macos/windows runners.
 - Cross-compilation support for aarch64-linux.
 - Two-pass shell-based packaging (placeholder digest, then real digest).
