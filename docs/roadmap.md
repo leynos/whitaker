@@ -83,11 +83,11 @@
 
 - [x] 3.4.1. Define artefact naming, manifest schema, and verification policy.
   See `docs/adr-001-prebuilt-dylint-libraries.md`.
-- [ ] 3.4.2. Build CI automation to compile lint libraries for the supported
+- [x] 3.4.2. Build CI automation to compile lint libraries for the supported
   target matrix and publish `.tar.zst` assets to the rolling release. See
   `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
   direction.
-- [ ] 3.4.3. Emit `manifest.json` for each artefact with git SHA, toolchain,
+- [x] 3.4.3. Emit `manifest.json` for each artefact with git SHA, toolchain,
   target triple, build time, and SHA256. See
   `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
   direction.

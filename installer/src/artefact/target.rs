@@ -4,6 +4,7 @@
 //! is rejected at construction time with a descriptive error.
 
 use super::error::{ArtefactError, Result};
+use serde::Serialize;
 use std::fmt;
 
 /// The supported target triples for prebuilt artefact distribution.
@@ -31,7 +32,8 @@ const SUPPORTED_TARGETS: &[&str] = &[
 ///     .expect("valid target triple");
 /// assert_eq!(triple.as_str(), "x86_64-unknown-linux-gnu");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct TargetTriple(String);
 
 impl TargetTriple {

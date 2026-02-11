@@ -160,6 +160,42 @@ Non-goals:
 - Supply-chain risks require checksum or signature verification and careful
   handling of extraction paths.
 
+## Implementation notes
+
+### Rolling release strategy (task 3.4.2)
+
+The CI workflow `.github/workflows/rolling-release.yml` uses a single `rolling`
+GitHub Release tag that is replaced on each push to `main`. This avoids asset
+accumulation and simplifies the installer's download URL construction. The
+workflow deletes the existing release before creating a new one with
+`gh release create rolling --prerelease --latest=false`.
+
+### Manifest inclusion in archives (task 3.4.2)
+
+Each `.tar.zst` archive contains both the compiled library files and the
+`manifest.json`. The manifest is produced by the `artefact::packaging` module
+in the `installer` crate, which reuses the existing artefact domain types. A
+two-pass approach creates the archive: first with a placeholder SHA-256 digest,
+then with the real digest computed from the first-pass archive. This resolves
+the circular dependency between the manifest needing the archive checksum and
+the archive containing the manifest.
+
+### Serialisation approach (task 3.4.2)
+
+Only `serde::Serialize` is derived on artefact types (not `Deserialize`). This
+task produces manifests; consuming them is deferred to task 3.4.4. Adding
+`Deserialize` now would introduce untested surface area. Newtypes use
+`#[serde(transparent)]` to serialise as their inner value. The `Manifest`
+struct uses `#[serde(flatten)]` on its provenance and content groups to produce
+the flat JSON object specified by this ADR.
+
+### Packaging module location (task 3.4.2)
+
+Packaging logic lives in `installer/src/artefact/packaging.rs` as a sub-module
+of the existing artefact domain model, rather than a standalone binary. This
+maintains cohesion with the validated newtypes. The CI workflow invokes the
+logic via shell commands that mirror the Rust module's algorithm.
+
 ## Architectural rationale
 
 The decision aligns with the existing toolchain pinning strategy and keeps the

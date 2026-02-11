@@ -9,6 +9,7 @@ use super::schema_version::SchemaVersion;
 use super::sha256_digest::Sha256Digest;
 use super::target::TargetTriple;
 use super::toolchain_channel::ToolchainChannel;
+use serde::Serialize;
 use std::fmt;
 
 /// Provenance fields that identify an artefact build.
@@ -16,7 +17,7 @@ use std::fmt;
 /// Groups the identity components (git SHA, schema version, toolchain, and
 /// target) so that the [`Manifest`] constructor stays within Clippy's
 /// parameter limit.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestProvenance {
     /// The git commit SHA the artefact was built from.
     pub git_sha: GitSha,
@@ -32,7 +33,7 @@ pub struct ManifestProvenance {
 ///
 /// Groups the output metadata (timestamp, file list, and checksum) so that
 /// the [`Manifest`] constructor stays within Clippy's parameter limit.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestContent {
     /// ISO 8601 timestamp recording when the artefact was built.
     pub generated_at: GeneratedAt,
@@ -87,9 +88,11 @@ pub struct ManifestContent {
 /// let manifest = Manifest::new(provenance, content);
 /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Manifest {
+    #[serde(flatten)]
     provenance: ManifestProvenance,
+    #[serde(flatten)]
     content: ManifestContent,
 }
 
@@ -98,7 +101,8 @@ pub struct Manifest {
 /// This is stored as an opaque string; parsing and validation of the
 /// timestamp format is deferred to later tasks that consume manifests
 /// from external sources.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct GeneratedAt(String);
 
 impl GeneratedAt {
@@ -286,6 +290,7 @@ impl Manifest {
 mod tests {
     use super::*;
     use rstest::{fixture, rstest};
+    use serde_json::Value;
 
     #[fixture]
     fn sample_provenance() -> ManifestProvenance {
@@ -337,6 +342,44 @@ mod tests {
     fn generated_at_display() {
         let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
         assert_eq!(format!("{ts}"), "2026-02-03T00:00:00Z");
+    }
+
+    #[rstest]
+    fn serialized_json_contains_all_adr_001_keys(sample_manifest: Manifest) {
+        let json = serde_json::to_string(&sample_manifest).expect("serialization succeeds");
+        let parsed: Value = serde_json::from_str(&json).expect("valid JSON");
+        let obj = parsed.as_object().expect("top-level object");
+
+        // ADR-001 specifies these seven top-level keys.
+        let required_keys = [
+            "git_sha",
+            "schema_version",
+            "toolchain",
+            "target",
+            "generated_at",
+            "files",
+            "sha256",
+        ];
+        for key in &required_keys {
+            assert!(obj.contains_key(*key), "missing key: {key}");
+        }
+
+        assert_eq!(obj.get("git_sha").and_then(Value::as_str), Some("abc1234"));
+        assert_eq!(obj.get("schema_version").and_then(Value::as_u64), Some(1));
+        assert_eq!(
+            obj.get("toolchain").and_then(Value::as_str),
+            Some("nightly-2025-09-18")
+        );
+        assert_eq!(
+            obj.get("target").and_then(Value::as_str),
+            Some("x86_64-unknown-linux-gnu")
+        );
+        assert!(
+            obj.get("files")
+                .and_then(Value::as_array)
+                .is_some_and(|a| !a.is_empty())
+        );
+        assert!(obj.get("sha256").and_then(Value::as_str).is_some());
     }
 
     #[rstest]
