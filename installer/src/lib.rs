@@ -6,6 +6,7 @@
 //!
 //! # Modules
 //!
+//! - [`artefact`] - Artefact naming, manifest schema, and verification policy
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
 //! - [`crate_name`] - Semantic wrapper for lint crate names
@@ -24,6 +25,7 @@
 //! - [`workspace`] - Workspace detection and path resolution
 //! - [`wrapper`] - Wrapper script generation
 
+pub mod artefact;
 pub mod builder;
 pub mod cli;
 pub mod crate_name;

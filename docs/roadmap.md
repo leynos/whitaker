@@ -81,7 +81,7 @@
 
 ### 3.4. Prebuilt lint libraries
 
-- [ ] 3.4.1. Define artefact naming, manifest schema, and verification policy.
+- [x] 3.4.1. Define artefact naming, manifest schema, and verification policy.
   See `docs/adr-001-prebuilt-dylint-libraries.md`.
 - [ ] 3.4.2. Build CI automation to compile lint libraries for the supported
   target matrix and publish `.tar.zst` assets to the rolling release. See
