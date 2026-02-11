@@ -151,24 +151,31 @@ mod tests {
         assert!(sha.is_ok());
     }
 
+    /// Build an invalid SHA string for the given test case.
+    fn invalid_sha(label: &str) -> String {
+        match label {
+            "empty" => String::new(),
+            "too_short" => "abc123".to_owned(),
+            "too_long" => "a".repeat(41),
+            "non_hex" => "abc123g".to_owned(),
+            "uppercase" => "ABC1234".to_owned(),
+            other => panic!("unknown case: {other}"),
+        }
+    }
+
     #[rstest]
-    #[case::empty("", "empty")]
-    #[case::too_short("abc123", "too short")]
-    #[case::non_hex("abc123g", "non-hex character")]
-    #[case::uppercase("ABC1234", "uppercase")]
-    fn rejects_invalid_sha(#[case] input: &str, #[case] label: &str) {
-        let err = GitSha::try_from(input).expect_err("expected rejection of invalid SHA");
+    #[case::empty("empty")]
+    #[case::too_short("too_short")]
+    #[case::too_long("too_long")]
+    #[case::non_hex("non_hex")]
+    #[case::uppercase("uppercase")]
+    fn rejects_invalid_sha(#[case] label: &str) {
+        let input = invalid_sha(label);
+        let err = GitSha::try_from(input.as_str()).expect_err("expected rejection of invalid SHA");
         assert!(
             matches!(err, ArtefactError::InvalidGitSha { .. }),
             "expected InvalidGitSha for {label}, got {err:?}"
         );
-    }
-
-    #[test]
-    fn rejects_too_long() {
-        let long = "a".repeat(41);
-        let err = GitSha::try_from(long.as_str()).expect_err("expected rejection of too-long SHA");
-        assert!(matches!(err, ArtefactError::InvalidGitSha { .. }));
     }
 
     #[test]
