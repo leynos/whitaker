@@ -25,12 +25,32 @@ pub struct Sha256Digest(String);
 
 impl Sha256Digest {
     /// Return the digest as a hex string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::sha256_digest::Sha256Digest;
+    ///
+    /// let hex = "a".repeat(64);
+    /// let digest: Sha256Digest = hex.as_str().try_into().expect("valid SHA-256 digest");
+    /// assert_eq!(digest.as_str(), hex);
+    /// ```
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// Consume the wrapper and return the inner string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::sha256_digest::Sha256Digest;
+    ///
+    /// let hex = "a".repeat(64);
+    /// let digest: Sha256Digest = hex.as_str().try_into().expect("valid SHA-256 digest");
+    /// assert_eq!(digest.into_inner(), hex);
+    /// ```
     #[must_use]
     pub fn into_inner(self) -> String {
         self.0

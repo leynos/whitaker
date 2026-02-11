@@ -28,12 +28,30 @@ pub struct GitSha(String);
 
 impl GitSha {
     /// Return the SHA as a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::git_sha::GitSha;
+    ///
+    /// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
+    /// assert_eq!(sha.as_str(), "abc1234");
+    /// ```
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// Consume the wrapper and return the inner string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::git_sha::GitSha;
+    ///
+    /// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
+    /// assert_eq!(sha.into_inner(), "abc1234");
+    /// ```
     #[must_use]
     pub fn into_inner(self) -> String {
         self.0
