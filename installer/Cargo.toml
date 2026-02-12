@@ -13,6 +13,10 @@ documentation.workspace = true
 name = "whitaker-installer"
 path = "src/main.rs"
 
+[[bin]]
+name = "whitaker-package-lints"
+path = "src/bin/package_lints.rs"
+
 [features]
 ## Exposes test utilities for use by external test suites.
 ##

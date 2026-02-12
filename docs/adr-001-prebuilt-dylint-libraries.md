@@ -192,9 +192,18 @@ the flat JSON object specified by this ADR.
 ### Packaging module location (task 3.4.2)
 
 Packaging logic lives in `installer/src/artefact/packaging.rs` as a sub-module
-of the existing artefact domain model, rather than a standalone binary. This
-maintains cohesion with the validated newtypes. The CI workflow invokes the
-logic via shell commands that mirror the Rust module's algorithm.
+of the existing artefact domain model, maintaining cohesion with the validated
+newtypes.
+
+### Centralised packaging binary (post-3.4.2)
+
+The `whitaker-package-lints` binary (`installer/src/bin/package_lints.rs`)
+provides a single CLI entry point that both the Makefile `package-lints` target
+and the `rolling-release.yml` CI workflow invoke. This eliminates the earlier
+shell reimplementations of JSON construction, two-pass SHA-256 hashing, and
+tar/zstd archiving that previously existed in the Makefile and CI workflow.
+Future manifest schema changes need only be made in the Rust
+`artefact::packaging` module.
 
 ## Architectural rationale
 

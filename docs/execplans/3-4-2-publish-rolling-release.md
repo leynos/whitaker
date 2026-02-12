@@ -294,13 +294,14 @@ Created `.github/workflows/rolling-release.yml` with:
 
 - Build matrix for all 5 targets across ubuntu/macos/windows runners.
 - Cross-compilation support for aarch64-linux.
-- Two-pass shell-based packaging (placeholder digest, then real digest).
+- Cross-compilation support for aarch64-linux.
+- Packaging delegated to `whitaker-package-lints` binary.
 - Publish job that replaces the `rolling` release tag.
 
 ### Stage F — Makefile target for local testing
 
 Added `package-lints` target to `Makefile` that builds all lint crates and
-creates `.tar.zst` archives with manifests in `dist/`.
+delegates packaging to `whitaker-package-lints`.
 
 ### Stage G — Quality gates
 

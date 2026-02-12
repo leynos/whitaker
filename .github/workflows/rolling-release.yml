@@ -90,6 +90,9 @@ jobs:
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Build packaging tool
+        run: cargo build --release -p whitaker-installer --bin whitaker-package-lints
+
       - name: Package artefact
         run: |
           set -euxo pipefail
@@ -99,14 +102,11 @@ jobs:
           SHA="${{ steps.sha.outputs.short }}"
           EXT="${{ matrix.lib_ext }}"
           RELEASE_DIR="target/${TARGET}/release"
-          DIST_DIR="dist"
 
-          mkdir -p "${DIST_DIR}"
+          mkdir -p dist
 
-          # Collect built library files.
           LIB_FILES=""
           for lint in $LINT_CRATES; do
-            # Library names use underscores (Cargo convention).
             LIB_NAME="lib${lint}.${EXT}"
             if [ "${EXT}" = "dll" ]; then
               LIB_NAME="${lint}.${EXT}"
@@ -119,68 +119,12 @@ jobs:
             fi
           done
 
-          # Create archive name following ADR-001.
-          ARCHIVE_NAME="whitaker-lints-${SHA}-${TOOLCHAIN}-${TARGET}.tar.zst"
-          ARCHIVE_PATH="${DIST_DIR}/${ARCHIVE_NAME}"
-          MANIFEST_PATH="${DIST_DIR}/manifest.json"
-
-          # Compute file list for manifest.
-          FILE_LIST="["
-          FIRST=true
-          for f in ${LIB_FILES}; do
-            FNAME=$(basename "$f")
-            if [ "${FIRST}" = "true" ]; then
-              FILE_LIST="${FILE_LIST}\"${FNAME}\""
-              FIRST=false
-            else
-              FILE_LIST="${FILE_LIST},\"${FNAME}\""
-            fi
-          done
-          FILE_LIST="${FILE_LIST}]"
-
-          # Create archive with placeholder manifest.
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          PLACEHOLDER_SHA256=$(printf '0%.0s' {1..64})
-
-          cat > "${MANIFEST_PATH}" <<MANIFEST_EOF
-          {
-            "git_sha": "${SHA}",
-            "schema_version": 1,
-            "toolchain": "${TOOLCHAIN}",
-            "target": "${TARGET}",
-            "generated_at": "${TIMESTAMP}",
-            "files": ${FILE_LIST},
-            "sha256": "${PLACEHOLDER_SHA256}"
-          }
-          MANIFEST_EOF
-
-          # First pass: create archive with placeholder digest.
-          tar -cf - -C "${RELEASE_DIR}" ${LIB_FILES##*/} \
-            -C "$(pwd)/${DIST_DIR}" manifest.json \
-            | zstd -o "${ARCHIVE_PATH}"
-
-          # Second pass: embed real digest.
-          REAL_SHA256=$(sha256sum "${ARCHIVE_PATH}" | cut -d' ' -f1)
-
-          cat > "${MANIFEST_PATH}" <<MANIFEST_EOF
-          {
-            "git_sha": "${SHA}",
-            "schema_version": 1,
-            "toolchain": "${TOOLCHAIN}",
-            "target": "${TARGET}",
-            "generated_at": "${TIMESTAMP}",
-            "files": ${FILE_LIST},
-            "sha256": "${REAL_SHA256}"
-          }
-          MANIFEST_EOF
-
-          # Recreate archive with final manifest.
-          tar -cf - -C "${RELEASE_DIR}" ${LIB_FILES##*/} \
-            -C "$(pwd)/${DIST_DIR}" manifest.json \
-            | zstd -o "${ARCHIVE_PATH}"
-
-          rm -f "${MANIFEST_PATH}"
-          echo "Created ${ARCHIVE_PATH}"
+          ./target/release/whitaker-package-lints \
+            --git-sha "${SHA}" \
+            --toolchain "${TOOLCHAIN}" \
+            --target "${TARGET}" \
+            --output-dir dist \
+            ${LIB_FILES}
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4

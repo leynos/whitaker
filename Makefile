@@ -153,42 +153,24 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 	for lint in $(LINT_CRATES); do \
 		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 	done; \
-	ARCHIVE_NAME="whitaker-lints-$${SHA}-$${TOOLCHAIN}-$${HOST_TRIPLE}.tar.zst"; \
-	ARCHIVE_PATH="$${DIST_DIR}/$${ARCHIVE_NAME}"; \
-	MANIFEST_PATH="$${DIST_DIR}/manifest.json"; \
 	LIB_EXT="so"; \
 	case "$$HOST_TRIPLE" in \
 		*darwin*) LIB_EXT="dylib" ;; \
 		*windows*) LIB_EXT="dll" ;; \
 	esac; \
 	LIB_FILES=""; \
-	FILE_LIST="["; \
-	FIRST=true; \
 	for lint in $(LINT_CRATES); do \
-		LIB_NAME="lib$${lint}.$${LIB_EXT}"; \
-		SRC="target/release/$${LIB_NAME}"; \
+		SRC="target/release/lib$${lint}.$${LIB_EXT}"; \
 		if [ -f "$$SRC" ]; then \
-			LIB_FILES="$$LIB_FILES $$LIB_NAME"; \
-			if [ "$$FIRST" = "true" ]; then \
-				FILE_LIST="$${FILE_LIST}\"$${LIB_NAME}\""; \
-				FIRST=false; \
-			else \
-				FILE_LIST="$${FILE_LIST},\"$${LIB_NAME}\""; \
-			fi; \
+			LIB_FILES="$$LIB_FILES $$SRC"; \
 		fi; \
 	done; \
-	FILE_LIST="$${FILE_LIST}]"; \
-	TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
-	PLACEHOLDER=$$(printf '0%.0s' $$(seq 1 64)); \
-	printf '{\n  "git_sha": "%s",\n  "schema_version": 1,\n  "toolchain": "%s",\n  "target": "%s",\n  "generated_at": "%s",\n  "files": %s,\n  "sha256": "%s"\n}\n' \
-		"$$SHA" "$$TOOLCHAIN" "$$HOST_TRIPLE" "$$TIMESTAMP" "$$FILE_LIST" "$$PLACEHOLDER" > "$$MANIFEST_PATH"; \
-	cd target/release && tar -cf - $$LIB_FILES -C "$$DIST_DIR" manifest.json | zstd -o "$$ARCHIVE_PATH"; cd "$(CURDIR)"; \
-	REAL_SHA256=$$(sha256sum "$$ARCHIVE_PATH" | cut -d' ' -f1); \
-	printf '{\n  "git_sha": "%s",\n  "schema_version": 1,\n  "toolchain": "%s",\n  "target": "%s",\n  "generated_at": "%s",\n  "files": %s,\n  "sha256": "%s"\n}\n' \
-		"$$SHA" "$$TOOLCHAIN" "$$HOST_TRIPLE" "$$TIMESTAMP" "$$FILE_LIST" "$$REAL_SHA256" > "$$MANIFEST_PATH"; \
-	cd target/release && tar -cf - $$LIB_FILES -C "$$DIST_DIR" manifest.json | zstd -o "$$ARCHIVE_PATH"; cd "$(CURDIR)"; \
-	rm -f "$$MANIFEST_PATH"; \
-	echo "Created $$ARCHIVE_PATH"
+	$(CARGO) run -p whitaker-installer --bin whitaker-package-lints -- \
+		--git-sha "$$SHA" \
+		--toolchain "$$TOOLCHAIN" \
+		--target "$$HOST_TRIPLE" \
+		--output-dir "$$DIST_DIR" \
+		$$LIB_FILES
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
