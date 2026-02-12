@@ -127,10 +127,18 @@ fn then_archive_exists(world: &mut PackagingWorld) {
 #[then("the archive contains the library file")]
 fn then_archive_has_library(world: &mut PackagingWorld) {
     let entries = list_archive_entries(world);
-    assert!(
-        entries.iter().any(|e| e.ends_with(".so")),
-        "archive must contain a .so file"
-    );
+    let expected: Vec<String> = world
+        .library_files
+        .iter()
+        .filter_map(|p| p.file_name())
+        .map(|n| n.to_string_lossy().into_owned())
+        .collect();
+    for name in &expected {
+        assert!(
+            entries.contains(name),
+            "archive must contain {name}, got {entries:?}"
+        );
+    }
 }
 
 #[then("the archive contains a manifest.json")]

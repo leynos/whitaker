@@ -155,19 +155,14 @@ fn discover_library_files(release_dir: &Path, target: &TargetTriple) -> Vec<Path
         .collect()
 }
 
-/// Verify that every library file exists on disk.
+/// Verify that every library file exists on disk and is a regular file.
 fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
     for path in paths {
-        if !path_exists(path) {
+        if !path.is_file() {
             return Err(PackageCliError::FileNotFound(path.clone()));
         }
     }
     Ok(())
-}
-
-/// Thin wrapper to allow testing without touching the filesystem.
-fn path_exists(path: &Path) -> bool {
-    path.exists()
 }
 
 /// Return the current UTC time as an ISO 8601 string (`YYYY-MM-DDThh:mm:ssZ`).
@@ -218,24 +213,39 @@ fn civil_from_epoch(epoch_secs: u64) -> (u32, u32, u32) {
 mod tests {
     use super::*;
     use clap::Parser;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use std::fs;
+
+    /// Common CLI base arguments shared across parsing tests.
+    const BASE_ARGS: [&str; 9] = [
+        "whitaker-package-lints",
+        "--git-sha",
+        "abc1234",
+        "--toolchain",
+        "nightly-2025-09-18",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--output-dir",
+        "/tmp/dist",
+    ];
+
+    /// Build a CLI arg vec from base args plus extra trailing args.
+    fn cli_args<'a>(extra: &'a [&'a str]) -> Vec<&'a str> {
+        BASE_ARGS
+            .iter()
+            .copied()
+            .chain(extra.iter().copied())
+            .collect()
+    }
+
+    #[fixture]
+    fn linux_target() -> TargetTriple {
+        TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")
+    }
 
     #[test]
     fn cli_parses_all_required_args() {
-        let cli = PackageCli::parse_from([
-            "whitaker-package-lints",
-            "--git-sha",
-            "abc1234",
-            "--toolchain",
-            "nightly-2025-09-18",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp/dist",
-            "/tmp/libfoo.so",
-            "/tmp/libbar.so",
-        ]);
+        let cli = PackageCli::parse_from(cli_args(&["/tmp/libfoo.so", "/tmp/libbar.so"]));
         assert_eq!(cli.git_sha, "abc1234");
         assert_eq!(cli.toolchain, "nightly-2025-09-18");
         assert_eq!(cli.target, "x86_64-unknown-linux-gnu");
@@ -246,20 +256,8 @@ mod tests {
 
     #[test]
     fn cli_accepts_optional_generated_at() {
-        let cli = PackageCli::parse_from([
-            "whitaker-package-lints",
-            "--git-sha",
-            "abc1234",
-            "--toolchain",
-            "nightly-2025-09-18",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp/dist",
-            "--generated-at",
-            "2026-02-12T10:00:00Z",
-            "/tmp/lib.so",
-        ]);
+        let args = cli_args(&["--generated-at", "2026-02-12T10:00:00Z", "/tmp/lib.so"]);
+        let cli = PackageCli::parse_from(args);
         assert_eq!(cli.generated_at, Some("2026-02-12T10:00:00Z".to_owned()));
     }
 
@@ -280,98 +278,51 @@ mod tests {
 
     #[test]
     fn cli_rejects_missing_library_files_and_release_dir() {
-        PackageCli::try_parse_from([
-            "whitaker-package-lints",
-            "--git-sha",
-            "abc1234",
-            "--toolchain",
-            "nightly",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp",
-        ])
-        .expect_err("expected clap to reject zero library files");
+        PackageCli::try_parse_from(cli_args(&[]))
+            .expect_err("expected clap to reject zero library files");
     }
 
     #[test]
     fn cli_parses_release_dir_flag() {
-        let cli = PackageCli::parse_from([
-            "whitaker-package-lints",
-            "--git-sha",
-            "abc1234",
-            "--toolchain",
-            "nightly-2025-09-18",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp/dist",
-            "--release-dir",
-            "/tmp/target/release",
-        ]);
+        let cli = PackageCli::parse_from(cli_args(&["--release-dir", "/tmp/target/release"]));
         assert_eq!(cli.release_dir, Some(PathBuf::from("/tmp/target/release")));
         assert!(cli.library_files.is_empty());
     }
 
     #[test]
     fn cli_rejects_both_release_dir_and_library_files() {
-        PackageCli::try_parse_from([
-            "whitaker-package-lints",
-            "--git-sha",
-            "abc1234",
-            "--toolchain",
-            "nightly-2025-09-18",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--output-dir",
-            "/tmp/dist",
-            "--release-dir",
-            "/tmp/release",
-            "/tmp/libfoo.so",
-        ])
-        .expect_err("expected clap to reject conflicting args");
+        PackageCli::try_parse_from(cli_args(&["--release-dir", "/tmp/release", "/tmp/lib.so"]))
+            .expect_err("expected clap to reject conflicting args");
     }
 
-    #[test]
-    fn discover_library_files_finds_expected_files() {
+    #[rstest]
+    fn discover_library_files_finds_expected_files(linux_target: TargetTriple) {
         let dir = tempfile::tempdir().expect("temp dir");
-        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid");
-
-        // Create library files for all lint crates plus the suite.
         for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
-            let filename = format!("lib{name}.so");
-            fs::write(dir.path().join(&filename), b"fake").expect("write");
+            fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
         }
-
-        let found = discover_library_files(dir.path(), &target);
+        let found = discover_library_files(dir.path(), &linux_target);
         assert_eq!(found.len(), LINT_CRATES.len() + 1);
     }
 
     #[test]
     fn discover_library_files_uses_correct_extension() {
-        let dir = tempfile::tempdir().expect("temp dir");
         let target = TargetTriple::try_from("aarch64-apple-darwin").expect("valid");
-
+        let dir = tempfile::tempdir().expect("temp dir");
         fs::write(dir.path().join("libwhitaker_suite.dylib"), b"fake").expect("write");
-
         let found = discover_library_files(dir.path(), &target);
         assert_eq!(found.len(), 1);
         assert!(found[0].to_string_lossy().ends_with(".dylib"));
     }
 
-    #[test]
-    fn discover_library_files_skips_missing() {
+    #[rstest]
+    fn discover_library_files_skips_missing(linux_target: TargetTriple) {
         let dir = tempfile::tempdir().expect("temp dir");
-        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid");
-
-        // Only create one file of many expected.
         fs::write(dir.path().join("libconditional_max_n_branches.so"), b"fake").expect("write");
-
-        let found = discover_library_files(dir.path(), &target);
+        let found = discover_library_files(dir.path(), &linux_target);
         assert_eq!(found.len(), 1);
     }
 
-    /// Known epoch values for timestamp formatting validation.
     #[rstest]
     #[case::unix_epoch(0, "1970-01-01T00:00:00Z")]
     #[case::y2k(946_684_800, "2000-01-01T00:00:00Z")]

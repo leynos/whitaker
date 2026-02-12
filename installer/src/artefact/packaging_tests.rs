@@ -73,7 +73,7 @@ fn generate_manifest_json_matches_schema(
     let content = ManifestContent {
         generated_at: GeneratedAt::new("2026-02-11T00:00:00Z"),
         files: vec!["libtest.so".to_owned()],
-        sha256: Sha256Digest::try_from(&"a".repeat(64) as &str).expect("valid digest"),
+        sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid digest"),
     };
     let manifest = Manifest::new(provenance, content);
     let json = generate_manifest_json(&manifest).expect("serialization");
@@ -152,6 +152,29 @@ fn package_artefact_rejects_empty_files(temp_dir: TempDir) {
         result.expect_err("expected error"),
         PackagingError::EmptyFileList
     ));
+}
+
+#[rstest]
+fn package_artefact_fails_when_library_file_missing(temp_dir: TempDir) {
+    let missing = temp_dir.path().join("nonexistent_lib.so");
+    let output_dir = temp_dir.path().join("dist");
+    fs::create_dir_all(&output_dir).expect("mkdir");
+
+    let params = PackageParams {
+        git_sha: GitSha::try_from("abc1234").expect("valid"),
+        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+        target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
+        library_files: vec![missing],
+        output_dir,
+        generated_at: GeneratedAt::new("2026-02-11T10:00:00Z"),
+    };
+
+    let result = package_artefact(params);
+    assert!(result.is_err(), "expected error for missing library file");
+    assert!(
+        matches!(result.expect_err("checked above"), PackagingError::Io(_)),
+        "expected Io error variant"
+    );
 }
 
 #[rstest]
@@ -241,6 +264,19 @@ fn packaging_produces_deterministic_digest(temp_dir: TempDir) {
     assert_eq!(
         digests[0], digests[1],
         "identical inputs must produce identical manifest digests"
+    );
+}
+
+#[rstest]
+fn collect_file_names_rejects_path_without_filename() {
+    let paths = vec![PathBuf::from("/some/valid.so"), PathBuf::from("/")];
+    let result = collect_file_names(&paths);
+    assert!(
+        matches!(
+            result.expect_err("expected error"),
+            PackagingError::InvalidLibraryPath(_)
+        ),
+        "expected InvalidLibraryPath for root path"
     );
 }
 

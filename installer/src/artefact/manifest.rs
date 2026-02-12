@@ -82,7 +82,7 @@ pub struct ManifestContent {
 /// let content = ManifestContent {
 ///     generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
 ///     files: vec!["libwhitaker_lints.so".to_owned()],
-///     sha256: Sha256Digest::try_from(&"a".repeat(64) as &str)
+///     sha256: Sha256Digest::try_from("a".repeat(64).as_str())
 ///         .expect("valid SHA-256 digest"),
 /// };
 /// let manifest = Manifest::new(provenance, content);
@@ -171,7 +171,7 @@ macro_rules! _manifest_doc_setup {
         let content = ManifestContent {
             generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
             files: vec!["libwhitaker_lints.so".to_owned()],
-            sha256: Sha256Digest::try_from(&"a".repeat(64) as &str).expect("valid SHA-256 digest"),
+            sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid SHA-256 digest"),
         };
         let $manifest = Manifest::new(provenance, content);
     };
@@ -309,7 +309,7 @@ mod tests {
             files: vec![
                 "libwhitaker_lints@nightly-2025-09-18-x86_64-unknown-linux-gnu.so".to_owned(),
             ],
-            sha256: Sha256Digest::try_from(&"a".repeat(64) as &str).expect("valid digest"),
+            sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid digest"),
         }
     }
 
@@ -393,7 +393,7 @@ mod tests {
         let content = ManifestContent {
             generated_at: GeneratedAt::new("2026-02-03T12:00:00Z"),
             files: vec!["file_a.dylib".to_owned(), "file_b.dylib".to_owned()],
-            sha256: Sha256Digest::try_from(&"b".repeat(64) as &str).expect("valid"),
+            sha256: Sha256Digest::try_from("b".repeat(64).as_str()).expect("valid"),
         };
         let m = Manifest::new(provenance, content);
         assert_eq!(m.files().len(), 2);

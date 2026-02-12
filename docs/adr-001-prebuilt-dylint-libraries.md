@@ -180,12 +180,12 @@ then with the real digest computed from the first-pass archive. This resolves
 the circular dependency between the manifest needing the archive checksum and
 the archive containing the manifest.
 
-### Serialisation approach (task 3.4.2)
+### Serialization approach (task 3.4.2)
 
 Only `serde::Serialize` is derived on artefact types (not `Deserialize`). This
 task produces manifests; consuming them is deferred to task 3.4.4. Adding
 `Deserialize` now would introduce untested surface area. Newtypes use
-`#[serde(transparent)]` to serialise as their inner value. The `Manifest`
+`#[serde(transparent)]` to serialize as their inner value. The `Manifest`
 struct uses `#[serde(flatten)]` on its provenance and content groups to produce
 the flat JSON object specified by this ADR.
 
@@ -195,7 +195,7 @@ Packaging logic lives in `installer/src/artefact/packaging.rs` as a sub-module
 of the existing artefact domain model, maintaining cohesion with the validated
 newtypes.
 
-### Centralised packaging binary (post-3.4.2)
+### Centralized packaging binary (post-3.4.2)
 
 The `whitaker-package-lints` binary (`installer/src/bin/package_lints.rs`)
 provides a single CLI entry point that both the Makefile `package-lints` target

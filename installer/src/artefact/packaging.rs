@@ -3,6 +3,29 @@
 //! Creates `.tar.zst` archives containing compiled lint libraries and a
 //! `manifest.json` file, following the naming and schema conventions
 //! defined in ADR-001.
+//!
+//! # Preconditions
+//!
+//! - All library file paths in [`PackageParams::library_files`] must
+//!   exist on disk and have a filename component.
+//! - The `output_dir` must exist and be writable.
+//!
+//! # Outputs and side effects
+//!
+//! [`package_artefact`] writes a `.tar.zst` archive to the output
+//! directory and returns a [`PackageOutput`] containing the archive
+//! path and an in-memory [`Manifest`].  A temporary `manifest.json`
+//! file is created during packaging and removed afterwards.
+//!
+//! # Two-pass SHA-256 algorithm
+//!
+//! The archive digest is computed over the first-pass archive (which
+//! contains a placeholder digest in its embedded manifest).  The
+//! second-pass archive embeds this real digest.  Consumers verify
+//! integrity by computing the SHA-256 of the downloaded archive and
+//! comparing against the `sha256` field returned by a separate
+//! manifest query (e.g. from the release API), not by re-extracting
+//! the manifest from the archive they just hashed.
 
 use super::git_sha::GitSha;
 use super::manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance};
@@ -53,7 +76,8 @@ pub struct PackageOutput {
 ///
 /// # Errors
 ///
-/// Returns [`PackagingError::Io`] if the file cannot be read.
+/// Returns [`PackagingError::Io`] if the file cannot be read, or
+/// [`PackagingError::InvalidDigest`] if the hex conversion fails.
 pub fn compute_sha256(path: &Path) -> Result<Sha256Digest, PackagingError> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
@@ -66,8 +90,7 @@ pub fn compute_sha256(path: &Path) -> Result<Sha256Digest, PackagingError> {
         hasher.update(&buffer[..bytes_read]);
     }
     let hex = format!("{:x}", hasher.finalize());
-    // sha2 always produces valid 64-char lowercase hex.
-    Ok(Sha256Digest::try_from(hex).expect("sha2 produces valid 64-char lowercase hex"))
+    Ok(Sha256Digest::try_from(hex)?)
 }
 
 /// Create a `.tar.zst` archive at `output_path`.
@@ -104,21 +127,37 @@ pub fn create_archive(
 /// # Errors
 ///
 /// Returns [`PackagingError::Serialization`] if serialization fails.
+///
+/// # Examples
+///
+/// ```
+/// whitaker_installer::_manifest_doc_setup!(manifest);
+/// use whitaker_installer::artefact::packaging::generate_manifest_json;
+///
+/// let json = generate_manifest_json(&manifest).expect("serialization");
+/// let parsed: serde_json::Value =
+///     serde_json::from_str(&json).expect("valid JSON");
+/// let obj = parsed.as_object().expect("top-level object");
+/// assert!(obj.contains_key("git_sha"));
+/// assert!(obj.contains_key("sha256"));
+/// ```
 pub fn generate_manifest_json(manifest: &Manifest) -> Result<String, PackagingError> {
     Ok(serde_json::to_string_pretty(manifest)?)
 }
 
 /// Package compiled lint libraries into a `.tar.zst` archive.
 ///
-/// Orchestrates: validate inputs, write manifest, create archive,
-/// compute SHA-256, then rebuild the archive with the final digest
-/// embedded in the manifest.
+/// Uses a two-pass algorithm: the first pass creates an archive with a
+/// placeholder SHA-256 digest in the manifest, then the real digest of
+/// that archive is computed and a second pass rebuilds the archive with
+/// the correct digest embedded.
 ///
 /// # Errors
 ///
 /// Returns [`PackagingError::EmptyFileList`] if `params.library_files`
-/// is empty, or [`PackagingError::Io`] / [`PackagingError::Serialization`]
-/// on I/O or serialization failures.
+/// is empty, [`PackagingError::InvalidLibraryPath`] if any path lacks
+/// a filename, or [`PackagingError::Io`] /
+/// [`PackagingError::Serialization`] on I/O or serialization failures.
 pub fn package_artefact(params: PackageParams) -> Result<PackageOutput, PackagingError> {
     if params.library_files.is_empty() {
         return Err(PackagingError::EmptyFileList);
@@ -130,87 +169,64 @@ pub fn package_artefact(params: PackageParams) -> Result<PackageOutput, Packagin
         params.target.clone(),
     );
     let archive_path = params.output_dir.join(artefact_name.filename());
-
-    let file_names = collect_file_names(&params.library_files);
-    let lib_entries = build_archive_entries(&params.library_files, &file_names);
-
-    // First pass: placeholder digest so we can write the archive.
-    let placeholder =
-        Sha256Digest::try_from("0".repeat(64).as_str()).expect("placeholder is valid hex");
     let manifest_path = params.output_dir.join("manifest.json");
-    let layout = ArchiveLayout {
-        manifest_path: &manifest_path,
-        lib_entries: &lib_entries,
-        archive_path: &archive_path,
+
+    let file_names = collect_file_names(&params.library_files)?;
+    let lib_entries: Vec<(PathBuf, String)> = params
+        .library_files
+        .iter()
+        .zip(&file_names)
+        .map(|(p, n)| (p.clone(), n.clone()))
+        .collect();
+
+    // Helper closure that writes a manifest with the given digest and
+    // creates the archive.  Captures the local paths so we stay within
+    // Clippy's parameter limit.
+    let write_pass = |digest: &Sha256Digest| -> Result<(), PackagingError> {
+        let manifest = build_manifest(&params, &file_names, digest);
+        let json = generate_manifest_json(&manifest)?;
+        fs::write(&manifest_path, json)?;
+
+        let mut entries = lib_entries.clone();
+        entries.push((manifest_path.clone(), "manifest.json".to_owned()));
+        create_archive(&archive_path, &entries)
     };
 
-    write_manifest_and_archive(&params, &file_names, &placeholder, &layout)?;
+    // First pass: placeholder digest.
+    let placeholder = Sha256Digest::try_from("0".repeat(64).as_str())?;
+    write_pass(&placeholder)?;
 
     // Second pass: embed the real digest.
     let real_digest = compute_sha256(&archive_path)?;
-    write_manifest_and_archive(&params, &file_names, &real_digest, &layout)?;
+    write_pass(&real_digest)?;
 
     let _ = fs::remove_file(&manifest_path);
 
-    let final_manifest = build_manifest(&params, file_names, real_digest);
+    let final_manifest = build_manifest(&params, &file_names, &real_digest);
     Ok(PackageOutput {
         archive_path,
         manifest: final_manifest,
     })
 }
 
-/// Collect filenames from library paths.
-fn collect_file_names(paths: &[PathBuf]) -> Vec<String> {
+/// Extract basenames from library paths, rejecting any without a
+/// filename component.
+fn collect_file_names(paths: &[PathBuf]) -> Result<Vec<String>, PackagingError> {
     paths
         .iter()
-        .filter_map(|p| p.file_name())
-        .map(|n| n.to_string_lossy().into_owned())
+        .map(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .ok_or_else(|| PackagingError::InvalidLibraryPath(p.clone()))
+        })
         .collect()
-}
-
-/// Build `(source_path, archive_name)` pairs for the archive builder.
-fn build_archive_entries(paths: &[PathBuf], names: &[String]) -> Vec<(PathBuf, String)> {
-    paths
-        .iter()
-        .zip(names.iter())
-        .map(|(p, n)| (p.clone(), n.clone()))
-        .collect()
-}
-
-/// Paths and pre-computed entries for a single archive build pass.
-struct ArchiveLayout<'a> {
-    /// Where to write the manifest JSON.
-    manifest_path: &'a Path,
-    /// Pre-built `(source_path, archive_name)` pairs for library files.
-    lib_entries: &'a [(PathBuf, String)],
-    /// Destination path for the `.tar.zst` archive.
-    archive_path: &'a Path,
-}
-
-/// Write the manifest JSON file and create the archive in one step.
-fn write_manifest_and_archive(
-    params: &PackageParams,
-    file_names: &[String],
-    digest: &Sha256Digest,
-    layout: &ArchiveLayout<'_>,
-) -> Result<(), PackagingError> {
-    let manifest = build_manifest(params, file_names.to_vec(), digest.clone());
-    let json = generate_manifest_json(&manifest)?;
-    fs::write(layout.manifest_path, json)?;
-
-    let mut entries = layout.lib_entries.to_vec();
-    entries.push((
-        layout.manifest_path.to_path_buf(),
-        "manifest.json".to_owned(),
-    ));
-    create_archive(layout.archive_path, &entries)
 }
 
 /// Build a [`Manifest`] from packaging parameters.
 fn build_manifest(
     params: &PackageParams,
-    file_names: Vec<String>,
-    sha256: Sha256Digest,
+    file_names: &[String],
+    sha256: &Sha256Digest,
 ) -> Manifest {
     let provenance = ManifestProvenance {
         git_sha: params.git_sha.clone(),
@@ -220,8 +236,8 @@ fn build_manifest(
     };
     let content = ManifestContent {
         generated_at: params.generated_at.clone(),
-        files: file_names,
-        sha256,
+        files: file_names.to_vec(),
+        sha256: sha256.clone(),
     };
     Manifest::new(provenance, content)
 }

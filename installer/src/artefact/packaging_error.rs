@@ -19,4 +19,12 @@ pub enum PackagingError {
     /// No library files were provided for packaging.
     #[error("no library files provided for packaging")]
     EmptyFileList,
+
+    /// A library path has no filename component.
+    #[error("library path has no filename: {0}")]
+    InvalidLibraryPath(std::path::PathBuf),
+
+    /// An internal digest conversion failed unexpectedly.
+    #[error("invalid digest: {0}")]
+    InvalidDigest(#[from] super::error::ArtefactError),
 }
