@@ -2,7 +2,7 @@
 //!
 //! Thin CLI wrapper around [`whitaker_installer::artefact::packaging`] that
 //! the Makefile `package-lints` target and the rolling-release CI workflow
-//! both invoke.  Centralising the archive creation and manifest emission in
+//! both invoke.  Centralizing the archive creation and manifest emission in
 //! Rust eliminates the risk of drift between shell reimplementations.
 
 use clap::Parser;
@@ -17,10 +17,6 @@ use whitaker_installer::artefact::packaging_error::PackagingError;
 use whitaker_installer::artefact::target::TargetTriple;
 use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
-
-// ---------------------------------------------------------------------------
-// CLI definition
-// ---------------------------------------------------------------------------
 
 /// Package prebuilt lint libraries into `.tar.zst` archives.
 ///
@@ -65,10 +61,6 @@ struct PackageCli {
     library_files: Vec<PathBuf>,
 }
 
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
-
 /// Errors returned by the packaging CLI.
 #[derive(Debug, Error)]
 enum PackageCliError {
@@ -84,14 +76,18 @@ enum PackageCliError {
     #[error("library file not found: {0}")]
     FileNotFound(PathBuf),
 
+    /// The `--generated-at` value is not valid ISO 8601 (`YYYY-MM-DDThh:mm:ssZ`).
+    #[error("invalid --generated-at timestamp: {0}")]
+    InvalidTimestamp(String),
+
+    /// The `--release-dir` path is not a directory.
+    #[error("--release-dir is not a directory: {0}")]
+    NotADirectory(PathBuf),
+
     /// Failed to read the system clock.
     #[error("system time error: {0}")]
     SystemTime(#[from] std::time::SystemTimeError),
 }
-
-// ---------------------------------------------------------------------------
-// Entrypoint
-// ---------------------------------------------------------------------------
 
 fn main() {
     let cli = PackageCli::parse();
@@ -109,16 +105,24 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
     let target = TargetTriple::try_from(cli.target.as_str())?;
 
     let library_files = if let Some(ref dir) = cli.release_dir {
-        discover_library_files(dir, &target)
+        if !dir.is_dir() {
+            return Err(PackageCliError::NotADirectory(dir.clone()));
+        }
+        discover_library_files(dir, &target)?
     } else {
         validate_library_files(&cli.library_files)?;
         cli.library_files
     };
 
     let timestamp = match cli.generated_at {
-        Some(ts) => ts,
+        Some(ts) => {
+            validate_iso8601(&ts)?;
+            ts
+        }
         None => now_utc_iso8601()?,
     };
+
+    std::fs::create_dir_all(&cli.output_dir).map_err(PackagingError::from)?;
 
     let params = PackageParams {
         git_sha,
@@ -136,20 +140,25 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
 }
 
 /// Discover library files in `release_dir` using the canonical crate list.
-fn discover_library_files(release_dir: &Path, target: &TargetTriple) -> Vec<PathBuf> {
+///
+/// Fails if any canonical crate's library is missing or is not a regular
+/// file, preventing incomplete artefacts from being published.
+fn discover_library_files(
+    release_dir: &Path,
+    target: &TargetTriple,
+) -> Result<Vec<PathBuf>, PackageCliError> {
     let (prefix, ext) = (target.library_prefix(), target.library_extension());
     LINT_CRATES
         .iter()
         .copied()
         .chain(std::iter::once(SUITE_CRATE))
-        .filter_map(|name| {
+        .map(|name| {
             let filename = format!("{prefix}{name}{ext}");
             let path = release_dir.join(&filename);
-            if path.exists() {
-                Some(path)
+            if path.is_file() {
+                Ok(path)
             } else {
-                eprintln!("warning: expected {filename} not found, skipping");
-                None
+                Err(PackageCliError::FileNotFound(path))
             }
         })
         .collect()
@@ -163,6 +172,29 @@ fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
         }
     }
     Ok(())
+}
+
+/// Verify that `ts` matches the expected `YYYY-MM-DDThh:mm:ssZ` shape.
+fn validate_iso8601(ts: &str) -> Result<(), PackageCliError> {
+    let b = ts.as_bytes();
+    let ok = b.len() == 20
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b[10] == b'T'
+        && b[13] == b':'
+        && b[16] == b':'
+        && b[19] == b'Z'
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[8..10].iter().all(u8::is_ascii_digit)
+        && b[11..13].iter().all(u8::is_ascii_digit)
+        && b[14..16].iter().all(u8::is_ascii_digit)
+        && b[17..19].iter().all(u8::is_ascii_digit);
+    if ok {
+        Ok(())
+    } else {
+        Err(PackageCliError::InvalidTimestamp(ts.to_owned()))
+    }
 }
 
 /// Return the current UTC time as an ISO 8601 string (`YYYY-MM-DDThh:mm:ssZ`).
@@ -204,10 +236,6 @@ fn civil_from_epoch(epoch_secs: u64) -> (u32, u32, u32) {
     )]
     (y as u32, m as u32, d as u32)
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -301,7 +329,7 @@ mod tests {
         for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
             fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
         }
-        let found = discover_library_files(dir.path(), &linux_target);
+        let found = discover_library_files(dir.path(), &linux_target).expect("all present");
         assert_eq!(found.len(), LINT_CRATES.len() + 1);
     }
 
@@ -309,18 +337,23 @@ mod tests {
     fn discover_library_files_uses_correct_extension() {
         let target = TargetTriple::try_from("aarch64-apple-darwin").expect("valid");
         let dir = tempfile::tempdir().expect("temp dir");
-        fs::write(dir.path().join("libwhitaker_suite.dylib"), b"fake").expect("write");
-        let found = discover_library_files(dir.path(), &target);
-        assert_eq!(found.len(), 1);
-        assert!(found[0].to_string_lossy().ends_with(".dylib"));
+        for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
+            fs::write(dir.path().join(format!("lib{name}.dylib")), b"fake").expect("write");
+        }
+        let found = discover_library_files(dir.path(), &target).expect("all present");
+        assert!(
+            found
+                .iter()
+                .all(|p| p.to_string_lossy().ends_with(".dylib"))
+        );
     }
 
     #[rstest]
-    fn discover_library_files_skips_missing(linux_target: TargetTriple) {
+    fn discover_library_files_rejects_missing(linux_target: TargetTriple) {
         let dir = tempfile::tempdir().expect("temp dir");
         fs::write(dir.path().join("libconditional_max_n_branches.so"), b"fake").expect("write");
-        let found = discover_library_files(dir.path(), &linux_target);
-        assert_eq!(found.len(), 1);
+        let result = discover_library_files(dir.path(), &linux_target);
+        assert!(result.is_err(), "must reject incomplete set of libraries");
     }
 
     #[rstest]
@@ -334,12 +367,26 @@ mod tests {
     #[test]
     fn now_utc_iso8601_format_is_valid() {
         let ts = now_utc_iso8601().expect("system time");
-        assert_eq!(ts.len(), 20, "ISO 8601 timestamp must be 20 characters");
-        assert!(ts.ends_with('Z'), "must end with Z");
-        assert_eq!(&ts[4..5], "-");
-        assert_eq!(&ts[7..8], "-");
-        assert_eq!(&ts[10..11], "T");
-        assert_eq!(&ts[13..14], ":");
-        assert_eq!(&ts[16..17], ":");
+        assert!(validate_iso8601(&ts).is_ok(), "own output must validate");
+    }
+
+    #[rstest]
+    #[case::valid("2026-02-12T10:00:00Z", true)]
+    #[case::too_short("2026-02-12T10:00Z", false)]
+    #[case::no_z("2026-02-12T10:00:00X", false)]
+    #[case::letters("XXXX-XX-XXTXX:XX:XXZ", false)]
+    fn validate_iso8601_accepts_and_rejects(#[case] ts: &str, #[case] ok: bool) {
+        assert_eq!(validate_iso8601(ts).is_ok(), ok);
+    }
+
+    #[test]
+    fn release_dir_rejects_non_directory() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let file = dir.path().join("not-a-dir");
+        fs::write(&file, b"x").expect("write");
+        let file_str = file.to_str().expect("utf8").to_owned();
+        let extra = ["--release-dir", &file_str];
+        let cli = PackageCli::parse_from(cli_args(&extra));
+        assert!(run(cli).is_err(), "should reject non-directory --release-dir");
     }
 }

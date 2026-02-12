@@ -336,7 +336,7 @@ with step definitions and scenario bindings.
 
 Created `.github/workflows/rolling-release.yml` with:
 
-- Build matrix for all 5 targets across ubuntu/macos/windows
+- Build matrix for all 5 targets across ubuntu/macOS/windows
   runners.
 - Cross-compilation support for aarch64-linux.
 - Packaging delegated to `whitaker-package-lints` binary.

@@ -9,7 +9,7 @@ Status: COMPLETE
 
 ## Context
 
-The `whitaker-package-lints` binary was introduced to centralise tar/zstd
+The `whitaker-package-lints` binary was introduced to centralize tar/zstd
 archive creation, manifest JSON generation, and SHA-256 computation in
 Rust. However, both the Makefile `package-lints` target and the CI
 workflow `rolling-release.yml` still contain shell loops that:

@@ -72,9 +72,9 @@ impl TargetTriple {
     /// ```
     #[must_use]
     pub fn library_extension(&self) -> &'static str {
-        if self.0.contains("windows") {
+        if self.is_windows() {
             ".dll"
-        } else if self.0.contains("darwin") {
+        } else if self.is_darwin() {
             ".dylib"
         } else {
             ".so"
@@ -97,11 +97,17 @@ impl TargetTriple {
     /// ```
     #[must_use]
     pub fn library_prefix(&self) -> &'static str {
-        if self.0.contains("windows") {
-            ""
-        } else {
-            "lib"
-        }
+        if self.is_windows() { "" } else { "lib" }
+    }
+
+    /// Whether this target is a Windows platform.
+    fn is_windows(&self) -> bool {
+        self.0.contains("windows")
+    }
+
+    /// Whether this target is a macOS (Darwin) platform.
+    fn is_darwin(&self) -> bool {
+        self.0.contains("darwin")
     }
 }
 
