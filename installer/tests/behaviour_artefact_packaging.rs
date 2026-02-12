@@ -225,6 +225,45 @@ fn then_packaging_error(world: &mut PackagingWorld) {
     );
 }
 
+#[given("library files \"{a}\" and \"{b}\" and \"{c}\"")]
+fn given_three_library_files(world: &mut PackagingWorld, a: String, b: String, c: String) {
+    for name in [a, b, c] {
+        let path = temp_path(world).join(&name);
+        fs::write(&path, format!("content of {name}")).expect("write");
+        world.library_files.push(path);
+    }
+}
+
+#[given("library files \"{a}\" and \"{b}\"")]
+fn given_two_library_files(world: &mut PackagingWorld, a: String, b: String) {
+    for name in [a, b] {
+        let path = temp_path(world).join(&name);
+        fs::write(&path, format!("content of {name}")).expect("write");
+        world.library_files.push(path);
+    }
+}
+
+#[then("the archive contains {count} library files")]
+fn then_archive_has_n_libraries(world: &mut PackagingWorld, count: usize) {
+    let entries = list_archive_entries(world);
+    let lib_count = entries.iter().filter(|e| *e != "manifest.json").count();
+    assert_eq!(
+        lib_count, count,
+        "expected {count} library files, got {lib_count}"
+    );
+}
+
+#[then("the manifest files field contains \"{name}\"")]
+fn then_manifest_files_contains(world: &mut PackagingWorld, name: String) {
+    let json = world.manifest_json.as_ref().expect("manifest_json set");
+    let files = json["files"].as_array().expect("files is an array");
+    let names: Vec<&str> = files.iter().filter_map(|v| v.as_str()).collect();
+    assert!(
+        names.contains(&name.as_str()),
+        "files field missing {name}: {names:?}"
+    );
+}
+
 #[given("a packaged artefact with known components")]
 fn given_packaged_with_known(world: &mut PackagingWorld) {
     given_packaged_artefact(world);
@@ -311,5 +350,21 @@ fn scenario_reject_empty_files(world: PackagingWorld) {
     name = "Archive filename matches ArtefactName convention"
 )]
 fn scenario_filename_matches(world: PackagingWorld) {
+    let _ = world;
+}
+
+#[scenario(
+    path = "tests/features/artefact_packaging.feature",
+    name = "Archive contains multiple library files"
+)]
+fn scenario_multi_library(world: PackagingWorld) {
+    let _ = world;
+}
+
+#[scenario(
+    path = "tests/features/artefact_packaging.feature",
+    name = "Manifest files field lists all library basenames"
+)]
+fn scenario_manifest_files_field(world: PackagingWorld) {
     let _ = world;
 }

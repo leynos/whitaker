@@ -217,6 +217,33 @@ fn manifest_sha256_is_valid_hex(temp_dir: TempDir) {
     );
 }
 
+#[rstest]
+fn packaging_produces_deterministic_digest(temp_dir: TempDir) {
+    let lib_path = temp_dir.path().join("libtest.so");
+    fs::write(&lib_path, b"content for hash check").expect("write");
+
+    // Run packaging twice with identical inputs; digests must match.
+    let mut digests = Vec::new();
+    for i in 0..2 {
+        let output_dir = temp_dir.path().join(format!("dist{i}"));
+        fs::create_dir_all(&output_dir).expect("mkdir");
+        let params = PackageParams {
+            git_sha: GitSha::try_from("abc1234").expect("valid"),
+            toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+            target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
+            library_files: vec![lib_path.clone()],
+            output_dir,
+            generated_at: GeneratedAt::new("2026-02-12T10:00:00Z"),
+        };
+        let output = package_artefact(params).expect("packaging");
+        digests.push(output.manifest.sha256().as_str().to_owned());
+    }
+    assert_eq!(
+        digests[0], digests[1],
+        "identical inputs must produce identical manifest digests"
+    );
+}
+
 /// Extract entry names from a `.tar.zst` archive for test assertions.
 fn list_archive_entries(archive_path: &Path) -> Vec<String> {
     let file = fs::File::open(archive_path).expect("open archive");

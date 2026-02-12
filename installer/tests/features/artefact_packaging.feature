@@ -37,3 +37,22 @@ Feature: Artefact packaging for rolling release
     Given a packaged artefact with known components
     When the archive filename is inspected
     Then it matches the ArtefactName string representation
+
+  Scenario: Archive contains multiple library files
+    Given library files "libfoo.so" and "libbar.so" and "libbaz.so"
+    And a git SHA "abc1234"
+    And a toolchain channel "nightly-2025-09-18"
+    And a target triple "x86_64-unknown-linux-gnu"
+    When the artefact is packaged
+    Then the archive contains 3 library files
+    And the archive contains a manifest.json
+
+  Scenario: Manifest files field lists all library basenames
+    Given library files "libfoo.so" and "libbar.so"
+    And a git SHA "abc1234"
+    And a toolchain channel "nightly-2025-09-18"
+    And a target triple "x86_64-unknown-linux-gnu"
+    When the artefact is packaged
+    And the manifest is extracted
+    Then the manifest files field contains "libfoo.so"
+    And the manifest files field contains "libbar.so"

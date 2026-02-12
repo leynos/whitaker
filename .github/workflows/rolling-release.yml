@@ -32,20 +32,15 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            lib_ext: so
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            lib_ext: so
             cross: true
           - target: x86_64-apple-darwin
             os: macos-latest
-            lib_ext: dylib
           - target: aarch64-apple-darwin
             os: macos-latest
-            lib_ext: dylib
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            lib_ext: dll
     env:
       RUSTFLAGS: -D warnings
 
@@ -96,35 +91,13 @@ jobs:
       - name: Package artefact
         run: |
           set -euxo pipefail
-
-          TARGET="${{ matrix.target }}"
-          TOOLCHAIN="${{ steps.toolchain.outputs.channel }}"
-          SHA="${{ steps.sha.outputs.short }}"
-          EXT="${{ matrix.lib_ext }}"
-          RELEASE_DIR="target/${TARGET}/release"
-
           mkdir -p dist
-
-          LIB_FILES=""
-          for lint in $LINT_CRATES; do
-            LIB_NAME="lib${lint}.${EXT}"
-            if [ "${EXT}" = "dll" ]; then
-              LIB_NAME="${lint}.${EXT}"
-            fi
-            SRC="${RELEASE_DIR}/${LIB_NAME}"
-            if [ -f "${SRC}" ]; then
-              LIB_FILES="${LIB_FILES} ${SRC}"
-            else
-              echo "Warning: ${SRC} not found, skipping"
-            fi
-          done
-
           ./target/release/whitaker-package-lints \
-            --git-sha "${SHA}" \
-            --toolchain "${TOOLCHAIN}" \
-            --target "${TARGET}" \
+            --git-sha "${{ steps.sha.outputs.short }}" \
+            --toolchain "${{ steps.toolchain.outputs.channel }}" \
+            --target "${{ matrix.target }}" \
             --output-dir dist \
-            ${LIB_FILES}
+            --release-dir "target/${{ matrix.target }}/release"
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4

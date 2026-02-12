@@ -153,24 +153,12 @@ package-lints: ## Build lint crates and package as .tar.zst archives
 	for lint in $(LINT_CRATES); do \
 		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
 	done; \
-	LIB_EXT="so"; \
-	case "$$HOST_TRIPLE" in \
-		*darwin*) LIB_EXT="dylib" ;; \
-		*windows*) LIB_EXT="dll" ;; \
-	esac; \
-	LIB_FILES=""; \
-	for lint in $(LINT_CRATES); do \
-		SRC="target/release/lib$${lint}.$${LIB_EXT}"; \
-		if [ -f "$$SRC" ]; then \
-			LIB_FILES="$$LIB_FILES $$SRC"; \
-		fi; \
-	done; \
 	$(CARGO) run -p whitaker-installer --bin whitaker-package-lints -- \
 		--git-sha "$$SHA" \
 		--toolchain "$$TOOLCHAIN" \
 		--target "$$HOST_TRIPLE" \
 		--output-dir "$$DIST_DIR" \
-		$$LIB_FILES
+		--release-dir target/release
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

@@ -205,6 +205,16 @@ tar/zstd archiving that previously existed in the Makefile and CI workflow.
 Future manifest schema changes need only be made in the Rust
 `artefact::packaging` module.
 
+### Library file discovery (post-3.4.2)
+
+The `whitaker-package-lints` binary now supports a `--release-dir` flag that
+auto-discovers compiled library files using `TargetTriple::library_extension()`
+and `TargetTriple::library_prefix()` combined with the canonical crate list
+from `resolution.rs`. This eliminated the brittle `LIB_EXT` case statements
+and `LIB_FILES` loops from both the Makefile and the CI workflow. The
+`lib_ext` matrix field was removed from `rolling-release.yml`. Positional
+library file arguments remain supported for backwards compatibility.
+
 ## Architectural rationale
 
 The decision aligns with the existing toolchain pinning strategy and keeps the

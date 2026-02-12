@@ -16,6 +16,7 @@ use whitaker_installer::artefact::packaging::{PackageParams, package_artefact};
 use whitaker_installer::artefact::packaging_error::PackagingError;
 use whitaker_installer::artefact::target::TargetTriple;
 use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
+use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
 
 // ---------------------------------------------------------------------------
 // CLI definition
@@ -54,8 +55,13 @@ struct PackageCli {
     #[arg(long)]
     generated_at: Option<String>,
 
-    /// Paths to the compiled library files to include in the archive.
-    #[arg(required = true)]
+    /// Directory containing compiled release libraries. Discovers
+    /// files automatically from the canonical crate list.
+    #[arg(long, conflicts_with = "library_files")]
+    release_dir: Option<PathBuf>,
+
+    /// Paths to compiled library files (required unless --release-dir).
+    #[arg(required_unless_present = "release_dir")]
     library_files: Vec<PathBuf>,
 }
 
@@ -102,7 +108,12 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
     let toolchain = ToolchainChannel::try_from(cli.toolchain.as_str())?;
     let target = TargetTriple::try_from(cli.target.as_str())?;
 
-    validate_library_files(&cli.library_files)?;
+    let library_files = if let Some(ref dir) = cli.release_dir {
+        discover_library_files(dir, &target)
+    } else {
+        validate_library_files(&cli.library_files)?;
+        cli.library_files
+    };
 
     let timestamp = match cli.generated_at {
         Some(ts) => ts,
@@ -113,7 +124,7 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
         git_sha,
         toolchain,
         target,
-        library_files: cli.library_files,
+        library_files,
         output_dir: cli.output_dir,
         generated_at: GeneratedAt::new(timestamp),
     };
@@ -124,9 +135,25 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/// Discover library files in `release_dir` using the canonical crate list.
+fn discover_library_files(release_dir: &Path, target: &TargetTriple) -> Vec<PathBuf> {
+    let (prefix, ext) = (target.library_prefix(), target.library_extension());
+    LINT_CRATES
+        .iter()
+        .copied()
+        .chain(std::iter::once(SUITE_CRATE))
+        .filter_map(|name| {
+            let filename = format!("{prefix}{name}{ext}");
+            let path = release_dir.join(&filename);
+            if path.exists() {
+                Some(path)
+            } else {
+                eprintln!("warning: expected {filename} not found, skipping");
+                None
+            }
+        })
+        .collect()
+}
 
 /// Verify that every library file exists on disk.
 fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
@@ -192,6 +219,7 @@ mod tests {
     use super::*;
     use clap::Parser;
     use rstest::rstest;
+    use std::fs;
 
     #[test]
     fn cli_parses_all_required_args() {
@@ -251,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn cli_rejects_missing_library_files() {
+    fn cli_rejects_missing_library_files_and_release_dir() {
         PackageCli::try_parse_from([
             "whitaker-package-lints",
             "--git-sha",
@@ -264,6 +292,83 @@ mod tests {
             "/tmp",
         ])
         .expect_err("expected clap to reject zero library files");
+    }
+
+    #[test]
+    fn cli_parses_release_dir_flag() {
+        let cli = PackageCli::parse_from([
+            "whitaker-package-lints",
+            "--git-sha",
+            "abc1234",
+            "--toolchain",
+            "nightly-2025-09-18",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--output-dir",
+            "/tmp/dist",
+            "--release-dir",
+            "/tmp/target/release",
+        ]);
+        assert_eq!(cli.release_dir, Some(PathBuf::from("/tmp/target/release")));
+        assert!(cli.library_files.is_empty());
+    }
+
+    #[test]
+    fn cli_rejects_both_release_dir_and_library_files() {
+        PackageCli::try_parse_from([
+            "whitaker-package-lints",
+            "--git-sha",
+            "abc1234",
+            "--toolchain",
+            "nightly-2025-09-18",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--output-dir",
+            "/tmp/dist",
+            "--release-dir",
+            "/tmp/release",
+            "/tmp/libfoo.so",
+        ])
+        .expect_err("expected clap to reject conflicting args");
+    }
+
+    #[test]
+    fn discover_library_files_finds_expected_files() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid");
+
+        // Create library files for all lint crates plus the suite.
+        for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
+            let filename = format!("lib{name}.so");
+            fs::write(dir.path().join(&filename), b"fake").expect("write");
+        }
+
+        let found = discover_library_files(dir.path(), &target);
+        assert_eq!(found.len(), LINT_CRATES.len() + 1);
+    }
+
+    #[test]
+    fn discover_library_files_uses_correct_extension() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = TargetTriple::try_from("aarch64-apple-darwin").expect("valid");
+
+        fs::write(dir.path().join("libwhitaker_suite.dylib"), b"fake").expect("write");
+
+        let found = discover_library_files(dir.path(), &target);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].to_string_lossy().ends_with(".dylib"));
+    }
+
+    #[test]
+    fn discover_library_files_skips_missing() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid");
+
+        // Only create one file of many expected.
+        fs::write(dir.path().join("libconditional_max_n_branches.so"), b"fake").expect("write");
+
+        let found = discover_library_files(dir.path(), &target);
+        assert_eq!(found.len(), 1);
     }
 
     /// Known epoch values for timestamp formatting validation.

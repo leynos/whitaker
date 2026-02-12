@@ -54,6 +54,55 @@ impl TargetTriple {
     pub fn supported() -> &'static [&'static str] {
         SUPPORTED_TARGETS
     }
+
+    /// Return the shared library extension for this target triple.
+    ///
+    /// Unlike `builder::library_extension()` which uses compile-time
+    /// `#[cfg(target_os)]`, this inspects the target string at runtime,
+    /// making it suitable for cross-compilation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::target::TargetTriple;
+    ///
+    /// let linux: TargetTriple = "x86_64-unknown-linux-gnu"
+    ///     .try_into().expect("valid");
+    /// assert_eq!(linux.library_extension(), ".so");
+    /// ```
+    #[must_use]
+    pub fn library_extension(&self) -> &'static str {
+        if self.0.contains("windows") {
+            ".dll"
+        } else if self.0.contains("darwin") {
+            ".dylib"
+        } else {
+            ".so"
+        }
+    }
+
+    /// Return the library filename prefix for this target triple.
+    ///
+    /// On Windows, shared libraries have no `lib` prefix; on all other
+    /// supported platforms they do.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::artefact::target::TargetTriple;
+    ///
+    /// let win: TargetTriple = "x86_64-pc-windows-msvc"
+    ///     .try_into().expect("valid");
+    /// assert_eq!(win.library_prefix(), "");
+    /// ```
+    #[must_use]
+    pub fn library_prefix(&self) -> &'static str {
+        if self.0.contains("windows") {
+            ""
+        } else {
+            "lib"
+        }
+    }
 }
 
 impl TryFrom<&str> for TargetTriple {
@@ -94,6 +143,7 @@ impl fmt::Display for TargetTriple {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn accepts_all_supported_targets() {
@@ -143,5 +193,17 @@ mod tests {
     fn supported_returns_all_five_targets() {
         let supported = TargetTriple::supported();
         assert_eq!(supported.len(), 5);
+    }
+
+    #[rstest]
+    #[case::linux_x86("x86_64-unknown-linux-gnu", ".so", "lib")]
+    #[case::linux_arm("aarch64-unknown-linux-gnu", ".so", "lib")]
+    #[case::macos_x86("x86_64-apple-darwin", ".dylib", "lib")]
+    #[case::macos_arm("aarch64-apple-darwin", ".dylib", "lib")]
+    #[case::windows("x86_64-pc-windows-msvc", ".dll", "")]
+    fn library_naming_for_target(#[case] triple: &str, #[case] ext: &str, #[case] prefix: &str) {
+        let t = TargetTriple::try_from(triple).expect("valid");
+        assert_eq!(t.library_extension(), ext);
+        assert_eq!(t.library_prefix(), prefix);
     }
 }
