@@ -1,9 +1,8 @@
 //! Packaging binary for prebuilt lint library distribution.
 //!
-//! Thin CLI wrapper around [`whitaker_installer::artefact::packaging`] that
-//! the Makefile `package-lints` target and the rolling-release CI workflow
-//! both invoke.  Centralizing the archive creation and manifest emission in
-//! Rust eliminates the risk of drift between shell reimplementations.
+//! Thin CLI wrapper around [`whitaker_installer::artefact::packaging`]
+//! invoked by both the Makefile `package-lints` target and the
+//! rolling-release CI workflow.
 
 use clap::Parser;
 use std::path::{Path, PathBuf};
@@ -23,11 +22,8 @@ use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
 /// Package prebuilt lint libraries into `.tar.zst` archives following
 /// the ADR-001 naming convention and write a sidecar `manifest.json`.
 #[derive(Parser, Debug)]
-#[command(name = "whitaker-package-lints")]
-#[command(
-    version,
-    about = "Package prebuilt lint libraries into .tar.zst archives"
-)]
+#[command(name = "whitaker-package-lints", version)]
+#[command(about = "Package prebuilt lint libraries into .tar.zst archives")]
 struct PackageCli {
     /// Git commit SHA (7–40 lowercase hex characters).
     #[arg(long)]
@@ -176,10 +172,15 @@ fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
 
 /// Verify that `ts` matches the expected `YYYY-MM-DDThh:mm:ssZ` shape.
 fn validate_iso8601(ts: &str) -> Result<(), PackageCliError> {
-    let err = || PackageCliError::InvalidTimestamp(ts.to_owned());
     let b = ts.as_bytes();
-    if !has_valid_length(b) || !has_valid_separators(b) || !has_valid_digits(b) {
-        return Err(err());
+    if !has_valid_length(b) {
+        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
+    }
+    if !has_valid_separators(b) {
+        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
+    }
+    if !has_valid_digits(b) {
+        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
     }
     Ok(())
 }

@@ -214,8 +214,9 @@ fn archive_name_follows_adr_convention(
     );
 }
 
-#[rstest]
-fn manifest_sha256_is_valid_hex(temp_dir: TempDir) {
+/// Create a [`PackageOutput`] with a single dummy library for tests that
+/// only need a valid package without caring about specific file content.
+fn create_test_package(temp_dir: &TempDir) -> PackageOutput {
     let lib_path = temp_dir.path().join("libtest.so");
     fs::write(&lib_path, b"test content for hash").expect("write");
 
@@ -231,7 +232,12 @@ fn manifest_sha256_is_valid_hex(temp_dir: TempDir) {
         generated_at: GeneratedAt::new("2026-02-11T12:00:00Z"),
     };
 
-    let output = package_artefact(params).expect("packaging");
+    package_artefact(params).expect("packaging")
+}
+
+#[rstest]
+fn manifest_sha256_is_valid_hex(temp_dir: TempDir) {
+    let output = create_test_package(&temp_dir);
     assert_eq!(output.manifest.sha256().as_str().len(), 64);
     assert!(
         output
@@ -245,22 +251,7 @@ fn manifest_sha256_is_valid_hex(temp_dir: TempDir) {
 
 #[rstest]
 fn manifest_sha256_matches_archive_digest(temp_dir: TempDir) {
-    let lib_path = temp_dir.path().join("libwhitaker_suite.so");
-    fs::write(&lib_path, b"library content for digest check").expect("write");
-
-    let output_dir = temp_dir.path().join("dist");
-    fs::create_dir_all(&output_dir).expect("mkdir");
-
-    let params = PackageParams {
-        git_sha: GitSha::try_from("abc1234").expect("valid"),
-        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
-        target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
-        library_files: vec![lib_path],
-        output_dir,
-        generated_at: GeneratedAt::new("2026-02-11T10:00:00Z"),
-    };
-
-    let output = package_artefact(params).expect("packaging");
+    let output = create_test_package(&temp_dir);
     let archive_digest = compute_sha256(&output.archive_path).expect("sha256 of archive");
     assert_eq!(
         archive_digest.as_str(),
