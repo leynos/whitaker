@@ -387,6 +387,9 @@ mod tests {
         let file_str = file.to_str().expect("utf8").to_owned();
         let extra = ["--release-dir", &file_str];
         let cli = PackageCli::parse_from(cli_args(&extra));
-        assert!(run(cli).is_err(), "should reject non-directory --release-dir");
+        assert!(
+            run(cli).is_err(),
+            "should reject non-directory --release-dir"
+        );
     }
 }

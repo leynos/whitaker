@@ -23,7 +23,8 @@ Success is observable by:
 1. Pushing a commit to `main` and seeing the `rolling-release`
    workflow complete on all matrix entries.
 2. Running `gh release view rolling` and seeing five `.tar.zst`
-   assets with correct ADR-001 naming.
+   assets with correct Architecture Decision Record (ADR) 001
+   naming.
 3. Running `make check-fmt && make lint && make test` locally with
    all checks green, including new unit and behaviour-driven
    development (BDD) tests for the packaging module.
@@ -159,21 +160,21 @@ Success is observable by:
   them is task 3.4.4. Adding `Deserialize` now would add untested
   surface area. Date/Author: 2026-02-11 (agent).
 
-- Decision: Place packaging logic in the `installer` crate as a new
-  `artefact::packaging` sub-module rather than a standalone binary.
-  Rationale: the logic reuses all existing artefact domain types;
-  keeping it co-located maintains cohesion. A thin Makefile target
-  or shell script in CI invokes the logic via a helper binary or
-  direct cargo commands. Date/Author: 2026-02-11 (agent).
+- ~~Decision: Place packaging logic in the `installer` crate as a
+  new `artefact::packaging` sub-module rather than a standalone
+  binary.~~ SUPERSEDED by the decision below.
+  Date/Author: 2026-02-11 (agent).
 
 - Decision: Invoke the `whitaker-package-lints` Rust binary from
   both CI and the Makefile rather than reimplementing packaging in
-  shell. Rationale: centralizes JSON construction, two-pass SHA-256
+  shell. The packaging module lives in `artefact::packaging` and
+  the binary is a thin CLI wrapper.
+  Rationale: centralizes JSON construction, two-pass SHA-256
   hashing, and tar/zstd archiving in a single authoritative
   location, eliminating drift between shell and Rust
-  implementations. The binary is built as part of the workspace and
-  adds no extra build step. Date/Author: 2026-02-12 (agent).
-  SUPERSEDES: shell-based packaging decision (2026-02-11).
+  implementations. The binary is built as part of the workspace
+  and adds no extra build step. Date/Author: 2026-02-12 (agent).
+  SUPERSEDES: packaging-location decision (2026-02-11).
 
 ## Outcomes & retrospective
 

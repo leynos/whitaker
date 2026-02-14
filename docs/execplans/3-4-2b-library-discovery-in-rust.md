@@ -87,8 +87,8 @@ Success is observable by:
   binary with unit tests.
 - [x] Stage C: Simplify the Makefile `package-lints` target.
 - [x] Stage D: Simplify the CI workflow "Package artefact" step.
-- [x] Stage E: Add BDD scenarios for multi-library packaging and
-  manifest `files` field.
+- [x] Stage E: Add behaviour-driven development (BDD) scenarios
+  for multi-library packaging and manifest `files` field.
 - [x] Stage F: Add SHA-256 self-consistency test to packaging unit
   tests.
 - [x] Stage G: Update ADR-001 implementation notes.
