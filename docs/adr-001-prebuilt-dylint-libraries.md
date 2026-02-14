@@ -94,9 +94,11 @@ Concrete decisions:
   and `x86_64-pc-windows-msvc`. Linux builds target a conservative glibc
   baseline using the oldest supported runner image.
 - Name artefacts `whitaker-lints-<git_sha>-<toolchain>-<target>.tar.zst`.
-- Ship a `manifest.json` and checksum in each artefact. The manifest captures
-  the git SHA, toolchain, target triple, build time, artefact list, and the
-  checksum of the archive.
+- Ship a `manifest.json` alongside each artefact (not embedded in the archive).
+  The manifest captures the git SHA, toolchain, target triple, build time,
+  artefact list, and the SHA-256 checksum of the archive. Because the manifest
+  is external, the checksum can be computed over the final archive without
+  circular dependency.
 
 Screen reader note: The following JSON snippet illustrates the manifest format.
 
@@ -170,15 +172,17 @@ accumulation and simplifies the installer's download URL construction. The
 workflow deletes the existing release before creating a new one with
 `gh release create rolling --prerelease --latest=false`.
 
-### Manifest inclusion in archives (task 3.4.2)
+### External manifest model (task 3.4.2, revised)
 
-Each `.tar.zst` archive contains both the compiled library files and the
-`manifest.json`. The manifest is produced by the `artefact::packaging` module
-in the `installer` crate, which reuses the existing artefact domain types. A
-two-pass approach creates the archive: first with a placeholder SHA-256 digest,
-then with the real digest computed from the first-pass archive. This resolves
-the circular dependency between the manifest needing the archive checksum and
-the archive containing the manifest.
+Each `.tar.zst` archive contains only the compiled library files; the
+`manifest.json` is **not** embedded in the archive. The manifest is produced by
+the `artefact::packaging` module in the `installer` crate and returned as an
+in-memory object for separate distribution (e.g. as a sidecar file or via the
+release API). This eliminates the circular dependency that previously required a
+two-pass algorithm: the SHA-256 digest in the manifest is computed directly over
+the final archive, and `SHA-256(archive) == manifest.sha256` holds by
+construction. Consumers verify integrity by hashing the downloaded archive and
+comparing against the digest from the separately obtained manifest.
 
 ### Serialization approach (task 3.4.2)
 
@@ -200,8 +204,8 @@ newtypes.
 The `whitaker-package-lints` binary (`installer/src/bin/package_lints.rs`)
 provides a single CLI entry point that both the Makefile `package-lints` target
 and the `rolling-release.yml` CI workflow invoke. This eliminates the earlier
-shell reimplementations of JSON construction, two-pass SHA-256 hashing, and
-tar/zstd archiving that previously existed in the Makefile and CI workflow.
+shell reimplementations of JSON construction, SHA-256 hashing, and tar/zstd
+archiving that previously existed in the Makefile and CI workflow.
 Future manifest schema changes need only be made in the Rust
 `artefact::packaging` module.
 

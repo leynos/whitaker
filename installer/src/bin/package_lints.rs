@@ -12,18 +12,16 @@ use thiserror::Error;
 use whitaker_installer::artefact::error::ArtefactError;
 use whitaker_installer::artefact::git_sha::GitSha;
 use whitaker_installer::artefact::manifest::GeneratedAt;
-use whitaker_installer::artefact::packaging::{PackageParams, package_artefact};
+use whitaker_installer::artefact::packaging::{
+    PackageParams, generate_manifest_json, package_artefact,
+};
 use whitaker_installer::artefact::packaging_error::PackagingError;
 use whitaker_installer::artefact::target::TargetTriple;
 use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
 
-/// Package prebuilt lint libraries into `.tar.zst` archives.
-///
-/// Creates a single archive following the ADR-001 naming convention
-/// (`whitaker-lints-<sha>-<toolchain>-<target>.tar.zst`) with an embedded
-/// `manifest.json` containing git SHA, toolchain, target, file list, and a
-/// SHA-256 digest of the archive itself.
+/// Package prebuilt lint libraries into `.tar.zst` archives following
+/// the ADR-001 naming convention and write a sidecar `manifest.json`.
 #[derive(Parser, Debug)]
 #[command(name = "whitaker-package-lints")]
 #[command(
@@ -134,15 +132,17 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
     };
 
     let output = package_artefact(params)?;
-
+    let manifest_json = generate_manifest_json(&output.manifest)?;
+    let out_dir = output.archive_path.parent().expect("archive has parent");
+    let manifest_path = out_dir.join("manifest.json");
+    std::fs::write(&manifest_path, &manifest_json).map_err(PackagingError::from)?;
     println!("Created {}", output.archive_path.display());
+    println!("Manifest {}", manifest_path.display());
     Ok(())
 }
 
-/// Discover library files in `release_dir` using the canonical crate list.
-///
-/// Fails if any canonical crate's library is missing or is not a regular
-/// file, preventing incomplete artefacts from being published.
+/// Discover library files in `release_dir` using the canonical crate
+/// list.  Fails if any expected library is missing or not a regular file.
 fn discover_library_files(
     release_dir: &Path,
     target: &TargetTriple,
@@ -176,25 +176,29 @@ fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
 
 /// Verify that `ts` matches the expected `YYYY-MM-DDThh:mm:ssZ` shape.
 fn validate_iso8601(ts: &str) -> Result<(), PackageCliError> {
+    let err = || PackageCliError::InvalidTimestamp(ts.to_owned());
     let b = ts.as_bytes();
-    let ok = b.len() == 20
-        && b[4] == b'-'
-        && b[7] == b'-'
-        && b[10] == b'T'
-        && b[13] == b':'
-        && b[16] == b':'
-        && b[19] == b'Z'
-        && b[..4].iter().all(u8::is_ascii_digit)
-        && b[5..7].iter().all(u8::is_ascii_digit)
-        && b[8..10].iter().all(u8::is_ascii_digit)
-        && b[11..13].iter().all(u8::is_ascii_digit)
-        && b[14..16].iter().all(u8::is_ascii_digit)
-        && b[17..19].iter().all(u8::is_ascii_digit);
-    if ok {
-        Ok(())
-    } else {
-        Err(PackageCliError::InvalidTimestamp(ts.to_owned()))
+    if !has_valid_length(b) || !has_valid_separators(b) || !has_valid_digits(b) {
+        return Err(err());
     }
+    Ok(())
+}
+
+fn has_valid_length(b: &[u8]) -> bool {
+    b.len() == 20
+}
+
+fn has_valid_separators(b: &[u8]) -> bool {
+    b[4] == b'-' && b[7] == b'-' && b[10] == b'T' && b[13] == b':' && b[16] == b':' && b[19] == b'Z'
+}
+
+/// Digit positions in `YYYY-MM-DDThh:mm:ssZ` (start, end pairs).
+const DIGIT_RANGES: [(usize, usize); 6] = [(0, 4), (5, 7), (8, 10), (11, 13), (14, 16), (17, 19)];
+
+fn has_valid_digits(b: &[u8]) -> bool {
+    DIGIT_RANGES
+        .iter()
+        .all(|&(s, e)| b[s..e].iter().all(u8::is_ascii_digit))
 }
 
 /// Return the current UTC time as an ISO 8601 string (`YYYY-MM-DDThh:mm:ssZ`).

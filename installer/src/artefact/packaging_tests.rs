@@ -73,7 +73,7 @@ fn generate_manifest_json_matches_schema(
     let content = ManifestContent {
         generated_at: GeneratedAt::new("2026-02-11T00:00:00Z"),
         files: vec!["libtest.so".to_owned()],
-        sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid digest"),
+        sha256: Sha256Digest::try_from("a".repeat(64)).expect("valid digest"),
     };
     let manifest = Manifest::new(provenance, content);
     let json = generate_manifest_json(&manifest).expect("serialization");
@@ -130,7 +130,10 @@ fn package_artefact_produces_valid_archive(
 
     let entry_names = list_archive_entries(&output.archive_path);
     assert!(entry_names.contains(&"libwhitaker_suite.so".to_owned()));
-    assert!(entry_names.contains(&"manifest.json".to_owned()));
+    assert!(
+        !entry_names.contains(&"manifest.json".to_owned()),
+        "manifest must not be embedded in the archive"
+    );
 }
 
 #[rstest]
@@ -237,6 +240,32 @@ fn manifest_sha256_is_valid_hex(temp_dir: TempDir) {
             .as_str()
             .chars()
             .all(|c| c.is_ascii_hexdigit())
+    );
+}
+
+#[rstest]
+fn manifest_sha256_matches_archive_digest(temp_dir: TempDir) {
+    let lib_path = temp_dir.path().join("libwhitaker_suite.so");
+    fs::write(&lib_path, b"library content for digest check").expect("write");
+
+    let output_dir = temp_dir.path().join("dist");
+    fs::create_dir_all(&output_dir).expect("mkdir");
+
+    let params = PackageParams {
+        git_sha: GitSha::try_from("abc1234").expect("valid"),
+        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+        target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
+        library_files: vec![lib_path],
+        output_dir,
+        generated_at: GeneratedAt::new("2026-02-11T10:00:00Z"),
+    };
+
+    let output = package_artefact(params).expect("packaging");
+    let archive_digest = compute_sha256(&output.archive_path).expect("sha256 of archive");
+    assert_eq!(
+        archive_digest.as_str(),
+        output.manifest.sha256().as_str(),
+        "manifest sha256 must match the archive's actual digest"
     );
 }
 

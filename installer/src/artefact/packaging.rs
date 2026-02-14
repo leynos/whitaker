@@ -1,8 +1,7 @@
 //! Artefact packaging for prebuilt lint library distribution.
 //!
-//! Creates `.tar.zst` archives containing compiled lint libraries and a
-//! `manifest.json` file, following the naming and schema conventions
-//! defined in ADR-001.
+//! Creates `.tar.zst` archives containing compiled lint libraries,
+//! following the naming and schema conventions defined in ADR-001.
 //!
 //! # Preconditions
 //!
@@ -14,18 +13,19 @@
 //!
 //! [`package_artefact`] writes a `.tar.zst` archive to the output
 //! directory and returns a [`PackageOutput`] containing the archive
-//! path and an in-memory [`Manifest`].  A temporary `manifest.json`
-//! file is created during packaging and removed afterwards.
+//! path and an in-memory [`Manifest`].  The manifest is **not**
+//! embedded in the archive; it is provided only via
+//! [`PackageOutput::manifest`] for separate distribution (e.g. via
+//! a release API or sidecar file).
 //!
-//! # Two-pass SHA-256 algorithm
+//! # Digest model
 //!
-//! The archive digest is computed over the first-pass archive (which
-//! contains a placeholder digest in its embedded manifest).  The
-//! second-pass archive embeds this real digest.  Consumers verify
-//! integrity by computing the SHA-256 of the downloaded archive and
-//! comparing against the `sha256` field returned by a separate
-//! manifest query (e.g. from the release API), not by re-extracting
-//! the manifest from the archive they just hashed.
+//! The `sha256` field in the manifest is the SHA-256 digest of the
+//! final shipped archive.  Because the manifest is external to the
+//! archive, there is no circular dependency between the digest and
+//! the archive contents.  Consumers verify integrity by computing
+//! `SHA-256(downloaded_archive)` and comparing against the `sha256`
+//! field from the manifest obtained via the release API.
 
 use super::git_sha::GitSha;
 use super::manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance};
@@ -147,10 +147,11 @@ pub fn generate_manifest_json(manifest: &Manifest) -> Result<String, PackagingEr
 
 /// Package compiled lint libraries into a `.tar.zst` archive.
 ///
-/// Uses a two-pass algorithm: the first pass creates an archive with a
-/// placeholder SHA-256 digest in the manifest, then the real digest of
-/// that archive is computed and a second pass rebuilds the archive with
-/// the correct digest embedded.
+/// Builds a single-pass archive containing only the library files,
+/// computes the SHA-256 digest of the resulting archive, and returns
+/// a [`PackageOutput`] whose manifest records that digest.  The
+/// manifest is **not** embedded in the archive, eliminating the
+/// circular dependency that previously required a two-pass algorithm.
 ///
 /// # Errors
 ///
@@ -169,7 +170,6 @@ pub fn package_artefact(params: PackageParams) -> Result<PackageOutput, Packagin
         params.target.clone(),
     );
     let archive_path = params.output_dir.join(artefact_name.filename());
-    let manifest_path = params.output_dir.join("manifest.json");
 
     let file_names = collect_file_names(&params.library_files)?;
     let lib_entries: Vec<(PathBuf, String)> = params
@@ -179,33 +179,13 @@ pub fn package_artefact(params: PackageParams) -> Result<PackageOutput, Packagin
         .map(|(p, n)| (p.clone(), n.clone()))
         .collect();
 
-    // Helper closure that writes a manifest with the given digest and
-    // creates the archive.  Captures the local paths so we stay within
-    // Clippy's parameter limit.
-    let write_pass = |digest: &Sha256Digest| -> Result<(), PackagingError> {
-        let manifest = build_manifest(&params, &file_names, digest);
-        let json = generate_manifest_json(&manifest)?;
-        fs::write(&manifest_path, json)?;
+    create_archive(&archive_path, &lib_entries)?;
+    let digest = compute_sha256(&archive_path)?;
+    let manifest = build_manifest(&params, &file_names, &digest);
 
-        let mut entries = lib_entries.clone();
-        entries.push((manifest_path.clone(), "manifest.json".to_owned()));
-        create_archive(&archive_path, &entries)
-    };
-
-    // First pass: placeholder digest.
-    let placeholder = Sha256Digest::try_from("0".repeat(64).as_str())?;
-    write_pass(&placeholder)?;
-
-    // Second pass: embed the real digest.
-    let real_digest = compute_sha256(&archive_path)?;
-    write_pass(&real_digest)?;
-
-    let _ = fs::remove_file(&manifest_path);
-
-    let final_manifest = build_manifest(&params, &file_names, &real_digest);
     Ok(PackageOutput {
         archive_path,
-        manifest: final_manifest,
+        manifest,
     })
 }
 

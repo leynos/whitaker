@@ -96,11 +96,11 @@ Success is observable by:
 
 ## Surprises & discoveries
 
-- The two-pass SHA-256 algorithm means the manifest digest records the
-  hash of the pass-1 archive, not the final on-disk archive (which has
-  a different hash because it embeds the pass-1 digest). The
-  self-consistency test was changed to verify determinism (identical
-  inputs produce identical digests) rather than self-reference.
+- The original two-pass SHA-256 algorithm embedded the manifest in the
+  archive, so the manifest digest could never match the final archive
+  hash. This was later resolved by moving to an external manifest model
+  where the manifest is not embedded in the archive, allowing
+  `SHA-256(archive) == manifest.sha256` by construction.
 
 - The `package_lints.rs` binary file approached the 400-line limit.
   Resolved by removing section divider comments and condensing doc
@@ -143,9 +143,9 @@ integration, and BDD layers).
 
 ### What was tricky
 
-- The two-pass SHA-256 algorithm meant a naive "archive hash equals
-  manifest hash" assertion would always fail. Resolved by testing
-  determinism instead.
+- The original two-pass SHA-256 algorithm meant "archive hash equals
+  manifest hash" would always fail. Resolved by adopting an external
+  manifest model where the archive no longer embeds the manifest.
 - `package_lints.rs` hit the 400-line file limit (407 lines). Resolved
   by removing section dividers and condensing doc comments to fit
   within 395 lines.

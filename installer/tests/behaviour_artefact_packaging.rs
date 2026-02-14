@@ -13,7 +13,7 @@ use whitaker_installer::artefact::git_sha::GitSha;
 use whitaker_installer::artefact::manifest::GeneratedAt;
 use whitaker_installer::artefact::naming::ArtefactName;
 use whitaker_installer::artefact::packaging::{
-    PackageOutput, PackageParams, compute_sha256, package_artefact,
+    PackageOutput, PackageParams, compute_sha256, generate_manifest_json, package_artefact,
 };
 use whitaker_installer::artefact::packaging_error::PackagingError;
 use whitaker_installer::artefact::target::TargetTriple;
@@ -141,12 +141,12 @@ fn then_archive_has_library(world: &mut PackagingWorld) {
     }
 }
 
-#[then("the archive contains a manifest.json")]
-fn then_archive_has_manifest(world: &mut PackagingWorld) {
+#[then("the archive does not contain a manifest")]
+fn then_archive_has_no_manifest(world: &mut PackagingWorld) {
     let entries = list_archive_entries(world);
     assert!(
-        entries.contains(&"manifest.json".to_owned()),
-        "archive must contain manifest.json"
+        !entries.contains(&"manifest.json".to_owned()),
+        "archive must not contain manifest.json"
     );
 }
 
@@ -161,24 +161,11 @@ fn given_packaged_artefact(world: &mut PackagingWorld) {
     run_packaging(world);
 }
 
-#[when("the manifest is extracted")]
-fn when_manifest_extracted(world: &mut PackagingWorld) {
+#[when("the manifest JSON is generated")]
+fn when_manifest_json_generated(world: &mut PackagingWorld) {
     let output = world.output.as_ref().expect("output set");
-    let file = fs::File::open(&output.archive_path).expect("open");
-    let decoder = zstd::Decoder::new(file).expect("decode");
-    let mut archive = tar::Archive::new(decoder);
-
-    for entry in archive.entries().expect("entries") {
-        let mut entry = entry.expect("entry");
-        let path = entry.path().expect("path").to_string_lossy().into_owned();
-        if path == "manifest.json" {
-            let mut contents = String::new();
-            std::io::Read::read_to_string(&mut entry, &mut contents).expect("read manifest");
-            world.manifest_json = Some(serde_json::from_str(&contents).expect("parse JSON"));
-            return;
-        }
-    }
-    panic!("manifest.json not found in archive");
+    let json = generate_manifest_json(&output.manifest).expect("serialization");
+    world.manifest_json = Some(serde_json::from_str(&json).expect("parse JSON"));
 }
 
 #[then("the manifest contains field \"{field}\"")]
@@ -193,6 +180,22 @@ fn when_sha256_computed(world: &mut PackagingWorld) {
     let output = world.output.as_ref().expect("output set");
     let digest = compute_sha256(&output.archive_path).expect("sha256");
     world.archive_sha256 = Some(digest.as_str().to_owned());
+}
+
+#[then("it matches the manifest sha256")]
+fn then_digest_matches_manifest(world: &mut PackagingWorld) {
+    let archive_hex = world.archive_sha256.as_ref().expect("sha256 set");
+    let manifest_hex = world
+        .output
+        .as_ref()
+        .expect("output set")
+        .manifest
+        .sha256()
+        .as_str();
+    assert_eq!(
+        archive_hex, manifest_hex,
+        "archive digest must match manifest sha256"
+    );
 }
 
 #[then("it is a valid 64-character hex string")]
@@ -334,6 +337,14 @@ fn scenario_package_single_library(world: PackagingWorld) {
     name = "Manifest JSON contains all required fields"
 )]
 fn scenario_manifest_fields(world: PackagingWorld) {
+    let _ = world;
+}
+
+#[scenario(
+    path = "tests/features/artefact_packaging.feature",
+    name = "Manifest sha256 matches the archive digest"
+)]
+fn scenario_manifest_digest_self_consistency(world: PackagingWorld) {
     let _ = world;
 }
 

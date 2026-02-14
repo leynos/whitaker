@@ -169,10 +169,9 @@ Success is observable by:
   both CI and the Makefile rather than reimplementing packaging in
   shell. The packaging module lives in `artefact::packaging` and
   the binary is a thin CLI wrapper.
-  Rationale: centralizes JSON construction, two-pass SHA-256
-  hashing, and tar/zstd archiving in a single authoritative
-  location, eliminating drift between shell and Rust
-  implementations. The binary is built as part of the workspace
+  Rationale: centralizes JSON construction, SHA-256 hashing,
+  and tar/zstd archiving in a single authoritative location,
+  eliminating drift between shell and Rust implementations. The binary is built as part of the workspace
   and adds no extra build step. Date/Author: 2026-02-12 (agent).
   SUPERSEDES: packaging-location decision (2026-02-11).
 
@@ -296,7 +295,7 @@ Created `installer/src/artefact/packaging.rs` implementing:
 
 4. `package_artefact(params: PackageParams) ->
    Result<PackageOutput, PackagingError>` — orchestrates the full
-   two-pass pipeline.
+   packaging pipeline.
 
 Created `installer/src/artefact/packaging_error.rs` with
 `PackagingError` enum (I/O, serialization, empty file list
