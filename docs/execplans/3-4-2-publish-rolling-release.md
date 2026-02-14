@@ -171,8 +171,9 @@ Success is observable by:
   the binary is a thin CLI wrapper.
   Rationale: centralizes JSON construction, SHA-256 hashing,
   and tar/zstd archiving in a single authoritative location,
-  eliminating drift between shell and Rust implementations. The binary is built as part of the workspace
-  and adds no extra build step. Date/Author: 2026-02-12 (agent).
+  eliminating drift between shell and Rust implementations.
+  The binary is built as part of the workspace and adds no
+  extra build step. Date/Author: 2026-02-12 (agent).
   SUPERSEDES: packaging-location decision (2026-02-11).
 
 ## Outcomes & retrospective
