@@ -124,6 +124,10 @@ pub struct InstallArgs {
     /// Do not update existing repository clone.
     #[arg(long)]
     pub no_update: bool,
+
+    /// Skip prebuilt artefact download and build from source.
+    #[arg(long)]
+    pub build_only: bool,
 }
 
 /// Arguments for the list command.
@@ -168,6 +172,7 @@ impl Default for InstallArgs {
             skip_deps: false,
             skip_wrapper: false,
             no_update: false,
+            build_only: false,
         }
     }
 }
@@ -232,6 +237,7 @@ mod tests {
         assert!(!cli.install.skip_deps);
         assert!(!cli.install.skip_wrapper);
         assert!(!cli.install.no_update);
+        assert!(!cli.install.build_only);
     }
 
     #[test]
@@ -315,6 +321,7 @@ mod tests {
     #[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip_deps)]
     #[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip_wrapper)]
     #[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.no_update)]
+    #[case::build_only(&["whitaker-installer", "--build-only"], |cli: &Cli| cli.install.build_only)]
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));

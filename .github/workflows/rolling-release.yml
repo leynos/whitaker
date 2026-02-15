@@ -103,7 +103,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lints-${{ matrix.target }}
-          path: dist/*.tar.zst
+          path: |
+            dist/*.tar.zst
+            dist/*.json
           retention-days: 1
 
   publish:
@@ -140,6 +142,6 @@ jobs:
             --notes "Prebuilt lint libraries from commit ${FULL_SHA}." \
             --prerelease \
             --latest=false \
-            dist/*.tar.zst
+            dist/*
         env:
           GH_TOKEN: ${{ github.token }}

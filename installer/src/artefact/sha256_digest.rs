@@ -59,6 +59,16 @@ impl Sha256Digest {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for Sha256Digest {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::try_from(s).map_err(serde::de::Error::custom)
+    }
+}
+
 impl TryFrom<&str> for Sha256Digest {
     type Error = ArtefactError;
 
@@ -170,5 +180,20 @@ mod tests {
     fn from_owned_string_accepts_valid(valid_digest: String) {
         let digest = Sha256Digest::try_from(valid_digest);
         assert!(digest.is_ok());
+    }
+
+    #[rstest]
+    fn serde_round_trip(valid_digest: String) {
+        let digest = Sha256Digest::try_from(valid_digest.as_str()).expect("valid");
+        let json = serde_json::to_string(&digest).expect("serialize");
+        let back: Sha256Digest = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(digest, back);
+    }
+
+    #[test]
+    fn deserialize_rejects_invalid() {
+        let json = r#""tooshort""#;
+        let result: std::result::Result<Sha256Digest, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }

@@ -91,7 +91,7 @@
   target triple, build time, and SHA256. See
   `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
   direction.
-- [ ] 3.4.4. Extend the installer to download and verify prebuilt artefacts
+- [x] 3.4.4. Extend the installer to download and verify prebuilt artefacts
   before local compilation, falling back on failure. See
   `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
   direction.

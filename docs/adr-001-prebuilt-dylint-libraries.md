@@ -184,14 +184,14 @@ the final archive, and `SHA-256(archive) == manifest.sha256` holds by
 construction. Consumers verify integrity by hashing the downloaded archive and
 comparing against the digest from the separately obtained manifest.
 
-### Serialization approach (task 3.4.2)
+### Serialization approach (task 3.4.2, extended by 3.4.4)
 
-Only `serde::Serialize` is derived on artefact types (not `Deserialize`). This
-task produces manifests; consuming them is deferred to task 3.4.4. Adding
-`Deserialize` now would introduce untested surface area. Newtypes use
-`#[serde(transparent)]` to serialize as their inner value. The `Manifest`
-struct uses `#[serde(flatten)]` on its provenance and content groups to produce
-the flat JSON object specified by this ADR.
+Artefact types implement both `serde::Serialize` and `serde::Deserialize`.
+Newtypes use `#[serde(transparent)]` to serialize as their inner value, with
+custom `Deserialize` implementations that route through `TryFrom` validation
+(added in task 3.4.4). The `Manifest` struct uses `#[serde(flatten)]` on its
+provenance and content groups to produce the flat JSON object specified by
+this ADR.
 
 ### Packaging module location (task 3.4.2)
 
@@ -218,6 +218,47 @@ from `resolution.rs`. This eliminated the brittle `LIB_EXT` case statements
 and `LIB_FILES` loops from both the Makefile and the CI workflow. The
 `lib_ext` matrix field was removed from `rolling-release.yml`. Positional
 library file arguments remain supported for backwards compatibility.
+
+### Prebuilt download and verification (task 3.4.4)
+
+The installer now attempts to download prebuilt artefacts before compiling
+locally. The implementation spans four new modules and modifications to the
+CLI and install flow:
+
+- **`artefact::download`** — Trait-based HTTP abstraction (`ArtefactDownloader`)
+  with a production implementation (`HttpDownloader`) using `ureq` v3. `ureq`
+  was chosen over `reqwest` for its synchronous API and minimal dependency tree,
+  matching the installer's blocking execution model.
+
+- **`artefact::extraction`** — Trait-based archive extraction (`ArtefactExtractor`)
+  with a production implementation (`ZstdExtractor`) using `tar` and `zstd`.
+  Includes path traversal (zip-slip) protection that validates each entry path
+  before extraction.
+
+- **`artefact::manifest_parser`** — Deserializes manifest JSON into the validated
+  `Manifest` type. All newtype validation runs during deserialization via custom
+  `serde::Deserialize` implementations that route through the existing `TryFrom`
+  validators, preventing invalid values from bypassing validation.
+
+- **`prebuilt`** — Orchestrator module implementing the download → parse →
+  verify → extract pipeline. Returns `PrebuiltResult::Success` or
+  `PrebuiltResult::Fallback` (never a fatal error). The `PrebuiltResult` enum
+  was chosen over `Result<T, E>` to prevent callers from accidentally
+  propagating errors with `?`.
+
+The `--build-only` CLI flag allows users to skip the prebuilt attempt and
+build from source directly. The prebuilt attempt is inserted between
+toolchain resolution and local compilation in `run_install()`.
+
+The CI workflow now uploads target-specific manifests as
+`manifest-<target>.json` alongside the `.tar.zst` archives, preventing
+filename collisions across the five-target build matrix.
+
+Custom `Deserialize` implementations were added to all artefact newtypes
+(`GitSha`, `ToolchainChannel`, `TargetTriple`, `Sha256Digest`,
+`SchemaVersion`) rather than using `#[derive(Deserialize)]`, because the
+derived implementation on `#[serde(transparent)]` newtypes bypasses the
+`TryFrom` validation, accepting invalid values.
 
 ## Architectural rationale
 

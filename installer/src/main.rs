@@ -17,6 +17,7 @@ use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::list::{determine_target_dir, run_list};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
+use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
@@ -75,6 +76,21 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
+    // Step 3.5: Attempt prebuilt download (unless --build-only)
+    if !args.build_only {
+        let host_target = detect_host_target()?;
+        let prebuilt_config = PrebuiltConfig {
+            target: &host_target,
+            toolchain: toolchain.channel(),
+            staging_base: &target_dir,
+            quiet: args.quiet,
+        };
+        if let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
+        {
+            return finish_install(args, &dirs, &staging_path, stderr);
+        }
+    }
+
     let context = PipelineContext {
         workspace_root: &workspace_root,
         toolchain: &toolchain,
@@ -90,14 +106,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
 
     // Step 5: Generate wrapper scripts if requested
-    if args.skip_wrapper {
-        write_stderr_line(stderr, "");
-        write_stderr_line(stderr, ShellSnippet::new(&staging_path).display_text());
-    } else {
-        generate_and_report_wrapper(&dirs, &staging_path, stderr)?;
-    }
-
-    Ok(())
+    finish_install(args, &dirs, &staging_path, stderr)
 }
 
 /// Runs in dry-run mode, showing configuration without side effects.
@@ -215,6 +224,42 @@ fn ensure_toolchain_installed(
             format!("Toolchain {} installed successfully.", toolchain.channel()),
         );
         write_stderr_line(stderr, "");
+    }
+    Ok(())
+}
+
+/// Detect the host target triple by parsing `rustc -vV` output.
+fn detect_host_target() -> Result<String> {
+    let output = std::process::Command::new("rustc")
+        .args(["-vV"])
+        .output()
+        .map_err(|e| InstallerError::ToolchainDetection {
+            reason: format!("failed to run `rustc -vV`: {e}"),
+        })?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if let Some(host) = line.strip_prefix("host: ") {
+            return Ok(host.trim().to_owned());
+        }
+    }
+    Err(InstallerError::ToolchainDetection {
+        reason: "could not determine host target from `rustc -vV`".to_owned(),
+    })
+}
+
+/// Common final steps: generate wrapper scripts or print shell snippet.
+fn finish_install(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    staging_path: &Utf8Path,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    if args.skip_wrapper {
+        write_stderr_line(stderr, "");
+        write_stderr_line(stderr, ShellSnippet::new(staging_path).display_text());
+    } else {
+        generate_and_report_wrapper(dirs, staging_path, stderr)?;
     }
     Ok(())
 }

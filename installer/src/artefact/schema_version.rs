@@ -43,6 +43,16 @@ impl SchemaVersion {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for SchemaVersion {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let v = <u32 as serde::Deserialize>::deserialize(deserializer)?;
+        Self::try_from(v).map_err(serde::de::Error::custom)
+    }
+}
+
 impl TryFrom<u32> for SchemaVersion {
     type Error = ArtefactError;
 
@@ -114,5 +124,20 @@ mod tests {
     fn display_shows_number() {
         let v = SchemaVersion::current();
         assert_eq!(format!("{v}"), "1");
+    }
+
+    #[test]
+    fn serde_round_trip() {
+        let v = SchemaVersion::current();
+        let json = serde_json::to_string(&v).expect("serialize");
+        let back: SchemaVersion = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(v, back);
+    }
+
+    #[test]
+    fn deserialize_rejects_unsupported_version() {
+        let json = "99";
+        let result: std::result::Result<SchemaVersion, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }

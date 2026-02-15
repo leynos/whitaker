@@ -23,6 +23,7 @@
 //! - [`stager`] - File staging with platform-specific naming conventions
 //! - [`toolchain`] - Rust toolchain detection and validation
 //! - [`workspace`] - Workspace detection and path resolution
+//! - [`prebuilt`] - Prebuilt artefact download and verification orchestrator
 //! - [`wrapper`] - Wrapper script generation
 
 pub mod artefact;
@@ -37,6 +38,7 @@ pub mod list;
 pub mod list_output;
 pub mod output;
 pub mod pipeline;
+pub mod prebuilt;
 pub mod resolution;
 pub mod scanner;
 pub mod stager;
