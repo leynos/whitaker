@@ -6,6 +6,7 @@
 //! host-qualified names such as `nightly-2025-09-18-x86_64-unknown-linux-gnu`.
 
 use super::error::{ArtefactError, Result};
+use serde::Serialize;
 use std::fmt;
 
 /// A validated Rust toolchain channel string (e.g. `nightly-2025-09-18`).
@@ -20,7 +21,8 @@ use std::fmt;
 ///     .expect("valid toolchain channel");
 /// assert_eq!(channel.as_str(), "nightly-2025-09-18");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct ToolchainChannel(String);
 
 /// Check that every byte is ASCII alphanumeric, a hyphen, a dot, or an

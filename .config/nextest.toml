@@ -1,3 +1,15 @@
+# Serialise dylint UI tests that build lint libraries and use
+# `#[serial]`.  nextest runs each test in its own process, so the
+# `serial_test` crate's in-process mutex has no effect.  A test-group
+# with max-threads = 1 prevents concurrent lint-library builds from
+# racing on the shared target directory.
+[test-groups]
+serial-dylint-ui = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "test(driver::ui::) | test(tests::ui::)"
+test-group = "serial-dylint-ui"
+
 # Extend the timeout for toolchain auto-install behavioural tests, since the
 # isolated rustup setup may need to download and install a full nightly toolchain.
 [[profile.default.overrides]]

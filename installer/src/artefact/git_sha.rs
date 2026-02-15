@@ -5,6 +5,7 @@
 //! object names.
 
 use super::error::{ArtefactError, Result};
+use serde::Serialize;
 use std::fmt;
 
 /// Minimum length of an abbreviated git SHA (7 hex characters).
@@ -23,7 +24,8 @@ const MAX_LEN: usize = 40;
 /// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
 /// assert_eq!(sha.as_str(), "abc1234");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct GitSha(String);
 
 impl GitSha {

@@ -4,6 +4,7 @@
 //! versioning policy defined in ADR-001.
 
 use super::error::{ArtefactError, Result};
+use serde::Serialize;
 use std::fmt;
 
 /// The highest schema version this build can read.
@@ -24,7 +25,8 @@ const CURRENT_MAX: u32 = 1;
 /// let v = SchemaVersion::current();
 /// assert_eq!(u32::from(v), 1);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct SchemaVersion(u32);
 
 impl SchemaVersion {

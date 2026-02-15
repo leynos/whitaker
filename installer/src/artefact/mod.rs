@@ -1,7 +1,10 @@
-//! Artefact naming, manifest schema, and verification policy.
+//! Artefact naming, manifest schema, packaging, and verification policy.
 //!
-//! This module implements roadmap item 3.4.1: the type-safe domain model
-//! for prebuilt lint library artefact distribution as specified in ADR-001.
+//! This module implements the type-safe domain model for prebuilt lint
+//! library artefact distribution as specified in ADR-001, covering:
+//!
+//! - Roadmap 3.4.1: naming, manifest schema, and verification policy.
+//! - Roadmap 3.4.2: packaging (archive creation and manifest emission).
 //!
 //! # Sub-modules
 //!
@@ -9,6 +12,8 @@
 //! - [`git_sha`] — Git commit SHA newtype (`GitSha`).
 //! - [`manifest`] — Manifest schema types (`Manifest`, `GeneratedAt`).
 //! - [`naming`] — Artefact archive naming policy (`ArtefactName`).
+//! - [`packaging`] — Archive creation and manifest emission.
+//! - [`packaging_error`] — Error types for packaging operations.
 //! - [`schema_version`] — Manifest version newtype (`SchemaVersion`).
 //! - [`sha256_digest`] — SHA-256 digest newtype (`Sha256Digest`).
 //! - [`target`] — Target triple validation (`TargetTriple`).
@@ -19,6 +24,8 @@ pub mod error;
 pub mod git_sha;
 pub mod manifest;
 pub mod naming;
+pub mod packaging;
+pub mod packaging_error;
 pub mod schema_version;
 pub mod sha256_digest;
 pub mod target;

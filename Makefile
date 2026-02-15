@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints
 
 APP ?= whitaker
 CARGO ?= cargo
@@ -142,6 +142,23 @@ publish-check: ## Build, test, and validate packages before publishing
 	for crate in $(PUBLISH_PACKAGES); do \
 		$(CARGO) package -p $$crate --allow-dirty; \
 	done
+
+package-lints: ## Build lint crates and package as .tar.zst archives
+	set -eu; \
+	TOOLCHAIN=$$(awk -F '"' '/^channel/ {print $$2}' rust-toolchain.toml); \
+	HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}'); \
+	SHA=$$(git rev-parse --short HEAD); \
+	DIST_DIR="$(CURDIR)/dist"; \
+	mkdir -p "$$DIST_DIR"; \
+	for lint in $(LINT_CRATES); do \
+		RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
+	done; \
+	$(CARGO) run -p whitaker-installer --bin whitaker-package-lints -- \
+		--git-sha "$$SHA" \
+		--toolchain "$$TOOLCHAIN" \
+		--target "$$HOST_TRIPLE" \
+		--output-dir "$$DIST_DIR" \
+		--release-dir target/release
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

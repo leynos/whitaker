@@ -4,6 +4,7 @@
 //! representing a 256-bit hash digest.
 
 use super::error::{ArtefactError, Result};
+use serde::Serialize;
 use std::fmt;
 
 /// Expected length of a hex-encoded SHA-256 digest.
@@ -20,7 +21,8 @@ const DIGEST_HEX_LEN: usize = 64;
 /// let digest: Sha256Digest = hex.as_str().try_into().expect("valid SHA-256 digest");
 /// assert_eq!(digest.as_str().len(), 64);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct Sha256Digest(String);
 
 impl Sha256Digest {

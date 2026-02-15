@@ -94,9 +94,11 @@ Concrete decisions:
   and `x86_64-pc-windows-msvc`. Linux builds target a conservative glibc
   baseline using the oldest supported runner image.
 - Name artefacts `whitaker-lints-<git_sha>-<toolchain>-<target>.tar.zst`.
-- Ship a `manifest.json` and checksum in each artefact. The manifest captures
-  the git SHA, toolchain, target triple, build time, artefact list, and the
-  checksum of the archive.
+- Ship a `manifest.json` alongside each artefact (not embedded in the archive).
+  The manifest captures the git SHA, toolchain, target triple, build time,
+  artefact list, and the SHA-256 checksum of the archive. Because the manifest
+  is external, the checksum can be computed over the final archive without
+  circular dependency.
 
 Screen reader note: The following JSON snippet illustrates the manifest format.
 
@@ -159,6 +161,63 @@ Non-goals:
   closed and fall back to local compilation.
 - Supply-chain risks require checksum or signature verification and careful
   handling of extraction paths.
+
+## Implementation notes
+
+### Rolling release strategy (task 3.4.2)
+
+The CI workflow `.github/workflows/rolling-release.yml` uses a single `rolling`
+GitHub Release tag that is replaced on each push to `main`. This avoids asset
+accumulation and simplifies the installer's download URL construction. The
+workflow deletes the existing release before creating a new one with
+`gh release create rolling --prerelease --latest=false`.
+
+### External manifest model (task 3.4.2, revised)
+
+Each `.tar.zst` archive contains only the compiled library files; the
+`manifest.json` is **not** embedded in the archive. The manifest is produced by
+the `artefact::packaging` module in the `installer` crate and returned as an
+in-memory object for separate distribution (e.g. as a sidecar file or via the
+release API). This eliminates the circular dependency that previously required a
+two-pass algorithm: the SHA-256 digest in the manifest is computed directly over
+the final archive, and `SHA-256(archive) == manifest.sha256` holds by
+construction. Consumers verify integrity by hashing the downloaded archive and
+comparing against the digest from the separately obtained manifest.
+
+### Serialization approach (task 3.4.2)
+
+Only `serde::Serialize` is derived on artefact types (not `Deserialize`). This
+task produces manifests; consuming them is deferred to task 3.4.4. Adding
+`Deserialize` now would introduce untested surface area. Newtypes use
+`#[serde(transparent)]` to serialize as their inner value. The `Manifest`
+struct uses `#[serde(flatten)]` on its provenance and content groups to produce
+the flat JSON object specified by this ADR.
+
+### Packaging module location (task 3.4.2)
+
+Packaging logic lives in `installer/src/artefact/packaging.rs` as a sub-module
+of the existing artefact domain model, maintaining cohesion with the validated
+newtypes.
+
+### Centralized packaging binary (post-3.4.2)
+
+The `whitaker-package-lints` binary (`installer/src/bin/package_lints.rs`)
+provides a single CLI entry point that both the Makefile `package-lints` target
+and the `rolling-release.yml` CI workflow invoke. This eliminates the earlier
+shell reimplementations of JSON construction, SHA-256 hashing, and tar/zstd
+archiving that previously existed in the Makefile and CI workflow.
+Future manifest schema changes need only be made in the Rust
+`artefact::packaging` module.
+
+### Library file discovery (post-3.4.2)
+
+The `whitaker-package-lints` binary now supports a `--release-dir` flag that
+auto-discovers compiled library files using `TargetTriple::library_extension()`
+and `TargetTriple::library_prefix()` combined with the canonical crate list
+from `resolution.rs`. This eliminated the brittle `LIB_EXT` case statements
+and `LIB_FILES` loops from both the Makefile and the CI workflow. The
+`lib_ext` matrix field was removed from `rolling-release.yml`. Positional
+library file arguments remain supported for backwards compatibility.
 
 ## Architectural rationale
 
