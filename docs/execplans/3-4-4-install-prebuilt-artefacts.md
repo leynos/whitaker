@@ -187,6 +187,7 @@ uploaded.
 ### Testing patterns
 
 BDD tests use rstest-bdd v0.5.0 mutable world pattern:
+
 - World struct with `#[derive(Default)]`
 - `#[fixture] fn world()` returning the default
 - Step definitions via `given!`, `when!`, `then!` macros from
@@ -215,6 +216,7 @@ The CI workflow must upload manifests alongside archives. Without this the
 installer has no manifest to download.
 
 Files to modify:
+
 - `installer/src/bin/package_lints.rs` (~line 133): change output
   manifest filename from `manifest.json` to
   `manifest-<target>.json`.
@@ -255,6 +257,7 @@ If `manifest.rs` exceeds 400 lines, extract its `#[cfg(test)] mod tests`
 to `manifest_tests.rs` using the `#[path = ...]` pattern.
 
 Files to modify:
+
 - `installer/src/artefact/git_sha.rs`
 - `installer/src/artefact/toolchain_channel.rs`
 - `installer/src/artefact/target.rs`
@@ -316,6 +319,7 @@ empty archive.
 ### Phase 4: Add download module
 
 Add dependencies:
+
 - Workspace `Cargo.toml`: `ureq = "3"`
 - `installer/Cargo.toml` dependencies: `ureq = { workspace = true }`
 - `installer/Cargo.toml` dependencies: promote `tempfile` from
@@ -390,6 +394,7 @@ Create `installer/src/prebuilt.rs` (~200 lines).
     ) -> PrebuiltResult
 
 Internal pipeline:
+
 1. Download manifest JSON for the target.
 2. Parse manifest, validate toolchain matches local.
 3. Derive archive filename from manifest fields.
@@ -455,6 +460,7 @@ Modify `run_install()` to insert prebuilt attempt between step 3
     }
 
 Files to modify:
+
 - `installer/src/cli.rs`
 - `installer/src/main.rs`
 - `installer/src/error.rs` (optional: add `PrebuiltFailed` variant
@@ -505,6 +511,7 @@ Create `installer/tests/features/prebuilt_download.feature` (~50 lines):
         Then no prebuilt download is attempted
 
 Create `installer/tests/behaviour_prebuilt.rs` (~250 lines):
+
 - `PrebuiltWorld` struct with fields for mock state, config, result.
 - Step definitions using `MockArtefactDownloader` and
   `MockArtefactExtractor`.
@@ -565,6 +572,7 @@ downloaded archives are cleaned up on failure.
 ## Artifacts and notes
 
 Key files created:
+
 - `installer/src/artefact/manifest_parser.rs`
 - `installer/src/artefact/download.rs`
 - `installer/src/artefact/extraction.rs`
@@ -573,6 +581,7 @@ Key files created:
 - `installer/tests/behaviour_prebuilt.rs`
 
 Key files modified:
+
 - `installer/src/artefact/git_sha.rs` (add Deserialize)
 - `installer/src/artefact/toolchain_channel.rs` (add Deserialize)
 - `installer/src/artefact/target.rs` (add Deserialize)
