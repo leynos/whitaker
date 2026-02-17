@@ -43,6 +43,33 @@ fn staging_base() -> (tempfile::TempDir, Utf8PathBuf) {
     (temp, path)
 }
 
+/// Run a fallback scenario: set up mocks via `setup_mocks`, call the
+/// orchestrator, and assert `Fallback` whose reason contains
+/// `expected_reason_substring`.
+fn test_fallback_scenario(
+    setup_mocks: impl FnOnce(&mut MockArtefactDownloader, &mut MockArtefactExtractor),
+    expected_reason_substring: &str,
+) {
+    let (_temp, staging_base) = staging_base();
+    let config = base_config(&staging_base);
+
+    let mut downloader = MockArtefactDownloader::new();
+    let mut extractor = MockArtefactExtractor::new();
+    setup_mocks(&mut downloader, &mut extractor);
+
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    match result {
+        PrebuiltResult::Fallback { reason } => {
+            assert!(
+                reason.contains(expected_reason_substring),
+                "reason: {reason}"
+            );
+        }
+        other => panic!("expected Fallback, got {other:?}"),
+    }
+}
+
 #[test]
 fn happy_path_returns_success() {
     let (_temp, staging_base) = staging_base();
@@ -73,127 +100,83 @@ fn happy_path_returns_success() {
 
 #[test]
 fn download_failure_returns_fallback() {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
-
-    let mut downloader = MockArtefactDownloader::new();
-    downloader.expect_download_manifest().returning(|_| {
-        Err(DownloadError::HttpError {
-            url: "http://example.com".to_owned(),
-            reason: "connection refused".to_owned(),
-        })
-    });
-
-    let extractor = MockArtefactExtractor::new();
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(reason.contains("download"), "reason: {reason}");
-        }
-        other => panic!("expected Fallback, got {other:?}"),
-    }
+    test_fallback_scenario(
+        |downloader, _extractor| {
+            downloader.expect_download_manifest().returning(|_| {
+                Err(DownloadError::HttpError {
+                    url: "http://example.com".to_owned(),
+                    reason: "connection refused".to_owned(),
+                })
+            });
+        },
+        "download",
+    );
 }
 
 #[test]
 fn not_found_returns_fallback() {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
-
-    let mut downloader = MockArtefactDownloader::new();
-    downloader.expect_download_manifest().returning(|_| {
-        Err(DownloadError::NotFound {
-            url: "http://example.com/manifest".to_owned(),
-        })
-    });
-
-    let extractor = MockArtefactExtractor::new();
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(reason.contains("not found"), "reason: {reason}");
-        }
-        other => panic!("expected Fallback, got {other:?}"),
-    }
+    test_fallback_scenario(
+        |downloader, _extractor| {
+            downloader.expect_download_manifest().returning(|_| {
+                Err(DownloadError::NotFound {
+                    url: "http://example.com/manifest".to_owned(),
+                })
+            });
+        },
+        "not found",
+    );
 }
 
 #[test]
 fn toolchain_mismatch_returns_fallback() {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
-
-    let mut downloader = MockArtefactDownloader::new();
-    let manifest_json = manifest_json_with("nightly-2025-01-01", &"a".repeat(64));
-    downloader
-        .expect_download_manifest()
-        .returning(move |_| Ok(manifest_json.clone()));
-
-    let extractor = MockArtefactExtractor::new();
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(reason.contains("toolchain mismatch"), "reason: {reason}");
-        }
-        other => panic!("expected Fallback, got {other:?}"),
-    }
+    test_fallback_scenario(
+        |downloader, _extractor| {
+            let manifest_json = manifest_json_with("nightly-2025-01-01", &"a".repeat(64));
+            downloader
+                .expect_download_manifest()
+                .returning(move |_| Ok(manifest_json.clone()));
+        },
+        "toolchain mismatch",
+    );
 }
 
 #[test]
 fn checksum_mismatch_returns_fallback() {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
-
-    // Manifest claims SHA = "aaa...a" but the file will hash differently.
-    let mut downloader = MockArtefactDownloader::new();
-    let manifest_json = manifest_json_with(TOOLCHAIN, &"a".repeat(64));
-    downloader
-        .expect_download_manifest()
-        .returning(move |_| Ok(manifest_json.clone()));
-    downloader
-        .expect_download_archive()
-        .returning(|_filename, dest| {
-            std::fs::write(dest, b"wrong content").map_err(DownloadError::Io)
-        });
-
-    let extractor = MockArtefactExtractor::new();
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(reason.contains("checksum mismatch"), "reason: {reason}");
-        }
-        other => panic!("expected Fallback, got {other:?}"),
-    }
+    test_fallback_scenario(
+        |downloader, _extractor| {
+            // Manifest claims SHA = "aaa...a" but the file will hash differently.
+            let manifest_json = manifest_json_with(TOOLCHAIN, &"a".repeat(64));
+            downloader
+                .expect_download_manifest()
+                .returning(move |_| Ok(manifest_json.clone()));
+            downloader
+                .expect_download_archive()
+                .returning(|_filename, dest| {
+                    std::fs::write(dest, b"wrong content").map_err(DownloadError::Io)
+                });
+        },
+        "checksum mismatch",
+    );
 }
 
 #[test]
 fn extraction_failure_returns_fallback() {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
-    let fake_sha = sha256_of(FAKE_ARCHIVE);
-
-    let mut downloader = MockArtefactDownloader::new();
-    let manifest_json = manifest_json_with(TOOLCHAIN, &fake_sha);
-    downloader
-        .expect_download_manifest()
-        .returning(move |_| Ok(manifest_json.clone()));
-    downloader
-        .expect_download_archive()
-        .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
-
-    let mut extractor = MockArtefactExtractor::new();
-    extractor.expect_extract().returning(|_archive, _dest| {
-        Err(crate::artefact::extraction::ExtractionError::EmptyArchive)
-    });
-
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(reason.contains("extraction"), "reason: {reason}");
-        }
-        other => panic!("expected Fallback, got {other:?}"),
-    }
+    test_fallback_scenario(
+        |downloader, extractor| {
+            let fake_sha = sha256_of(FAKE_ARCHIVE);
+            let manifest_json = manifest_json_with(TOOLCHAIN, &fake_sha);
+            downloader
+                .expect_download_manifest()
+                .returning(move |_| Ok(manifest_json.clone()));
+            downloader
+                .expect_download_archive()
+                .returning(|_filename, dest| {
+                    std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io)
+                });
+            extractor.expect_extract().returning(|_archive, _dest| {
+                Err(crate::artefact::extraction::ExtractionError::EmptyArchive)
+            });
+        },
+        "extraction",
+    );
 }

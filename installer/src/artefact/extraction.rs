@@ -96,13 +96,11 @@ impl ArtefactExtractor for ZstdExtractor {
 /// Validate that a tar entry path does not escape the destination
 /// directory via `..` components or absolute paths.
 fn validate_entry_path(path: &Path) -> Result<(), ExtractionError> {
-    if path.is_absolute() {
-        return Err(ExtractionError::PathTraversal {
-            path: path.display().to_string(),
-        });
-    }
     for component in path.components() {
-        if matches!(component, Component::ParentDir) {
+        if matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        ) {
             return Err(ExtractionError::PathTraversal {
                 path: path.display().to_string(),
             });
