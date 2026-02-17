@@ -98,33 +98,39 @@ fn happy_path_returns_success() {
     );
 }
 
-#[test]
-fn download_failure_returns_fallback() {
-    test_fallback_scenario(
-        |downloader, _extractor| {
-            downloader.expect_download_manifest().returning(|_| {
-                Err(DownloadError::HttpError {
-                    url: "http://example.com".to_owned(),
-                    reason: "connection refused".to_owned(),
-                })
-            });
-        },
-        "download",
-    );
-}
+type DownloadErrorCase = (&'static str, fn() -> DownloadError, &'static str);
 
 #[test]
-fn not_found_returns_fallback() {
-    test_fallback_scenario(
-        |downloader, _extractor| {
-            downloader.expect_download_manifest().returning(|_| {
-                Err(DownloadError::NotFound {
-                    url: "http://example.com/manifest".to_owned(),
-                })
-            });
-        },
-        "not found",
-    );
+fn manifest_download_errors_return_fallback() {
+    let cases: Vec<DownloadErrorCase> = vec![
+        (
+            "http_error",
+            || DownloadError::HttpError {
+                url: "http://example.com".to_owned(),
+                reason: "connection refused".to_owned(),
+            },
+            "download",
+        ),
+        (
+            "not_found",
+            || DownloadError::NotFound {
+                url: "http://example.com/manifest".to_owned(),
+            },
+            "not found",
+        ),
+    ];
+
+    for (name, make_error, expected_substring) in cases {
+        test_fallback_scenario(
+            |downloader, _extractor| {
+                downloader
+                    .expect_download_manifest()
+                    .returning(move |_| Err(make_error()));
+            },
+            expected_substring,
+        );
+        eprintln!("{name} passed");
+    }
 }
 
 #[test]
