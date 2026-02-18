@@ -1,28 +1,10 @@
+//! Unit tests for prebuilt artefact orchestration.
+
 use super::*;
 use crate::artefact::download::MockArtefactDownloader;
 use crate::artefact::extraction::MockArtefactExtractor;
-
-/// Build a manifest JSON string with a configurable toolchain and SHA-256.
-fn manifest_json_with(toolchain: &str, sha256: &str) -> String {
-    format!(
-        concat!(
-            r#"{{"git_sha":"abc1234","schema_version":1,"#,
-            r#""toolchain":"{toolchain}","#,
-            r#""target":"x86_64-unknown-linux-gnu","#,
-            r#""generated_at":"2026-02-03T00:00:00Z","#,
-            r#""files":["lib.so"],"#,
-            r#""sha256":"{sha256}"}}"#,
-        ),
-        toolchain = toolchain,
-        sha256 = sha256,
-    )
-}
-
-/// Compute the SHA-256 of a byte slice (for test fixtures).
-fn sha256_of(data: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(data))
-}
+use crate::test_utils::{prebuilt_manifest_json, sha256_hex};
+use rstest::rstest;
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
@@ -74,8 +56,8 @@ fn test_fallback_scenario(
 fn happy_path_returns_success() {
     let (_temp, staging_base) = staging_base();
     let config = base_config(&staging_base);
-    let fake_sha = sha256_of(FAKE_ARCHIVE);
-    let manifest_json = manifest_json_with(TOOLCHAIN, &fake_sha);
+    let fake_sha = sha256_hex(FAKE_ARCHIVE);
+    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
 
     let mut downloader = MockArtefactDownloader::new();
     downloader
@@ -86,9 +68,11 @@ fn happy_path_returns_success() {
         .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
 
     let mut extractor = MockArtefactExtractor::new();
-    extractor
-        .expect_extract()
-        .returning(|_archive, _dest| Ok(vec!["lib.so".to_owned()]));
+    extractor.expect_extract().returning(|_archive, dest| {
+        let source_name = "libwhitaker_suite.so".to_owned();
+        std::fs::write(dest.join(&source_name), b"fake").expect("write extracted file");
+        Ok(vec![source_name])
+    });
 
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
@@ -98,38 +82,33 @@ fn happy_path_returns_success() {
     );
 }
 
-type DownloadErrorCase = (&'static str, fn() -> DownloadError, &'static str);
+#[rstest]
+#[case::http_error(make_http_error, "download")]
+#[case::not_found(make_not_found_error, "not found")]
+fn manifest_download_errors_return_fallback(
+    #[case] make_error: fn() -> DownloadError,
+    #[case] expected_substring: &str,
+) {
+    test_fallback_scenario(
+        |downloader, _extractor| {
+            downloader
+                .expect_download_manifest()
+                .returning(move |_| Err(make_error()));
+        },
+        expected_substring,
+    );
+}
 
-#[test]
-fn manifest_download_errors_return_fallback() {
-    let cases: Vec<DownloadErrorCase> = vec![
-        (
-            "http_error",
-            || DownloadError::HttpError {
-                url: "http://example.com".to_owned(),
-                reason: "connection refused".to_owned(),
-            },
-            "download",
-        ),
-        (
-            "not_found",
-            || DownloadError::NotFound {
-                url: "http://example.com/manifest".to_owned(),
-            },
-            "not found",
-        ),
-    ];
+fn make_http_error() -> DownloadError {
+    DownloadError::HttpError {
+        url: "http://example.com".to_owned(),
+        reason: "connection refused".to_owned(),
+    }
+}
 
-    for (name, make_error, expected_substring) in cases {
-        test_fallback_scenario(
-            |downloader, _extractor| {
-                downloader
-                    .expect_download_manifest()
-                    .returning(move |_| Err(make_error()));
-            },
-            expected_substring,
-        );
-        eprintln!("{name} passed");
+fn make_not_found_error() -> DownloadError {
+    DownloadError::NotFound {
+        url: "http://example.com/manifest".to_owned(),
     }
 }
 
@@ -137,7 +116,8 @@ fn manifest_download_errors_return_fallback() {
 fn toolchain_mismatch_returns_fallback() {
     test_fallback_scenario(
         |downloader, _extractor| {
-            let manifest_json = manifest_json_with("nightly-2025-01-01", &"a".repeat(64));
+            let manifest_json =
+                prebuilt_manifest_json("nightly-2025-01-01", TARGET, &"a".repeat(64));
             downloader
                 .expect_download_manifest()
                 .returning(move |_| Ok(manifest_json.clone()));
@@ -151,7 +131,7 @@ fn checksum_mismatch_returns_fallback() {
     test_fallback_scenario(
         |downloader, _extractor| {
             // Manifest claims SHA = "aaa...a" but the file will hash differently.
-            let manifest_json = manifest_json_with(TOOLCHAIN, &"a".repeat(64));
+            let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &"a".repeat(64));
             downloader
                 .expect_download_manifest()
                 .returning(move |_| Ok(manifest_json.clone()));
@@ -169,8 +149,8 @@ fn checksum_mismatch_returns_fallback() {
 fn extraction_failure_returns_fallback() {
     test_fallback_scenario(
         |downloader, extractor| {
-            let fake_sha = sha256_of(FAKE_ARCHIVE);
-            let manifest_json = manifest_json_with(TOOLCHAIN, &fake_sha);
+            let fake_sha = sha256_hex(FAKE_ARCHIVE);
+            let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
             downloader
                 .expect_download_manifest()
                 .returning(move |_| Ok(manifest_json.clone()));
@@ -184,5 +164,19 @@ fn extraction_failure_returns_fallback() {
             });
         },
         "extraction",
+    );
+}
+
+#[test]
+fn target_mismatch_returns_fallback() {
+    test_fallback_scenario(
+        |downloader, _extractor| {
+            let manifest_json =
+                prebuilt_manifest_json(TOOLCHAIN, "aarch64-apple-darwin", &"a".repeat(64));
+            downloader
+                .expect_download_manifest()
+                .returning(move |_| Ok(manifest_json.clone()));
+        },
+        "target mismatch",
     );
 }

@@ -62,35 +62,37 @@ impl ArtefactExtractor for ZstdExtractor {
         archive_path: &Path,
         dest_dir: &Path,
     ) -> Result<Vec<String>, ExtractionError> {
-        let file = std::fs::File::open(archive_path)?;
-        let decoder = zstd::Decoder::new(file)?;
-        let mut archive = tar::Archive::new(decoder);
-        let mut extracted = Vec::new();
-
-        for entry_result in archive.entries()? {
-            let mut entry = entry_result?;
-            let entry_path = entry.path()?.into_owned();
-
-            validate_entry_path(&entry_path)?;
-
-            let dest_path = dest_dir.join(&entry_path);
-            if let Some(parent) = dest_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            entry.unpack(&dest_path)?;
-
-            if let Some(name) = entry_path.file_name() {
-                extracted.push(name.to_string_lossy().into_owned());
-            }
-        }
-
+        let extracted = collect_entry_filenames(archive_path)?;
         if extracted.is_empty() {
             return Err(ExtractionError::EmptyArchive);
         }
 
+        let file = std::fs::File::open(archive_path)?;
+        let decoder = zstd::Decoder::new(file)?;
+        let mut archive = tar::Archive::new(decoder);
+        archive.unpack(dest_dir)?;
+
         Ok(extracted)
     }
+}
+
+/// Read archive entries and collect extracted filenames.
+fn collect_entry_filenames(archive_path: &Path) -> Result<Vec<String>, ExtractionError> {
+    let file = std::fs::File::open(archive_path)?;
+    let decoder = zstd::Decoder::new(file)?;
+    let mut archive = tar::Archive::new(decoder);
+    let mut extracted = Vec::new();
+
+    for entry_result in archive.entries()? {
+        let entry = entry_result?;
+        let entry_path = entry.path()?.into_owned();
+        validate_entry_path(&entry_path)?;
+        if let Some(name) = entry_path.file_name() {
+            extracted.push(name.to_string_lossy().into_owned());
+        }
+    }
+
+    Ok(extracted)
 }
 
 /// Validate that a tar entry path does not escape the destination

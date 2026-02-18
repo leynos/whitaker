@@ -5,12 +5,16 @@
 //! injection for testing.
 
 use std::path::Path;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 /// The GitHub repository owner/name for URL construction.
 const GITHUB_REPO: &str = "leynos/whitaker";
 
 /// The rolling release tag name.
 const ROLLING_TAG: &str = "rolling";
+/// Network timeout for prebuilt artefact downloads.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Trait for downloading artefact files from a release.
 ///
@@ -101,7 +105,10 @@ impl ArtefactDownloader for HttpDownloader {
 
 /// Download a URL and return the body as a string.
 fn download_text(url: &str) -> Result<String, DownloadError> {
-    let response = ureq::get(url).call().map_err(|e| map_ureq_error(url, &e))?;
+    let response = http_agent()
+        .get(url)
+        .call()
+        .map_err(|e| map_ureq_error(url, &e))?;
     response
         .into_body()
         .read_to_string()
@@ -113,7 +120,10 @@ fn download_text(url: &str) -> Result<String, DownloadError> {
 
 /// Download a URL and write the body to a file.
 fn download_to_file(url: &str, dest: &Path) -> Result<(), DownloadError> {
-    let response = ureq::get(url).call().map_err(|e| map_ureq_error(url, &e))?;
+    let response = http_agent()
+        .get(url)
+        .call()
+        .map_err(|e| map_ureq_error(url, &e))?;
     let mut file = std::fs::File::create(dest)?;
     std::io::copy(&mut response.into_body().as_reader(), &mut file).map_err(|e| {
         DownloadError::HttpError {
@@ -122,6 +132,17 @@ fn download_to_file(url: &str, dest: &Path) -> Result<(), DownloadError> {
         }
     })?;
     Ok(())
+}
+
+/// Shared `ureq` agent with request timeout configuration.
+fn http_agent() -> &'static ureq::Agent {
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| {
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(DOWNLOAD_TIMEOUT))
+            .build();
+        ureq::Agent::new_with_config(config)
+    })
 }
 
 /// Map a ureq error to a [`DownloadError`].
@@ -153,5 +174,19 @@ mod tests {
     fn asset_url_for_manifest() {
         let url = HttpDownloader::asset_url("manifest-x86_64-unknown-linux-gnu.json");
         assert!(url.ends_with("manifest-x86_64-unknown-linux-gnu.json"));
+    }
+
+    #[test]
+    fn map_ureq_error_maps_404_to_not_found() {
+        let err = ureq::Error::StatusCode(404);
+        let mapped = map_ureq_error("https://example.test/manifest", &err);
+        assert!(matches!(mapped, DownloadError::NotFound { .. }));
+    }
+
+    #[test]
+    fn map_ureq_error_maps_other_status_to_http_error() {
+        let err = ureq::Error::StatusCode(500);
+        let mapped = map_ureq_error("https://example.test/manifest", &err);
+        assert!(matches!(mapped, DownloadError::HttpError { .. }));
     }
 }

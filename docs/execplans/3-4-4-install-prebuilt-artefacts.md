@@ -1,7 +1,7 @@
 # Extend installer to download and verify prebuilt artefacts (roadmap 3.4.4)
 
-This ExecPlan is a living document. The sections Constraints, Tolerances,
-Risks, Progress, Surprises & Discoveries, Decision Log, and
+This execution plan (ExecPlan) is a living document. The sections Constraints,
+Tolerances, Risks, Progress, Surprises & Discoveries, Decision Log, and
 Outcomes & Retrospective must be kept up to date as work proceeds.
 
 Status: COMPLETE
@@ -13,22 +13,23 @@ The canonical plan file is `docs/execplans/3-4-4-install-prebuilt-artefacts.md`.
 ## Purpose / big picture
 
 The Whitaker installer currently builds every Dylint lint library locally,
-which is slow. ADR-001 specifies a download-first, compile-second approach:
-before local compilation the installer should attempt to download a prebuilt
-`.tar.zst` archive from the GitHub rolling release, verify its SHA-256
-checksum against an external manifest, and extract the libraries to the
-staging directory. On any failure (network, checksum, missing artefact,
-unsupported target) it falls back to local compilation with a warning.
+which is slow. Architecture Decision Record (ADR-001) specifies a
+download-first, compile-second approach: before local compilation the installer
+should attempt to download a prebuilt `.tar.zst` archive from the GitHub
+rolling release, verify its SHA-256 checksum against an external manifest, and
+extract the libraries to the staging directory. On any failure (network,
+checksum, missing artefact, unsupported target) it falls back to local
+compilation with a warning.
 
-After this change a user on a supported platform running
-`whitaker-installer` will see the installer download prebuilt libraries in
-seconds rather than compiling for minutes. Users on unsupported platforms
-or behind firewalls will see a warning and the existing build path runs
-unchanged.
+After this change, a user on a supported platform running `whitaker-installer`
+will see the installer download prebuilt libraries in seconds rather than
+compiling for minutes. Users on unsupported platforms or behind firewalls will
+see a warning and the existing build path runs unchanged.
 
 ## Constraints
 
-- All changes confined to the `installer/` crate, CI workflow, and docs.
+- All changes confined to the `installer/` crate, continuous integration (CI)
+  workflow, and docs.
 - Public interfaces of existing modules must remain stable.
 - Must pass `make check-fmt`, `make lint`, and `make test`.
 - No file may exceed 400 lines.
@@ -36,7 +37,8 @@ unchanged.
   `TryFrom` via bare `#[derive(Deserialize)]`).
 - en-GB-oxendict spelling in all comments and documentation.
 - Caret requirements for all dependencies.
-- rstest-bdd v0.5.0 mutable world pattern for BDD tests.
+- rstest-bdd v0.5.0 mutable world pattern for behaviour-driven development
+  (BDD) tests.
 - The prebuilt attempt must never be fatal — all failures produce a
   fallback to local compilation.
 
@@ -51,33 +53,28 @@ unchanged.
 - Iterations: if tests still fail after 5 attempts at a fix, stop and
   escalate.
 - Ambiguity: if a design choice materially affects the user-visible
-  behaviour and multiple valid interpretations exist, stop and present
-  options.
+  behaviour and multiple valid interpretations exist, stop and present options.
 
 ## Risks
 
 - Risk: `manifest.json` is not currently uploaded as a release asset
-  in CI. The installer cannot download manifests without this fix.
-  Severity: high. Likelihood: certain (confirmed by reading the workflow).
-  Mitigation: include the CI fix in this plan (rename to
-  `manifest-<target>.json`, upload alongside archives).
+  in CI. The installer cannot download manifests without this fix. Severity:
+  high. Likelihood: certain (confirmed by reading the workflow). Mitigation:
+  include the CI fix in this plan (rename to `manifest-<target>.json`, upload
+  alongside archives).
 
 - Risk: `ureq` v3 may introduce API differences from v2 that require
-  adaptation.
-  Severity: low. Likelihood: low.
-  Mitigation: pin to `ureq = "3"` with caret requirement; consult docs
-  during implementation.
+  adaptation. Severity: low. Likelihood: low. Mitigation: pin to
+  `ureq = "3.2.0"` with caret requirement; consult docs during implementation.
 
 - Risk: `manifest.rs` is already ~402 lines. Adding `Deserialize` may
-  push it over the 400-line limit.
-  Severity: low. Likelihood: medium.
-  Mitigation: extract tests to `manifest_tests.rs` using the
-  `#[path = ...]` pattern already established by `packaging.rs`.
+  push it over the 400-line limit. Severity: low. Likelihood: medium.
+  Mitigation: extract tests to `manifest_tests.rs` using the `#[path = ...]`
+  pattern already established by `packaging.rs`.
 
 - Risk: `tempfile` is only a dev-dependency. The prebuilt download
-  pipeline needs it at runtime for download-then-verify.
-  Severity: low. Likelihood: certain.
-  Mitigation: promote `tempfile` to a regular dependency.
+  pipeline needs it at runtime for download-then-verify. Severity: low.
+  Likelihood: certain. Mitigation: promote `tempfile` to a regular dependency.
 
 ## Progress
 
@@ -94,8 +91,9 @@ unchanged.
 ## Surprises & discoveries
 
 - Mock types generated by `mockall::automock` under `#[cfg(test)]` are not
-  accessible from integration tests. BDD tests use hand-written stub
-  implementations of `ArtefactDownloader` and `ArtefactExtractor` instead.
+  accessible from integration tests. Behaviour-driven development (BDD) tests
+  use handwritten stub implementations of `ArtefactDownloader` and
+  `ArtefactExtractor` instead.
 
 - The `prebuilt.rs` module exceeded 400 lines with inline tests. Tests
   were extracted to `prebuilt_tests.rs` using the `#[path = ...]` pattern.
@@ -109,29 +107,24 @@ unchanged.
 ## Decision log
 
 - Decision: Use `ureq` (v3) as HTTP client rather than `reqwest`.
-  Rationale: `ureq` is synchronous with no async runtime dependency,
-  matching the installer's blocking execution model. Much smaller
-  dependency tree.
-  Date: 2026-02-15 (plan phase).
+  Rationale: `ureq` is synchronous with no async runtime dependency, matching
+  the installer's blocking execution model. Much smaller dependency tree. Date:
+  2026-02-15 (plan phase).
 
 - Decision: Use `PrebuiltResult` enum (Success/Fallback) rather than
-  `Result<T, E>` for the orchestrator return type.
-  Rationale: prebuilt failures are never fatal. An enum prevents callers
-  from accidentally propagating errors with `?`.
-  Date: 2026-02-15 (plan phase).
+  `Result<T, E>` for the orchestrator return type. Rationale: prebuilt failures
+  are never fatal. An enum prevents callers from accidentally propagating
+  errors with `?`. Date: 2026-02-15 (plan phase).
 
 - Decision: Implement custom `Deserialize` for newtypes rather than
-  deriving it.
-  Rationale: `#[derive(Deserialize)]` on `#[serde(transparent)]`
-  newtypes bypasses `TryFrom` validation, accepting invalid values.
-  Custom impls route through existing validation.
-  Date: 2026-02-15 (plan phase).
+  deriving it. Rationale: `#[derive(Deserialize)]` on `#[serde(transparent)]`
+  newtypes bypasses `TryFrom` validation, accepting invalid values. Custom
+  impls route through existing validation. Date: 2026-02-15 (plan phase).
 
 - Decision: Rename CI manifest output to `manifest-<target>.json`.
   Rationale: all 5 matrix jobs write `dist/manifest.json`; the
   `download-artifact` merge step would clobber all but the last.
-  Target-qualified names prevent this.
-  Date: 2026-02-15 (plan phase).
+  Target-qualified names prevent this. Date: 2026-02-15 (plan phase).
 
 ## Outcomes & retrospective
 
@@ -148,26 +141,26 @@ strategy from ADR-001:
 - CI workflow updated to upload target-specific manifests.
 - ADR-001 and roadmap updated.
 
-All constraints respected: no file exceeds 400 lines, no breaking changes
-to existing public APIs, en-GB-oxendict spelling throughout.
+All constraints respected: no file exceeds 400 lines, no breaking changes to
+existing public APIs, en-GB-oxendict spelling throughout.
 
 ## Context and orientation
 
 ### Crate structure
 
-The installer crate at `installer/` is a Cargo binary crate with two
-binaries: `whitaker-installer` (main CLI) and `whitaker-package-lints`
-(packaging CLI used by CI). The library root is `installer/src/lib.rs`.
+The installer crate at `installer/` is a Cargo binary crate with two binaries:
+`whitaker-installer` (main CLI) and `whitaker-package-lints` (packaging CLI
+used by CI). The library root is `installer/src/lib.rs`.
 
 ### Key modules
 
 - `installer/src/artefact/` — Domain model: `GitSha`, `ToolchainChannel`,
-  `TargetTriple`, `Sha256Digest`, `SchemaVersion`, `ArtefactName`,
-  `Manifest`, `VerificationPolicy`, `VerificationFailureAction`, plus
-  packaging functions. Currently only `Serialize` is derived (not
-  `Deserialize`).
+  `TargetTriple`, `Sha256Digest`, `SchemaVersion`, `ArtefactName`, `Manifest`,
+  `VerificationPolicy`, `VerificationFailureAction`, plus packaging functions.
+  Currently only `Serialize` is derived (not `Deserialize`).
 - `installer/src/builder.rs` — `CrateBuilder` trait (mockable with
-  `mockall`) and `Builder` impl. Established pattern for trait-based DI.
+  `mockall`) and `Builder` impl. Established pattern for trait-based dependency
+  injection (DI).
 - `installer/src/pipeline.rs` — `PipelineContext`, `perform_build()`,
   `stage_libraries()`.
 - `installer/src/main.rs` — `run_install()` orchestration (lines 55-101):
@@ -180,13 +173,13 @@ binaries: `whitaker-installer` (main CLI) and `whitaker-package-lints`
 
 `.github/workflows/rolling-release.yml` builds lint crates for a 5-target
 matrix, packages each as `.tar.zst` using `whitaker-package-lints`, and
-publishes to a `rolling` GitHub Release tag. Currently only `.tar.zst`
-files are uploaded; `manifest.json` sidecar files are produced but not
-uploaded.
+publishes to a `rolling` GitHub Release tag. Currently only `.tar.zst` files
+are uploaded; `manifest.json` sidecar files are produced but not uploaded.
 
 ### Testing patterns
 
-BDD tests use rstest-bdd v0.5.0 mutable world pattern:
+Behaviour-driven development (BDD) tests use rstest-bdd v0.5.0 mutable world
+pattern:
 
 - World struct with `#[derive(Default)]`
 - `#[fixture] fn world()` returning the default
@@ -195,7 +188,7 @@ BDD tests use rstest-bdd v0.5.0 mutable world pattern:
 - Scenario bindings via `#[scenario(path = ..., name = ...)]`
 - Feature files in `installer/tests/features/`
 
-Unit tests use rstest fixtures, `#[case]` parameterisation, and mockall.
+Unit tests use rstest fixtures, `#[case]` parameterization, and mockall.
 
 ### Existing reusable code
 
@@ -218,8 +211,7 @@ installer has no manifest to download.
 Files to modify:
 
 - `installer/src/bin/package_lints.rs` (~line 133): change output
-  manifest filename from `manifest.json` to
-  `manifest-<target>.json`.
+  manifest filename from `manifest.json` to `manifest-<target>.json`.
 - `.github/workflows/rolling-release.yml`:
   - Line 106: change upload glob from `dist/*.tar.zst` to `dist/*`
     (or add `dist/*.json` as a second path).
@@ -228,13 +220,12 @@ Files to modify:
 
 ### Phase 1: Add `serde::Deserialize` to artefact newtypes
 
-Add custom `Deserialize` implementations that route through existing
-`TryFrom` validation for: `GitSha`, `ToolchainChannel`, `TargetTriple`,
-`Sha256Digest`, `SchemaVersion`.
+Add custom `Deserialize` implementations that route through existing `TryFrom`
+validation for: `GitSha`, `ToolchainChannel`, `TargetTriple`, `Sha256Digest`,
+`SchemaVersion`.
 
-Add `#[derive(Deserialize)]` to compound types that compose validated
-newtypes: `Manifest`, `ManifestProvenance`, `ManifestContent`,
-`GeneratedAt`.
+Add `#[derive(Deserialize)]` to compound types that compose validated newtypes:
+`Manifest`, `ManifestProvenance`, `ManifestContent`, `GeneratedAt`.
 
 Pattern for each newtype (example `GitSha`):
 
@@ -253,8 +244,8 @@ For `SchemaVersion`, deserialize as `u32` then `TryFrom<u32>`.
 Add round-trip unit tests (serialize then deserialize) and rejection tests
 (deserialize invalid values) for each type.
 
-If `manifest.rs` exceeds 400 lines, extract its `#[cfg(test)] mod tests`
-to `manifest_tests.rs` using the `#[path = ...]` pattern.
+If `manifest.rs` exceeds 400 lines, extract its `#[cfg(test)] mod tests` to
+`manifest_tests.rs` using the `#[path = ...]` pattern.
 
 Files to modify:
 
@@ -279,8 +270,8 @@ Create `installer/src/artefact/manifest_parser.rs` (~60 lines).
 
 Register in `installer/src/artefact/mod.rs`.
 
-Unit tests: valid JSON, invalid JSON, invalid field values (schema version
-99, bad target triple, bad SHA digest, missing fields).
+Unit tests: valid JSON, invalid JSON, invalid field values (schema version 99,
+bad target triple, bad SHA digest, missing fields).
 
 ### Phase 3: Add extraction module
 
@@ -307,20 +298,20 @@ Create `installer/src/artefact/extraction.rs` (~120 lines).
 
     pub struct ZstdExtractor;
 
-Implementation: open file → zstd decode → tar unpack. Validate each
-entry path has no `..` components and is not absolute (zip-slip
-prevention). Collect and return extracted filenames.
+Implementation: open file → zstd decode → tar unpack. Validate each entry path
+has no `..` components and is not absolute (zip-slip prevention). Collect and
+return extracted filenames.
 
 Register in `installer/src/artefact/mod.rs`.
 
-Unit tests: extract a real temp `.tar.zst`, path traversal rejection,
-empty archive.
+Unit tests: extract a real temp `.tar.zst`, path traversal rejection, empty
+archive.
 
 ### Phase 4: Add download module
 
 Add dependencies:
 
-- Workspace `Cargo.toml`: `ureq = "3"`
+- Workspace `Cargo.toml`: `ureq = "3.2.0"`
 - `installer/Cargo.toml` dependencies: `ureq = { workspace = true }`
 - `installer/Cargo.toml` dependencies: promote `tempfile` from
   dev-dependencies to regular dependencies.
@@ -356,8 +347,8 @@ Create `installer/src/artefact/download.rs` (~150 lines).
 `HttpDownloader` constructs URLs as:
 `https://github.com/{GITHUB_REPO}/releases/download/{ROLLING_TAG}/{filename}`
 
-For manifests the filename is `manifest-{target}.json`.
-For archives the filename is the `ArtefactName::filename()` string.
+For manifests the filename is `manifest-{target}.json`. For archives the
+filename is the `ArtefactName::filename()` string.
 
 Register in `installer/src/artefact/mod.rs`.
 
@@ -400,9 +391,8 @@ Internal pipeline:
 3. Derive archive filename from manifest fields.
 4. Download archive to a `tempfile::tempdir()`.
 5. If `VerificationPolicy::default().require_checksum()`, compute
-   SHA-256 of downloaded archive using
-   `artefact::packaging::compute_sha256()` and compare against
-   `manifest.sha256()`.
+   SHA-256 of downloaded archive using `artefact::packaging::compute_sha256()`
+   and compare against `manifest.sha256()`.
 6. Extract archive to `staging_base/<toolchain>/release/` using the
    extractor.
 7. Return `PrebuiltResult::Success` with the staging path.
@@ -410,14 +400,14 @@ Internal pipeline:
 On any error, log a warning (unless quiet) and return
 `PrebuiltResult::Fallback { reason }`.
 
-Internal error type `PrebuiltError` (not exported) with variants:
-`Download`, `ManifestParse`, `ChecksumMismatch`, `Extraction`, `Other`.
+Internal error type `PrebuiltError` (not exported) with variants: `Download`,
+`ManifestParse`, `ChecksumMismatch`, `Extraction`, `Other`.
 
 Register in `installer/src/lib.rs`.
 
-Unit tests with `MockArtefactDownloader` + `MockArtefactExtractor`:
-happy path, download failure, 404, checksum mismatch, extraction
-failure, toolchain mismatch.
+Unit tests with `MockArtefactDownloader` + `MockArtefactExtractor`: happy path,
+download failure, 404, checksum mismatch, extraction failure, toolchain
+mismatch.
 
 ### Phase 6: CLI flag + modify `run_install()` flow
 
@@ -435,8 +425,8 @@ Add host target detection in `installer/src/main.rs`:
         // Run `rustc -vV`, parse `host: <triple>` line
     }
 
-Modify `run_install()` to insert prebuilt attempt between step 3
-(resolve crates/toolchain) and step 4 (build):
+Modify `run_install()` to insert prebuilt attempt between step 3 (resolve
+crates/toolchain) and step 4 (build):
 
     // Step 3.5: Attempt prebuilt download
     if !args.build_only {
@@ -450,7 +440,7 @@ Modify `run_install()` to insert prebuilt attempt between step 3
         match attempt_prebuilt(&prebuilt_config, stderr) {
             PrebuiltResult::Success { staging_path } => {
                 // Skip build+stage, jump to wrapper generation
-                if args.skip_wrapper { ... } else { ... }
+                if args.skip_wrapper { … } else { … }
                 return Ok(());
             }
             PrebuiltResult::Fallback { .. } => {
@@ -548,10 +538,9 @@ Expected: all three commands exit 0.
 Quality criteria:
 
 - Tests: `make test` passes. New unit tests cover round-trip
-  serialization, manifest parsing (happy + unhappy), extraction (happy +
-  path traversal + empty), prebuilt orchestration (happy + 5 failure
-  modes), CLI flag parsing. New BDD scenarios in
-  `prebuilt_download.feature` all pass.
+  serialization, manifest parsing (happy + unhappy), extraction (happy + path
+  traversal + empty), prebuilt orchestration (happy + 5 failure modes), CLI
+  flag parsing. New BDD scenarios in `prebuilt_download.feature` all pass.
 - Lint: `make lint` passes (clippy workspace, all targets, all features,
   `-D warnings`).
 - Format: `make check-fmt` passes.
@@ -565,9 +554,9 @@ Quality method:
 
 ## Idempotence and recovery
 
-All phases produce additive changes. If a phase fails partway through,
-fix the issue and re-run the quality gates. The `tempfile` crate ensures
-downloaded archives are cleaned up on failure.
+All phases produce additive changes. If a phase fails partway through, fix the
+issue and re-run the quality gates. The `tempfile` crate ensures downloaded
+archives are cleaned up on failure.
 
 ## Artifacts and notes
 
@@ -639,5 +628,5 @@ In `installer/src/prebuilt.rs`:
 
 ### New dependency
 
-    ureq = "3"  (workspace, caret requirement)
+    ureq = "3.2.0"  (workspace, caret requirement)
     tempfile promoted from dev-dep to regular dep in installer crate.

@@ -19,6 +19,7 @@ use crate::artefact::naming::ArtefactName;
 use crate::artefact::packaging::compute_sha256;
 use crate::artefact::packaging_error::PackagingError;
 use crate::artefact::verification::VerificationPolicy;
+use crate::builder::{library_extension, library_prefix};
 use crate::output::write_stderr_line;
 
 /// The outcome of a prebuilt download attempt.
@@ -67,6 +68,9 @@ enum PrebuiltError {
 
     #[error("toolchain mismatch: manifest has {manifest}, expected {expected}")]
     ToolchainMismatch { manifest: String, expected: String },
+
+    #[error("target mismatch: manifest has {manifest}, expected {expected}")]
+    TargetMismatch { manifest: String, expected: String },
 
     #[error("checksum mismatch: manifest={expected}, actual={actual}")]
     ChecksumMismatch { expected: String, actual: String },
@@ -133,6 +137,7 @@ fn run_pipeline(
     // Step 2: Parse and validate manifest.
     let manifest = parse_manifest(&manifest_json)?;
     validate_toolchain(&manifest, config.toolchain)?;
+    validate_target(&manifest, config.target)?;
 
     // Step 3: Derive archive filename and download.
     let archive_filename = derive_archive_filename(&manifest);
@@ -159,7 +164,8 @@ fn run_pipeline(
     if !config.quiet {
         write_stderr_line(stderr, "Extracting prebuilt libraries...");
     }
-    extractor.extract(&archive_path, staging_path.as_std_path())?;
+    let extracted = extractor.extract(&archive_path, staging_path.as_std_path())?;
+    apply_staging_filenames(&extracted, &staging_path, config.toolchain)?;
 
     if !config.quiet {
         write_stderr_line(stderr, "Prebuilt libraries installed successfully.");
@@ -178,6 +184,68 @@ fn validate_toolchain(manifest: &Manifest, expected: &str) -> Result<(), Prebuil
         });
     }
     Ok(())
+}
+
+/// Validate that the manifest target matches the detected host target.
+fn validate_target(manifest: &Manifest, expected: &str) -> Result<(), PrebuiltError> {
+    if manifest.target().as_str() != expected {
+        return Err(PrebuiltError::TargetMismatch {
+            manifest: manifest.target().to_string(),
+            expected: expected.to_owned(),
+        });
+    }
+    Ok(())
+}
+
+/// Rename extracted files into the staged `lib<crate>@<toolchain>.<ext>` format.
+fn apply_staging_filenames(
+    extracted_files: &[String],
+    staging_path: &Utf8Path,
+    toolchain: &str,
+) -> Result<(), PrebuiltError> {
+    for extracted in extracted_files {
+        let staged = staged_filename(extracted, toolchain);
+        if staged == *extracted {
+            continue;
+        }
+
+        let source = staging_path.join(extracted);
+        let dest = staging_path.join(staged);
+        std::fs::rename(source.as_std_path(), dest.as_std_path())
+            .map_err(|e| PrebuiltError::Download(DownloadError::Io(e)))?;
+    }
+    Ok(())
+}
+
+/// Convert a plain library filename to the staged naming convention.
+fn staged_filename(filename: &str, toolchain: &str) -> String {
+    if is_staged_filename(filename) {
+        return filename.to_owned();
+    }
+
+    let prefix = library_prefix();
+    let extension = library_extension();
+    let Some(without_prefix) = filename.strip_prefix(prefix) else {
+        return filename.to_owned();
+    };
+    let Some(crate_name) = without_prefix.strip_suffix(extension) else {
+        return filename.to_owned();
+    };
+    if crate_name.is_empty() {
+        return filename.to_owned();
+    }
+    format!("{prefix}{crate_name}@{toolchain}{extension}")
+}
+
+/// Return true when `filename` already follows the staged naming convention.
+fn is_staged_filename(filename: &str) -> bool {
+    let prefix = library_prefix();
+    let extension = library_extension();
+    filename
+        .strip_prefix(prefix)
+        .and_then(|s| s.strip_suffix(extension))
+        .and_then(|base| base.split_once('@'))
+        .is_some_and(|(crate_name, toolchain)| !crate_name.is_empty() && !toolchain.is_empty())
 }
 
 /// Derive the expected archive filename from manifest fields.

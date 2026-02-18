@@ -1,13 +1,17 @@
 //! BDD tests for the prebuilt artefact download and verification workflow.
 
 use camino::Utf8PathBuf;
+use clap::Parser;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::path::Path;
 use std::sync::Mutex;
 use whitaker_installer::artefact::download::{ArtefactDownloader, DownloadError};
 use whitaker_installer::artefact::extraction::{ArtefactExtractor, ExtractionError};
+use whitaker_installer::cli::{Cli, InstallArgs};
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt_with};
+use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
+use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -16,28 +20,6 @@ use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebu
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 const DEFAULT_TOOLCHAIN: &str = "nightly-2025-09-18";
-
-/// Compute the SHA-256 hex digest of a byte slice.
-fn sha256_of(data: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(data))
-}
-
-/// Build manifest JSON with configurable toolchain and SHA-256.
-fn manifest_json(toolchain: &str, sha256: &str) -> String {
-    format!(
-        concat!(
-            r#"{{"git_sha":"abc1234","schema_version":1,"#,
-            r#""toolchain":"{toolchain}","#,
-            r#""target":"x86_64-unknown-linux-gnu","#,
-            r#""generated_at":"2026-02-03T00:00:00Z","#,
-            r#""files":["lib.so"],"#,
-            r#""sha256":"{sha256}"}}"#,
-        ),
-        toolchain = toolchain,
-        sha256 = sha256,
-    )
-}
 
 /// How the stub downloader should respond to `download_manifest`.
 enum ManifestBehaviour {
@@ -116,9 +98,11 @@ impl ArtefactExtractor for StubExtractor {
     fn extract(
         &self,
         _archive_path: &Path,
-        _dest_dir: &Path,
+        dest_dir: &Path,
     ) -> Result<Vec<String>, ExtractionError> {
-        Ok(vec!["lib.so".to_owned()])
+        let source_name = "libwhitaker_suite.so".to_owned();
+        std::fs::write(dest_dir.join(&source_name), b"fake").map_err(ExtractionError::Io)?;
+        Ok(vec![source_name])
     }
 }
 
@@ -131,11 +115,12 @@ struct PrebuiltWorld {
     _temp_dir: Option<tempfile::TempDir>,
     staging_base: Option<Utf8PathBuf>,
     expected_toolchain: Option<String>,
+    requested_target: Option<String>,
     manifest_behaviour: Option<ManifestBehaviour>,
     archive_behaviour: Option<ArchiveBehaviour>,
     result: Option<PrebuiltResult>,
-    build_only: bool,
-    prebuilt_attempted: bool,
+    install_args: Option<InstallArgs>,
+    should_attempt_prebuilt: Option<bool>,
 }
 
 #[fixture]
@@ -146,6 +131,7 @@ fn world() -> PrebuiltWorld {
         _temp_dir: Some(temp_dir),
         staging_base: Some(staging_base),
         expected_toolchain: Some(DEFAULT_TOOLCHAIN.to_owned()),
+        requested_target: Some(DEFAULT_TARGET.to_owned()),
         ..Default::default()
     }
 }
@@ -156,10 +142,11 @@ fn world() -> PrebuiltWorld {
 
 #[given("a valid manifest for target \"{target}\"")]
 fn given_valid_manifest(world: &mut PrebuiltWorld, target: String) {
-    let _ = target;
-    let sha = sha256_of(FAKE_ARCHIVE);
-    world.manifest_behaviour = Some(ManifestBehaviour::Ok(manifest_json(
+    let sha = sha256_hex(FAKE_ARCHIVE);
+    world.requested_target = Some(target.clone());
+    world.manifest_behaviour = Some(ManifestBehaviour::Ok(prebuilt_manifest_json(
         DEFAULT_TOOLCHAIN,
+        &target,
         &sha,
     )));
 }
@@ -172,8 +159,13 @@ fn given_correct_checksum(world: &mut PrebuiltWorld) {
 #[given("an archive with mismatched checksum")]
 fn given_wrong_checksum(world: &mut PrebuiltWorld) {
     let sha = "a".repeat(64);
-    world.manifest_behaviour = Some(ManifestBehaviour::Ok(manifest_json(
+    let target = world
+        .requested_target
+        .clone()
+        .unwrap_or_else(|| DEFAULT_TARGET.to_owned());
+    world.manifest_behaviour = Some(ManifestBehaviour::Ok(prebuilt_manifest_json(
         DEFAULT_TOOLCHAIN,
+        &target,
         &sha,
     )));
     world.archive_behaviour = Some(ArchiveBehaviour::WrongChecksum);
@@ -196,8 +188,14 @@ fn given_not_found(world: &mut PrebuiltWorld) {
 
 #[given("a valid manifest with toolchain \"{toolchain}\"")]
 fn given_manifest_with_toolchain(world: &mut PrebuiltWorld, toolchain: String) {
-    let sha = sha256_of(FAKE_ARCHIVE);
-    world.manifest_behaviour = Some(ManifestBehaviour::Ok(manifest_json(&toolchain, &sha)));
+    let target = world
+        .requested_target
+        .clone()
+        .unwrap_or_else(|| DEFAULT_TARGET.to_owned());
+    let sha = sha256_hex(FAKE_ARCHIVE);
+    world.manifest_behaviour = Some(ManifestBehaviour::Ok(prebuilt_manifest_json(
+        &toolchain, &target, &sha,
+    )));
 }
 
 #[given("the expected toolchain is \"{toolchain}\"")]
@@ -207,7 +205,8 @@ fn given_expected_toolchain(world: &mut PrebuiltWorld, toolchain: String) {
 
 #[given("the build-only flag is set")]
 fn given_build_only(world: &mut PrebuiltWorld) {
-    world.build_only = true;
+    let cli = Cli::parse_from(["whitaker-installer", "--build-only"]);
+    world.install_args = Some(cli.install.clone());
 }
 
 // ---------------------------------------------------------------------------
@@ -216,15 +215,14 @@ fn given_build_only(world: &mut PrebuiltWorld) {
 
 #[when("prebuilt download is attempted")]
 fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
-    world.prebuilt_attempted = true;
-
     let staging_base = world.staging_base.as_ref().expect("staging_base set");
     let toolchain = world
         .expected_toolchain
         .as_deref()
         .unwrap_or(DEFAULT_TOOLCHAIN);
+    let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
     let config = PrebuiltConfig {
-        target: DEFAULT_TARGET,
+        target,
         toolchain,
         staging_base,
         quiet: true,
@@ -249,9 +247,13 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
 
 #[when("the install configuration is checked")]
 fn when_install_config_checked(world: &mut PrebuiltWorld) {
-    if world.build_only {
-        world.prebuilt_attempted = false;
-    }
+    let install_args = world.install_args.clone().unwrap_or_default();
+    let options = CrateResolutionOptions {
+        individual_lints: install_args.individual_lints,
+        experimental: install_args.experimental,
+    };
+    let requested_crates = resolve_crates(&[], &options);
+    world.should_attempt_prebuilt = Some(install_args.should_attempt_prebuilt(&requested_crates));
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +314,7 @@ fn then_fallback_reason_mentions(world: &mut PrebuiltWorld, keyword: String) {
 #[then("no prebuilt download is attempted")]
 fn then_no_prebuilt_attempted(world: &mut PrebuiltWorld) {
     assert!(
-        !world.prebuilt_attempted,
+        world.should_attempt_prebuilt == Some(false),
         "expected no prebuilt download attempt when --build-only is set"
     );
 }

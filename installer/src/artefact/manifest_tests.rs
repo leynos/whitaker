@@ -116,9 +116,9 @@ fn serde_round_trip(sample_manifest: Manifest) {
     assert_eq!(sample_manifest, back);
 }
 
-#[test]
-fn deserialize_rejects_invalid_target() {
-    let json = r#"{
+#[rstest]
+#[case::invalid_target(
+    r#"{
         "git_sha": "abc1234",
         "schema_version": 1,
         "toolchain": "nightly-2025-09-18",
@@ -126,14 +126,10 @@ fn deserialize_rejects_invalid_target() {
         "generated_at": "2026-02-03T00:00:00Z",
         "files": ["lib.so"],
         "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    }"#;
-    let result: std::result::Result<Manifest, _> = serde_json::from_str(json);
-    assert!(result.is_err());
-}
-
-#[test]
-fn deserialize_rejects_missing_fields() {
-    let json = r#"{"git_sha": "abc1234"}"#;
+    }"#
+)]
+#[case::missing_fields(r#"{"git_sha": "abc1234"}"#)]
+fn deserialize_rejects_invalid_payloads(#[case] json: &str) {
     let result: std::result::Result<Manifest, _> = serde_json::from_str(json);
     assert!(result.is_err());
 }

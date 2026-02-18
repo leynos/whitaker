@@ -89,6 +89,31 @@ pub fn failure_output(stderr: &str) -> Output {
     }
 }
 
+/// Compute the SHA-256 hex digest of a byte slice for test fixtures.
+#[cfg(any(test, feature = "test-support"))]
+pub fn sha256_hex(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(data))
+}
+
+/// Build prebuilt manifest JSON for tests with configurable fields.
+#[cfg(any(test, feature = "test-support"))]
+pub fn prebuilt_manifest_json(toolchain: &str, target: &str, sha256: &str) -> String {
+    format!(
+        concat!(
+            r#"{{"git_sha":"abc1234","schema_version":1,"#,
+            r#""toolchain":"{toolchain}","#,
+            r#""target":"{target}","#,
+            r#""generated_at":"2026-02-03T00:00:00Z","#,
+            r#""files":["libwhitaker_suite.so"],"#,
+            r#""sha256":"{sha256}"}}"#,
+        ),
+        toolchain = toolchain,
+        target = target,
+        sha256 = sha256,
+    )
+}
+
 /// Represents an expected command invocation for testing.
 ///
 /// # Examples

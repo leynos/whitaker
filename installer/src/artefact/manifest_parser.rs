@@ -96,19 +96,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::bad_sha(r#""git_sha":"AB""#)]
-    #[case::bad_digest(r#""sha256":"short""#)]
-    fn rejects_invalid_field_values(#[case] replacement: &str) {
-        let key = replacement.split(':').next().expect("has colon");
-        let json = valid_manifest_json();
-        // Find the key and replace the entire key:value pair
-        let key_trimmed = key.trim_matches('"');
-        let json = if key_trimmed == "git_sha" {
-            json.replace(r#""git_sha":"abc1234""#, replacement)
-        } else {
-            let digest = "a".repeat(64);
-            json.replace(&format!("\"sha256\":\"{digest}\""), replacement)
-        };
+    #[case::bad_sha(r#""git_sha":"abc1234""#, r#""git_sha":"AB""#)]
+    #[case::bad_digest(
+        r#""sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#,
+        r#""sha256":"short""#
+    )]
+    fn rejects_invalid_field_values(#[case] from: &str, #[case] to: &str) {
+        let json = valid_manifest_json().replace(from, to);
         let result = parse_manifest(&json);
         assert!(result.is_err());
     }

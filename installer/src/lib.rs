@@ -18,12 +18,12 @@
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
 //! - [`pipeline`] - Build and staging pipeline orchestration
+//! - [`prebuilt`] - Prebuilt artefact download and verification orchestrator
 //! - [`resolution`] - Crate resolution and validation
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
 //! - [`toolchain`] - Rust toolchain detection and validation
 //! - [`workspace`] - Workspace detection and path resolution
-//! - [`prebuilt`] - Prebuilt artefact download and verification orchestrator
 //! - [`wrapper`] - Wrapper script generation
 
 pub mod artefact;

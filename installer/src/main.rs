@@ -76,8 +76,8 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
-    // Step 3.5: Attempt prebuilt download (unless --build-only)
-    if !args.build_only {
+    // Step 3.5: Attempt prebuilt download when install options allow it.
+    if args.should_attempt_prebuilt(&crates) {
         let host_target = detect_host_target()?;
         let prebuilt_config = PrebuiltConfig {
             target: &host_target,
@@ -236,6 +236,16 @@ fn detect_host_target() -> Result<String> {
         .map_err(|e| InstallerError::ToolchainDetection {
             reason: format!("failed to run `rustc -vV`: {e}"),
         })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(InstallerError::ToolchainDetection {
+            reason: format!(
+                "`rustc -vV` exited with {}: {}",
+                output.status,
+                stderr.trim()
+            ),
+        });
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {

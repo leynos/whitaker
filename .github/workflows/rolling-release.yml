@@ -105,7 +105,7 @@ jobs:
           name: lints-${{ matrix.target }}
           path: |
             dist/*.tar.zst
-            dist/*.json
+            dist/manifest-*.json
           retention-days: 1
 
   publish:
@@ -142,6 +142,7 @@ jobs:
             --notes "Prebuilt lint libraries from commit ${FULL_SHA}." \
             --prerelease \
             --latest=false \
-            dist/*
+            dist/*.tar.zst \
+            dist/manifest-*.json
         env:
           GH_TOKEN: ${{ github.token }}
