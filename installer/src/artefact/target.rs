@@ -111,6 +111,16 @@ impl TargetTriple {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for TargetTriple {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::try_from(s).map_err(serde::de::Error::custom)
+    }
+}
+
 impl TryFrom<&str> for TargetTriple {
     type Error = ArtefactError;
 
@@ -211,5 +221,20 @@ mod tests {
         let t = TargetTriple::try_from(triple).expect("valid");
         assert_eq!(t.library_extension(), ext);
         assert_eq!(t.library_prefix(), prefix);
+    }
+
+    #[test]
+    fn serde_round_trip() {
+        let t = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid");
+        let json = serde_json::to_string(&t).expect("serialize");
+        let back: TargetTriple = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(t, back);
+    }
+
+    #[test]
+    fn deserialize_rejects_unsupported() {
+        let json = r#""wasm32-unknown-unknown""#;
+        let result: std::result::Result<TargetTriple, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }

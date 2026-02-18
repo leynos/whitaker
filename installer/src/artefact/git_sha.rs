@@ -91,6 +91,16 @@ impl fmt::Display for GitSha {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for GitSha {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::try_from(s).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Validate that `value` is a well-formed git SHA.
 fn validate_git_sha(value: &str) -> Result<()> {
     if value.is_empty() {
@@ -190,5 +200,20 @@ mod tests {
     fn from_owned_string_accepts_valid() {
         let sha = GitSha::try_from(String::from("abc1234"));
         assert!(sha.is_ok());
+    }
+
+    #[test]
+    fn serde_round_trip() {
+        let sha = GitSha::try_from("abc1234").expect("valid");
+        let json = serde_json::to_string(&sha).expect("serialize");
+        let back: GitSha = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(sha, back);
+    }
+
+    #[test]
+    fn deserialize_rejects_invalid() {
+        let json = r#""AB""#; // too short + uppercase
+        let result: std::result::Result<GitSha, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }

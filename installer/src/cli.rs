@@ -4,6 +4,8 @@
 //! from the main entrypoint to keep the binary small and focused on
 //! orchestration.
 
+use crate::crate_name::CrateName;
+use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 
@@ -124,6 +126,10 @@ pub struct InstallArgs {
     /// Do not update existing repository clone.
     #[arg(long)]
     pub no_update: bool,
+
+    /// Skip prebuilt artefact download and build from source.
+    #[arg(long = "build-only")]
+    pub is_build_only: bool,
 }
 
 /// Arguments for the list command.
@@ -136,6 +142,42 @@ pub struct ListArgs {
     /// Staging directory to scan [default: platform-specific].
     #[arg(short, long, value_name = "DIR")]
     pub target_dir: Option<Utf8PathBuf>,
+}
+
+impl InstallArgs {
+    /// Return true when installer settings permit a prebuilt download attempt.
+    ///
+    /// Prebuilt artefacts are skipped when:
+    /// - `--build-only` is set, or
+    /// - experimental lint behaviour is requested, either via
+    ///   `--experimental` (suite build) or explicit experimental crates.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::cli::InstallArgs;
+    /// use whitaker_installer::crate_name::CrateName;
+    ///
+    /// let requested = vec![CrateName::from("whitaker_suite")];
+    ///
+    /// let default_args = InstallArgs::default();
+    /// assert!(default_args.should_attempt_prebuilt(&requested));
+    ///
+    /// let build_only_args = InstallArgs {
+    ///     is_build_only: true,
+    ///     ..InstallArgs::default()
+    /// };
+    /// assert!(!build_only_args.should_attempt_prebuilt(&requested));
+    /// ```
+    #[must_use]
+    pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
+        if self.is_build_only || self.experimental {
+            return false;
+        }
+        !requested_crates
+            .iter()
+            .any(|crate_name| EXPERIMENTAL_LINT_CRATES.contains(&crate_name.as_str()))
+    }
 }
 
 impl Default for InstallArgs {
@@ -168,6 +210,7 @@ impl Default for InstallArgs {
             skip_deps: false,
             skip_wrapper: false,
             no_update: false,
+            is_build_only: false,
         }
     }
 }
@@ -232,6 +275,7 @@ mod tests {
         assert!(!cli.install.skip_deps);
         assert!(!cli.install.skip_wrapper);
         assert!(!cli.install.no_update);
+        assert!(!cli.install.is_build_only);
     }
 
     #[test]
@@ -305,6 +349,40 @@ mod tests {
         }
     }
 
+    #[test]
+    fn should_attempt_prebuilt_true_for_default_configuration() {
+        let args = InstallArgs::default();
+        let requested = vec![CrateName::from("whitaker_suite")];
+        assert!(args.should_attempt_prebuilt(&requested));
+    }
+
+    #[test]
+    fn should_attempt_prebuilt_false_when_build_only() {
+        let args = InstallArgs {
+            is_build_only: true,
+            ..InstallArgs::default()
+        };
+        let requested = vec![CrateName::from("whitaker_suite")];
+        assert!(!args.should_attempt_prebuilt(&requested));
+    }
+
+    #[test]
+    fn should_attempt_prebuilt_false_when_experimental_flag_enabled() {
+        let args = InstallArgs {
+            experimental: true,
+            ..InstallArgs::default()
+        };
+        let requested = vec![CrateName::from("whitaker_suite")];
+        assert!(!args.should_attempt_prebuilt(&requested));
+    }
+
+    #[test]
+    fn should_attempt_prebuilt_false_for_experimental_crate_requests() {
+        let args = InstallArgs::default();
+        let requested = vec![CrateName::from("bumpy_road_function")];
+        assert!(!args.should_attempt_prebuilt(&requested));
+    }
+
     /// Parameterised tests for boolean CLI flags (backwards compatibility).
     #[rstest]
     #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.individual_lints)]
@@ -315,6 +393,7 @@ mod tests {
     #[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip_deps)]
     #[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip_wrapper)]
     #[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.no_update)]
+    #[case::build_only(&["whitaker-installer", "--build-only"], |cli: &Cli| cli.install.is_build_only)]
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));

@@ -18,6 +18,7 @@
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
 //! - [`pipeline`] - Build and staging pipeline orchestration
+//! - [`prebuilt`] - Prebuilt artefact download and verification orchestrator
 //! - [`resolution`] - Crate resolution and validation
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
@@ -37,6 +38,7 @@ pub mod list;
 pub mod list_output;
 pub mod output;
 pub mod pipeline;
+pub mod prebuilt;
 pub mod resolution;
 pub mod scanner;
 pub mod stager;

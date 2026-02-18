@@ -20,7 +20,8 @@ use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 use whitaker_installer::resolution::{LINT_CRATES, SUITE_CRATE};
 
 /// Package prebuilt lint libraries into `.tar.zst` archives following
-/// the ADR-001 naming convention and write a sidecar `manifest.json`.
+/// the ADR-001 naming convention and write a sidecar
+/// `manifest-<target>.json`.
 #[derive(Parser, Debug)]
 #[command(name = "whitaker-package-lints", version)]
 #[command(about = "Package prebuilt lint libraries into .tar.zst archives")]
@@ -130,7 +131,8 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
     let output = package_artefact(params)?;
     let manifest_json = generate_manifest_json(&output.manifest)?;
     let out_dir = output.archive_path.parent().expect("archive has parent");
-    let manifest_path = out_dir.join("manifest.json");
+    let manifest_filename = format!("manifest-{}.json", output.manifest.target());
+    let manifest_path = out_dir.join(manifest_filename);
     std::fs::write(&manifest_path, &manifest_json).map_err(PackagingError::from)?;
     println!("Created {}", output.archive_path.display());
     println!("Manifest {}", manifest_path.display());

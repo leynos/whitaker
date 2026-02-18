@@ -103,6 +103,16 @@ impl AsRef<str> for ToolchainChannel {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for ToolchainChannel {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::try_from(s).map_err(serde::de::Error::custom)
+    }
+}
+
 impl fmt::Display for ToolchainChannel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -147,5 +157,20 @@ mod tests {
     fn from_owned_string_accepts_valid() {
         let ch = ToolchainChannel::try_from(String::from("nightly-2025-09-18"));
         assert!(ch.is_ok());
+    }
+
+    #[test]
+    fn serde_round_trip() {
+        let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("valid");
+        let json = serde_json::to_string(&ch).expect("serialize");
+        let back: ToolchainChannel = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(ch, back);
+    }
+
+    #[test]
+    fn deserialize_rejects_invalid() {
+        let json = r#""""#; // empty string
+        let result: std::result::Result<ToolchainChannel, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }
