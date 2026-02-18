@@ -65,7 +65,7 @@ platform-specific directory:
 - `-t, --target-dir DIR` — Staging directory for built libraries
 - `-l, --lint NAME` — Build specific lint (repeatable)
 - `--individual-lints` — Build individual crates instead of the suite
-- `--experimental` — Include experimental lints in the build
+- `--experimental` — Include experimental lints in the build (none currently)
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
 - `--dry-run` — Show what would be done without running
@@ -106,6 +106,8 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
+At present, all shipped Whitaker lints are standard.
+
 ### Adding a new lint
 
 New lints should typically start as experimental. To add a lint:
@@ -113,7 +115,7 @@ New lints should typically start as experimental. To add a lint:
 1. Create the lint crate under `crates/` (see
    [Creating a New Lint](#creating-a-new-lint))
 2. Add the crate name to `EXPERIMENTAL_LINT_CRATES` in
-   `installer/src/lint_crates.rs`
+   `installer/src/resolution.rs`
 3. Add a feature flag for the lint in `suite/Cargo.toml` under `[features]`
 
 ### Promoting to standard
@@ -127,7 +129,8 @@ Once an experimental lint has been:
 It can be promoted to standard by:
 
 1. Moving the crate name from `EXPERIMENTAL_LINT_CRATES` to `LINT_CRATES`
-2. Adding the lint to the suite's default features in `suite/Cargo.toml`
+2. Adding the lint dependency to the suite `dylint-driver` feature in
+   `suite/Cargo.toml`
 3. Updating documentation to reflect the change
 
 ## Creating a New Lint

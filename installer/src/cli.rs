@@ -26,6 +26,7 @@ use clap::{Parser, Subcommand};
 ))]
 #[command(after_help = concat!(
     "DEFAULT LINTS:\n",
+    "  bumpy_road_function           Detect multiple complexity clusters in functions\n",
     "  conditional_max_n_branches    Limit boolean branches in conditionals\n",
     "  function_attrs_follow_docs    Doc comments must precede other attributes\n",
     "  module_max_lines              Warn when modules exceed line threshold\n",
@@ -34,7 +35,7 @@ use clap::{Parser, Subcommand};
     "  no_std_fs_operations          Enforce capability-based filesystem access\n",
     "  no_unwrap_or_else_panic       Deny panicking unwrap_or_else fallbacks\n\n",
     "EXPERIMENTAL LINTS (requires --experimental):\n",
-    "  bumpy_road_function           Detect high nesting depth in functions\n\n",
+    "  (none currently)\n\n",
     "EXAMPLES:\n",
     "  Build and stage the aggregated suite:\n",
     "    $ whitaker-installer\n\n",
@@ -85,7 +86,7 @@ pub struct InstallArgs {
     #[arg(long, conflicts_with = "lint")]
     pub individual_lints: bool,
 
-    /// Include experimental lints (e.g., bumpy_road_function).
+    /// Include experimental lints when available.
     #[arg(long)]
     pub experimental: bool,
 
@@ -150,7 +151,8 @@ impl InstallArgs {
     /// Prebuilt artefacts are skipped when:
     /// - `--build-only` is set, or
     /// - experimental lint behaviour is requested, either via
-    ///   `--experimental` (suite build) or explicit experimental crates.
+    ///   `--experimental` (suite build) or explicit experimental crates when
+    ///   the experimental crate list is non-empty.
     ///
     /// # Examples
     ///
@@ -377,10 +379,10 @@ mod tests {
     }
 
     #[test]
-    fn should_attempt_prebuilt_false_for_experimental_crate_requests() {
+    fn should_attempt_prebuilt_true_for_stable_bumpy_road_requests() {
         let args = InstallArgs::default();
         let requested = vec![CrateName::from("bumpy_road_function")];
-        assert!(!args.should_attempt_prebuilt(&requested));
+        assert!(args.should_attempt_prebuilt(&requested));
     }
 
     /// Parameterised tests for boolean CLI flags (backwards compatibility).

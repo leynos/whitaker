@@ -34,11 +34,12 @@ For version pinning, installation details, and configuration options, see the
 
 ## The Lints
 
-Whitaker currently ships seven lints, with more on the way:
+Whitaker currently ships eight lints, with more on the way:
 
 | Lint                          | What it does                                                                                                           |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `function_attrs_follow_docs`  | Insists that doc comments come before other attributes. The docs are the star of the show—they go first.               |
+| `bumpy_road_function`         | Flags functions with multiple separate clusters of nested conditional complexity.                                      |
 | `no_expect_outside_tests`     | Bans `.expect()` on `Option` and `Result` outside test contexts. Production code deserves proper error handling.       |
 | `module_must_have_inner_docs` | Requires every module to open with an inner doc comment (`//!`). Future you will thank present you.                    |
 | `module_max_lines`            | Caps modules at 400 lines by default. Encourages you to decompose or extract before things get unwieldy.               |

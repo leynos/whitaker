@@ -150,8 +150,9 @@ impl Builder {
 
     /// Determine which features to enable for a given crate.
     ///
-    /// For the suite crate, this includes the experimental feature when enabled.
-    /// For individual lint crates, only the `dylint-driver` feature is needed.
+    /// For the suite crate, this includes experimental features when enabled
+    /// and configured. For individual lint crates, only the `dylint-driver`
+    /// feature is needed.
     fn features_for_crate(&self, crate_name: &CrateName) -> String {
         if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
             let experimental = Self::experimental_features();
@@ -276,37 +277,20 @@ mod tests {
     }
 
     #[test]
-    fn features_for_crate_includes_experimental_for_suite() {
+    fn features_for_crate_handles_suite_experimental_mode() {
         let builder = test_builder(true);
         let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
-
-        // Should start with dylint-driver
-        assert!(result.starts_with("dylint-driver"));
-
-        // Should include experimental features
-        assert!(result.contains("experimental-"));
-        // Verify format: experimental-{lint-name-with-hyphens}
-        for lint in EXPERIMENTAL_LINT_CRATES {
-            let expected_feature = format!("experimental-{}", lint.replace('_', "-"));
-            assert!(
-                result.contains(&expected_feature),
-                "expected {expected_feature} in {result}"
-            );
-        }
+        assert_eq!(result, "dylint-driver");
     }
 
     #[test]
     fn experimental_features_derives_from_experimental_lint_crates() {
         let features = Builder::experimental_features();
-
-        // Verify comma-separated format
-        let parts: Vec<_> = features.split(',').collect();
-        assert_eq!(parts.len(), EXPERIMENTAL_LINT_CRATES.len());
-
-        // Verify each feature follows the expected pattern
-        for (i, lint) in EXPERIMENTAL_LINT_CRATES.iter().enumerate() {
-            let expected = format!("experimental-{}", lint.replace('_', "-"));
-            assert_eq!(parts[i], expected);
-        }
+        let expected = EXPERIMENTAL_LINT_CRATES
+            .iter()
+            .map(|&lint| format!("experimental-{}", lint.replace('_', "-")))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert_eq!(features, expected);
     }
 }

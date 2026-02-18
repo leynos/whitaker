@@ -11,6 +11,7 @@ use crate::error::{InstallerError, Result};
 /// This list includes all individual lint crates. The aggregated suite is
 /// defined separately as [`SUITE_CRATE`].
 pub const LINT_CRATES: &[&str] = &[
+    "bumpy_road_function",
     "conditional_max_n_branches",
     "function_attrs_follow_docs",
     "module_max_lines",
@@ -23,8 +24,8 @@ pub const LINT_CRATES: &[&str] = &[
 /// Static list of experimental lint crates.
 ///
 /// These lints are not included in the default suite but can be enabled via
-/// the `--experimental` flag.
-pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["bumpy_road_function"];
+/// the `--experimental` flag. The list is currently empty.
+pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &[];
 
 /// The aggregated suite crate name.
 pub const SUITE_CRATE: &str = "whitaker_suite";
@@ -109,15 +110,15 @@ mod tests {
         experimental: bool,
         expect_lint: bool,
         expect_suite: bool,
-        expect_experimental: bool,
+        expect_bumpy_road: bool,
     }
 
     /// Parameterised tests for resolve_crates variants.
     #[rstest]
-    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_experimental: false })]
-    #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_experimental: false })]
-    #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_experimental: true })]
-    #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_experimental: false })]
+    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_bumpy_road: false })]
+    #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_bumpy_road: true })]
+    #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_bumpy_road: true })]
+    #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_bumpy_road: false })]
     fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
         let options = CrateResolutionOptions {
             individual_lints: case.individual_lints,
@@ -137,8 +138,8 @@ mod tests {
         );
         assert_eq!(
             crates.contains(&CrateName::from("bumpy_road_function")),
-            case.expect_experimental,
-            "experimental crate inclusion mismatch"
+            case.expect_bumpy_road,
+            "bumpy_road_function inclusion mismatch"
         );
     }
 
@@ -151,7 +152,7 @@ mod tests {
 
     #[rstest]
     #[case::valid(&["module_max_lines", "whitaker_suite"], true)]
-    #[case::experimental_lint(&["bumpy_road_function"], true)]
+    #[case::bumpy_road_function(&["bumpy_road_function"], true)]
     #[case::unknown(&["nonexistent_lint"], false)]
     fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
         let crate_names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();

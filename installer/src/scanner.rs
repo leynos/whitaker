@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn lints_for_experimental_crate_returns_single_lint() {
+    fn lints_for_bumpy_road_crate_returns_single_lint() {
         let lints = lints_for_library(&CrateName::from("bumpy_road_function"));
         assert_eq!(lints, vec!["bumpy_road_function"]);
     }

@@ -6,6 +6,7 @@ use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
 use rustc_session::Session;
 
 // Import constituent lint pass types required by `late_lint_methods!`.
+use bumpy_road_function::BumpyRoadFunction;
 use conditional_max_n_branches::ConditionalMaxNBranches;
 use function_attrs_follow_docs::FunctionAttrsFollowDocs;
 use module_max_lines::ModuleMaxLines;
@@ -14,13 +15,10 @@ use no_expect_outside_tests::NoExpectOutsideTests;
 use no_std_fs_operations::NoStdFsOperations;
 use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
 
-#[cfg(feature = "experimental-bumpy-road-function")]
-use bumpy_road_function::BumpyRoadFunction;
-
 dylint_library!();
 
 macro_rules! define_suite_pass {
-    ($($extra:tt)*) => {
+    () => {
         rustc_lint::late_lint_methods!(
             declare_combined_late_lint_pass,
             [SuitePass, [
@@ -31,17 +29,13 @@ macro_rules! define_suite_pass {
                 ModuleMaxLines: module_max_lines::ModuleMaxLines::default(),
                 NoUnwrapOrElsePanic: no_unwrap_or_else_panic::NoUnwrapOrElsePanic::default(),
                 NoStdFsOperations: no_std_fs_operations::NoStdFsOperations::default(),
-                $($extra)*
+                BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::default(),
             ]]
         );
     };
 }
 
-#[cfg(not(feature = "experimental-bumpy-road-function"))]
 define_suite_pass!();
-
-#[cfg(feature = "experimental-bumpy-road-function")]
-define_suite_pass!(BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::default(),);
 
 /// Registers the suite lints into the provided lint store.
 ///
@@ -55,8 +49,7 @@ define_suite_pass!(BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::de
 /// # use whitaker_suite::register_suite_lints;
 /// let mut store = LintStore::new();
 /// register_suite_lints(&mut store);
-/// let expected = if cfg!(feature = "experimental-bumpy-road-function") { 8 } else { 7 };
-/// assert_eq!(store.get_lints().len(), expected);
+/// assert_eq!(store.get_lints().len(), 8);
 /// ```
 pub fn register_suite_lints(store: &mut LintStore) {
     store.register_lints(SUITE_LINT_DECLS);
