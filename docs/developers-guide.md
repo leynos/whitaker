@@ -60,6 +60,16 @@ platform-specific directory:
 - macOS: `~/Library/Application Support/dylint/lib/<toolchain>/release`
 - Windows: `%LOCALAPPDATA%\dylint\lib\<toolchain>\release`
 
+When a prebuilt artefact is available, the installer extracts it to the
+Whitaker data directory keyed by toolchain and target:
+
+- Linux:
+  `~/.local/share/whitaker/lints/<toolchain>/<target>/lib`
+- macOS:
+  `~/Library/Application Support/whitaker/lints/<toolchain>/<target>/lib`
+- Windows:
+  `%LOCALAPPDATA%\whitaker\lints\<toolchain>\<target>\lib`
+
 ### Configuration options
 
 - `-t, --target-dir DIR` — Staging directory for built libraries
@@ -84,13 +94,20 @@ export DYLINT_LIBRARY_PATH="$HOME/.local/share/dylint/lib/nightly-2025-01-15/rel
 cargo dylint --all
 ```
 
+For prebuilt installs, use the toolchain-and-target-specific directory:
+
+```sh
+export DYLINT_LIBRARY_PATH="$HOME/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib"
+cargo dylint --all
+```
+
 Alternatively, configure workspace metadata to use the pre-built libraries
 directly:
 
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-  { path = "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release" }
+  { path = "/home/user/.local/share/whitaker/lints/nightly-2025-01-15/x86_64-unknown-linux-gnu/lib" }
 ]
 ```
 

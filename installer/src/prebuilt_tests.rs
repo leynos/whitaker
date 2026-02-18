@@ -10,18 +10,19 @@ const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 const TOOLCHAIN: &str = "nightly-2025-09-18";
 
-fn base_config(staging_base: &Utf8Path) -> PrebuiltConfig<'_> {
+fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     PrebuiltConfig {
         target: TARGET,
         toolchain: TOOLCHAIN,
-        staging_base,
+        destination_dir,
         quiet: true,
     }
 }
 
-fn staging_base() -> (tempfile::TempDir, Utf8PathBuf) {
+fn destination_dir() -> (tempfile::TempDir, Utf8PathBuf) {
     let temp = tempfile::tempdir().expect("temp dir");
-    let path = Utf8PathBuf::try_from(temp.path().to_path_buf()).expect("UTF-8 path");
+    let root = Utf8PathBuf::try_from(temp.path().to_path_buf()).expect("UTF-8 path");
+    let path = root.join("lints").join(TOOLCHAIN).join(TARGET).join("lib");
     (temp, path)
 }
 
@@ -32,8 +33,8 @@ fn test_fallback_scenario(
     setup_mocks: impl FnOnce(&mut MockArtefactDownloader, &mut MockArtefactExtractor),
     expected_reason_substring: &str,
 ) {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
+    let (_temp, destination_dir) = destination_dir();
+    let config = base_config(&destination_dir);
 
     let mut downloader = MockArtefactDownloader::new();
     let mut extractor = MockArtefactExtractor::new();
@@ -54,8 +55,8 @@ fn test_fallback_scenario(
 
 #[test]
 fn happy_path_returns_success() {
-    let (_temp, staging_base) = staging_base();
-    let config = base_config(&staging_base);
+    let (_temp, destination_dir) = destination_dir();
+    let config = base_config(&destination_dir);
     let fake_sha = sha256_hex(FAKE_ARCHIVE);
     let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
 
@@ -76,10 +77,10 @@ fn happy_path_returns_success() {
 
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    assert!(
-        matches!(result, PrebuiltResult::Success { .. }),
-        "expected Success, got {result:?}"
-    );
+    match result {
+        PrebuiltResult::Success { staging_path } => assert_eq!(staging_path, destination_dir),
+        other => panic!("expected Success, got {other:?}"),
+    }
 }
 
 #[rstest]
@@ -182,4 +183,36 @@ fn extraction_failure_returns_fallback() {
         },
         "extraction",
     );
+}
+
+#[test]
+fn destination_creation_failure_returns_fallback() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let root = Utf8PathBuf::try_from(temp.path().to_path_buf()).expect("UTF-8 path");
+    let occupied = root.join("occupied");
+    std::fs::write(occupied.as_std_path(), b"file").expect("write occupied file");
+    let destination_dir = occupied.join("child").join("lib");
+    let config = base_config(&destination_dir);
+
+    let fake_sha = sha256_hex(FAKE_ARCHIVE);
+    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
+
+    let mut downloader = MockArtefactDownloader::new();
+    downloader
+        .expect_download_manifest()
+        .returning(move |_| Ok(manifest_json.clone()));
+    downloader
+        .expect_download_archive()
+        .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
+
+    let extractor = MockArtefactExtractor::new();
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    match result {
+        PrebuiltResult::Fallback { reason } => assert!(
+            reason.contains("download failed"),
+            "unexpected fallback reason: {reason}"
+        ),
+        other => panic!("expected Fallback, got {other:?}"),
+    }
 }

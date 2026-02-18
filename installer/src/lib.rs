@@ -19,6 +19,7 @@
 //! - [`output`] - Shell snippet generation for environment configuration
 //! - [`pipeline`] - Build and staging pipeline orchestration
 //! - [`prebuilt`] - Prebuilt artefact download and verification orchestrator
+//! - [`prebuilt_path`] - Canonical prebuilt extraction path derivation
 //! - [`resolution`] - Crate resolution and validation
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
@@ -39,6 +40,7 @@ pub mod list_output;
 pub mod output;
 pub mod pipeline;
 pub mod prebuilt;
+pub mod prebuilt_path;
 pub mod resolution;
 pub mod scanner;
 pub mod stager;

@@ -4,7 +4,7 @@ This execution plan (ExecPlan) is a living document. The sections Constraints,
 Tolerances, Risks, Progress, Surprises & Discoveries, Decision Log, and
 Outcomes & Retrospective must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -262,34 +262,58 @@ Review logs for:
 ## Progress
 
 - [x] 2026-02-18: Draft ExecPlan created for roadmap item 3.4.5.
-- [ ] Phase 1 complete: canonical destination helper implemented.
-- [ ] Phase 2 complete: prebuilt extraction path updated.
-- [ ] Phase 3 complete: path propagation to wrappers/snippets verified.
-- [ ] Phase 4 complete: list/scanner compatibility implemented.
-- [ ] Phase 5 complete: unit tests added and passing.
-- [ ] Phase 6 complete: BDD scenarios added and passing.
-- [ ] Phase 7 complete: docs and roadmap updated.
-- [ ] Phase 8 complete: `make check-fmt`, `make lint`, `make test` all pass.
+- [x] Phase 1 complete: canonical destination helper implemented.
+- [x] Phase 2 complete: prebuilt extraction path updated.
+- [x] Phase 3 complete: path propagation to wrappers/snippets verified.
+- [x] Phase 4 complete: list/scanner compatibility implemented.
+- [x] Phase 5 complete: unit tests added and passing.
+- [x] Phase 6 complete: BDD scenarios added and passing.
+- [x] Phase 7 complete: docs and roadmap updated.
+- [x] Phase 8 complete: `make check-fmt`, `make lint`, `make test` all pass.
 
 ## Surprises & Discoveries
 
-- None yet at draft time.
+- The documentation behaviour test for prebuilt path metadata still asserted
+  the legacy `dylint/lib/<toolchain>/release` shape. The test had to be
+  updated to assert the new `<whitaker>/lints/<toolchain>/<target>/lib`
+  structure to keep docs and implementation aligned.
 
 ## Decision Log
 
-- Decision (draft): Prebuilt artefacts will use a canonical destination rooted
-  at `whitaker_data_dir` to match ADR-001, independent of local build staging
-  defaults. Rationale: this gives deterministic cache keys by toolchain and
-  target and matches the accepted architectural direction.
+- Decision: Prebuilt artefacts use a canonical destination rooted at
+  `whitaker_data_dir`, independent of `--target-dir` local build staging.
+  Rationale: this gives deterministic cache keys by toolchain and target while
+  preserving existing local build behaviour.
 
-- Decision (draft): Behaviour coverage will extend the existing prebuilt BDD
-  feature file instead of creating a parallel feature. Rationale: keeps all
-  prebuilt success/fallback behaviour in one executable specification.
+- Decision: Behaviour coverage extends the existing prebuilt BDD feature file
+  rather than creating a parallel feature file. Rationale: keeps all prebuilt
+  success/fallback behaviour in one executable specification.
 
-- Decision (draft): Scanner/list compatibility for the new layout is included
-  in this scope. Rationale: without this, users can install successfully but
-  immediately get misleading `list` output.
+- Decision: `whitaker-installer list` scans both default local staging and the
+  prebuilt `whitaker/lints` root when no `--target-dir` override is supplied.
+  Rationale: without dual-root scanning, successful prebuilt installs would be
+  invisible to the default listing command.
 
 ## Outcomes & Retrospective
 
-Pending implementation.
+Implementation complete.
+
+Delivered outcomes:
+
+- New `prebuilt_path` module derives
+  `<whitaker_data_dir>/lints/<toolchain>/<target>/lib`.
+- Prebuilt orchestration now extracts directly to an explicit destination
+  directory (`PrebuiltConfig::destination_dir`).
+- Installer prebuilt flow resolves destination via `BaseDirs` and still falls
+  back to local compilation on all prebuilt failures.
+- Scanner supports both legacy `<toolchain>/release` and new
+  `<toolchain>/<target>/lib` layouts.
+- List command merges discovered libraries from both default roots.
+- Unit tests and BDD scenarios were expanded for happy paths, fallback paths,
+  and edge cases.
+- Design docs and roadmap were updated, including roadmap item 3.4.5 marked
+  done.
+- Quality gates passed:
+  - `make check-fmt`
+  - `make lint`
+  - `make test` (617 passed, 2 skipped)

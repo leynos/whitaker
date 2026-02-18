@@ -18,6 +18,7 @@ use whitaker_installer::list::{determine_target_dir, run_list};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
+use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
@@ -79,19 +80,29 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Step 3.5: Attempt prebuilt download when install options allow it.
     if args.should_attempt_prebuilt(&crates) {
         match detect_host_target() {
-            Ok(host_target) => {
-                let prebuilt_config = PrebuiltConfig {
-                    target: &host_target,
-                    toolchain: toolchain.channel(),
-                    staging_base: &target_dir,
-                    quiet: args.quiet,
-                };
-                if let PrebuiltResult::Success { staging_path } =
-                    attempt_prebuilt(&prebuilt_config, stderr)
-                {
-                    return finish_install(args, &dirs, &staging_path, stderr);
+            Ok(host_target) => match prebuilt_library_dir(&dirs, toolchain.channel(), &host_target)
+            {
+                Ok(destination_dir) => {
+                    let prebuilt_config = PrebuiltConfig {
+                        target: &host_target,
+                        toolchain: toolchain.channel(),
+                        destination_dir: &destination_dir,
+                        quiet: args.quiet,
+                    };
+                    if let PrebuiltResult::Success { staging_path } =
+                        attempt_prebuilt(&prebuilt_config, stderr)
+                    {
+                        return finish_install(args, &dirs, &staging_path, stderr);
+                    }
                 }
-            }
+                Err(e) => {
+                    if !args.quiet {
+                        write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
+                        write_stderr_line(stderr, "Falling back to local compilation.");
+                        write_stderr_line(stderr, "");
+                    }
+                }
+            },
             Err(e) => {
                 if !args.quiet {
                     write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));

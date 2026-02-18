@@ -95,7 +95,7 @@
   before local compilation, falling back on failure. See
   `docs/adr-001-prebuilt-dylint-libraries.md` §Decision outcome / proposed
   direction.
-- [ ] 3.4.5. Extract libraries to
+- [x] 3.4.5. Extract libraries to
   `~/.local/share/whitaker/lints/<toolchain>/<target>/lib` and set
   `DYLINT_LIBRARY_PATH`. See `docs/adr-001-prebuilt-dylint-libraries.md`
   §Decision outcome / proposed direction.

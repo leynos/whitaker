@@ -1398,6 +1398,12 @@ the latest assets discoverable without tagging every commit.
 artefacts remain optional. The decision is recorded in
 `docs/adr-001-prebuilt-dylint-libraries.md` (Accepted 2026-02-03).
 
+**Implementation decision (2026-02-18):** The installer now derives prebuilt
+extraction paths from `BaseDirs::whitaker_data_dir()` and writes libraries to
+`<data_dir>/lints/<toolchain>/<target>/lib`. Wrapper scripts and shell snippets
+use that exact `lib` directory for `DYLINT_LIBRARY_PATH`. Local build staging
+continues to honour `--target-dir` and existing release-layout behaviour.
+
 ### Workspace metadata example selection
 
 **Decision:** Include examples for suite-only, individual crates,

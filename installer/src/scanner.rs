@@ -40,9 +40,10 @@ impl InstalledLints {
 
 /// Scan the staging directory for installed libraries.
 ///
-/// The staging directory structure is:
+/// Supported staging directory structures are:
 /// ```text
 /// {target_dir}/{toolchain}/release/lib{crate}@{toolchain}.{ext}
+/// {target_dir}/{toolchain}/{target}/lib/lib{crate}@{toolchain}.{ext}
 /// ```
 ///
 /// # Errors
@@ -65,19 +66,36 @@ pub fn scan_installed(target_dir: &Utf8Path) -> io::Result<InstalledLints> {
         }
 
         let toolchain = entry.file_name().to_owned();
-        let release_path = toolchain_path.join("release");
-
-        if !release_path.exists() || !release_path.is_dir() {
-            continue;
-        }
-
-        let libraries = scan_toolchain_release(&release_path, &toolchain)?;
+        let libraries = scan_toolchain_layouts(toolchain_path, &toolchain)?;
         if !libraries.is_empty() {
             result.by_toolchain.insert(toolchain, libraries);
         }
     }
 
     Ok(result)
+}
+
+fn scan_toolchain_layouts(
+    toolchain_path: &Utf8Path,
+    toolchain: &str,
+) -> io::Result<Vec<InstalledLibrary>> {
+    let mut libraries = Vec::new();
+    let release_path = toolchain_path.join("release");
+    if release_path.is_dir() {
+        libraries.extend(scan_toolchain_release(&release_path, toolchain)?);
+    }
+    for entry in toolchain_path.read_dir_utf8()? {
+        let entry = entry?;
+        if !entry.path().is_dir() || entry.file_name() == "release" {
+            continue;
+        }
+        let lib_path = entry.path().join("lib");
+        if lib_path.is_dir() {
+            libraries.extend(scan_toolchain_release(&lib_path, toolchain)?);
+        }
+    }
+    libraries.sort_by_key(|lib| lib.crate_name.as_str().to_owned());
+    Ok(libraries)
 }
 
 /// Scan a single toolchain's release directory for libraries.
@@ -102,9 +120,6 @@ fn scan_toolchain_release(
             }
         }
     }
-
-    // Sort by crate name for consistent output
-    libraries.sort_by_key(|lib| lib.crate_name.as_str().to_owned());
 
     Ok(libraries)
 }
