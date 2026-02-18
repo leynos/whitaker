@@ -81,7 +81,8 @@ pub fn success_output() -> Output {
 /// assert!(output.stdout.is_empty());
 /// assert_eq!(output.stderr, b"command failed");
 /// ```
-pub fn failure_output(stderr: &str) -> Output {
+pub fn failure_output(stderr: impl AsRef<str>) -> Output {
+    let stderr = stderr.as_ref();
     Output {
         status: exit_status(1),
         stdout: Vec::new(),
@@ -98,7 +99,14 @@ pub fn sha256_hex(data: &[u8]) -> String {
 
 /// Build prebuilt manifest JSON for tests with configurable fields.
 #[cfg(any(test, feature = "test-support"))]
-pub fn prebuilt_manifest_json(toolchain: &str, target: &str, sha256: &str) -> String {
+pub fn prebuilt_manifest_json(
+    toolchain: impl AsRef<str>,
+    target: impl AsRef<str>,
+    sha256: impl AsRef<str>,
+) -> String {
+    let toolchain = toolchain.as_ref();
+    let target = target.as_ref();
+    let sha256 = sha256.as_ref();
     format!(
         concat!(
             r#"{{"git_sha":"abc1234","schema_version":1,"#,

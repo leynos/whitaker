@@ -125,12 +125,7 @@ fn download_to_file(url: &str, dest: &Path) -> Result<(), DownloadError> {
         .call()
         .map_err(|e| map_ureq_error(url, &e))?;
     let mut file = std::fs::File::create(dest)?;
-    std::io::copy(&mut response.into_body().as_reader(), &mut file).map_err(|e| {
-        DownloadError::HttpError {
-            url: url.to_owned(),
-            reason: e.to_string(),
-        }
-    })?;
+    std::io::copy(&mut response.into_body().as_reader(), &mut file).map_err(DownloadError::Io)?;
     Ok(())
 }
 

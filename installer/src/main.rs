@@ -78,16 +78,27 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
 
     // Step 3.5: Attempt prebuilt download when install options allow it.
     if args.should_attempt_prebuilt(&crates) {
-        let host_target = detect_host_target()?;
-        let prebuilt_config = PrebuiltConfig {
-            target: &host_target,
-            toolchain: toolchain.channel(),
-            staging_base: &target_dir,
-            quiet: args.quiet,
-        };
-        if let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
-        {
-            return finish_install(args, &dirs, &staging_path, stderr);
+        match detect_host_target() {
+            Ok(host_target) => {
+                let prebuilt_config = PrebuiltConfig {
+                    target: &host_target,
+                    toolchain: toolchain.channel(),
+                    staging_base: &target_dir,
+                    quiet: args.quiet,
+                };
+                if let PrebuiltResult::Success { staging_path } =
+                    attempt_prebuilt(&prebuilt_config, stderr)
+                {
+                    return finish_install(args, &dirs, &staging_path, stderr);
+                }
+            }
+            Err(e) => {
+                if !args.quiet {
+                    write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
+                    write_stderr_line(stderr, "Falling back to local compilation.");
+                    write_stderr_line(stderr, "");
+                }
+            }
         }
     }
 

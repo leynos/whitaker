@@ -113,17 +113,34 @@ fn make_not_found_error() -> DownloadError {
 }
 
 #[test]
-fn toolchain_mismatch_returns_fallback() {
-    test_fallback_scenario(
-        |downloader, _extractor| {
-            let manifest_json =
-                prebuilt_manifest_json("nightly-2025-01-01", TARGET, &"a".repeat(64));
-            downloader
-                .expect_download_manifest()
-                .returning(move |_| Ok(manifest_json.clone()));
-        },
-        "toolchain mismatch",
-    );
+fn manifest_validation_errors_return_fallback() {
+    let test_cases = vec![
+        (
+            "toolchain mismatch",
+            "nightly-2025-01-01",
+            TARGET,
+            "toolchain mismatch",
+        ),
+        (
+            "target mismatch",
+            TOOLCHAIN,
+            "aarch64-apple-darwin",
+            "target mismatch",
+        ),
+    ];
+
+    for (case_name, toolchain, target, expected_reason_substring) in test_cases {
+        test_fallback_scenario(
+            |downloader, _extractor| {
+                let manifest_json = prebuilt_manifest_json(toolchain, target, "a".repeat(64));
+                downloader
+                    .expect_download_manifest()
+                    .returning(move |_| Ok(manifest_json.clone()));
+            },
+            expected_reason_substring,
+        );
+        eprintln!("manifest validation scenario passed: {case_name}");
+    }
 }
 
 #[test]
@@ -131,7 +148,7 @@ fn checksum_mismatch_returns_fallback() {
     test_fallback_scenario(
         |downloader, _extractor| {
             // Manifest claims SHA = "aaa...a" but the file will hash differently.
-            let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &"a".repeat(64));
+            let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, "a".repeat(64));
             downloader
                 .expect_download_manifest()
                 .returning(move |_| Ok(manifest_json.clone()));
@@ -164,19 +181,5 @@ fn extraction_failure_returns_fallback() {
             });
         },
         "extraction",
-    );
-}
-
-#[test]
-fn target_mismatch_returns_fallback() {
-    test_fallback_scenario(
-        |downloader, _extractor| {
-            let manifest_json =
-                prebuilt_manifest_json(TOOLCHAIN, "aarch64-apple-darwin", &"a".repeat(64));
-            downloader
-                .expect_download_manifest()
-                .returning(move |_| Ok(manifest_json.clone()));
-        },
-        "target mismatch",
     );
 }

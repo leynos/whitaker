@@ -128,8 +128,8 @@ pub struct InstallArgs {
     pub no_update: bool,
 
     /// Skip prebuilt artefact download and build from source.
-    #[arg(long)]
-    pub build_only: bool,
+    #[arg(long = "build-only")]
+    pub is_build_only: bool,
 }
 
 /// Arguments for the list command.
@@ -151,9 +151,27 @@ impl InstallArgs {
     /// - `--build-only` is set, or
     /// - experimental lint behaviour is requested, either via
     ///   `--experimental` (suite build) or explicit experimental crates.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::cli::InstallArgs;
+    /// use whitaker_installer::crate_name::CrateName;
+    ///
+    /// let requested = vec![CrateName::from("whitaker_suite")];
+    ///
+    /// let default_args = InstallArgs::default();
+    /// assert!(default_args.should_attempt_prebuilt(&requested));
+    ///
+    /// let build_only_args = InstallArgs {
+    ///     is_build_only: true,
+    ///     ..InstallArgs::default()
+    /// };
+    /// assert!(!build_only_args.should_attempt_prebuilt(&requested));
+    /// ```
     #[must_use]
     pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
-        if self.build_only || self.experimental {
+        if self.is_build_only || self.experimental {
             return false;
         }
         !requested_crates
@@ -192,7 +210,7 @@ impl Default for InstallArgs {
             skip_deps: false,
             skip_wrapper: false,
             no_update: false,
-            build_only: false,
+            is_build_only: false,
         }
     }
 }
@@ -257,7 +275,7 @@ mod tests {
         assert!(!cli.install.skip_deps);
         assert!(!cli.install.skip_wrapper);
         assert!(!cli.install.no_update);
-        assert!(!cli.install.build_only);
+        assert!(!cli.install.is_build_only);
     }
 
     #[test]
@@ -341,7 +359,7 @@ mod tests {
     #[test]
     fn should_attempt_prebuilt_false_when_build_only() {
         let args = InstallArgs {
-            build_only: true,
+            is_build_only: true,
             ..InstallArgs::default()
         };
         let requested = vec![CrateName::from("whitaker_suite")];
@@ -375,7 +393,7 @@ mod tests {
     #[case::skip_deps(&["whitaker-installer", "--skip-deps"], |cli: &Cli| cli.install.skip_deps)]
     #[case::skip_wrapper(&["whitaker-installer", "--skip-wrapper"], |cli: &Cli| cli.install.skip_wrapper)]
     #[case::no_update(&["whitaker-installer", "--no-update"], |cli: &Cli| cli.install.no_update)]
-    #[case::build_only(&["whitaker-installer", "--build-only"], |cli: &Cli| cli.install.build_only)]
+    #[case::build_only(&["whitaker-installer", "--build-only"], |cli: &Cli| cli.install.is_build_only)]
     fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bool) {
         let cli = Cli::parse_from(args);
         assert!(check(&cli));
