@@ -1,9 +1,9 @@
 # Implement `test_must_not_have_example` lint (roadmap 2.2.5)
 
 This execution plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`,
-`Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: DRAFT
 
@@ -19,15 +19,19 @@ predicate branching, module length, panic fallbacks, and `std::fs` usage.
 Roadmap item 2.2.5 remains open and the `test_must_not_have_example` lint crate
 is not present in `crates/` yet.
 
-After this change, test-like functions (`#[test]`, `#[tokio::test]`, `#[rstest]`,
-and recognised equivalents) will trigger a warning when their documentation
-contains either an Examples heading or a fenced code block. This preserves
-readability goals by keeping test docs focused on intent rather than user
-examples.
+After this change, test-like functions (`#[test]`, `#[tokio::test]`,
+`#[rstest]`, and recognised equivalents) will trigger a warning when their
+documentation contains either an Examples heading or a fenced code block. This
+preserves readability goals by keeping test docs focused on intent rather than
+user examples.
+
+The test-context predicate must be shared with `no_expect_outside_tests` so
+Whitaker maintains one canonical definition of what counts as a test.
 
 Success is observable when:
 
-1. `crates/test_must_not_have_example/` exists and exports a working Dylint lint.
+1. `crates/test_must_not_have_example/` exists and exports a working Dylint
+   lint.
 2. UI fixtures show warning diagnostics for unhappy paths and clean output for
    happy paths.
 3. Unit tests and behavioural tests (`rstest-bdd` v0.5.0) cover happy, unhappy,
@@ -44,6 +48,11 @@ Success is observable when:
   modules where required.
 - Preserve existing public interfaces of current crates unless a local,
   additive change is needed for suite registration.
+- Reuse existing test-context detection logic from `common` and
+  `no_expect_outside_tests`; do not introduce a second independent matrix of
+  recognised test attributes.
+- If reuse requires moving logic, extract shared helpers into `common` rather
+  than copying implementation details into the new crate.
 - Use workspace-pinned dependencies; `rstest-bdd` and `rstest-bdd-macros` must
   remain at `0.5.0` (already pinned in workspace `Cargo.toml`).
 - Provide both unit tests and behavioural tests for happy/unhappy/edge paths.
@@ -62,6 +71,8 @@ Success is observable when:
 - Interface: if enabling the lint requires breaking changes to suite or
   installer public interfaces, stop and escalate.
 - Dependencies: if any new external dependency is needed, stop and escalate.
+- Reuse boundary: if a canonical shared helper cannot be used without changing
+  lint semantics unexpectedly, stop and escalate with options.
 - Heuristic ambiguity: if heuristic choices materially change which docs are
   flagged and requirements are unclear, stop and present concrete options.
 - Iterations: if `make check-fmt`, `make lint`, or `make test` still fail after
@@ -89,6 +100,13 @@ Success is observable when:
   - Likelihood: medium.
   - Mitigation: update `suite/Cargo.toml`, `suite/src/lints.rs`, and any
     packaging lists that enumerate standard lint crates.
+
+- Risk: duplicated test detection logic diverges over time and causes lints to
+  disagree about whether code is a test context.
+  - Severity: high.
+  - Likelihood: medium.
+  - Mitigation: enforce shared helper usage and add parity tests that lock
+    expected outcomes for representative attribute/module/file contexts.
 
 ## Progress
 
@@ -131,6 +149,12 @@ Success is observable when:
     increases churn without benefit.
   - Date/Author: 2026-02-18 / Codex.
 
+- Decision: treat test-context detection as a shared concern and avoid
+  duplicate implementations between lints.
+  - Rationale: conflicting test definitions would create user-visible policy
+    drift and inconsistent diagnostics.
+  - Date/Author: 2026-02-18 / Codex.
+
 ## Outcomes & Retrospective
 
 Pending implementation.
@@ -153,6 +177,10 @@ Current repository state relevant to this task:
   - simple `src/lib.rs` with `driver` module and optional `stub` path;
   - pure helper logic plus `#[cfg(test)]` unit and BDD modules (often with
     feature files under `tests/features/`).
+- Existing reusable detection helpers already exist:
+  - `common::context::{is_test_fn_with, in_test_like_context_with}`;
+  - `crates/no_expect_outside_tests/src/context.rs` for HIR ancestor collection
+    and `cfg(test)` handling (`collect_context`, `summarise_context`).
 - Existing BDD tests use `rstest_bdd_macros::{given, when, then, scenario}` and
   are executed under `cargo test`.
 
@@ -167,6 +195,8 @@ Likely files to add or modify:
 - `suite/Cargo.toml`
 - `suite/src/lints.rs`
 - `Makefile` (if `LINT_CRATES` list must include the new core lint)
+- `common/src/context.rs` and/or a new shared context collector module in
+  `common` (if extraction from `no_expect_outside_tests` is required)
 - `docs/whitaker-dylint-suite-design.md`
 - `docs/roadmap.md`
 - `README.md` and/or `docs/users-guide.md` if current text still says this lint
@@ -180,6 +210,13 @@ Create `crates/test_must_not_have_example/` using the established lint crate
 layout (`cdylib` + `rlib`, `dylint-driver` feature, `constituent` feature,
 workspace dependencies, test dependencies including `rstest-bdd`).
 
+Before coding lint behaviour, select and document the reuse path for
+test-context detection:
+
+- preferred: consume an existing shared helper from `common`;
+- fallback: extract reusable context collection from
+  `no_expect_outside_tests` into `common` and migrate both lints.
+
 Wire the crate into aggregated delivery:
 
 - add dependency and feature linkage in `suite/Cargo.toml`.
@@ -188,7 +225,8 @@ Wire the crate into aggregated delivery:
   expected to include all standard lints.
 
 Acceptance for Stage A: workspace resolves and compiles with the new crate
-included in the suite wiring (even with placeholder logic).
+included in the suite wiring (even with placeholder logic), and a single
+canonical test-context helper is identified.
 
 ### Stage B: Implement doc-text heuristics as pure logic
 
@@ -206,13 +244,14 @@ Keep this logic independent of rustc traversal so it can be heavily unit tested
 and exercised via BDD scenarios.
 
 Acceptance for Stage B: helper functions compile and expose predictable,
-documented outcomes for heading/fence checks.
+documented outcomes for heading/fence checks, without embedding test-context
+classification rules.
 
 ### Stage C: Implement lint pass and diagnostics
 
 Implement `LateLintPass` in `src/driver.rs` to:
 
-- recognise test-like functions;
+- recognise test-like functions through the shared canonical helper path;
 - collect doc comments/attributes for each candidate function;
 - pass normalised doc text into Stage B helpers;
 - emit a warning for disallowed Examples/fence content using localised messages
@@ -223,7 +262,8 @@ message resolution) and include the offending test/function name in diagnostic
 arguments where useful.
 
 Acceptance for Stage C: lint emits stable diagnostics for clear positive cases
-and remains silent for clear negative cases.
+and remains silent for clear negative cases, while sharing the same
+test-context semantics used by `no_expect_outside_tests`.
 
 ### Stage D: Unit tests and BDD behavioural tests (`rstest-bdd` v0.5.0)
 
@@ -233,6 +273,8 @@ Add unit tests for heuristic helpers and policy decisions. Cover at least:
 - unhappy paths: Examples heading found; fenced block found.
 - edge paths: inline backticks without fences, heading variants, empty docs,
   unmatched fence lines.
+- parity paths: representative attribute/module/file contexts align with the
+  shared test-context helper used by `no_expect_outside_tests`.
 
 Add behavioural coverage with `rstest-bdd` v0.5.0 using feature files and step
 bindings. Include scenarios that mirror the above happy/unhappy/edge classes so
@@ -288,7 +330,7 @@ as complete in `docs/roadmap.md`:
 
 - change
   `- [ ] 2.2.5. Implement test_must_not_have_example covering code-fence heuristics.`
-  to `[x]`.
+   to `[x]`.
 
 Acceptance for Stage H: roadmap reflects the shipped state.
 
@@ -297,6 +339,8 @@ Acceptance for Stage H: roadmap reflects the shipped state.
 The feature is complete only when all are true:
 
 - `test_must_not_have_example` lint crate exists and is wired into suite build.
+- Test-context determination reuses the canonical shared helper path and does
+  not define a separate attribute matrix.
 - Unit tests cover happy/unhappy/edge heuristic behaviour.
 - Behaviour tests use `rstest-bdd` v0.5.0 and cover the same behavioural
   contract.
@@ -317,3 +361,5 @@ The feature is complete only when all are true:
 ## Revision note
 
 - 2026-02-18: Initial draft created for roadmap task 2.2.5.
+- 2026-02-18: Updated to require maximal reuse for test-context detection and
+  prevent divergent definitions across lints.
