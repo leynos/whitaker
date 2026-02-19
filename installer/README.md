@@ -30,8 +30,8 @@ This builds and stages the aggregated suite containing all standard lints.
 whitaker-installer --experimental
 ```
 
-At present there are no experimental lints, so this flag is reserved for future
-lint previews.
+At present, there are no experimental lints, so this flag is reserved for
+future lint previews.
 
 ### Install specific lints
 
