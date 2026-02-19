@@ -209,12 +209,15 @@ mod tests {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// Helper to create a mock installed library in the target directory for tests.
-    fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
+    fn create_mock_library_at(
+        lib_dir: &Utf8Path,
+        toolchain: &str,
+        content: &[u8],
+        error_msg: &str,
+    ) {
         use crate::builder::{library_extension, library_prefix};
 
-        let release_dir = target_dir.join(toolchain).join("release");
-        fs::create_dir_all(&release_dir).expect("failed to create release dir");
+        fs::create_dir_all(lib_dir).expect("failed to create target library directory");
 
         let filename = format!(
             "{}whitaker_suite@{toolchain}{}",
@@ -222,24 +225,28 @@ mod tests {
             library_extension()
         );
 
-        fs::write(release_dir.join(filename), b"mock library")
-            .expect("failed to create mock library");
+        fs::write(lib_dir.join(filename), content).expect(error_msg);
+    }
+
+    /// Helper to create a mock installed library in the target directory for tests.
+    fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
+        let release_dir = target_dir.join(toolchain).join("release");
+        create_mock_library_at(
+            &release_dir,
+            toolchain,
+            b"mock library",
+            "failed to create mock library",
+        );
     }
 
     fn create_mock_prebuilt_library(target_dir: &Utf8Path, toolchain: &str, target: &str) {
-        use crate::builder::{library_extension, library_prefix};
-
         let lib_dir = target_dir.join(toolchain).join(target).join("lib");
-        fs::create_dir_all(&lib_dir).expect("failed to create prebuilt lib dir");
-
-        let filename = format!(
-            "{}whitaker_suite@{toolchain}{}",
-            library_prefix(),
-            library_extension()
+        create_mock_library_at(
+            &lib_dir,
+            toolchain,
+            b"mock prebuilt library",
+            "failed to create prebuilt mock library",
         );
-
-        fs::write(lib_dir.join(filename), b"mock prebuilt library")
-            .expect("failed to create prebuilt mock library");
     }
 
     // -------------------------------------------------------------------------
