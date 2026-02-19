@@ -58,11 +58,13 @@ mod tests {
 
         let result = prebuilt_library_dir(&dirs, "nightly-2025-09-18", "x86_64-unknown-linux-gnu")
             .expect("expected path construction to succeed");
+        let expected = Utf8PathBuf::from("/home/test/.local/share/whitaker")
+            .join("lints")
+            .join("nightly-2025-09-18")
+            .join("x86_64-unknown-linux-gnu")
+            .join("lib");
 
-        assert_eq!(
-            result.as_str(),
-            "/home/test/.local/share/whitaker/lints/nightly-2025-09-18/x86_64-unknown-linux-gnu/lib"
-        );
+        assert_eq!(result, expected);
     }
 
     #[rstest]

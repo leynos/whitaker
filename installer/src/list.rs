@@ -209,15 +209,33 @@ mod tests {
     // Helpers
     // -------------------------------------------------------------------------
 
-    fn create_mock_library_at(
-        lib_dir: &Utf8Path,
-        toolchain: &str,
-        content: &[u8],
-        error_msg: &str,
-    ) {
+    #[derive(Debug, Clone, Copy)]
+    enum MockLibraryKind {
+        Local,
+        Prebuilt { target: &'static str },
+    }
+
+    impl MockLibraryKind {
+        fn library_dir(&self, target_dir: &Utf8Path, toolchain: &str) -> Utf8PathBuf {
+            match self {
+                Self::Local => target_dir.join(toolchain).join("release"),
+                Self::Prebuilt { target } => target_dir.join(toolchain).join(target).join("lib"),
+            }
+        }
+
+        fn content(&self) -> &'static [u8] {
+            match self {
+                Self::Local => b"mock library",
+                Self::Prebuilt { .. } => b"mock prebuilt library",
+            }
+        }
+    }
+
+    fn create_mock_library_internal(target_dir: &Utf8Path, toolchain: &str, kind: MockLibraryKind) {
         use crate::builder::{library_extension, library_prefix};
 
-        fs::create_dir_all(lib_dir).expect("failed to create target library directory");
+        let lib_dir = kind.library_dir(target_dir, toolchain);
+        fs::create_dir_all(&lib_dir).expect("failed to create target library directory");
 
         let filename = format!(
             "{}whitaker_suite@{toolchain}{}",
@@ -225,28 +243,20 @@ mod tests {
             library_extension()
         );
 
-        fs::write(lib_dir.join(filename), content).expect(error_msg);
+        let error_msg = match kind {
+            MockLibraryKind::Local => "failed to create mock library",
+            MockLibraryKind::Prebuilt { .. } => "failed to create prebuilt mock library",
+        };
+        fs::write(lib_dir.join(filename), kind.content()).expect(error_msg);
     }
 
     /// Helper to create a mock installed library in the target directory for tests.
     fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
-        let release_dir = target_dir.join(toolchain).join("release");
-        create_mock_library_at(
-            &release_dir,
-            toolchain,
-            b"mock library",
-            "failed to create mock library",
-        );
+        create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Local);
     }
 
-    fn create_mock_prebuilt_library(target_dir: &Utf8Path, toolchain: &str, target: &str) {
-        let lib_dir = target_dir.join(toolchain).join(target).join("lib");
-        create_mock_library_at(
-            &lib_dir,
-            toolchain,
-            b"mock prebuilt library",
-            "failed to create prebuilt mock library",
-        );
+    fn create_mock_prebuilt_library(target_dir: &Utf8Path, toolchain: &str, target: &'static str) {
+        create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Prebuilt { target });
     }
 
     // -------------------------------------------------------------------------

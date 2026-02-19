@@ -2,17 +2,17 @@
 
 This Execution Plan (ExecPlan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
-work proceeds.
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
 ## Context
 
 The `whitaker-package-lints` binary was introduced to centralize tar/zstd
-archive creation, manifest JSON generation, and SHA-256 computation in
-Rust. However, both the Makefile `package-lints` target and the CI
-workflow `rolling-release.yml` still contain shell loops that:
+archive creation, manifest JSON generation, and SHA-256 computation in Rust.
+However, both the Makefile `package-lints` target and the CI workflow
+`rolling-release.yml` still contain shell loops that:
 
 1. Map target triples to platform-specific library extensions
    (`LIB_EXT` case/matrix).
@@ -20,15 +20,14 @@ workflow `rolling-release.yml` still contain shell loops that:
 3. Iterate crate names to discover built library files in the release
    directory.
 
-This duplicated shell logic is brittle -- it uses space-separated
-`LIB_FILES` strings, has inconsistent Windows handling (CI checks for
-`dll` prefix stripping; Makefile does not), and silently misses the suite
-crate because the Makefile uses `-p suite` while the actual library is
-`libwhitaker_suite.so`.
+This duplicated shell logic is brittle -- it uses space-separated `LIB_FILES`
+strings, has inconsistent Windows handling (CI checks for `dll` prefix
+stripping; Makefile does not), and silently misses the suite crate because the
+Makefile uses `-p suite` while the actual library is `libwhitaker_suite.so`.
 
 The tar/zstd and SHA-256 operations are already fully in Rust
-(`create_archive()` and `compute_sha256()`) with good test coverage,
-but the user has asked to confirm this and strengthen the tests.
+(`create_archive()` and `compute_sha256()`) with good test coverage, but the
+user has asked to confirm this and strengthen the tests.
 
 ## Purpose / big picture
 
@@ -69,11 +68,10 @@ Success is observable by:
 ## Risks
 
 - Risk: Makefile `LINT_CRATES` has `suite` but the library is
-  `libwhitaker_suite.so`. The Rust discovery must use the correct
-  package name `whitaker_suite` from `resolution::SUITE_CRATE`.
-  Severity: medium. Mitigation: the `-p suite` build flag still works
-  (Cargo resolves workspace members); only the discovery step uses
-  the Rust constant.
+  `libwhitaker_suite.so`. The Rust discovery must use the correct package name
+  `whitaker_suite` from `resolution::SUITE_CRATE`. Severity: medium.
+  Mitigation: the `-p suite` build flag still works (Cargo resolves workspace
+  members); only the discovery step uses the Rust constant.
 
 - Risk: Changing `library_files` from `required = true` to
   `required_unless_present = "release_dir"` might affect clap parsing.
@@ -97,27 +95,26 @@ Success is observable by:
 ## Surprises & discoveries
 
 - The original two-pass SHA-256 algorithm embedded the manifest in the
-  archive, so the manifest digest could never match the final archive
-  hash. This was later resolved by moving to an external manifest model
-  where the manifest is not embedded in the archive, allowing
+  archive, so the manifest digest could never match the final archive hash.
+  This was later resolved by moving to an external manifest model where the
+  manifest is not embedded in the archive, allowing
   `SHA-256(archive) == manifest.sha256` by construction.
 
 - The `package_lints.rs` binary file approached the 400-line limit.
-  Resolved by removing section divider comments and condensing doc
-  comments on the new fields.
+  Resolved by removing section divider comments and condensing doc comments on
+  the new fields.
 
 ## Decision log
 
 - Decision: Use `conflicts_with` and `required_unless_present` in clap
-  to make `--release-dir` and positional `library_files` mutually
-  exclusive. Rationale: simpler than subcommands; both invocation modes
-  are tested.
+  to make `--release-dir` and positional `library_files` mutually exclusive.
+  Rationale: simpler than subcommands; both invocation modes are tested.
 
 - Decision: The `discover_library_files` function uses
-  `LINT_CRATES` and `SUITE_CRATE` from `resolution.rs` as the canonical
-  crate list. Rationale: keeps the crate list in a single authoritative
-  location; the Makefile's `LINT_CRATES` variable is used only for the
-  build step (which must use Cargo package names like `suite`).
+  `LINT_CRATES` and `SUITE_CRATE` from `resolution.rs` as the canonical crate
+  list. Rationale: keeps the crate list in a single authoritative location; the
+  Makefile's `LINT_CRATES` variable is used only for the build step (which must
+  use Cargo package names like `suite`).
 
 ## Outcomes & retrospective
 
@@ -127,28 +124,27 @@ All stages completed successfully. Quality gates green:
 - `make lint` -- zero warnings (cargo doc + clippy).
 - `make test` -- 555 tests passed, 0 failed, 2 skipped.
 
-Test count increased from 542 to 555 (+13 new tests across unit,
-integration, and BDD layers).
+Test count increased from 542 to 555 (+13 new tests across unit, integration,
+and BDD layers).
 
 ### What went well
 
 - The canonical crate list in `resolution.rs` (`LINT_CRATES` +
-  `SUITE_CRATE`) gave a single source of truth; the discovery function
-  was straightforward.
+  `SUITE_CRATE`) gave a single source of truth; the discovery function was
+  straightforward.
 - `clap`'s `conflicts_with` / `required_unless_present` made the
-  mutual exclusion between `--release-dir` and positional
-  `library_files` clean.
+  mutual exclusion between `--release-dir` and positional `library_files` clean.
 - Both the Makefile and CI workflow became significantly simpler:
   Makefile shrank by 13 lines; CI workflow by 28 lines.
 
 ### What was tricky
 
 - The original two-pass SHA-256 algorithm meant "archive hash equals
-  manifest hash" would always fail. Resolved by adopting an external
-  manifest model where the archive no longer embeds the manifest.
+  manifest hash" would always fail. Resolved by adopting an external manifest
+  model where the archive no longer embeds the manifest.
 - `package_lints.rs` hit the 400-line file limit (407 lines). Resolved
-  by removing section dividers and condensing doc comments to fit
-  within 395 lines.
+  by removing section dividers and condensing doc comments to fit within 395
+  lines.
 
 ### Scope check
 

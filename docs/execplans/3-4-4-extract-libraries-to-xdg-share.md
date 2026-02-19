@@ -274,9 +274,9 @@ Review logs for:
 ## Surprises & Discoveries
 
 - The documentation behaviour test for prebuilt path metadata still asserted
-  the legacy `dylint/lib/<toolchain>/release` shape. The test had to be
-  updated to assert the new `<whitaker>/lints/<toolchain>/<target>/lib`
-  structure to keep docs and implementation aligned.
+  the legacy `dylint/lib/<toolchain>/release` shape. The test had to be updated
+  to assert the new `<whitaker>/lints/<toolchain>/<target>/lib` structure to
+  keep docs and implementation aligned.
 
 ## Decision Log
 
