@@ -42,7 +42,7 @@
   coverage.
 - [ ] 2.2.4. Implement `public_fn_must_have_docs` using effective visibility
   data.
-- [ ] 2.2.5. Implement `test_must_not_have_example` covering code-fence
+- [x] 2.2.5. Implement `test_must_not_have_example` covering code-fence
   heuristics.
 - [x] 2.2.6. Implement `module_max_lines` with configurable thresholds.
 - [x] 2.2.7. Implement `conditional_max_n_branches` for complex predicates.

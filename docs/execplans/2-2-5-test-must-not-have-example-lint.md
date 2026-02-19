@@ -5,7 +5,7 @@ This execution plan (ExecPlan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -16,8 +16,7 @@ The canonical plan file is
 
 Whitaker currently ships lints for attribute order, `expect`, module docs,
 predicate branching, module length, panic fallbacks, and `std::fs` usage.
-Roadmap item 2.2.5 remains open and the `test_must_not_have_example` lint crate
-is not present in `crates/` yet.
+Roadmap item 2.2.5 tracks delivery of `test_must_not_have_example`.
 
 After this change, test-like functions (`#[test]`, `#[tokio::test]`,
 `#[rstest]`, and recognised equivalents) will trigger a warning when their
@@ -111,25 +110,27 @@ Success is observable when:
 ## Progress
 
 - [x] (2026-02-18) Draft ExecPlan for roadmap item 2.2.5.
-- [ ] Stage A: Scaffold crate and workspace/suite wiring.
-- [ ] Stage B: Implement detection heuristics in pure helper modules.
-- [ ] Stage C: Implement lint driver and diagnostics.
-- [ ] Stage D: Add unit and behavioural tests (`rstest-bdd` v0.5.0).
-- [ ] Stage E: Add UI tests for happy and unhappy diagnostics.
-- [ ] Stage F: Update design and user-facing docs.
-- [ ] Stage G: Run quality gates and capture logs.
-- [ ] Stage H: Mark roadmap item 2.2.5 as done.
+- [x] Stage A: Scaffold crate and workspace/suite wiring.
+- [x] Stage B: Implement detection heuristics in pure helper modules.
+- [x] Stage C: Implement lint driver and diagnostics.
+- [x] Stage D: Add unit and behavioural tests (`rstest-bdd` v0.5.0).
+- [x] Stage E: Add UI tests for happy and unhappy diagnostics.
+- [x] Stage F: Update design and user-facing docs.
+- [x] Stage G: Run quality gates and capture logs.
+- [x] Stage H: Mark roadmap item 2.2.5 as done.
 
 ## Surprises & Discoveries
 
-- `crates/test_must_not_have_example/` does not exist yet; this task includes
-  crate creation, not only lint logic.
-- Localisation resources already exist at
-  `locales/en-GB/test_must_not_have_example.ftl`,
-  `locales/cy/test_must_not_have_example.ftl`, and
-  `locales/gd/test_must_not_have_example.ftl`, so diagnostics can reuse the
-  established i18n pattern.
-- `rstest-bdd` is already pinned to `0.5.0` in workspace dependencies.
+- The default `whitaker::declare_ui_tests!` harness does not apply per-fixture
+  `.rustc-flags`, so this lint switched to a custom `lib_ui_tests.rs` runner
+  that loads fixture-specific rustc flags and per-fixture `dylint.toml`.
+- Because fixtures run in temporary workspaces, `BLESS=1` updates temp
+  snapshots instead of source fixtures. Expected stderr files were updated from
+  `*.stage-id.stderr` outputs.
+- Adding a `rustc_private`-backed HIR helper to `common` caused `make test`
+  linkage failures for `common` integration tests under `--all-features`.
+  Resolution: keep the canonical test matrix in `common` while keeping HIR
+  attribute adapters local to lint crates.
 
 ## Decision Log
 
@@ -155,16 +156,47 @@ Success is observable when:
     drift and inconsistent diagnostics.
   - Date/Author: 2026-02-18 / Codex.
 
+- Decision: keep HIR-to-path adaptation inside lint crates, but route
+  classification through `common::Attribute::is_test_like_with`.
+  - Rationale: this preserves one canonical attribute matrix without introducing
+    `rustc_private` linkage into `common` test binaries.
+  - Date/Author: 2026-02-19 / Codex.
+
+- Decision: UI warning fixtures use
+  `additional_test_attributes = ["allow"]` with `#[allow(dead_code)]`.
+  - Rationale: this validates lint diagnostics deterministically in UI tests
+    without relying on `#[test]` attributes that may be rewritten by harness
+    lowering.
+  - Date/Author: 2026-02-19 / Codex.
+
 ## Outcomes & Retrospective
 
-Pending implementation.
+Implemented and shipped.
 
-This section should be updated at completion with:
-
-- Final heuristic contract implemented.
-- Test inventory (unit, BDD, UI) and notable edge cases.
-- Gate results for `make check-fmt`, `make lint`, and `make test`.
-- Any follow-up work deferred from this scope.
+- Final heuristic contract:
+  - Flag docs containing Markdown headings `# Examples` (any heading level,
+    case-insensitive, optional trailing colon).
+  - Flag lines starting with fenced code markers (three or more backticks).
+  - Ignore inline backticks and plain prose.
+  - Evaluate in source order and report the first violation encountered.
+- Test inventory:
+  - Unit tests in `crates/test_must_not_have_example/src/heuristics.rs`.
+  - Behaviour tests in
+    `crates/test_must_not_have_example/src/behaviour.rs` with feature scenarios
+    in `crates/test_must_not_have_example/tests/features/doc_examples.feature`.
+  - UI tests in `crates/test_must_not_have_example/ui/` with stderr snapshots
+    for unhappy cases and pass fixtures for non-violations.
+- Reuse contract:
+  - `no_expect_outside_tests` and `test_must_not_have_example` share the same
+    canonical test-attribute matrix via common attribute classification.
+  - HIR-specific adaptation remains local per lint to keep `common` free of
+    `rustc_private` test-linkage hazards.
+- Quality gates:
+  - `make check-fmt` passed (`/tmp/2-2-5-check-fmt.log`).
+  - `make lint` passed (`/tmp/2-2-5-lint.log`).
+  - `make test` passed (`/tmp/2-2-5-test.log`).
+- Roadmap:
+  - `docs/roadmap.md` item 2.2.5 marked complete.
 
 ## Context and orientation
 
@@ -363,3 +395,4 @@ The feature is complete only when all are true:
 - 2026-02-18: Initial draft created for roadmap task 2.2.5.
 - 2026-02-18: Updated to require maximal reuse for test-context detection and
   prevent divergent definitions across lints.
+- 2026-02-19: Completed implementation, validation, and roadmap/status updates.

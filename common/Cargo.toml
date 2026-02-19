@@ -6,6 +6,9 @@ publish = false
 description = "Internal common utilities for Whitaker lints"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = []
+
 [dependencies]
 
 camino = { workspace = true }

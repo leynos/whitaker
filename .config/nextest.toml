@@ -15,7 +15,7 @@ test-group = "serial-dylint-ui"
 # isolated rustup setup may need to download and install a full nightly toolchain.
 [[profile.default.overrides]]
 filter = "binary(behaviour_toolchain)"
-slow-timeout = { period = "20m", terminate-after = 1 }
+slow-timeout = { period = "30m", terminate-after = 1 }
 
 # These three scenarios all invoke installer-driven lint builds and can
 # contend on shared rustup/cargo state when run in parallel.

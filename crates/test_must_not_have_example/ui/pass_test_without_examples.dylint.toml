@@ -1,0 +1,2 @@
+[test_must_not_have_example]
+additional_test_attributes = ["allow"]

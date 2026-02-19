@@ -304,6 +304,31 @@ a test context.
 
 ______________________________________________________________________
 
+### `test_must_not_have_example`
+
+Warns when test function documentation includes example headings (for example
+`# Examples`) or fenced code blocks.
+
+**How to fix:** Keep test docs focused on intent and assertions, and move
+example/tutorial snippets into user-facing documentation.
+
+```rust
+// Before
+#[test]
+/// # Examples
+/// ```rust
+/// assert_eq!(sum(2, 2), 4);
+/// ```
+fn sums_values() { /* ... */ }
+
+// After
+#[test]
+/// Verifies summation handles two positive integers.
+fn sums_values() { /* ... */ }
+```
+
+______________________________________________________________________
+
 ### `no_std_fs_operations`
 
 Enforces capability-based filesystem access by forbidding direct use of

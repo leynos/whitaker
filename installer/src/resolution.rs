@@ -17,6 +17,7 @@ pub const LINT_CRATES: &[&str] = &[
     "module_max_lines",
     "module_must_have_inner_docs",
     "no_expect_outside_tests",
+    "test_must_not_have_example",
     "no_std_fs_operations",
     "no_unwrap_or_else_panic",
 ];

@@ -44,6 +44,7 @@ Whitaker currently ships eight lints, with more on the way:
 | `module_must_have_inner_docs` | Requires every module to open with an inner doc comment (`//!`). Future you will thank present you.                    |
 | `module_max_lines`            | Caps modules at 400 lines by default. Encourages you to decompose or extract before things get unwieldy.               |
 | `conditional_max_n_branches`  | Flags conditionals with more than 2 branches in a single predicate. Complex boolean logic deserves its own home.       |
+| `test_must_not_have_example`  | Flags test docs containing examples headings or fenced code blocks. Test docs should describe intent, not tutorials.   |
 | `no_unwrap_or_else_panic`     | Catches sneaky panics hidden inside `unwrap_or_else` closures. If you're going to panic, at least be upfront about it. |
 | `no_std_fs_operations`        | Forbids `std::fs` operations, nudging you toward capability-based filesystem access via `cap_std`.                     |
 
@@ -58,9 +59,9 @@ Whitaker currently ships eight lints, with more on the way:
 
 ## Project Status
 
-Whitaker is under active development. Two additional lints
-(`public_fn_must_have_docs` and `test_must_not_have_example`) are planned—see
-the [roadmap](docs/roadmap.md) for details.
+Whitaker is under active development. One additional lint
+(`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
+details.
 
 ## Documentation
 

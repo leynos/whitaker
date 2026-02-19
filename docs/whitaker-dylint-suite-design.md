@@ -602,6 +602,37 @@ Forbid examples or fenced code blocks in `#[test]` docs.
 Heuristic: detect Markdown `# Examples` heading or fenced code (``` / ```rust)
 in collected doc text.
 
+**Implementation notes (2026-02-19).**
+
+- The lint is implemented in `crates/test_must_not_have_example` and checks
+  free functions, impl methods, and trait methods.
+- Test detection reuses the shared `common::Attribute::is_test_like_with`
+  matrix, so this lint and `no_expect_outside_tests` rely on one canonical set
+  of recognised test attribute paths even though each lint adapts HIR
+  attributes to that shared representation.
+- The driver adds a harness-only fallback that treats function/const pairs with
+  the same span as test functions when `rustc` rewrites `#[test]` into
+  synthetic descriptors.
+- Documentation scanning uses line-anchored heuristics:
+  - headings such as `# Examples`, `## Examples`, and `# examples:`
+  - fenced code lines with three-or-more leading backticks
+- Diagnostics are localised via `test_must_not_have_example.ftl` and include
+  fallback strings when message lookup fails.
+
+**Tests.**
+
+- Unit tests cover happy, unhappy, and edge cases in
+  `crates/test_must_not_have_example/src/heuristics.rs`.
+- Behaviour-driven tests (`rstest-bdd` v0.5.0) live in
+  `crates/test_must_not_have_example/src/behaviour.rs` with scenarios in
+  `crates/test_must_not_have_example/tests/features/doc_examples.feature`.
+- UI tests under `crates/test_must_not_have_example/ui/` validate both warning
+  and non-warning fixtures through Dylint's expected stderr snapshots. The
+  warning fixtures use per-case `dylint.toml` overrides that map
+  `additional_test_attributes = ["allow"]` so UI runs can exercise the lint
+  without relying on `#[test]` attributes that are lowered away in non-harness
+  builds.
+
 ### 3.7 `module_max_lines` (maintainability, warn)
 
 Lint when module span exceeds 400 lines. Configurable via `max_lines`.

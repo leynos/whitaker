@@ -14,6 +14,7 @@ use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
 use no_expect_outside_tests::NoExpectOutsideTests;
 use no_std_fs_operations::NoStdFsOperations;
 use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
+use test_must_not_have_example::TestMustNotHaveExample;
 
 dylint_library!();
 
@@ -24,6 +25,7 @@ macro_rules! define_suite_pass {
             [SuitePass, [
                 FunctionAttrsFollowDocs: function_attrs_follow_docs::FunctionAttrsFollowDocs::default(),
                 NoExpectOutsideTests: no_expect_outside_tests::NoExpectOutsideTests::default(),
+                TestMustNotHaveExample: test_must_not_have_example::TestMustNotHaveExample::default(),
                 ModuleMustHaveInnerDocs: module_must_have_inner_docs::ModuleMustHaveInnerDocs::default(),
                 ConditionalMaxNBranches: conditional_max_n_branches::ConditionalMaxNBranches::default(),
                 ModuleMaxLines: module_max_lines::ModuleMaxLines::default(),
@@ -49,7 +51,7 @@ define_suite_pass!();
 /// # use whitaker_suite::register_suite_lints;
 /// let mut store = LintStore::new();
 /// register_suite_lints(&mut store);
-/// assert_eq!(store.get_lints().len(), 8);
+/// assert_eq!(store.get_lints().len(), 9);
 /// ```
 pub fn register_suite_lints(store: &mut LintStore) {
     store.register_lints(SUITE_LINT_DECLS);
