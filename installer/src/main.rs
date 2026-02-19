@@ -45,6 +45,64 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
     }
 }
 
+/// Attempt prebuilt installation and return staged path when successful.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Signature intentionally mirrors run_install split points"
+)]
+fn try_prebuilt_installation(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    crates: &[String],
+    toolchain_channel: &str,
+    stderr: &mut dyn Write,
+) -> Result<Option<Utf8PathBuf>> {
+    let requested_crates: Vec<CrateName> = crates
+        .iter()
+        .map(|crate_name| CrateName::from(crate_name.as_str()))
+        .collect();
+    if !args.should_attempt_prebuilt(&requested_crates) {
+        return Ok(None);
+    }
+
+    let host_target = match detect_host_target() {
+        Ok(target) => target,
+        Err(e) => {
+            if !args.quiet {
+                write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
+                write_stderr_line(stderr, "Falling back to local compilation.");
+                write_stderr_line(stderr, "");
+            }
+            return Ok(None);
+        }
+    };
+
+    let destination_dir = match prebuilt_library_dir(dirs, toolchain_channel, &host_target) {
+        Ok(destination) => destination,
+        Err(e) => {
+            if !args.quiet {
+                write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
+                write_stderr_line(stderr, "Falling back to local compilation.");
+                write_stderr_line(stderr, "");
+            }
+            return Ok(None);
+        }
+    };
+
+    let prebuilt_config = PrebuiltConfig {
+        target: &host_target,
+        toolchain: toolchain_channel,
+        destination_dir: &destination_dir,
+        quiet: args.quiet,
+    };
+
+    let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(staging_path))
+}
+
 /// Runs the install command to build and stage lint libraries.
 ///
 /// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
@@ -72,45 +130,17 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
 
     // Step 3: Resolve crates and toolchain
-    let crates = resolve_requested_crates(args)?;
+    let requested_crates = resolve_requested_crates(args)?;
+    let crates: Vec<String> = requested_crates.iter().map(ToString::to_string).collect();
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     // Step 3.5: Attempt prebuilt download when install options allow it.
-    if args.should_attempt_prebuilt(&crates) {
-        match detect_host_target() {
-            Ok(host_target) => match prebuilt_library_dir(&dirs, toolchain.channel(), &host_target)
-            {
-                Ok(destination_dir) => {
-                    let prebuilt_config = PrebuiltConfig {
-                        target: &host_target,
-                        toolchain: toolchain.channel(),
-                        destination_dir: &destination_dir,
-                        quiet: args.quiet,
-                    };
-                    if let PrebuiltResult::Success { staging_path } =
-                        attempt_prebuilt(&prebuilt_config, stderr)
-                    {
-                        return finish_install(args, &dirs, &staging_path, stderr);
-                    }
-                }
-                Err(e) => {
-                    if !args.quiet {
-                        write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
-                        write_stderr_line(stderr, "Falling back to local compilation.");
-                        write_stderr_line(stderr, "");
-                    }
-                }
-            },
-            Err(e) => {
-                if !args.quiet {
-                    write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
-                    write_stderr_line(stderr, "Falling back to local compilation.");
-                    write_stderr_line(stderr, "");
-                }
-            }
-        }
+    if let Some(staging_path) =
+        try_prebuilt_installation(args, &dirs, &crates, toolchain.channel(), stderr)?
+    {
+        return finish_install(args, &dirs, &staging_path, stderr);
     }
 
     let context = PipelineContext {
@@ -124,7 +154,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     };
 
     // Step 4: Build and stage
-    let build_results = perform_build(&context, &crates, stderr)?;
+    let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
 
     // Step 5: Generate wrapper scripts if requested
