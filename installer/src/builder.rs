@@ -291,6 +291,14 @@ mod tests {
             .map(|&lint| format!("experimental-{}", lint.replace('_', "-")))
             .collect::<Vec<_>>()
             .join(",");
+        if expected.is_empty() {
+            assert!(
+                features.is_empty(),
+                "Builder::experimental_features should return an empty string when \
+                 EXPERIMENTAL_LINT_CRATES is empty"
+            );
+            return;
+        }
         assert_eq!(features, expected);
     }
 }

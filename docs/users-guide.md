@@ -166,10 +166,19 @@ ______________________________________________________________________
 
 ### `bumpy_road_function`
 
-Flags functions with multiple distinct clusters of nested conditional
+#### Purpose
+
+Detects functions with multiple distinct clusters of nested conditional
 complexity.
 
-**Configuration:**
+#### Scope and behaviour
+
+Flags a function when peak detection finds two or more separated complexity
+regions above the configured threshold. Detection smooths the local complexity
+signal with the configured `window` and only considers peaks spanning at least
+`min_bump_lines`.
+
+#### Configuration
 
 ```toml
 [bumpy_road_function]
@@ -178,8 +187,19 @@ window = 3
 min_bump_lines = 2
 ```
 
-**How to fix:** Split complex regions into helper functions and simplify
-branch-heavy predicates.
+#### What is allowed
+
+- A single complexity peak in a function.
+- Simple predicates that remain below the configured threshold.
+
+#### What is denied
+
+- Two or more separated complexity peaks above the configured threshold.
+
+#### How to fix
+
+Split complex regions into helper functions and simplify branch-heavy
+predicates.
 
 ______________________________________________________________________
 
