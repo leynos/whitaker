@@ -74,6 +74,25 @@ impl<'a> ItemKindInfo<'a> {
     }
 }
 
+/// Macro to implement check methods for function-bearing HIR items.
+macro_rules! impl_check_method {
+    ($method_name:ident, $item_type:ty, $kind_pattern:pat, $variant:ident) => {
+        fn $method_name(&mut self, cx: &LateContext<'tcx>, item: &'tcx $item_type) {
+            if let $kind_pattern = item.kind {
+                let attrs = cx.tcx.hir_attrs(item.hir_id());
+                self.check_function_item(
+                    cx,
+                    ItemKindInfo::$variant {
+                        ident: &item.ident,
+                        attrs,
+                    },
+                    None,
+                );
+            }
+        }
+    };
+}
+
 impl Default for TestMustNotHaveExample {
     fn default() -> Self {
         Self {
@@ -118,33 +137,18 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
         }
     }
 
-    fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
-        if let hir::ImplItemKind::Fn(..) = item.kind {
-            let attrs = cx.tcx.hir_attrs(item.hir_id());
-            self.check_function_item(
-                cx,
-                ItemKindInfo::ImplItem {
-                    ident: &item.ident,
-                    attrs,
-                },
-                None,
-            );
-        }
-    }
-
-    fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
-        if let hir::TraitItemKind::Fn(..) = item.kind {
-            let attrs = cx.tcx.hir_attrs(item.hir_id());
-            self.check_function_item(
-                cx,
-                ItemKindInfo::TraitItem {
-                    ident: &item.ident,
-                    attrs,
-                },
-                None,
-            );
-        }
-    }
+    impl_check_method!(
+        check_impl_item,
+        hir::ImplItem<'tcx>,
+        hir::ImplItemKind::Fn(..),
+        ImplItem
+    );
+    impl_check_method!(
+        check_trait_item,
+        hir::TraitItem<'tcx>,
+        hir::TraitItemKind::Fn(..),
+        TraitItem
+    );
 }
 
 impl TestMustNotHaveExample {
