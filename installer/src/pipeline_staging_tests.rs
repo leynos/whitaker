@@ -26,17 +26,18 @@ struct StagingTestContext {
 
 impl StagingTestContext {
     fn new() -> Self {
+        use std::fs;
+
         let temp_dir = TempDir::new().expect("failed to create temp dir");
         let target_dir =
             Utf8PathBuf::try_from(temp_dir.path().to_owned()).expect("non-UTF8 temp path");
+        let workspace_root = target_dir.join("workspace");
+        fs::create_dir_all(&workspace_root).expect("failed to create workspace root");
         Self {
             _temp_dir: temp_dir,
             target_dir,
-            workspace_root: Utf8PathBuf::from("/tmp/workspace"),
-            toolchain: Toolchain::with_override(
-                &Utf8PathBuf::from("/tmp/test"),
-                "nightly-2025-09-18",
-            ),
+            toolchain: Toolchain::with_override(&workspace_root, "nightly-2025-09-18"),
+            workspace_root,
             jobs: None,
             verbosity: 0,
             experimental: false,
@@ -50,24 +51,6 @@ impl StagingTestContext {
 
     fn with_quiet(mut self, quiet: bool) -> Self {
         self.quiet = quiet;
-        self
-    }
-
-    #[expect(
-        dead_code,
-        reason = "API parity with parent test context for future test use"
-    )]
-    fn with_jobs(mut self, jobs: Option<usize>) -> Self {
-        self.jobs = jobs;
-        self
-    }
-
-    #[expect(
-        dead_code,
-        reason = "API parity with parent test context for future test use"
-    )]
-    fn with_verbosity(mut self, verbosity: u8) -> Self {
-        self.verbosity = verbosity;
         self
     }
 

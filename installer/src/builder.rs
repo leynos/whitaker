@@ -280,6 +280,8 @@ mod tests {
     fn features_for_crate_handles_suite_experimental_mode() {
         let builder = test_builder(true);
         let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
+        // At present EXPERIMENTAL_LINT_CRATES is empty, so suite features remain
+        // unchanged even when experimental mode is enabled.
         assert_eq!(result, "dylint-driver");
     }
 
