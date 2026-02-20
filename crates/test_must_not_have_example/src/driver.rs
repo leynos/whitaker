@@ -42,10 +42,36 @@ struct FunctionSite<'a> {
     span: Span,
 }
 
-struct FunctionCheckContext<'a> {
-    attrs: &'a [hir::Attribute],
-    ident: &'a Ident,
-    is_test: bool,
+enum ItemKindInfo<'a> {
+    Item {
+        ident: Ident,
+        attrs: &'a [hir::Attribute],
+    },
+    ImplItem {
+        ident: &'a Ident,
+        attrs: &'a [hir::Attribute],
+    },
+    TraitItem {
+        ident: &'a Ident,
+        attrs: &'a [hir::Attribute],
+    },
+}
+
+impl<'a> ItemKindInfo<'a> {
+    fn ident(&self) -> &Ident {
+        match self {
+            ItemKindInfo::Item { ident, .. } => ident,
+            ItemKindInfo::ImplItem { ident, .. } | ItemKindInfo::TraitItem { ident, .. } => ident,
+        }
+    }
+
+    fn attrs(&self) -> &'a [hir::Attribute] {
+        match self {
+            ItemKindInfo::Item { attrs, .. }
+            | ItemKindInfo::ImplItem { attrs, .. }
+            | ItemKindInfo::TraitItem { attrs, .. } => attrs,
+        }
+    }
 }
 
 impl Default for TestMustNotHaveExample {
@@ -88,31 +114,20 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
                 return;
             };
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            let additional_test_attributes = self.additional_test_attributes.clone();
-            self.check_function_with(
-                cx,
-                FunctionCheckContext {
-                    attrs,
-                    ident: &ident,
-                    is_test: false,
-                },
-                || is_test_function_item(cx, item, attrs, additional_test_attributes.as_slice()),
-            );
+            self.check_function_item(cx, ItemKindInfo::Item { ident, attrs }, Some(item));
         }
     }
 
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            let additional_test_attributes = self.additional_test_attributes.clone();
-            self.check_function_with(
+            self.check_function_item(
                 cx,
-                FunctionCheckContext {
-                    attrs,
+                ItemKindInfo::ImplItem {
                     ident: &item.ident,
-                    is_test: false,
+                    attrs,
                 },
-                || has_test_like_hir_attributes(attrs, additional_test_attributes.as_slice()),
+                None,
             );
         }
     }
@@ -120,15 +135,13 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            let additional_test_attributes = self.additional_test_attributes.clone();
-            self.check_function_with(
+            self.check_function_item(
                 cx,
-                FunctionCheckContext {
-                    attrs,
+                ItemKindInfo::TraitItem {
                     ident: &item.ident,
-                    is_test: false,
+                    attrs,
                 },
-                || has_test_like_hir_attributes(attrs, additional_test_attributes.as_slice()),
+                None,
             );
         }
     }
@@ -170,37 +183,29 @@ impl TestMustNotHaveExample {
         });
     }
 
-    fn check_function<'tcx>(&mut self, cx: &LateContext<'tcx>, context: FunctionCheckContext<'_>) {
-        if let Some(violation) = self.detect_violation(context.attrs, context.is_test) {
+    fn check_function_item<'tcx>(
+        &mut self,
+        cx: &LateContext<'tcx>,
+        item_info: ItemKindInfo<'_>,
+        item: Option<&'tcx hir::Item<'tcx>>,
+    ) {
+        let attrs = item_info.attrs();
+        let is_test = if let Some(item) = item {
+            is_test_function_item(cx, item, attrs, self.additional_test_attributes.as_slice())
+        } else {
+            has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice())
+        };
+
+        if let Some(violation) = self.detect_violation(attrs, is_test) {
             self.emit_violation(
                 cx,
                 FunctionSite {
-                    name: context.ident.name.as_str(),
-                    span: context.ident.span,
+                    name: item_info.ident().name.as_str(),
+                    span: item_info.ident().span,
                 },
                 violation,
             );
         }
-    }
-
-    /// Helper to check a function with customisable test detection.
-    fn check_function_with<'tcx, F>(
-        &mut self,
-        cx: &LateContext<'tcx>,
-        context: FunctionCheckContext<'_>,
-        is_test_fn: F,
-    ) where
-        F: FnOnce() -> bool,
-    {
-        let is_test = is_test_fn();
-        self.check_function(
-            cx,
-            FunctionCheckContext {
-                attrs: context.attrs,
-                ident: context.ident,
-                is_test,
-            },
-        );
     }
 }
 
