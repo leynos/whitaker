@@ -30,6 +30,9 @@ This builds and stages the aggregated suite containing all standard lints.
 whitaker-installer --experimental
 ```
 
+At present, there are no experimental lints, so this flag is reserved for
+future lint previews.
+
 ### Install specific lints
 
 ```bash
@@ -74,26 +77,21 @@ Whitaker lints are divided into two categories:
 
 These lints are included when running `whitaker-installer` without flags:
 
-| Lint                          | Description                                |
-| ----------------------------- | ------------------------------------------ |
-| `conditional_max_n_branches`  | Limit boolean branches in conditionals     |
-| `function_attrs_follow_docs`  | Doc comments must precede other attributes |
-| `module_max_lines`            | Warn when modules exceed line threshold    |
-| `module_must_have_inner_docs` | Require inner doc comments on modules      |
-| `no_expect_outside_tests`     | Forbid `.expect()` outside test contexts   |
-| `no_std_fs_operations`        | Enforce capability-based filesystem access |
-| `no_unwrap_or_else_panic`     | Deny panicking `unwrap_or_else` fallbacks  |
+| Lint                          | Description                                      |
+| ----------------------------- | ------------------------------------------------ |
+| `bumpy_road_function`         | Detect multiple complexity clusters in functions |
+| `conditional_max_n_branches`  | Limit boolean branches in conditionals           |
+| `function_attrs_follow_docs`  | Doc comments must precede other attributes       |
+| `module_max_lines`            | Warn when modules exceed line threshold          |
+| `module_must_have_inner_docs` | Require inner doc comments on modules            |
+| `no_expect_outside_tests`     | Forbid `.expect()` outside test contexts         |
+| `no_std_fs_operations`        | Enforce capability-based filesystem access       |
+| `no_unwrap_or_else_panic`     | Deny panicking `unwrap_or_else` fallbacks        |
 
 ### Experimental Lints
 
-These lints require `whitaker-installer --experimental` to install:
-
-| Lint                  | Description                            |
-| --------------------- | -------------------------------------- |
-| `bumpy_road_function` | Detect high nesting depth in functions |
-
-Experimental lints may be promoted to standard in future releases once they
-have been sufficiently tested in real-world codebases.
+There are currently no experimental lints. The `--experimental` flag remains
+available for future releases that add preview lints.
 
 ## Using the Installed Lints
 

@@ -150,8 +150,9 @@ impl Builder {
 
     /// Determine which features to enable for a given crate.
     ///
-    /// For the suite crate, this includes the experimental feature when enabled.
-    /// For individual lint crates, only the `dylint-driver` feature is needed.
+    /// For the suite crate, this includes experimental features when enabled
+    /// and configured. For individual lint crates, only the `dylint-driver`
+    /// feature is needed.
     fn features_for_crate(&self, crate_name: &CrateName) -> String {
         if crate_name.as_str() == SUITE_CRATE && self.config.experimental {
             let experimental = Self::experimental_features();
@@ -229,10 +230,10 @@ pub const fn library_prefix() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
-    /// Create a test builder with the given experimental flag.
-    fn test_builder(experimental: bool) -> Builder {
+    #[fixture]
+    fn builder() -> Builder {
         Builder {
             config: BuildConfig {
                 toolchain: Toolchain::with_override(
@@ -242,7 +243,7 @@ mod tests {
                 target_dir: Utf8PathBuf::from("/tmp/target"),
                 jobs: None,
                 verbosity: 0,
-                experimental,
+                experimental: false,
             },
         }
     }
@@ -266,47 +267,43 @@ mod tests {
     #[case::non_suite_with_experimental("module_max_lines", true, "dylint-driver")]
     #[case::suite_without_experimental("whitaker_suite", false, "dylint-driver")]
     fn features_for_crate_returns_expected_features(
+        mut builder: Builder,
         #[case] crate_name: &str,
         #[case] experimental: bool,
         #[case] expected: &str,
     ) {
-        let builder = test_builder(experimental);
+        builder.config.experimental = experimental;
         let result = builder.features_for_crate(&CrateName::from(crate_name));
         assert_eq!(result, expected);
     }
 
-    #[test]
-    fn features_for_crate_includes_experimental_for_suite() {
-        let builder = test_builder(true);
+    #[rstest]
+    fn features_for_crate_handles_suite_experimental_mode(mut builder: Builder) {
+        builder.config.experimental = true;
         let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
-
-        // Should start with dylint-driver
-        assert!(result.starts_with("dylint-driver"));
-
-        // Should include experimental features
-        assert!(result.contains("experimental-"));
-        // Verify format: experimental-{lint-name-with-hyphens}
-        for lint in EXPERIMENTAL_LINT_CRATES {
-            let expected_feature = format!("experimental-{}", lint.replace('_', "-"));
-            assert!(
-                result.contains(&expected_feature),
-                "expected {expected_feature} in {result}"
-            );
-        }
+        // At present EXPERIMENTAL_LINT_CRATES is empty, so suite features remain
+        // unchanged even when experimental mode is enabled.
+        assert_eq!(result, "dylint-driver");
     }
 
     #[test]
     fn experimental_features_derives_from_experimental_lint_crates() {
         let features = Builder::experimental_features();
-
-        // Verify comma-separated format
-        let parts: Vec<_> = features.split(',').collect();
-        assert_eq!(parts.len(), EXPERIMENTAL_LINT_CRATES.len());
-
-        // Verify each feature follows the expected pattern
-        for (i, lint) in EXPERIMENTAL_LINT_CRATES.iter().enumerate() {
-            let expected = format!("experimental-{}", lint.replace('_', "-"));
-            assert_eq!(parts[i], expected);
+        let expected = EXPERIMENTAL_LINT_CRATES
+            .iter()
+            .map(|&lint| format!("experimental-{}", lint.replace('_', "-")))
+            .collect::<Vec<_>>()
+            .join(",");
+        if expected.is_empty() {
+            assert!(
+                features.is_empty(),
+                concat!(
+                    "Builder::experimental_features should return an empty string when ",
+                    "EXPERIMENTAL_LINT_CRATES is empty"
+                )
+            );
+            return;
         }
+        assert_eq!(features, expected);
     }
 }

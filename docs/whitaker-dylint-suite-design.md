@@ -1096,10 +1096,8 @@ highlight the top two intervals in the diagnostic.
 - When configuration values are invalid (negative threshold, even/zero window,
   negative weights), fall back to defaults and log at debug level rather than
   panicking.
-- Exclude the lint from the aggregated `whitaker_suite` crate by default;
-  enable it via the `whitaker_suite` feature flag
-  `experimental-bumpy-road-function`, or load the lint crate directly when
-  opting into experimental checks.
+- Include the lint in the aggregated `whitaker_suite` crate by default as a
+  stable rule, while still allowing direct usage by loading the lint crate.
 
 **Algorithm sketch.**
 
@@ -1149,7 +1147,7 @@ and other maintainability lints for a complementary suite.
 
 **Verdict.** The Bumpy Road lint is realistic and actionable. It approximates
 CodeScene’s smell by emphasising the distribution of complexity within a single
-function and can ship as an experimental Dylint rule guarded by a feature flag.
+function and is suitable as a stable Dylint rule in the default suite.
 
 ## 13) Maintenance policy
 
@@ -1161,7 +1159,7 @@ function and can ship as an experimental Dylint rule guarded by a feature flag.
 
 ## 14) Deliverables checklist
 
-- [ ] Seven `cdylib` crates under `crates/*` with skeletons.
+- [ ] Eight `cdylib` crates under `crates/*` with skeletons.
 - [ ] `common` helpers.
 - [ ] Optional `whitaker_suite` aggregated crate.
 - [ ] Optional `installer` CLI.

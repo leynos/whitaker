@@ -10,7 +10,6 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-experimental-bumpy-road-function = ["dylint-driver", "dep:bumpy_road_function"]
 dylint-driver = [
     "dep:dylint_linting",
     "dep:function_attrs_follow_docs",
@@ -20,6 +19,7 @@ dylint-driver = [
     "dep:module_max_lines",
     "dep:no_unwrap_or_else_panic",
     "dep:no_std_fs_operations",
+    "dep:bumpy_road_function",
     "dep:rustc_hir",
     "dep:rustc_lint",
     "dep:rustc_session",

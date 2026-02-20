@@ -3,7 +3,7 @@ name = "bumpy_road_function"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Experimental lint that flags multiple clusters of complex conditional logic"
+description = "Lint that flags multiple clusters of complex conditional logic"
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -15,7 +15,6 @@ test = false
 
 [features]
 default = []
-experimental-bumpy-road = []
 dylint-driver = [
     "dep:common",
     "dep:dylint_linting",

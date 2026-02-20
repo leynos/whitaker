@@ -106,9 +106,9 @@ Whitaker lints are divided into two categories:
   false positives or undergo breaking changes between releases. They must be
   explicitly enabled.
 
-The default `whitaker_suite` pattern includes only standard lints. Experimental
-lints can be added individually or enabled via the `--experimental` flag when
-using the standalone installer.
+The default `whitaker_suite` pattern includes only standard lints. At present,
+all shipped Whitaker lints are standard and there are no experimental lints in
+the release.
 
 ### Enabling experimental lints
 
@@ -118,17 +118,7 @@ using the standalone installer.
 whitaker-installer --experimental
 ```
 
-#### Via Cargo.toml
-
-Add experimental lints alongside the suite:
-
-```toml
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://github.com/leynos/whitaker", pattern = "whitaker_suite" },
-  { git = "https://github.com/leynos/whitaker", pattern = "crates/bumpy_road_function" }
-]
-```
+This flag is retained for forward compatibility and currently has no effect.
 
 ## Lint Configuration
 
@@ -173,6 +163,45 @@ Available locales:
 ______________________________________________________________________
 
 ## Available Lints
+
+### `bumpy_road_function`
+
+#### Purpose
+
+Detects functions with multiple distinct clusters of nested conditional
+complexity.
+
+#### Scope and behaviour
+
+Flags a function when peak detection finds two or more separated complexity
+regions above the configured threshold. Detection smooths the local complexity
+signal with the configured `window` and only considers peaks spanning at least
+`min_bump_lines`.
+
+#### Configuration
+
+```toml
+[bumpy_road_function]
+threshold = 3.0
+window = 3
+min_bump_lines = 2
+```
+
+#### What is allowed
+
+- A single complexity peak in a function.
+- Simple predicates that remain below the configured threshold.
+
+#### What is denied
+
+- Two or more separated complexity peaks above the configured threshold.
+
+#### How to fix
+
+Split complex regions into helper functions and simplify branch-heavy
+predicates.
+
+______________________________________________________________________
 
 ### `conditional_max_n_branches`
 

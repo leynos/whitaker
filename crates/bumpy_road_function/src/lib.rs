@@ -1,9 +1,9 @@
-//! Experimental lint crate detecting "Bumpy Road" complexity clusters.
+//! Lint crate detecting "Bumpy Road" complexity clusters.
 //!
 //! The bumpy road detector models complexity as a per-line signal, smooths it,
 //! then flags functions exhibiting two or more separated peaks. Consumers can
-//! run the lint directly by loading this crate as a Dylint library or opt into
-//! it via the aggregated suite's experimental feature.
+//! run the lint directly by loading this crate as a Dylint library or use it
+//! via the aggregated suite, where it is included by default.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 pub mod analysis;
