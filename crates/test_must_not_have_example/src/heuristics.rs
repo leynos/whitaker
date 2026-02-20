@@ -8,6 +8,17 @@ pub(crate) enum DocExampleViolation {
 }
 
 impl DocExampleViolation {
+    /// Returns the human-readable detail describing the violation kind.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// assert_eq!(
+    ///     DocExampleViolation::ExamplesHeading.note_detail(),
+    ///     "an examples heading"
+    /// );
+    /// assert_eq!(DocExampleViolation::CodeFence.note_detail(), "a fenced code block");
+    /// ```
     pub(crate) const fn note_detail(self) -> &'static str {
         match self {
             Self::ExamplesHeading => "an examples heading",
@@ -16,7 +27,20 @@ impl DocExampleViolation {
     }
 }
 
-/// Detect the first example-like violation in documentation text.
+/// Detects the first example-like violation in documentation text.
+///
+/// # Examples
+///
+/// ```ignore
+/// let doc = "# Examples\nDetails";
+/// assert_eq!(
+///     detect_example_violation(doc),
+///     Some(DocExampleViolation::ExamplesHeading)
+/// );
+///
+/// let prose = "Plain prose with no headings";
+/// assert_eq!(detect_example_violation(prose), None);
+/// ```
 #[must_use]
 pub(crate) fn detect_example_violation(doc_text: &str) -> Option<DocExampleViolation> {
     for line in doc_text.lines() {

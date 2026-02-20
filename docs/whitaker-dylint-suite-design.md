@@ -382,7 +382,7 @@ observed during feature rollout.
 integration test crates), functions bearing `#[test]` may not be detected via
 the standard attribute traversal if the test framework processes them
 differently. A fallback heuristic supplements standard detection by checking:
-(1) whether any enclosing function has a recognised test attribute, (2) whether
+(1) whether any enclosing function has a recognized test attribute, (2) whether
 the code lives inside a module named `test` or `tests`, and (3) whether the
 source file resides in a `tests/` directory. This fallback only activates when
 `rustc` is running with the test harness flag (`--test`), ensuring production
@@ -608,15 +608,17 @@ in collected doc text.
   free functions, impl methods, and trait methods.
 - Test detection reuses the shared `common::Attribute::is_test_like_with`
   matrix, so this lint and `no_expect_outside_tests` rely on one canonical set
-  of recognised test attribute paths even though each lint adapts HIR
+  of recognized test attribute paths even though each lint adapts HIR
   attributes to that shared representation.
 - The driver adds a harness-only fallback that treats function/const pairs with
   the same span as test functions when `rustc` rewrites `#[test]` into
-  synthetic descriptors.
+  synthetic descriptors. This path is gated behind `--test` and assumes
+  non-harness user code will not produce same-name const/function pairs at the
+  same span.
 - Documentation scanning uses line-anchored heuristics:
   - headings such as `# Examples`, `## Examples`, and `# examples:`
   - fenced code lines with three-or-more leading backticks
-- Diagnostics are localised via `test_must_not_have_example.ftl` and include
+- Diagnostics are localized via `test_must_not_have_example.ftl` and include
   fallback strings when message lookup fails.
 
 **Tests.**
@@ -649,7 +651,7 @@ Lint when module span exceeds 400 lines. Configurable via `max_lines`.
 - Macro expansions are ignored. The call site is often a single `mod` block in a
   macro definition and warning there would not guide the developer who wrote
   the expanded code.
-- Diagnostics are localised via the shared `Localizer`,
+- Diagnostics are localized via the shared `Localizer`,
   with fallback strings matching the bundled Fluent resources. The module ident
   span is highlighted whilst an additional note points to the declaration
   header to minimise visual noise in long files.

@@ -1,6 +1,10 @@
+//! UI fixture: test-like docs without examples should not trigger warnings.
 #![warn(test_must_not_have_example)]
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Fixture helper exists solely to validate a no-warning path"
+)]
 /// Validates behaviour without embedding examples.
 fn pass_test_without_examples() {
     assert!(true);

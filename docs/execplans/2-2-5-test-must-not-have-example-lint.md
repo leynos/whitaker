@@ -19,7 +19,7 @@ predicate branching, module length, panic fallbacks, and `std::fs` usage.
 Roadmap item 2.2.5 tracks delivery of `test_must_not_have_example`.
 
 After this change, test-like functions (`#[test]`, `#[tokio::test]`,
-`#[rstest]`, and recognised equivalents) will trigger a warning when their
+`#[rstest]`, and recognized equivalents) will trigger a warning when their
 documentation contains either an Examples heading or a fenced code block. This
 preserves readability goals by keeping test docs focused on intent rather than
 user examples.
@@ -49,7 +49,7 @@ Success is observable when:
   additive change is needed for suite registration.
 - Reuse existing test-context detection logic from `common` and
   `no_expect_outside_tests`; do not introduce a second independent matrix of
-  recognised test attributes.
+  recognized test attributes.
 - If reuse requires moving logic, extract shared helpers into `common` rather
   than copying implementation details into the new crate.
 - Use workspace-pinned dependencies; `rstest-bdd` and `rstest-bdd-macros` must
@@ -163,7 +163,7 @@ Success is observable when:
   - Date/Author: 2026-02-19 / Codex.
 
 - Decision: UI warning fixtures use
-  `additional_test_attributes = ["allow"]` with `#[allow(dead_code)]`.
+  `additional_test_attributes = ["expect"]` with `#[expect(dead_code)]`.
   - Rationale: this validates lint diagnostics deterministically in UI tests
     without relying on `#[test]` attributes that may be rewritten by harness
     lowering.
@@ -283,13 +283,13 @@ classification rules.
 
 Implement `LateLintPass` in `src/driver.rs` to:
 
-- recognise test-like functions through the shared canonical helper path;
+- recognize test-like functions through the shared canonical helper path;
 - collect doc comments/attributes for each candidate function;
-- pass normalised doc text into Stage B helpers;
-- emit a warning for disallowed Examples/fence content using localised messages
+- pass normalized doc text into Stage B helpers;
+- emit a warning for disallowed Examples/fence content using localized messages
   from the existing Fluent bundles.
 
-Reuse established localisation flow (`get_localizer_for_lint`, fallback-safe
+Reuse established localization flow (`get_localizer_for_lint`, fallback-safe
 message resolution) and include the offending test/function name in diagnostic
 arguments where useful.
 

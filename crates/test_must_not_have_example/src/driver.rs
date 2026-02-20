@@ -10,7 +10,7 @@ use log::debug;
 use rustc_hir as hir;
 use rustc_hir::Node;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
-use rustc_span::{Ident, Span};
+use rustc_span::{Ident, Span, Symbol};
 use serde::Deserialize;
 use std::borrow::Cow;
 use whitaker::SharedConfig;
@@ -33,7 +33,9 @@ dylint_linting::impl_late_lint! {
 
 /// Lint pass that checks test documentation for example sections.
 pub struct TestMustNotHaveExample {
+    /// Additional attribute paths configured as test-like markers.
     additional_test_attributes: Vec<AttributePath>,
+    /// Localized message resolver used for emitted diagnostics.
     localizer: Localizer,
 }
 
@@ -175,15 +177,15 @@ impl TestMustNotHaveExample {
         function: FunctionSite<'_>,
         violation: DocExampleViolation,
     ) {
-        let messages = localised_messages(&self.localizer, function.name, violation);
+        let messages = localized_messages(&self.localizer, function.name, violation);
         let primary = messages.primary().to_string();
         let note = messages.note().to_string();
         let help = messages.help().to_string();
 
         cx.span_lint(TEST_MUST_NOT_HAVE_EXAMPLE, function.span, move |lint| {
-            lint.primary_message(primary.clone());
-            lint.note(note.clone());
-            lint.help(help.clone());
+            lint.primary_message(primary);
+            lint.note(note);
+            lint.help(help);
         });
     }
 
@@ -235,42 +237,61 @@ fn is_harness_marked_test_function<'tcx>(
         return false;
     };
 
-    sibling_items(cx, item)
-        .into_iter()
-        .filter(|sibling| sibling.hir_id() != item.hir_id())
-        .filter(|sibling| matches!(sibling.kind, hir::ItemKind::Const(..)))
-        .filter_map(|sibling| sibling.kind.ident().map(|ident| (ident, sibling)))
-        .any(|(ident, sibling)| ident.name == function_ident.name && sibling.span == item.span)
-}
-
-fn sibling_items<'tcx>(
-    cx: &LateContext<'tcx>,
-    item: &'tcx hir::Item<'tcx>,
-) -> Vec<&'tcx hir::Item<'tcx>> {
+    let function_hir_id = item.hir_id();
+    let function_name = function_ident.name;
+    let function_span = item.span;
     let mut parents = cx.tcx.hir_parent_iter(item.hir_id());
     let Some((_, parent_node)) = parents.next() else {
-        return Vec::new();
+        return false;
     };
 
     match parent_node {
         Node::Item(parent_item) => {
             let hir::ItemKind::Mod(_, module) = parent_item.kind else {
-                return Vec::new();
+                return false;
             };
             module
                 .item_ids
                 .iter()
                 .map(|id| cx.tcx.hir_item(*id))
-                .collect()
+                .any(|sibling| {
+                    is_matching_harness_test_descriptor(
+                        function_hir_id,
+                        function_name,
+                        function_span,
+                        sibling,
+                    )
+                })
         }
         Node::Crate(_crate_node) => cx
             .tcx
             .hir_crate_items(())
             .free_items()
             .map(|id| cx.tcx.hir_item(id))
-            .collect(),
-        _ => Vec::new(),
+            .any(|sibling| {
+                is_matching_harness_test_descriptor(
+                    function_hir_id,
+                    function_name,
+                    function_span,
+                    sibling,
+                )
+            }),
+        _ => false,
     }
+}
+
+fn is_matching_harness_test_descriptor(
+    function_hir_id: hir::HirId,
+    function_name: Symbol,
+    function_span: Span,
+    sibling: &hir::Item<'_>,
+) -> bool {
+    sibling.hir_id() != function_hir_id
+        && matches!(sibling.kind, hir::ItemKind::Const(..))
+        && sibling
+            .kind
+            .ident()
+            .is_some_and(|ident| ident.name == function_name && sibling.span == function_span)
 }
 
 fn has_test_like_hir_attributes(attrs: &[hir::Attribute], additional: &[AttributePath]) -> bool {
@@ -298,7 +319,7 @@ fn collect_doc_text(attrs: &[hir::Attribute]) -> String {
         .join("\n")
 }
 
-fn localised_messages(
+fn localized_messages(
     localizer: &Localizer,
     function_name: &str,
     violation: DocExampleViolation,
@@ -322,8 +343,8 @@ fn localised_messages(
 
 fn fallback_messages(function_name: &str, reason: &str) -> DiagnosticMessageSet {
     DiagnosticMessageSet::new(
-        format!("Remove example sections from test `{function_name}` documentation."),
-        format!("The docs for `{function_name}` contain {reason}."),
+        format!("Remove example sections from test {function_name} documentation."),
+        format!("The docs for {function_name} contain {reason}."),
         String::from("Drop the example or move it into standalone user-facing documentation."),
     )
 }
