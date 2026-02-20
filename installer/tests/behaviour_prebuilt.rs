@@ -13,10 +13,6 @@ use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebu
 use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
 use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
 
-// ---------------------------------------------------------------------------
-// Test doubles
-// ---------------------------------------------------------------------------
-
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 const DEFAULT_TOOLCHAIN: &str = "nightly-2025-09-18";
@@ -106,14 +102,10 @@ impl ArtefactExtractor for StubExtractor {
     }
 }
 
-// ---------------------------------------------------------------------------
-// World
-// ---------------------------------------------------------------------------
-
 #[derive(Default)]
 struct PrebuiltWorld {
     _temp_dir: Option<tempfile::TempDir>,
-    staging_base: Option<Utf8PathBuf>,
+    staging_root: Option<Utf8PathBuf>,
     expected_toolchain: Option<String>,
     requested_target: Option<String>,
     manifest_behaviour: Option<ManifestBehaviour>,
@@ -121,24 +113,22 @@ struct PrebuiltWorld {
     result: Option<PrebuiltResult>,
     install_args: Option<InstallArgs>,
     should_attempt_prebuilt: Option<bool>,
+    force_destination_conflict: bool,
+    attempted_destination: Option<Utf8PathBuf>,
 }
 
 #[fixture]
 fn world() -> PrebuiltWorld {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let staging_base = Utf8PathBuf::try_from(temp_dir.path().to_path_buf()).expect("UTF-8 path");
+    let staging_root = Utf8PathBuf::try_from(temp_dir.path().to_path_buf()).expect("UTF-8 path");
     PrebuiltWorld {
         _temp_dir: Some(temp_dir),
-        staging_base: Some(staging_base),
+        staging_root: Some(staging_root),
         expected_toolchain: Some(DEFAULT_TOOLCHAIN.to_owned()),
         requested_target: Some(DEFAULT_TARGET.to_owned()),
         ..Default::default()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Given steps
-// ---------------------------------------------------------------------------
 
 #[given("a valid manifest for target \"{target}\"")]
 fn given_valid_manifest(world: &mut PrebuiltWorld, target: String) {
@@ -209,22 +199,35 @@ fn given_build_only(world: &mut PrebuiltWorld) {
     world.install_args = Some(cli.install.clone());
 }
 
-// ---------------------------------------------------------------------------
-// When steps
-// ---------------------------------------------------------------------------
+#[given("the destination path cannot be created")]
+fn given_destination_path_conflict(world: &mut PrebuiltWorld) {
+    world.force_destination_conflict = true;
+}
 
 #[when("prebuilt download is attempted")]
 fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
-    let staging_base = world.staging_base.as_ref().expect("staging_base set");
     let toolchain = world
         .expected_toolchain
         .as_deref()
         .unwrap_or(DEFAULT_TOOLCHAIN);
     let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
+    let staging_root = world.staging_root.as_ref().expect("staging_root set");
+    let destination_dir = if world.force_destination_conflict {
+        let occupied = staging_root.join("occupied");
+        std::fs::write(occupied.as_std_path(), b"occupied file").expect("write occupied file");
+        occupied.join("child").join("lib")
+    } else {
+        staging_root
+            .join("lints")
+            .join(toolchain)
+            .join(target)
+            .join("lib")
+    };
+    world.attempted_destination = Some(destination_dir.clone());
     let config = PrebuiltConfig {
         target,
         toolchain,
-        staging_base,
+        destination_dir: &destination_dir,
         quiet: true,
     };
 
@@ -256,10 +259,6 @@ fn when_install_config_checked(world: &mut PrebuiltWorld) {
     world.should_attempt_prebuilt = Some(install_args.should_attempt_prebuilt(&requested_crates));
 }
 
-// ---------------------------------------------------------------------------
-// Then steps
-// ---------------------------------------------------------------------------
-
 #[then("the prebuilt result is success")]
 fn then_result_is_success(world: &mut PrebuiltWorld) {
     let result = world.result.as_ref().expect("result set");
@@ -269,17 +268,19 @@ fn then_result_is_success(world: &mut PrebuiltWorld) {
     );
 }
 
-#[then("the staging path contains the expected toolchain directory")]
-fn then_staging_path_has_toolchain_dir(world: &mut PrebuiltWorld) {
+#[then("the staging path uses toolchain, target, and lib directories")]
+fn then_staging_path_uses_expected_layout(world: &mut PrebuiltWorld) {
     let result = world.result.as_ref().expect("result set");
     if let PrebuiltResult::Success { staging_path } = result {
         let toolchain = world
             .expected_toolchain
             .as_deref()
             .unwrap_or(DEFAULT_TOOLCHAIN);
+        let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
+        let expected_suffix = format!("{toolchain}/{target}/lib");
         assert!(
-            staging_path.as_str().contains(toolchain),
-            "staging path {staging_path} does not contain {toolchain}"
+            staging_path.ends_with(&expected_suffix),
+            "staging path {staging_path} does not end with {expected_suffix}"
         );
     } else {
         panic!("expected Success, got {result:?}");
@@ -319,9 +320,17 @@ fn then_no_prebuilt_attempted(world: &mut PrebuiltWorld) {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Scenario bindings
-// ---------------------------------------------------------------------------
+#[then("the destination directory is not created")]
+fn then_destination_is_not_created(world: &mut PrebuiltWorld) {
+    let destination = world
+        .attempted_destination
+        .as_ref()
+        .expect("attempted destination should be set");
+    assert!(
+        !destination.exists(),
+        "destination directory should not exist: {destination}"
+    );
+}
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
@@ -352,6 +361,14 @@ fn scenario_network_failure(world: PrebuiltWorld) {
     name = "Missing artefact triggers fallback"
 )]
 fn scenario_not_found(world: PrebuiltWorld) {
+    let _ = world;
+}
+
+#[scenario(
+    path = "tests/features/prebuilt_download.feature",
+    name = "Destination path creation failure triggers fallback"
+)]
+fn scenario_destination_creation_failure(world: PrebuiltWorld) {
     let _ = world;
 }
 

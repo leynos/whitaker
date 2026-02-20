@@ -8,9 +8,10 @@ use log::trace;
 use std::io::Write;
 
 use crate::cli::ListArgs;
+use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
 use crate::list_output::{format_human, format_json};
-use crate::scanner::scan_installed;
+use crate::scanner::{InstalledLints, scan_installed};
 use crate::stager::default_target_dir;
 use crate::toolchain::Toolchain;
 
@@ -36,10 +37,14 @@ fn run_list_with<F>(args: &ListArgs, stdout: &mut dyn Write, detect_toolchain: F
 where
     F: FnOnce() -> Option<String>,
 {
-    let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-
-    let installed =
-        scan_installed(&target_dir).map_err(|e| InstallerError::ScanFailed { source: e })?;
+    let scan_roots = determine_scan_roots(args.target_dir.as_deref())?;
+    let mut installed = InstalledLints::default();
+    for root in scan_roots {
+        let discovered =
+            scan_installed(&root).map_err(|e| InstallerError::ScanFailed { source: e })?;
+        merge_installed(&mut installed, discovered);
+    }
+    sort_installed_libraries(&mut installed);
 
     let active_toolchain = detect_toolchain();
 
@@ -52,6 +57,49 @@ where
     writeln!(stdout, "{output}").map_err(|e| InstallerError::WriteFailed { source: e })?;
 
     Ok(())
+}
+
+fn merge_installed(target: &mut InstalledLints, discovered: InstalledLints) {
+    for (toolchain, mut libraries) in discovered.by_toolchain {
+        let entry = target.by_toolchain.entry(toolchain).or_default();
+        entry.append(&mut libraries);
+    }
+}
+
+fn sort_installed_libraries(installed: &mut InstalledLints) {
+    for libraries in installed.by_toolchain.values_mut() {
+        libraries.sort_by(|left, right| left.crate_name.as_str().cmp(right.crate_name.as_str()));
+    }
+}
+
+fn default_prebuilt_target_dir() -> Option<Utf8PathBuf> {
+    SystemBaseDirs::new()
+        .and_then(|dirs| dirs.whitaker_data_dir())
+        .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+        .map(|path| path.join("lints"))
+}
+
+fn determine_scan_roots(cli_target: Option<&Utf8Path>) -> Result<Vec<Utf8PathBuf>> {
+    if let Some(target) = cli_target {
+        return Ok(vec![target.to_owned()]);
+    }
+
+    let mut roots = Vec::new();
+    if let Some(default) = default_target_dir() {
+        roots.push(default);
+    }
+    if let Some(prebuilt) = default_prebuilt_target_dir()
+        && !roots.iter().any(|root| root == &prebuilt)
+    {
+        roots.push(prebuilt);
+    }
+
+    if roots.is_empty() {
+        return Err(InstallerError::StagingFailed {
+            reason: "could not determine any scan roots".to_owned(),
+        });
+    }
+    Ok(roots)
 }
 
 /// Detect the active toolchain from `rust-toolchain.toml` in the current directory.
@@ -167,12 +215,33 @@ mod tests {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// Helper to create a mock installed library in the target directory for tests.
-    fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
+    #[derive(Debug, Clone, Copy)]
+    enum MockLibraryKind {
+        Local,
+        Prebuilt { target: &'static str },
+    }
+
+    impl MockLibraryKind {
+        fn library_dir(&self, target_dir: &Utf8Path, toolchain: &str) -> Utf8PathBuf {
+            match self {
+                Self::Local => target_dir.join(toolchain).join("release"),
+                Self::Prebuilt { target } => target_dir.join(toolchain).join(target).join("lib"),
+            }
+        }
+
+        fn content(&self) -> &'static [u8] {
+            match self {
+                Self::Local => b"mock library",
+                Self::Prebuilt { .. } => b"mock prebuilt library",
+            }
+        }
+    }
+
+    fn create_mock_library_internal(target_dir: &Utf8Path, toolchain: &str, kind: MockLibraryKind) {
         use crate::builder::{library_extension, library_prefix};
 
-        let release_dir = target_dir.join(toolchain).join("release");
-        fs::create_dir_all(&release_dir).expect("failed to create release dir");
+        let lib_dir = kind.library_dir(target_dir, toolchain);
+        fs::create_dir_all(&lib_dir).expect("failed to create target library directory");
 
         let filename = format!(
             "{}whitaker_suite@{toolchain}{}",
@@ -180,8 +249,20 @@ mod tests {
             library_extension()
         );
 
-        fs::write(release_dir.join(filename), b"mock library")
-            .expect("failed to create mock library");
+        let error_msg = match kind {
+            MockLibraryKind::Local => "failed to create mock library",
+            MockLibraryKind::Prebuilt { .. } => "failed to create prebuilt mock library",
+        };
+        fs::write(lib_dir.join(filename), kind.content()).expect(error_msg);
+    }
+
+    /// Helper to create a mock installed library in the target directory for tests.
+    fn create_mock_library(target_dir: &Utf8Path, toolchain: &str) {
+        create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Local);
+    }
+
+    fn create_mock_prebuilt_library(target_dir: &Utf8Path, toolchain: &str, target: &'static str) {
+        create_mock_library_internal(target_dir, toolchain, MockLibraryKind::Prebuilt { target });
     }
 
     // -------------------------------------------------------------------------
@@ -228,6 +309,27 @@ mod tests {
                 "expected '{needle}' in output: {output}"
             );
         }
+    }
+
+    #[rstest]
+    fn run_list_finds_prebuilt_layout_libraries(temp_target: TempTarget) {
+        create_mock_prebuilt_library(
+            &temp_target.path,
+            "nightly-2025-09-18",
+            "x86_64-unknown-linux-gnu",
+        );
+        let args = ListArgs {
+            json: false,
+            target_dir: Some(temp_target.path.clone()),
+        };
+        let mut stdout = Vec::new();
+
+        let result = run_list_with(&args, &mut stdout, || Some("nightly-2025-09-18".to_owned()));
+
+        assert!(result.is_ok(), "expected success, got: {result:?}");
+        let output = String::from_utf8_lossy(&stdout);
+        assert!(output.contains("nightly-2025-09-18"), "got: {output}");
+        assert!(output.contains("whitaker_suite"), "got: {output}");
     }
 
     #[rstest]

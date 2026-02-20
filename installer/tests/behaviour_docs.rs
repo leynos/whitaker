@@ -205,8 +205,10 @@ fn then_path_present(toml_world: &TomlWorld) {
     let path = get_library_string_field(table, "path");
 
     assert!(
-        path.contains("dylint/lib") && path.contains("/release"),
-        "expected path to contain toolchain/release structure, got: {path}"
+        path.contains("/whitaker/lints/")
+            && path.contains("/nightly-")
+            && path.contains("/x86_64-unknown-linux-gnu/lib"),
+        "expected path to contain prebuilt lints layout, got: {path}"
     );
 }
 

@@ -48,8 +48,8 @@ pub struct PrebuiltConfig<'a> {
     pub target: &'a str,
     /// The expected toolchain channel (e.g. `nightly-2025-09-18`).
     pub toolchain: &'a str,
-    /// The base staging directory for extracted libraries.
-    pub staging_base: &'a Utf8Path,
+    /// The directory where libraries are extracted and staged.
+    pub destination_dir: &'a Utf8Path,
     /// When true, suppress progress output.
     pub quiet: bool,
 }
@@ -156,8 +156,8 @@ fn run_pipeline(
         verify_checksum(&manifest, &archive_path)?;
     }
 
-    // Step 5: Extract to staging directory.
-    let staging_path = config.staging_base.join(config.toolchain).join("release");
+    // Step 5: Extract to destination directory.
+    let staging_path = config.destination_dir.to_owned();
     std::fs::create_dir_all(staging_path.as_std_path())
         .map_err(|e| PrebuiltError::Download(DownloadError::Io(e)))?;
 

@@ -18,6 +18,7 @@ use whitaker_installer::list::{determine_target_dir, run_list};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
+use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
@@ -42,6 +43,70 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
         Some(Command::Install(args)) => run_install(args, stderr),
         None => run_install(cli.install_args(), stderr),
     }
+}
+
+/// Write fallback message when prebuilt installation fails (if not in quiet mode).
+fn write_prebuilt_fallback_message(
+    quiet: bool,
+    error: &dyn std::fmt::Display,
+    stderr: &mut dyn Write,
+) {
+    if quiet {
+        return;
+    }
+    write_stderr_line(stderr, format!("Prebuilt download unavailable: {error}"));
+    write_stderr_line(stderr, "Falling back to local compilation.");
+    write_stderr_line(stderr, "");
+}
+
+struct PrebuiltInstallationContext<'a> {
+    args: &'a InstallArgs,
+    dirs: &'a dyn BaseDirs,
+    requested_crates: &'a [CrateName],
+    toolchain_channel: &'a str,
+}
+
+/// Attempt prebuilt installation and return staged path when successful.
+fn try_prebuilt_installation(
+    context: &PrebuiltInstallationContext,
+    stderr: &mut dyn Write,
+) -> Result<Option<Utf8PathBuf>> {
+    if !context
+        .args
+        .should_attempt_prebuilt(context.requested_crates)
+    {
+        return Ok(None);
+    }
+
+    let host_target = match detect_host_target() {
+        Ok(target) => target,
+        Err(e) => {
+            write_prebuilt_fallback_message(context.args.quiet, &e, stderr);
+            return Ok(None);
+        }
+    };
+
+    let destination_dir =
+        match prebuilt_library_dir(context.dirs, context.toolchain_channel, &host_target) {
+            Ok(destination) => destination,
+            Err(e) => {
+                write_prebuilt_fallback_message(context.args.quiet, &e, stderr);
+                return Ok(None);
+            }
+        };
+
+    let prebuilt_config = PrebuiltConfig {
+        target: &host_target,
+        toolchain: context.toolchain_channel,
+        destination_dir: &destination_dir,
+        quiet: context.args.quiet,
+    };
+
+    let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(staging_path))
 }
 
 /// Runs the install command to build and stage lint libraries.
@@ -71,35 +136,20 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
 
     // Step 3: Resolve crates and toolchain
-    let crates = resolve_requested_crates(args)?;
+    let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     // Step 3.5: Attempt prebuilt download when install options allow it.
-    if args.should_attempt_prebuilt(&crates) {
-        match detect_host_target() {
-            Ok(host_target) => {
-                let prebuilt_config = PrebuiltConfig {
-                    target: &host_target,
-                    toolchain: toolchain.channel(),
-                    staging_base: &target_dir,
-                    quiet: args.quiet,
-                };
-                if let PrebuiltResult::Success { staging_path } =
-                    attempt_prebuilt(&prebuilt_config, stderr)
-                {
-                    return finish_install(args, &dirs, &staging_path, stderr);
-                }
-            }
-            Err(e) => {
-                if !args.quiet {
-                    write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
-                    write_stderr_line(stderr, "Falling back to local compilation.");
-                    write_stderr_line(stderr, "");
-                }
-            }
-        }
+    let prebuilt_context = PrebuiltInstallationContext {
+        args,
+        dirs: &dirs,
+        requested_crates: &requested_crates,
+        toolchain_channel: toolchain.channel(),
+    };
+    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
+        return finish_install(args, &dirs, &staging_path, stderr);
     }
 
     let context = PipelineContext {
@@ -113,7 +163,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     };
 
     // Step 4: Build and stage
-    let build_results = perform_build(&context, &crates, stderr)?;
+    let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
 
     // Step 5: Generate wrapper scripts if requested
@@ -125,10 +175,10 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
     use whitaker_installer::workspace::resolve_workspace_path;
 
     let workspace_root = resolve_workspace_path(dirs)?;
-    let crates = resolve_requested_crates(args)?;
+    let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     toolchain.verify_installed()?;
-    let target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    let target_dir = determine_dry_run_target_dir(args, dirs, &toolchain, &requested_crates)?;
 
     let info = DryRunInfo {
         workspace_root: &workspace_root,
@@ -140,10 +190,27 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         skip_wrapper: args.skip_wrapper,
         no_update: args.no_update,
         jobs: args.jobs,
-        crates: &crates,
+        crates: &requested_crates,
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
+}
+
+fn determine_dry_run_target_dir(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    toolchain: &Toolchain,
+    requested_crates: &[CrateName],
+) -> Result<Utf8PathBuf> {
+    let build_target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    if !args.should_attempt_prebuilt(requested_crates) {
+        return Ok(build_target_dir);
+    }
+
+    let Ok(host_target) = detect_host_target() else {
+        return Ok(build_target_dir);
+    };
+    Ok(prebuilt_library_dir(dirs, toolchain.channel(), &host_target).unwrap_or(build_target_dir))
 }
 
 /// Checks for and installs Dylint tools if missing.
