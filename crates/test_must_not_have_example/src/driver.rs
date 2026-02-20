@@ -42,6 +42,12 @@ struct FunctionSite<'a> {
     span: Span,
 }
 
+struct FunctionCheckContext<'a> {
+    attrs: &'a [hir::Attribute],
+    ident: &'a Ident,
+    is_test: bool,
+}
+
 impl Default for TestMustNotHaveExample {
     fn default() -> Self {
         Self {
@@ -84,7 +90,14 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
             let is_test =
                 is_test_function_item(cx, item, attrs, self.additional_test_attributes.as_slice());
-            self.check_function(cx, attrs, &ident, is_test);
+            self.check_function(
+                cx,
+                FunctionCheckContext {
+                    attrs,
+                    ident: &ident,
+                    is_test,
+                },
+            );
         }
     }
 
@@ -93,7 +106,14 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
             let is_test =
                 has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice());
-            self.check_function(cx, attrs, &item.ident, is_test);
+            self.check_function(
+                cx,
+                FunctionCheckContext {
+                    attrs,
+                    ident: &item.ident,
+                    is_test,
+                },
+            );
         }
     }
 
@@ -102,7 +122,14 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
             let is_test =
                 has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice());
-            self.check_function(cx, attrs, &item.ident, is_test);
+            self.check_function(
+                cx,
+                FunctionCheckContext {
+                    attrs,
+                    ident: &item.ident,
+                    is_test,
+                },
+            );
         }
     }
 }
@@ -143,23 +170,13 @@ impl TestMustNotHaveExample {
         });
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "signature intentionally mirrors item-specific callers to keep test-detection logic at call sites"
-    )]
-    fn check_function<'tcx>(
-        &mut self,
-        cx: &LateContext<'tcx>,
-        attrs: &[hir::Attribute],
-        ident: &Ident,
-        is_test: bool,
-    ) {
-        if let Some(violation) = self.detect_violation(attrs, is_test) {
+    fn check_function<'tcx>(&mut self, cx: &LateContext<'tcx>, context: FunctionCheckContext<'_>) {
+        if let Some(violation) = self.detect_violation(context.attrs, context.is_test) {
             self.emit_violation(
                 cx,
                 FunctionSite {
-                    name: ident.name.as_str(),
-                    span: ident.span,
+                    name: context.ident.name.as_str(),
+                    span: context.ident.span,
                 },
                 violation,
             );
