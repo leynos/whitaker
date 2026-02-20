@@ -279,7 +279,7 @@ fn then_staging_path_uses_expected_layout(world: &mut PrebuiltWorld) {
         let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
         let expected_suffix = format!("{toolchain}/{target}/lib");
         assert!(
-            staging_path.as_str().ends_with(&expected_suffix),
+            staging_path.ends_with(&expected_suffix),
             "staging path {staging_path} does not end with {expected_suffix}"
         );
     } else {
