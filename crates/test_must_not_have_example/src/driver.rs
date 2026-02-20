@@ -88,15 +88,15 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
                 return;
             };
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            let is_test =
-                is_test_function_item(cx, item, attrs, self.additional_test_attributes.as_slice());
-            self.check_function(
+            let additional_test_attributes = self.additional_test_attributes.clone();
+            self.check_function_with(
                 cx,
                 FunctionCheckContext {
                     attrs,
                     ident: &ident,
-                    is_test,
+                    is_test: false,
                 },
+                || is_test_function_item(cx, item, attrs, additional_test_attributes.as_slice()),
             );
         }
     }
@@ -104,15 +104,15 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
     fn check_impl_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::ImplItem<'tcx>) {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            let is_test =
-                has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice());
-            self.check_function(
+            let additional_test_attributes = self.additional_test_attributes.clone();
+            self.check_function_with(
                 cx,
                 FunctionCheckContext {
                     attrs,
                     ident: &item.ident,
-                    is_test,
+                    is_test: false,
                 },
+                || has_test_like_hir_attributes(attrs, additional_test_attributes.as_slice()),
             );
         }
     }
@@ -120,15 +120,15 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
     fn check_trait_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::TraitItem<'tcx>) {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            let is_test =
-                has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice());
-            self.check_function(
+            let additional_test_attributes = self.additional_test_attributes.clone();
+            self.check_function_with(
                 cx,
                 FunctionCheckContext {
                     attrs,
                     ident: &item.ident,
-                    is_test,
+                    is_test: false,
                 },
+                || has_test_like_hir_attributes(attrs, additional_test_attributes.as_slice()),
             );
         }
     }
@@ -181,6 +181,26 @@ impl TestMustNotHaveExample {
                 violation,
             );
         }
+    }
+
+    /// Helper to check a function with customisable test detection.
+    fn check_function_with<'tcx, F>(
+        &mut self,
+        cx: &LateContext<'tcx>,
+        context: FunctionCheckContext<'_>,
+        is_test_fn: F,
+    ) where
+        F: FnOnce() -> bool,
+    {
+        let is_test = is_test_fn();
+        self.check_function(
+            cx,
+            FunctionCheckContext {
+                attrs: context.attrs,
+                ident: context.ident,
+                is_test,
+            },
+        );
     }
 }
 
