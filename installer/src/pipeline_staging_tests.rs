@@ -123,7 +123,8 @@ fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext)
     assert!(result.is_ok(), "expected success, got: {result:?}");
     let staging_path = result.expect("already checked");
 
-    // Verify the path matches the expected `Stager::staging_path()` format.
+    // Keep this contract explicit so staged artefacts remain discoverable by
+    // toolchain and profile when scanner logic depends on path layout.
     let expected_path = staging_ctx
         .target_dir()
         .join("nightly-2025-09-18")
@@ -172,7 +173,8 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
     let staging_path =
         stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
 
-    // Verify the library was staged to the correct location.
+    // The staged filename must preserve crate and toolchain identity so
+    // multi-toolchain installs do not collide.
     let staged_filename = format!(
         "{}whitaker_suite@nightly-2025-09-18{}",
         library_prefix(),

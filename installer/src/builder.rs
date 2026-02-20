@@ -230,10 +230,10 @@ pub const fn library_prefix() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
-    /// Create a test builder with the given experimental flag.
-    fn test_builder(experimental: bool) -> Builder {
+    #[fixture]
+    fn builder() -> Builder {
         Builder {
             config: BuildConfig {
                 toolchain: Toolchain::with_override(
@@ -243,7 +243,7 @@ mod tests {
                 target_dir: Utf8PathBuf::from("/tmp/target"),
                 jobs: None,
                 verbosity: 0,
-                experimental,
+                experimental: false,
             },
         }
     }
@@ -267,18 +267,19 @@ mod tests {
     #[case::non_suite_with_experimental("module_max_lines", true, "dylint-driver")]
     #[case::suite_without_experimental("whitaker_suite", false, "dylint-driver")]
     fn features_for_crate_returns_expected_features(
+        mut builder: Builder,
         #[case] crate_name: &str,
         #[case] experimental: bool,
         #[case] expected: &str,
     ) {
-        let builder = test_builder(experimental);
+        builder.config.experimental = experimental;
         let result = builder.features_for_crate(&CrateName::from(crate_name));
         assert_eq!(result, expected);
     }
 
-    #[test]
-    fn features_for_crate_handles_suite_experimental_mode() {
-        let builder = test_builder(true);
+    #[rstest]
+    fn features_for_crate_handles_suite_experimental_mode(mut builder: Builder) {
+        builder.config.experimental = true;
         let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
         // At present EXPERIMENTAL_LINT_CRATES is empty, so suite features remain
         // unchanged even when experimental mode is enabled.
@@ -296,8 +297,10 @@ mod tests {
         if expected.is_empty() {
             assert!(
                 features.is_empty(),
-                "Builder::experimental_features should return an empty string when \
-                 EXPERIMENTAL_LINT_CRATES is empty"
+                concat!(
+                    "Builder::experimental_features should return an empty string when ",
+                    "EXPERIMENTAL_LINT_CRATES is empty"
+                )
             );
             return;
         }
