@@ -45,55 +45,63 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
     }
 }
 
+/// Write fallback message when prebuilt installation fails (if not in quiet mode).
+fn write_prebuilt_fallback_message(
+    quiet: bool,
+    error: &dyn std::fmt::Display,
+    stderr: &mut dyn Write,
+) {
+    if quiet {
+        return;
+    }
+    write_stderr_line(stderr, format!("Prebuilt download unavailable: {error}"));
+    write_stderr_line(stderr, "Falling back to local compilation.");
+    write_stderr_line(stderr, "");
+}
+
+struct PrebuiltInstallationContext<'a> {
+    args: &'a InstallArgs,
+    dirs: &'a dyn BaseDirs,
+    crates: &'a [String],
+    toolchain_channel: &'a str,
+}
+
 /// Attempt prebuilt installation and return staged path when successful.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Signature intentionally mirrors run_install split points"
-)]
 fn try_prebuilt_installation(
-    args: &InstallArgs,
-    dirs: &dyn BaseDirs,
-    crates: &[String],
-    toolchain_channel: &str,
+    context: &PrebuiltInstallationContext,
     stderr: &mut dyn Write,
 ) -> Result<Option<Utf8PathBuf>> {
-    let requested_crates: Vec<CrateName> = crates
+    let requested_crates: Vec<CrateName> = context
+        .crates
         .iter()
         .map(|crate_name| CrateName::from(crate_name.as_str()))
         .collect();
-    if !args.should_attempt_prebuilt(&requested_crates) {
+    if !context.args.should_attempt_prebuilt(&requested_crates) {
         return Ok(None);
     }
 
     let host_target = match detect_host_target() {
         Ok(target) => target,
         Err(e) => {
-            if !args.quiet {
-                write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
-                write_stderr_line(stderr, "Falling back to local compilation.");
-                write_stderr_line(stderr, "");
-            }
+            write_prebuilt_fallback_message(context.args.quiet, &e, stderr);
             return Ok(None);
         }
     };
 
-    let destination_dir = match prebuilt_library_dir(dirs, toolchain_channel, &host_target) {
-        Ok(destination) => destination,
-        Err(e) => {
-            if !args.quiet {
-                write_stderr_line(stderr, format!("Prebuilt download unavailable: {e}"));
-                write_stderr_line(stderr, "Falling back to local compilation.");
-                write_stderr_line(stderr, "");
+    let destination_dir =
+        match prebuilt_library_dir(context.dirs, context.toolchain_channel, &host_target) {
+            Ok(destination) => destination,
+            Err(e) => {
+                write_prebuilt_fallback_message(context.args.quiet, &e, stderr);
+                return Ok(None);
             }
-            return Ok(None);
-        }
-    };
+        };
 
     let prebuilt_config = PrebuiltConfig {
         target: &host_target,
-        toolchain: toolchain_channel,
+        toolchain: context.toolchain_channel,
         destination_dir: &destination_dir,
-        quiet: args.quiet,
+        quiet: context.args.quiet,
     };
 
     let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
@@ -137,9 +145,13 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
 
     // Step 3.5: Attempt prebuilt download when install options allow it.
-    if let Some(staging_path) =
-        try_prebuilt_installation(args, &dirs, &crates, toolchain.channel(), stderr)?
-    {
+    let prebuilt_context = PrebuiltInstallationContext {
+        args,
+        dirs: &dirs,
+        crates: &crates,
+        toolchain_channel: toolchain.channel(),
+    };
+    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
         return finish_install(args, &dirs, &staging_path, stderr);
     }
 
