@@ -44,6 +44,7 @@ where
             scan_installed(&root).map_err(|e| InstallerError::ScanFailed { source: e })?;
         merge_installed(&mut installed, discovered);
     }
+    sort_installed_libraries(&mut installed);
 
     let active_toolchain = detect_toolchain();
 
@@ -62,7 +63,12 @@ fn merge_installed(target: &mut InstalledLints, discovered: InstalledLints) {
     for (toolchain, mut libraries) in discovered.by_toolchain {
         let entry = target.by_toolchain.entry(toolchain).or_default();
         entry.append(&mut libraries);
-        entry.sort_by_key(|library| library.crate_name.as_str().to_owned());
+    }
+}
+
+fn sort_installed_libraries(installed: &mut InstalledLints) {
+    for libraries in installed.by_toolchain.values_mut() {
+        libraries.sort_by(|left, right| left.crate_name.as_str().cmp(right.crate_name.as_str()));
     }
 }
 
@@ -90,7 +96,7 @@ fn determine_scan_roots(cli_target: Option<&Utf8Path>) -> Result<Vec<Utf8PathBuf
 
     if roots.is_empty() {
         return Err(InstallerError::StagingFailed {
-            reason: "could not determine default target directory".to_owned(),
+            reason: "could not determine any scan roots".to_owned(),
         });
     }
     Ok(roots)

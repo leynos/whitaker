@@ -90,12 +90,22 @@ fn scan_toolchain_layouts(
             continue;
         }
         let lib_path = entry.path().join("lib");
-        if lib_path.is_dir() {
+        if lib_path.is_dir() && contains_libraries_in_layout(&lib_path)? {
             libraries.extend(scan_toolchain_release(&lib_path, toolchain)?);
         }
     }
-    libraries.sort_by_key(|lib| lib.crate_name.as_str().to_owned());
+    libraries.sort_by(|left, right| left.crate_name.as_str().cmp(right.crate_name.as_str()));
     Ok(libraries)
+}
+
+fn contains_libraries_in_layout(lib_path: &Utf8Path) -> io::Result<bool> {
+    for entry in lib_path.read_dir_utf8()? {
+        let entry = entry?;
+        if entry.path().is_file() && parse_library_filename(entry.file_name()).is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Scan a single toolchain's release directory for libraries.

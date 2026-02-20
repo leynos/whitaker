@@ -1,4 +1,4 @@
-# Extract prebuilt libraries to XDG share path (roadmap 3.4.5)
+# Extract prebuilt libraries to XDG (X Desktop Group) share path (roadmap 3.4.5)
 
 This execution plan (ExecPlan) is a living document. The sections Constraints,
 Tolerances, Risks, Progress, Surprises & Discoveries, Decision Log, and
@@ -47,7 +47,7 @@ Success is observable by:
   `<whitaker_data_dir>/lints/<toolchain>/<target>/lib`.
 - Keep prebuilt failures non-fatal; fallback to local build must remain intact.
 - Keep `rstest-bdd` at workspace version `0.5.0`; do not introduce alternate
-  BDD frameworks.
+  behaviour-driven development (BDD) frameworks.
 - Add both unit and behavioural test coverage for happy and unhappy paths.
 - Keep files below 400 lines; split tests/modules when needed.
 - Preserve en-GB-oxendict spelling in docs/comments.
@@ -73,7 +73,7 @@ Success is observable by:
   design doc.
 
 - Risk: list/scanner compatibility with the new directory shape.
-  Mitigation: update scanner/list logic to recognise the prebuilt layout, with
+  Mitigation: update scanner/list logic to recognize the prebuilt layout, with
   tests covering both legacy and new layouts.
 
 - Risk: platform path handling differences (`Application Support`, LocalAppData)
@@ -120,7 +120,7 @@ destination from `whitaker_data_dir`, toolchain, and target:
 Implementation notes:
 
 - Place logic in a testable library module (not only in binary-local code).
-- Validate/sanitise target and toolchain with existing domain newtypes where
+- Validate/sanitize target and toolchain with existing domain newtypes where
   practical.
 - Return semantic installer errors for missing directory roots.
 
@@ -149,7 +149,7 @@ Planned files:
 - `installer/src/prebuilt.rs`
 - `installer/src/prebuilt_tests.rs`
 
-### Phase 3: DYLINT_LIBRARY_PATH propagation and UX
+### Phase 3: DYLINT_LIBRARY_PATH propagation and user experience (UX)
 
 Verify that successful prebuilt installs pass the canonical destination to
 `finish_install`, wrapper generation, and shell snippets.
@@ -198,7 +198,7 @@ Primary files:
 - `installer/src/scanner.rs`
 - `installer/src/list.rs`
 
-### Phase 6: Behaviour tests with `rstest-bdd` v0.5.0
+### Phase 6: Behaviour-driven development (BDD) tests with `rstest-bdd` v0.5.0
 
 Extend BDD coverage in `installer/tests/behaviour_prebuilt.rs` and
 `installer/tests/features/prebuilt_download.feature`.

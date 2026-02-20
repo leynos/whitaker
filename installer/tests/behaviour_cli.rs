@@ -9,6 +9,8 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use tempfile::TempDir;
+use whitaker_installer::dirs::SystemBaseDirs;
+use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
 #[derive(Default)]
@@ -108,6 +110,27 @@ fn setup_temp_dir(cli_world: &CliWorld) -> String {
     let target_dir = temp_dir.path().to_string_lossy().to_string();
     cli_world._temp_dir.replace(Some(temp_dir));
     target_dir
+}
+
+fn detect_host_target() -> Option<String> {
+    let output = Command::new("rustc").args(["-vV"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    stdout.lines().find_map(|line| {
+        line.strip_prefix("host: ")
+            .map(str::trim)
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
+    let dirs = SystemBaseDirs::new()?;
+    let host_target = detect_host_target()?;
+    prebuilt_library_dir(&dirs, toolchain, &host_target)
+        .ok()
+        .map(|path| path.into_string())
 }
 
 /// Asserts that the CLI exit status matches the expected success state.
@@ -226,7 +249,9 @@ fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
     let temp_dir = cli_world._temp_dir.borrow();
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");
     let target_dir = temp_dir.path().to_string_lossy();
-    assert!(stderr.contains(&format!("Target directory: {target_dir}")));
+    let expected_target_dir =
+        expected_prebuilt_target_dir(toolchain).unwrap_or_else(|| target_dir.into_owned());
+    assert!(stderr.contains(&format!("Target directory: {expected_target_dir}")));
 }
 
 #[then("the CLI exits with an error")]

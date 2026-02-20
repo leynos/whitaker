@@ -62,7 +62,7 @@ fn write_prebuilt_fallback_message(
 struct PrebuiltInstallationContext<'a> {
     args: &'a InstallArgs,
     dirs: &'a dyn BaseDirs,
-    crates: &'a [String],
+    requested_crates: &'a [CrateName],
     toolchain_channel: &'a str,
 }
 
@@ -71,12 +71,10 @@ fn try_prebuilt_installation(
     context: &PrebuiltInstallationContext,
     stderr: &mut dyn Write,
 ) -> Result<Option<Utf8PathBuf>> {
-    let requested_crates: Vec<CrateName> = context
-        .crates
-        .iter()
-        .map(|crate_name| CrateName::from(crate_name.as_str()))
-        .collect();
-    if !context.args.should_attempt_prebuilt(&requested_crates) {
+    if !context
+        .args
+        .should_attempt_prebuilt(context.requested_crates)
+    {
         return Ok(None);
     }
 
@@ -139,7 +137,6 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
 
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
-    let crates: Vec<String> = requested_crates.iter().map(ToString::to_string).collect();
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
@@ -148,7 +145,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let prebuilt_context = PrebuiltInstallationContext {
         args,
         dirs: &dirs,
-        crates: &crates,
+        requested_crates: &requested_crates,
         toolchain_channel: toolchain.channel(),
     };
     if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
@@ -178,10 +175,10 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
     use whitaker_installer::workspace::resolve_workspace_path;
 
     let workspace_root = resolve_workspace_path(dirs)?;
-    let crates = resolve_requested_crates(args)?;
+    let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     toolchain.verify_installed()?;
-    let target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    let target_dir = determine_dry_run_target_dir(args, dirs, &toolchain, &requested_crates)?;
 
     let info = DryRunInfo {
         workspace_root: &workspace_root,
@@ -193,10 +190,27 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         skip_wrapper: args.skip_wrapper,
         no_update: args.no_update,
         jobs: args.jobs,
-        crates: &crates,
+        crates: &requested_crates,
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
+}
+
+fn determine_dry_run_target_dir(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    toolchain: &Toolchain,
+    requested_crates: &[CrateName],
+) -> Result<Utf8PathBuf> {
+    let build_target_dir = determine_target_dir(args.target_dir.as_deref())?;
+    if !args.should_attempt_prebuilt(requested_crates) {
+        return Ok(build_target_dir);
+    }
+
+    let Ok(host_target) = detect_host_target() else {
+        return Ok(build_target_dir);
+    };
+    Ok(prebuilt_library_dir(dirs, toolchain.channel(), &host_target).unwrap_or(build_target_dir))
 }
 
 /// Checks for and installs Dylint tools if missing.
