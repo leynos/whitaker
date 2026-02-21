@@ -20,9 +20,9 @@ Roadmap item 2.2.5 tracks delivery of `test_must_not_have_example`.
 
 After this change, test-like functions (`#[test]`, `#[tokio::test]`,
 `#[rstest]`, and recognized equivalents) will trigger a warning when their
-documentation contains either an Examples heading or a fenced code block. This
-preserves readability goals by keeping test docs focused on intent rather than
-user examples.
+documentation contains either an `Examples` heading or a fenced code block.
+This preserves readability goals by keeping test docs focused on intent rather
+than user examples.
 
 The test-context predicate must be shared with `no_expect_outside_tests` so
 Whitaker maintains one canonical definition of what counts as a test.

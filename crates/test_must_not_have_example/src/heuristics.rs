@@ -74,8 +74,14 @@ fn is_examples_heading(line: &str) -> bool {
 
 fn is_code_fence(line: &str) -> bool {
     let trimmed = line.trim_start();
-    let tick_count = trimmed.chars().take_while(|ch| *ch == '`').count();
-    tick_count >= 3
+    let Some(fence_marker) = trimmed.chars().next() else {
+        return false;
+    };
+    if !matches!(fence_marker, '`' | '~') {
+        return false;
+    }
+
+    trimmed.chars().take_while(|ch| *ch == fence_marker).count() >= 3
 }
 
 #[cfg(test)]
@@ -92,6 +98,8 @@ mod tests {
     #[case("# Examples:\nDetails", Some(DocExampleViolation::ExamplesHeading))]
     #[case("```rust\nassert!(true);\n```", Some(DocExampleViolation::CodeFence))]
     #[case("   ```\nlet a = 1;\n```", Some(DocExampleViolation::CodeFence))]
+    #[case("~~~rust\nassert!(true);\n~~~", Some(DocExampleViolation::CodeFence))]
+    #[case(" ~~~\nlet a = 1;\n~~~", Some(DocExampleViolation::CodeFence))]
     #[case("This has inline `ticks` only.", None)]
     #[case("Heading\n# Example", None)]
     fn detects_expected_patterns(

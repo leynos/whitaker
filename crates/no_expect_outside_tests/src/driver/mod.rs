@@ -12,7 +12,7 @@
 use std::ffi::OsStr;
 use std::path::Component;
 
-use common::{Attribute, AttributeKind, AttributePath, Localizer, get_localizer_for_lint};
+use common::{AttributePath, Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
@@ -20,6 +20,7 @@ use rustc_middle::ty::{self, Ty};
 use rustc_span::sym;
 use serde::Deserialize;
 use whitaker::SharedConfig;
+use whitaker::hir::has_test_like_hir_attributes;
 
 use crate::context::{collect_context, summarise_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
@@ -240,23 +241,6 @@ fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
 #[cfg(test)]
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
     has_test_like_hir_attributes(std::slice::from_ref(attr), &[])
-}
-
-fn has_test_like_hir_attributes(attrs: &[hir::Attribute], additional: &[AttributePath]) -> bool {
-    attrs
-        .iter()
-        .filter_map(attribute_path)
-        .any(|path| Attribute::new(path, AttributeKind::Outer).is_test_like_with(additional))
-}
-
-fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
-    let hir::Attribute::Unparsed(_) = attr else {
-        return None;
-    };
-
-    let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
-    let first = names.next()?;
-    Some(AttributePath::new(std::iter::once(first).chain(names)))
 }
 
 #[cfg(all(test, feature = "dylint-driver"))]

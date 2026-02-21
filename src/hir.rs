@@ -1,5 +1,6 @@
 //! Helpers for working with HIR constructs shared across Whitaker lints.
 
+use common::{Attribute, AttributeKind, AttributePath};
 use rustc_hir as hir;
 use rustc_lint::LateContext;
 use rustc_span::Span;
@@ -34,4 +35,26 @@ pub fn module_body_span<'tcx>(
 #[must_use]
 pub fn module_header_span(item_span: Span, ident_span: Span) -> Span {
     item_span.with_hi(ident_span.hi())
+}
+
+/// Returns whether any HIR attribute resolves to a recognized test marker.
+#[must_use]
+pub fn has_test_like_hir_attributes(
+    attrs: &[hir::Attribute],
+    additional: &[AttributePath],
+) -> bool {
+    attrs
+        .iter()
+        .filter_map(attribute_path)
+        .any(|path| Attribute::new(path, AttributeKind::Outer).is_test_like_with(additional))
+}
+
+fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
+    let hir::Attribute::Unparsed(_) = attr else {
+        return None;
+    };
+
+    let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
+    let first = names.next()?;
+    Some(AttributePath::new(std::iter::once(first).chain(names)))
 }

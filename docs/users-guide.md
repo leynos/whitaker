@@ -140,6 +140,10 @@ max_branches = 3
 [no_expect_outside_tests]
 additional_test_attributes = ["my_framework::test", "async_std::test"]
 
+# Additional test markers for docs-without-examples lint
+[test_must_not_have_example]
+additional_test_attributes = ["actix_rt::test", "my_framework::test"]
+
 # Allow panics in main
 [no_unwrap_or_else_panic]
 allow_in_main = true
@@ -308,6 +312,16 @@ ______________________________________________________________________
 
 Warns when test function documentation includes example headings (for example
 `# Examples`) or fenced code blocks.
+
+**Configuration:**
+
+```toml
+[test_must_not_have_example]
+additional_test_attributes = ["actix_rt::test", "my_framework::test"]
+```
+
+Use `additional_test_attributes` for frameworks not covered by default test
+markers such as `#[test]`, `#[tokio::test]`, and `#[rstest]`.
 
 **How to fix:** Keep test docs focused on intent and assertions, and move
 example/tutorial snippets into user-facing documentation.

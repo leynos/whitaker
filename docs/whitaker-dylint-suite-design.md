@@ -145,9 +145,9 @@ Utilities shared by lints:
   without rewriting the table. Unknown fields are rejected via
   `deny_unknown_fields` so configuration typos fail fast during deserialization.
 - Unit and behaviour coverage lean on `rstest` fixtures and `rstest-bdd`
-  scenarios (v0.1.0) to exercise happy, unhappy, and edge cases without
+  scenarios (v0.5.0) to exercise happy, unhappy, and edge cases without
   duplicating setup logic.
-- Adopt the rstest-bdd 0.1.0 stable release to eliminate alpha regressions
+- Adopt the rstest-bdd 0.5.0 stable release to eliminate alpha regressions
   whilst keeping compile-time validation consistent across lint crates.
 
 ### Localization infrastructure
@@ -599,17 +599,17 @@ Each `.rs` pairs with a `.stderr` expectation via `dylint_testing::ui_test`.
 
 Forbid examples or fenced code blocks in `#[test]` docs.
 
-Heuristic: detect Markdown `# Examples` heading or fenced code (``` / ```rust)
-in collected doc text.
+Heuristic: detect Markdown `# Examples` heading or fenced code in collected doc
+text, including fences that start with backticks or tildes.
 
 **Implementation notes (2026-02-19).**
 
 - The lint is implemented in `crates/test_must_not_have_example` and checks
   free functions, impl methods, and trait methods.
 - Test detection reuses the shared `common::Attribute::is_test_like_with`
-  matrix, so this lint and `no_expect_outside_tests` rely on one canonical set
-  of recognized test attribute paths even though each lint adapts HIR
-  attributes to that shared representation.
+  matrix via `whitaker::hir::has_test_like_hir_attributes`, so this lint and
+  `no_expect_outside_tests` rely on one canonical set of recognized test
+  attribute paths and one HIR-adaptation helper.
 - The driver adds a harness-only fallback that treats function/const pairs with
   the same span as test functions when `rustc` rewrites `#[test]` into
   synthetic descriptors. This path is gated behind `--test` and assumes
@@ -617,7 +617,7 @@ in collected doc text.
   same span.
 - Documentation scanning uses line-anchored heuristics:
   - headings such as `# Examples`, `## Examples`, and `# examples:`
-  - fenced code lines with three-or-more leading backticks
+  - fenced code lines with three-or-more leading backticks or tildes
 - Diagnostics are localized via `test_must_not_have_example.ftl` and include
   fallback strings when message lookup fails.
 
@@ -687,7 +687,7 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   `std::fs::File::open`, `std::fs::remove_file`, bare module references, and
   renamed imports all register as `StdFsUsage` while `cap_std::fs` remains
   untouched.
-- Behaviour-driven tests (via `rstest-bdd 0.1.0`) exercise localization, failure
+- Behaviour-driven tests (via `rstest-bdd 0.5.0`) exercise localization, failure
   fallbacks, and the world state used to model capability hints. Scenarios
   cover en-GB, cy, and gd locales, as well as missing-message paths.
 - UI fixtures demonstrate unhappy paths (imports, function calls, and type
@@ -945,7 +945,7 @@ pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
 
 Re-export `register_suite_lints` and `suite_lint_decls` so tests and
 documentation can assert the wiring without needing a `Session`. Behaviour
-coverage uses `rstest-bdd 0.1.0` to prove the happy path registration and to
+coverage uses `rstest-bdd 0.5.0` to prove the happy path registration and to
 surface the duplicate-lint panic when called twice.
 
 ## 6) Installer CLI — optional

@@ -85,7 +85,7 @@ These lints are included when running `whitaker-installer` without flags:
 | `module_max_lines`            | Warn when modules exceed line threshold          |
 | `module_must_have_inner_docs` | Require inner doc comments on modules            |
 | `no_expect_outside_tests`     | Forbid `.expect()` outside test contexts         |
-| `test_must_not_have_example`  | Forbid examples in test documentation      |
+| `test_must_not_have_example`  | Forbid examples in test documentation            |
 | `no_std_fs_operations`        | Enforce capability-based filesystem access       |
 | `no_unwrap_or_else_panic`     | Deny panicking `unwrap_or_else` fallbacks        |
 

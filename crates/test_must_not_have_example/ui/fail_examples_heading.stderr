@@ -1,5 +1,5 @@
 warning: Remove example sections from test fail_examples_heading documentation.
-  --> $DIR/fail_examples_heading.rs:10:4
+  --> $DIR/fail_examples_heading.rs:11:4
    |
 LL | fn fail_examples_heading() {
    |    ^^^^^^^^^^^^^^^^^^^^^

@@ -1,5 +1,5 @@
 warning: Remove example sections from test fail_fenced_code documentation.
-  --> $DIR/fail_fenced_code.rs:11:4
+  --> $DIR/fail_fenced_code.rs:13:4
    |
 LL | fn fail_fenced_code() {
    |    ^^^^^^^^^^^^^^^^

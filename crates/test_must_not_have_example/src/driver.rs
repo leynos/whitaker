@@ -1,11 +1,11 @@
 //! Lint crate enforcing example-free documentation for test functions.
 
 use crate::heuristics::{DocExampleViolation, detect_example_violation};
+use common::AttributePath;
 use common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
-use common::{Attribute, AttributeKind, AttributePath};
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::Node;
@@ -14,6 +14,7 @@ use rustc_span::{Ident, Span, Symbol};
 use serde::Deserialize;
 use std::borrow::Cow;
 use whitaker::SharedConfig;
+use whitaker::hir::has_test_like_hir_attributes;
 
 const LINT_NAME: &str = "test_must_not_have_example";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("test_must_not_have_example");
@@ -286,29 +287,15 @@ fn is_matching_harness_test_descriptor(
     function_span: Span,
     sibling: &hir::Item<'_>,
 ) -> bool {
+    // The `rustc --test` harness may synthesise a const descriptor that shares
+    // the test function's name and span; matching this pair lets us recover
+    // test context when the original marker attribute is unavailable.
     sibling.hir_id() != function_hir_id
         && matches!(sibling.kind, hir::ItemKind::Const(..))
         && sibling
             .kind
             .ident()
             .is_some_and(|ident| ident.name == function_name && sibling.span == function_span)
-}
-
-fn has_test_like_hir_attributes(attrs: &[hir::Attribute], additional: &[AttributePath]) -> bool {
-    attrs
-        .iter()
-        .filter_map(attribute_path)
-        .any(|path| Attribute::new(path, AttributeKind::Outer).is_test_like_with(additional))
-}
-
-fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
-    let hir::Attribute::Unparsed(_) = attr else {
-        return None;
-    };
-
-    let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
-    let first = names.next()?;
-    Some(AttributePath::new(std::iter::once(first).chain(names)))
 }
 
 fn collect_doc_text(attrs: &[hir::Attribute]) -> String {

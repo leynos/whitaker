@@ -5,6 +5,11 @@ Feature: Detect example patterns in test documentation
     When I evaluate the documentation
     Then the violation is examples heading
 
+  Scenario: Detect heading-level variants
+    Given documentation line "## Examples"
+    When I evaluate the documentation
+    Then the violation is examples heading
+
   Scenario: Detect a fenced code block
     Given documentation line "```rust"
     And documentation line "assert!(true);"
