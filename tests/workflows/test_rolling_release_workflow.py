@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+from ruamel.yaml import YAML
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/rolling-release.yml"
@@ -42,65 +42,8 @@ ACT_LIST_TIMEOUT_SECONDS = 60
 ACT_RUN_TIMEOUT_SECONDS = 900
 
 
-def _parse_block_style_value(
-    lines: list[str], start_index: int, base_indent: int
-) -> list[str]:
-    """Parse block-style YAML values for `LINT_CRATES`.
-
-    Parameters
-    ----------
-    lines
-        Workflow file split into lines.
-    start_index
-        Index of the `LINT_CRATES` declaration line.
-    base_indent
-        Indentation level of the `LINT_CRATES` declaration line.
-
-    Returns
-    -------
-    list[str]
-        Parsed crate names from a block scalar declaration.
-    """
-    lint_crates: list[str] = []
-    for block_line in lines[start_index + 1 :]:
-        stripped = block_line.strip()
-        if not stripped:
-            continue
-
-        current_indent = len(block_line) - len(block_line.lstrip(" "))
-        if current_indent <= base_indent:
-            break
-
-        if stripped.startswith("#"):
-            continue
-
-        lint_crates.append(stripped)
-
-    return lint_crates
-
-
-def _parse_inline_array(value: str) -> list[str]:
-    """Parse inline YAML array values for `LINT_CRATES`.
-
-    Parameters
-    ----------
-    value
-        Raw YAML value including surrounding square brackets.
-
-    Returns
-    -------
-    list[str]
-        Parsed crate names from an inline array declaration.
-    """
-    return [
-        entry.strip().strip("'\"")
-        for entry in value[1:-1].split(",")
-        if entry.strip()
-    ]
-
-
 def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
-    """Extract LINT_CRATES from workflow YAML using indentation-aware parsing.
+    """Extract `LINT_CRATES` from workflow YAML using `ruamel.yaml`.
 
     Parameters
     ----------
@@ -112,27 +55,34 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
     list[str]
         Parsed crate names in declaration order.
     """
-    lint_key_pattern = re.compile(r"^(?P<indent>\s*)LINT_CRATES:\s*(?P<value>.*)$")
-    lines = workflow_text.splitlines()
+    yaml = YAML()
+    parsed = yaml.load(workflow_text)
 
-    for index, line in enumerate(lines):
-        match = lint_key_pattern.match(line)
-        if match is None:
+    workflow_env = parsed.get("env") if isinstance(parsed, dict) else None
+    jobs = parsed.get("jobs") if isinstance(parsed, dict) else None
+    build_lints = jobs.get("build-lints") if isinstance(jobs, dict) else None
+    build_lints_env = (
+        build_lints.get("env") if isinstance(build_lints, dict) else None
+    )
+    lint_value = None
+
+    for env in (workflow_env, build_lints_env):
+        if not isinstance(env, dict):
             continue
+        lint_value = env.get("LINT_CRATES")
+        if lint_value is not None:
+            break
 
-        indent = len(match.group("indent"))
-        value = match.group("value").strip()
+    if lint_value is None:
+        raise AssertionError(f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration")
 
-        if value in {"|", "|-", ">", ">-"}:
-            return _parse_block_style_value(lines, index, indent)
+    if isinstance(lint_value, list):
+        return [str(crate).strip() for crate in lint_value if str(crate).strip()]
 
-        if value.startswith("[") and value.endswith("]"):
-            return _parse_inline_array(value)
+    if isinstance(lint_value, str):
+        return [crate for crate in lint_value.split() if crate]
 
-        if value:
-            return [entry for entry in value.split() if entry]
-
-    raise AssertionError(f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration")
+    return [crate for crate in str(lint_value).split() if crate]
 
 
 def lint_crates_from_workflow() -> list[str]:
