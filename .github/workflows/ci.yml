@@ -48,7 +48,7 @@ jobs:
           mmdc --version
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@3259c6206f993105e3a61b142c2d97bf4b9ef83d  # v7.1.0
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7.2.1
         with:
           version: 'latest'
 
