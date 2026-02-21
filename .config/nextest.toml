@@ -5,6 +5,7 @@
 # racing on the shared target directory.
 [test-groups]
 serial-dylint-ui = { max-threads = 1 }
+serial-toolchain-installs = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = "test(driver::ui::) | test(tests::ui::)"
@@ -15,3 +16,9 @@ test-group = "serial-dylint-ui"
 [[profile.default.overrides]]
 filter = "binary(behaviour_toolchain)"
 slow-timeout = { period = "20m", terminate-after = 1 }
+
+# These three scenarios all invoke installer-driven lint builds and can
+# contend on shared rustup/cargo state when run in parallel.
+[[profile.default.overrides]]
+filter = "binary(behaviour_toolchain) & (test(scenario_auto_detect_toolchain_install) | test(scenario_auto_install_success_emits_message) | test(scenario_auto_install_success_quiet_mode))"
+test-group = "serial-toolchain-installs"

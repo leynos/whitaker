@@ -18,7 +18,7 @@ env:
     no_expect_outside_tests
     no_std_fs_operations
     no_unwrap_or_else_panic
-    suite
+    whitaker_suite
 
 jobs:
   build-lints:
