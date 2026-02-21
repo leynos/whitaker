@@ -1,6 +1,6 @@
 [package]
 name = "no_std_fs_operations"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [lib]
@@ -32,7 +32,7 @@ rustc_span = { workspace = true, optional = true }
 common = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
+whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 cargo_metadata = { workspace = true }

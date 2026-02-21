@@ -1,6 +1,6 @@
 [package]
 name = "conditional_max_n_branches"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 publish = false
 description = "Dylint lint that enforces an upper bound on conditional branch counts"
@@ -39,11 +39,11 @@ rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
+whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 common = { workspace = true }
-whitaker = { version = "0.1.0", path = "../../" }
+whitaker = { workspace = true }
 camino = { workspace = true }
 glob = "0.3.0"
 tempfile = "3.14.0"

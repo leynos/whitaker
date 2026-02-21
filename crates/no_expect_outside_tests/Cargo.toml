@@ -1,6 +1,6 @@
 [package]
 name = "no_expect_outside_tests"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [lib]
@@ -33,7 +33,7 @@ rustc_middle = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 common = { workspace = true, optional = true }
-whitaker = { version = "0.1.0", path = "../../", features = ["dylint-driver"], optional = true }
+whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 log = { workspace = true, optional = true }
 

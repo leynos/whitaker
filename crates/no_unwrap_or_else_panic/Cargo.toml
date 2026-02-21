@@ -1,6 +1,6 @@
 [package]
 name = "no_unwrap_or_else_panic"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 publish = false
 description = "Dylint lint that flags unwrap_or_else closures which panic"
@@ -36,7 +36,7 @@ rustc_middle = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-whitaker = { path = "../../", features = ["dylint-driver"], optional = true }
+whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 clippy_utils = { workspace = true, optional = true }
 
 [dev-dependencies]
