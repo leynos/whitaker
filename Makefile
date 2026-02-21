@@ -76,7 +76,7 @@ test: ## Run tests with warnings treated as errors
 workflow-test: ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
 	@command -v python3 >/dev/null || { echo "python3 is required for workflow tests"; exit 1; }
-	@python3 -m pytest tests/workflows
+	@ACT_WORKFLOW_TESTS=1 python3 -m pytest tests/workflows
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)

@@ -1,9 +1,29 @@
-"""Black-box smoke tests for the rolling release GitHub Actions workflow."""
+"""Validate the rolling release workflow with contract and smoke checks.
+
+This module provides two complementary checks for
+`.github/workflows/rolling-release.yml`:
+
+1. A fast contract test that ensures every crate listed in `LINT_CRATES` is a
+   real workspace package.
+2. An opt-in black-box smoke test that runs the `build-lints` job with `act`.
+
+The smoke test is intentionally gated behind `ACT_WORKFLOW_TESTS=1` because it
+depends on a container runtime and can take several minutes.
+
+Examples
+--------
+Run the contract check:
+`python3 -m pytest tests/workflows/test_rolling_release_workflow.py -k lint`
+
+Run the `act` smoke test:
+`ACT_WORKFLOW_TESTS=1 python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,35 +37,102 @@ EVENT_PATH = (
     / "tests/workflows/fixtures/workflow_dispatch.rolling-release.event.json"
 )
 MATRIX = {"os": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu"}
+CARGO_METADATA_TIMEOUT_SECONDS = 30
+ACT_LIST_TIMEOUT_SECONDS = 60
+ACT_RUN_TIMEOUT_SECONDS = 900
+
+
+def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
+    """Extract LINT_CRATES from workflow YAML using indentation-aware parsing.
+
+    Parameters
+    ----------
+    workflow_text
+        Raw contents of `.github/workflows/rolling-release.yml`.
+
+    Returns
+    -------
+    list[str]
+        Parsed crate names in declaration order.
+    """
+    lint_key_pattern = re.compile(r"^(?P<indent>\s*)LINT_CRATES:\s*(?P<value>.*)$")
+    lines = workflow_text.splitlines()
+
+    for index, line in enumerate(lines):
+        match = lint_key_pattern.match(line)
+        if match is None:
+            continue
+
+        indent = len(match.group("indent"))
+        value = match.group("value").strip()
+
+        if value in {"|", "|-", ">", ">-"}:
+            lint_crates: list[str] = []
+            for block_line in lines[index + 1 :]:
+                stripped = block_line.strip()
+                if not stripped:
+                    continue
+
+                current_indent = len(block_line) - len(block_line.lstrip(" "))
+                if current_indent <= indent:
+                    break
+
+                if stripped.startswith("#"):
+                    continue
+
+                lint_crates.append(stripped)
+            return lint_crates
+
+        if value.startswith("[") and value.endswith("]"):
+            return [
+                entry.strip().strip("'\"")
+                for entry in value[1:-1].split(",")
+                if entry.strip()
+            ]
+
+        if value:
+            return [entry for entry in value.split() if entry]
+
+    raise AssertionError(f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration")
 
 
 def lint_crates_from_workflow() -> list[str]:
-    marker = "  LINT_CRATES: >-"
-    lines = WORKFLOW_PATH.read_text(encoding="utf-8").splitlines()
-    try:
-        start = lines.index(marker) + 1
-    except ValueError as error:
-        raise AssertionError(f"{WORKFLOW_PATH} is missing {marker!r}") from error
+    """Return lint crates declared in the rolling release workflow.
 
-    lint_crates: list[str] = []
-    for line in lines[start:]:
-        if not line.startswith("    "):
-            break
-        crate_name = line.strip()
-        if crate_name:
-            lint_crates.append(crate_name)
+    Parameters
+    ----------
+    None
 
+    Returns
+    -------
+    list[str]
+        Crate names used by the workflow build loop.
+    """
+    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    lint_crates = _extract_lint_crates_from_text(workflow_text)
     assert lint_crates, "rolling-release workflow must define at least one lint crate"
     return lint_crates
 
 
 def workspace_package_names() -> set[str]:
+    """Resolve package names from Cargo workspace metadata.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    set[str]
+        Workspace package names from `cargo metadata`.
+    """
     completed = subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--no-deps"],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,
         text=True,
+        timeout=CARGO_METADATA_TIMEOUT_SECONDS,
     )
     assert completed.returncode == 0, (
         "cargo metadata failed while resolving workspace packages:\n"
@@ -56,6 +143,18 @@ def workspace_package_names() -> set[str]:
 
 
 def run_act_build_lints(*, artifact_dir: Path) -> tuple[int, str]:
+    """Run the workflow build-lints job through `act`.
+
+    Parameters
+    ----------
+    artifact_dir
+        Directory where uploaded artifacts should be written by `act`.
+
+    Returns
+    -------
+    tuple[int, str]
+        Process return code and merged stdout/stderr logs.
+    """
     artifact_dir.mkdir(parents=True, exist_ok=True)
     lint_crates = " ".join(lint_crates_from_workflow())
     command = [
@@ -86,12 +185,24 @@ def run_act_build_lints(*, artifact_dir: Path) -> tuple[int, str]:
         check=False,
         capture_output=True,
         text=True,
+        timeout=ACT_RUN_TIMEOUT_SECONDS,
     )
     logs = f"{completed.stdout}\n{completed.stderr}"
     return completed.returncode, logs
 
 
 def workflow_runtime_is_ready() -> bool:
+    """Check whether `act` can reach a working container runtime.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    bool
+        `True` when `act --list` succeeds for the workflow; otherwise `False`.
+    """
     if shutil.which("act") is None:
         return False
 
@@ -107,11 +218,22 @@ def workflow_runtime_is_ready() -> bool:
         check=False,
         capture_output=True,
         text=True,
+        timeout=ACT_LIST_TIMEOUT_SECONDS,
     )
     return completed.returncode == 0
 
 
 def test_lint_crates_are_workspace_packages() -> None:
+    """Ensure `LINT_CRATES` only references real workspace packages.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
     lint_crates = lint_crates_from_workflow()
     workspace_packages = workspace_package_names()
     missing = sorted(set(lint_crates) - workspace_packages)
@@ -119,8 +241,13 @@ def test_lint_crates_are_workspace_packages() -> None:
         "rolling-release workflow includes non-workspace lint crates: "
         + ", ".join(missing)
     )
-    assert "suite" not in lint_crates
-    assert "whitaker_suite" in lint_crates
+    assert "suite" not in lint_crates, (
+        "rolling-release workflow must reference the workspace crate "
+        "`whitaker_suite` and never `suite`"
+    )
+    assert "whitaker_suite" in lint_crates, (
+        "rolling-release workflow must include `whitaker_suite` in LINT_CRATES"
+    )
 
 
 @pytest.mark.skipif(
@@ -128,11 +255,27 @@ def test_lint_crates_are_workspace_packages() -> None:
     reason="set ACT_WORKFLOW_TESTS=1 to run act workflow smoke tests",
 )
 def test_build_lints_job_succeeds_under_act(tmp_path: Path) -> None:
+    """Verify the `build-lints` job succeeds under `act`.
+
+    Parameters
+    ----------
+    tmp_path
+        Pytest-provided temporary path used for artifact output.
+
+    Returns
+    -------
+    None
+    """
     if not workflow_runtime_is_ready():
-        pytest.skip("act runtime is unavailable or cannot reach the container socket")
+        pytest.fail(
+            "ACT_WORKFLOW_TESTS=1 was set but act runtime is unavailable or "
+            "cannot reach the container socket"
+        )
 
     artifact_dir = tmp_path / "act-artifacts"
     code, logs = run_act_build_lints(artifact_dir=artifact_dir)
     assert code == 0, f"act build-lints job failed:\n{logs}"
     assert "cannot specify features for packages outside of workspace" not in logs
-    assert any(artifact_dir.rglob("*")), "act did not export any artefacts"
+    assert any(path.is_file() for path in artifact_dir.rglob("*")), (
+        "act did not export any artifact files"
+    )
