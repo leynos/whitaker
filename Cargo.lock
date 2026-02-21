@@ -2448,6 +2448,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
+name = "test_must_not_have_example"
+version = "0.2.0"
+dependencies = [
+ "camino",
+ "common",
+ "dylint_linting",
+ "dylint_testing",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_span",
+ "serde",
+ "whitaker",
+]
+
+[[package]]
 name = "tester"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2851,6 +2870,7 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "rustc_ast",
  "rustc_hir",
  "rustc_lint",
  "rustc_span",
@@ -2907,6 +2927,7 @@ dependencies = [
  "rustc_lint",
  "rustc_session",
  "rustc_span",
+ "test_must_not_have_example",
 ]
 
 [[package]]

@@ -20,6 +20,7 @@ use rustc_middle::ty::{self, Ty};
 use rustc_span::sym;
 use serde::Deserialize;
 use whitaker::SharedConfig;
+use whitaker::hir::has_test_like_hir_attributes;
 
 use crate::context::{collect_context, summarise_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
@@ -228,7 +229,7 @@ fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
 
 // Check if any attribute is #[test].
 fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
-    attrs.iter().any(is_test_attribute)
+    has_test_like_hir_attributes(attrs, &[])
 }
 
 // Detect test framework attributes.
@@ -237,37 +238,9 @@ fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
 // Unparsed HIR attributes. The Parsed variant is reserved for compiler-internal
 // attributes like #[must_use] and #[doc], not for test framework annotations.
 // This function therefore only inspects Unparsed attributes.
+#[cfg(test)]
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
-    let hir::Attribute::Unparsed(_) = attr else {
-        return false;
-    };
-
-    let path = attr.path();
-
-    // Check for built-in #[test] attribute via symbol comparison (fast path)
-    if path.len() == 1 && path[0] == sym::test {
-        return true;
-    }
-
-    // Match against known test attribute patterns (must match full paths to
-    // avoid false positives like #[tokio::main] or #[rstest::fixture]).
-    // Use direct length and element checks to avoid per-attribute allocation.
-    match path.len() {
-        1 => matches!(path[0].as_str(), "rstest" | "case"),
-        2 => {
-            let first = path[0].as_str();
-            let second = path[1].as_str();
-            matches!(
-                (first, second),
-                ("rstest", "rstest")
-                    | ("rstest", "case")
-                    | ("tokio", "test")
-                    | ("async_std", "test")
-                    | ("gpui", "test")
-            )
-        }
-        _ => false,
-    }
+    has_test_like_hir_attributes(std::slice::from_ref(attr), &[])
 }
 
 #[cfg(all(test, feature = "dylint-driver"))]

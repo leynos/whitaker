@@ -14,6 +14,7 @@ dylint-driver = [
     "dep:dylint_linting",
     "dep:function_attrs_follow_docs",
     "dep:no_expect_outside_tests",
+    "dep:test_must_not_have_example",
     "dep:module_must_have_inner_docs",
     "dep:conditional_max_n_branches",
     "dep:module_max_lines",
@@ -34,6 +35,7 @@ rustc_hir = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
 function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs", optional = true, features = ["dylint-driver", "constituent"] }
 no_expect_outside_tests = { path = "../crates/no_expect_outside_tests", optional = true, features = ["dylint-driver", "constituent"] }
+test_must_not_have_example = { path = "../crates/test_must_not_have_example", optional = true, features = ["dylint-driver", "constituent"] }
 module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs", optional = true, features = ["dylint-driver", "constituent"] }
 conditional_max_n_branches = { path = "../crates/conditional_max_n_branches", optional = true, features = ["dylint-driver", "constituent"] }
 module_max_lines = { path = "../crates/module_max_lines", optional = true, features = ["dylint-driver", "constituent"] }

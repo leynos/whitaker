@@ -20,6 +20,10 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         crate_name: "no_expect_outside_tests",
     },
     LintDescriptor {
+        name: "test_must_not_have_example",
+        crate_name: "test_must_not_have_example",
+    },
+    LintDescriptor {
         name: "module_must_have_inner_docs",
         crate_name: "module_must_have_inner_docs",
     },
@@ -53,6 +57,7 @@ use rustc_lint::Lint;
 pub const SUITE_LINT_DECLS: &[&Lint] = &[
     function_attrs_follow_docs::FUNCTION_ATTRS_FOLLOW_DOCS,
     no_expect_outside_tests::NO_EXPECT_OUTSIDE_TESTS,
+    test_must_not_have_example::TEST_MUST_NOT_HAVE_EXAMPLE,
     module_must_have_inner_docs::MODULE_MUST_HAVE_INNER_DOCS,
     conditional_max_n_branches::CONDITIONAL_MAX_N_BRANCHES,
     module_max_lines::MODULE_MAX_LINES,
@@ -71,6 +76,7 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// for expected in [
 ///     "function_attrs_follow_docs",
 ///     "no_expect_outside_tests",
+///     "test_must_not_have_example",
 ///     "module_must_have_inner_docs",
 ///     "conditional_max_n_branches",
 ///     "module_max_lines",

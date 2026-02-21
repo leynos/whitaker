@@ -1,0 +1,16 @@
+warning: Remove example sections from test fail_examples_heading documentation.
+  --> $DIR/fail_examples_heading.rs:11:4
+   |
+LL | fn fail_examples_heading() {
+   |    ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The docs for fail_examples_heading contain an examples heading.
+   = help: Drop the example or move it into standalone user-facing documentation.
+note: the lint level is defined here
+  --> $DIR/fail_examples_heading.rs:2:9
+   |
+LL | #![warn(test_must_not_have_example)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

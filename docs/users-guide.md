@@ -140,6 +140,10 @@ max_branches = 3
 [no_expect_outside_tests]
 additional_test_attributes = ["my_framework::test", "async_std::test"]
 
+# Additional test markers for `test_must_not_have_example`
+[test_must_not_have_example]
+additional_test_attributes = ["actix_rt::test", "my_framework::test"]
+
 # Allow panics in main
 [no_unwrap_or_else_panic]
 allow_in_main = true
@@ -301,6 +305,41 @@ additional_test_attributes = ["my_framework::test", "async_std::test"]
 
 **How to fix:** Use proper error handling (`?`, `map_err`) or move the code to
 a test context.
+
+______________________________________________________________________
+
+### `test_must_not_have_example`
+
+Warns when test function documentation includes example headings (for example
+`# Examples`) or fenced code blocks.
+
+**Configuration:**
+
+```toml
+[test_must_not_have_example]
+additional_test_attributes = ["actix_rt::test", "my_framework::test"]
+```
+
+Use `additional_test_attributes` for frameworks not covered by default test
+markers such as `#[test]`, `#[tokio::test]`, and `#[rstest]`.
+
+**How to fix:** Keep test docs focused on intent and assertions, and move
+example/tutorial snippets into user-facing documentation.
+
+```rust
+// Before
+#[test]
+/// # Examples
+/// ```rust
+/// assert_eq!(sum(2, 2), 4);
+/// ```
+fn sums_values() { /* ... */ }
+
+// After
+#[test]
+/// Verifies summation handles two positive integers.
+fn sums_values() { /* ... */ }
+```
 
 ______________________________________________________________________
 

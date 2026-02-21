@@ -1,0 +1,16 @@
+warning: Remove example sections from test fail_fenced_code documentation.
+  --> $DIR/fail_fenced_code.rs:13:4
+   |
+LL | fn fail_fenced_code() {
+   |    ^^^^^^^^^^^^^^^^
+   |
+   = note: The docs for fail_fenced_code contain a fenced code block.
+   = help: Drop the example or move it into standalone user-facing documentation.
+note: the lint level is defined here
+  --> $DIR/fail_fenced_code.rs:2:9
+   |
+LL | #![warn(test_must_not_have_example)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+

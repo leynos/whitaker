@@ -148,7 +148,7 @@ Success is observable by:
   Date/Author: 2026-02-11 (agent).
 
 - ~~Decision: Place packaging logic in the `installer` crate as a
-  new `artefact::packaging` sub-module rather than a standalone binary.~~
+  new `artefact::packaging` submodule rather than a standalone binary.~~
   SUPERSEDED by the decision below. Date/Author: 2026-02-11 (agent).
 
 - Decision: Invoke the `whitaker-package-lints` Rust binary from
