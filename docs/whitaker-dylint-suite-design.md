@@ -1402,6 +1402,15 @@ extraction paths from `BaseDirs::whitaker_data_dir()` and writes libraries to
 use that exact `lib` directory for `DYLINT_LIBRARY_PATH`. Local build staging
 continues to honour `--target-dir` and existing release-layout behaviour.
 
+**Implementation decision (2026-02-21):** The installer now records local
+aggregate metrics at `<data_dir>/metrics/install_metrics.json`, counting only
+successful installs. Each successful run increments either the
+download-installs counter or the build-installs counter and adds elapsed
+installation time to a cumulative total. Download and build rates use
+successful installs as the denominator. Metrics storage failures are non-fatal:
+the installer logs a warning and still exits successfully. If the metrics file
+is malformed, the installer resets it to defaults and records the current run.
+
 ### Workspace metadata example selection
 
 **Decision:** Include examples for suite-only, individual crates,

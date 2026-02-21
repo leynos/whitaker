@@ -4,9 +4,16 @@
 //! After installation, it prints shell configuration snippets for enabling
 //! library discovery.
 
+mod install_flow;
+
+use crate::install_flow::{
+    MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
+    try_prebuilt_installation, write_install_metrics,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use std::io::Write;
+use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{
@@ -14,10 +21,10 @@ use whitaker_installer::deps::{
 };
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
+use whitaker_installer::install_metrics::InstallMode;
 use whitaker_installer::list::{determine_target_dir, run_list};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
-use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
@@ -45,70 +52,6 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
     }
 }
 
-/// Write fallback message when prebuilt installation fails (if not in quiet mode).
-fn write_prebuilt_fallback_message(
-    quiet: bool,
-    error: &dyn std::fmt::Display,
-    stderr: &mut dyn Write,
-) {
-    if quiet {
-        return;
-    }
-    write_stderr_line(stderr, format!("Prebuilt download unavailable: {error}"));
-    write_stderr_line(stderr, "Falling back to local compilation.");
-    write_stderr_line(stderr, "");
-}
-
-struct PrebuiltInstallationContext<'a> {
-    args: &'a InstallArgs,
-    dirs: &'a dyn BaseDirs,
-    requested_crates: &'a [CrateName],
-    toolchain_channel: &'a str,
-}
-
-/// Attempt prebuilt installation and return staged path when successful.
-fn try_prebuilt_installation(
-    context: &PrebuiltInstallationContext,
-    stderr: &mut dyn Write,
-) -> Result<Option<Utf8PathBuf>> {
-    if !context
-        .args
-        .should_attempt_prebuilt(context.requested_crates)
-    {
-        return Ok(None);
-    }
-
-    let host_target = match detect_host_target() {
-        Ok(target) => target,
-        Err(e) => {
-            write_prebuilt_fallback_message(context.args.quiet, &e, stderr);
-            return Ok(None);
-        }
-    };
-
-    let destination_dir =
-        match prebuilt_library_dir(context.dirs, context.toolchain_channel, &host_target) {
-            Ok(destination) => destination,
-            Err(e) => {
-                write_prebuilt_fallback_message(context.args.quiet, &e, stderr);
-                return Ok(None);
-            }
-        };
-
-    let prebuilt_config = PrebuiltConfig {
-        target: &host_target,
-        toolchain: context.toolchain_channel,
-        destination_dir: &destination_dir,
-        quiet: context.args.quiet,
-    };
-
-    let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
-    else {
-        return Ok(None);
-    };
-    Ok(Some(staging_path))
-}
-
 /// Runs the install command to build and stage lint libraries.
 ///
 /// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
@@ -126,6 +69,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     if args.dry_run {
         return run_dry(args, &dirs, stderr);
     }
+    let install_started = Instant::now();
 
     // Step 1: Check and install Dylint dependencies if needed
     if !args.skip_deps {
@@ -149,7 +93,14 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         toolchain_channel: toolchain.channel(),
     };
     if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
-        return finish_install(args, &dirs, &staging_path, stderr);
+        let finish_context = FinishInstallContext {
+            args,
+            dirs: &dirs,
+            staging_path: &staging_path,
+            install_mode: InstallMode::Download,
+            install_started,
+        };
+        return finish_install_and_record_metrics(&finish_context, stderr);
     }
 
     let context = PipelineContext {
@@ -167,7 +118,14 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
 
     // Step 5: Generate wrapper scripts if requested
-    finish_install(args, &dirs, &staging_path, stderr)
+    let finish_context = FinishInstallContext {
+        args,
+        dirs: &dirs,
+        staging_path: &staging_path,
+        install_mode: InstallMode::Build,
+        install_started,
+    };
+    finish_install_and_record_metrics(&finish_context, stderr)
 }
 
 /// Runs in dry-run mode, showing configuration without side effects.
@@ -306,36 +264,6 @@ fn ensure_toolchain_installed(
     Ok(())
 }
 
-/// Detect the host target triple by parsing `rustc -vV` output.
-fn detect_host_target() -> Result<String> {
-    let output = std::process::Command::new("rustc")
-        .args(["-vV"])
-        .output()
-        .map_err(|e| InstallerError::ToolchainDetection {
-            reason: format!("failed to run `rustc -vV`: {e}"),
-        })?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(InstallerError::ToolchainDetection {
-            reason: format!(
-                "`rustc -vV` exited with {}: {}",
-                output.status,
-                stderr.trim()
-            ),
-        });
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        if let Some(host) = line.strip_prefix("host: ") {
-            return Ok(host.trim().to_owned());
-        }
-    }
-    Err(InstallerError::ToolchainDetection {
-        reason: "could not determine host target from `rustc -vV`".to_owned(),
-    })
-}
-
 /// Common final steps: generate wrapper scripts or print shell snippet.
 fn finish_install(
     args: &InstallArgs,
@@ -349,6 +277,31 @@ fn finish_install(
     } else {
         generate_and_report_wrapper(dirs, staging_path, stderr)?;
     }
+    Ok(())
+}
+
+/// Finalize installation and record aggregate installer metrics.
+struct FinishInstallContext<'a> {
+    args: &'a InstallArgs,
+    dirs: &'a dyn BaseDirs,
+    staging_path: &'a Utf8Path,
+    install_mode: InstallMode,
+    install_started: Instant,
+}
+
+/// Finalize installation and record aggregate installer metrics.
+fn finish_install_and_record_metrics(
+    context: &FinishInstallContext<'_>,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    finish_install(context.args, context.dirs, context.staging_path, stderr)?;
+    let metrics_context = MetricsWriteContext {
+        quiet: context.args.quiet,
+        dirs: context.dirs,
+        install_mode: context.install_mode,
+        elapsed: context.install_started.elapsed(),
+    };
+    write_install_metrics(&metrics_context, stderr);
     Ok(())
 }
 

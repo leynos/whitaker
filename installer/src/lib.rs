@@ -14,6 +14,7 @@
 //! - [`dirs`] - Directory resolution abstraction for platform-specific paths
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
+//! - [`install_metrics`] - Local installer metrics persistence and summaries
 //! - [`list`] - List command implementation
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
@@ -35,6 +36,7 @@ pub mod deps;
 pub mod dirs;
 pub mod error;
 pub mod git;
+pub mod install_metrics;
 pub mod list;
 pub mod list_output;
 pub mod output;

@@ -99,7 +99,7 @@
   `~/.local/share/whitaker/lints/<toolchain>/<target>/lib` and set
   `DYLINT_LIBRARY_PATH`. See `docs/adr-001-prebuilt-dylint-libraries.md`
   §Decision outcome / proposed direction.
-- [ ] 3.4.6. Record download-versus-build rates and total installation time.
+- [x] 3.4.6. Record download-versus-build rates and total installation time.
   See `docs/adr-001-prebuilt-dylint-libraries.md` §Migration plan.
 
 ## 4. Quality gates and automation
