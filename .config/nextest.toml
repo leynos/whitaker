@@ -8,7 +8,8 @@ serial-dylint-ui = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = "test(driver::ui::) | test(tests::ui::)"
+# Include crate-local `ui::ui` entrypoints that wrap dylint UI fixtures.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui)"
 test-group = "serial-dylint-ui"
 
 # Extend the timeout for toolchain auto-install behavioural tests, since the
