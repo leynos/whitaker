@@ -42,6 +42,63 @@ ACT_LIST_TIMEOUT_SECONDS = 60
 ACT_RUN_TIMEOUT_SECONDS = 900
 
 
+def _parse_block_style_value(
+    lines: list[str], start_index: int, base_indent: int
+) -> list[str]:
+    """Parse block-style YAML values for `LINT_CRATES`.
+
+    Parameters
+    ----------
+    lines
+        Workflow file split into lines.
+    start_index
+        Index of the `LINT_CRATES` declaration line.
+    base_indent
+        Indentation level of the `LINT_CRATES` declaration line.
+
+    Returns
+    -------
+    list[str]
+        Parsed crate names from a block scalar declaration.
+    """
+    lint_crates: list[str] = []
+    for block_line in lines[start_index + 1 :]:
+        stripped = block_line.strip()
+        if not stripped:
+            continue
+
+        current_indent = len(block_line) - len(block_line.lstrip(" "))
+        if current_indent <= base_indent:
+            break
+
+        if stripped.startswith("#"):
+            continue
+
+        lint_crates.append(stripped)
+
+    return lint_crates
+
+
+def _parse_inline_array(value: str) -> list[str]:
+    """Parse inline YAML array values for `LINT_CRATES`.
+
+    Parameters
+    ----------
+    value
+        Raw YAML value including surrounding square brackets.
+
+    Returns
+    -------
+    list[str]
+        Parsed crate names from an inline array declaration.
+    """
+    return [
+        entry.strip().strip("'\"")
+        for entry in value[1:-1].split(",")
+        if entry.strip()
+    ]
+
+
 def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
     """Extract LINT_CRATES from workflow YAML using indentation-aware parsing.
 
@@ -67,28 +124,10 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
         value = match.group("value").strip()
 
         if value in {"|", "|-", ">", ">-"}:
-            lint_crates: list[str] = []
-            for block_line in lines[index + 1 :]:
-                stripped = block_line.strip()
-                if not stripped:
-                    continue
-
-                current_indent = len(block_line) - len(block_line.lstrip(" "))
-                if current_indent <= indent:
-                    break
-
-                if stripped.startswith("#"):
-                    continue
-
-                lint_crates.append(stripped)
-            return lint_crates
+            return _parse_block_style_value(lines, index, indent)
 
         if value.startswith("[") and value.endswith("]"):
-            return [
-                entry.strip().strip("'\"")
-                for entry in value[1:-1].split(",")
-                if entry.strip()
-            ]
+            return _parse_inline_array(value)
 
         if value:
             return [entry for entry in value.split() if entry]
