@@ -1,5 +1,6 @@
 //! Shared lint infrastructure providing attribute helpers, context tracking,
-//! path, expression, span, and diagnostic utilities for Whitaker lints.
+//! path, expression, span, diagnostic, and cohesion analysis utilities for
+//! Whitaker lints.
 
 pub mod attributes;
 pub mod complexity_signal;
@@ -7,6 +8,7 @@ pub mod context;
 pub mod diagnostics;
 pub mod expr;
 pub mod i18n;
+pub mod lcom4;
 pub mod path;
 pub mod span;
 pub mod test_support;
@@ -26,5 +28,6 @@ pub use i18n::{
     MessageResolution, available_locales, branch_phrase, get_localizer_for_lint, noop_reporter,
     normalise_locale, resolve_localizer, safe_resolve_message_set, supports_locale,
 };
+pub use lcom4::{MethodInfo, cohesion_components};
 pub use path::SimplePath;
 pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};

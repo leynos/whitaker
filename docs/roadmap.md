@@ -139,7 +139,7 @@
 
 ### 6.1. Shared cohesion analysis
 
-- [ ] 6.1.1. Add a shared LCOM4 helper in `common` that builds a method graph
+- [x] 6.1.1. Add a shared LCOM4 helper in `common` that builds a method graph
       and
   returns connected component counts. See
   [brain trust lints design](brain-trust-lints-design.md) §Cohesion analysis

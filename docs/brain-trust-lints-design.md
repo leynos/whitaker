@@ -132,6 +132,24 @@ pub fn cohesion_components(methods: &[MethodInfo]) -> usize { /* ... */ }
 
 This will allow reuse in future cohesion-aware lints.
 
+### Implementation decisions (6.1.1)
+
+- **Data representation**: `MethodInfo` carries the method name, a
+  `BTreeSet<String>` of accessed field names, and a `BTreeSet<String>` of
+  called method names. `BTreeSet` is chosen over `HashSet` for deterministic
+  iteration and trivial `Eq`/`Ord` derivation.
+- **Graph algorithm**: connected components are counted using an inline
+  union-find with path compression and union-by-rank. This is O(n α(n))
+  amortized and requires no external dependency.
+- **Edge semantics**: two methods are connected when they share at least one
+  field name in their `accessed_fields` sets, or when one method's
+  `called_methods` set contains the other's name. Calls to methods not present
+  in the input slice are silently ignored.
+- **Empty input**: an empty method slice returns 0 components, which callers
+  may treat as "not applicable" rather than "cohesive".
+- **No validation errors**: `cohesion_components` is infallible. All string
+  inputs are valid; the function cannot fail on well-typed data.
+
 ## Implementation approach
 
 ### Metric collection
