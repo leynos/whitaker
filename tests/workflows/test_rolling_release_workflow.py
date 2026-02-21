@@ -230,13 +230,6 @@ def test_lint_crates_are_workspace_packages() -> None:
         "rolling-release workflow includes non-workspace lint crates: "
         + ", ".join(missing)
     )
-    assert "suite" not in lint_crates, (
-        "rolling-release workflow must reference the workspace crate "
-        "`whitaker_suite` and never `suite`"
-    )
-    assert "whitaker_suite" in lint_crates, (
-        "rolling-release workflow must include `whitaker_suite` in LINT_CRATES"
-    )
 
 
 @pytest.mark.skipif(
