@@ -20,9 +20,9 @@ Roadmap item 2.2.5 tracks delivery of `test_must_not_have_example`.
 
 After this change, test-like functions (`#[test]`, `#[tokio::test]`,
 `#[rstest]`, and recognized equivalents) will trigger a warning when their
-documentation contains either an `Examples` heading or a fenced code block.
-This preserves readability goals by keeping test docs focused on intent rather
-than user examples.
+documentation contains either an `Example` heading or a fenced code block. This
+preserves readability goals by keeping test docs focused on intent rather than
+user examples.
 
 The test-context predicate must be shared with `no_expect_outside_tests` so
 Whitaker maintains one canonical definition of what counts as a test.
@@ -202,7 +202,7 @@ Implemented and shipped.
 
 Current repository state relevant to this task:
 
-- `docs/roadmap.md` marks 2.2.5 as not done.
+- `docs/roadmap.md` marks 2.2.5 as complete.
 - `suite/src/lints.rs` and `suite/Cargo.toml` do not reference
   `test_must_not_have_example` yet.
 - Existing lint crates show two common patterns:
@@ -267,7 +267,7 @@ classification describing whether disallowed content exists, plus why.
 
 Implement and document the heuristic contract explicitly, including:
 
-- what qualifies as an Examples heading;
+- what qualifies as an `Example` heading;
 - what qualifies as a fenced code block start;
 - how whitespace/casing is treated;
 - what patterns are intentionally out of scope.
@@ -345,9 +345,11 @@ Acceptance for Stage F: design doc clearly records what was implemented and why.
 
 Run required checks with `tee` and `set -o pipefail`:
 
-    set -o pipefail; make check-fmt 2>&1 | tee /tmp/2-2-5-check-fmt.log
-    set -o pipefail; make lint 2>&1 | tee /tmp/2-2-5-lint.log
-    set -o pipefail; make test 2>&1 | tee /tmp/2-2-5-test.log
+```bash
+set -o pipefail; make check-fmt 2>&1 | tee /tmp/2-2-5-check-fmt.log
+set -o pipefail; make lint 2>&1 | tee /tmp/2-2-5-lint.log
+set -o pipefail; make test 2>&1 | tee /tmp/2-2-5-test.log
+```
 
 If any command fails, fix and rerun until all pass or a tolerance trigger is
 hit.

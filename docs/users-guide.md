@@ -140,7 +140,7 @@ max_branches = 3
 [no_expect_outside_tests]
 additional_test_attributes = ["my_framework::test", "async_std::test"]
 
-# Additional test markers for docs-without-examples lint
+# Additional test markers for `test_must_not_have_example`
 [test_must_not_have_example]
 additional_test_attributes = ["actix_rt::test", "my_framework::test"]
 

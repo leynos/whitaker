@@ -299,11 +299,12 @@ fn is_matching_harness_test_descriptor(
 }
 
 fn collect_doc_text(attrs: &[hir::Attribute]) -> String {
-    attrs
-        .iter()
-        .filter_map(|attr| attr.doc_str().map(|doc| doc.to_string()))
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut doc_text = String::new();
+    for doc in attrs.iter().filter_map(hir::Attribute::doc_str) {
+        doc_text.push_str(doc.as_str());
+        doc_text.push('\n');
+    }
+    doc_text
 }
 
 fn localized_messages(
@@ -317,14 +318,18 @@ fn localized_messages(
         FluentValue::from(function_name.to_string()),
     );
 
-    let reason = violation.note_detail().to_string();
+    let reason = violation.note_detail();
+    args.insert(
+        Cow::Borrowed("reason"),
+        FluentValue::from(reason.to_string()),
+    );
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
         key: MESSAGE_KEY,
         args: &args,
     };
     safe_resolve_message_set(localizer, resolution, noop_reporter, move || {
-        fallback_messages(function_name, reason.as_str())
+        fallback_messages(function_name, reason)
     })
 }
 
