@@ -260,7 +260,9 @@ def test_build_lints_job_succeeds_under_act(tmp_path: Path) -> None:
     artifact_dir = tmp_path / "act-artifacts"
     code, logs = run_act_build_lints(artifact_dir=artifact_dir)
     assert code == 0, f"act build-lints job failed:\n{logs}"
-    assert "cannot specify features for packages outside of workspace" not in logs
+    assert "cannot specify features for packages outside of workspace" not in logs, (
+        "act output indicates a non-workspace feature specification error"
+    )
     assert any(path.is_file() for path in artifact_dir.rglob("*")), (
         "act did not export any artifact files"
     )
