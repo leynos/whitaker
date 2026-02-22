@@ -39,6 +39,7 @@ fn record_mode(world: &mut InstallMetricsWorld, mode: InstallMode, millis: u64) 
             world.last_error = Some(error.to_string());
             world.outcome = None;
             world.summary_line = None;
+            world.in_memory_metrics = None;
         }
     }
 }

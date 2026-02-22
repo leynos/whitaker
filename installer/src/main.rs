@@ -289,7 +289,7 @@ struct FinishInstallContext<'a> {
     install_started: Instant,
 }
 
-/// Finalize installation and record aggregate installer metrics.
+/// Finalise installation and record aggregate installer metrics.
 fn finish_install_and_record_metrics(
     context: &FinishInstallContext<'_>,
     stderr: &mut dyn Write,

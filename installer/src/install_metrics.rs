@@ -34,18 +34,51 @@ pub struct InstallMetrics {
 
 impl InstallMetrics {
     /// Returns the number of successful installs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
+    ///
+    /// let mut metrics = InstallMetrics::default();
+    /// metrics.record_install(InstallMode::Download, Duration::from_millis(250));
+    /// assert_eq!(metrics.total_installs(), 1);
+    /// ```
     #[must_use]
     pub fn total_installs(&self) -> u64 {
         self.total_installs
     }
 
     /// Returns the number of successful prebuilt-download installs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
+    ///
+    /// let mut metrics = InstallMetrics::default();
+    /// metrics.record_install(InstallMode::Download, Duration::from_millis(250));
+    /// assert_eq!(metrics.download_installs(), 1);
+    /// ```
     #[must_use]
     pub fn download_installs(&self) -> u64 {
         self.download_installs
     }
 
     /// Returns the number of successful local-build installs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
+    ///
+    /// let mut metrics = InstallMetrics::default();
+    /// metrics.record_install(InstallMode::Build, Duration::from_millis(250));
+    /// assert_eq!(metrics.build_installs(), 1);
+    /// ```
     #[must_use]
     pub fn build_installs(&self) -> u64 {
         self.build_installs
@@ -70,6 +103,20 @@ impl InstallMetrics {
     }
 
     /// Records one successful install event.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
+    ///
+    /// let mut metrics = InstallMetrics::default();
+    /// metrics.record_install(InstallMode::Download, Duration::from_millis(500));
+    /// metrics.record_install(InstallMode::Build, Duration::from_millis(1000));
+    /// assert_eq!(metrics.total_installs(), 2);
+    /// assert_eq!(metrics.download_installs(), 1);
+    /// assert_eq!(metrics.build_installs(), 1);
+    /// ```
     pub fn record_install(&mut self, mode: InstallMode, duration: Duration) {
         self.total_installs = self.total_installs.saturating_add(1);
         match mode {
@@ -86,6 +133,19 @@ impl InstallMetrics {
     }
 
     /// Returns a human-readable installer metrics summary line.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use whitaker_installer::install_metrics::{InstallMetrics, InstallMode};
+    ///
+    /// let mut metrics = InstallMetrics::default();
+    /// metrics.record_install(InstallMode::Download, Duration::from_millis(500));
+    /// let summary = metrics.summary_line();
+    /// assert!(summary.contains("download 1/1 (100.0%)"));
+    /// assert!(summary.contains("total installation time 0.500s"));
+    /// ```
     #[must_use]
     pub fn summary_line(&self) -> String {
         format!(
@@ -199,6 +259,8 @@ pub fn record_install_at_path(
 ) -> Result<RecordOutcome, InstallMetricsError> {
     ensure_metrics_directory(metrics_path)?;
     let mut metrics_file = open_metrics_file(metrics_path)?;
+    // Use standard-library advisory locking to serialize the read-modify-write
+    // cycle across concurrent installer processes.
     metrics_file
         .lock()
         .map_err(|source| InstallMetricsError::LockMetrics {
@@ -319,11 +381,19 @@ fn format_duration(duration: Duration) -> String {
     let minutes = (total_seconds % 3600) / 60;
     let seconds = total_seconds % 60;
 
-    if hours > 0 {
+    if should_format_with_hours(hours) {
         return format!("{hours}h {minutes}m {seconds}.{millis:03}s");
     }
-    if minutes > 0 {
+    if should_format_with_minutes(hours, minutes) {
         return format!("{minutes}m {seconds}.{millis:03}s");
     }
     format!("{seconds}.{millis:03}s")
+}
+
+fn should_format_with_hours(hours: u64) -> bool {
+    hours > 0
+}
+
+fn should_format_with_minutes(hours: u64, minutes: u64) -> bool {
+    hours == 0 && minutes > 0
 }
