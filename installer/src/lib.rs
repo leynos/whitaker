@@ -50,6 +50,9 @@ pub mod toolchain;
 pub mod workspace;
 pub mod wrapper;
 
+#[cfg(test)]
+mod install_metrics_tests;
+
 /// Test utilities for stubbing command execution in integration tests.
 ///
 /// This module is public to allow the binary crate's tests to import it,

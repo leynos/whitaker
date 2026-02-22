@@ -16,6 +16,7 @@ struct InstallMetricsWorld {
     outcome: Option<RecordOutcome>,
     last_error: Option<String>,
     in_memory_metrics: Option<InstallMetrics>,
+    summary_line: Option<String>,
 }
 
 #[fixture]
@@ -28,13 +29,16 @@ fn record_mode(world: &mut InstallMetricsWorld, mode: InstallMode, millis: u64) 
     let result = record_install_at_path(path, mode, Duration::from_millis(millis));
     match result {
         Ok(outcome) => {
-            world.in_memory_metrics = Some(outcome.metrics().clone());
+            let metrics = outcome.metrics().clone();
+            world.summary_line = Some(metrics.summary_line());
+            world.in_memory_metrics = Some(metrics);
             world.last_error = None;
             world.outcome = Some(outcome);
         }
         Err(error) => {
             world.last_error = Some(error.to_string());
             world.outcome = None;
+            world.summary_line = None;
         }
     }
 }
@@ -47,6 +51,7 @@ fn given_empty_store(world: &mut InstallMetricsWorld) {
     world.outcome = None;
     world.last_error = None;
     world.in_memory_metrics = None;
+    world.summary_line = None;
 }
 
 #[given("a corrupt install metrics store")]
@@ -152,11 +157,44 @@ fn then_recording_fails(world: &mut InstallMetricsWorld) {
     );
 }
 
+#[then("summary line contains \"{expected}\"")]
+fn then_summary_line_contains(world: &mut InstallMetricsWorld, expected: String) {
+    let summary = world
+        .summary_line
+        .as_deref()
+        .expect("summary line is available");
+    assert!(
+        summary.contains(&expected),
+        "expected summary line to contain {expected:?}, got {summary:?}"
+    );
+}
+
+#[then("warning text contains \"{expected}\"")]
+fn then_warning_text_contains(world: &mut InstallMetricsWorld, expected: String) {
+    let error = world
+        .last_error
+        .as_deref()
+        .expect("metrics recording error should be available");
+    let warning_text = format!("Warning: could not record install metrics: {error}");
+    assert!(
+        warning_text.contains(&expected),
+        "expected warning text to contain {expected:?}, got {warning_text:?}"
+    );
+}
+
 #[scenario(
     path = "tests/features/install_metrics.feature",
-    name = "Record a successful download install"
+    name = "Record a successful prebuilt-download install"
 )]
 fn scenario_download_install(world: InstallMetricsWorld) {
+    let _ = world;
+}
+
+#[scenario(
+    path = "tests/features/install_metrics.feature",
+    name = "Record a successful build-only install"
+)]
+fn scenario_build_only_install(world: InstallMetricsWorld) {
     let _ = world;
 }
 
@@ -178,7 +216,7 @@ fn scenario_recover_from_corrupt_file(world: InstallMetricsWorld) {
 
 #[scenario(
     path = "tests/features/install_metrics.feature",
-    name = "Report write failures as errors"
+    name = "Report write failures as warning text"
 )]
 fn scenario_report_write_failures(world: InstallMetricsWorld) {
     let _ = world;

@@ -6,6 +6,8 @@
 
 use crate::dirs::BaseDirs;
 use serde::{Deserialize, Serialize};
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -150,6 +152,16 @@ pub enum InstallMetricsError {
         source: std::io::Error,
     },
 
+    /// Locking the metrics file failed.
+    #[error("failed to lock metrics file {path}: {source}")]
+    LockMetrics {
+        /// File path that could not be locked.
+        path: PathBuf,
+        /// Underlying I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+
     /// Serializing metrics failed.
     #[error("failed to serialize metrics: {source}")]
     SerializeMetrics {
@@ -185,9 +197,18 @@ pub fn record_install_at_path(
     mode: InstallMode,
     duration: Duration,
 ) -> Result<RecordOutcome, InstallMetricsError> {
-    let (mut metrics, recovered_from_corrupt_file) = load_metrics(metrics_path)?;
+    ensure_metrics_directory(metrics_path)?;
+    let mut metrics_file = open_metrics_file(metrics_path)?;
+    metrics_file
+        .lock()
+        .map_err(|source| InstallMetricsError::LockMetrics {
+            path: metrics_path.to_path_buf(),
+            source,
+        })?;
+
+    let (mut metrics, recovered_from_corrupt_file) = load_metrics(metrics_path, &mut metrics_file)?;
     metrics.record_install(mode, duration);
-    persist_metrics(metrics_path, &metrics)?;
+    persist_metrics(metrics_path, &mut metrics_file, &metrics)?;
 
     Ok(RecordOutcome {
         metrics,
@@ -202,28 +223,7 @@ fn metrics_path(dirs: &dyn BaseDirs) -> Result<PathBuf, InstallMetricsError> {
     Ok(data_dir.join(METRICS_DIRNAME).join(METRICS_FILENAME))
 }
 
-fn load_metrics(metrics_path: &Path) -> Result<(InstallMetrics, bool), InstallMetricsError> {
-    if !metrics_path.exists() {
-        return Ok((InstallMetrics::default(), false));
-    }
-
-    let content = std::fs::read_to_string(metrics_path).map_err(|source| {
-        InstallMetricsError::ReadMetrics {
-            path: metrics_path.to_path_buf(),
-            source,
-        }
-    })?;
-
-    match serde_json::from_str::<InstallMetrics>(&content) {
-        Ok(metrics) => Ok((metrics, false)),
-        Err(_) => Ok((InstallMetrics::default(), true)),
-    }
-}
-
-fn persist_metrics(
-    metrics_path: &Path,
-    metrics: &InstallMetrics,
-) -> Result<(), InstallMetricsError> {
+fn ensure_metrics_directory(metrics_path: &Path) -> Result<(), InstallMetricsError> {
     let parent = metrics_path
         .parent()
         .ok_or_else(|| InstallMetricsError::CreateDirectory {
@@ -234,23 +234,75 @@ fn persist_metrics(
     std::fs::create_dir_all(parent).map_err(|source| InstallMetricsError::CreateDirectory {
         path: parent.to_path_buf(),
         source,
-    })?;
+    })
+}
 
+fn open_metrics_file(metrics_path: &Path) -> Result<File, InstallMetricsError> {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(metrics_path)
+        .map_err(|source| InstallMetricsError::ReadMetrics {
+            path: metrics_path.to_path_buf(),
+            source,
+        })
+}
+
+fn load_metrics(
+    metrics_path: &Path,
+    metrics_file: &mut File,
+) -> Result<(InstallMetrics, bool), InstallMetricsError> {
+    metrics_file
+        .seek(SeekFrom::Start(0))
+        .map_err(|source| InstallMetricsError::ReadMetrics {
+            path: metrics_path.to_path_buf(),
+            source,
+        })?;
+
+    let mut content = String::new();
+    metrics_file
+        .read_to_string(&mut content)
+        .map_err(|source| InstallMetricsError::ReadMetrics {
+            path: metrics_path.to_path_buf(),
+            source,
+        })?;
+
+    if content.trim().is_empty() {
+        return Ok((InstallMetrics::default(), false));
+    }
+
+    match serde_json::from_str::<InstallMetrics>(&content) {
+        Ok(metrics) => Ok((metrics, false)),
+        Err(_) => Ok((InstallMetrics::default(), true)),
+    }
+}
+
+fn persist_metrics(
+    metrics_path: &Path,
+    metrics_file: &mut File,
+    metrics: &InstallMetrics,
+) -> Result<(), InstallMetricsError> {
     let json = serde_json::to_string_pretty(metrics)
         .map_err(|source| InstallMetricsError::SerializeMetrics { source })?;
-    std::fs::write(metrics_path, json).map_err(|source| InstallMetricsError::WriteMetrics {
-        path: metrics_path.to_path_buf(),
-        source,
-    })?;
-
-    Ok(())
+    metrics_file
+        .set_len(0)
+        .and_then(|()| metrics_file.seek(SeekFrom::Start(0)).map(|_| ()))
+        .and_then(|()| metrics_file.write_all(json.as_bytes()))
+        .and_then(|()| metrics_file.sync_data())
+        .map_err(|source| InstallMetricsError::WriteMetrics {
+            path: metrics_path.to_path_buf(),
+            source,
+        })
 }
 
 fn rate(part: u64, whole: u64) -> f64 {
     if whole == 0 {
-        return 0.0;
+        0.0
+    } else {
+        part as f64 / whole as f64
     }
-    part as f64 / whole as f64
 }
 
 fn duration_to_millis(duration: Duration) -> u64 {
@@ -274,125 +326,4 @@ fn format_duration(duration: Duration) -> String {
         return format!("{minutes}m {seconds}.{millis:03}s");
     }
     format!("{seconds}.{millis:03}s")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::ErrorKind;
-
-    #[test]
-    fn zero_state_rates_are_zero() {
-        let metrics = InstallMetrics::default();
-        assert_eq!(metrics.download_rate(), 0.0);
-        assert_eq!(metrics.build_rate(), 0.0);
-    }
-
-    #[test]
-    fn record_install_updates_counts_and_duration() {
-        let mut metrics = InstallMetrics::default();
-        metrics.record_install(InstallMode::Download, Duration::from_millis(1250));
-        metrics.record_install(InstallMode::Build, Duration::from_millis(750));
-
-        assert_eq!(metrics.total_installs(), 2);
-        assert_eq!(metrics.download_installs(), 1);
-        assert_eq!(metrics.build_installs(), 1);
-        assert_eq!(metrics.total_install_duration(), Duration::from_secs(2));
-        assert!((metrics.download_rate() - 0.5).abs() < f64::EPSILON);
-        assert!((metrics.build_rate() - 0.5).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn record_install_at_path_creates_metrics_file() {
-        let temp_dir = tempfile::tempdir().expect("create tempdir");
-        let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
-
-        let result = record_install_at_path(
-            &metrics_path,
-            InstallMode::Download,
-            Duration::from_millis(250),
-        )
-        .expect("record install");
-        assert_eq!(result.metrics().total_installs(), 1);
-        assert!(metrics_path.exists());
-    }
-
-    #[test]
-    fn malformed_metrics_file_is_reset_and_recovered() {
-        let temp_dir = tempfile::tempdir().expect("create tempdir");
-        let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
-        std::fs::create_dir_all(metrics_path.parent().expect("parent path"))
-            .expect("create parent");
-        std::fs::write(&metrics_path, "{not valid json").expect("write corrupt data");
-
-        let result = record_install_at_path(
-            &metrics_path,
-            InstallMode::Build,
-            Duration::from_millis(500),
-        )
-        .expect("record install from corrupt file");
-        assert!(result.recovered_from_corrupt_file());
-        assert_eq!(result.metrics().total_installs(), 1);
-        assert_eq!(result.metrics().build_installs(), 1);
-    }
-
-    #[test]
-    fn persistence_failure_is_reported() {
-        let temp_dir = tempfile::tempdir().expect("create tempdir");
-        let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
-        std::fs::create_dir_all(&metrics_path).expect("create blocking directory");
-
-        let error =
-            record_install_at_path(&metrics_path, InstallMode::Build, Duration::from_secs(1))
-                .expect_err("expected persistence failure");
-        match error {
-            InstallMetricsError::ReadMetrics { source, .. } => {
-                assert!(
-                    matches!(
-                        source.kind(),
-                        ErrorKind::IsADirectory | ErrorKind::PermissionDenied
-                    ),
-                    "unexpected error kind: {}",
-                    source.kind()
-                );
-            }
-            InstallMetricsError::WriteMetrics { source, .. } => {
-                assert!(
-                    matches!(
-                        source.kind(),
-                        ErrorKind::IsADirectory | ErrorKind::PermissionDenied
-                    ),
-                    "unexpected error kind: {}",
-                    source.kind()
-                );
-            }
-            other => panic!("unexpected error: {other}"),
-        }
-    }
-
-    #[test]
-    fn summary_line_includes_rates_and_total_time() {
-        let mut metrics = InstallMetrics::default();
-        metrics.record_install(InstallMode::Download, Duration::from_millis(1500));
-        metrics.record_install(InstallMode::Build, Duration::from_millis(500));
-
-        let summary = metrics.summary_line();
-        assert!(summary.contains("download 1/2 (50.0%)"));
-        assert!(summary.contains("build 1/2 (50.0%)"));
-        assert!(summary.contains("total installation time 2.000s"));
-    }
-
-    #[test]
-    fn long_durations_saturate_total_install_time() {
-        let mut metrics = InstallMetrics {
-            total_install_millis: u64::MAX - 10,
-            ..InstallMetrics::default()
-        };
-        metrics.record_install(InstallMode::Build, Duration::from_millis(100));
-
-        assert_eq!(
-            metrics.total_install_duration(),
-            Duration::from_millis(u64::MAX)
-        );
-    }
 }

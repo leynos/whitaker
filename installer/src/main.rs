@@ -280,7 +280,7 @@ fn finish_install(
     Ok(())
 }
 
-/// Finalize installation and record aggregate installer metrics.
+/// Aggregates final-step inputs required after a successful install run.
 struct FinishInstallContext<'a> {
     args: &'a InstallArgs,
     dirs: &'a dyn BaseDirs,
