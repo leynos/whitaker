@@ -43,18 +43,7 @@ ACT_RUN_TIMEOUT_SECONDS = 900
 
 
 def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
-    """Extract `LINT_CRATES` from workflow YAML using `ruamel.yaml`.
-
-    Parameters
-    ----------
-    workflow_text
-        Raw contents of `.github/workflows/rolling-release.yml`.
-
-    Returns
-    -------
-    list[str]
-        Parsed crate names in declaration order.
-    """
+    """Return the list of crate names from workflow text."""
     yaml = YAML()
     parsed = yaml.load(workflow_text)
 
