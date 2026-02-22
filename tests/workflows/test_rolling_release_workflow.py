@@ -42,7 +42,7 @@ ACT_LIST_TIMEOUT_SECONDS = 60
 ACT_RUN_TIMEOUT_SECONDS = 900
 
 
-def _find_lint_crates_value(parsed: dict) -> str | list[str] | None:
+def _find_lint_crates_value(parsed: dict[str, object]) -> str | list[str] | None:
     """Return the raw `LINT_CRATES` value from workflow or build-lints env."""
     workflow_env = None
     jobs = None
