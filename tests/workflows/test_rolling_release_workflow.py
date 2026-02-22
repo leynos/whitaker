@@ -63,16 +63,15 @@ def _find_lint_crates_value(parsed: dict) -> str | list[str] | None:
 
 def _normalize_lint_crates_value(lint_value: str | list[str] | None) -> list[str]:
     """Normalize a raw `LINT_CRATES` value into a list of crate names."""
-    if isinstance(lint_value, list):
-        return [str(crate).strip() for crate in lint_value if str(crate).strip()]
-
-    if isinstance(lint_value, str):
-        return [crate for crate in lint_value.split() if crate]
-
-    if lint_value is None:
-        return []
-
-    return [crate for crate in str(lint_value).split() if crate]
+    match lint_value:
+        case list() as crates:
+            return [str(crate).strip() for crate in crates if str(crate).strip()]
+        case str() as crates:
+            return [crate for crate in crates.split() if crate]
+        case None:
+            return []
+        case _:
+            return [crate for crate in str(lint_value).split() if crate]
 
 
 def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
@@ -134,20 +133,20 @@ def workspace_package_names() -> set[str]:
     return {package["name"] for package in metadata["packages"]}
 
 
-def run_act_build_lints(*, artifact_dir: Path) -> tuple[int, str]:
+def run_act_build_lints(*, artefact_dir: Path) -> tuple[int, str]:
     """Run the workflow build-lints job through `act`.
 
     Parameters
     ----------
-    artifact_dir
-        Directory where uploaded artifacts should be written by `act`.
+    artefact_dir
+        Directory where uploaded artefacts should be written by `act`.
 
     Returns
     -------
     tuple[int, str]
         Process return code and merged stdout/stderr logs.
     """
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artefact_dir.mkdir(parents=True, exist_ok=True)
     lint_crates = " ".join(lint_crates_from_workflow())
     command = [
         "act",
@@ -161,7 +160,7 @@ def run_act_build_lints(*, artifact_dir: Path) -> tuple[int, str]:
         "-P",
         "ubuntu-latest=catthehacker/ubuntu:act-latest",
         "--artifact-server-path",
-        str(artifact_dir),
+        str(artefact_dir),
         "--json",
         "--bind",
         "--matrix",
@@ -245,7 +244,7 @@ def test_build_lints_job_succeeds_under_act(tmp_path: Path) -> None:
     Parameters
     ----------
     tmp_path
-        Pytest-provided temporary path used for artifact output.
+        Pytest-provided temporary path used for artefact output.
 
     Returns
     -------
@@ -257,12 +256,14 @@ def test_build_lints_job_succeeds_under_act(tmp_path: Path) -> None:
             "cannot reach the container socket"
         )
 
-    artifact_dir = tmp_path / "act-artifacts"
-    code, logs = run_act_build_lints(artifact_dir=artifact_dir)
+    artefact_dir = tmp_path / "act-artefacts"
+    code, logs = run_act_build_lints(artefact_dir=artefact_dir)
     assert code == 0, f"act build-lints job failed:\n{logs}"
     assert "cannot specify features for packages outside of workspace" not in logs, (
-        "act output indicates a non-workspace feature specification error"
+        "Unexpected error message found in logs: "
+        "cannot specify features for packages outside of workspace\n"
+        f"{logs}"
     )
-    assert any(path.is_file() for path in artifact_dir.rglob("*")), (
-        "act did not export any artifact files"
+    assert any(path.is_file() for path in artefact_dir.rglob("*")), (
+        "act did not export any artefact files"
     )
