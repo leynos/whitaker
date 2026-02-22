@@ -98,7 +98,11 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
     """Return the list of crate names from workflow text."""
     yaml = YAML()
     parsed = yaml.load(workflow_text)
-    parsed_dict = parsed if isinstance(parsed, dict) else {}
+    match parsed:
+        case dict():
+            parsed_dict = parsed
+        case _:
+            parsed_dict = {}
     lint_value = _find_lint_crates_value(parsed_dict)
 
     if lint_value is None:
