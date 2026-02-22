@@ -136,21 +136,31 @@ impl UnionFind {
     }
 }
 
-/// Builds a field-to-method index and unions methods that share fields.
-fn union_by_shared_fields(methods: &[MethodInfo], uf: &mut UnionFind) {
-    let mut field_index: HashMap<&str, Vec<usize>> = HashMap::new();
+/// Builds an index mapping each field name to the methods that access it.
+fn build_field_index<'a>(methods: &'a [MethodInfo]) -> HashMap<&'a str, Vec<usize>> {
+    let mut index: HashMap<&'a str, Vec<usize>> = HashMap::new();
     for (idx, method) in methods.iter().enumerate() {
         for field in method.accessed_fields() {
-            field_index.entry(field.as_str()).or_default().push(idx);
+            index.entry(field.as_str()).or_default().push(idx);
         }
     }
-    for indices in field_index.values() {
-        // Union all methods that share this field with the first one.
-        if let Some((&first, rest)) = indices.split_first() {
-            for &other in rest {
-                uf.union(first, other);
-            }
+    index
+}
+
+/// Unions all methods in the given index list with the first method.
+fn union_methods_by_index(indices: &[usize], uf: &mut UnionFind) {
+    if let Some((&first, rest)) = indices.split_first() {
+        for &other in rest {
+            uf.union(first, other);
         }
+    }
+}
+
+/// Builds a field-to-method index and unions methods that share fields.
+fn union_by_shared_fields(methods: &[MethodInfo], uf: &mut UnionFind) {
+    let field_index = build_field_index(methods);
+    for indices in field_index.values() {
+        union_methods_by_index(indices, uf);
     }
 }
 
