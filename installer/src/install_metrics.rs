@@ -15,6 +15,9 @@ use std::time::Duration;
 const METRICS_DIRNAME: &str = "metrics";
 const METRICS_FILENAME: &str = "install_metrics.json";
 
+#[path = "install_metrics_error.rs"]
+mod error;
+pub use error::InstallMetricsError;
 /// Terminal installation path used for metrics accounting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstallMode {
@@ -32,7 +35,6 @@ pub struct InstallMetrics {
     build_installs: u64,
     total_install_millis: u64,
 }
-
 impl InstallMetrics {
     /// Returns the number of successful installs.
     ///
@@ -86,18 +88,46 @@ impl InstallMetrics {
     }
 
     /// Returns total cumulative install duration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use whitaker_installer::install_metrics::InstallMetrics;
+    ///
+    /// assert_eq!(
+    ///     InstallMetrics::default().total_install_duration(),
+    ///     Duration::from_secs(0)
+    /// );
+    /// ```
     #[must_use]
     pub fn total_install_duration(&self) -> Duration {
         Duration::from_millis(self.total_install_millis)
     }
 
     /// Returns `download_installs / total_installs`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::install_metrics::InstallMetrics;
+    ///
+    /// assert_eq!(InstallMetrics::default().download_rate(), 0.0);
+    /// ```
     #[must_use]
     pub fn download_rate(&self) -> f64 {
         rate(self.download_installs, self.total_installs)
     }
 
     /// Returns `build_installs / total_installs`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_installer::install_metrics::InstallMetrics;
+    ///
+    /// assert_eq!(InstallMetrics::default().build_rate(), 0.0);
+    /// ```
     #[must_use]
     pub fn build_rate(&self) -> f64 {
         rate(self.build_installs, self.total_installs)
@@ -171,7 +201,6 @@ pub struct RecordOutcome {
     metrics: InstallMetrics,
     recovered_from_corrupt_file: bool,
 }
-
 impl RecordOutcome {
     /// Returns the updated aggregate metrics.
     #[must_use]
@@ -184,62 +213,6 @@ impl RecordOutcome {
     pub fn recovered_from_corrupt_file(&self) -> bool {
         self.recovered_from_corrupt_file
     }
-}
-
-/// Errors that prevent metrics persistence.
-#[derive(Debug, thiserror::Error)]
-pub enum InstallMetricsError {
-    /// Whitaker data directory could not be resolved.
-    #[error("could not determine Whitaker data directory")]
-    MissingDataDirectory,
-
-    /// Creating the metrics directory failed.
-    #[error("failed to create metrics directory {path}: {source}")]
-    CreateDirectory {
-        /// Directory path that could not be created.
-        path: PathBuf,
-        /// Underlying I/O error.
-        #[source]
-        source: std::io::Error,
-    },
-
-    /// Reading the metrics file failed.
-    #[error("failed to read metrics file {path}: {source}")]
-    ReadMetrics {
-        /// File path that could not be read.
-        path: PathBuf,
-        /// Underlying I/O error.
-        #[source]
-        source: std::io::Error,
-    },
-
-    /// Locking the metrics file failed.
-    #[error("failed to lock metrics file {path}: {source}")]
-    LockMetrics {
-        /// File path that could not be locked.
-        path: PathBuf,
-        /// Underlying I/O error.
-        #[source]
-        source: std::io::Error,
-    },
-
-    /// Serializing metrics failed.
-    #[error("failed to serialize metrics: {source}")]
-    SerializeMetrics {
-        /// Underlying serialization error.
-        #[source]
-        source: serde_json::Error,
-    },
-
-    /// Writing the metrics file failed.
-    #[error("failed to write metrics file {path}: {source}")]
-    WriteMetrics {
-        /// File path that could not be written.
-        path: PathBuf,
-        /// Underlying I/O error.
-        #[source]
-        source: std::io::Error,
-    },
 }
 
 /// Records one successful install in Whitaker's metrics store.
@@ -385,7 +358,7 @@ fn format_duration(duration: Duration) -> String {
     if should_format_with_hours(hours) {
         return format!("{hours}h {minutes}m {seconds}.{millis:03}s");
     }
-    if should_format_with_minutes(hours, minutes) {
+    if should_format_with_minutes(minutes) {
         return format!("{minutes}m {seconds}.{millis:03}s");
     }
     format!("{seconds}.{millis:03}s")
@@ -395,6 +368,6 @@ fn should_format_with_hours(hours: u64) -> bool {
     hours > 0
 }
 
-fn should_format_with_minutes(hours: u64, minutes: u64) -> bool {
-    hours == 0 && minutes > 0
+fn should_format_with_minutes(minutes: u64) -> bool {
+    minutes > 0
 }
