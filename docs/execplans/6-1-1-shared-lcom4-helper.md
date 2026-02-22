@@ -35,7 +35,7 @@ This separation matches the project's established pattern: `complexity_signal`
 in `common` provides pure signal-processing helpers consumed by the
 `bumpy_road_function` lint driver, which handles the HIR traversal.
 
-After this change the `common` crate exports a `cohesion_components` function
+After this change, the `common` crate exports a `cohesion_components` function
 and a `MethodInfo` data type that future lints (`brain_type`, `brain_trait`)
 can consume directly.
 

@@ -24,7 +24,7 @@ impl LcomWorld {
 
     #[expect(
         clippy::expect_used,
-        reason = "fixture configuration is required for this behaviour test"
+        reason = "result must be computed before assertion in behaviour test"
     )]
     fn result(&self) -> usize {
         self.result
@@ -83,6 +83,10 @@ fn then_component_count(world: &LcomWorld, count: usize) {
     assert_eq!(world.result(), count);
 }
 
+// Scenario indices must match their declaration order in
+// `tests/features/lcom4.feature`. Adding, removing, or reordering
+// scenarios in the feature file requires updating the indices here.
+
 #[scenario(path = "tests/features/lcom4.feature", index = 0)]
 fn scenario_single_method(world: LcomWorld) {
     let _ = world;
@@ -116,4 +120,41 @@ fn scenario_empty_type(world: LcomWorld) {
 #[scenario(path = "tests/features/lcom4.feature", index = 6)]
 fn scenario_isolated_methods(world: LcomWorld) {
     let _ = world;
+}
+
+#[scenario(path = "tests/features/lcom4.feature", index = 7)]
+fn scenario_self_call(world: LcomWorld) {
+    let _ = world;
+}
+
+// --- Unit tests for parse_field_set ---
+
+#[cfg(test)]
+mod parse_field_set_tests {
+    use super::parse_field_set;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn basic_comma_separated() {
+        let result = parse_field_set("a, b");
+        assert_eq!(result, BTreeSet::from(["a".into(), "b".into()]));
+    }
+
+    #[test]
+    fn trims_whitespace_and_skips_empty_segments() {
+        let result = parse_field_set("  a  , , b  ");
+        assert_eq!(result, BTreeSet::from(["a".into(), "b".into()]));
+    }
+
+    #[test]
+    fn empty_string_yields_empty_set() {
+        let result = parse_field_set("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn whitespace_only_yields_empty_set() {
+        let result = parse_field_set("   ,   ,   ");
+        assert!(result.is_empty());
+    }
 }

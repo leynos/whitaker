@@ -43,3 +43,9 @@ Feature: LCOM4 cohesion analysis
     And a method called gamma accessing no fields
     When I compute LCOM4
     Then the component count is 3
+
+  Scenario: Self-call does not connect to other methods
+    Given a method called a accessing no fields calling a
+    And a method called b accessing no fields
+    When I compute LCOM4
+    Then the component count is 2
