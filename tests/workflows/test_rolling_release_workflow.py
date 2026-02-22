@@ -44,19 +44,39 @@ ACT_RUN_TIMEOUT_SECONDS = 900
 
 def _find_lint_crates_value(parsed: dict) -> str | list[str] | None:
     """Return the raw `LINT_CRATES` value from workflow or build-lints env."""
-    workflow_env = parsed.get("env")
-    jobs = parsed.get("jobs") if isinstance(parsed.get("jobs"), dict) else {}
-    build_lints = jobs.get("build-lints") if isinstance(jobs, dict) else {}
-    build_lints_env = (
-        build_lints.get("env") if isinstance(build_lints, dict) else None
-    )
+    workflow_env = None
+    jobs = None
+    match parsed:
+        case {"env": workflow_env_candidate, "jobs": jobs_candidate}:
+            workflow_env = workflow_env_candidate
+            jobs = jobs_candidate
+        case {"env": workflow_env_candidate}:
+            workflow_env = workflow_env_candidate
+        case {"jobs": jobs_candidate}:
+            jobs = jobs_candidate
+        case _:
+            return None
+
+    build_lints = None
+    match jobs:
+        case {"build-lints": build_lints_candidate}:
+            build_lints = build_lints_candidate
+        case _:
+            build_lints = None
+
+    build_lints_env = None
+    match build_lints:
+        case {"env": build_lints_env_candidate}:
+            build_lints_env = build_lints_env_candidate
+        case _:
+            build_lints_env = None
 
     for env in (workflow_env, build_lints_env):
-        if not isinstance(env, dict):
-            continue
-        lint_value = env.get("LINT_CRATES")
-        if lint_value is not None:
-            return lint_value
+        match env:
+            case {"LINT_CRATES": lint_value} if lint_value is not None:
+                return lint_value
+            case _:
+                continue
 
     return None
 
