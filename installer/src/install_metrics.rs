@@ -5,6 +5,7 @@
 //! `<data_dir>/metrics/install_metrics.json`.
 
 use crate::dirs::BaseDirs;
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -262,7 +263,7 @@ pub fn record_install_at_path(
     // Use standard-library advisory locking to serialize the read-modify-write
     // cycle across concurrent installer processes.
     metrics_file
-        .lock()
+        .lock_exclusive()
         .map_err(|source| InstallMetricsError::LockMetrics {
             path: metrics_path.to_path_buf(),
             source,

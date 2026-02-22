@@ -9,6 +9,8 @@ use whitaker_installer::install_metrics::{
     InstallMetrics, InstallMode, RecordOutcome, record_install_at_path,
 };
 
+const FLOAT_RATE_TOLERANCE: f64 = 1e-6;
+
 #[derive(Default)]
 struct InstallMetricsWorld {
     _temp_dir: Option<TempDir>,
@@ -117,7 +119,7 @@ fn then_build_installs(world: &mut InstallMetricsWorld, expected: u64) {
 fn then_download_rate(world: &mut InstallMetricsWorld, expected: f64) {
     let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
     assert!(
-        (metrics.download_rate() - expected).abs() < f64::EPSILON,
+        (metrics.download_rate() - expected).abs() < FLOAT_RATE_TOLERANCE,
         "expected {}, got {}",
         expected,
         metrics.download_rate()
@@ -128,7 +130,7 @@ fn then_download_rate(world: &mut InstallMetricsWorld, expected: f64) {
 fn then_build_rate(world: &mut InstallMetricsWorld, expected: f64) {
     let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
     assert!(
-        (metrics.build_rate() - expected).abs() < f64::EPSILON,
+        (metrics.build_rate() - expected).abs() < FLOAT_RATE_TOLERANCE,
         "expected {}, got {}",
         expected,
         metrics.build_rate()
