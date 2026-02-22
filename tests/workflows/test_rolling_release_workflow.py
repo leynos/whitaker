@@ -42,36 +42,50 @@ ACT_LIST_TIMEOUT_SECONDS = 60
 ACT_RUN_TIMEOUT_SECONDS = 900
 
 
-def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
-    """Return the list of crate names from workflow text."""
-    yaml = YAML()
-    parsed = yaml.load(workflow_text)
-
-    workflow_env = parsed.get("env") if isinstance(parsed, dict) else None
-    jobs = parsed.get("jobs") if isinstance(parsed, dict) else None
-    build_lints = jobs.get("build-lints") if isinstance(jobs, dict) else None
+def _find_lint_crates_value(parsed: dict) -> str | list[str] | None:
+    """Return the raw `LINT_CRATES` value from workflow or build-lints env."""
+    workflow_env = parsed.get("env")
+    jobs = parsed.get("jobs") if isinstance(parsed.get("jobs"), dict) else {}
+    build_lints = jobs.get("build-lints") if isinstance(jobs, dict) else {}
     build_lints_env = (
         build_lints.get("env") if isinstance(build_lints, dict) else None
     )
-    lint_value = None
 
     for env in (workflow_env, build_lints_env):
         if not isinstance(env, dict):
             continue
         lint_value = env.get("LINT_CRATES")
         if lint_value is not None:
-            break
+            return lint_value
 
-    if lint_value is None:
-        raise AssertionError(f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration")
+    return None
 
+
+def _normalize_lint_crates_value(lint_value: str | list[str] | None) -> list[str]:
+    """Normalize a raw `LINT_CRATES` value into a list of crate names."""
     if isinstance(lint_value, list):
         return [str(crate).strip() for crate in lint_value if str(crate).strip()]
 
     if isinstance(lint_value, str):
         return [crate for crate in lint_value.split() if crate]
 
+    if lint_value is None:
+        return []
+
     return [crate for crate in str(lint_value).split() if crate]
+
+
+def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
+    """Return the list of crate names from workflow text."""
+    yaml = YAML()
+    parsed = yaml.load(workflow_text)
+    parsed_dict = parsed if isinstance(parsed, dict) else {}
+    lint_value = _find_lint_crates_value(parsed_dict)
+
+    if lint_value is None:
+        raise AssertionError(f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration")
+
+    return _normalize_lint_crates_value(lint_value)
 
 
 def lint_crates_from_workflow() -> list[str]:
