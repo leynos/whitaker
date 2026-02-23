@@ -2,7 +2,10 @@
 
 use super::*;
 use rstest::rstest;
+use std::path::PathBuf;
+use std::time::Duration;
 use whitaker_installer::cli::InstallArgs;
+use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::test_utils::*;
 
 #[test]
@@ -196,4 +199,99 @@ fn ensure_dylint_tools_propagates_install_failures() {
             if tool == "cargo-dylint" && message == "install failed"
     ));
     executor.assert_finished();
+}
+
+#[derive(Debug, Clone)]
+struct TestBaseDirs {
+    home_dir: Option<PathBuf>,
+    bin_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
+}
+
+impl BaseDirs for TestBaseDirs {
+    fn home_dir(&self) -> Option<PathBuf> {
+        self.home_dir.clone()
+    }
+
+    fn bin_dir(&self) -> Option<PathBuf> {
+        self.bin_dir.clone()
+    }
+
+    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+        self.data_dir.clone()
+    }
+}
+
+#[test]
+fn write_install_metrics_prints_summary_and_persists_metrics() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let dirs = TestBaseDirs {
+        home_dir: Some(temp_dir.path().to_path_buf()),
+        bin_dir: Some(temp_dir.path().join("bin")),
+        data_dir: Some(temp_dir.path().to_path_buf()),
+    };
+
+    let mut stderr = Vec::new();
+    let context = MetricsWriteContext {
+        quiet: false,
+        dirs: &dirs,
+        install_mode: InstallMode::Download,
+        elapsed: Duration::from_millis(1250),
+    };
+    write_install_metrics(&context, &mut stderr);
+
+    let stderr_text = String::from_utf8(stderr).expect("stderr UTF-8");
+    assert!(stderr_text.contains("Install metrics:"));
+    assert!(stderr_text.contains("download 1/1 (100.0%)"));
+    assert!(stderr_text.contains("build 0/1 (0.0%)"));
+    assert!(stderr_text.contains("total installation time 1.250s"));
+
+    let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
+    assert!(
+        metrics_path.exists(),
+        "expected metrics file at {:?}",
+        metrics_path
+    );
+}
+
+#[test]
+fn write_install_metrics_warns_when_recording_fails() {
+    let dirs = TestBaseDirs {
+        home_dir: None,
+        bin_dir: None,
+        data_dir: None,
+    };
+
+    let mut stderr = Vec::new();
+    let context = MetricsWriteContext {
+        quiet: false,
+        dirs: &dirs,
+        install_mode: InstallMode::Build,
+        elapsed: Duration::from_secs(1),
+    };
+    write_install_metrics(&context, &mut stderr);
+
+    let stderr_text = String::from_utf8(stderr).expect("stderr UTF-8");
+    assert!(stderr_text.contains("Warning: could not record install metrics"));
+}
+
+#[test]
+fn write_install_metrics_suppresses_output_in_quiet_mode() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let dirs = TestBaseDirs {
+        home_dir: Some(temp_dir.path().to_path_buf()),
+        bin_dir: Some(temp_dir.path().join("bin")),
+        data_dir: Some(temp_dir.path().to_path_buf()),
+    };
+
+    let mut stderr = Vec::new();
+    let context = MetricsWriteContext {
+        quiet: true,
+        dirs: &dirs,
+        install_mode: InstallMode::Build,
+        elapsed: Duration::from_millis(500),
+    };
+    write_install_metrics(&context, &mut stderr);
+
+    assert!(stderr.is_empty(), "expected no stderr output in quiet mode");
 }
