@@ -37,118 +37,112 @@ fn method_with_fields_and_calls() -> fn(&str, &[&str], &[&str]) -> MethodInfo {
     }
 }
 
-// --- Happy paths ---
+// --- Field-based cohesion (parameterised) ---
 
 #[rstest]
-fn single_method_yields_one_component(method_with_fields: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![method_with_fields("process", &["data"])];
-    assert_eq!(cohesion_components(&methods), 1);
-}
-
-#[rstest]
-fn two_methods_sharing_field_yields_one_component(
+#[case::single_method(
+    "single method yields one component",
+    vec![("process", &["data"] as &[&str])],
+    1
+)]
+#[case::shared_field(
+    "two methods sharing a field yields one component",
+    vec![("read", &["buffer"] as &[&str]), ("write", &["buffer"])],
+    1
+)]
+#[case::transitive_sharing(
+    "transitive field sharing yields one component",
+    vec![("a", &["x"] as &[&str]), ("b", &["x", "y"]), ("c", &["y"])],
+    1
+)]
+#[case::common_field(
+    "all methods share a common field",
+    vec![
+        ("alpha", &["shared"] as &[&str]),
+        ("beta", &["shared"]),
+        ("gamma", &["shared"]),
+        ("delta", &["shared"]),
+    ],
+    1
+)]
+#[case::disjoint(
+    "two disjoint methods yield two components",
+    vec![("parse", &["input"] as &[&str]), ("render", &["output"])],
+    2
+)]
+#[case::two_clusters(
+    "three methods in two clusters",
+    vec![("a", &["x"] as &[&str]), ("b", &["x"]), ("c", &["y"])],
+    2
+)]
+#[case::three_clusters(
+    "four methods in three clusters",
+    vec![("a", &["x"] as &[&str]), ("b", &["x"]), ("c", &["y"]), ("d", &["z"])],
+    3
+)]
+#[case::isolated_no_fields(
+    "methods with empty fields and no calls are isolated",
+    vec![
+        ("alpha", &[] as &[&str]),
+        ("beta", &[]),
+        ("gamma", &[]),
+    ],
+    3
+)]
+fn field_based_cohesion(
     method_with_fields: fn(&str, &[&str]) -> MethodInfo,
+    #[case] scenario: &str,
+    #[case] method_specs: Vec<(&str, &[&str])>,
+    #[case] expected: usize,
 ) {
-    let methods = vec![
-        method_with_fields("read", &["buffer"]),
-        method_with_fields("write", &["buffer"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 1);
+    let methods: Vec<MethodInfo> = method_specs
+        .iter()
+        .map(|(name, fields)| method_with_fields(name, fields))
+        .collect();
+    assert_eq!(cohesion_components(&methods), expected, "{scenario}");
 }
 
+// --- Call-based cohesion (parameterised) ---
+
 #[rstest]
-fn two_methods_with_direct_call_yields_one_component(
-    method_with_calls: fn(&str, &[&str]) -> MethodInfo,
-    method_with_fields: fn(&str, &[&str]) -> MethodInfo,
+#[case::direct_call(
+    "two methods with a direct call yields one component",
+    vec![("process", &[] as &[&str], &["validate"] as &[&str]), ("validate", &[], &[])],
+    1
+)]
+#[case::self_call(
+    "self-call does not connect to others",
+    vec![("a", &[] as &[&str], &["a"] as &[&str]), ("b", &[], &["b"])],
+    2
+)]
+#[case::unknown_callee(
+    "call to unknown method is silently ignored",
+    vec![("a", &[] as &[&str], &["nonexistent"] as &[&str]), ("b", &["y"], &[])],
+    2
+)]
+#[case::bidirectional(
+    "bidirectional call connects methods",
+    vec![("a", &[] as &[&str], &["b"] as &[&str]), ("b", &[], &["a"])],
+    1
+)]
+fn call_based_cohesion(
+    method_with_fields_and_calls: fn(&str, &[&str], &[&str]) -> MethodInfo,
+    #[case] scenario: &str,
+    #[case] method_specs: Vec<(&str, &[&str], &[&str])>,
+    #[case] expected: usize,
 ) {
-    let methods = vec![
-        method_with_calls("process", &["validate"]),
-        method_with_fields("validate", &[]),
-    ];
-    assert_eq!(cohesion_components(&methods), 1);
+    let methods: Vec<MethodInfo> = method_specs
+        .iter()
+        .map(|(name, fields, calls)| method_with_fields_and_calls(name, fields, calls))
+        .collect();
+    assert_eq!(cohesion_components(&methods), expected, "{scenario}");
 }
 
-#[rstest]
-fn transitive_field_sharing_yields_one_component(
-    method_with_fields: fn(&str, &[&str]) -> MethodInfo,
-) {
-    let methods = vec![
-        method_with_fields("a", &["x"]),
-        method_with_fields("b", &["x", "y"]),
-        method_with_fields("c", &["y"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 1);
-}
-
-#[rstest]
-fn all_methods_share_common_field(method_with_fields: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![
-        method_with_fields("alpha", &["shared"]),
-        method_with_fields("beta", &["shared"]),
-        method_with_fields("gamma", &["shared"]),
-        method_with_fields("delta", &["shared"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 1);
-}
-
-// --- Unhappy paths ---
-
-#[rstest]
-fn two_disjoint_methods_yield_two_components(method_with_fields: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![
-        method_with_fields("parse", &["input"]),
-        method_with_fields("render", &["output"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 2);
-}
-
-#[rstest]
-fn three_methods_two_clusters(method_with_fields: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![
-        method_with_fields("a", &["x"]),
-        method_with_fields("b", &["x"]),
-        method_with_fields("c", &["y"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 2);
-}
-
-#[rstest]
-fn four_methods_three_clusters(method_with_fields: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![
-        method_with_fields("a", &["x"]),
-        method_with_fields("b", &["x"]),
-        method_with_fields("c", &["y"]),
-        method_with_fields("d", &["z"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 3);
-}
-
-// --- Edge cases ---
+// --- Tests with distinct concerns or mixed fixtures ---
 
 #[rstest]
 fn empty_methods_yields_zero() {
     assert_eq!(cohesion_components(&[]), 0);
-}
-
-#[rstest]
-fn methods_with_empty_fields_and_no_calls_are_isolated(
-    method_with_fields: fn(&str, &[&str]) -> MethodInfo,
-) {
-    let methods = vec![
-        method_with_fields("alpha", &[]),
-        method_with_fields("beta", &[]),
-        method_with_fields("gamma", &[]),
-    ];
-    assert_eq!(cohesion_components(&methods), 3);
-}
-
-#[rstest]
-fn self_call_does_not_connect_to_others(method_with_calls: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![
-        method_with_calls("a", &["a"]),
-        method_with_calls("b", &["b"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 2);
 }
 
 #[rstest]
@@ -165,18 +159,6 @@ fn mixed_field_sharing_and_calls(
 }
 
 #[rstest]
-fn method_calls_unknown_method(
-    method_with_calls: fn(&str, &[&str]) -> MethodInfo,
-    method_with_fields: fn(&str, &[&str]) -> MethodInfo,
-) {
-    let methods = vec![
-        method_with_calls("a", &["nonexistent"]),
-        method_with_fields("b", &["y"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 2);
-}
-
-#[rstest]
 fn duplicate_method_names_connected_via_call(
     method_with_fields: fn(&str, &[&str]) -> MethodInfo,
     method_with_calls: fn(&str, &[&str]) -> MethodInfo,
@@ -189,6 +171,21 @@ fn duplicate_method_names_connected_via_call(
         method_with_calls("dispatch", &["do_work"]),
     ];
     assert_eq!(cohesion_components(&methods), 1);
+}
+
+#[rstest]
+fn fields_and_calls_combine_to_connect(
+    method_with_fields: fn(&str, &[&str]) -> MethodInfo,
+    method_with_fields_and_calls: fn(&str, &[&str], &[&str]) -> MethodInfo,
+) {
+    // a --field:x-- b, c --calls:a--> a, d --field:z-- (isolated)
+    let methods = vec![
+        method_with_fields("a", &["x"]),
+        method_with_fields("b", &["x"]),
+        method_with_fields_and_calls("c", &[], &["a"]),
+        method_with_fields("d", &["z"]),
+    ];
+    assert_eq!(cohesion_components(&methods), 2);
 }
 
 // --- Union-find internals ---
@@ -209,28 +206,4 @@ fn union_find_merge_reduces_count() {
     assert_eq!(uf.component_count(), 2);
     uf.union(0, 2);
     assert_eq!(uf.component_count(), 1);
-}
-
-#[rstest]
-fn bidirectional_call_connects_methods(method_with_calls: fn(&str, &[&str]) -> MethodInfo) {
-    let methods = vec![
-        method_with_calls("a", &["b"]),
-        method_with_calls("b", &["a"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 1);
-}
-
-#[rstest]
-fn fields_and_calls_combine_to_connect(
-    method_with_fields: fn(&str, &[&str]) -> MethodInfo,
-    method_with_fields_and_calls: fn(&str, &[&str], &[&str]) -> MethodInfo,
-) {
-    // a --field:x-- b, c --calls:a--> a, d --field:z-- (isolated)
-    let methods = vec![
-        method_with_fields("a", &["x"]),
-        method_with_fields("b", &["x"]),
-        method_with_fields_and_calls("c", &[], &["a"]),
-        method_with_fields("d", &["z"]),
-    ];
-    assert_eq!(cohesion_components(&methods), 2);
 }
