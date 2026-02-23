@@ -72,7 +72,12 @@ jobs:
           set -euxo pipefail
           TOOLCHAIN="${{ steps.toolchain.outputs.channel }}"
           rustup target add --toolchain "${TOOLCHAIN}" "${{ matrix.target }}"
-          rustup component add --toolchain "${TOOLCHAIN}" rust-src rustc-dev llvm-tools-preview
+          HOST_TARGET="$(rustc "+${TOOLCHAIN}" -vV | awk -F ': ' '/host:/ {print $2}')"
+          rustup component add --toolchain "${TOOLCHAIN}" rust-src
+          rustup component add --toolchain "${TOOLCHAIN}" --target "${HOST_TARGET}" rustc-dev llvm-tools-preview
+          if [ "${HOST_TARGET}" != "${{ matrix.target }}" ]; then
+            rustup component add --toolchain "${TOOLCHAIN}" --target "${{ matrix.target }}" rustc-dev llvm-tools-preview
+          fi
 
       - name: Build lint crates
         run: |

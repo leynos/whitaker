@@ -145,7 +145,7 @@ def lint_crates_from_resolution_constants() -> list[str]:
     """
     source = RESOLUTION_PATH.read_text(encoding="utf-8")
     lint_match = re.search(
-        r"pub const LINT_CRATES: &\[&str\] = &\[(.*?)\];",
+        r"pub(?:\(crate\))?\s+const\s+LINT_CRATES\s*:\s*&\[\s*&str\s*\]\s*=\s*&\[(.*?)\];",
         source,
         flags=re.DOTALL,
     )
@@ -153,9 +153,12 @@ def lint_crates_from_resolution_constants() -> list[str]:
     lint_crates = re.findall(r'"([^"]+)"', lint_match.group(1))
     assert lint_crates, f"{RESOLUTION_PATH} LINT_CRATES is unexpectedly empty"
 
-    suite_match = re.search(r'pub const SUITE_CRATE: &str = "([^"]+)";', source)
+    suite_match = re.search(
+        r'pub(?:\(crate\))?\s+const\s+SUITE_CRATE\s*:\s*&str\s*=\s*"([^"]+)";',
+        source,
+    )
     assert suite_match, f"unable to parse SUITE_CRATE from {RESOLUTION_PATH}"
-    return lint_crates + [suite_match.group(1)]
+    return [*lint_crates, suite_match.group(1)]
 
 
 def workspace_package_names() -> set[str]:
@@ -300,6 +303,8 @@ def test_workflow_lint_crates_match_installer_constants() -> None:
     """
     workflow_crates = lint_crates_from_workflow()
     canonical_crates = lint_crates_from_resolution_constants()
+    # Ordering is part of this contract: both definitions should evolve in lock-step
+    # for deterministic build logs and packaging expectations.
     assert workflow_crates == canonical_crates, (
         "rolling-release workflow LINT_CRATES drifted from installer constants:\n"
         f"workflow={workflow_crates}\n"
