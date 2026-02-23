@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps
 
 APP ?= whitaker
 CARGO ?= cargo
@@ -73,10 +73,15 @@ test: ## Run tests with warnings treated as errors
 		$(MAKE) workflow-test; \
 	fi
 
-workflow-test: ## Run opt-in GitHub workflow smoke tests with act + pytest
+workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
 	@command -v python3 >/dev/null || { echo "python3 is required for workflow tests"; exit 1; }
 	@ACT_WORKFLOW_TESTS=1 python3 -m pytest tests/workflows
+
+workflow-test-deps: ## Install Python dependencies for workflow tests
+	@command -v python3 >/dev/null || { echo "python3 is required for workflow tests"; exit 1; }
+	@python3 -m pip --version >/dev/null || { echo "python3 with pip is required for workflow tests"; exit 1; }
+	@python3 -m pip install --disable-pip-version-check -r tests/workflows/requirements.txt
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
