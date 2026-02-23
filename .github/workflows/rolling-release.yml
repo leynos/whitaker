@@ -11,11 +11,13 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   LINT_CRATES: >-
+    bumpy_road_function
     conditional_max_n_branches
     function_attrs_follow_docs
     module_max_lines
     module_must_have_inner_docs
     no_expect_outside_tests
+    test_must_not_have_example
     no_std_fs_operations
     no_unwrap_or_else_panic
     whitaker_suite
@@ -51,9 +53,6 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
 
-      - name: Add Rust target
-        run: rustup target add ${{ matrix.target }}
-
       - name: Install cross-compilation tools (aarch64-linux)
         if: matrix.cross
         run: |
@@ -68,6 +67,13 @@ jobs:
           channel=$(awk -F '"' '/^channel/ {print $2}' rust-toolchain.toml)
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
+      - name: Install pinned toolchain components
+        run: |
+          set -euxo pipefail
+          TOOLCHAIN="${{ steps.toolchain.outputs.channel }}"
+          rustup target add --toolchain "${TOOLCHAIN}" "${{ matrix.target }}"
+          rustup component add --toolchain "${TOOLCHAIN}" rust-src rustc-dev llvm-tools-preview
+
       - name: Build lint crates
         run: |
           set -euxo pipefail
@@ -80,6 +86,15 @@ jobs:
                 -p "$lint" \
                 --target "${{ matrix.target }}"
           done
+
+      - name: Diagnostics (build lint crates)
+        if: failure()
+        run: |
+          set -euxo pipefail
+          TOOLCHAIN="${{ steps.toolchain.outputs.channel }}"
+          rustup show
+          rustup component list --toolchain "${TOOLCHAIN}" --installed
+          ls -lah "target/${{ matrix.target }}/release" || true
 
       - name: Determine git SHA
         id: sha
@@ -98,6 +113,13 @@ jobs:
             --target "${{ matrix.target }}" \
             --output-dir dist \
             --release-dir "target/${{ matrix.target }}/release"
+
+      - name: Diagnostics (package artefact)
+        if: failure()
+        run: |
+          set -euxo pipefail
+          ls -lah "target/${{ matrix.target }}/release" || true
+          ls -lah dist || true
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4
