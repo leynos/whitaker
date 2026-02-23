@@ -22,14 +22,8 @@ impl LcomWorld {
         self.result.set(Some(cohesion_components(&methods)));
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "result must be computed before assertion in behaviour test"
-    )]
-    fn result(&self) -> usize {
-        self.result
-            .get()
-            .expect("LCOM4 result must be computed before assertion")
+    fn result(&self) -> Option<usize> {
+        self.result.get()
     }
 }
 
@@ -80,7 +74,7 @@ fn when_compute(world: &LcomWorld) {
 
 #[then("the component count is {count}")]
 fn then_component_count(world: &LcomWorld, count: usize) {
-    assert_eq!(world.result(), count);
+    assert_eq!(world.result(), Some(count));
 }
 
 // Scenario indices must match their declaration order in
