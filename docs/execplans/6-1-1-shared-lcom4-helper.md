@@ -26,7 +26,7 @@ graph: LCOM4 == 1 indicates high cohesion, while LCOM4 >= 2 suggests the
 type bundles unrelated responsibilities.
 
 The helper is a **pure library module** (`common/src/lcom4.rs`) that receives
-pre-extracted method metadata (names, accessed fields, called methods as
+pre-extracted method metadata (names, accessed fields, and called methods as
 plain strings) and returns connected component counts. It does **not** depend
 on `rustc_private` or any HIR types — the HIR traversal that populates
 `MethodInfo` is a separate task (roadmap 6.1.2).

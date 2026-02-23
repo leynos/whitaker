@@ -1,3 +1,5 @@
+//! rstest-based unit tests for [`super::cohesion_components`] and supporting types.
+
 use super::*;
 use rstest::rstest;
 use std::collections::BTreeSet;
