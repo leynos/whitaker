@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -32,6 +33,7 @@ from ruamel.yaml import YAML
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/rolling-release.yml"
+RESOLUTION_PATH = REPO_ROOT / "installer/src/resolution.rs"
 EVENT_PATH = (
     REPO_ROOT
     / "tests/workflows/fixtures/workflow_dispatch.rolling-release.event.json"
@@ -127,6 +129,36 @@ def lint_crates_from_workflow() -> list[str]:
     lint_crates = _extract_lint_crates_from_text(workflow_text)
     assert lint_crates, "rolling-release workflow must define at least one lint crate"
     return lint_crates
+
+
+def lint_crates_from_resolution_constants() -> list[str]:
+    """Return canonical lint crate names from installer constants.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    list[str]
+        `LINT_CRATES` plus `SUITE_CRATE` from `installer/src/resolution.rs`.
+    """
+    source = RESOLUTION_PATH.read_text(encoding="utf-8")
+    lint_match = re.search(
+        r"pub(?:\(crate\))?\s+const\s+LINT_CRATES\s*:\s*&\[\s*&str\s*\]\s*=\s*&\[(.*?)\];",
+        source,
+        flags=re.DOTALL,
+    )
+    assert lint_match, f"unable to parse LINT_CRATES from {RESOLUTION_PATH}"
+    lint_crates = re.findall(r'"([^"]+)"', lint_match.group(1))
+    assert lint_crates, f"{RESOLUTION_PATH} LINT_CRATES is unexpectedly empty"
+
+    suite_match = re.search(
+        r'pub(?:\(crate\))?\s+const\s+SUITE_CRATE\s*:\s*&str\s*=\s*"([^"]+)";',
+        source,
+    )
+    assert suite_match, f"unable to parse SUITE_CRATE from {RESOLUTION_PATH}"
+    return [*lint_crates, suite_match.group(1)]
 
 
 def workspace_package_names() -> set[str]:
@@ -255,6 +287,28 @@ def test_lint_crates_are_workspace_packages() -> None:
     assert not missing, (
         "rolling-release workflow includes non-workspace lint crates: "
         + ", ".join(missing)
+    )
+
+
+def test_workflow_lint_crates_match_installer_constants() -> None:
+    """Ensure workflow crate list matches installer canonical constants.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
+    workflow_crates = lint_crates_from_workflow()
+    canonical_crates = lint_crates_from_resolution_constants()
+    # Ordering is part of this contract: both definitions should evolve in lock-step
+    # for deterministic build logs and packaging expectations.
+    assert workflow_crates == canonical_crates, (
+        "rolling-release workflow LINT_CRATES drifted from installer constants:\n"
+        f"workflow={workflow_crates}\n"
+        f"installer={canonical_crates}"
     )
 
 
