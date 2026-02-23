@@ -143,7 +143,7 @@
   graph and returns connected component counts. See
   [brain trust lints design](brain-trust-lints-design.md) §Cohesion analysis
   (LCOM4). Requires 1.1.1.
-- [ ] 6.1.2. Define method metadata extraction for field access and method
+- [x] 6.1.2. Define method metadata extraction for field access and method
   calls, including macro-span filtering. See
   [brain trust lints design](brain-trust-lints-design.md) §Cohesion analysis
   (LCOM4) and §Implementation approach.

@@ -9,21 +9,20 @@ Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
-The canonical plan file is
-`docs/execplans/6-1-1-shared-lcom4-helper.md`.
+The canonical plan file is `docs/execplans/6-1-1-shared-lcom4-helper.md`.
 
 ## Purpose / big picture
 
 Whitaker's brain trust lints (`brain_type` and `brain_trait`, roadmap §6)
 require a shared cohesion analysis foundation. Roadmap item 6.1.1 tracks
-delivery of a shared LCOM4 (Lack of Cohesion in Methods, version 4) helper
-in the `common` crate.
+delivery of a shared LCOM4 (Lack of Cohesion in Methods, version 4) helper in
+the `common` crate.
 
 LCOM4 models each method as a node in an undirected graph, adding edges when
 two methods share a field access or when one method directly calls another on
 the same type. The metric equals the number of connected components in this
-graph: LCOM4 == 1 indicates high cohesion, while LCOM4 >= 2 suggests the
-type bundles unrelated responsibilities.
+graph: LCOM4 == 1 indicates high cohesion, while LCOM4 >= 2 suggests the type
+bundles unrelated responsibilities.
 
 The helper is a **pure library module** (`common/src/lcom4.rs`) that receives
 pre-extracted method metadata (names, accessed fields, and called methods as
@@ -57,9 +56,9 @@ Success is observable when:
   patterns (closest analogue: `common/src/complexity_signal.rs`).
 - Keep file sizes under 400 lines.
 - No new external dependencies. Connected component counting uses an inline
-  union-find implementation (private to the module). The typical method
-  count per type is small (< 100), making union-find the simplest correct
-  choice without adding `petgraph` or similar.
+  union-find implementation (private to the module). The typical method count
+  per type is small (< 100), making union-find the simplest correct choice
+  without adding `petgraph` or similar.
 - Use `BTreeSet<String>` for field and method-call sets in `MethodInfo` to
   ensure deterministic iteration and derive compatibility (`Eq`, `Ord`).
 - The module must not depend on `rustc_private` or any HIR types. It is a
@@ -73,8 +72,8 @@ Success is observable when:
 - Keep comments/docs in en-GB-oxendict spelling and wrap Markdown prose at
   80 columns.
 - Observe `clippy::expect_used = "deny"` and `clippy::unwrap_used = "deny"`
-  enforced by `common/Cargo.toml` — no `expect()` or `unwrap()` in
-  non-test code.
+  enforced by `common/Cargo.toml` — no `expect()` or `unwrap()` in non-test
+  code.
 
 ## Tolerances (exception triggers)
 
@@ -87,9 +86,8 @@ Success is observable when:
 ## Risks
 
 - Risk: `MethodInfo` API may prove insufficient when 6.1.2 (HIR extraction)
-  begins — for example, if field access needs to distinguish reads from
-  writes, or if associated-function-style calls (no `self`) need separate
-  handling.
+  begins — for example, if field access needs to distinguish reads from writes,
+  or if associated-function-style calls (no `self`) need separate handling.
   - Severity: medium.
   - Likelihood: low (the design document treats field access uniformly and
     only considers methods on the same type).
@@ -126,10 +124,10 @@ Success is observable when:
   within quoted strings — the comma was treated as a delimiter, causing
   multi-field steps to split incorrectly. The transitive-sharing scenario
   returned 3 components instead of the expected 1 because method `b` only
-  received `"x` as its field set. The fix was to remove all quotes from
-  Gherkin steps and use the word `called` as a natural-language separator
-  (e.g., `Given a method called b accessing fields x, y`). This matches
-  the pattern used by the existing `complexity_signal.feature`.
+  received `"x` as its field set. The fix was to remove all quotes from Gherkin
+  steps and use the word `called` as a natural-language separator (e.g.,
+  `Given a method called b accessing fields x, y`). This matches the pattern
+  used by the existing `complexity_signal.feature`.
 
 ## Decision Log
 
@@ -181,16 +179,16 @@ All acceptance criteria met:
 
 - `common/src/lcom4.rs` (~310 lines) exports `MethodInfo` and
   `cohesion_components`. The module follows the `complexity_signal` pattern
-  with a module-level `//!` doc comment, private fields, `#[derive]`
-  macros, `const fn` / `#[must_use]` accessors, and Rustdoc `# Examples`.
+  with a module-level `//!` doc comment, private fields, `#[derive]` macros,
+  `const fn` / `#[must_use]` accessors, and Rustdoc `# Examples`.
 - 17 inline unit tests cover happy paths (single method, shared field,
   direct call, transitive sharing, common field), unhappy paths (disjoint
-  methods, multiple clusters), and edge cases (empty input, isolated
-  methods, self-calls, unknown callees, mixed connections). Two tests
-  validate the `UnionFind` data structure directly.
+  methods, multiple clusters), and edge cases (empty input, isolated methods,
+  self-calls, unknown callees, mixed connections). Two tests validate the
+  `UnionFind` data structure directly.
 - 7 BDD scenarios in `common/tests/features/lcom4.feature` with step
-  definitions in `common/tests/lcom4_behaviour.rs` cover the same contract
-  from a behavioural perspective.
+  definitions in `common/tests/lcom4_behaviour.rs` cover the same contract from
+  a behavioural perspective.
 - `docs/brain-trust-lints-design.md` records five implementation decisions
   under "### Implementation decisions (6.1.1)".
 - `docs/roadmap.md` marks 6.1.1 as `[x]`.
@@ -239,8 +237,8 @@ Current repository state relevant to this task:
   `common/tests/complexity_signal_behaviour.rs` with feature file at
   `common/tests/features/complexity_signal.feature`.
 - BDD test pattern uses a `World` struct with `Cell`/`RefCell` fields,
-  `#[fixture]`, `#[given]`/`#[when]`/`#[then]` step macros, and
-  `#[scenario]` binding to feature file indices.
+  `#[fixture]`, `#[given]`/`#[when]`/`#[then]` step macros, and `#[scenario]`
+  binding to feature file indices.
 - The `common` crate's `Cargo.toml` already includes `rstest`, `rstest-bdd`,
   and `rstest-bdd-macros` in dev-dependencies.
 
@@ -296,8 +294,7 @@ struct UnionFind {
 - `fn find(&mut self, x: usize) -> usize` — with path compression.
 - `fn union(&mut self, x: usize, y: usize)` — with union-by-rank.
 - `fn component_count(&self) -> usize` — counts distinct roots. Note: call
-  `find` on all elements first to flatten the tree, then count unique
-  parents.
+  `find` on all elements first to flatten the tree, then count unique parents.
 
 **`cohesion_components` function:**
 
@@ -325,8 +322,8 @@ Algorithm:
    the callee's index in `method_index` and union `i` with it.
 7. Return `uf.component_count()`.
 
-Acceptance: module compiles, exports `MethodInfo` and
-`cohesion_components`, and follows all code style requirements.
+Acceptance: module compiles, exports `MethodInfo` and `cohesion_components`,
+and follows all code style requirements.
 
 ### Stage B: Wire module into `common/src/lib.rs`
 
@@ -342,8 +339,8 @@ And add re-exports:
 pub use lcom4::{MethodInfo, cohesion_components};
 ```
 
-Place the new module declaration alphabetically (after `i18n`, before
-`path`). Place the re-export line after the `i18n` re-exports block.
+Place the new module declaration alphabetically (after `i18n`, before `path`).
+Place the re-export line after the `i18n` re-exports block.
 
 Acceptance: `cargo check -p common` succeeds.
 
@@ -459,10 +456,10 @@ Acceptance: `cargo test -p common` passes all BDD scenarios.
 
 ### Stage E: Record design decisions
 
-Append implementation decisions to `docs/brain-trust-lints-design.md` in
-the "Cohesion analysis (LCOM4)" section, after the existing paragraph about
-the shared helper. Cover data representation, graph algorithm, edge
-semantics, empty input handling, and infallibility.
+Append implementation decisions to `docs/brain-trust-lints-design.md` in the
+"Cohesion analysis (LCOM4)" section, after the existing paragraph about the
+shared helper. Cover data representation, graph algorithm, edge semantics,
+empty input handling, and infallibility.
 
 Acceptance: design document is updated and passes `make check-fmt`.
 
@@ -476,11 +473,10 @@ set -o pipefail; make lint      2>&1 | tee /tmp/6-1-1-lint.log
 set -o pipefail; make test      2>&1 | tee /tmp/6-1-1-test.log
 ```
 
-If any command fails, fix and rerun until all pass or a tolerance trigger
-is hit.
+If any command fails, fix and rerun until all pass or a tolerance trigger is
+hit.
 
-Acceptance: all three commands exit successfully with logs retained for
-review.
+Acceptance: all three commands exit successfully with logs retained for review.
 
 ### Stage G: Mark roadmap item 6.1.1 as done
 
