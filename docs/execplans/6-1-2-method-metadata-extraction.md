@@ -12,7 +12,8 @@ plan file is `docs/execplans/6-1-2-method-metadata-extraction.md`.
 ## Purpose / big picture
 
 Roadmap item 6.1.2 delivers the method metadata extraction layer that bridges
-lint-driver HIR traversal and the pure LCOM4 cohesion helper shipped in 6.1.1.
+lint-driver High-level Intermediate Representation (HIR) traversal and the pure
+Lack of Cohesion in Methods, version 4 (LCOM4) cohesion helper shipped in 6.1.1.
 
 The brain trust lints (`brain_type`, `brain_trait`) need to populate
 `MethodInfo` values — specifically, which fields each method accesses and which
@@ -27,13 +28,13 @@ After this change:
 
 1. `common::lcom4::extract::MethodInfoBuilder` exists and provides
    `record_field_access`, `record_method_call` (both with
-   `from_expansion: bool` macro-span filtering), `is_empty`, and `build`.
+   `is_from_expansion: bool` macro-span filtering), `is_empty`, and `build`.
 2. `common::lcom4::extract::collect_method_infos` converts a collection of
    builders into `Vec<MethodInfo>`.
 3. Unit tests (`#[rstest]`) cover happy, unhappy, and edge cases including
    macro-span filtering.
-4. Behavioural tests (`rstest-bdd` v0.5.0) in Gherkin scenarios cover the
-   extraction contract.
+4. Behaviour-Driven Development (BDD) tests (`rstest-bdd` v0.5.0) in Gherkin
+   scenarios cover the extraction contract.
 5. `docs/brain-trust-lints-design.md` records implementation decisions for
    6.1.2.
 6. `docs/roadmap.md` marks 6.1.2 as done.
@@ -45,7 +46,7 @@ After this change:
   `common/src/lcom4/` directory (alongside `mod.rs` and `tests.rs`).
 - Keep every file under 400 lines.
 - No new external dependencies. No `rustc_private` dependency in `common`.
-- The builder is a pure-library type — it accepts `from_expansion: bool`
+- The builder is a pure-library type — it accepts `is_from_expansion: bool`
   rather than importing `rustc_span::Span`. This mirrors the established
   pattern where `common/src/complexity_signal.rs` provides pure helpers and
   `bumpy_road_function/src/driver/segment_builder.rs` performs HIR traversal.
@@ -107,15 +108,15 @@ After this change:
 
 - Clippy enforces `clippy::expect_used = "deny"` even in integration test
   targets (files under `common/tests/`). BDD step definitions that used
-  `.expect()` on `RefCell` borrows had to be refactored to use
-  `is_some_and` / `is_none_or` helper methods instead.
+  `.expect()` on `RefCell` borrows had to be refactored to use `is_some_and` /
+  `is_none_or` helper methods instead.
 - Clippy's `unnecessary_map_or` lint requires `map_or(false, ...)` to be
   written as `is_some_and(...)` and `map_or(true, ...)` as `is_none_or(...)`.
   This was not encountered during 6.1.1.
 - The `clippy::too_many_arguments` lint (limit 4) was triggered by
-  parameterised `#[rstest]` test functions with 5 case parameters. Resolved
-  by extracting a shared `assert_extraction` helper and converting to
-  individual named test functions.
+  parameterized `#[rstest]` test functions with 5 case parameters. Resolved by
+  extracting a shared `assert_extraction` helper and converting to individual
+  named test functions.
 
 ## Decision log
 
@@ -129,19 +130,19 @@ After this change:
   architectural consistency. The HIR visitor will live in the lint driver
   crates (6.2, 6.3). Date/Author: 2026-02-23 / DevBoxer.
 
-- Decision: use `from_expansion: bool` parameter rather than importing
+- Decision: use `is_from_expansion: bool` parameter rather than importing
   `rustc_span::Span` into the builder. Rationale: this is the same approach
   used by `SegmentBuilder` in `bumpy_road_function`, where
   `span.from_expansion()` is checked in the HIR walker before creating a
-  `LineSegment`. The builder silently discards entries where `from_expansion`
-  is true. This keeps macro-span filtering semantics defined and testable in
-  `common`. Date/Author: 2026-02-23 / DevBoxer.
+  `LineSegment`. The builder silently discards entries where
+  `is_from_expansion` is true. This keeps macro-span filtering semantics
+  defined and testable in `common`. Date/Author: 2026-02-23 / DevBoxer.
 
 - Decision: use builder pattern (`MethodInfoBuilder`) rather than requiring
   callers to pre-compute `BTreeSet` values. Rationale: HIR walkers discover
   fields and calls incrementally during traversal. A mutable builder is more
   ergonomic than collecting into sets first and avoids intermediate allocations
-  in the caller. The builder also encapsulates the filtering logic so callers
+  in the caller. The builder also encapsulates the filtering logic, so callers
   do not need to implement it. Date/Author: 2026-02-23 / DevBoxer.
 
 ## Outcomes & retrospective
@@ -162,11 +163,11 @@ All acceptance criteria met:
 - `make lint` passed (after fixing 3 Clippy issues across 2 iterations).
 - `make test` passed: 707 tests, 707 passed, 0 failed.
 
-Test count increased by 23 (from 684 baseline to 707): 16 unit tests +
-7 BDD scenarios.
+Test count increased by 23 (from 684 baseline to 707): 16 unit tests + 7 BDD
+scenarios.
 
-Files touched: 7 (3 created, 4 modified). Net lines added: ~596. Both
-within tolerance thresholds.
+Files touched: 7 (3 created, 4 modified). Net lines added: ~596. Both within
+tolerance thresholds.
 
 ## Context and orientation
 
@@ -230,10 +231,12 @@ Methods:
 
 - `pub fn new(name: impl Into<String>) -> Self` — creates builder with
   given method name and empty sets.
-- `pub fn record_field_access(&mut self, field_name: &str, from_expansion: bool)`
-  — inserts field name into `accessed_fields` unless `from_expansion` is true.
-- `pub fn record_method_call(&mut self, method_name: &str, from_expansion: bool)`
-  — inserts method name into `called_methods` unless `from_expansion` is true.
+- `pub fn record_field_access(&mut self, field_name: &str, is_from_expansion: bool)`
+  — inserts field name into `accessed_fields` unless `is_from_expansion` is
+  true.
+- `pub fn record_method_call(&mut self, method_name: &str, is_from_expansion: bool)`
+  — inserts method name into `called_methods` unless `is_from_expansion` is
+  true.
 - `pub fn is_empty(&self) -> bool` — returns true when both sets are empty
   (useful for lint drivers that want to skip methods with no observable state
   interaction).
@@ -277,13 +280,13 @@ Acceptance: `cargo check -p common` succeeds.
 ### Stage C: Add inline unit tests
 
 Add `#[cfg(test)] mod tests` at the bottom of `extract.rs` with `#[rstest]`
-parameterised tests covering:
+parameterized tests covering:
 
 **Happy paths:**
 
-- `single_field_access` — record one field (`from_expansion: false`);
+- `single_field_access` — record one field (`is_from_expansion: false`);
   `accessed_fields` contains it, `called_methods` empty.
-- `single_method_call` — record one call (`from_expansion: false`);
+- `single_method_call` — record one call (`is_from_expansion: false`);
   `called_methods` contains it, `accessed_fields` empty.
 - `multiple_fields_and_calls` — record several of each; all present.
 - `builder_name_preserved` — `new("foo").build().name() == "foo"`.
@@ -292,9 +295,9 @@ parameterised tests covering:
 
 **Macro-span filtering:**
 
-- `field_from_expansion_filtered` — field with `from_expansion: true` not
+- `field_from_expansion_filtered` — field with `is_from_expansion: true` not
   in `accessed_fields`.
-- `method_from_expansion_filtered` — method with `from_expansion: true`
+- `method_from_expansion_filtered` — method with `is_from_expansion: true`
   not in `called_methods`.
 - `mixed_expansion_and_regular` — both macro and non-macro entries; only
   non-macro entries present.
@@ -334,7 +337,7 @@ quoted values, no commas in placeholders):
 - `And a field access to {field} from expansion`
 - `And a method call to {method} not from expansion`
 - `And a method call to {method} from expansion`
-- `When I build the method info`
+- `When the method info is built`
 - `Then the accessed fields contain {field}`
 - `Then the accessed fields do not contain {field}`
 - `Then the called methods contain {method}`
@@ -362,7 +365,7 @@ Append a `### Implementation decisions (6.1.2)` section to
 three decisions:
 
 1. Extraction as pure builder (no `rustc_private` in `common`).
-2. Macro-span filtering via `from_expansion: bool` parameter.
+2. Macro-span filtering via `is_from_expansion: bool` parameter.
 3. Builder pattern over pre-computed `BTreeSet` constructor.
 
 Acceptance: design document is updated, `make markdownlint` passes (or manual
@@ -402,8 +405,8 @@ Quality method:
 
     make check-fmt && make lint && make test
 
-Expected: all pass, test count increases by approximately 25 (16 unit +
-7 BDD + existing 660).
+Expected: all pass, test count increases by approximately 25 (16 unit + 7 BDD +
+existing 660).
 
 ## Idempotence and recovery
 
@@ -428,8 +431,8 @@ In `common/src/lcom4/extract.rs`:
 
     impl MethodInfoBuilder {
         pub fn new(name: impl Into<String>) -> Self;
-        pub fn record_field_access(&mut self, field_name: &str, from_expansion: bool);
-        pub fn record_method_call(&mut self, method_name: &str, from_expansion: bool);
+        pub fn record_field_access(&mut self, field_name: &str, is_from_expansion: bool);
+        pub fn record_method_call(&mut self, method_name: &str, is_from_expansion: bool);
         pub fn is_empty(&self) -> bool;
         pub fn build(self) -> MethodInfo;
     }
@@ -445,10 +448,10 @@ Lint drivers for `brain_type` (6.2) and `brain_trait` (6.3) will:
 1. Create a `MethodInfoBuilder` per method during HIR traversal.
 2. Call
    `builder.record_field_access(ident.name.as_str(), expr.span.from_expansion())`
-   for each `ExprKind::Field(base, ident)` where base is `self`.
+    for each `ExprKind::Field(base, ident)` where base is `self`.
 3. Call
    `builder.record_method_call(segment.ident.name.as_str(), expr.span.from_expansion())`
-   for each `ExprKind::MethodCall(segment, receiver, ..)` where receiver is
+    for each `ExprKind::MethodCall(segment, receiver, ..)` where receiver is
    `self`.
 4. Call `collect_method_infos(builders)` and pass to `cohesion_components()`.
 

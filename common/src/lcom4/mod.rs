@@ -304,7 +304,7 @@ pub fn cohesion_components(methods: &[MethodInfo]) -> usize {
 
 pub mod extract;
 
-pub use extract::MethodInfoBuilder;
+pub use extract::{MethodInfoBuilder, collect_method_infos};
 
 #[cfg(test)]
 mod tests;

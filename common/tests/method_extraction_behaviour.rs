@@ -1,7 +1,6 @@
 //! Behaviour-driven coverage for method metadata extraction.
 
-use common::lcom4::MethodInfo;
-use common::lcom4::extract::MethodInfoBuilder;
+use common::lcom4::{MethodInfo, MethodInfoBuilder};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
@@ -26,32 +25,36 @@ impl ExtractionWorld {
         }
     }
 
+    /// Borrows the built result, panicking if the build step was never
+    /// executed (catches mis-specified scenarios missing the When step).
+    fn with_result<T>(&self, f: impl FnOnce(&MethodInfo) -> T) -> T {
+        let borrow = self.result.borrow();
+        assert!(
+            borrow.is_some(),
+            "result is None — did you forget the When step?"
+        );
+        // SAFETY: the assert above guarantees Some.
+        if let Some(info) = borrow.as_ref() {
+            f(info)
+        } else {
+            unreachable!()
+        }
+    }
+
     fn has_field(&self, field: &str) -> bool {
-        self.result
-            .borrow()
-            .as_ref()
-            .is_some_and(|info| info.accessed_fields().contains(field))
+        self.with_result(|info| info.accessed_fields().contains(field))
     }
 
     fn has_call(&self, method: &str) -> bool {
-        self.result
-            .borrow()
-            .as_ref()
-            .is_some_and(|info| info.called_methods().contains(method))
+        self.with_result(|info| info.called_methods().contains(method))
     }
 
     fn fields_empty(&self) -> bool {
-        self.result
-            .borrow()
-            .as_ref()
-            .is_none_or(|info| info.accessed_fields().is_empty())
+        self.with_result(|info| info.accessed_fields().is_empty())
     }
 
     fn calls_empty(&self) -> bool {
-        self.result
-            .borrow()
-            .as_ref()
-            .is_none_or(|info| info.called_methods().is_empty())
+        self.with_result(|info| info.called_methods().is_empty())
     }
 }
 
@@ -89,7 +92,7 @@ fn given_call_expanded(world: &ExtractionWorld, method: String) {
 
 // --- When steps ---
 
-#[when("I build the method info")]
+#[when("the method info is built")]
 fn when_build(world: &ExtractionWorld) {
     world.build();
 }

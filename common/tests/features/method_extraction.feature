@@ -6,14 +6,14 @@ Feature: Method metadata extraction for LCOM4
   Scenario: Field access is recorded
     Given an extraction builder for method process
     And a field access to data not from expansion
-    When I build the method info
+    When the method info is built
     Then the accessed fields contain data
     And the called methods are empty
 
   Scenario: Method call is recorded
     Given an extraction builder for method dispatch
     And a method call to validate not from expansion
-    When I build the method info
+    When the method info is built
     Then the called methods contain validate
     And the accessed fields are empty
 
@@ -21,7 +21,7 @@ Feature: Method metadata extraction for LCOM4
     Given an extraction builder for method render
     And a field access to canvas not from expansion
     And a field access to macro_field from expansion
-    When I build the method info
+    When the method info is built
     Then the accessed fields contain canvas
     And the accessed fields do not contain macro_field
 
@@ -29,7 +29,7 @@ Feature: Method metadata extraction for LCOM4
     Given an extraction builder for method update
     And a method call to helper not from expansion
     And a method call to macro_call from expansion
-    When I build the method info
+    When the method info is built
     Then the called methods contain helper
     And the called methods do not contain macro_call
 
@@ -37,13 +37,13 @@ Feature: Method metadata extraction for LCOM4
     Given an extraction builder for method generated
     And a field access to a from expansion
     And a method call to b from expansion
-    When I build the method info
+    When the method info is built
     Then the accessed fields are empty
     And the called methods are empty
 
   Scenario: Empty builder yields empty method info
     Given an extraction builder for method empty
-    When I build the method info
+    When the method info is built
     Then the accessed fields are empty
     And the called methods are empty
 
@@ -53,7 +53,7 @@ Feature: Method metadata extraction for LCOM4
     And a field access to beta not from expansion
     And a method call to do_work not from expansion
     And a method call to validate not from expansion
-    When I build the method info
+    When the method info is built
     Then the accessed fields contain alpha
     And the accessed fields contain beta
     And the called methods contain do_work

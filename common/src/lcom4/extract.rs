@@ -9,8 +9,8 @@
 //! [`cohesion_components`](super::cohesion_components).
 //!
 //! This module is a pure library with no `rustc_private` dependency. Macro-span
-//! filtering is expressed through a `from_expansion: bool` parameter that the
-//! caller (the HIR walker) populates from `expr.span.from_expansion()`. This
+//! filtering is expressed through an `is_from_expansion: bool` parameter that
+//! the caller (the HIR walker) populates from `expr.span.from_expansion()`. This
 //! mirrors the pattern used by `bumpy_road_function`'s `SegmentBuilder`, where
 //! macro-span checks happen in the HIR walker before feeding data to the pure
 //! signal builder in `common`.
@@ -22,13 +22,13 @@ use super::MethodInfo;
 /// Incrementally builds a [`MethodInfo`] from field accesses and method calls
 /// observed during a method body walk.
 ///
-/// Entries where `from_expansion` is `true` are silently discarded, preventing
+/// Entries where `is_from_expansion` is `true` are silently discarded, preventing
 /// macro-generated code from inflating the cohesion graph.
 ///
 /// # Examples
 ///
 /// ```
-/// use common::lcom4::extract::MethodInfoBuilder;
+/// use common::lcom4::MethodInfoBuilder;
 ///
 /// let mut builder = MethodInfoBuilder::new("process");
 /// builder.record_field_access("data", false);
@@ -54,11 +54,12 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::extract::MethodInfoBuilder;
+    /// use common::lcom4::MethodInfoBuilder;
     ///
     /// let builder = MethodInfoBuilder::new("read");
     /// assert!(builder.is_empty());
     /// ```
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -69,7 +70,7 @@ impl MethodInfoBuilder {
 
     /// Records a field access observed in the method body.
     ///
-    /// When `from_expansion` is `true` the access is silently ignored,
+    /// When `is_from_expansion` is `true` the access is silently ignored,
     /// preventing macro-generated field references from inflating the
     /// cohesion graph. Duplicate field names are naturally deduplicated
     /// by the underlying `BTreeSet`.
@@ -77,7 +78,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::extract::MethodInfoBuilder;
+    /// use common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("render");
     /// builder.record_field_access("canvas", false);
@@ -87,15 +88,15 @@ impl MethodInfoBuilder {
     /// assert!(info.accessed_fields().contains("canvas"));
     /// assert!(!info.accessed_fields().contains("macro_field"));
     /// ```
-    pub fn record_field_access(&mut self, field_name: &str, from_expansion: bool) {
-        if !from_expansion {
+    pub fn record_field_access(&mut self, field_name: &str, is_from_expansion: bool) {
+        if !is_from_expansion {
             self.accessed_fields.insert(field_name.to_owned());
         }
     }
 
     /// Records a method call on the same type observed in the method body.
     ///
-    /// When `from_expansion` is `true` the call is silently ignored,
+    /// When `is_from_expansion` is `true` the call is silently ignored,
     /// preventing macro-generated calls from inflating the cohesion graph.
     /// Duplicate method names are naturally deduplicated by the underlying
     /// `BTreeSet`.
@@ -103,7 +104,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::extract::MethodInfoBuilder;
+    /// use common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("dispatch");
     /// builder.record_method_call("validate", false);
@@ -113,8 +114,8 @@ impl MethodInfoBuilder {
     /// assert!(info.called_methods().contains("validate"));
     /// assert!(!info.called_methods().contains("macro_helper"));
     /// ```
-    pub fn record_method_call(&mut self, method_name: &str, from_expansion: bool) {
-        if !from_expansion {
+    pub fn record_method_call(&mut self, method_name: &str, is_from_expansion: bool) {
+        if !is_from_expansion {
             self.called_methods.insert(method_name.to_owned());
         }
     }
@@ -128,7 +129,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::extract::MethodInfoBuilder;
+    /// use common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("noop");
     /// assert!(builder.is_empty());
@@ -146,7 +147,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::extract::MethodInfoBuilder;
+    /// use common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("process");
     /// builder.record_field_access("data", false);
@@ -170,7 +171,7 @@ impl MethodInfoBuilder {
 /// # Examples
 ///
 /// ```
-/// use common::lcom4::extract::{MethodInfoBuilder, collect_method_infos};
+/// use common::lcom4::{MethodInfoBuilder, collect_method_infos};
 ///
 /// let mut b1 = MethodInfoBuilder::new("read");
 /// b1.record_field_access("buf", false);

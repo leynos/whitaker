@@ -162,8 +162,8 @@ This will allow reuse in future cohesion-aware lints.
 - **Macro-span filtering via boolean parameter**: rather than importing
   `rustc_span::Span` and calling `from_expansion()` inside `common`, the
   builder's `record_field_access` and `record_method_call` methods accept a
-  `from_expansion: bool` parameter. The caller (the HIR walker) passes the
-  result of `expr.span.from_expansion()`. Entries where `from_expansion` is
+  `is_from_expansion: bool` parameter. The caller (the HIR walker) passes the
+  result of `expr.span.from_expansion()`. Entries where `is_from_expansion` is
   `true` are silently discarded. This mirrors the approach in
   `bumpy_road_function`'s `SegmentBuilder`, where `span.from_expansion()` is
   checked before creating a `LineSegment`.
