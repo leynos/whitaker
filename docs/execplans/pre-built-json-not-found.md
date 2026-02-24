@@ -74,8 +74,8 @@ archive instead of immediately falling back to local build.
   `make check-fmt`, `make typecheck`, `make lint`, `make test`,
   `make markdownlint`, and `make nixie`.
 - [x] 2026-02-24 18:27 UTC: Workflow contract tests passed via
-  `python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
-  (3 passed, 1 skipped).
+  `python3 -m pytest tests/workflows/test_rolling_release_workflow.py` (3
+  passed, 1 skipped).
 - [ ] Validate with GitHub Actions run evidence that `publish` executes.
 - [ ] Validate manifest URL is downloadable after publish.
 
@@ -92,9 +92,9 @@ archive instead of immediately falling back to local build.
 
 ## Decision Log
 
-- 2026-02-24: Root cause accepted as CI publication failure, not installer URL
-  construction bug. Evidence: installer code points at `rolling`; release tag
-  is absent; run `22319537097` failed before publish.
+- 2026-02-24: Root cause accepted as continuous integration (CI) publication
+  failure, not installer URL construction bug. Evidence: installer code points
+  at `rolling`; release tag is absent; run `22319537097` failed before publish.
 - 2026-02-24: Initial remediation focus is the workflow component-install step.
   The installer code already handles missing artefacts correctly by falling
   back.
@@ -107,9 +107,9 @@ archive instead of immediately falling back to local build.
 ## Outcomes & Retrospective
 
 Implementation work is complete in-repo: workflow install logic now avoids the
-dual-target `rustc-dev` conflict, and tests enforce the updated contract.
-Local Rust/Python/docs gates all pass. Remaining work is external verification
-on GitHub Actions that `publish` executes and that the `rolling` manifest URL
+dual-target `rustc-dev` conflict, and tests enforce the updated contract. Local
+Rust/Python/docs gates all pass. Remaining work is external verification on
+GitHub Actions that `publish` executes and that the `rolling` manifest URL
 returns HTTP 200.
 
 ## Technical orientation
@@ -173,16 +173,15 @@ Minimum assertions to add:
 
 Run validation in this order:
 
-1. Local workflow checks
-   - `python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
-2. Trigger/observe GitHub rolling-release run on the branch with workflow
-   changes (or equivalent repository test run).
-3. Confirm run completion and publish execution.
-4. Verify release manifest endpoint exists:
-   - `curl -fL \
-     https://github.com/leynos/whitaker/releases/download/rolling/manifest-x86_64-unknown-linux-gnu.json`
-5. Verify installer prebuilt path no longer immediately falls back on Linux
-   x86_64.
+- [x] 3.1 Run local workflow checks with:
+  `python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
+- [ ] 3.2 Trigger/observe a GitHub rolling-release run on this branch (or an
+  equivalent repository test run).
+- [ ] 3.3 Confirm run completion and publish execution.
+- [ ] 3.4 Verify release manifest endpoint exists with:
+  `curl -fL https://github.com/leynos/whitaker/releases/download/rolling/manifest-x86_64-unknown-linux-gnu.json`
+- [ ] 3.5 Verify installer prebuilt path no longer immediately falls back on
+  Linux x86_64.
 
 ### Phase 4: Hardening (only if needed)
 
@@ -196,8 +195,10 @@ Use `tee` logs for long output as required by AGENTS guidance.
 
 - Local workflow test command:
 
-      python3 -m pytest tests/workflows/test_rolling_release_workflow.py \
-        | tee /tmp/test-workflow-whitaker-$(git branch --show).out
+  ```plaintext
+  python3 -m pytest tests/workflows/test_rolling_release_workflow.py \
+    | tee /tmp/test-workflow-whitaker-$(git branch --show).out
+  ```
 
   Expected: tests pass, including new contract assertions.
 - GitHub run inspection:
