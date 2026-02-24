@@ -467,9 +467,9 @@ Lint drivers for `brain_type` (6.2) and `brain_trait` (6.3) will:
 
 **Files to modify (4):**
 
-| File                               | Change                                                           |
-| ---------------------------------- | ---------------------------------------------------------------- |
+| File                               | Change                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
 | `common/src/lcom4/mod.rs`          | Add `pub mod extract;` and `pub use extract::{MethodInfoBuilder, collect_method_infos};` |
-| `common/src/lib.rs`                | Add `MethodInfoBuilder` and `collect_method_infos` to `lcom4` re-export line              |
-| `docs/brain-trust-lints-design.md` | Append 6.1.2 implementation decisions                            |
-| `docs/roadmap.md`                  | Mark 6.1.2 as `[x]`                                              |
+| `common/src/lib.rs`                | Add `MethodInfoBuilder` and `collect_method_infos` to `lcom4` re-export line             |
+| `docs/brain-trust-lints-design.md` | Append 6.1.2 implementation decisions                                                    |
+| `docs/roadmap.md`                  | Mark 6.1.2 as `[x]`                                                                      |

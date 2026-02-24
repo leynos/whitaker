@@ -173,6 +173,35 @@ This will allow reuse in future cohesion-aware lints.
   incrementally during traversal, and avoids intermediate collection
   allocations in the caller.
 
+### Implementation decisions (6.2.1)
+
+- **Separate `brain_type_metrics` module**: metric collection for brain type
+  detection lives in `common/src/brain_type_metrics/` rather than extending the
+  `complexity_signal` module. The `complexity_signal` module provides per-line
+  signal rasterisation and smoothing for the bumpy road lint, whereas brain
+  type metrics operate at the per-method aggregate level — a fundamentally
+  different abstraction. Keeping them separate maintains single responsibility.
+- **`MethodMetrics` stores pre-computed values**: `MethodMetrics` carries
+  `cognitive_complexity: usize` and `lines_of_code: usize` as pre-computed
+  values rather than computing cognitive complexity (CC) from source. The
+  `common` crate has no `rustc_private` dependencies. The actual CC computation
+  from HIR happens in the lint driver (6.2.2), which passes the pre-computed
+  value into `MethodMetrics`. This follows the same pattern as
+  `MethodInfoBuilder` (pure library stores and aggregates; HIR walker produces).
+- **`TypeMetricsBuilder` for incremental construction**: follows the
+  `MethodInfoBuilder` pattern from 6.1.2. The lint driver discovers methods
+  incrementally during HIR traversal and calls `add_method()` for each. Brain
+  method thresholds are provided at construction time so the builder identifies
+  brain methods during `build()`. LCOM4 and foreign reach are set separately
+  via `set_lcom4()` and `set_foreign_reach()`, defaulting to zero if not set.
+- **`ForeignReferenceSet` with macro-span filtering**: `ForeignReferenceSet`
+  accumulates distinct external module or type references using `BTreeSet` for
+  deterministic iteration. Its `record_reference()` method accepts
+  `is_from_expansion: bool`, mirroring the pattern in
+  `MethodInfoBuilder::record_field_access()`. The HIR walker calls
+  `record_reference(&path_string, span.from_expansion())`. Using plain `String`
+  paths avoids coupling to `rustc_private` types.
+
 ## Implementation approach
 
 ### Metric collection
