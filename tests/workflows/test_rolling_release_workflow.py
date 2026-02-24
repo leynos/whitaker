@@ -28,7 +28,7 @@ import pytest
 
 from tests.workflows.workflow_test_helpers import (
     WORKFLOW_PATH,
-    _install_components_script,
+    install_components_script,
     lint_crates_from_resolution_constants,
     lint_crates_from_workflow,
     run_act_build_lints,
@@ -76,13 +76,13 @@ jobs:
         AssertionError,
         match="missing the install-components run step",
     ):
-        _install_components_script(workflow_text)
+        install_components_script(workflow_text)
 
 
 def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
     """Ensure install step avoids conflicting dual-target rustc-dev installs."""
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-    run_script = _install_components_script(workflow_text)
+    run_script = install_components_script(workflow_text)
 
     expected_matrix_install = (
         '--target "${{ matrix.target }}" rustc-dev llvm-tools-preview'
@@ -138,10 +138,6 @@ def test_build_lints_job_succeeds_under_act(tmp_path: Path) -> None:
     ----------
     tmp_path
         Pytest-provided temporary path used for artefact output.
-
-    Returns
-    -------
-    None
     """
     if not workflow_runtime_is_ready():
         pytest.fail(

@@ -109,7 +109,7 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
     return _normalize_lint_crates_value(lint_value)
 
 
-def _install_components_script(workflow_text: str) -> str:
+def install_components_script(workflow_text: str) -> str:
     """Return the run script for the install-components workflow step."""
     yaml = YAML()
     parsed = yaml.load(workflow_text)
@@ -124,9 +124,7 @@ def _install_components_script(workflow_text: str) -> str:
                         return run_script
         case _:
             pass
-    raise AssertionError(
-        "rolling-release workflow is missing the install-components run step"
-    )
+    assert False, "rolling-release workflow is missing the install-components run step"  # noqa: B011
 
 
 def lint_crates_from_workflow() -> list[str]:

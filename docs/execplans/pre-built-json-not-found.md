@@ -12,7 +12,7 @@ This document must be maintained in accordance with `AGENTS.md`.
 
 `whitaker-installer` currently attempts to download `manifest-<target>.json`
 from the `rolling` GitHub Release, before falling back to local compilation.
-Right now that URL returns 404, so every install on otherwise supported targets
+Right now, that URL returns 404, so every install on otherwise supported targets
 takes the slow fallback path.
 
 After this work, a successful rolling-release run will always publish a
@@ -179,7 +179,11 @@ Run validation in this order:
   equivalent repository test run).
 - [ ] 3.3 Confirm run completion and publish execution.
 - [ ] 3.4 Verify release manifest endpoint exists with:
-  `curl -fL https://github.com/leynos/whitaker/releases/download/rolling/manifest-x86_64-unknown-linux-gnu.json`
+
+  ```plaintext
+  https://github.com/leynos/whitaker/releases/download/rolling/
+  manifest-x86_64-unknown-linux-gnu.json
+  ```
 - [ ] 3.5 Verify installer prebuilt path no longer immediately falls back on
   Linux x86_64.
 
