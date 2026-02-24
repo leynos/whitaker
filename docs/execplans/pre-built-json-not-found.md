@@ -4,7 +4,7 @@ This execution plan (ExecPlan) is a living document. The sections Constraints,
 Tolerances, Risks, Progress, Surprises & Discoveries, Decision Log, and
 Outcomes & Retrospective must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -66,8 +66,16 @@ archive instead of immediately falling back to local build.
   skipped.
 - [x] 2026-02-24 17:05 UTC: Confirmed `GET /releases/tags/rolling` returns
   `{"message":"Not Found"}`.
-- [ ] Implement workflow fix for component-install conflict.
-- [ ] Add or update workflow tests for the revised install logic.
+- [x] 2026-02-24 18:05 UTC: Implemented workflow fix to install
+  `rustc-dev`/`llvm-tools-preview` for `matrix.target` only.
+- [x] 2026-02-24 18:05 UTC: Added workflow regression test enforcing the
+  matrix-target-only `rustc-dev` install contract.
+- [x] 2026-02-24 18:27 UTC: Local gates passed:
+  `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie`.
+- [x] 2026-02-24 18:27 UTC: Workflow contract tests passed via
+  `python3 -m pytest tests/workflows/test_rolling_release_workflow.py`
+  (3 passed, 1 skipped).
 - [ ] Validate with GitHub Actions run evidence that `publish` executes.
 - [ ] Validate manifest URL is downloadable after publish.
 
@@ -92,11 +100,17 @@ archive instead of immediately falling back to local build.
   back.
 - 2026-02-24: Keep release tag and manifest naming unchanged to avoid widening
   blast radius.
+- 2026-02-24: Use `matrix.target` as the sole `rustc-dev` installation target
+  per matrix leg. This removes the second `rustc-dev` install call that
+  triggered rustup file conflicts.
 
 ## Outcomes & Retrospective
 
-Not started yet. This section will be completed after implementation and
-validation.
+Implementation work is complete in-repo: workflow install logic now avoids the
+dual-target `rustc-dev` conflict, and tests enforce the updated contract.
+Local Rust/Python/docs gates all pass. Remaining work is external verification
+on GitHub Actions that `publish` executes and that the `rolling` manifest URL
+returns HTTP 200.
 
 ## Technical orientation
 

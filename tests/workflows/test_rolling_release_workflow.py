@@ -113,6 +113,38 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
     return _normalize_lint_crates_value(lint_value)
 
 
+def _install_components_script(workflow_text: str) -> str:
+    """Return the shell script for the install-components workflow step.
+
+    Parameters
+    ----------
+    workflow_text
+        Raw YAML text from `rolling-release.yml`.
+
+    Returns
+    -------
+    str
+        The shell script configured under
+        `Install pinned toolchain components`.
+    """
+    yaml = YAML()
+    parsed = yaml.load(workflow_text)
+    match parsed:
+        case {"jobs": {"build-lints": {"steps": steps}}} if isinstance(steps, list):
+            for step in steps:
+                match step:
+                    case {
+                        "name": "Install pinned toolchain components",
+                        "run": run_script,
+                    } if isinstance(run_script, str):
+                        return run_script
+        case _:
+            pass
+    raise AssertionError(
+        "rolling-release workflow is missing the install-components run step"
+    )
+
+
 def lint_crates_from_workflow() -> list[str]:
     """Return lint crates declared in the rolling release workflow.
 
@@ -310,6 +342,31 @@ def test_workflow_lint_crates_match_installer_constants() -> None:
         f"workflow={workflow_crates}\n"
         f"installer={canonical_crates}"
     )
+
+
+def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
+    """Ensure install step avoids conflicting dual-target rustc-dev installs.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
+    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    run_script = _install_components_script(workflow_text)
+    assert (
+        '--target "${{ matrix.target }}" rustc-dev llvm-tools-preview'
+        in run_script
+    ), "install step must install rustc-dev for matrix target"
+    assert (
+        '--target "${HOST_TARGET}" rustc-dev llvm-tools-preview' not in run_script
+    ), "install step should not install rustc-dev for HOST_TARGET"
+    assert (
+        "if [ \"${HOST_TARGET}\" != \"${{ matrix.target }}\" ];" not in run_script
+    ), "install step should not conditionally install a second rustc-dev target"
 
 
 @pytest.mark.skipif(
