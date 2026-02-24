@@ -323,6 +323,7 @@ In `common/src/brain_type_metrics/foreign_reach.rs`:
     }
 
 Methods:
+
 - `new() -> Self` — empty set.
 - `record_reference(&mut self, path: &str, is_from_expansion: bool)` — inserts
   path unless `is_from_expansion` is true.
@@ -377,6 +378,7 @@ Accessors: `type_name()`, `wmc()`, `brain_method_names()`,
     }
 
 Methods:
+
 - `new(type_name, cc_threshold, loc_threshold) -> Self`
 - `add_method(&mut self, name, cognitive_complexity, lines_of_code)` — pushes
   a `MethodMetrics`.
@@ -408,6 +410,7 @@ Acceptance: `cargo check -p common` succeeds.
 In `common/src/brain_type_metrics/tests.rs`, add `#[rstest]` tests:
 
 **MethodMetrics tests:**
+
 - `construction_and_accessors` — verify name, CC, LOC.
 - `is_brain_method_both_above_thresholds` — CC=30, LOC=100, thresholds
   25/80 → true.
@@ -417,12 +420,14 @@ In `common/src/brain_type_metrics/tests.rs`, add `#[rstest]` tests:
 - `is_brain_method_both_below_thresholds` — CC=5, LOC=20 → false.
 
 **`weighted_methods_count` tests:**
+
 - `empty_slice_returns_zero`
 - `single_method_returns_its_cc`
 - `multiple_methods_returns_sum`
 - `methods_with_zero_cc_contribute_nothing`
 
 **`brain_methods` tests:**
+
 - `empty_slice_returns_empty`
 - `no_qualifying_methods`
 - `one_qualifying_method`
@@ -431,6 +436,7 @@ In `common/src/brain_type_metrics/tests.rs`, add `#[rstest]` tests:
 - `method_meeting_only_loc_threshold_excluded`
 
 **ForeignReferenceSet tests:**
+
 - `empty_set_has_zero_count`
 - `distinct_references_counted`
 - `duplicate_references_deduplicated`
@@ -439,6 +445,7 @@ In `common/src/brain_type_metrics/tests.rs`, add `#[rstest]` tests:
 - `foreign_reach_count_convenience`
 
 **TypeMetricsBuilder tests:**
+
 - `empty_builder_produces_zero_metrics`
 - `builder_computes_wmc`
 - `builder_identifies_brain_methods`
