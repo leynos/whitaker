@@ -1,4 +1,24 @@
-"""Shared helper utilities for rolling-release workflow tests."""
+"""Shared helper utilities for rolling-release workflow tests.
+
+This module centralizes helpers used by workflow contract and smoke tests,
+including workflow parsing utilities, workspace metadata lookups, and `act`
+runtime execution helpers.
+
+Main utilities provided:
+- Crate-list extraction and normalization helpers for workflow/config checks.
+- Subprocess-backed helpers for Cargo metadata and `act` invocation.
+- Reusable workflow fixture paths/constants consumed by test modules.
+
+Typical usage:
+Tests import these helpers to assert workflow contracts and optionally run
+`build-lints` through `act` with deterministic matrix inputs.
+
+Examples
+--------
+>>> from tests.workflows.workflow_test_helpers import workflow_runtime_is_ready
+>>> isinstance(workflow_runtime_is_ready(), bool)
+True
+"""
 
 from __future__ import annotations
 
@@ -42,15 +62,11 @@ def _find_lint_crates_value(parsed: dict[str, object]) -> str | list[str] | None
     match jobs:
         case {"build-lints": build_lints_candidate}:
             build_lints = build_lints_candidate
-        case _:
-            build_lints = None
 
     build_lints_env = None
     match build_lints:
         case {"env": build_lints_env_candidate}:
             build_lints_env = build_lints_env_candidate
-        case _:
-            build_lints_env = None
 
     for env in (workflow_env, build_lints_env):
         match env:
@@ -86,8 +102,9 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
             parsed_dict = {}
     lint_value = _find_lint_crates_value(parsed_dict)
 
-    if lint_value is None:
-        raise AssertionError(f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration")
+    assert lint_value is not None, (
+        f"{WORKFLOW_PATH} is missing a LINT_CRATES declaration"
+    )
 
     return _normalize_lint_crates_value(lint_value)
 
@@ -113,7 +130,13 @@ def _install_components_script(workflow_text: str) -> str:
 
 
 def lint_crates_from_workflow() -> list[str]:
-    """Return lint crates declared in the rolling release workflow."""
+    """Return lint crates declared in the rolling release workflow.
+
+    Returns
+    -------
+    list[str]
+        Workflow lint crate names in declaration order.
+    """
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     lint_crates = _extract_lint_crates_from_text(workflow_text)
     assert lint_crates, "rolling-release workflow must define at least one lint crate"
@@ -121,7 +144,13 @@ def lint_crates_from_workflow() -> list[str]:
 
 
 def lint_crates_from_resolution_constants() -> list[str]:
-    """Return canonical lint crate names from installer constants."""
+    """Return canonical lint crate names from installer constants.
+
+    Returns
+    -------
+    list[str]
+        Canonical lint crate names from `LINT_CRATES` plus `SUITE_CRATE`.
+    """
     source = RESOLUTION_PATH.read_text(encoding="utf-8")
     lint_match = re.search(
         r"pub(?:\(crate\))?\s+const\s+LINT_CRATES\s*:\s*&\[\s*&str\s*\]\s*=\s*&\[(.*?)\];",
@@ -141,7 +170,13 @@ def lint_crates_from_resolution_constants() -> list[str]:
 
 
 def workspace_package_names() -> set[str]:
-    """Resolve package names from Cargo workspace metadata."""
+    """Resolve package names from Cargo workspace metadata.
+
+    Returns
+    -------
+    set[str]
+        Package names reported by `cargo metadata --no-deps`.
+    """
     completed = subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--no-deps"],
         cwd=REPO_ROOT,
@@ -159,7 +194,31 @@ def workspace_package_names() -> set[str]:
 
 
 def run_act_build_lints(*, artefact_dir: Path) -> tuple[int, str]:
-    """Run the workflow build-lints job through `act`."""
+    """Run the workflow `build-lints` job through `act`.
+
+    Parameters
+    ----------
+    artefact_dir : Path
+        Directory where `act` exports build artefacts.
+
+    Returns
+    -------
+    tuple[int, str]
+        A pair of `(return_code, logs)` containing the process exit status and
+        combined standard output/error text.
+
+    Raises
+    ------
+    AssertionError
+        Propagated when `lint_crates_from_workflow()` cannot extract
+        `LINT_CRATES`.
+    subprocess.TimeoutExpired
+        Raised if `act` does not complete within
+        `ACT_RUN_TIMEOUT_SECONDS`.
+    OSError
+        Raised when the subprocess cannot be started (for example if `act` is
+        unavailable).
+    """
     artefact_dir.mkdir(parents=True, exist_ok=True)
     lint_crates = " ".join(lint_crates_from_workflow())
     command = [
@@ -197,7 +256,14 @@ def run_act_build_lints(*, artefact_dir: Path) -> tuple[int, str]:
 
 
 def workflow_runtime_is_ready() -> bool:
-    """Return whether `act --list` can run for the workflow."""
+    """Return whether `act --list` can run for the workflow.
+
+    Returns
+    -------
+    bool
+        `True` when `act` is available and can list the workflow, otherwise
+        `False`.
+    """
     if shutil.which("act") is None:
         return False
 

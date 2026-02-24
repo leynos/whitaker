@@ -11,7 +11,7 @@ This document must be maintained in accordance with `AGENTS.md`.
 ## Purpose / big picture
 
 `whitaker-installer` currently attempts to download `manifest-<target>.json`
-from the `rolling` GitHub Release before falling back to local compilation.
+from the `rolling` GitHub Release, before falling back to local compilation.
 Right now that URL returns 404, so every install on otherwise supported targets
 takes the slow fallback path.
 
@@ -85,7 +85,7 @@ archive instead of immediately falling back to local build.
   artefact, but that does not make assets available at
   `releases/download/rolling/...`; only the `publish` job creates that release.
 - The failing step installs `rustc-dev` twice for different targets in the
-  same toolchain invocation path, and the second install conflicts on
+  same toolchain invocation path, and the second installation conflicts on
   `lib/rustlib/rustc-src/rust/Cargo.lock`.
 - `publish` is currently blocked by `needs: build-lints`, so a single matrix
   failure removes prebuilt availability for all targets.
@@ -205,8 +205,12 @@ Use `tee` logs for long output as required by AGENTS guidance.
   - `gh run view <run-id> --repo leynos/whitaker`
   - Expected: `build-lints` legs succeed and `publish` is not skipped.
 - Release availability check:
-  - `curl -fL \
-    https://github.com/leynos/whitaker/releases/download/rolling/manifest-x86_64-unknown-linux-gnu.json`
+
+  ```plaintext
+  curl -fL \
+    https://github.com/leynos/whitaker/releases/download/rolling/manifest-x86_64-unknown-linux-gnu.json
+  ```
+
   - Expected: HTTP 200 and JSON body.
 
 ## Rollback / recovery
