@@ -110,7 +110,24 @@ def _extract_lint_crates_from_text(workflow_text: str) -> list[str]:
 
 
 def install_components_script(workflow_text: str) -> str:
-    """Return the run script for the install-components workflow step."""
+    """Return the run script for the install-components workflow step.
+
+    Parameters
+    ----------
+    workflow_text : str
+        Raw YAML text for the rolling-release workflow.
+
+    Returns
+    -------
+    str
+        The shell script configured under the
+        `Install pinned toolchain components` step.
+
+    Raises
+    ------
+    AssertionError
+        Raised when the install-components run step is absent.
+    """
     yaml = YAML()
     parsed = yaml.load(workflow_text)
     match parsed:
