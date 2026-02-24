@@ -150,6 +150,29 @@ This will allow reuse in future cohesion-aware lints.
 - **No validation errors**: `cohesion_components` is infallible. All string
   inputs are valid; the function cannot fail on well-typed data.
 
+### Implementation decisions (6.1.2)
+
+- **Extraction as pure builder, not HIR visitor**: the extraction module
+  (`common/src/lcom4/extract.rs`) provides a `MethodInfoBuilder` that
+  accumulates field accesses and method calls without depending on
+  `rustc_private`. Lint drivers walk HIR bodies and feed data into the builder,
+  following the same pattern as `complexity_signal` (pure library) and
+  `bumpy_road_function` (HIR walker). This keeps the `common` crate free of
+  compiler dependencies and fully testable without a compilation context.
+- **Macro-span filtering via boolean parameter**: rather than importing
+  `rustc_span::Span` and calling `from_expansion()` inside `common`, the
+  builder's `record_field_access` and `record_method_call` methods accept an
+  `is_from_expansion: bool` parameter. The caller (the HIR walker) passes the
+  result of `expr.span.from_expansion()`. Entries where `is_from_expansion` is
+  `true` are silently discarded. This mirrors the approach in
+  `bumpy_road_function`'s `SegmentBuilder`, where `span.from_expansion()` is
+  checked before creating a `LineSegment`.
+- **Builder pattern over constructor**: `MethodInfoBuilder` uses a mutable
+  builder rather than requiring the caller to pre-compute `BTreeSet` values.
+  This is more ergonomic for HIR walkers that discover fields and calls
+  incrementally during traversal, and avoids intermediate collection
+  allocations in the caller.
+
 ## Implementation approach
 
 ### Metric collection

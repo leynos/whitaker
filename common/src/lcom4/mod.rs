@@ -302,5 +302,9 @@ pub fn cohesion_components(methods: &[MethodInfo]) -> usize {
     uf.component_count()
 }
 
+pub mod extract;
+
+pub use extract::{MethodInfoBuilder, collect_method_infos};
+
 #[cfg(test)]
 mod tests;

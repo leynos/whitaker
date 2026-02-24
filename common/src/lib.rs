@@ -28,6 +28,6 @@ pub use i18n::{
     MessageResolution, available_locales, branch_phrase, get_localizer_for_lint, noop_reporter,
     normalise_locale, resolve_localizer, safe_resolve_message_set, supports_locale,
 };
-pub use lcom4::{MethodInfo, cohesion_components};
+pub use lcom4::{MethodInfo, MethodInfoBuilder, cohesion_components, collect_method_infos};
 pub use path::SimplePath;
 pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};
