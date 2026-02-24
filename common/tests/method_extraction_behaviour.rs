@@ -27,18 +27,16 @@ impl ExtractionWorld {
 
     /// Borrows the built result, panicking if the build step was never
     /// executed (catches mis-specified scenarios missing the When step).
+    #[expect(
+        clippy::expect_used,
+        reason = "build result is required for this behaviour test"
+    )]
     fn with_result<T>(&self, f: impl FnOnce(&MethodInfo) -> T) -> T {
         let borrow = self.result.borrow();
-        assert!(
-            borrow.is_some(),
-            "result is None — did you forget the When step?"
-        );
-        // SAFETY: the assert above guarantees Some.
-        if let Some(info) = borrow.as_ref() {
-            f(info)
-        } else {
-            unreachable!()
-        }
+        let info = borrow
+            .as_ref()
+            .expect("result is None — did you forget the When step?");
+        f(info)
     }
 
     fn has_field(&self, field: &str) -> bool {

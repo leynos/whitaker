@@ -161,7 +161,7 @@ This will allow reuse in future cohesion-aware lints.
   compiler dependencies and fully testable without a compilation context.
 - **Macro-span filtering via boolean parameter**: rather than importing
   `rustc_span::Span` and calling `from_expansion()` inside `common`, the
-  builder's `record_field_access` and `record_method_call` methods accept a
+  builder's `record_field_access` and `record_method_call` methods accept an
   `is_from_expansion: bool` parameter. The caller (the HIR walker) passes the
   result of `expr.span.from_expansion()`. Entries where `is_from_expansion` is
   `true` are silently discarded. This mirrors the approach in
