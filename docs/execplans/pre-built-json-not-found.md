@@ -180,9 +180,12 @@ blocking, document the decision, and add tests accordingly.
 
 Use `tee` logs for long output as required by AGENTS guidance.
 
-- `python3 -m pytest tests/workflows/test_rolling_release_workflow.py \
-  | tee /tmp/test-workflow-whitaker-$(git branch --show).out` |
-  - Expected: tests pass, including new contract assertions.
+- Local workflow test command:
+
+      python3 -m pytest tests/workflows/test_rolling_release_workflow.py \
+        | tee /tmp/test-workflow-whitaker-$(git branch --show).out
+
+  Expected: tests pass, including new contract assertions.
 - GitHub run inspection:
   - `gh run view <run-id> --repo leynos/whitaker`
   - Expected: `build-lints` legs succeed and `publish` is not skipped.
