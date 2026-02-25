@@ -26,6 +26,7 @@ import shlex
 from pathlib import Path
 
 import pytest
+from ruamel.yaml import YAML
 
 from tests.workflows.workflow_test_helpers import (
     WORKFLOW_PATH,
@@ -120,6 +121,35 @@ def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
     ), (
         "rustc-dev install command must include llvm-tools-preview in the same "
         "command"
+    )
+    rust_src_commands = [
+        command for command in parsed_commands if "rust-src" in command
+    ]
+    assert not rust_src_commands, (
+        "install step must not install rust-src because it conflicts with "
+        "targeted rustc-dev payloads on some runners"
+    )
+
+
+def test_publish_job_runs_even_if_build_lints_fails() -> None:
+    """Ensure publish job still runs when some build-lints matrix legs fail."""
+    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    parsed = YAML().load(workflow_text)
+    assert isinstance(parsed, dict), (
+        "rolling-release workflow must parse to a mapping"
+    )
+
+    jobs = parsed.get("jobs")
+    assert isinstance(jobs, dict), "rolling-release workflow must declare jobs"
+    publish_job = jobs.get("publish")
+    assert isinstance(publish_job, dict), (
+        "rolling-release workflow must declare publish job"
+    )
+    assert publish_job.get("needs") == "build-lints", (
+        "publish job must depend on build-lints outputs"
+    )
+    assert publish_job.get("if") == "${{ always() }}", (
+        "publish job must run even when build-lints has failing matrix legs"
     )
 
 

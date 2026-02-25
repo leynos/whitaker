@@ -72,9 +72,8 @@ jobs:
           set -euxo pipefail
           TOOLCHAIN="${{ steps.toolchain.outputs.channel }}"
           rustup target add --toolchain "${TOOLCHAIN}" "${{ matrix.target }}"
-          rustup component add --toolchain "${TOOLCHAIN}" rust-src
-          # rustup cannot install rustc-dev for two targets in one toolchain
-          # because both payloads include rustc-src files.
+          # rustc-dev payloads already include rustc-src files and can conflict
+          # with a separate rust-src install on some targets.
           rustup component add --toolchain "${TOOLCHAIN}" --target "${{ matrix.target }}" rustc-dev llvm-tools-preview
 
       - name: Build lint crates
@@ -134,6 +133,7 @@ jobs:
           retention-days: 1
 
   publish:
+    if: ${{ always() }}
     needs: build-lints
     runs-on: ubuntu-latest
     permissions:
@@ -152,22 +152,43 @@ jobs:
       - name: List artefacts
         run: ls -lh dist/
 
+      - name: Check whether release assets are available
+        id: assets
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          assets=(dist/*.tar.zst dist/manifest-*.json)
+          if [[ "${#assets[@]}" -eq 0 ]]; then
+            echo "has_assets=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s\n' "${assets[@]}" > dist/release-assets.txt
+          echo "has_assets=true" >> "$GITHUB_OUTPUT"
+
       - name: Delete existing rolling release
+        if: steps.assets.outputs.has_assets == 'true'
         run: gh release delete rolling --cleanup-tag --yes || true
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create rolling release
+        if: steps.assets.outputs.has_assets == 'true'
         run: |
           set -euxo pipefail
           SHA=$(git rev-parse --short HEAD)
           FULL_SHA=$(git rev-parse HEAD)
+          mapfile -t RELEASE_ASSETS < dist/release-assets.txt
           gh release create rolling \
             --title "Rolling Release (${SHA})" \
             --notes "Prebuilt lint libraries from commit ${FULL_SHA}." \
             --prerelease \
             --latest=false \
-            dist/*.tar.zst \
-            dist/manifest-*.json
+            "${RELEASE_ASSETS[@]}"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Skip release publish when no assets were built
+        if: steps.assets.outputs.has_assets != 'true'
+        run: |
+          echo "No rolling-release assets were produced by build-lints."
+          echo "Skipping release publication."
