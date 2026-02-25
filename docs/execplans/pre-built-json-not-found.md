@@ -12,8 +12,8 @@ This document must be maintained in accordance with `AGENTS.md`.
 
 `whitaker-installer` currently attempts to download `manifest-<target>.json`
 from the `rolling` GitHub Release, before falling back to local compilation.
-Right now, that URL returns 404, so every install on otherwise supported targets
-takes the slow fallback path.
+Right now, that URL returns 404, so every install on otherwise supported
+targets takes the slow fallback path.
 
 After this work, a successful rolling-release run will always publish a
 `rolling` release that includes `manifest-<target>.json` and matching
