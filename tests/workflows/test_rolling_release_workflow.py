@@ -146,11 +146,15 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
         "rolling-release workflow must declare publish job"
     )
     needs = publish_job.get("needs")
-    if isinstance(needs, str):
-        needs = [needs]
-    assert isinstance(needs, list) and "build-lints" in needs, (
-        "publish job must depend on build-lints"
-    )
+    match needs:
+        case str():
+            needs_list = [needs]
+        case list():
+            needs_list = needs
+        case _:
+            assert False, "publish job needs must be a string or list"
+
+    assert "build-lints" in needs_list, "publish job must depend on build-lints"
     assert publish_job.get("if") == "${{ always() }}", (
         "publish job must run even when build-lints has failing matrix legs"
     )
