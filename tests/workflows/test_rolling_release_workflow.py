@@ -134,7 +134,7 @@ def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
 def test_publish_job_runs_even_if_build_lints_fails() -> None:
     """Ensure publish job still runs when some build-lints matrix legs fail."""
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-    parsed = YAML().load(workflow_text)
+    parsed = YAML(typ="safe").load(workflow_text)
     assert isinstance(parsed, dict), (
         "rolling-release workflow must parse to a mapping"
     )
@@ -145,11 +145,32 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
     assert isinstance(publish_job, dict), (
         "rolling-release workflow must declare publish job"
     )
-    assert publish_job.get("needs") == "build-lints", (
-        "publish job must depend on build-lints outputs"
+    needs = publish_job.get("needs")
+    if isinstance(needs, str):
+        needs = [needs]
+    assert isinstance(needs, list) and "build-lints" in needs, (
+        "publish job must depend on build-lints"
     )
     assert publish_job.get("if") == "${{ always() }}", (
         "publish job must run even when build-lints has failing matrix legs"
+    )
+
+    steps = publish_job.get("steps")
+    assert isinstance(steps, list), "publish job must declare steps"
+    download_step = next(
+        (
+            step
+            for step in steps
+            if isinstance(step, dict) and step.get("name") == "Download all artefacts"
+        ),
+        None,
+    )
+    assert isinstance(download_step, dict), (
+        "publish job must download build artefacts before publish checks"
+    )
+    assert download_step.get("continue-on-error") is True, (
+        "download step must continue on error so zero-artefact runs can fall "
+        "through to has_assets=false"
     )
 
 
