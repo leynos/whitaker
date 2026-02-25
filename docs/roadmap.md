@@ -150,7 +150,7 @@
 
 ### 6.2. `brain_type` lint
 
-- [ ] 6.2.1. Implement metric collection for WMC (cognitive complexity), brain
+- [x] 6.2.1. Implement metric collection for WMC (cognitive complexity), brain
   method detection (CC + LOC), LCOM4, and foreign reach. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_type`
   signals. Requires 6.1.1.

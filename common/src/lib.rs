@@ -1,8 +1,9 @@
 //! Shared lint infrastructure providing attribute helpers, context tracking,
-//! path, expression, span, diagnostic, and cohesion analysis utilities for
-//! Whitaker lints.
+//! path, expression, span, diagnostic, cohesion analysis, and brain type
+//! metric collection utilities for Whitaker lints.
 
 pub mod attributes;
+pub mod brain_type_metrics;
 pub mod complexity_signal;
 pub mod context;
 pub mod diagnostics;
@@ -16,6 +17,10 @@ pub mod test_support;
 pub use attributes::{
     Attribute, AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER, has_test_like_attribute,
     has_test_like_attribute_with, outer_attributes, split_doc_attributes,
+};
+pub use brain_type_metrics::{
+    ForeignReferenceSet, MethodMetrics, TypeMetrics, TypeMetricsBuilder, brain_methods,
+    foreign_reach_count, weighted_methods_count,
 };
 pub use context::{
     ContextEntry, ContextKind, in_test_like_context, in_test_like_context_with, is_in_main_fn,
