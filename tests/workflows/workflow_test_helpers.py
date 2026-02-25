@@ -197,7 +197,7 @@ def workspace_package_names() -> set[str]:
     set[str]
         Package names reported by `cargo metadata --no-deps`.
     """
-    completed = subprocess.run(
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
         ["cargo", "metadata", "--format-version", "1", "--no-deps"],
         cwd=REPO_ROOT,
         check=False,
@@ -263,7 +263,7 @@ def run_act_build_lints(*, artefact_dir: Path) -> tuple[int, str]:
         "--env",
         f"LINT_CRATES={lint_crates}",
     ]
-    completed = subprocess.run(
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
         command,
         cwd=REPO_ROOT,
         check=False,
@@ -287,7 +287,7 @@ def workflow_runtime_is_ready() -> bool:
     if shutil.which("act") is None:
         return False
 
-    completed = subprocess.run(
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
         [
             "act",
             "workflow_dispatch",

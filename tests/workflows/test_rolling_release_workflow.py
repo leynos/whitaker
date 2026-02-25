@@ -90,7 +90,12 @@ def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
         for line in run_script.splitlines()
         if line.strip().startswith("rustup component add")
     ]
-    parsed_commands = [shlex.split(line) for line in install_lines]
+    parsed_commands = []
+    for line in install_lines:
+        cleaned_line = line.rstrip()
+        if cleaned_line.endswith("\\"):
+            cleaned_line = cleaned_line[:-1].rstrip()
+        parsed_commands.append(shlex.split(cleaned_line))
 
     rustc_dev_commands = [
         command for command in parsed_commands if "rustc-dev" in command
