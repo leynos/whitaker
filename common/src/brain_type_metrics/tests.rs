@@ -131,15 +131,14 @@ fn brain_methods_multiple_qualifying_in_order() {
 }
 
 #[rstest]
-fn brain_methods_only_cc_threshold_met_excluded() {
-    let methods = vec![MethodMetrics::new("complex_short", 30, 40)];
-    let result = brain_methods(&methods, 25, 80);
-    assert!(result.is_empty());
-}
-
-#[rstest]
-fn brain_methods_only_loc_threshold_met_excluded() {
-    let methods = vec![MethodMetrics::new("simple_long", 10, 100)];
+#[case("complex_short", 30, 40)]
+#[case("simple_long", 10, 100)]
+fn brain_methods_single_threshold_match_excluded(
+    #[case] method_name: &str,
+    #[case] cc: usize,
+    #[case] loc: usize,
+) {
+    let methods = vec![MethodMetrics::new(method_name, cc, loc)];
     let result = brain_methods(&methods, 25, 80);
     assert!(result.is_empty());
 }

@@ -36,8 +36,7 @@ After this change:
    construction for lint drivers.
 7. Unit tests (`#[rstest]`) cover happy, unhappy, and edge cases.
 8. Behaviour-driven development (BDD) tests (`rstest-bdd` v0.5.0) in
-   Gherkin scenarios cover the metric
-   collection contract.
+   Gherkin scenarios cover the metric collection contract.
 9. `docs/brain-trust-lints-design.md` records implementation decisions for
    6.2.1.
 10. `docs/roadmap.md` marks 6.2.1 as done.
@@ -75,20 +74,19 @@ After this change:
 
 - Risk: `TypeMetricsBuilder` API may prove insufficient when the lint driver
   (6.2.2) implements HIR walking (e.g., needing per-method `MethodInfo` and
-  `MethodMetrics` in the same pass).
-  Severity: medium. Likelihood: low (builder is additive).
-  Mitigation: keep builder API additive; new setters can be added later.
+  `MethodMetrics` in the same pass). Severity: medium. Likelihood: low (builder
+  is additive). Mitigation: keep builder API additive; new setters can be added
+  later.
 
 - Risk: `ForeignReferenceSet` path representation may not match what the HIR
-  walker produces (e.g., `DefPath` vs module path strings).
-  Severity: low. Likelihood: medium.
-  Mitigation: use plain `String` and document that the HIR walker converts to
-  a string representation before recording.
+  walker produces (e.g., `DefPath` vs module path strings). Severity: low.
+  Likelihood: medium. Mitigation: use plain `String` and document that the HIR
+  walker converts to a string representation before recording.
 
 - Risk: The tests file exceeds 400 lines.
-  Severity: low. Likelihood: medium.
-  Mitigation: split into `tests.rs` and `tests/foreign_reach_tests.rs` or
-  move BDD coverage to the integration test harness.
+  Severity: low. Likelihood: medium. Mitigation: split into `tests.rs` and
+  `tests/foreign_reach_tests.rs` or move BDD coverage to the integration test
+  harness.
 
 ## Progress
 
@@ -120,42 +118,41 @@ After this change:
 ## Decision log
 
 - Decision: create a new `brain_type_metrics` module rather than extending
-  `complexity_signal`.
-  Rationale: `complexity_signal` provides per-line signal rasterization and
-  smoothing for the bumpy road lint. Brain type metrics operate at the
-  per-method aggregate level — a fundamentally different abstraction. Keeping
-  them separate maintains single responsibility.
+  `complexity_signal`. Rationale: `complexity_signal` provides per-line signal
+  rasterization and smoothing for the bumpy road lint. Brain type metrics
+  operate at the per-method aggregate level — a fundamentally different
+  abstraction. Keeping them separate maintains single responsibility.
   Date/Author: 2026-02-24 / DevBoxer.
 
 - Decision: `MethodMetrics` stores pre-computed `cognitive_complexity: usize`
-  rather than computing CC from source.
-  Rationale: the `common` crate has no `rustc_private` dependencies. The actual
-  CC computation from HIR happens in the lint driver (6.2.2), which passes the
-  pre-computed value into `MethodMetrics`. This follows the same pattern as
-  `MethodInfoBuilder` (pure library stores and aggregates; HIR walker produces).
-  Date/Author: 2026-02-24 / DevBoxer.
+  rather than computing CC from source. Rationale: the `common` crate has no
+  `rustc_private` dependencies. The actual CC computation from HIR happens in
+  the lint driver (6.2.2), which passes the pre-computed value into
+  `MethodMetrics`. This follows the same pattern as `MethodInfoBuilder` (pure
+  library stores and aggregates; HIR walker produces). Date/Author: 2026-02-24
+  / DevBoxer.
 
 - Decision: use a builder pattern (`TypeMetricsBuilder`) for aggregate metrics.
   Rationale: follows the `MethodInfoBuilder` pattern from 6.1.2. The lint
   driver discovers methods incrementally during HIR traversal and can call
   `add_method()` for each. Brain method thresholds are provided at construction
-  time so the builder identifies brain methods during `build()`.
-  Date/Author: 2026-02-24 / DevBoxer.
+  time so the builder identifies brain methods during `build()`. Date/Author:
+  2026-02-24 / DevBoxer.
 
 - Decision: `ForeignReferenceSet` uses `is_from_expansion: bool` parameter
-  for macro filtering.
-  Rationale: mirrors the pattern in `MethodInfoBuilder.record_field_access()`
-  and `MethodInfoBuilder.record_method_call()`. The HIR walker calls
-  `record_reference(&path_string, span.from_expansion())`.
-  Date/Author: 2026-02-24 / DevBoxer.
+  for macro filtering. Rationale: mirrors the pattern in
+  `MethodInfoBuilder.record_field_access()` and
+  `MethodInfoBuilder.record_method_call()`. The HIR walker calls
+  `record_reference(&path_string, span.from_expansion())`. Date/Author:
+  2026-02-24 / DevBoxer.
 
 - Decision: remove `TypeMetrics::new()` public constructor; use
-  `TypeMetricsBuilder` as the sole construction path.
-  Rationale: Clippy's `too_many_arguments` lint (workspace limit 4) rejected
-  `TypeMetrics::new()` with 6 parameters. The builder already existed and is
-  the natural entry point for lint drivers that discover methods incrementally.
-  Removing the direct constructor enforces correct usage patterns.
-  Date/Author: 2026-02-24 / DevBoxer.
+  `TypeMetricsBuilder` as the sole construction path. Rationale: Clippy's
+  `too_many_arguments` lint (workspace limit 4) rejected `TypeMetrics::new()`
+  with 6 parameters. The builder already existed and is the natural entry point
+  for lint drivers that discover methods incrementally. Removing the direct
+  constructor enforces correct usage patterns. Date/Author: 2026-02-24 /
+  DevBoxer.
 
 ## Outcomes & retrospective
 
@@ -173,7 +170,7 @@ All 11 acceptance criteria met:
 6. `TypeMetricsBuilder` for incremental construction (sole construction path
    after removing `TypeMetrics::new()`).
 7. 32 rstest unit tests covering happy, unhappy, and edge cases.
-8. 9 BDD scenarios in Gherkin with rstest-bdd v0.5.0 harness.
+8. 10 BDD scenarios in Gherkin with rstest-bdd v0.5.0 harness.
 9. Design decisions recorded in `docs/brain-trust-lints-design.md`.
 10. `docs/roadmap.md` marks 6.2.1 as `[x]`.
 11. `make check-fmt`, `make lint`, and `make test` all pass.
@@ -183,7 +180,7 @@ All 11 acceptance criteria met:
 - Files created: 5 (mod.rs, foreign_reach.rs, tests.rs, feature file,
   behaviour harness).
 - Files modified: 3 (lib.rs, brain-trust-lints-design.md, roadmap.md).
-- New test count: 41 (32 unit + 9 BDD).
+- New test count: 42 (32 unit + 10 BDD).
 - All files under 400 lines.
 - No new external dependencies.
 - Quality gate iterations: 2 (first for formatting, second for Clippy
@@ -192,11 +189,11 @@ All 11 acceptance criteria met:
 ### Lessons
 
 - The workspace enforces Clippy's `too_many_arguments` at a limit of 4.
-  Future structs with more than 4 fields should use builders as the sole
-  public construction path from the start.
+  Future structs with more than 4 fields should use builders as the sole public
+  construction path from the start.
 - The `MethodInfoBuilder` pattern from 6.1.2 translated cleanly to
-  `TypeMetricsBuilder`. This confirms the builder-per-aggregate pattern
-  works well for incremental construction during HIR traversal.
+  `TypeMetricsBuilder`. This confirms the builder-per-aggregate pattern works
+  well for incremental construction during HIR traversal.
 
 ## Context and orientation
 
@@ -226,11 +223,11 @@ BDD tests for the LCOM4 module live at:
 ### Existing helpers to reuse
 
 - `common::lcom4::cohesion_components(&[MethodInfo]) -> usize` — LCOM4
-  computation. The lint driver in 6.2.2 will call this and pass the result
-  into `TypeMetricsBuilder::set_lcom4()`.
+  computation. The lint driver in 6.2.2 will call this and pass the result into
+  `TypeMetricsBuilder::set_lcom4()`.
 - `common::span::span_line_count(SourceSpan) -> usize` — LOC from span.
-  The lint driver will use rustc's `SourceMap` to get line counts and pass
-  them into `MethodMetrics`.
+  The lint driver will use rustc's `SourceMap` to get line counts and pass them
+  into `MethodMetrics`.
 
 ### Design specification
 
@@ -253,8 +250,8 @@ The closest analogue is the LCOM4 extraction layer (6.1.2):
 - **Pure library**: `common/src/lcom4/extract.rs` provides `MethodInfoBuilder`
   with `is_from_expansion` filtering, `build()`, and `collect_method_infos()`.
 - **Integration test**: `common/tests/lcom4_behaviour.rs` uses a `LcomWorld`
-  struct with `RefCell<Vec<MethodInfo>>` and `Cell<Option<usize>>`, step macros,
-  and indexed scenario bindings.
+  struct with `RefCell<Vec<MethodInfo>>` and `Cell<Option<usize>>`, step
+  macros, and indexed scenario bindings.
 - **Feature file**: `common/tests/features/lcom4.feature` uses natural-language
   step text without quoted values.
 
@@ -325,8 +322,8 @@ In `common/src/brain_type_metrics/foreign_reach.rs`:
 Methods:
 
 - `new() -> Self` — empty set.
-- `record_reference(&mut self, path: &str, is_from_expansion: bool)` — inserts
-  path unless `is_from_expansion` is true.
+- `record_reference(&mut self, path: impl Into<String>,
+  is_from_expansion: bool)` — inserts path unless `is_from_expansion` is true.
 - `count(&self) -> usize` — distinct reference count.
 - `is_empty(&self) -> bool`.
 - `references(&self) -> &BTreeSet<String>` — for diagnostic display.
@@ -468,9 +465,10 @@ Acceptance: `cargo test -p common` passes all new tests.
 7. Type metrics aggregate all signals
 8. Foreign references are deduplicated
 9. Macro-expanded foreign references are filtered
+10. Foreign reach convenience function counts correctly
 
-Step text uses unquoted natural-language style (no quoted values, no commas
-in placeholders) following the pattern in `lcom4.feature`:
+Step text uses unquoted natural-language style (no quoted values, no commas in
+placeholders) following the pattern in `lcom4.feature`:
 
 - `Given a method called {name} with CC {cc} and LOC {loc}`
 - `And the brain method CC threshold is {threshold}`
@@ -496,14 +494,13 @@ in placeholders) following the pattern in `lcom4.feature`:
 `lcom4_behaviour.rs` pattern:
 
 - `MetricsWorld` struct with `RefCell<Vec<MethodMetrics>>`,
-  `Cell<Option<usize>>` for WMC, `RefCell<Vec<String>>` for brain method
-  names, `Cell<usize>` for CC/LOC thresholds, `Cell<Option<usize>>` for
-  LCOM4 and foreign reach, `RefCell<ForeignReferenceSet>` for foreign
-  refs.
+  `Cell<Option<usize>>` for WMC, `RefCell<Vec<String>>` for brain method names,
+  `Cell<usize>` for CC/LOC thresholds, `Cell<Option<usize>>` for LCOM4 and
+  foreign reach, `RefCell<ForeignReferenceSet>` for foreign refs.
 - `#[fixture] fn world() -> MetricsWorld`
 - Step definitions for each step text.
 - `#[scenario(path = "tests/features/brain_type_metrics.feature", index = N)]`
-  bindings for each scenario (indices 0..8).
+  bindings for each scenario (indices 0..9).
 
 Acceptance: `cargo test -p common` passes all BDD scenarios.
 
@@ -574,8 +571,8 @@ Stage F: Create feature file and behaviour harness. Verify:
 
     cargo test -p common
 
-Stage G: Update `docs/brain-trust-lints-design.md`. Verify markdown if
-tooling available.
+Stage G: Update `docs/brain-trust-lints-design.md`. Verify markdown if tooling
+available.
 
 Stage H:
 
@@ -678,7 +675,7 @@ In `common/src/brain_type_metrics/foreign_reach.rs`:
 
     impl ForeignReferenceSet {
         pub fn new() -> Self;
-        pub fn record_reference(&mut self, path: &str,
+        pub fn record_reference(&mut self, path: impl Into<String>,
                                 is_from_expansion: bool);
         pub fn count(&self) -> usize;
         pub fn is_empty(&self) -> bool;
@@ -710,18 +707,18 @@ The lint driver for `brain_type` (6.2.2) will:
 
 **Files to create (5):**
 
-| File | Purpose | Est. lines |
-|------|---------|-----------|
-| `common/src/brain_type_metrics/mod.rs` | `MethodMetrics`, `TypeMetrics`, `TypeMetricsBuilder`, WMC, brain method detection | ~250 |
-| `common/src/brain_type_metrics/foreign_reach.rs` | `ForeignReferenceSet`, `foreign_reach_count` | ~120 |
-| `common/src/brain_type_metrics/tests.rs` | rstest unit tests for all functions | ~300 |
-| `common/tests/features/brain_type_metrics.feature` | Gherkin BDD scenarios | ~80 |
-| `common/tests/brain_type_metrics_behaviour.rs` | BDD step definitions and scenario bindings | ~200 |
+| File                                               | Purpose                                                                           | Est. lines |
+| -------------------------------------------------- | --------------------------------------------------------------------------------- | ---------- |
+| `common/src/brain_type_metrics/mod.rs`             | `MethodMetrics`, `TypeMetrics`, `TypeMetricsBuilder`, WMC, brain method detection | ~250       |
+| `common/src/brain_type_metrics/foreign_reach.rs`   | `ForeignReferenceSet`, `foreign_reach_count`                                      | ~120       |
+| `common/src/brain_type_metrics/tests.rs`           | rstest unit tests for all functions                                               | ~300       |
+| `common/tests/features/brain_type_metrics.feature` | Gherkin BDD scenarios                                                             | ~80        |
+| `common/tests/brain_type_metrics_behaviour.rs`     | BDD step definitions and scenario bindings                                        | ~200       |
 
 **Files to modify (3):**
 
-| File | Change |
-|------|--------|
-| `common/src/lib.rs` | Add `pub mod brain_type_metrics;` and re-exports |
-| `docs/brain-trust-lints-design.md` | Append §Implementation decisions (6.2.1) |
-| `docs/roadmap.md` | Mark 6.2.1 as `[x]` |
+| File                               | Change                                           |
+| ---------------------------------- | ------------------------------------------------ |
+| `common/src/lib.rs`                | Add `pub mod brain_type_metrics;` and re-exports |
+| `docs/brain-trust-lints-design.md` | Append §Implementation decisions (6.2.1)         |
+| `docs/roadmap.md`                  | Mark 6.2.1 as `[x]`                              |
