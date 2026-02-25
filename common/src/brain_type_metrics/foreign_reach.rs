@@ -72,9 +72,9 @@ impl ForeignReferenceSet {
     ///
     /// assert_eq!(refs.count(), 1);
     /// ```
-    pub fn record_reference(&mut self, path: &str, is_from_expansion: bool) {
+    pub fn record_reference(&mut self, path: impl Into<String>, is_from_expansion: bool) {
         if !is_from_expansion {
-            self.references.insert(path.to_owned());
+            self.references.insert(path.into());
         }
     }
 
@@ -150,7 +150,7 @@ impl ForeignReferenceSet {
 pub fn foreign_reach_count(references: impl IntoIterator<Item = (String, bool)>) -> usize {
     let mut set = ForeignReferenceSet::new();
     for (path, from_expansion) in references {
-        set.record_reference(&path, from_expansion);
+        set.record_reference(path, from_expansion);
     }
     set.count()
 }

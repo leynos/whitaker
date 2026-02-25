@@ -6,8 +6,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 
 Status: DONE
 
-This document must be maintained in accordance with `AGENTS.md`. On approval,
-copy this plan to `docs/execplans/6-2-1-implement-metric-collection-for-wmc.md`.
+This document must be maintained in accordance with `AGENTS.md`.
 
 ## Purpose / big picture
 
@@ -23,7 +22,7 @@ provides pure library types and functions in `common/` for:
    `common/src/lcom4/mod.rs` — this task provides the aggregate struct that
    carries the LCOM4 value alongside other metrics.
 4. **Foreign reach**: count distinct external modules or types referenced by a
-   type's methods (ATFD analogue).
+   type's methods (Access to Foreign Data (ATFD) analogue).
 
 After this change:
 
@@ -36,7 +35,8 @@ After this change:
 6. `common::brain_type_metrics::TypeMetricsBuilder` provides incremental
    construction for lint drivers.
 7. Unit tests (`#[rstest]`) cover happy, unhappy, and edge cases.
-8. BDD tests (`rstest-bdd` v0.5.0) in Gherkin scenarios cover the metric
+8. Behaviour-driven development (BDD) tests (`rstest-bdd` v0.5.0) in
+   Gherkin scenarios cover the metric
    collection contract.
 9. `docs/brain-trust-lints-design.md` records implementation decisions for
    6.2.1.
@@ -115,13 +115,13 @@ After this change:
   entry point for lint drivers.
 
 - The `tests.rs` file stayed comfortably under 400 lines (~300 lines for
-  32 unit tests), so the risk of needing to split tests did not materialise.
+  32 unit tests), so the risk of needing to split tests did not materialize.
 
 ## Decision log
 
 - Decision: create a new `brain_type_metrics` module rather than extending
   `complexity_signal`.
-  Rationale: `complexity_signal` provides per-line signal rasterisation and
+  Rationale: `complexity_signal` provides per-line signal rasterization and
   smoothing for the bumpy road lint. Brain type metrics operate at the
   per-method aggregate level — a fundamentally different abstraction. Keeping
   them separate maintains single responsibility.
@@ -236,10 +236,10 @@ BDD tests for the LCOM4 module live at:
 
 From `docs/brain-trust-lints-design.md` §`brain_type` signals (lines 75–89):
 
-- **WMC**: sum CC of all methods in the type. Default warn threshold 60.
+- **WMC**: sum CC of all methods in the type. Default warning threshold 60.
 - **Brain method**: CC >= 25 AND LOC >= 80 (both configurable).
 - **LCOM4**: connected components >= 2 indicates low cohesion.
-- **Foreign reach**: count distinct external modules/types. Default warn 10.
+- **Foreign reach**: count distinct external modules/types. Default warning 10.
 
 From §`brain_type` rule set (lines 91–98), for 6.2.2 context:
 
@@ -479,10 +479,10 @@ in placeholders) following the pattern in `lcom4.feature`:
 - `And the foreign reach is {count}`
 - `And a foreign reference to {path}`
 - `And a foreign reference to {path} from expansion`
-- `When I compute WMC`
-- `When I identify brain methods`
-- `When I build type metrics for {name}`
-- `When I compute foreign reach`
+- `When WMC is computed`
+- `When brain methods are identified`
+- `When type metrics are built for {name}`
+- `When foreign reach is computed`
 - `Then the WMC is {value}`
 - `Then {name} is a brain method`
 - `Then there are no brain methods`
@@ -514,7 +514,7 @@ Append a `### Implementation decisions (6.2.1)` section to
 
 1. New `brain_type_metrics` module — separate from `complexity_signal` because
    per-method aggregate metrics are a different abstraction from per-line
-   signal rasterisation.
+   signal rasterization.
 2. `MethodMetrics` stores pre-computed CC and LOC — actual CC computation from
    HIR happens in the lint driver (6.2.2).
 3. `TypeMetricsBuilder` follows the `MethodInfoBuilder` pattern for incremental

@@ -1,7 +1,8 @@
 //! Behaviour-driven coverage for brain type metric collection.
 
 use common::brain_type_metrics::{
-    ForeignReferenceSet, MethodMetrics, TypeMetricsBuilder, brain_methods, weighted_methods_count,
+    ForeignReferenceSet, MethodMetrics, TypeMetricsBuilder, brain_methods, foreign_reach_count,
+    weighted_methods_count,
 };
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -17,6 +18,7 @@ struct MetricsWorld {
     wmc_result: Cell<Option<usize>>,
     brain_method_names: RefCell<Vec<String>>,
     foreign_refs: RefCell<ForeignReferenceSet>,
+    raw_foreign_pairs: RefCell<Vec<(String, bool)>>,
     foreign_reach_result: Cell<Option<usize>>,
     type_metrics_wmc: Cell<Option<usize>>,
     type_metrics_brain_count: Cell<Option<usize>>,
@@ -35,6 +37,7 @@ impl Default for MetricsWorld {
             wmc_result: Cell::new(None),
             brain_method_names: RefCell::new(Vec::new()),
             foreign_refs: RefCell::new(ForeignReferenceSet::new()),
+            raw_foreign_pairs: RefCell::new(Vec::new()),
             foreign_reach_result: Cell::new(None),
             type_metrics_wmc: Cell::new(None),
             type_metrics_brain_count: Cell::new(None),
@@ -47,6 +50,23 @@ impl Default for MetricsWorld {
 #[fixture]
 fn world() -> MetricsWorld {
     MetricsWorld::default()
+}
+
+// --- Helpers ---
+
+fn record_foreign_ref(world: &MetricsWorld, path: &str, is_from_expansion: bool) {
+    world
+        .foreign_refs
+        .borrow_mut()
+        .record_reference(path, is_from_expansion);
+    world
+        .raw_foreign_pairs
+        .borrow_mut()
+        .push((path.to_owned(), is_from_expansion));
+}
+
+fn assert_brain_count(world: &MetricsWorld, n: usize) {
+    assert_eq!(world.type_metrics_brain_count.get(), Some(n));
 }
 
 // --- Given steps ---
@@ -81,37 +101,28 @@ fn given_foreign_reach_count(world: &MetricsWorld, count: usize) {
 
 #[given("a foreign reference to {path}")]
 fn given_foreign_ref(world: &MetricsWorld, path: String) {
-    world
-        .foreign_refs
-        .borrow_mut()
-        .record_reference(&path, false);
+    record_foreign_ref(world, &path, false);
 }
 
 #[given("a foreign reference to {path} from expansion")]
 fn given_foreign_ref_expanded(world: &MetricsWorld, path: String) {
-    world
-        .foreign_refs
-        .borrow_mut()
-        .record_reference(&path, true);
+    record_foreign_ref(world, &path, true);
 }
 
 #[given("a foreign reference to {path} not from expansion")]
 fn given_foreign_ref_not_expanded(world: &MetricsWorld, path: String) {
-    world
-        .foreign_refs
-        .borrow_mut()
-        .record_reference(&path, false);
+    record_foreign_ref(world, &path, false);
 }
 
 // --- When steps ---
 
-#[when("I compute WMC")]
+#[when("WMC is computed")]
 fn when_compute_wmc(world: &MetricsWorld) {
     let methods = world.methods.borrow();
     world.wmc_result.set(Some(weighted_methods_count(&methods)));
 }
 
-#[when("I identify brain methods")]
+#[when("brain methods are identified")]
 fn when_identify_brain_methods(world: &MetricsWorld) {
     let methods = world.methods.borrow();
     let brains = brain_methods(
@@ -122,7 +133,7 @@ fn when_identify_brain_methods(world: &MetricsWorld) {
     *world.brain_method_names.borrow_mut() = brains.iter().map(|m| m.name().to_owned()).collect();
 }
 
-#[when("I build type metrics for {name}")]
+#[when("type metrics are built for {name}")]
 fn when_build_type_metrics(world: &MetricsWorld, name: String) {
     let mut builder =
         TypeMetricsBuilder::new(name, world.cc_threshold.get(), world.loc_threshold.get());
@@ -146,10 +157,18 @@ fn when_build_type_metrics(world: &MetricsWorld, name: String) {
         .set(Some(metrics.foreign_reach()));
 }
 
-#[when("I compute foreign reach")]
+#[when("foreign reach is computed")]
 fn when_compute_foreign_reach(world: &MetricsWorld) {
     let refs = world.foreign_refs.borrow();
     world.foreign_reach_result.set(Some(refs.count()));
+}
+
+#[when("foreign reach is computed using the convenience function")]
+fn when_compute_foreign_reach_convenience(world: &MetricsWorld) {
+    let pairs = world.raw_foreign_pairs.borrow().clone();
+    world
+        .foreign_reach_result
+        .set(Some(foreign_reach_count(pairs)));
 }
 
 // --- Then steps ---
@@ -184,12 +203,12 @@ fn then_type_wmc(world: &MetricsWorld, value: usize) {
 
 #[then("the type has {n} brain method")]
 fn then_type_brain_count_singular(world: &MetricsWorld, n: usize) {
-    assert_eq!(world.type_metrics_brain_count.get(), Some(n));
+    assert_brain_count(world, n);
 }
 
 #[then("the type has {n} brain methods")]
 fn then_type_brain_count_plural(world: &MetricsWorld, n: usize) {
-    assert_eq!(world.type_metrics_brain_count.get(), Some(n));
+    assert_brain_count(world, n);
 }
 
 #[then("the type LCOM4 is {value}")]
@@ -254,5 +273,10 @@ fn scenario_foreign_refs_deduplicated(world: MetricsWorld) {
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 8)]
 fn scenario_macro_expanded_foreign_filtered(world: MetricsWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/brain_type_metrics.feature", index = 9)]
+fn scenario_foreign_reach_convenience(world: MetricsWorld) {
     let _ = world;
 }

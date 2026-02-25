@@ -178,7 +178,7 @@ This will allow reuse in future cohesion-aware lints.
 - **Separate `brain_type_metrics` module**: metric collection for brain type
   detection lives in `common/src/brain_type_metrics/` rather than extending the
   `complexity_signal` module. The `complexity_signal` module provides per-line
-  signal rasterisation and smoothing for the bumpy road lint, whereas brain
+  signal rasterization and smoothing for the bumpy road lint, whereas brain
   type metrics operate at the per-method aggregate level — a fundamentally
   different abstraction. Keeping them separate maintains single responsibility.
 - **`MethodMetrics` stores pre-computed values**: `MethodMetrics` carries

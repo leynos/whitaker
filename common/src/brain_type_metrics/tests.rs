@@ -1,5 +1,4 @@
 //! Unit tests for brain type metric collection.
-#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use super::*;
 use rstest::rstest;
