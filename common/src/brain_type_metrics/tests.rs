@@ -16,39 +16,24 @@ fn construction_and_accessors() {
 }
 
 #[rstest]
-fn is_brain_method_both_above_thresholds() {
-    let m = MethodMetrics::new("parse", 30, 100);
-    assert!(m.is_brain_method(25, 80));
-}
-
-#[rstest]
-fn is_brain_method_at_exact_thresholds() {
-    let m = MethodMetrics::new("parse", 25, 80);
-    assert!(m.is_brain_method(25, 80));
-}
-
-#[rstest]
-fn is_brain_method_cc_below_threshold() {
-    let m = MethodMetrics::new("helper", 20, 100);
-    assert!(!m.is_brain_method(25, 80));
-}
-
-#[rstest]
-fn is_brain_method_loc_below_threshold() {
-    let m = MethodMetrics::new("complex_but_short", 30, 40);
-    assert!(!m.is_brain_method(25, 80));
-}
-
-#[rstest]
-fn is_brain_method_both_below_thresholds() {
-    let m = MethodMetrics::new("tiny", 5, 20);
-    assert!(!m.is_brain_method(25, 80));
-}
-
-#[rstest]
-fn is_brain_method_zero_thresholds() {
-    let m = MethodMetrics::new("any", 0, 0);
-    assert!(m.is_brain_method(0, 0));
+#[case(("parse", 30, 100, 25, 80, true))]
+#[case(("parse", 25, 80, 25, 80, true))]
+#[case(("helper", 20, 100, 25, 80, false))]
+#[case(("complex_but_short", 30, 40, 25, 80, false))]
+#[case(("tiny", 5, 20, 25, 80, false))]
+#[case(("any", 0, 0, 0, 0, true))]
+fn is_brain_method_threshold_cases(
+    #[case] (name, cc, loc, cc_threshold, loc_threshold, expected): (
+        &str,
+        usize,
+        usize,
+        usize,
+        usize,
+        bool,
+    ),
+) {
+    let m = MethodMetrics::new(name, cc, loc);
+    assert_eq!(m.is_brain_method(cc_threshold, loc_threshold), expected);
 }
 
 // ---------------------------------------------------------------------------
