@@ -152,7 +152,7 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
         case list():
             needs_list = needs
         case _:
-            assert False, "publish job needs must be a string or list"
+            pytest.fail("publish job needs must be a string or list")
 
     assert "build-lints" in needs_list, "publish job must depend on build-lints"
     assert publish_job.get("if") == "${{ always() }}", (
