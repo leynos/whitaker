@@ -22,6 +22,7 @@ Run the `act` smoke test:
 from __future__ import annotations
 
 import os
+import shlex
 from pathlib import Path
 
 import pytest
@@ -83,47 +84,37 @@ def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
     """Ensure install step avoids conflicting dual-target rustc-dev installs."""
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     run_script = install_components_script(workflow_text)
-
-    expected_matrix_install = (
-        '--target "${{ matrix.target }}" rustc-dev llvm-tools-preview'
-    )
-    assert (
-        expected_matrix_install in run_script
-    ), "install step must install rustc-dev for matrix target"
-    assert (
-        '--target "${HOST_TARGET}" rustc-dev llvm-tools-preview' not in run_script
-    ), "install step should not install rustc-dev for HOST_TARGET"
-    assert (
-        'if [ "${HOST_TARGET}" != "${{ matrix.target }}" ];' not in run_script
-    ), "install step should not conditionally install a second rustc-dev target"
-
-    rustc_dev_install_lines = [
-        line
-        for line in run_script.splitlines()
-        if "rustup component add" in line and "rustc-dev" in line
-    ]
-    assert (
-        len(rustc_dev_install_lines) == 1
-    ), "install step must contain exactly one rustc-dev rustup install line"
-
-    matrix_target_install_lines = [
-        line for line in rustc_dev_install_lines if expected_matrix_install in line
-    ]
-    assert (
-        len(matrix_target_install_lines) == 1
-    ), "the single rustc-dev install line must target the matrix target"
-
+    expected_target = "${{ matrix.target }}"
     install_lines = [
-        line for line in run_script.splitlines() if "rustup component add" in line
+        line.strip()
+        for line in run_script.splitlines()
+        if line.strip().startswith("rustup component add")
     ]
-    llvm_tools_occurrences = sum(
-        "llvm-tools-preview" in line for line in install_lines
+    parsed_commands = [shlex.split(line) for line in install_lines]
+
+    rustc_dev_commands = [
+        command for command in parsed_commands if "rustc-dev" in command
+    ]
+    assert (
+        len(rustc_dev_commands) == 1
+    ), "install step must contain exactly one rustc-dev rustup install command"
+
+    rustc_dev_command = rustc_dev_commands[0]
+    assert "--target" in rustc_dev_command, (
+        "rustc-dev install command must include --target"
+    )
+    target_flag_index = rustc_dev_command.index("--target")
+    assert target_flag_index + 1 < len(rustc_dev_command), (
+        "rustc-dev install command must include a target value"
     )
     assert (
-        llvm_tools_occurrences == 1
+        rustc_dev_command[target_flag_index + 1] == expected_target
+    ), "rustc-dev install command must target the matrix target"
+    assert (
+        "llvm-tools-preview" in rustc_dev_command
     ), (
-        "'llvm-tools-preview' must appear exactly once in install script, "
-        f"found {llvm_tools_occurrences}"
+        "rustc-dev install command must include llvm-tools-preview in the same "
+        "command"
     )
 
 

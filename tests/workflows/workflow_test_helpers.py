@@ -130,18 +130,23 @@ def install_components_script(workflow_text: str) -> str:
     """
     yaml = YAML()
     parsed = yaml.load(workflow_text)
+    run_script: str | None = None
     match parsed:
         case {"jobs": {"build-lints": {"steps": list() as steps}}}:
             for step in steps:
                 match step:
                     case {
                         "name": "Install pinned toolchain components",
-                        "run": str() as run_script,
+                        "run": str() as candidate_script,
                     }:
-                        return run_script
+                        run_script = candidate_script
+                        break
         case _:
             pass
-    assert False, "rolling-release workflow is missing the install-components run step"  # noqa: B011
+    assert run_script is not None, (
+        "rolling-release workflow is missing the install-components run step"
+    )
+    return run_script
 
 
 def lint_crates_from_workflow() -> list[str]:

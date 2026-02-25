@@ -184,6 +184,7 @@ Run validation in this order:
   https://github.com/leynos/whitaker/releases/download/rolling/
   manifest-x86_64-unknown-linux-gnu.json
   ```
+
 - [ ] 3.5 Verify installer prebuilt path no longer immediately falls back on
   Linux x86_64.
 
