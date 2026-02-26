@@ -40,12 +40,32 @@ fn build_metrics(name: &str, target_wmc: usize, brain_count: usize, lcom4: usize
 // ---------------------------------------------------------------------------
 
 #[rstest]
-fn default_thresholds_match_design_spec() {
+fn default_wmc_warn_threshold() {
     let t = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(t.wmc_warn(), 60);
+}
+
+#[rstest]
+fn default_wmc_deny_threshold() {
+    let t = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(t.wmc_deny(), 100);
+}
+
+#[rstest]
+fn default_lcom4_warn_threshold() {
+    let t = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(t.lcom4_warn(), 2);
+}
+
+#[rstest]
+fn default_lcom4_deny_threshold() {
+    let t = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(t.lcom4_deny(), 3);
+}
+
+#[rstest]
+fn default_brain_method_deny_count_threshold() {
+    let t = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(t.brain_method_deny_count(), 2);
 }
 
@@ -62,7 +82,7 @@ fn builder_overrides_individual_fields() {
 }
 
 #[rstest]
-fn builder_chaining_produces_correct_thresholds() {
+fn builder_chaining_sets_wmc_warn() {
     let t = BrainTypeThresholdsBuilder::new()
         .wmc_warn(40)
         .wmc_deny(80)
@@ -71,9 +91,53 @@ fn builder_chaining_produces_correct_thresholds() {
         .brain_method_deny_count(3)
         .build();
     assert_eq!(t.wmc_warn(), 40);
+}
+
+#[rstest]
+fn builder_chaining_sets_wmc_deny() {
+    let t = BrainTypeThresholdsBuilder::new()
+        .wmc_warn(40)
+        .wmc_deny(80)
+        .lcom4_warn(3)
+        .lcom4_deny(5)
+        .brain_method_deny_count(3)
+        .build();
     assert_eq!(t.wmc_deny(), 80);
+}
+
+#[rstest]
+fn builder_chaining_sets_lcom4_warn() {
+    let t = BrainTypeThresholdsBuilder::new()
+        .wmc_warn(40)
+        .wmc_deny(80)
+        .lcom4_warn(3)
+        .lcom4_deny(5)
+        .brain_method_deny_count(3)
+        .build();
     assert_eq!(t.lcom4_warn(), 3);
+}
+
+#[rstest]
+fn builder_chaining_sets_lcom4_deny() {
+    let t = BrainTypeThresholdsBuilder::new()
+        .wmc_warn(40)
+        .wmc_deny(80)
+        .lcom4_warn(3)
+        .lcom4_deny(5)
+        .brain_method_deny_count(3)
+        .build();
     assert_eq!(t.lcom4_deny(), 5);
+}
+
+#[rstest]
+fn builder_chaining_sets_brain_method_deny_count() {
+    let t = BrainTypeThresholdsBuilder::new()
+        .wmc_warn(40)
+        .wmc_deny(80)
+        .lcom4_warn(3)
+        .lcom4_deny(5)
+        .brain_method_deny_count(3)
+        .build();
     assert_eq!(t.brain_method_deny_count(), 3);
 }
 
@@ -181,42 +245,102 @@ fn custom_deny_thresholds() {
 // Diagnostic — primary message
 // ---------------------------------------------------------------------------
 
-#[rstest]
-fn primary_message_with_one_brain_method() {
+/// Builds a diagnostic message for a type with one brain method (`parse_all`,
+/// CC=31, LOC=140) and a non-brain helper (CC=5, LOC=20), LCOM4=3.
+fn one_brain_method_message() -> String {
     let mut builder = TypeMetricsBuilder::new("Foo", 25, 80);
     builder.add_method("parse_all", 31, 140);
     builder.add_method("helper", 5, 20);
     builder.set_lcom4(3);
     let metrics = builder.build();
     let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn);
-    let msg = format_primary_message(&diag);
+    format_primary_message(&diag)
+}
 
+#[rstest]
+fn one_brain_method_message_contains_type_name() {
+    let msg = one_brain_method_message();
     assert!(msg.contains("`Foo`"), "should contain type name");
+}
+
+#[rstest]
+fn one_brain_method_message_contains_wmc() {
+    let msg = one_brain_method_message();
     assert!(msg.contains("WMC=36"), "should contain WMC value");
+}
+
+#[rstest]
+fn one_brain_method_message_contains_lcom4() {
+    let msg = one_brain_method_message();
     assert!(msg.contains("LCOM4=3"), "should contain LCOM4 value");
+}
+
+#[rstest]
+fn one_brain_method_message_contains_method_name() {
+    let msg = one_brain_method_message();
     assert!(
         msg.contains("`parse_all`"),
         "should contain brain method name"
     );
-    assert!(msg.contains("CC=31"), "should contain brain method CC");
-    assert!(msg.contains("LOC=140"), "should contain brain method LOC");
-    assert!(msg.contains("a brain method"), "should use singular form");
 }
 
 #[rstest]
-fn primary_message_with_multiple_brain_methods() {
+fn one_brain_method_message_contains_cc() {
+    let msg = one_brain_method_message();
+    assert!(msg.contains("CC=31"), "should contain brain method CC");
+}
+
+#[rstest]
+fn one_brain_method_message_contains_loc() {
+    let msg = one_brain_method_message();
+    assert!(msg.contains("LOC=140"), "should contain brain method LOC");
+}
+
+#[rstest]
+fn one_brain_method_message_uses_singular_form() {
+    let msg = one_brain_method_message();
+    assert!(msg.contains("a brain method"), "should use singular form");
+}
+
+/// Builds a diagnostic message for a type with two brain methods (`parse`
+/// CC=30, LOC=100 and `render` CC=40, LOC=200), LCOM4=2.
+fn multiple_brain_methods_message() -> String {
     let mut builder = TypeMetricsBuilder::new("Bar", 25, 80);
     builder.add_method("parse", 30, 100);
     builder.add_method("render", 40, 200);
     builder.set_lcom4(2);
     let metrics = builder.build();
     let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Deny);
-    let msg = format_primary_message(&diag);
+    format_primary_message(&diag)
+}
 
+#[rstest]
+fn multiple_brain_methods_message_uses_plural_form() {
+    let msg = multiple_brain_methods_message();
     assert!(msg.contains("2 brain methods"), "should use plural form");
+}
+
+#[rstest]
+fn multiple_brain_methods_message_lists_first_method() {
+    let msg = multiple_brain_methods_message();
     assert!(msg.contains("`parse`"), "should list first brain method");
+}
+
+#[rstest]
+fn multiple_brain_methods_message_lists_second_method() {
+    let msg = multiple_brain_methods_message();
     assert!(msg.contains("`render`"), "should list second brain method");
+}
+
+#[rstest]
+fn multiple_brain_methods_message_contains_first_cc() {
+    let msg = multiple_brain_methods_message();
     assert!(msg.contains("CC=30"), "should contain first method CC");
+}
+
+#[rstest]
+fn multiple_brain_methods_message_contains_second_loc() {
+    let msg = multiple_brain_methods_message();
     assert!(msg.contains("LOC=200"), "should contain second method LOC");
 }
 
@@ -289,20 +413,55 @@ fn help_suggests_decomposition() {
 // Diagnostic — accessors
 // ---------------------------------------------------------------------------
 
-#[rstest]
-fn diagnostic_accessors() {
+/// Builds a diagnostic for accessor tests: type "Qux" with one brain method
+/// "big" (CC=30, LOC=100), LCOM4=2, foreign reach=7.
+fn accessor_diagnostic() -> BrainTypeDiagnostic {
     let mut builder = TypeMetricsBuilder::new("Qux", 25, 80);
     builder.add_method("big", 30, 100);
     builder.set_lcom4(2);
     builder.set_foreign_reach(7);
     let metrics = builder.build();
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn);
+    BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn)
+}
 
+#[rstest]
+fn diagnostic_type_name_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.type_name(), "Qux");
+}
+
+#[rstest]
+fn diagnostic_disposition_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.disposition(), BrainTypeDisposition::Warn);
+}
+
+#[rstest]
+fn diagnostic_wmc_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.wmc(), 30);
+}
+
+#[rstest]
+fn diagnostic_lcom4_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.lcom4(), 2);
+}
+
+#[rstest]
+fn diagnostic_foreign_reach_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.foreign_reach(), 7);
+}
+
+#[rstest]
+fn diagnostic_brain_methods_count_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.brain_methods().len(), 1);
+}
+
+#[rstest]
+fn diagnostic_brain_methods_name_accessor() {
+    let diag = accessor_diagnostic();
     assert_eq!(diag.brain_methods()[0].name(), "big");
 }

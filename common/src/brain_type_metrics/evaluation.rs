@@ -237,24 +237,32 @@ impl Default for BrainTypeThresholdsBuilder {
 ///     common::brain_type_metrics::evaluation::BrainTypeDisposition::Pass,
 /// );
 /// ```
+/// Returns `true` when any single deny condition holds (OR-based).
+fn is_deny_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) -> bool {
+    metrics.wmc() >= thresholds.wmc_deny
+        || metrics.brain_method_count() >= thresholds.brain_method_deny_count
+        || metrics.lcom4() >= thresholds.lcom4_deny
+}
+
+/// Returns `true` when all warn conditions hold simultaneously (AND-based).
+fn is_warn_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) -> bool {
+    metrics.wmc() >= thresholds.wmc_warn
+        && metrics.brain_method_count() >= 1
+        && metrics.lcom4() >= thresholds.lcom4_warn
+}
+
 #[must_use]
 pub fn evaluate_brain_type(
     metrics: &TypeMetrics,
     thresholds: &BrainTypeThresholds,
 ) -> BrainTypeDisposition {
     // Deny is OR-based: any single trigger fires deny.
-    if metrics.wmc() >= thresholds.wmc_deny
-        || metrics.brain_method_count() >= thresholds.brain_method_deny_count
-        || metrics.lcom4() >= thresholds.lcom4_deny
-    {
+    if is_deny_triggered(metrics, thresholds) {
         return BrainTypeDisposition::Deny;
     }
 
     // Warn is AND-based: all conditions must hold.
-    if metrics.wmc() >= thresholds.wmc_warn
-        && metrics.brain_method_count() >= 1
-        && metrics.lcom4() >= thresholds.lcom4_warn
-    {
+    if is_warn_triggered(metrics, thresholds) {
         return BrainTypeDisposition::Warn;
     }
 
