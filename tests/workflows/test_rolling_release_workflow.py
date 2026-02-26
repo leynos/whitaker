@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import shlex
 from pathlib import Path
+from typing import Any, Mapping, Optional, Union
 
 import pytest
 from ruamel.yaml import YAML
@@ -131,7 +132,8 @@ def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
     )
 
 
-def _load_workflow_mapping(yaml_text: str) -> dict:
+def _load_workflow_mapping(yaml_text: str) -> dict[str, object]:
+    """Load YAML text and return workflow mapping."""
     parsed = YAML(typ="safe").load(yaml_text)
     match parsed:
         case dict() as workflow_mapping:
@@ -140,7 +142,8 @@ def _load_workflow_mapping(yaml_text: str) -> dict:
             pytest.fail("rolling-release workflow must parse to a mapping")
 
 
-def _get_job_dict(jobs: dict, job_name: str) -> dict:
+def _get_job_dict(jobs: Mapping[str, dict[str, Any]], job_name: str) -> dict[str, Any]:
+    """Return the requested job mapping from the jobs map."""
     match jobs.get(job_name):
         case dict() as job_dict:
             return job_dict
@@ -150,8 +153,9 @@ def _get_job_dict(jobs: dict, job_name: str) -> dict:
             pytest.fail(f"rolling-release workflow must declare {job_name} job")
 
 
-def _get_needs_list(publish_job: dict) -> list:
-    needs = publish_job.get("needs")
+def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:
+    """Return publish job dependency names as a list."""
+    needs: Optional[Union[str, list[str]]] = publish_job.get("needs")
     match needs:
         case str():
             return [needs]
@@ -161,7 +165,8 @@ def _get_needs_list(publish_job: dict) -> list:
             pytest.fail("publish job needs must be a string or list")
 
 
-def _find_step_by_name(steps: object, name: str) -> dict | None:
+def _find_step_by_name(steps: object, name: str) -> dict[str, object] | None:
+    """Find a step dict by its name."""
     match steps:
         case list():
             pass
