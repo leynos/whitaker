@@ -19,6 +19,8 @@ pub const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
 
 /// Output marker indicating successful library staging.
 const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
+/// Output marker indicating successful prebuilt installation.
+const PREBUILT_OUTPUT_MARKER: &str = "Prebuilt libraries installed successfully.";
 
 /// Output marker indicating successful toolchain installation.
 const TOOLCHAIN_INSTALLED_MARKER: &str = "installed successfully";
@@ -319,9 +321,11 @@ pub fn then_suite_library_is_staged(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_local_staging_marker = stderr.contains(STAGING_OUTPUT_MARKER);
+    let has_prebuilt_staging_marker = stderr.contains(PREBUILT_OUTPUT_MARKER);
     assert!(
-        stderr.contains(STAGING_OUTPUT_MARKER),
-        "expected '{STAGING_OUTPUT_MARKER}' in staging output, stderr: {stderr}"
+        has_local_staging_marker || has_prebuilt_staging_marker,
+        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_OUTPUT_MARKER}' in staging output, stderr: {stderr}"
     );
 }
 

@@ -3,9 +3,14 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
+use camino::Utf8Path;
 use camino::Utf8PathBuf;
+use std::collections::HashSet;
+use std::fs;
+use std::io;
 use std::io::Write;
 use std::time::Duration;
+use whitaker_installer::builder::{library_extension, library_prefix};
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::dirs::BaseDirs;
@@ -14,6 +19,7 @@ use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_ins
 use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
+use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
 
 /// Context needed to attempt prebuilt installation.
 pub(crate) struct PrebuiltInstallationContext<'a> {
@@ -93,7 +99,70 @@ pub(crate) fn try_prebuilt_installation(
     else {
         return Ok(None);
     };
+    prune_prebuilt_libraries(
+        &staging_path,
+        context.toolchain_channel,
+        context.requested_crates,
+    )?;
     Ok(Some(staging_path))
+}
+
+fn requested_crate_names(requested_crates: &[CrateName]) -> HashSet<&str> {
+    if requested_crates.is_empty() {
+        return HashSet::from([SUITE_CRATE]);
+    }
+    requested_crates.iter().map(CrateName::as_str).collect()
+}
+
+fn staged_library_filename(crate_name: &str, toolchain_channel: &str) -> String {
+    let normalized = crate_name.replace('-', "_");
+    format!(
+        "{}{}@{}{}",
+        library_prefix(),
+        normalized,
+        toolchain_channel,
+        library_extension()
+    )
+}
+
+/// Remove staged prebuilt libraries that were not requested for this install.
+///
+/// Prebuilt archives can contain both suite and constituent crates, while local
+/// builds stage only requested crates. Pruning keeps prebuilt installs aligned
+/// with local-build behaviour and avoids duplicate lint registration when the
+/// wrapper runs `cargo dylint --all`.
+fn prune_prebuilt_libraries(
+    staging_path: &Utf8Path,
+    toolchain_channel: &str,
+    requested_crates: &[CrateName],
+) -> Result<()> {
+    let requested = requested_crate_names(requested_crates);
+    let known_crates = LINT_CRATES
+        .iter()
+        .copied()
+        .chain(EXPERIMENTAL_LINT_CRATES.iter().copied())
+        .chain(std::iter::once(SUITE_CRATE));
+
+    for crate_name in known_crates {
+        if requested.contains(crate_name) {
+            continue;
+        }
+
+        let stale_path = staging_path.join(staged_library_filename(crate_name, toolchain_channel));
+        match fs::remove_file(stale_path.as_std_path()) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(InstallerError::StagingFailed {
+                    reason: format!(
+                        "failed to remove stale prebuilt library {stale_path}: {error}"
+                    ),
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Detect the host target triple by parsing `rustc -vV` output.
@@ -153,4 +222,71 @@ fn write_metrics_summary(quiet: bool, record_outcome: &RecordOutcome, stderr: &m
         );
     }
     write_stderr_line(stderr, record_outcome.metrics().summary_line());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+
+    fn create_staged_library(
+        staging_path: &Utf8Path,
+        crate_name: &str,
+        toolchain: &str,
+    ) -> Utf8PathBuf {
+        let library_path = staging_path.join(staged_library_filename(crate_name, toolchain));
+        fs::write(library_path.as_std_path(), b"fake prebuilt library")
+            .expect("test setup should write staged library");
+        library_path
+    }
+
+    #[test]
+    fn prune_prebuilt_libraries_keeps_suite_request_only() {
+        let temp_dir = tempfile::tempdir().expect("tempdir should be available");
+        let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+            .expect("tempdir path should be utf-8");
+        fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
+        let toolchain = "nightly-2025-09-18";
+
+        let suite_path = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+        let lint_path = create_staged_library(&staging_path, "module_max_lines", toolchain);
+        let foreign_path = staging_path.join("libforeign_lint@nightly-2025-09-18.so");
+        fs::write(foreign_path.as_std_path(), b"foreign library")
+            .expect("test setup should write foreign library");
+
+        let requested = vec![CrateName::from(SUITE_CRATE)];
+        prune_prebuilt_libraries(&staging_path, toolchain, &requested)
+            .expect("pruning should succeed");
+
+        assert!(suite_path.exists(), "suite library should remain");
+        assert!(!lint_path.exists(), "non-requested lint should be removed");
+        assert!(
+            foreign_path.exists(),
+            "non-whitaker libraries should remain untouched"
+        );
+    }
+
+    #[test]
+    fn prune_prebuilt_libraries_keeps_requested_individual_lints() {
+        let temp_dir = tempfile::tempdir().expect("tempdir should be available");
+        let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+            .expect("tempdir path should be utf-8");
+        fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
+        let toolchain = "nightly-2025-09-18";
+
+        let suite_path = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
+        let requested_path = create_staged_library(&staging_path, "module_max_lines", toolchain);
+        let stale_path = create_staged_library(&staging_path, "no_expect_outside_tests", toolchain);
+
+        let requested = vec![CrateName::from("module_max_lines")];
+        prune_prebuilt_libraries(&staging_path, toolchain, &requested)
+            .expect("pruning should succeed");
+
+        assert!(!suite_path.exists(), "suite should be removed");
+        assert!(requested_path.exists(), "requested lint should remain");
+        assert!(
+            !stale_path.exists(),
+            "other individual lints should be removed"
+        );
+    }
 }
