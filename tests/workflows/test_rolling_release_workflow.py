@@ -135,16 +135,22 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
     """Ensure publish job still runs when some build-lints matrix legs fail."""
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     parsed = YAML(typ="safe").load(workflow_text)
-    assert isinstance(parsed, dict), (
-        "rolling-release workflow must parse to a mapping"
-    )
+    match parsed:
+        case dict():
+            pass
+        case _:
+            raise AssertionError("rolling-release workflow must parse to a mapping")
 
-    jobs = parsed.get("jobs")
-    assert isinstance(jobs, dict), "rolling-release workflow must declare jobs"
-    publish_job = jobs.get("publish")
-    assert isinstance(publish_job, dict), (
-        "rolling-release workflow must declare publish job"
-    )
+    match parsed.get("jobs"):
+        case dict() as jobs:
+            pass
+        case _:
+            raise AssertionError("rolling-release workflow must declare jobs")
+    match jobs.get("publish"):
+        case dict() as publish_job:
+            pass
+        case _:
+            raise AssertionError("rolling-release workflow must declare publish job")
     needs = publish_job.get("needs")
     match needs:
         case str():
@@ -160,7 +166,11 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
     )
 
     steps = publish_job.get("steps")
-    assert isinstance(steps, list), "publish job must declare steps"
+    match steps:
+        case list():
+            pass
+        case _:
+            raise AssertionError("publish job must declare steps")
     download_step = next(
         (
             step
@@ -169,9 +179,13 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
         ),
         None,
     )
-    assert isinstance(download_step, dict), (
-        "publish job must download build artefacts before publish checks"
-    )
+    match download_step:
+        case dict():
+            pass
+        case _:
+            raise AssertionError(
+                "publish job must download build artefacts before publish checks"
+            )
     assert download_step.get("continue-on-error") is True, (
         "download step must continue on error so zero-artefact runs can fall "
         "through to has_assets=false"
