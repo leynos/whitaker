@@ -139,18 +139,18 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
         case dict():
             pass
         case _:
-            raise AssertionError("rolling-release workflow must parse to a mapping")
+            pytest.fail("rolling-release workflow must parse to a mapping")
 
     match parsed.get("jobs"):
         case dict() as jobs:
             pass
         case _:
-            raise AssertionError("rolling-release workflow must declare jobs")
+            pytest.fail("rolling-release workflow must declare jobs")
     match jobs.get("publish"):
         case dict() as publish_job:
             pass
         case _:
-            raise AssertionError("rolling-release workflow must declare publish job")
+            pytest.fail("rolling-release workflow must declare publish job")
     needs = publish_job.get("needs")
     match needs:
         case str():
@@ -170,20 +170,22 @@ def test_publish_job_runs_even_if_build_lints_fails() -> None:
         case list():
             pass
         case _:
-            raise AssertionError("publish job must declare steps")
-    download_step = next(
-        (
-            step
-            for step in steps
-            if isinstance(step, dict) and step.get("name") == "Download all artefacts"
-        ),
-        None,
-    )
+            pytest.fail("publish job must declare steps")
+
+    download_step = None
+    for step in steps:
+        match step:
+            case {"name": "Download all artefacts"}:
+                download_step = step
+                break
+            case _:
+                continue
+
     match download_step:
         case dict():
             pass
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "publish job must download build artefacts before publish checks"
             )
     assert download_step.get("continue-on-error") is True, (
