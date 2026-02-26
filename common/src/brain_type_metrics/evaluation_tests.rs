@@ -82,7 +82,12 @@ fn builder_overrides_individual_fields() {
 }
 
 #[rstest]
-fn builder_chaining_sets_wmc_warn() {
+#[case("wmc_warn", 40)]
+#[case("wmc_deny", 80)]
+#[case("lcom4_warn", 3)]
+#[case("lcom4_deny", 5)]
+#[case("brain_method_deny_count", 3)]
+fn builder_chaining_sets_field(#[case] field: &str, #[case] expected: usize) {
     let t = BrainTypeThresholdsBuilder::new()
         .wmc_warn(40)
         .wmc_deny(80)
@@ -90,55 +95,17 @@ fn builder_chaining_sets_wmc_warn() {
         .lcom4_deny(5)
         .brain_method_deny_count(3)
         .build();
-    assert_eq!(t.wmc_warn(), 40);
-}
 
-#[rstest]
-fn builder_chaining_sets_wmc_deny() {
-    let t = BrainTypeThresholdsBuilder::new()
-        .wmc_warn(40)
-        .wmc_deny(80)
-        .lcom4_warn(3)
-        .lcom4_deny(5)
-        .brain_method_deny_count(3)
-        .build();
-    assert_eq!(t.wmc_deny(), 80);
-}
+    let actual = match field {
+        "wmc_warn" => t.wmc_warn(),
+        "wmc_deny" => t.wmc_deny(),
+        "lcom4_warn" => t.lcom4_warn(),
+        "lcom4_deny" => t.lcom4_deny(),
+        "brain_method_deny_count" => t.brain_method_deny_count(),
+        _ => panic!("Unknown field: {field}"),
+    };
 
-#[rstest]
-fn builder_chaining_sets_lcom4_warn() {
-    let t = BrainTypeThresholdsBuilder::new()
-        .wmc_warn(40)
-        .wmc_deny(80)
-        .lcom4_warn(3)
-        .lcom4_deny(5)
-        .brain_method_deny_count(3)
-        .build();
-    assert_eq!(t.lcom4_warn(), 3);
-}
-
-#[rstest]
-fn builder_chaining_sets_lcom4_deny() {
-    let t = BrainTypeThresholdsBuilder::new()
-        .wmc_warn(40)
-        .wmc_deny(80)
-        .lcom4_warn(3)
-        .lcom4_deny(5)
-        .brain_method_deny_count(3)
-        .build();
-    assert_eq!(t.lcom4_deny(), 5);
-}
-
-#[rstest]
-fn builder_chaining_sets_brain_method_deny_count() {
-    let t = BrainTypeThresholdsBuilder::new()
-        .wmc_warn(40)
-        .wmc_deny(80)
-        .lcom4_warn(3)
-        .lcom4_deny(5)
-        .brain_method_deny_count(3)
-        .build();
-    assert_eq!(t.brain_method_deny_count(), 3);
+    assert_eq!(actual, expected);
 }
 
 #[rstest]
