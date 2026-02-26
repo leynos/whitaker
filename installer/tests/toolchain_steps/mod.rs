@@ -9,6 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
+use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use super::support::{
     is_toolchain_installed, is_toolchain_installed_in_env, pinned_toolchain_channel,
     setup_isolated_rustup, workspace_root,
@@ -19,8 +20,6 @@ pub const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
 
 /// Output marker indicating successful library staging.
 const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
-/// Output marker indicating successful prebuilt installation.
-const PREBUILT_OUTPUT_MARKER: &str = "Prebuilt libraries installed successfully.";
 
 /// Output marker indicating successful toolchain installation.
 const TOOLCHAIN_INSTALLED_MARKER: &str = "installed successfully";
@@ -322,10 +321,10 @@ pub fn then_suite_library_is_staged(world: &ToolchainWorld) {
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let has_local_staging_marker = stderr.contains(STAGING_OUTPUT_MARKER);
-    let has_prebuilt_staging_marker = stderr.contains(PREBUILT_OUTPUT_MARKER);
+    let has_prebuilt_staging_marker = stderr.contains(PREBUILT_INSTALL_MARKER);
     assert!(
         has_local_staging_marker || has_prebuilt_staging_marker,
-        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_OUTPUT_MARKER}' in staging output, stderr: {stderr}"
+        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_INSTALL_MARKER}' in staging output, stderr: {stderr}"
     );
 }
 

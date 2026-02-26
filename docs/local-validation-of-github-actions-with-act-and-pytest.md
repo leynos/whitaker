@@ -174,14 +174,14 @@ def test_workflow_produces_expected_artefact_and_logs(tmp_path: Path) -> None:
 `tests/workflows/test_release_workflow.py` applies the pattern above to
 `.github/workflows/release.yml`. The test:
 
-- synthesises a `workflow_dispatch` event fixture,
+- synthesizes a `workflow_dispatch` event fixture,
 - invokes `act workflow_dispatch` against the real release workflow,
 - captures the JSON logs (`act --json`), and
 - asserts that a ZIP artefact is built and logged exactly once.
 
 Because the test launches containers, it requires the same Podman/Docker setup
 described in the prerequisites. The harness skips automatically when the
-runtime or socket is unavailable, but to _run_ it you must opt in:
+runtime or socket is unavailable, but running it must be explicitly opted into:
 
 ```bash
 # Inside a sandbox where podman requires sudo:

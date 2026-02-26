@@ -9,6 +9,7 @@
 //!   environment (RUSTUP_HOME/CARGO_HOME set to temp directories)
 //! - Failure scenarios that test error handling with a non-existent toolchain
 
+mod prebuilt_markers;
 mod support;
 mod toolchain_steps;
 

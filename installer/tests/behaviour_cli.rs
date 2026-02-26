@@ -3,6 +3,9 @@
 //! These scenarios invoke the installer binary and validate dry-run output,
 //! error handling, and (when possible) installation results.
 
+mod prebuilt_markers;
+
+use prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
@@ -12,9 +15,6 @@ use tempfile::TempDir;
 use whitaker_installer::dirs::SystemBaseDirs;
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::toolchain::parse_toolchain_channel;
-
-/// Output marker emitted when a prebuilt install succeeds.
-const PREBUILT_INSTALL_MARKER: &str = "Prebuilt libraries installed successfully.";
 
 #[derive(Default)]
 struct CliWorld {
@@ -309,10 +309,14 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");
 
     let staging_dir = if stderr.contains(PREBUILT_INSTALL_MARKER) {
-        PathBuf::from(
-            expected_prebuilt_target_dir(channel)
-                .unwrap_or_else(|| temp_dir.path().to_string_lossy().into_owned()),
-        )
+        PathBuf::from(expected_prebuilt_target_dir(channel).unwrap_or_else(|| {
+            temp_dir
+                .path()
+                .join(channel)
+                .join("release")
+                .display()
+                .to_string()
+        }))
     } else {
         temp_dir.path().join(channel).join("release")
     };

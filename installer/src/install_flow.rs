@@ -99,11 +99,14 @@ pub(crate) fn try_prebuilt_installation(
     else {
         return Ok(None);
     };
-    prune_prebuilt_libraries(
+    if let Err(error) = prune_prebuilt_libraries(
         &staging_path,
         context.toolchain_channel,
         context.requested_crates,
-    )?;
+    ) {
+        write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
+        return Ok(None);
+    }
     Ok(Some(staging_path))
 }
 
@@ -228,6 +231,26 @@ fn write_metrics_summary(quiet: bool, record_outcome: &RecordOutcome, stderr: &m
 mod tests {
     use super::*;
     use camino::Utf8PathBuf;
+    use rstest::{fixture, rstest};
+
+    struct StagingFixture {
+        _temp_dir: tempfile::TempDir,
+        staging_path: Utf8PathBuf,
+        toolchain: &'static str,
+    }
+
+    #[fixture]
+    fn staging_fixture() -> StagingFixture {
+        let temp_dir = tempfile::tempdir().expect("tempdir should be available");
+        let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+            .expect("tempdir path should be utf-8");
+        fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
+        StagingFixture {
+            _temp_dir: temp_dir,
+            staging_path,
+            toolchain: "nightly-2025-09-18",
+        }
+    }
 
     fn create_staged_library(
         staging_path: &Utf8Path,
@@ -240,53 +263,67 @@ mod tests {
         library_path
     }
 
-    #[test]
-    fn prune_prebuilt_libraries_keeps_suite_request_only() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should be available");
-        let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-            .expect("tempdir path should be utf-8");
-        fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
-        let toolchain = "nightly-2025-09-18";
+    #[rstest]
+    #[case::suite_only(
+        &[SUITE_CRATE],
+        &[SUITE_CRATE],
+        &["module_max_lines", "no_expect_outside_tests"]
+    )]
+    #[case::individual_only(
+        &["module_max_lines"],
+        &["module_max_lines"],
+        &[SUITE_CRATE, "no_expect_outside_tests"]
+    )]
+    fn prune_prebuilt_libraries_keeps_only_requested_crates(
+        staging_fixture: StagingFixture,
+        #[case] requested: &[&str],
+        #[case] retained: &[&str],
+        #[case] removed: &[&str],
+    ) {
+        let StagingFixture {
+            _temp_dir: _,
+            staging_path,
+            toolchain,
+        } = staging_fixture;
 
-        let suite_path = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
-        let lint_path = create_staged_library(&staging_path, "module_max_lines", toolchain);
         let foreign_path = staging_path.join("libforeign_lint@nightly-2025-09-18.so");
         fs::write(foreign_path.as_std_path(), b"foreign library")
             .expect("test setup should write foreign library");
 
-        let requested = vec![CrateName::from(SUITE_CRATE)];
-        prune_prebuilt_libraries(&staging_path, toolchain, &requested)
+        let mut staged = Vec::new();
+        for crate_name in retained.iter().chain(removed.iter()) {
+            let path = create_staged_library(&staging_path, crate_name, toolchain);
+            staged.push(((*crate_name).to_owned(), path));
+        }
+
+        let requested_crates: Vec<CrateName> = requested
+            .iter()
+            .map(|name| CrateName::from(*name))
+            .collect();
+        prune_prebuilt_libraries(&staging_path, toolchain, &requested_crates)
             .expect("pruning should succeed");
 
-        assert!(suite_path.exists(), "suite library should remain");
-        assert!(!lint_path.exists(), "non-requested lint should be removed");
+        for crate_name in retained {
+            let path = staged
+                .iter()
+                .find(|(name, _)| name == crate_name)
+                .map(|(_, path)| path)
+                .expect("retained library should have been staged");
+            assert!(path.exists(), "{crate_name} should remain");
+        }
+
+        for crate_name in removed {
+            let path = staged
+                .iter()
+                .find(|(name, _)| name == crate_name)
+                .map(|(_, path)| path)
+                .expect("removed library should have been staged");
+            assert!(!path.exists(), "{crate_name} should be removed");
+        }
+
         assert!(
             foreign_path.exists(),
             "non-whitaker libraries should remain untouched"
-        );
-    }
-
-    #[test]
-    fn prune_prebuilt_libraries_keeps_requested_individual_lints() {
-        let temp_dir = tempfile::tempdir().expect("tempdir should be available");
-        let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-            .expect("tempdir path should be utf-8");
-        fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
-        let toolchain = "nightly-2025-09-18";
-
-        let suite_path = create_staged_library(&staging_path, SUITE_CRATE, toolchain);
-        let requested_path = create_staged_library(&staging_path, "module_max_lines", toolchain);
-        let stale_path = create_staged_library(&staging_path, "no_expect_outside_tests", toolchain);
-
-        let requested = vec![CrateName::from("module_max_lines")];
-        prune_prebuilt_libraries(&staging_path, toolchain, &requested)
-            .expect("pruning should succeed");
-
-        assert!(!suite_path.exists(), "suite should be removed");
-        assert!(requested_path.exists(), "requested lint should remain");
-        assert!(
-            !stale_path.exists(),
-            "other individual lints should be removed"
         );
     }
 }
