@@ -25,13 +25,12 @@ import os
 import shlex
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from ruamel.yaml import YAML
 
 from tests.workflows.workflow_test_helpers import (
-    WORKFLOW_PATH,
     install_components_script,
     lint_crates_from_resolution_constants,
     lint_crates_from_workflow,
@@ -83,9 +82,8 @@ jobs:
         install_components_script(workflow_text)
 
 
-def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
+def test_install_components_uses_only_matrix_target_rustc_dev(workflow_text: str) -> None:
     """Ensure install step avoids conflicting dual-target rustc-dev installs."""
-    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     run_script = install_components_script(workflow_text)
     expected_target = "${{ matrix.target }}"
     install_lines = [
@@ -161,7 +159,9 @@ def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:
         case str():
             return [needs]
         case list():
-            return needs
+            if all(isinstance(item, str) for item in needs):
+                return cast(list[str], needs)
+            pytest.fail("publish job needs list must contain only strings")
         case _:
             pytest.fail("publish job needs must be a string or list")
 
@@ -183,9 +183,8 @@ def _find_step_by_name(steps: object, name: str) -> dict[str, object] | None:
     return None
 
 
-def test_publish_job_runs_even_if_build_lints_fails() -> None:
+def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
     """Ensure publish job still runs when some build-lints matrix legs fail."""
-    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     workflow_mapping = _load_workflow_mapping(workflow_text)
     jobs = _get_job_dict(workflow_mapping, "jobs")
     publish_job = _get_job_dict(jobs, "publish")
