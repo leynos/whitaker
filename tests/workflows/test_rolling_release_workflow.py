@@ -131,63 +131,68 @@ def test_install_components_uses_only_matrix_target_rustc_dev() -> None:
     )
 
 
-def test_publish_job_runs_even_if_build_lints_fails() -> None:
-    """Ensure publish job still runs when some build-lints matrix legs fail."""
-    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-    parsed = YAML(typ="safe").load(workflow_text)
+def _load_workflow_mapping(yaml_text: str) -> dict:
+    parsed = YAML(typ="safe").load(yaml_text)
     match parsed:
-        case dict():
-            pass
+        case dict() as workflow_mapping:
+            return workflow_mapping
         case _:
             pytest.fail("rolling-release workflow must parse to a mapping")
 
-    match parsed.get("jobs"):
-        case dict() as jobs:
-            pass
+
+def _get_job_dict(jobs: dict, job_name: str) -> dict:
+    match jobs.get(job_name):
+        case dict() as job_dict:
+            return job_dict
         case _:
-            pytest.fail("rolling-release workflow must declare jobs")
-    match jobs.get("publish"):
-        case dict() as publish_job:
-            pass
-        case _:
-            pytest.fail("rolling-release workflow must declare publish job")
+            if job_name == "jobs":
+                pytest.fail("rolling-release workflow must declare jobs")
+            pytest.fail(f"rolling-release workflow must declare {job_name} job")
+
+
+def _get_needs_list(publish_job: dict) -> list:
     needs = publish_job.get("needs")
     match needs:
         case str():
-            needs_list = [needs]
+            return [needs]
         case list():
-            needs_list = needs
+            return needs
         case _:
             pytest.fail("publish job needs must be a string or list")
 
-    assert "build-lints" in needs_list, "publish job must depend on build-lints"
-    assert publish_job.get("if") == "${{ always() }}", (
-        "publish job must run even when build-lints has failing matrix legs"
-    )
 
-    steps = publish_job.get("steps")
+def _find_step_by_name(steps: object, name: str) -> dict | None:
     match steps:
         case list():
             pass
         case _:
             pytest.fail("publish job must declare steps")
 
-    download_step = None
     for step in steps:
         match step:
-            case {"name": "Download all artefacts"}:
-                download_step = step
-                break
+            case {"name": step_name} if step_name == name:
+                return step
             case _:
                 continue
+    return None
 
-    match download_step:
-        case dict():
-            pass
-        case _:
-            pytest.fail(
-                "publish job must download build artefacts before publish checks"
-            )
+
+def test_publish_job_runs_even_if_build_lints_fails() -> None:
+    """Ensure publish job still runs when some build-lints matrix legs fail."""
+    workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    workflow_mapping = _load_workflow_mapping(workflow_text)
+    jobs = _get_job_dict(workflow_mapping, "jobs")
+    publish_job = _get_job_dict(jobs, "publish")
+    needs_list = _get_needs_list(publish_job)
+
+    assert "build-lints" in needs_list, "publish job must depend on build-lints"
+    assert publish_job.get("if") == "${{ always() }}", (
+        "publish job must run even when build-lints has failing matrix legs"
+    )
+
+    download_step = _find_step_by_name(publish_job.get("steps"), "Download all artefacts")
+    if download_step is None:
+        pytest.fail("publish job must download build artefacts before publish checks")
     assert download_step.get("continue-on-error") is True, (
         "download step must continue on error so zero-artefact runs can fall "
         "through to has_assets=false"
