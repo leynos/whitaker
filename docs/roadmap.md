@@ -154,7 +154,7 @@
   method detection (CC + LOC), LCOM4, and foreign reach. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_type`
   signals. Requires 6.1.1.
-- [ ] 6.2.2. Implement threshold evaluation and escalation rules, and surface
+- [x] 6.2.2. Implement threshold evaluation and escalation rules, and surface
   measured values in diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_type` rule
   set (initial defaults). Requires 6.2.1.

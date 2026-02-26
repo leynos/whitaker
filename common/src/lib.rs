@@ -18,6 +18,10 @@ pub use attributes::{
     Attribute, AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER, has_test_like_attribute,
     has_test_like_attribute_with, outer_attributes, split_doc_attributes,
 };
+pub use brain_type_metrics::evaluation::{
+    BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
+    evaluate_brain_type, format_help, format_note, format_primary_message,
+};
 pub use brain_type_metrics::{
     ForeignReferenceSet, MethodMetrics, TypeMetrics, TypeMetricsBuilder, brain_methods,
     foreign_reach_count, weighted_methods_count,

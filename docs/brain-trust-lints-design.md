@@ -202,6 +202,36 @@ This will allow reuse in future cohesion-aware lints.
   `record_reference(&path_string, span.from_expansion())`. Using plain `String`
   paths avoids coupling to `rustc_private` types.
 
+### Implementation decisions (6.2.2)
+
+- **Evaluation in `common`, not in the lint crate**: the threshold evaluation
+  function `evaluate_brain_type()` and diagnostic formatting live in
+  `common/src/brain_type_metrics/evaluation.rs`. This keeps the evaluation
+  logic pure (no `rustc_private` dependency), independently testable, and
+  reusable by future lints such as `brain_trait`.
+- **`TypeMetrics` stores full brain method metrics**: changed from
+  `Vec<String>` (names only) to `Vec<MethodMetrics>` so that diagnostic
+  formatting can include per-method CC and LOC values (e.g.,
+  `` `parse_all` (CC=31, LOC=140) ``). The `brain_method_names()` accessor is
+  preserved with a `Vec<&str>` return type for backward compatibility.
+- **`BrainTypeThresholds` uses a builder**: the struct has five threshold
+  fields, exceeding the workspace Clippy `too_many_arguments` limit of four. A
+  consuming-self builder (`BrainTypeThresholdsBuilder`) provides the
+  construction path, following the `TypeMetricsBuilder` pattern from 6.2.1.
+- **No serde in `common`**: the threshold struct does not derive `Deserialize`.
+  The lint driver crate will deserialize from TOML configuration and convert
+  into `BrainTypeThresholds`, following the `bumpy_road_function` Config →
+  Settings conversion pattern.
+- **Warn is AND-based, deny is OR-based**: the warn rule fires only when WMC,
+  brain method presence, and LCOM4 all exceed their respective thresholds
+  simultaneously. The deny rule fires when any single deny condition holds.
+  Deny supersedes warn. This directly reflects the design document
+  §`brain_type` rule set.
+- **`BrainTypeDiagnostic` carries all measured values**: the diagnostic struct
+  carries type name, disposition, WMC, LCOM4, foreign reach, and full brain
+  method metrics. Formatting functions produce primary, note, and help strings
+  matching the design document diagnostic format.
+
 ## Implementation approach
 
 ### Metric collection

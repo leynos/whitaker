@@ -15,6 +15,8 @@
 //! See `docs/brain-trust-lints-design.md` §`brain_type` signals for the
 //! full design rationale.
 
+pub mod diagnostic;
+pub mod evaluation;
 pub mod foreign_reach;
 
 pub use foreign_reach::{ForeignReferenceSet, foreign_reach_count};
@@ -196,7 +198,7 @@ pub fn brain_methods(
 pub struct TypeMetrics {
     type_name: String,
     wmc: usize,
-    brain_method_names: Vec<String>,
+    brain_methods: Vec<MethodMetrics>,
     lcom4: usize,
     foreign_reach: usize,
     method_count: usize,
@@ -215,16 +217,23 @@ impl TypeMetrics {
         self.wmc
     }
 
-    /// Names of methods that qualify as brain methods.
+    /// Brain methods with their full metric details.
     #[must_use]
-    pub fn brain_method_names(&self) -> &[String] {
-        &self.brain_method_names
+    pub fn brain_methods(&self) -> &[MethodMetrics] {
+        &self.brain_methods
+    }
+
+    /// Returns an iterator over the names of brain methods.
+    ///
+    /// Callers that need a collected `Vec` should use `.collect()`.
+    pub fn brain_method_names(&self) -> impl Iterator<Item = &str> {
+        self.brain_methods.iter().map(|m| m.name())
     }
 
     /// Number of brain methods detected.
     #[must_use]
     pub fn brain_method_count(&self) -> usize {
-        self.brain_method_names.len()
+        self.brain_methods.len()
     }
 
     /// LCOM4 connected component count (1 = cohesive, >= 2 = low cohesion).
@@ -333,17 +342,17 @@ impl TypeMetricsBuilder {
     #[must_use]
     pub fn build(self) -> TypeMetrics {
         let wmc = weighted_methods_count(&self.method_metrics);
-        let brain_names: Vec<String> =
+        let brain: Vec<MethodMetrics> =
             brain_methods(&self.method_metrics, self.cc_threshold, self.loc_threshold)
                 .into_iter()
-                .map(|m| m.name().to_owned())
+                .cloned()
                 .collect();
         let method_count = self.method_metrics.len();
 
         TypeMetrics {
             type_name: self.type_name,
             wmc,
-            brain_method_names: brain_names,
+            brain_methods: brain,
             lcom4: self.lcom4.unwrap_or(0),
             foreign_reach: self.foreign_reach.unwrap_or(0),
             method_count,
