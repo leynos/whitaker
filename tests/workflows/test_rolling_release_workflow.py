@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import os
 import shlex
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, Optional, Union
+from typing import Any
 
 import pytest
 from ruamel.yaml import YAML
@@ -142,7 +143,7 @@ def _load_workflow_mapping(yaml_text: str) -> dict[str, object]:
             pytest.fail("rolling-release workflow must parse to a mapping")
 
 
-def _get_job_dict(jobs: Mapping[str, dict[str, Any]], job_name: str) -> dict[str, Any]:
+def _get_job_dict(jobs: Mapping[str, Any], job_name: str) -> dict[str, Any]:
     """Return the requested job mapping from the jobs map."""
     match jobs.get(job_name):
         case dict() as job_dict:
@@ -155,7 +156,7 @@ def _get_job_dict(jobs: Mapping[str, dict[str, Any]], job_name: str) -> dict[str
 
 def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:
     """Return publish job dependency names as a list."""
-    needs: Optional[Union[str, list[str]]] = publish_job.get("needs")
+    needs: str | list[str] | None = publish_job.get("needs")
     match needs:
         case str():
             return [needs]
