@@ -13,6 +13,9 @@ use whitaker_installer::dirs::SystemBaseDirs;
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
+/// Output marker emitted when a prebuilt install succeeds.
+const PREBUILT_INSTALL_MARKER: &str = "Prebuilt libraries installed successfully.";
+
 #[derive(Default)]
 struct CliWorld {
     args: RefCell<Vec<String>>,
@@ -299,12 +302,20 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
     let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");
     let temp_dir = cli_world._temp_dir.borrow();
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");
 
-    let staging_dir = temp_dir.path().join(channel).join("release");
+    let staging_dir = if stderr.contains(PREBUILT_INSTALL_MARKER) {
+        PathBuf::from(
+            expected_prebuilt_target_dir(channel)
+                .unwrap_or_else(|| temp_dir.path().to_string_lossy().into_owned()),
+        )
+    } else {
+        temp_dir.path().join(channel).join("release")
+    };
     let entries = std::fs::read_dir(&staging_dir)
         .expect("staging directory should exist")
         .filter_map(|e| e.ok())
