@@ -235,30 +235,24 @@ fn exact_brain_method_deny_count_triggers_deny() {
 }
 
 #[rstest]
-fn custom_brain_method_deny_count_override() {
-    // With deny count overridden to 3, exactly 2 brain methods is no
-    // longer sufficient to trigger deny (assuming other deny conditions
-    // are not met).
-    let metrics = build_metrics("BM", 60, 2, 1);
+#[case("below custom threshold", 2, false)]
+#[case("at custom threshold boundary", 3, true)]
+fn custom_brain_method_deny_count_boundary(
+    #[case] _label: &str,
+    #[case] brain_count: usize,
+    #[case] should_deny: bool,
+) {
+    // Override deny count to 3, test boundary behaviour.
+    // Use WMC and LCOM4 values that won't trigger their own deny conditions.
+    let metrics = build_metrics("BM", 90, brain_count, 1);
     let thresholds = BrainTypeThresholdsBuilder::new()
         .brain_method_deny_count(3)
         .build();
-    assert_ne!(
-        evaluate_brain_type(&metrics, &thresholds),
-        BrainTypeDisposition::Deny
-    );
-}
 
-#[rstest]
-fn custom_brain_method_deny_count_triggers_at_boundary() {
-    // With deny count overridden to 3, exactly 3 brain methods triggers
-    // deny.
-    let metrics = build_metrics("BM", 90, 3, 1);
-    let thresholds = BrainTypeThresholdsBuilder::new()
-        .brain_method_deny_count(3)
-        .build();
-    assert_eq!(
-        evaluate_brain_type(&metrics, &thresholds),
-        BrainTypeDisposition::Deny
-    );
+    let disposition = evaluate_brain_type(&metrics, &thresholds);
+    if should_deny {
+        assert_eq!(disposition, BrainTypeDisposition::Deny);
+    } else {
+        assert_ne!(disposition, BrainTypeDisposition::Deny);
+    }
 }
