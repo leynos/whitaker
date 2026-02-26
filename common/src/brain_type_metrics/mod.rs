@@ -15,6 +15,7 @@
 //! See `docs/brain-trust-lints-design.md` §`brain_type` signals for the
 //! full design rationale.
 
+pub mod diagnostic;
 pub mod evaluation;
 pub mod foreign_reach;
 

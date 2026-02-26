@@ -18,7 +18,8 @@ formatting that surfaces measured values to the developer. After this change:
    metric collection layer from 6.2.1) and a threshold configuration, and
    returns a three-level disposition: pass, warn, or deny.
 2. The warn rule fires when all warn conditions hold simultaneously (AND-based):
-   WMC >= 60 AND at least one brain method AND LCOM4 >= 2.
+   Weighted Methods Count (WMC) >= 60 AND at least one brain method AND Lack of
+   Cohesion in Methods (LCOM4) >= 2.
 3. The deny rule fires when any single deny condition holds (OR-based):
    WMC >= 100 OR brain method count >= 2 OR LCOM4 >= 3. Deny supersedes warn.
 4. Diagnostic formatting functions produce primary message, note, and help text
@@ -115,17 +116,16 @@ rules from the design document.
 - The BDD step for configuring a type with specific WMC, LCOM4, and brain
   method count required synthesizing `TypeMetrics` values. The builder API
   makes this straightforward: add placeholder methods with appropriate CC
-  values to achieve the desired WMC, and adjust CC/LOC to control brain
-  method count.
+  values to achieve the desired WMC, and adjust CC/LOC to control brain method
+  count.
 
 - Quality gate iteration: `make lint` failed with 3 Clippy errors in the
-  BDD harness. (1) `clippy::too_many_arguments` on the Given step function
-  that parsed 4 values from the feature text (5 args total with `world`).
-  Fix: split into two Given steps — one for type name, WMC, and brain count,
-  another for LCOM4. (2/3) `clippy::expect_used` on two functions using
-  `.expect()` in the When/Then steps. Fix: added
-  `#[expect(clippy::expect_used, reason = "...")]` following the pattern in
-  `complexity_signal_behaviour.rs`.
+  BDD harness. (1) `clippy::too_many_arguments` on the Given step function that
+  parsed 4 values from the feature text (5 args total with `world`). Fix: split
+  into two Given steps — one for type name, WMC, and brain count, another for
+  LCOM4. (2/3) `clippy::expect_used` on two functions using `.expect()` in the
+  When/Then steps. Fix: added `#[expect(clippy::expect_used, reason = "...")]`
+  following the pattern in `complexity_signal_behaviour.rs`.
 
 ## Decision log
 
@@ -191,9 +191,9 @@ All 8 acceptance criteria met:
 - The `TypeMetricsBuilder` pattern translates cleanly to test fixture
   construction in BDD scenarios.
 - BDD step functions parsing multiple values from the feature text are
-  subject to the workspace `too_many_arguments` limit of 4, since the
-  world reference counts as an argument. Steps with >3 parsed values
-  must be split into separate Given/And lines.
+  subject to the workspace `too_many_arguments` limit of 4, since the world
+  reference counts as an argument. Steps with >3 parsed values must be split
+  into separate Given/And lines.
 - Quality gate iterations: 3 (formatting, Clippy `too_many_arguments`
   and `expect_used`, final pass). All gates pass.
 

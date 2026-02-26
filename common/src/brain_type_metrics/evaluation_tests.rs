@@ -1,4 +1,4 @@
-//! Unit tests for brain type threshold evaluation and diagnostic formatting.
+//! Unit tests for brain type threshold evaluation.
 
 use super::*;
 use crate::brain_type_metrics::TypeMetricsBuilder;
@@ -209,226 +209,56 @@ fn custom_deny_thresholds() {
 }
 
 // ---------------------------------------------------------------------------
-// Diagnostic — primary message
+// Evaluation — brain_method_deny_count boundary
 // ---------------------------------------------------------------------------
 
-/// Builds a diagnostic message for a type with one brain method (`parse_all`,
-/// CC=31, LOC=140) and a non-brain helper (CC=5, LOC=20), LCOM4=3.
-fn one_brain_method_message() -> String {
-    let mut builder = TypeMetricsBuilder::new("Foo", 25, 80);
-    builder.add_method("parse_all", 31, 140);
-    builder.add_method("helper", 5, 20);
-    builder.set_lcom4(3);
-    let metrics = builder.build();
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn);
-    format_primary_message(&diag)
-}
-
 #[rstest]
-fn one_brain_method_message_contains_type_name() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("`Foo`"), "should contain type name");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_wmc() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("WMC=36"), "should contain WMC value");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_lcom4() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("LCOM4=3"), "should contain LCOM4 value");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_method_name() {
-    let msg = one_brain_method_message();
-    assert!(
-        msg.contains("`parse_all`"),
-        "should contain brain method name"
+fn one_brain_method_does_not_trigger_deny() {
+    // 1 brain method is below the default deny count of 2.
+    let metrics = build_metrics("BM", 30, 1, 1);
+    let thresholds = BrainTypeThresholdsBuilder::new().build();
+    assert_ne!(
+        evaluate_brain_type(&metrics, &thresholds),
+        BrainTypeDisposition::Deny
     );
 }
 
 #[rstest]
-fn one_brain_method_message_contains_cc() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("CC=31"), "should contain brain method CC");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_loc() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("LOC=140"), "should contain brain method LOC");
-}
-
-#[rstest]
-fn one_brain_method_message_uses_singular_form() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("a brain method"), "should use singular form");
-}
-
-/// Builds a diagnostic message for a type with two brain methods (`parse`
-/// CC=30, LOC=100 and `render` CC=40, LOC=200), LCOM4=2.
-fn multiple_brain_methods_message() -> String {
-    let mut builder = TypeMetricsBuilder::new("Bar", 25, 80);
-    builder.add_method("parse", 30, 100);
-    builder.add_method("render", 40, 200);
-    builder.set_lcom4(2);
-    let metrics = builder.build();
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Deny);
-    format_primary_message(&diag)
-}
-
-#[rstest]
-fn multiple_brain_methods_message_uses_plural_form() {
-    let msg = multiple_brain_methods_message();
-    assert!(msg.contains("2 brain methods"), "should use plural form");
-}
-
-#[rstest]
-fn multiple_brain_methods_message_lists_first_method() {
-    let msg = multiple_brain_methods_message();
-    assert!(msg.contains("`parse`"), "should list first brain method");
-}
-
-#[rstest]
-fn multiple_brain_methods_message_lists_second_method() {
-    let msg = multiple_brain_methods_message();
-    assert!(msg.contains("`render`"), "should list second brain method");
-}
-
-#[rstest]
-fn multiple_brain_methods_message_contains_first_cc() {
-    let msg = multiple_brain_methods_message();
-    assert!(msg.contains("CC=30"), "should contain first method CC");
-}
-
-#[rstest]
-fn multiple_brain_methods_message_contains_second_loc() {
-    let msg = multiple_brain_methods_message();
-    assert!(msg.contains("LOC=200"), "should contain second method LOC");
-}
-
-#[rstest]
-fn primary_message_with_no_brain_methods() {
-    let mut builder = TypeMetricsBuilder::new("Simple", 25, 80);
-    builder.add_method("a", 10, 20);
-    builder.set_lcom4(1);
-    let metrics = builder.build();
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
-    let msg = format_primary_message(&diag);
-
-    assert!(msg.contains("WMC=10"), "should contain WMC");
-    assert!(msg.contains("LCOM4=1"), "should contain LCOM4");
-    assert!(
-        !msg.contains("brain method"),
-        "should not mention brain methods"
+fn exact_brain_method_deny_count_triggers_deny() {
+    // Exactly 2 brain methods (the default deny count) triggers deny.
+    let metrics = build_metrics("BM", 60, 2, 1);
+    let thresholds = BrainTypeThresholdsBuilder::new().build();
+    assert_eq!(
+        evaluate_brain_type(&metrics, &thresholds),
+        BrainTypeDisposition::Deny
     );
 }
 
-// ---------------------------------------------------------------------------
-// Diagnostic — note
-// ---------------------------------------------------------------------------
-
 #[rstest]
-fn note_mentions_wmc() {
-    let metrics = build_metrics("Foo", 30, 0, 1);
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
-    let note = format_note(&diag);
-    assert!(note.contains("WMC measures total cognitive complexity"));
+fn custom_brain_method_deny_count_override() {
+    // With deny count overridden to 3, exactly 2 brain methods is no
+    // longer sufficient to trigger deny (assuming other deny conditions
+    // are not met).
+    let metrics = build_metrics("BM", 60, 2, 1);
+    let thresholds = BrainTypeThresholdsBuilder::new()
+        .brain_method_deny_count(3)
+        .build();
+    assert_ne!(
+        evaluate_brain_type(&metrics, &thresholds),
+        BrainTypeDisposition::Deny
+    );
 }
 
 #[rstest]
-fn note_mentions_brain_methods_when_present() {
-    let metrics = build_metrics("Foo", 60, 1, 2);
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn);
-    let note = format_note(&diag);
-    assert!(note.contains("Brain methods are methods with high complexity"));
-}
-
-#[rstest]
-fn note_mentions_lcom4_when_low_cohesion() {
-    let metrics = build_metrics("Foo", 30, 0, 2);
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
-    let note = format_note(&diag);
-    assert!(note.contains("LCOM4 >= 2"));
-}
-
-#[rstest]
-fn note_omits_lcom4_when_cohesive() {
-    let metrics = build_metrics("Foo", 30, 0, 1);
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
-    let note = format_note(&diag);
-    assert!(!note.contains("LCOM4 >= 2"));
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostic — help
-// ---------------------------------------------------------------------------
-
-#[rstest]
-fn help_suggests_decomposition() {
-    let metrics = build_metrics("Foo", 30, 0, 1);
-    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
-    let help = format_help(&diag);
-    assert!(help.contains("extracting related methods"));
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostic — accessors
-// ---------------------------------------------------------------------------
-
-/// Builds a diagnostic for accessor tests: type "Qux" with one brain method
-/// "big" (CC=30, LOC=100), LCOM4=2, foreign reach=7.
-fn accessor_diagnostic() -> BrainTypeDiagnostic {
-    let mut builder = TypeMetricsBuilder::new("Qux", 25, 80);
-    builder.add_method("big", 30, 100);
-    builder.set_lcom4(2);
-    builder.set_foreign_reach(7);
-    let metrics = builder.build();
-    BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn)
-}
-
-#[rstest]
-fn diagnostic_type_name_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.type_name(), "Qux");
-}
-
-#[rstest]
-fn diagnostic_disposition_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.disposition(), BrainTypeDisposition::Warn);
-}
-
-#[rstest]
-fn diagnostic_wmc_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.wmc(), 30);
-}
-
-#[rstest]
-fn diagnostic_lcom4_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.lcom4(), 2);
-}
-
-#[rstest]
-fn diagnostic_foreign_reach_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.foreign_reach(), 7);
-}
-
-#[rstest]
-fn diagnostic_brain_methods_count_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.brain_methods().len(), 1);
-}
-
-#[rstest]
-fn diagnostic_brain_methods_name_accessor() {
-    let diag = accessor_diagnostic();
-    assert_eq!(diag.brain_methods()[0].name(), "big");
+fn custom_brain_method_deny_count_triggers_at_boundary() {
+    // With deny count overridden to 3, exactly 3 brain methods triggers
+    // deny.
+    let metrics = build_metrics("BM", 90, 3, 1);
+    let thresholds = BrainTypeThresholdsBuilder::new()
+        .brain_method_deny_count(3)
+        .build();
+    assert_eq!(
+        evaluate_brain_type(&metrics, &thresholds),
+        BrainTypeDisposition::Deny
+    );
 }

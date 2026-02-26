@@ -17,6 +17,7 @@ struct EvaluationWorld {
     lcom4: Cell<usize>,
     explicit_brain_methods: RefCell<Vec<MethodMetrics>>,
     thresholds: RefCell<Option<BrainTypeThresholds>>,
+    built_metrics: RefCell<Option<TypeMetrics>>,
     disposition: Cell<Option<BrainTypeDisposition>>,
     primary_message: RefCell<Option<String>>,
 }
@@ -30,6 +31,7 @@ impl Default for EvaluationWorld {
             lcom4: Cell::new(0),
             explicit_brain_methods: RefCell::new(Vec::new()),
             thresholds: RefCell::new(None),
+            built_metrics: RefCell::new(None),
             disposition: Cell::new(None),
             primary_message: RefCell::new(None),
         }
@@ -40,8 +42,9 @@ impl EvaluationWorld {
     /// Builds `TypeMetrics` from the configured world state.
     ///
     /// Brain methods are synthesized with CC=30, LOC=100 (above default
-    /// thresholds). If explicit brain methods have been added, those are
-    /// used instead of synthesized ones.
+    /// thresholds). If explicit brain methods have been added via the
+    /// `given_explicit_brain_method` step, those are used instead and the
+    /// `brain_count` field is ignored.
     fn build_metrics(&self) -> TypeMetrics {
         let cc_threshold = 25;
         let loc_threshold = 80;
@@ -125,20 +128,24 @@ fn when_evaluate(world: &EvaluationWorld) {
         .unwrap_or_else(|| BrainTypeThresholdsBuilder::new().build());
     let result = evaluate_brain_type(&metrics, &thresholds);
     world.disposition.set(Some(result));
+    *world.built_metrics.borrow_mut() = Some(metrics);
 }
 
 #[when("the diagnostic message is formatted")]
 #[expect(
     clippy::expect_used,
-    reason = "disposition is required for this behaviour test"
+    reason = "metrics and disposition are required for this behaviour test"
 )]
 fn when_format_diagnostic(world: &EvaluationWorld) {
-    let metrics = world.build_metrics();
+    let metrics_ref = world.built_metrics.borrow();
+    let metrics = metrics_ref
+        .as_ref()
+        .expect("metrics must be built before formatting");
     let disposition = world
         .disposition
         .get()
         .expect("disposition must be evaluated first");
-    let diag = BrainTypeDiagnostic::new(&metrics, disposition);
+    let diag = BrainTypeDiagnostic::new(metrics, disposition);
     *world.primary_message.borrow_mut() = Some(format_primary_message(&diag));
 }
 
