@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cargo binstall --no-confirm cargo-nextest
+          cargo binstall --no-confirm --locked cargo-nextest
           make test
 
       - name: Installer smoke test
