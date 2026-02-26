@@ -130,50 +130,79 @@ impl BrainTypeDiagnostic {
 /// ```
 #[must_use]
 pub fn format_primary_message(diagnostic: &BrainTypeDiagnostic) -> String {
+    match diagnostic.brain_methods() {
+        [] => format_primary_without_brain_methods(diagnostic),
+        [bm] => format_primary_with_one_brain_method(diagnostic, bm),
+        methods => format_primary_with_many_brain_methods(diagnostic, methods),
+    }
+}
+
+/// Formats the primary message when no brain methods are present.
+fn format_primary_without_brain_methods(diagnostic: &BrainTypeDiagnostic) -> String {
     let name = diagnostic.type_name();
     let wmc = diagnostic.wmc();
     let lcom4 = diagnostic.lcom4();
+    let fr_suffix = foreign_reach_suffix(diagnostic);
+    format!("`{name}` has WMC={wmc} and LCOM4={lcom4}{fr_suffix}.")
+}
 
+/// Formats the primary message when exactly one brain method is present.
+fn format_primary_with_one_brain_method(
+    diagnostic: &BrainTypeDiagnostic,
+    bm: &MethodMetrics,
+) -> String {
+    let name = diagnostic.type_name();
+    let wmc = diagnostic.wmc();
+    let lcom4 = diagnostic.lcom4();
+    let fr_suffix = foreign_reach_suffix(diagnostic);
+    format!(
+        "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
+         and a brain method `{}` (CC={}, LOC={}).",
+        bm.name(),
+        bm.cognitive_complexity(),
+        bm.lines_of_code(),
+    )
+}
+
+/// Formats the primary message when multiple brain methods are present.
+fn format_primary_with_many_brain_methods(
+    diagnostic: &BrainTypeDiagnostic,
+    methods: &[MethodMetrics],
+) -> String {
+    let name = diagnostic.type_name();
+    let wmc = diagnostic.wmc();
+    let lcom4 = diagnostic.lcom4();
+    let fr_suffix = foreign_reach_suffix(diagnostic);
+    let n = methods.len();
+    let mut msg = format!(
+        "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
+         and {n} brain methods: ",
+    );
+    for (i, bm) in methods.iter().enumerate() {
+        if i > 0 {
+            msg.push_str(", ");
+        }
+        // Write cannot fail on String.
+        let _ = write!(
+            msg,
+            "`{}` (CC={}, LOC={})",
+            bm.name(),
+            bm.cognitive_complexity(),
+            bm.lines_of_code(),
+        );
+    }
+    msg.push('.');
+    msg
+}
+
+/// Returns the foreign reach suffix for the primary message, or an
+/// empty string when foreign reach is zero.
+fn foreign_reach_suffix(diagnostic: &BrainTypeDiagnostic) -> String {
     let fr = diagnostic.foreign_reach();
-    let fr_suffix = if fr > 0 {
+    if fr > 0 {
         format!(", foreign reach={fr}")
     } else {
         String::new()
-    };
-
-    match diagnostic.brain_methods().len() {
-        0 => format!("`{name}` has WMC={wmc} and LCOM4={lcom4}{fr_suffix}."),
-        1 => {
-            let bm = &diagnostic.brain_methods()[0];
-            format!(
-                "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
-                 and a brain method `{}` (CC={}, LOC={}).",
-                bm.name(),
-                bm.cognitive_complexity(),
-                bm.lines_of_code(),
-            )
-        }
-        n => {
-            let mut msg = format!(
-                "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
-                 and {n} brain methods: ",
-            );
-            for (i, bm) in diagnostic.brain_methods().iter().enumerate() {
-                if i > 0 {
-                    msg.push_str(", ");
-                }
-                // Write cannot fail on String.
-                let _ = write!(
-                    msg,
-                    "`{}` (CC={}, LOC={})",
-                    bm.name(),
-                    bm.cognitive_complexity(),
-                    bm.lines_of_code(),
-                );
-            }
-            msg.push('.');
-            msg
-        }
     }
 }
 

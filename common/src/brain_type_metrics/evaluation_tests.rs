@@ -40,33 +40,22 @@ fn build_metrics(name: &str, target_wmc: usize, brain_count: usize, lcom4: usize
 // ---------------------------------------------------------------------------
 
 #[rstest]
-fn default_wmc_warn_threshold() {
+#[case("wmc_warn", 60)]
+#[case("wmc_deny", 100)]
+#[case("lcom4_warn", 2)]
+#[case("lcom4_deny", 3)]
+#[case("brain_method_deny_count", 2)]
+fn default_threshold_values(#[case] field: &str, #[case] expected: usize) {
     let t = BrainTypeThresholdsBuilder::new().build();
-    assert_eq!(t.wmc_warn(), 60);
-}
-
-#[rstest]
-fn default_wmc_deny_threshold() {
-    let t = BrainTypeThresholdsBuilder::new().build();
-    assert_eq!(t.wmc_deny(), 100);
-}
-
-#[rstest]
-fn default_lcom4_warn_threshold() {
-    let t = BrainTypeThresholdsBuilder::new().build();
-    assert_eq!(t.lcom4_warn(), 2);
-}
-
-#[rstest]
-fn default_lcom4_deny_threshold() {
-    let t = BrainTypeThresholdsBuilder::new().build();
-    assert_eq!(t.lcom4_deny(), 3);
-}
-
-#[rstest]
-fn default_brain_method_deny_count_threshold() {
-    let t = BrainTypeThresholdsBuilder::new().build();
-    assert_eq!(t.brain_method_deny_count(), 2);
+    let actual = match field {
+        "wmc_warn" => t.wmc_warn(),
+        "wmc_deny" => t.wmc_deny(),
+        "lcom4_warn" => t.lcom4_warn(),
+        "lcom4_deny" => t.lcom4_deny(),
+        "brain_method_deny_count" => t.brain_method_deny_count(),
+        _ => panic!("Unknown field: {field}"),
+    };
+    assert_eq!(actual, expected);
 }
 
 // ---------------------------------------------------------------------------

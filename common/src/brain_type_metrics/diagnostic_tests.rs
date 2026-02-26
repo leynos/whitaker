@@ -22,48 +22,19 @@ fn one_brain_method_message() -> String {
 }
 
 #[rstest]
-fn one_brain_method_message_contains_type_name() {
+#[case("`Foo`", "type name")]
+#[case("WMC=36", "WMC value")]
+#[case("LCOM4=3", "LCOM4 value")]
+#[case("`parse_all`", "brain method name")]
+#[case("CC=31", "brain method CC")]
+#[case("LOC=140", "brain method LOC")]
+#[case("a brain method", "singular form")]
+fn one_brain_method_message_contains_expected_fragment(
+    #[case] fragment: &str,
+    #[case] _description: &str,
+) {
     let msg = one_brain_method_message();
-    assert!(msg.contains("`Foo`"), "should contain type name");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_wmc() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("WMC=36"), "should contain WMC value");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_lcom4() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("LCOM4=3"), "should contain LCOM4 value");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_method_name() {
-    let msg = one_brain_method_message();
-    assert!(
-        msg.contains("`parse_all`"),
-        "should contain brain method name"
-    );
-}
-
-#[rstest]
-fn one_brain_method_message_contains_cc() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("CC=31"), "should contain brain method CC");
-}
-
-#[rstest]
-fn one_brain_method_message_contains_loc() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("LOC=140"), "should contain brain method LOC");
-}
-
-#[rstest]
-fn one_brain_method_message_uses_singular_form() {
-    let msg = one_brain_method_message();
-    assert!(msg.contains("a brain method"), "should use singular form");
+    assert!(msg.contains(fragment), "missing fragment: {fragment}");
 }
 
 // ---------------------------------------------------------------------------
