@@ -104,7 +104,8 @@ impl BrainTypeDiagnostic {
 
 /// Formats the primary diagnostic message with measured values.
 ///
-/// The message varies based on brain method count:
+/// Includes foreign reach when non-zero. The message varies based on
+/// brain method count:
 /// - 0 brain methods: reports WMC and LCOM4.
 /// - 1 brain method: names the method with its CC and LOC.
 /// - 2+ brain methods: lists each method with its CC and LOC.
@@ -133,20 +134,30 @@ pub fn format_primary_message(diagnostic: &BrainTypeDiagnostic) -> String {
     let wmc = diagnostic.wmc();
     let lcom4 = diagnostic.lcom4();
 
+    let fr = diagnostic.foreign_reach();
+    let fr_suffix = if fr > 0 {
+        format!(", foreign reach={fr}")
+    } else {
+        String::new()
+    };
+
     match diagnostic.brain_methods().len() {
-        0 => format!("`{name}` has WMC={wmc} and LCOM4={lcom4}."),
+        0 => format!("`{name}` has WMC={wmc} and LCOM4={lcom4}{fr_suffix}."),
         1 => {
             let bm = &diagnostic.brain_methods()[0];
             format!(
-                "`{name}` has WMC={wmc}, LCOM4={lcom4}, and a brain method \
-                 `{}` (CC={}, LOC={}).",
+                "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
+                 and a brain method `{}` (CC={}, LOC={}).",
                 bm.name(),
                 bm.cognitive_complexity(),
                 bm.lines_of_code(),
             )
         }
         n => {
-            let mut msg = format!("`{name}` has WMC={wmc}, LCOM4={lcom4}, and {n} brain methods: ");
+            let mut msg = format!(
+                "`{name}` has WMC={wmc}, LCOM4={lcom4}{fr_suffix}, \
+                 and {n} brain methods: ",
+            );
             for (i, bm) in diagnostic.brain_methods().iter().enumerate() {
                 if i > 0 {
                     msg.push_str(", ");
@@ -167,6 +178,9 @@ pub fn format_primary_message(diagnostic: &BrainTypeDiagnostic) -> String {
 }
 
 /// Formats the note explaining what the metrics mean.
+///
+/// Surfaces foreign reach when it is non-zero, alongside WMC, brain
+/// method, and LCOM4 explanations.
 ///
 /// # Examples
 ///
@@ -193,10 +207,23 @@ pub fn format_note(diagnostic: &BrainTypeDiagnostic) -> String {
              responsibilities.",
         );
     }
+    if diagnostic.foreign_reach() > 0 {
+        let _ = write!(
+            note,
+            " Foreign reach of {} indicates coupling to external modules.",
+            diagnostic.foreign_reach(),
+        );
+    }
     note
 }
 
-/// Formats the help text with decomposition guidance.
+/// Formats help text with tailored decomposition guidance.
+///
+/// The guidance varies based on the diagnostic signals:
+/// - Brain methods present: suggests extracting or simplifying them.
+/// - High LCOM4: suggests splitting unrelated responsibilities.
+/// - High foreign reach: suggests reducing external coupling.
+/// - Default: general decomposition advice.
 ///
 /// # Examples
 ///
@@ -212,9 +239,25 @@ pub fn format_note(diagnostic: &BrainTypeDiagnostic) -> String {
 /// assert!(help.contains("extract"));
 /// ```
 #[must_use]
-pub fn format_help(_diagnostic: &BrainTypeDiagnostic) -> String {
-    String::from(
-        "Consider extracting related methods into separate types or modules \
-         to reduce complexity and improve cohesion.",
-    )
+pub fn format_help(diagnostic: &BrainTypeDiagnostic) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+
+    if !diagnostic.brain_methods().is_empty() {
+        parts.push("extracting or simplifying brain methods");
+    }
+    if diagnostic.lcom4() >= 2 {
+        parts.push("splitting unrelated responsibilities into separate types");
+    }
+    if diagnostic.foreign_reach() > 0 {
+        parts.push("reducing coupling to external modules");
+    }
+
+    if parts.is_empty() {
+        return String::from(
+            "Consider extracting related methods into separate types or \
+             modules to reduce complexity and improve cohesion.",
+        );
+    }
+
+    format!("Consider {}.", parts.join(", "))
 }

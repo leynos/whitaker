@@ -139,6 +139,15 @@ fn primary_message_with_no_brain_methods() {
 
 /// Builds metrics suitable for note and help tests.
 fn build_note_metrics(brain_count: usize, lcom4: usize) -> crate::brain_type_metrics::TypeMetrics {
+    build_note_metrics_with_reach(brain_count, lcom4, 0)
+}
+
+/// Builds metrics with explicit foreign reach for formatting tests.
+fn build_note_metrics_with_reach(
+    brain_count: usize,
+    lcom4: usize,
+    foreign_reach: usize,
+) -> crate::brain_type_metrics::TypeMetrics {
     let cc_threshold = 25;
     let loc_threshold = 80;
     let brain_cc = 30;
@@ -151,6 +160,7 @@ fn build_note_metrics(brain_count: usize, lcom4: usize) -> crate::brain_type_met
     // Filler to ensure non-zero WMC even without brain methods.
     builder.add_method("filler", 10, 10);
     builder.set_lcom4(lcom4);
+    builder.set_foreign_reach(foreign_reach);
     builder.build()
 }
 
@@ -186,16 +196,82 @@ fn note_omits_lcom4_when_cohesive() {
     assert!(!note.contains("LCOM4 >= 2"));
 }
 
+#[rstest]
+fn note_mentions_foreign_reach_when_nonzero() {
+    let metrics = build_note_metrics_with_reach(0, 1, 5);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let note = format_note(&diag);
+    assert!(note.contains("Foreign reach of 5"));
+}
+
+#[rstest]
+fn note_omits_foreign_reach_when_zero() {
+    let metrics = build_note_metrics(0, 1);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let note = format_note(&diag);
+    assert!(!note.contains("Foreign reach"));
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic — primary message (foreign reach)
+// ---------------------------------------------------------------------------
+
+#[rstest]
+fn primary_message_includes_foreign_reach_when_nonzero() {
+    let metrics = build_note_metrics_with_reach(0, 1, 4);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let msg = format_primary_message(&diag);
+    assert!(
+        msg.contains("foreign reach=4"),
+        "should include foreign reach value",
+    );
+}
+
+#[rstest]
+fn primary_message_omits_foreign_reach_when_zero() {
+    let metrics = build_note_metrics(0, 1);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let msg = format_primary_message(&diag);
+    assert!(
+        !msg.contains("foreign reach"),
+        "should not include foreign reach when zero",
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Diagnostic — help
 // ---------------------------------------------------------------------------
 
 #[rstest]
-fn help_suggests_decomposition() {
+fn help_suggests_decomposition_when_no_signals() {
     let metrics = build_note_metrics(0, 1);
     let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
     let help = format_help(&diag);
     assert!(help.contains("extracting related methods"));
+}
+
+#[rstest]
+fn help_mentions_brain_methods_when_present() {
+    let metrics = build_note_metrics(1, 1);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Warn);
+    let help = format_help(&diag);
+    assert!(help.contains("simplifying brain methods"));
+}
+
+#[rstest]
+fn help_mentions_responsibilities_when_low_cohesion() {
+    let metrics = build_note_metrics(0, 2);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let help = format_help(&diag);
+    assert!(help.contains("splitting unrelated responsibilities"));
+}
+
+#[rstest]
+fn help_mentions_coupling_when_foreign_reach_nonzero() {
+    let metrics = build_note_metrics_with_reach(0, 1, 3);
+    let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let help = format_help(&diag);
+    assert!(help.contains("reducing coupling to external modules"));
 }
 
 // ---------------------------------------------------------------------------

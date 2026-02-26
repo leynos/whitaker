@@ -223,10 +223,11 @@ impl TypeMetrics {
         &self.brain_methods
     }
 
-    /// Names of methods that qualify as brain methods.
-    #[must_use]
-    pub fn brain_method_names(&self) -> Vec<&str> {
-        self.brain_methods.iter().map(|m| m.name()).collect()
+    /// Returns an iterator over the names of brain methods.
+    ///
+    /// Callers that need a collected `Vec` should use `.collect()`.
+    pub fn brain_method_names(&self) -> impl Iterator<Item = &str> {
+        self.brain_methods.iter().map(|m| m.name())
     }
 
     /// Number of brain methods detected.

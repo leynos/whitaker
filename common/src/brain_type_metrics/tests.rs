@@ -211,7 +211,7 @@ fn builder_empty_produces_zero_metrics() {
     let metrics = builder.build();
     assert_eq!(metrics.type_name(), "Empty");
     assert_eq!(metrics.wmc(), 0);
-    assert!(metrics.brain_method_names().is_empty());
+    assert_eq!(metrics.brain_method_names().count(), 0);
     assert_eq!(metrics.brain_method_count(), 0);
     assert_eq!(metrics.lcom4(), 0);
     assert_eq!(metrics.foreign_reach(), 0);
@@ -235,7 +235,10 @@ fn builder_identifies_brain_methods() {
     builder.add_method("transform", 28, 90);
     let metrics = builder.build();
     assert_eq!(metrics.brain_method_count(), 2);
-    assert_eq!(metrics.brain_method_names(), &["parse", "transform"]);
+    assert_eq!(
+        metrics.brain_method_names().collect::<Vec<_>>(),
+        &["parse", "transform"],
+    );
 }
 
 #[rstest]
@@ -281,7 +284,10 @@ fn type_metrics_all_accessors() {
     let tm = builder.build();
     assert_eq!(tm.type_name(), "Bar");
     assert_eq!(tm.wmc(), 120);
-    assert_eq!(tm.brain_method_names(), &["parse", "render"]);
+    assert_eq!(
+        tm.brain_method_names().collect::<Vec<_>>(),
+        &["parse", "render"],
+    );
     assert_eq!(tm.brain_method_count(), 2);
     assert_eq!(tm.lcom4(), 3);
     assert_eq!(tm.foreign_reach(), 5);
