@@ -232,6 +232,32 @@ This will allow reuse in future cohesion-aware lints.
   method metrics. Formatting functions produce primary, note, and help strings
   matching the design document diagnostic format.
 
+### Implementation decisions (6.2.3)
+
+- **"Skip" strategy for macro-expanded nodes**: when `is_from_expansion`
+  is `true`, the builder silently discards the increment. This follows the
+  established pattern in `ForeignReferenceSet::record_reference()` and
+  `MethodInfoBuilder::record_field_access()`, and aligns with Clippy issue
+  #14417's guidance that macro invocations should be treated as atomic units
+  akin to function calls (CC=0 contribution from expanded internals).
+- **`CognitiveComplexityBuilder` in `common`**: the builder lives at
+  `common/src/brain_type_metrics/cognitive_complexity.rs` with no
+  `rustc_private` dependency. The HIR walker (in the future lint driver) maps
+  each HIR expression to the appropriate builder call, passing
+  `span.from_expansion()` as the `is_from_expansion` parameter.
+- **Internal nesting depth tracking**: the builder maintains a stack
+  recording whether each nesting level originates from a macro expansion.
+  Effective depth (used for nesting increments) counts only non-expansion
+  levels. This prevents macro-generated control flow from inflating the nesting
+  penalty of subsequent real code.
+- **API by increment category**: the builder exposes
+  `record_structural_increment`, `record_nesting_increment`, and
+  `record_fundamental_increment` rather than per-expression-type methods. This
+  keeps the builder decoupled from Rust HIR node types.
+- **Consuming `build()` with balance assertion**: `build()` panics if
+  the nesting stack is not empty, catching mismatched `push_nesting` /
+  `pop_nesting` calls at the point of use.
+
 ## Implementation approach
 
 ### Metric collection

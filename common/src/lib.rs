@@ -23,8 +23,8 @@ pub use brain_type_metrics::evaluation::{
     evaluate_brain_type, format_help, format_note, format_primary_message,
 };
 pub use brain_type_metrics::{
-    ForeignReferenceSet, MethodMetrics, TypeMetrics, TypeMetricsBuilder, brain_methods,
-    foreign_reach_count, weighted_methods_count,
+    CognitiveComplexityBuilder, ForeignReferenceSet, MethodMetrics, TypeMetrics,
+    TypeMetricsBuilder, brain_methods, foreign_reach_count, weighted_methods_count,
 };
 pub use context::{
     ContextEntry, ContextKind, in_test_like_context, in_test_like_context_with, is_in_main_fn,

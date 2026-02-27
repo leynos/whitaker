@@ -158,7 +158,7 @@
   measured values in diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_type` rule
   set (initial defaults). Requires 6.2.1.
-- [ ] 6.2.3. Ensure macro-expanded spans are excluded or capped during CC
+- [x] 6.2.3. Ensure macro-expanded spans are excluded or capped during CC
   calculation. See [brain trust lints design](brain-trust-lints-design.md)
   §Metric collection.
 
