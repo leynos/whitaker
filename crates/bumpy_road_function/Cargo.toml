@@ -1,6 +1,6 @@
 [package]
 name = "bumpy_road_function"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 publish = false
 description = "Lint that flags multiple clusters of complex conditional logic"

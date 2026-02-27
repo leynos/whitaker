@@ -1,6 +1,6 @@
 [package]
 name = "function_attrs_follow_docs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 publish = false
 description = "Dylint lint that enforces function attributes follow documentation comments"

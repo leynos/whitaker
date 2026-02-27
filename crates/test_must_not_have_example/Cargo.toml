@@ -1,6 +1,6 @@
 [package]
 name = "test_must_not_have_example"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 publish = false
 description = "Dylint lint forbidding example sections in test documentation"
