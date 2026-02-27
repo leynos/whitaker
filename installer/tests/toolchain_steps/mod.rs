@@ -9,6 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
+use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use super::support::{
     is_toolchain_installed, is_toolchain_installed_in_env, pinned_toolchain_channel,
     setup_isolated_rustup, workspace_root,
@@ -319,9 +320,11 @@ pub fn then_suite_library_is_staged(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let has_local_staging_marker = stderr.contains(STAGING_OUTPUT_MARKER);
+    let has_prebuilt_staging_marker = stderr.contains(PREBUILT_INSTALL_MARKER);
     assert!(
-        stderr.contains(STAGING_OUTPUT_MARKER),
-        "expected '{STAGING_OUTPUT_MARKER}' in staging output, stderr: {stderr}"
+        has_local_staging_marker || has_prebuilt_staging_marker,
+        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_INSTALL_MARKER}' in staging output, stderr: {stderr}"
     );
 }
 

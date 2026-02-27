@@ -3,9 +3,14 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
+use camino::Utf8Path;
 use camino::Utf8PathBuf;
+use std::collections::HashSet;
+use std::fs;
+use std::io;
 use std::io::Write;
 use std::time::Duration;
+use whitaker_installer::builder::{library_extension, library_prefix};
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::dirs::BaseDirs;
@@ -14,6 +19,7 @@ use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_ins
 use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
+use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
 
 /// Context needed to attempt prebuilt installation.
 pub(crate) struct PrebuiltInstallationContext<'a> {
@@ -58,6 +64,42 @@ pub(crate) fn try_prebuilt_installation(
     context: &PrebuiltInstallationContext<'_>,
     stderr: &mut dyn Write,
 ) -> Result<Option<Utf8PathBuf>> {
+    try_prebuilt_installation_with(
+        context,
+        stderr,
+        PrebuiltInstallationHooks {
+            detect_host_target,
+            resolve_destination_dir: prebuilt_library_dir,
+            attempt_prebuilt,
+            prune_prebuilt_libraries,
+        },
+    )
+}
+
+type DetectHostTargetFn = fn() -> Result<String>;
+type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathBuf>;
+type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
+type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName]) -> Result<()>;
+
+struct PrebuiltInstallationHooks {
+    detect_host_target: DetectHostTargetFn,
+    resolve_destination_dir: ResolveDestinationDirFn,
+    attempt_prebuilt: AttemptPrebuiltFn,
+    prune_prebuilt_libraries: PruneLibrariesFn,
+}
+
+fn try_prebuilt_installation_with(
+    context: &PrebuiltInstallationContext<'_>,
+    stderr: &mut dyn Write,
+    hooks: PrebuiltInstallationHooks,
+) -> Result<Option<Utf8PathBuf>> {
+    let PrebuiltInstallationHooks {
+        detect_host_target,
+        resolve_destination_dir,
+        attempt_prebuilt,
+        prune_prebuilt_libraries,
+    } = hooks;
+
     if !context
         .args
         .should_attempt_prebuilt(context.requested_crates)
@@ -74,7 +116,7 @@ pub(crate) fn try_prebuilt_installation(
     };
 
     let destination_dir =
-        match prebuilt_library_dir(context.dirs, context.toolchain_channel, &host_target) {
+        match resolve_destination_dir(context.dirs, context.toolchain_channel, &host_target) {
             Ok(destination) => destination,
             Err(error) => {
                 write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
@@ -93,7 +135,73 @@ pub(crate) fn try_prebuilt_installation(
     else {
         return Ok(None);
     };
+    if let Err(error) = prune_prebuilt_libraries(
+        &staging_path,
+        context.toolchain_channel,
+        context.requested_crates,
+    ) {
+        write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
+        return Ok(None);
+    }
     Ok(Some(staging_path))
+}
+
+fn requested_crate_names(requested_crates: &[CrateName]) -> HashSet<&str> {
+    if requested_crates.is_empty() {
+        return HashSet::from([SUITE_CRATE]);
+    }
+    requested_crates.iter().map(CrateName::as_str).collect()
+}
+
+fn staged_library_filename(crate_name: &str, toolchain_channel: &str) -> String {
+    let normalized = crate_name.replace('-', "_");
+    format!(
+        "{}{}@{}{}",
+        library_prefix(),
+        normalized,
+        toolchain_channel,
+        library_extension()
+    )
+}
+
+/// Remove staged prebuilt libraries that were not requested for this install.
+///
+/// Prebuilt archives can contain both suite and constituent crates, while local
+/// builds stage only requested crates. Pruning keeps prebuilt installs aligned
+/// with local-build behaviour and avoids duplicate lint registration when the
+/// wrapper runs `cargo dylint --all`.
+fn prune_prebuilt_libraries(
+    staging_path: &Utf8Path,
+    toolchain_channel: &str,
+    requested_crates: &[CrateName],
+) -> Result<()> {
+    let requested = requested_crate_names(requested_crates);
+    let known_crates = LINT_CRATES
+        .iter()
+        .copied()
+        .chain(EXPERIMENTAL_LINT_CRATES.iter().copied())
+        .chain(std::iter::once(SUITE_CRATE));
+
+    for crate_name in known_crates {
+        if requested.contains(crate_name) {
+            continue;
+        }
+
+        let stale_path = staging_path.join(staged_library_filename(crate_name, toolchain_channel));
+        match fs::remove_file(stale_path.as_std_path()) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(InstallerError::StagingFailed {
+                    reason: format!(
+                        "failed to remove stale prebuilt library {stale_path}: {error}"
+                    ),
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Detect the host target triple by parsing `rustc -vV` output.
@@ -154,3 +262,6 @@ fn write_metrics_summary(quiet: bool, record_outcome: &RecordOutcome, stderr: &m
     }
     write_stderr_line(stderr, record_outcome.metrics().summary_line());
 }
+
+#[cfg(test)]
+mod tests;

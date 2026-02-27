@@ -3,6 +3,9 @@
 //! These scenarios invoke the installer binary and validate dry-run output,
 //! error handling, and (when possible) installation results.
 
+mod prebuilt_markers;
+
+use prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
@@ -299,12 +302,24 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
     let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");
     let temp_dir = cli_world._temp_dir.borrow();
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");
 
-    let staging_dir = temp_dir.path().join(channel).join("release");
+    let staging_dir = if stderr.contains(PREBUILT_INSTALL_MARKER) {
+        PathBuf::from(expected_prebuilt_target_dir(channel).unwrap_or_else(|| {
+            temp_dir
+                .path()
+                .join(channel)
+                .join("release")
+                .display()
+                .to_string()
+        }))
+    } else {
+        temp_dir.path().join(channel).join("release")
+    };
     let entries = std::fs::read_dir(&staging_dir)
         .expect("staging directory should exist")
         .filter_map(|e| e.ok())
