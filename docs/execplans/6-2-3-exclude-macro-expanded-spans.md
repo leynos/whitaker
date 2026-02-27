@@ -93,16 +93,14 @@ excludes macro-expanded increments and nesting from the score.
 ## Surprises & discoveries
 
 - Observation: rstest-bdd step functions must name the world parameter
-  `world`, not `_world`. Using `_world` causes the macro to fail to
-  match the fixture name, producing "requires fixtures `_world`, but the
-  following are missing: `_world`. Available fixtures from scenario:
-  `world`".
-  Evidence: all 7 BDD scenarios failed with this error until the
-  parameter was renamed from `_world` to `world` with `let _ = world;`
-  to suppress the unused-variable warning.
-  Impact: cosmetic; fixed immediately. Future step functions that do
-  not use the world parameter should use `let _ = world;` instead of
-  prefixing with underscore.
+  `world`, not `_world`. Using `_world` causes the macro to fail to match the
+  fixture name, producing "requires fixtures `_world`, but the following are
+  missing: `_world`. Available fixtures from scenario: `world`". Evidence: all
+  7 BDD scenarios failed with this error until the parameter was renamed from
+  `_world` to `world` with `let _ = world;` to suppress the unused-variable
+  warning. Impact: cosmetic; fixed immediately. Future step functions that do
+  not use the world parameter should use `let _ = world;` instead of prefixing
+  with underscore.
 
 ## Decision log
 
@@ -149,17 +147,16 @@ increments.
 **Test coverage**: 28 unit tests in `cognitive_complexity_tests.rs` covering
 individual increment types, macro-expansion filtering, nesting stack behaviour,
 composite scenarios modelling real code patterns, and edge cases. 7 BDD
-scenarios in `cognitive_complexity_behaviour.rs` covering end-to-end behavioural
-cases.
+scenarios in `cognitive_complexity_behaviour.rs` covering end-to-end
+behavioural cases.
 
 **Quality gates**: `make check-fmt`, `make lint`, and `make test` all pass.
 Full test suite: 797/855 tests run, 796 passed (2 slow), 1 pre-existing failure
 (unrelated), 2 skipped.
 
 **Files created** (5): `cognitive_complexity.rs` (115 lines),
-`cognitive_complexity_tests.rs` (315 lines),
-`cognitive_complexity.feature` (57 lines),
-`cognitive_complexity_behaviour.rs` (135 lines), this exec plan.
+`cognitive_complexity_tests.rs` (315 lines), `cognitive_complexity.feature` (57
+lines), `cognitive_complexity_behaviour.rs` (135 lines), this exec plan.
 
 **Files modified** (4): `mod.rs` (+2 lines), `lib.rs` (+1 line),
 `brain-trust-lints-design.md` (+29 lines), `roadmap.md` (checkbox flip).
@@ -175,8 +172,8 @@ straightforward. The consuming `build()` with balance assertion catches
 programming errors early.
 
 **What to watch**: the builder is a pure producer; integration with the HIR
-walker (future task) will exercise the API under real conditions and may surface
-additional edge cases.
+walker (future task) will exercise the API under real conditions and may
+surface additional edge cases.
 
 ## Context and orientation
 

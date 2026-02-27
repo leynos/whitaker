@@ -3,9 +3,6 @@
 //! These scenarios invoke the installer binary and validate dry-run output,
 //! error handling, and (when possible) installation results.
 
-mod prebuilt_markers;
-
-use prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
@@ -134,6 +131,18 @@ fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
     prebuilt_library_dir(&dirs, toolchain, &host_target)
         .ok()
         .map(|path| path.into_string())
+}
+
+/// Counts files in `dir` whose name contains `substring`.
+/// Returns 0 when `dir` does not exist or cannot be read.
+fn count_matching_files(dir: &std::path::Path, substring: &str) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains(substring))
+        .count()
 }
 
 /// Asserts that the CLI exit status matches the expected success state.
@@ -302,41 +311,28 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
     let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");
+    let needle = format!("whitaker_suite@{channel}");
+
+    // When prebuilt artefacts are available the installer downloads them to the
+    // canonical prebuilt path instead of staging to --target-dir.
+    if let Some(dir) = expected_prebuilt_target_dir(channel)
+        && count_matching_files(&PathBuf::from(&dir), &needle) == 1
+    {
+        return;
+    }
+
     let temp_dir = cli_world._temp_dir.borrow();
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");
-
-    let staging_dir = if stderr.contains(PREBUILT_INSTALL_MARKER) {
-        PathBuf::from(expected_prebuilt_target_dir(channel).unwrap_or_else(|| {
-            temp_dir
-                .path()
-                .join(channel)
-                .join("release")
-                .display()
-                .to_string()
-        }))
-    } else {
-        temp_dir.path().join(channel).join("release")
-    };
-    let entries = std::fs::read_dir(&staging_dir)
-        .expect("staging directory should exist")
-        .filter_map(|e| e.ok())
-        .map(|e| e.file_name().to_string_lossy().to_string())
-        .collect::<Vec<_>>();
-
-    let expected_substring = format!("whitaker_suite@{channel}");
-    let matches = entries
-        .iter()
-        .filter(|name| name.contains(&expected_substring))
-        .count();
+    let staging_dir = temp_dir.path().join(channel).join("release");
 
     assert!(
-        matches == 1,
-        "expected exactly one suite library matching '{expected_substring}' to be staged in {staging_dir:?}; matches={matches}, entries={entries:?}, stdout={}, stderr={}",
+        count_matching_files(&staging_dir, &needle) == 1,
+        "expected exactly one suite library matching '{needle}' in {staging_dir:?}, \
+         stdout={}, stderr={}",
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr),
     );
 }
 

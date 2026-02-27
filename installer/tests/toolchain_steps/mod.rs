@@ -18,7 +18,7 @@ use super::support::{
 /// Non-existent toolchain channel used to exercise auto-install failure paths.
 pub const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
 
-/// Output marker indicating successful library staging.
+/// Output marker indicating successful library staging (build-from-source path).
 const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
 
 /// Output marker indicating successful toolchain installation.
@@ -320,6 +320,9 @@ pub fn then_suite_library_is_staged(world: &ToolchainWorld) {
     skip_if_needed!(world);
     let output = get_output(world);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    // Accept either the build-from-source staging marker or the prebuilt
+    // success marker — when prebuilt artefacts are available the installer
+    // downloads them instead of building locally.
     let has_local_staging_marker = stderr.contains(STAGING_OUTPUT_MARKER);
     let has_prebuilt_staging_marker = stderr.contains(PREBUILT_INSTALL_MARKER);
     assert!(
