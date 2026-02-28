@@ -50,7 +50,7 @@ that helper into a `#[fixture]` and injecting it as a test parameter.
 
 The lint emits only when all conditions hold:
 
-- Callsite is within a function recognised as an `#[rstest]` test.
+- Callsite is within a function recognized as an `#[rstest]` test.
 - Callee resolves to a function definition, and by default is local to the
   crate.
 - Distinct test count is at least `min_distinct_tests`.
@@ -99,7 +99,7 @@ struct ArgFingerprint {
 
 Fingerprint rules:
 
-- `FixtureLocal`: path expression resolving to a recognised fixture parameter.
+- `FixtureLocal`: path expression resolving to a recognized fixture parameter.
 - `ConstLit`: literal expression captured as source text.
 - `ConstPath`: path expression resolving to `const`, associated `const`, or
   `static`, keyed by a stable definition path.
@@ -154,7 +154,7 @@ Given statements `S[0..n)`, a paragraph candidate is an inclusive range
 
 For each sink binding `S[i]`:
 
-1. Initialise `needed` to local uses inside the sink expression.
+1. Initialize `needed` to local uses inside the sink expression.
 2. Walk backward from `i - 1` while contiguity is preserved.
 3. Include statement `S[j]` when it defines or mutates an item in `needed`.
 4. Update `needed` with statement uses and remove newly satisfied definitions.
@@ -251,8 +251,8 @@ enum CalleeShape {
 }
 ```
 
-Local identifiers should be normalised to deterministic slots by
-first-appearance order. Deep AST canonicalisation is intentionally out of scope.
+Local identifiers should be normalized to deterministic slots by
+first-appearance order. Deep AST canonicalization is intentionally out of scope.
 
 ### Emission strategy
 
@@ -286,7 +286,7 @@ emit_once_per_group = false
 
 _Table 1: Comparison of target scope, cost, and implementation complexity._
 
-For screen readers: The following flowchart summarises lint data flow from HIR
+For screen readers: The following flowchart summarizes lint data flow from HIR
 traversal to per-lint diagnostics.
 
 ```mermaid
@@ -346,7 +346,7 @@ The following work is intentionally excluded from this design:
 - whole-program dependence graphs,
 - MIR or SSA-level transformations,
 - general-purpose clone detection, and
-- aggressive canonicalisation aimed at maximal recall.
+- aggressive canonicalization aimed at maximal recall.
 
 These constraints keep runtime cost predictable, diagnostics explainable, and
 false-positive control practical for iterative promotion from experimental to

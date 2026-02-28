@@ -189,13 +189,13 @@
   opt-in and English-only for tool ingestion. See
   [brain trust lints design](brain-trust-lints-design.md) §SARIF output.
 
-### 6.6. Configuration, localisation, and tests
+### 6.6. Configuration, localization, and tests
 
 - [ ] 6.6.1. Add `brain_type` and `brain_trait` configuration sections to
   `whitaker.toml` with documented defaults. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
   localization, and testing.
-- [ ] 6.6.2. Add Fluent localisation entries for both lints. See
+- [ ] 6.6.2. Add Fluent localization entries for both lints. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
   localization, and testing.
 - [ ] 6.6.3. Add UI tests for positive and negative cases under
@@ -372,7 +372,7 @@
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Integration constraints and §Comparison and rollout guidance. Requires
   8.2.4, 8.3.4, and 8.4.4.
-- [ ] 8.5.2. Add Fluent localisation entries and diagnostic argument mappings
+- [ ] 8.5.2. Add Fluent localization entries and diagnostic argument mappings
   for all three lint slugs. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Integration constraints. Requires 8.5.1 and 2.3.3.
