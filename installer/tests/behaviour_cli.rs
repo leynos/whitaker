@@ -131,11 +131,17 @@ fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
 }
 
 /// Lists filenames in `dir` whose name contains `substring`.
-/// Returns an empty vec when `dir` does not exist or cannot be read.
+/// Returns an empty vec when `dir` does not exist.
 /// Pass an empty string to list all entries.
+///
+/// # Panics
+///
+/// Panics on I/O errors other than `NotFound` (e.g. permission denied).
 fn matching_files(dir: &std::path::Path, substring: &str) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(e) => panic!("failed to read directory {}: {e}", dir.display()),
     };
     entries
         .filter_map(|e| e.ok())

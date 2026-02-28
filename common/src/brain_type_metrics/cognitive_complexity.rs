@@ -38,7 +38,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+/// use common::CognitiveComplexityBuilder;
 ///
 /// let mut cc = CognitiveComplexityBuilder::new();
 /// // Simulate: if condition { ... }
@@ -70,7 +70,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let cc = CognitiveComplexityBuilder::new();
     /// assert_eq!(cc.score(), 0);
@@ -95,7 +95,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let mut cc = CognitiveComplexityBuilder::new();
     /// cc.record_structural_increment(false);
@@ -121,7 +121,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let mut cc = CognitiveComplexityBuilder::new();
     /// cc.push_nesting(false);
@@ -146,7 +146,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let mut cc = CognitiveComplexityBuilder::new();
     /// cc.record_fundamental_increment(false);
@@ -170,7 +170,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let mut cc = CognitiveComplexityBuilder::new();
     /// cc.push_nesting(false);
@@ -215,7 +215,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let mut cc = CognitiveComplexityBuilder::new();
     /// assert_eq!(cc.effective_depth(), 0);
@@ -233,7 +233,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let mut cc = CognitiveComplexityBuilder::new();
     /// cc.record_structural_increment(false);
@@ -254,7 +254,7 @@ impl CognitiveComplexityBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+    /// use common::CognitiveComplexityBuilder;
     ///
     /// let cc = CognitiveComplexityBuilder::new();
     /// assert_eq!(cc.build(), 0);
