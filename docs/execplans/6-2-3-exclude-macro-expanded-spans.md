@@ -16,7 +16,8 @@ with built-in filtering for macro-expanded spans. After this change:
 
 1. A pure library builder (`CognitiveComplexityBuilder`) accepts incremental
    complexity contributions via method calls. Each call accepts
-   `is_from_expansion: bool` so the future HIR walker can pass
+   `is_from_expansion: bool` so the future High-level Intermediate
+   Representation (HIR) walker can pass
    `span.from_expansion()` without the `common` crate depending on
    `rustc_private`.
 2. Macro-expanded nodes are silently excluded from the CC score, preventing
@@ -29,8 +30,9 @@ with built-in filtering for macro-expanded spans. After this change:
    `TypeMetricsBuilder::add_method()`, completing the producer side of the
    brain type metric pipeline.
 
-Observable outcome: running `cargo test -p common` shows new unit tests and BDD
-scenarios passing for cognitive complexity computation. The builder correctly
+Observable outcome: running `cargo test -p common` shows new unit tests and
+Behaviour-Driven Development (BDD) scenarios passing for cognitive complexity
+computation. The builder correctly
 excludes macro-expanded increments and nesting from the score.
 
 ## Constraints
@@ -81,13 +83,15 @@ excludes macro-expanded increments and nesting from the score.
 - [x] (2026-02-26) Stage B: Create `CognitiveComplexityBuilder` with
   unit tests. 28 unit tests passing.
 - [x] (2026-02-26) Stage C: Create BDD feature file and behaviour
-  harness. 7 BDD scenarios passing.
+  harness. 8 BDD scenarios passing.
 - [x] (2026-02-26) Stage D: Record design decisions in
   `docs/brain-trust-lints-design.md`.
 - [x] (2026-02-26) Stage E: Run quality gates (`make check-fmt`, `make lint`,
-  `make test`). All three gates pass. One pre-existing failure
-  (`scenario_install_suite_to_temp_dir` in `whitaker-installer`) is unrelated
-  to this change (last modified in commit `ab7b1bd` for ExecPlan 3-4-4).
+  `make test`). `check-fmt` and `lint` passed cleanly. `make test` had one
+  pre-existing failure (`scenario_install_suite_to_temp_dir` in
+  `whitaker-installer`, last modified in commit `ab7b1bd` for ExecPlan 3-4-4)
+  that is unrelated to this change and was subsequently fixed in a later
+  commit.
 - [x] (2026-02-26) Stage F: Mark roadmap item 6.2.3 as done.
 
 ## Surprises & discoveries
@@ -146,13 +150,14 @@ increments.
 
 **Test coverage**: 28 unit tests in `cognitive_complexity_tests.rs` covering
 individual increment types, macro-expansion filtering, nesting stack behaviour,
-composite scenarios modelling real code patterns, and edge cases. 7 BDD
+composite scenarios modelling real code patterns, and edge cases. 8 BDD
 scenarios in `cognitive_complexity_behaviour.rs` covering end-to-end
 behavioural cases.
 
-**Quality gates**: `make check-fmt`, `make lint`, and `make test` all pass.
-Full test suite: 797/855 tests run, 796 passed (2 slow), 1 pre-existing failure
-(unrelated), 2 skipped.
+**Quality gates**: `make check-fmt` and `make lint` passed cleanly. `make test`
+ran 797/855 tests: 796 passed (2 slow), 2 skipped; 1 pre-existing failure in
+`whitaker-installer` was unrelated and subsequently fixed in a later commit.
+All gates now pass.
 
 **Files created** (5): `cognitive_complexity.rs` (115 lines),
 `cognitive_complexity_tests.rs` (315 lines), `cognitive_complexity.feature` (57
@@ -293,7 +298,7 @@ Acceptance: `cargo check -p common && cargo test -p common` succeed.
 
 ### Stage C: Create BDD feature file and behaviour harness
 
-Create `common/tests/features/cognitive_complexity.feature` with 7 scenarios:
+Create `common/tests/features/cognitive_complexity.feature` with 8 scenarios:
 
 1. Empty function has zero complexity.
 2. Single if adds one structural increment.
@@ -302,10 +307,11 @@ Create `common/tests/features/cognitive_complexity.feature` with 7 scenarios:
 5. Macro-expanded nesting does not inflate depth.
 6. Boolean operators add fundamental increments.
 7. Mixed real and expansion increments.
+8. Fundamental increment from expansion is excluded.
 
 Create `common/tests/cognitive_complexity_behaviour.rs` with a `CcWorld` struct
 (using `RefCell<CognitiveComplexityBuilder>` and `Cell<Option<usize>>`), step
-functions, and scenario registrations (indices 0-6).
+functions, and scenario registrations (indices 0-7).
 
 Acceptance: `cargo test -p common` passes.
 
@@ -365,7 +371,7 @@ The feature is complete only when all of the following are true:
   methods described in Stage B.
 - Unit tests cover all increment types, macro-expansion filtering, nesting
   stack behaviour, composite scenarios, and edge cases.
-- BDD scenarios cover 7 behavioural cases for CC computation with
+- BDD scenarios cover 8 behavioural cases for CC computation with
   macro-expansion filtering.
 - Design decisions recorded in `docs/brain-trust-lints-design.md`.
 - Roadmap 6.2.3 marked as `[x]`.
@@ -442,6 +448,8 @@ impl Default for CognitiveComplexityBuilder {
 
 ### Files to create
 
+*Table 1: New files introduced by this change.*
+
 | File                                                          | Est. lines | Purpose                |
 | ------------------------------------------------------------- | ---------- | ---------------------- |
 | `common/src/brain_type_metrics/cognitive_complexity.rs`       | ~160-200   | Builder implementation |
@@ -451,6 +459,8 @@ impl Default for CognitiveComplexityBuilder {
 | `docs/execplans/6-2-3-exclude-macro-expanded-spans.md`        | ~330       | This exec plan         |
 
 ### Files to modify
+
+*Table 2: Existing files modified by this change.*
 
 | File                                                | Change                                              |
 | --------------------------------------------------- | --------------------------------------------------- |

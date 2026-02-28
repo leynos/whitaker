@@ -3,6 +3,9 @@
 //! These scenarios invoke the installer binary and validate dry-run output,
 //! error handling, and (when possible) installation results.
 
+mod prebuilt_markers;
+
+use prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
@@ -77,16 +80,10 @@ fn skip_scenario_when_toolchain_missing(cli_world: &CliWorld, channel: &str) {
 fn ensure_toolchain_available(cli_world: &CliWorld) -> Option<String> {
     let channel = pinned_toolchain_channel();
     cli_world.toolchain.replace(Some(channel.clone()));
-
     if cli_world.requires_toolchain.get() {
         skip_scenario_when_toolchain_missing(cli_world, &channel);
     }
-
-    if cli_world.skip_assertions.get() {
-        None
-    } else {
-        Some(channel)
-    }
+    (!cli_world.skip_assertions.get()).then_some(channel)
 }
 
 /// Ensures a toolchain is available for scenarios that strictly require it.
@@ -133,37 +130,31 @@ fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
         .map(|path| path.into_string())
 }
 
-/// Counts files in `dir` whose name contains `substring`.
-/// Returns 0 when `dir` does not exist or cannot be read.
-fn count_matching_files(dir: &std::path::Path, substring: &str) -> usize {
+/// Lists filenames in `dir` whose name contains `substring`.
+/// Returns an empty vec when `dir` does not exist or cannot be read.
+/// Pass an empty string to list all entries.
+fn matching_files(dir: &std::path::Path, substring: &str) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
-        return 0;
+        return Vec::new();
     };
     entries
         .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().contains(substring))
-        .count()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|name| name.contains(substring))
+        .collect()
 }
 
 /// Asserts that the CLI exit status matches the expected success state.
 fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
     skip_if_needed!(cli_world);
-
     let output = get_output(cli_world);
-    if expected_success {
-        assert!(
-            output.status.success(),
-            "expected success, stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    } else {
-        assert!(
-            !output.status.success(),
-            "expected failure, stdout: {}, stderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.success(),
+        expected_success,
+        "expected success={expected_success}, stdout={}, stderr={stderr}",
+        String::from_utf8_lossy(&output.stdout),
+    );
 }
 
 #[given("the installer is invoked with dry-run and a target directory")]
@@ -311,28 +302,41 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     skip_if_needed!(cli_world);
 
     let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");
     let needle = format!("whitaker_suite@{channel}");
 
-    // When prebuilt artefacts are available the installer downloads them to the
-    // canonical prebuilt path instead of staging to --target-dir.
-    if let Some(dir) = expected_prebuilt_target_dir(channel)
-        && count_matching_files(&PathBuf::from(&dir), &needle) == 1
+    // When the installer reports a successful prebuilt installation, verify
+    // that the canonical prebuilt directory contains at least one matching
+    // library. We only take this path when stderr confirms the installer
+    // actually used prebuilt artefacts in this run.
+    if stderr.contains(PREBUILT_INSTALL_MARKER)
+        && let Some(dir) = expected_prebuilt_target_dir(channel)
     {
+        let prebuilt_path = PathBuf::from(&dir);
+        let matches = matching_files(&prebuilt_path, &needle);
+        assert!(
+            !matches.is_empty(),
+            "prebuilt marker found in stderr but no library matching \
+             '{needle}' in {prebuilt_path:?}, entries={:?}",
+            matching_files(&prebuilt_path, ""),
+        );
         return;
     }
 
     let temp_dir = cli_world._temp_dir.borrow();
     let temp_dir = temp_dir.as_ref().expect("temp dir not set");
     let staging_dir = temp_dir.path().join(channel).join("release");
+    let matches = matching_files(&staging_dir, &needle);
 
     assert!(
-        count_matching_files(&staging_dir, &needle) == 1,
-        "expected exactly one suite library matching '{needle}' in {staging_dir:?}, \
-         stdout={}, stderr={}",
+        matches.len() == 1,
+        "expected exactly one suite library matching '{needle}' in \
+         {staging_dir:?}, matches={matches:?}, entries={:?}, \
+         stdout={}, stderr={stderr}",
+        matching_files(&staging_dir, ""),
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
     );
 }
 

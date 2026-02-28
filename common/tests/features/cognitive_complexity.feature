@@ -59,3 +59,9 @@ Feature: Cognitive complexity with macro-expansion filtering
     And nesting is popped
     When the complexity is finalised
     Then the complexity score is 3
+
+  Scenario: Fundamental increment from expansion is excluded
+    Given a new complexity builder
+    And a fundamental increment from expansion
+    When the complexity is finalised
+    Then the complexity score is 0

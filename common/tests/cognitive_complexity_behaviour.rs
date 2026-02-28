@@ -63,6 +63,11 @@ fn given_fundamental_not_expanded(world: &CcWorld) {
     with_builder(world, |b| b.record_fundamental_increment(false));
 }
 
+#[given("a fundamental increment from expansion")]
+fn given_fundamental_expanded(world: &CcWorld) {
+    with_builder(world, |b| b.record_fundamental_increment(true));
+}
+
 #[given("nesting is pushed not from expansion")]
 fn given_push_nesting_not_expanded(world: &CcWorld) {
     with_builder(world, |b| b.push_nesting(false));
@@ -134,5 +139,10 @@ fn scenario_boolean_operators(world: CcWorld) {
 
 #[scenario(path = "tests/features/cognitive_complexity.feature", index = 6)]
 fn scenario_mixed_real_and_expansion(world: CcWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/cognitive_complexity.feature", index = 7)]
+fn scenario_fundamental_from_expansion_excluded(world: CcWorld) {
     let _ = world;
 }

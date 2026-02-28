@@ -151,7 +151,7 @@ fn mixed_expansion_nesting() {
 /// Parameterised composite scenarios. Each case simulates a code
 /// pattern and asserts the expected CC score.
 ///
-/// Tuple: `(label, setup_fn, expected_score)`
+/// Parameters: `(label, expected_score)`
 #[rstest]
 #[case("simple_if", 1)]
 fn composite_simple_if(#[case] _label: &str, #[case] expected: usize) {
