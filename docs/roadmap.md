@@ -189,13 +189,13 @@
   opt-in and English-only for tool ingestion. See
   [brain trust lints design](brain-trust-lints-design.md) §SARIF output.
 
-### 6.6. Configuration, localisation, and tests
+### 6.6. Configuration, localization, and tests
 
 - [ ] 6.6.1. Add `brain_type` and `brain_trait` configuration sections to
   `whitaker.toml` with documented defaults. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
   localization, and testing.
-- [ ] 6.6.2. Add Fluent localisation entries for both lints. See
+- [ ] 6.6.2. Add Fluent localization entries for both lints. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
   localization, and testing.
 - [ ] 6.6.3. Add UI tests for positive and negative cases under
@@ -283,3 +283,104 @@
 - [ ] 7.8.1. Add CI jobs to run token and AST passes and verify stable SARIF
   output. See [clone detector design](whitaker-clone-detector-design.md)
   §Acceptance criteria.
+
+## 8. `rstest` fixture and test hygiene lints
+
+### 8.1. Shared foundations
+
+- [ ] 8.1.1. Add shared `rstest` test and fixture detection helpers in `common`
+  for attribute-based detection and optional expansion-trace fallback. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction and §Integration constraints. Requires
+  1.1.1.
+- [ ] 8.1.2. Add shared user-editable span recovery helpers for macro-heavy
+  test code paths, and use them to avoid diagnostics on macro-only glue. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Integration constraints and §Lint A: call-site fixture extraction. Requires
+  1.1.1.
+- [ ] 8.1.3. Add shared argument and paragraph fingerprint data models for
+  deterministic grouping across tests. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction and §Lint C: repeated fixture
+  paragraph detection. Requires 8.1.1.
+
+### 8.2. `rstest_helper_should_be_fixture` lint
+
+- [ ] 8.2.1. Create the `rstest_helper_should_be_fixture` lint crate, register
+  `RSTEST_HELPER_SHOULD_BE_FIXTURE`, and wire configuration loading defaults.
+  See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.1.1 and 8.1.3.
+- [ ] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
+  fixture-local classification and constant-aware argument fingerprinting. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.1.
+- [ ] 8.2.3. Implement crate-post aggregation thresholds and actionable
+  diagnostics with `span_lint_hir_and_then`. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.2 and 8.1.2.
+- [ ] 8.2.4. Add UI pass/fail coverage for repeated no-arg helpers,
+  repeated fixture/constant argument helpers, and non-trigger cases. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.3 and 1.2.1.
+
+### 8.3. `single_binding_paragraph` lint
+
+- [ ] 8.3.1. Create the `single_binding_paragraph` lint crate and implement the
+  local statement I/O model (`defs`, `uses`, `muts`, and control-flow guards).
+  See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint B: single-binding paragraph detection. Requires 8.1.2.
+- [ ] 8.3.2. Implement the contiguous backward-slice algorithm, single-output
+  checks, and configurable limits for paragraph length and external inputs. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint B: single-binding paragraph detection. Requires 8.3.1.
+- [ ] 8.3.3. Emit diagnostics with bounded spans and explanatory notes for
+  extraction candidates. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint B: single-binding paragraph detection. Requires 8.3.2.
+- [ ] 8.3.4. Add UI pass/fail coverage for simple paragraphs, too-short
+  candidates, control-flow-containing blocks, and intermediate reuse cases. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint B: single-binding paragraph detection. Requires 8.3.3 and 1.2.1.
+
+### 8.4. `rstest_paragraph_should_be_fixture` lint
+
+- [ ] 8.4.1. Create the `rstest_paragraph_should_be_fixture` lint crate and
+  register `RSTEST_PARAGRAPH_SHOULD_BE_FIXTURE` with configurable assertion and
+  input constraints. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint C: repeated fixture paragraph detection. Requires 8.1.1 and 8.1.3.
+- [ ] 8.4.2. Reuse lint B candidate generation and implement assertion-free
+  filtering plus fixture-or-constant input validation. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint C: repeated fixture paragraph detection. Requires 8.4.1 and 8.3.2.
+- [ ] 8.4.3. Implement cross-test paragraph grouping, identical input
+  fingerprint checks, and crate-post emission controls (`emit_once_per_group`).
+  See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint C: repeated fixture paragraph detection. Requires 8.4.2.
+- [ ] 8.4.4. Add UI pass/fail coverage for repeated setup paragraphs, assertion
+  presence, differing inputs, and non-fixture-derived inputs. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint C: repeated fixture paragraph detection. Requires 8.4.3 and 1.2.1.
+
+### 8.5. Integration, documentation, and promotion
+
+- [ ] 8.5.1. Add all three lints to the experimental set with feature-gated
+  suite wiring and default configuration stanzas. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Integration constraints and §Comparison and rollout guidance. Requires
+  8.2.4, 8.3.4, and 8.4.4.
+- [ ] 8.5.2. Add Fluent localization entries and diagnostic argument mappings
+  for all three lint slugs. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Integration constraints. Requires 8.5.1 and 2.3.3.
+- [ ] 8.5.3. Update user documentation with lint intent, configuration keys,
+  and fixture-extraction remediation guidance. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Comparison and rollout guidance. Requires 8.5.1.
+- [ ] 8.5.4. Define promotion criteria from experimental to standard based on
+  UI stability and false-positive tuning across internal repositories. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Integration constraints. Requires 8.5.1.
