@@ -83,6 +83,44 @@ pub fn expand_bin_dir(version: &str, target: &str) -> String {
         .replace("{bin}", bin)
 }
 
+// ---------------------------------------------------------------------------
+// Test helpers (available to unit tests and integration tests via
+// the `test-support` feature)
+// ---------------------------------------------------------------------------
+
+/// Load and parse the installer's `Cargo.toml`.
+///
+/// Returns the full TOML table for `installer/Cargo.toml`, located via
+/// `CARGO_MANIFEST_DIR`. This helper is shared by unit tests and
+/// behaviour-driven scenarios to avoid duplicating manifest-loading logic.
+#[cfg(any(test, feature = "test-support"))]
+#[must_use]
+pub fn load_cargo_toml() -> toml::Table {
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let cargo_toml_path = manifest_dir.join("Cargo.toml");
+    let content =
+        std::fs::read_to_string(&cargo_toml_path).expect("failed to read installer/Cargo.toml");
+    content
+        .parse::<toml::Table>()
+        .expect("failed to parse installer/Cargo.toml as TOML")
+}
+
+/// Extract the `[package.metadata.binstall]` sub-table from a parsed
+/// `Cargo.toml`.
+///
+/// Panics if the expected table path is missing.
+#[cfg(any(test, feature = "test-support"))]
+#[must_use]
+pub fn extract_binstall_table(table: &toml::Table) -> toml::Table {
+    table
+        .get("package")
+        .and_then(|p| p.get("metadata"))
+        .and_then(|m| m.get("binstall"))
+        .and_then(|b| b.as_table())
+        .expect("[package.metadata.binstall] table not found")
+        .clone()
+}
+
 #[cfg(test)]
 #[path = "binstall_metadata_tests.rs"]
 mod tests;

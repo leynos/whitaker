@@ -6,34 +6,11 @@
 
 use super::*;
 use rstest::rstest;
-use std::path::PathBuf;
-use toml::Table;
-
-/// Load and parse the installer's `Cargo.toml`.
-fn load_cargo_toml() -> Table {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let cargo_toml_path = manifest_dir.join("Cargo.toml");
-    let content =
-        std::fs::read_to_string(&cargo_toml_path).expect("failed to read installer/Cargo.toml");
-    content
-        .parse::<Table>()
-        .expect("failed to parse installer/Cargo.toml as TOML")
-}
-
-/// Navigate to `package.metadata.binstall` in the parsed TOML table.
-fn binstall_table(table: &Table) -> &Table {
-    table
-        .get("package")
-        .and_then(|p| p.get("metadata"))
-        .and_then(|m| m.get("binstall"))
-        .and_then(|b| b.as_table())
-        .expect("[package.metadata.binstall] table not found")
-}
 
 #[rstest]
 fn pkg_url_matches_design_document() {
     let table = load_cargo_toml();
-    let binstall = binstall_table(&table);
+    let binstall = extract_binstall_table(&table);
     let pkg_url = binstall
         .get("pkg-url")
         .and_then(|v| v.as_str())
@@ -44,7 +21,7 @@ fn pkg_url_matches_design_document() {
 #[rstest]
 fn bin_dir_matches_design_document() {
     let table = load_cargo_toml();
-    let binstall = binstall_table(&table);
+    let binstall = extract_binstall_table(&table);
     let bin_dir = binstall
         .get("bin-dir")
         .and_then(|v| v.as_str())
@@ -55,7 +32,7 @@ fn bin_dir_matches_design_document() {
 #[rstest]
 fn default_pkg_fmt_is_tgz() {
     let table = load_cargo_toml();
-    let binstall = binstall_table(&table);
+    let binstall = extract_binstall_table(&table);
     let pkg_fmt = binstall
         .get("pkg-fmt")
         .and_then(|v| v.as_str())
@@ -66,7 +43,7 @@ fn default_pkg_fmt_is_tgz() {
 #[rstest]
 fn windows_override_uses_zip() {
     let table = load_cargo_toml();
-    let binstall = binstall_table(&table);
+    let binstall = extract_binstall_table(&table);
     let overrides = binstall
         .get("overrides")
         .and_then(|o| o.as_table())
@@ -85,7 +62,7 @@ fn windows_override_uses_zip() {
 #[rstest]
 fn no_unexpected_overrides() {
     let table = load_cargo_toml();
-    let binstall = binstall_table(&table);
+    let binstall = extract_binstall_table(&table);
     let overrides = binstall
         .get("overrides")
         .and_then(|o| o.as_table())
@@ -105,7 +82,7 @@ fn no_unexpected_overrides() {
 #[rstest]
 fn essential_binstall_fields_present() {
     let table = load_cargo_toml();
-    let binstall = binstall_table(&table);
+    let binstall = extract_binstall_table(&table);
     let required = ["pkg-url", "bin-dir", "pkg-fmt"];
     for key in &required {
         assert!(

@@ -6,20 +6,24 @@
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::path::PathBuf;
 use toml::Table;
 use whitaker_installer::binstall_metadata::{
-    BIN_DIR_TEMPLATE, PKG_URL_TEMPLATE, expand_bin_dir, expand_pkg_url,
+    BIN_DIR_TEMPLATE, PKG_URL_TEMPLATE, expand_bin_dir, expand_pkg_url, extract_binstall_table,
+    load_cargo_toml,
 };
 
 // ---------------------------------------------------------------------------
 // World type
 // ---------------------------------------------------------------------------
 
+/// Mutable state threaded through Gherkin steps.
+///
+/// Fields use `Option` because the world starts empty (`Default`) and is
+/// populated incrementally by Given/When steps. Each Then step asserts on
+/// the values set by preceding steps.
 #[derive(Default)]
 struct BinstallWorld {
     binstall_table: Option<Table>,
-    overrides_table: Option<Table>,
     target: Option<String>,
     version: Option<String>,
     expanded_url: Option<String>,
@@ -32,40 +36,13 @@ fn world() -> BinstallWorld {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Load and parse the installer's `Cargo.toml`.
-fn load_cargo_toml() -> Table {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let cargo_toml_path = manifest_dir.join("Cargo.toml");
-    let content =
-        std::fs::read_to_string(&cargo_toml_path).expect("failed to read installer/Cargo.toml");
-    content
-        .parse::<Table>()
-        .expect("failed to parse installer/Cargo.toml as TOML")
-}
-
-/// Extract the `[package.metadata.binstall]` sub-table.
-fn extract_binstall(table: &Table) -> Table {
-    table
-        .get("package")
-        .and_then(|p| p.get("metadata"))
-        .and_then(|m| m.get("binstall"))
-        .and_then(|b| b.as_table())
-        .expect("[package.metadata.binstall] not found")
-        .clone()
-}
-
-// ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
 
 #[given("the installer Cargo.toml is loaded")]
 fn given_cargo_toml_loaded(world: &mut BinstallWorld) {
     let table = load_cargo_toml();
-    let binstall = extract_binstall(&table);
-    world.binstall_table = Some(binstall);
+    world.binstall_table = Some(extract_binstall_table(&table));
 }
 
 #[given("target \"{target}\" and version \"{version}\"")]
@@ -86,13 +63,12 @@ fn when_binstall_inspected(world: &mut BinstallWorld) {
 
 #[when("the binstall overrides are inspected")]
 fn when_overrides_inspected(world: &mut BinstallWorld) {
+    // Verify overrides are accessible; the Then step extracts them directly.
     let binstall = world.binstall_table.as_ref().expect("binstall table set");
-    let overrides = binstall
-        .get("overrides")
-        .and_then(|o| o.as_table())
-        .expect("overrides table not found")
-        .clone();
-    world.overrides_table = Some(overrides);
+    assert!(
+        binstall.get("overrides").is_some(),
+        "overrides table not found"
+    );
 }
 
 #[when("the pkg-url template is expanded")]
@@ -141,9 +117,10 @@ fn then_default_pkg_fmt(world: &mut BinstallWorld, expected: String) {
 
 #[then("the x86_64-pc-windows-msvc override has pkg-fmt \"{expected}\"")]
 fn then_windows_override_pkg_fmt(world: &mut BinstallWorld, expected: String) {
-    let overrides = world.overrides_table.as_ref().expect("overrides table set");
-    let windows = overrides
-        .get("x86_64-pc-windows-msvc")
+    let binstall = world.binstall_table.as_ref().expect("binstall table set");
+    let windows = binstall
+        .get("overrides")
+        .and_then(|o| o.get("x86_64-pc-windows-msvc"))
         .and_then(|w| w.as_table())
         .expect("Windows override not found");
     let pkg_fmt = windows

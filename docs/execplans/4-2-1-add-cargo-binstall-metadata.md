@@ -23,8 +23,9 @@ After this change:
    template expansion helpers so the metadata values are testable.
 4. Unit tests (`rstest`) parse the actual `installer/Cargo.toml` and verify
    every binstall field matches the design-document specification.
-5. BDD scenarios (`rstest-bdd` v0.5.0) validate template expansion for all
-   supported targets and check for invalid placeholders.
+5. Behaviour-driven development (BDD) scenarios (`rstest-bdd` v0.5.0)
+   validate template expansion for all supported targets and check for invalid
+   placeholders.
 6. The roadmap marks 4.2.1 as done.
 7. The design document records implementation completion.
 8. `make check-fmt`, `make lint`, and `make test` all pass.
@@ -42,25 +43,24 @@ if the metadata is removed or altered.
 - Every module must begin with a `//!` doc comment.
 - No new external dependencies. The `toml` crate is already in both
   `[dependencies]` and `[dev-dependencies]`.
-- Workspace Clippy `too_many_arguments` limit is 4. BDD step functions must
-  have at most 4 parameters (world + 3 parsed values).
+- Workspace Clippy `too_many_arguments` limit is 4. BDD step functions
+  must have at most 4 parameters (world + 3 parsed values).
 - The `rstest-bdd` world fixture parameter must be named `world` (not
   `_world`) — the macro matches parameter names literally.
 - Use caret version requirements for all dependencies.
 - Comments and documentation use en-GB-oxendict spelling.
 - Markdown wrapped at 80 columns; code blocks at 120.
 - `clippy::expect_used = "deny"` and `clippy::unwrap_used = "deny"` apply in
-  non-test code. The new module's public functions must not call `.expect()`
-  or `.unwrap()` (they are infallible by construction, so this is not an
-  issue).
+  non-test code. The new module's public functions must not call `.expect()` or
+  `.unwrap()` (they are infallible by construction, so this is not an issue).
 - On completion, update `docs/roadmap.md` entry 4.2.1 to `[x]`.
 
 ## Tolerances (exception triggers)
 
 - Scope: if implementation requires changes to more than 10 files, stop and
   escalate.
-- Interface: if a public API signature in existing code must change, stop and
-  escalate.
+- Interface: if a public application programming interface (API) signature in
+  existing code must change, stop and escalate.
 - Dependencies: if a new external dependency is required, stop and escalate.
 - Iterations: if `make check-fmt`, `make lint`, or `make test` still fail
   after 3 targeted fix attempts per gate, stop and escalate with logs.
@@ -71,16 +71,15 @@ if the metadata is removed or altered.
 
 - Risk: The `toml` crate's table navigation for nested
   `package.metadata.binstall` may require careful chaining of `.get()` calls.
-  Severity: low. Likelihood: low. Mitigation: the existing
-  `behaviour_docs.rs` already demonstrates TOML table parsing; the same
-  pattern applies here.
+  Severity: low. Likelihood: low. Mitigation: the existing `behaviour_docs.rs`
+  already demonstrates TOML table parsing; the same pattern applies here.
   Outcome: no issues encountered.
 
 - Risk: BDD step functions with URL template parameters might exceed the
-  4-argument Clippy limit. Severity: low. Likelihood: medium. Mitigation:
-  split Gherkin steps so each step function parses at most 2-3 values from
-  the feature text. Use the world struct to carry state between steps.
-  Outcome: all step functions stayed within the 4-parameter limit.
+  4-argument Clippy limit. Severity: low. Likelihood: medium. Mitigation: split
+  Gherkin steps so each step function parses at most 2-3 values from the
+  feature text. Use the world struct to carry state between steps. Outcome: all
+  step functions stayed within the 4-parameter limit.
 
 ## Progress
 
@@ -96,31 +95,29 @@ if the metadata is removed or altered.
 ## Surprises & discoveries
 
 - Observation: `cargo fmt` reflows multi-line `.expect()` chains and import
-  orderings differently from hand-written style.
-  Evidence: first `make check-fmt` run showed diffs in
-  `binstall_metadata_tests.rs` and `behaviour_binstall.rs`.
-  Impact: resolved by running `make fmt` before re-checking. No functional
-  change.
+  orderings differently from hand-written style. Evidence: first
+  `make check-fmt` run showed diffs in `binstall_metadata_tests.rs` and
+  `behaviour_binstall.rs`. Impact: resolved by running `make fmt` before
+  re-checking. No functional change.
 
 ## Decision log
 
 - Decision: Place the binstall metadata module at
   `installer/src/binstall_metadata.rs` (a top-level peer to `cli`, `pipeline`,
-  etc.) rather than inside the `artefact/` subtree.
-  Rationale: The `artefact/` module covers the prebuilt lint library artefact
-  system (ADR-001). Binstall metadata is about the installer binary's own
-  distribution packaging — a separate concern. A top-level module keeps
+  etc.) rather than inside the `artefact/` subtree. Rationale: The `artefact/`
+  module covers the prebuilt lint library artefact system (architecture
+  decision record (ADR) 001). Binstall metadata is about the installer binary's
+  own distribution packaging — a separate concern. A top-level module keeps
   concerns separated and avoids overloading the `artefact` namespace.
   Date/Author: 2026-02-27 / plan author
 
 - Decision: Parse the actual `Cargo.toml` in tests via
   `env!("CARGO_MANIFEST_DIR")` rather than embedding expected values as string
-  constants alone.
-  Rationale: Parsing the real file detects drift. If someone changes the
-  metadata without updating tests, assertions will catch the mismatch. The
-  constants in the module serve as the single source of truth that both
-  unit tests and BDD scenarios reference.
-  Date/Author: 2026-02-27 / plan author
+  constants alone. Rationale: Parsing the real file detects drift. If someone
+  changes the metadata without updating tests, assertions will catch the
+  mismatch. The constants in the module serve as the single source of truth
+  that both unit tests and BDD scenarios reference. Date/Author: 2026-02-27 /
+  plan author
 
 ## Outcomes & retrospective
 
@@ -147,9 +144,9 @@ No tolerances were breached. Total: 4 new files + 5 modified files = 9 files
 ## Context and orientation
 
 The Whitaker project is a Rust workspace at `/home/user/project/` containing
-Dylint lint crates, a `common` library, and an installer CLI. The installer
-lives in `installer/` and is published as the `whitaker-installer` crate
-(v0.2.0).
+Dylint lint crates, a `common` library, and an installer command-line interface
+(CLI). The installer lives in `installer/` and is published as the
+`whitaker-installer` crate (v0.2.0).
 
 Key files for this task:
 
@@ -177,8 +174,8 @@ Cargo-binstall template placeholders:
 - `{bin}` — binary name (`whitaker-installer` or `whitaker-installer.exe`)
 
 Supported target triples (from the design document):
-`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
-`x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`,
+`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
 
 ## Plan of work
 
@@ -234,8 +231,8 @@ Register the module in `installer/src/lib.rs`:
 
 ### Stage C: Create Gherkin feature file and BDD behaviour tests
 
-Create `installer/tests/features/binstall_metadata.feature` (~40 lines)
-with seven scenarios:
+Create `installer/tests/features/binstall_metadata.feature` (~40 lines) with
+seven scenarios:
 
 1. Binstall metadata section exists in Cargo.toml — verifies `pkg-url`,
    `bin-dir`, and default `pkg-fmt` are present and correct.
@@ -270,8 +267,8 @@ established BDD pattern:
 
 In `docs/roadmap.md` line 118, change `- [ ]` to `- [x]`.
 
-In `docs/whitaker-dylint-suite-design.md`, after line 1412 (the sentence
-about cargo-binstall placeholders), add:
+In `docs/whitaker-dylint-suite-design.md`, after line 1412 (the sentence about
+cargo-binstall placeholders), add:
 
 ```plaintext
 **Implementation status:** The `[package.metadata.binstall]` entries above
@@ -294,8 +291,8 @@ All three must exit 0. Review the test log to confirm the new tests appear.
 
 ### Stage F: Write execplan and commit
 
-Copy this plan to `docs/execplans/4-2-1-add-cargo-binstall-metadata.md`,
-update Status to COMPLETE, and commit all changes.
+Copy this plan to `docs/execplans/4-2-1-add-cargo-binstall-metadata.md`, update
+Status to COMPLETE, and commit all changes.
 
 ## Concrete steps
 
@@ -321,14 +318,14 @@ All commands run from `/home/user/project/`.
 Quality criteria (what "done" means):
 
 - Tests: `make test` passes. New unit tests in `binstall_metadata_tests.rs`
-  and BDD scenarios in `behaviour_binstall.rs` all pass. The tests fail if
-  the binstall metadata is removed from `Cargo.toml`.
+  and BDD scenarios in `behaviour_binstall.rs` all pass. The tests fail if the
+  binstall metadata is removed from `Cargo.toml`.
 - Lint/typecheck: `make check-fmt` and `make lint` exit 0.
 - No regressions: all existing tests continue to pass.
 - Documentation: roadmap item 4.2.1 is checked. Design document notes
   implementation is complete.
 
-Quality method (how we check):
+Quality method (verification steps):
 
 ```bash
 make check-fmt && make lint && make test
@@ -338,34 +335,34 @@ All three must exit 0.
 
 ## Idempotence and recovery
 
-All steps are idempotent. Re-running file creation overwrites the same
-content. Re-running quality gates produces the same result.
+All steps are idempotent. Re-running file creation overwrites the same content.
+Re-running quality gates produces the same result.
 
-To revert: remove the `[package.metadata.binstall]` and override sections
-from `Cargo.toml`, delete `binstall_metadata.rs`,
-`binstall_metadata_tests.rs`, `behaviour_binstall.rs`, and
-`binstall_metadata.feature`, remove the `pub mod binstall_metadata;` line
-and doc-comment entry from `lib.rs`, and revert the roadmap/design-doc edits.
+To revert: remove the `[package.metadata.binstall]` and override sections from
+`Cargo.toml`, delete `binstall_metadata.rs`, `binstall_metadata_tests.rs`,
+`behaviour_binstall.rs`, and `binstall_metadata.feature`, remove the
+`pub mod binstall_metadata;` line and doc-comment entry from `lib.rs`, and
+revert the roadmap/design-doc edits.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Summary of new files:
 
-| File | Purpose | Lines |
-|---|---|---|
-| `installer/src/binstall_metadata.rs` | Constants and expansion helpers | 85 |
-| `installer/src/binstall_metadata_tests.rs` | Unit tests parsing Cargo.toml | 146 |
-| `installer/tests/features/binstall_metadata.feature` | Gherkin scenarios | 42 |
-| `installer/tests/behaviour_binstall.rs` | BDD step definitions and bindings | 239 |
+| File                                                 | Purpose                           | Lines |
+| ---------------------------------------------------- | --------------------------------- | ----- |
+| `installer/src/binstall_metadata.rs`                 | Constants and expansion helpers   | 85    |
+| `installer/src/binstall_metadata_tests.rs`           | Unit tests parsing Cargo.toml     | 146   |
+| `installer/tests/features/binstall_metadata.feature` | Gherkin scenarios                 | 42    |
+| `installer/tests/behaviour_binstall.rs`              | BDD step definitions and bindings | 239   |
 
 Summary of modified files:
 
-| File | Change |
-|---|---|
-| `installer/Cargo.toml` | Append 7 lines of binstall metadata |
-| `installer/src/lib.rs` | Add 2 doc-comment lines + 1 module declaration |
-| `docs/roadmap.md` | `[ ]` to `[x]` on line 118 |
-| `docs/whitaker-dylint-suite-design.md` | Add 4-line implementation note |
+| File                                   | Change                                         |
+| -------------------------------------- | ---------------------------------------------- |
+| `installer/Cargo.toml`                 | Append 7 lines of binstall metadata            |
+| `installer/src/lib.rs`                 | Add 2 doc-comment lines + 1 module declaration |
+| `docs/roadmap.md`                      | `[ ]` to `[x]` on line 118                     |
+| `docs/whitaker-dylint-suite-design.md` | Add 4-line implementation note                 |
 
 Total: 4 new files + 5 modified files = 9 files (within 10-file tolerance).
 
