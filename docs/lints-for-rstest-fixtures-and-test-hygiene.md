@@ -253,7 +253,8 @@ enum CalleeShape {
 ```
 
 Local identifiers should be normalized to deterministic slots by
-first-appearance order. Deep AST canonicalization is intentionally out of scope.
+first-appearance order. Deep Abstract Syntax Tree (AST) canonicalization is
+intentionally out of scope.
 
 ### Emission strategy
 
