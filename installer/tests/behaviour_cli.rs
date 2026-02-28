@@ -144,7 +144,10 @@ fn matching_files(dir: &std::path::Path, substring: &str) -> Vec<String> {
         Err(e) => panic!("failed to read directory {}: {e}", dir.display()),
     };
     entries
-        .filter_map(|e| e.ok())
+        .map(|entry| match entry {
+            Ok(e) => e,
+            Err(e) => panic!("failed to read entry in {}: {e}", dir.display()),
+        })
         .map(|e| e.file_name().to_string_lossy().to_string())
         .filter(|name| name.contains(substring))
         .collect()
