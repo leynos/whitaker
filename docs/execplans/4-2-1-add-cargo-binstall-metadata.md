@@ -77,7 +77,7 @@ if the metadata is removed or altered.
 
 - Risk: BDD step functions with URL template parameters might exceed the
   4-argument Clippy limit. Severity: low. Likelihood: medium. Mitigation: split
-  Gherkin steps so each step function parses at most 2-3 values from the
+  Gherkin steps so each step function parses at most 2–3 values from the
   feature text. Use the world struct to carry state between steps. Outcome: all
   step functions stayed within the 4-parameter limit.
 
@@ -216,7 +216,7 @@ Create `installer/src/binstall_metadata_tests.rs` (~140 lines) containing
 - Assert the Windows override sets `pkg-fmt = "zip"`.
 - Assert exactly one override exists.
 - Assert all essential fields are present.
-- Parameterised tests expand templates for each non-Windows target (`.tgz`)
+- Parameterized tests expand templates for each non-Windows target (`.tgz`)
   and the Windows target (`.zip`).
 - Verify `bin-dir` expands to `whitaker-installer` (Unix) and
   `whitaker-installer.exe` (Windows).
@@ -325,7 +325,7 @@ Quality criteria (what "done" means):
 - Documentation: roadmap item 4.2.1 is checked. Design document notes
   implementation is complete.
 
-Quality method (verification steps):
+Quality method (verification procedure):
 
 ```bash
 make check-fmt && make lint && make test

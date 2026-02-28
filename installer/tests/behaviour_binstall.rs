@@ -8,8 +8,8 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use toml::Table;
 use whitaker_installer::binstall_metadata::{
-    BIN_DIR_TEMPLATE, PKG_URL_TEMPLATE, expand_bin_dir, expand_pkg_url, extract_binstall_table,
-    load_cargo_toml,
+    BIN_DIR_TEMPLATE, PKG_URL_TEMPLATE, WINDOWS_OVERRIDE_TARGET, expand_bin_dir, expand_pkg_url,
+    extract_binstall_table, load_cargo_toml,
 };
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ fn then_windows_override_pkg_fmt(world: &mut BinstallWorld, expected: String) {
     let binstall = world.binstall_table.as_ref().expect("binstall table set");
     let windows = binstall
         .get("overrides")
-        .and_then(|o| o.get("x86_64-pc-windows-msvc"))
+        .and_then(|o| o.get(WINDOWS_OVERRIDE_TARGET))
         .and_then(|w| w.as_table())
         .expect("Windows override not found");
     let pkg_fmt = windows
