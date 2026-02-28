@@ -30,7 +30,8 @@ Whitaker uses Dylint's dynamic-library model, so each lint should live in an
 independent crate with explicit configuration. The following constraints guide
 implementation:
 
-- Implement as late lints so HIR and type checking information are available.
+- Implement as late lints so High-level Intermediate Representation (HIR) and
+  type checking information are available.
 - Recover user-editable spans where possible to avoid flagging macro-only glue.
 - Keep first release in the experimental lint set and promote only after
   tuning against real repositories.
@@ -344,7 +345,8 @@ _Figure 2: Proposed phased implementation timeline for lints A, B, and C._
 The following work is intentionally excluded from this design:
 
 - whole-program dependence graphs,
-- MIR or SSA-level transformations,
+- Mid-level Intermediate Representation (MIR) or Static Single Assignment
+  (SSA) transformations,
 - general-purpose clone detection, and
 - aggressive canonicalization aimed at maximal recall.
 
