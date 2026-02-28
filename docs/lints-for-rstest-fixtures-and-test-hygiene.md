@@ -76,7 +76,7 @@ For each function parameter:
 
 - Mark as non-fixture when annotated with provider-oriented attributes such as
   `case`, `values`, `files`, `future`, or `context`.
-- Otherwise mark as fixture-local for this lint.
+- Otherwise, mark as fixture-local for this lint.
 
 Version one should accept only simple identifier bindings for fixture-local
 classification and defer destructuring support to a later refinement.
