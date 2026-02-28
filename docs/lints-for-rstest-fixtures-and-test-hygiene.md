@@ -7,7 +7,8 @@ configurable lints:
 
 - Per-lint crates under `crates/*`.
 - A suite aggregator library.
-- UI fixtures (`ui/pass_*.rs`, `ui/fail_*.rs`, and `ui/fail_*.stderr`).
+- User Interface (UI) fixtures (`ui/pass_*.rs`, `ui/fail_*.rs`, and
+  `ui/fail_*.stderr`).
 - A documented split between standard and experimental lint sets.
 
 This document proposes three experimental lints for `rstest`-based tests:
@@ -336,7 +337,7 @@ gantt
 
     section Integration
     Experimental-set wiring and feature gates         :e1, after b2, 3d
-    Documentation and localisation updates            :e2, after d2, 3d
+    Documentation and localization updates            :e2, after d2, 3d
 ```
 
 _Figure 2: Proposed phased implementation timeline for lints A, B, and C._
