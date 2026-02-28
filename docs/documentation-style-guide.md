@@ -1,7 +1,8 @@
 # Documentation style guide
 
-This guide outlines conventions for authoring documentation for df12 software.
-Apply these rules to keep the documentation clear and consistent for developers.
+This guide outlines conventions for authoring documentation for software by
+df12 Productions. Apply these rules to keep the documentation clear and
+consistent for developers.
 
 ## Spelling
 
@@ -13,11 +14,11 @@ Apply these rules to keep the documentation clear and consistent for developers.
      such as _analyse_, _paralyse_ and _catalyse_,
   - suffix -our in words such as _colour_, _behaviour_ and _neighbour_,
   - suffix -re in words such as _calibre_, _centre_ and _fibre_,
-  - double "l" in words such as _cancelled_, _counsellor_ and _cruellest_,
-  - maintain the "e" in words such as _likeable_, _liveable_ and _rateable_,
+  - double “l” in words such as _cancelled_, _counsellor_ and _cruellest_,
+  - maintain the “e” in words such as _likeable_, _liveable_ and _rateable_,
   - suffix -ogue in words such as _analogue_ and _catalogue_,
   - and so forth.
-- The words **"outwith"** and **"caveat"** are acceptable.
+- The words **“outwith”** and **“caveat”** are acceptable.
 - Keep United States (US) spelling when used in an external API, command, or
   library, for example, `color`.
 - The name of the project licence file is spelled `LICENSE` for community
@@ -25,10 +26,10 @@ Apply these rules to keep the documentation clear and consistent for developers.
 
 ## Punctuation and grammar
 
-- Use the Oxford comma: "ships, planes, and hovercraft" where it aids
+- Use the Oxford comma: “ships, planes, and hovercraft” where it aids
   comprehension.
-- Company names are treated as collective nouns: "df12 Productions are
-  expanding".
+- Company names are treated as collective nouns: “df12 Productions are
+  expanding”.
 - Avoid first and second person personal pronouns outside the `README.md`
   file.
 
@@ -40,7 +41,8 @@ Apply these rules to keep the documentation clear and consistent for developers.
 
 ## Markdown rules
 
-- Follow [markdownlint](https://github.com/DavidAnson/markdownlint)
+- Follow
+  [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
   recommendations[^1].
 - Provide code blocks and lists using standard Markdown syntax.
 - Always provide a language identifier for fenced code blocks; use `plaintext`
@@ -170,15 +172,15 @@ navigability:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub-Flavoured
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency
-  using dotted notation (e.g. "Requires 2.3.1").
+  using dotted notation (e.g. “Requires 2.3.1”).
 - **Success criteria:** Include explicit success criteria only where not
   immediately obvious from the task description.
 - **Design document citations:** Where applicable, cite the relevant design
-  document section for each task (e.g. "See design-doc.md §3.2").
+  document section for each task (e.g. “See design-doc.md §3.2”).
 
 ### Roadmap example
 
@@ -197,13 +199,13 @@ navigability:
 
 ### 1.2. Authentication
 
-- [ ] 1.2.1. Implement role-based access control. Requires 1.1.1.
+- [ ] 1.2.1. Implement role-based access control (RBAC). Requires 1.1.1.
   - [ ] Define role hierarchy. See design-doc.md §4.3.
   - [ ] Add RBAC middleware to API endpoints.
   - [ ] Write integration tests for permission boundaries.
 ```
 
-## Architectural Decision Records (ADRs)
+## Architectural decision records (ADRs)
 
 Use ADRs to document significant architectural and design decisions. ADRs
 capture the context, options considered, and rationale behind decisions,
@@ -237,7 +239,7 @@ Include these sections as appropriate to the decision's complexity:
 - **Options Considered:** Describe the alternatives evaluated. Use a comparison
   table when contrasting multiple options across several dimensions.
 - **Decision Outcome / Proposed Direction:** State the chosen approach and
-  summarise the rationale. For `Proposed` ADRs, describe the recommended
+  summarize the rationale. For `Proposed` ADRs, describe the recommended
   direction.
 - **Goals and Non-Goals:** Clarify what the decision aims to achieve and what
   is explicitly out of scope.
@@ -255,7 +257,7 @@ Include these sections as appropriate to the decision's complexity:
 - Use second-level headings (`##`) for major sections.
 - Use third-level headings (`###`) for subsections (e.g. phases, option names).
 - Use tables to compare options when multiple dimensions are relevant. Include
-  a caption below the table (e.g. "_Table 1: Trade-offs between X and Y._").
+  a caption below the table (e.g. “_Table 1: Trade-offs between X and Y._”).
 - Include code snippets with language identifiers when illustrating technical
   approaches. Use `no_run` for illustrative Rust code that should not be
   executed.
@@ -269,7 +271,7 @@ Include these sections as appropriate to the decision's complexity:
 
 ## Status
 
-Proposed.
+<Proposed | Accepted | Superseded | Deprecated>.
 
 ## Date
 
@@ -279,10 +281,22 @@ YYYY-MM-DD.
 
 <Describe the situation, constraints, and the question being addressed.>
 
-## Decision drivers
+## Decision Drivers
 
 - <Driver 1>
 - <Driver 2>
+
+## Requirements
+
+### Functional requirements
+
+- <Functional requirement 1>
+- <Functional requirement 2>
+
+### Technical requirements
+
+- <Technical requirement 1>
+- <Technical requirement 2>
 
 ## Options considered
 
@@ -302,7 +316,21 @@ _Table 1: Comparison of options._
 
 ## Decision outcome / proposed direction
 
-<State the chosen or recommended approach and summarise the rationale.>
+<State the chosen or recommended approach and summarize the rationale.>
+
+## Goals and non-goals
+
+- Goals:
+  - <Goal 1>
+  - <Goal 2>
+- Non-goals:
+  - <Non-goal 1>
+  - <Non-goal 2>
+
+## Migration plan
+
+<Use numbered phases with clear goals and deliverables where phased
+implementation is required.>
 
 ## Known risks and limitations
 
