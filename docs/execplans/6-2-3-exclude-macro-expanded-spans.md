@@ -17,9 +17,8 @@ with built-in filtering for macro-expanded spans. After this change:
 1. A pure library builder (`CognitiveComplexityBuilder`) accepts incremental
    complexity contributions via method calls. Each call accepts
    `is_from_expansion: bool` so the future High-level Intermediate
-   Representation (HIR) walker can pass
-   `span.from_expansion()` without the `common` crate depending on
-   `rustc_private`.
+   Representation (HIR) walker can pass `span.from_expansion()` without the
+   `common` crate depending on `rustc_private`.
 2. Macro-expanded nodes are silently excluded from the CC score, preventing
    macro-generated HIR from inflating complexity counts — the core problem
    described in Clippy issue #14417.
@@ -32,8 +31,8 @@ with built-in filtering for macro-expanded spans. After this change:
 
 Observable outcome: running `cargo test -p common` shows new unit tests and
 Behaviour-Driven Development (BDD) scenarios passing for cognitive complexity
-computation. The builder correctly
-excludes macro-expanded increments and nesting from the score.
+computation. The builder correctly excludes macro-expanded increments and
+nesting from the score.
 
 ## Constraints
 
@@ -90,8 +89,7 @@ excludes macro-expanded increments and nesting from the score.
   `make test`). `check-fmt` and `lint` passed cleanly. `make test` had one
   pre-existing failure (`scenario_install_suite_to_temp_dir` in
   `whitaker-installer`, last modified in commit `ab7b1bd` for ExecPlan 3-4-4)
-  that is unrelated to this change and was subsequently fixed in a later
-  commit.
+  that is unrelated to this change and was subsequently fixed in a later commit.
 - [x] (2026-02-26) Stage F: Mark roadmap item 6.2.3 as done.
 
 ## Surprises & discoveries
