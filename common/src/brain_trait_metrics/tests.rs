@@ -18,25 +18,23 @@ fn assert_trait_item(item: &TraitItemMetrics, name: &str, kind: TraitItemKind, c
     assert_eq!(item.default_method_cc(), cc);
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Helper signature is intentionally explicit per refactor requirement"
-)]
-fn assert_trait_metrics(
-    metrics: &TraitMetrics,
-    name: &str,
+/// Expected values for trait metrics assertions
+struct ExpectedTraitMetrics {
+    name: &'static str,
     total: usize,
     required: usize,
     default: usize,
     cc_sum: usize,
     burden: usize,
-) {
-    assert_eq!(metrics.trait_name(), name);
-    assert_eq!(metrics.total_item_count(), total);
-    assert_eq!(metrics.required_method_count(), required);
-    assert_eq!(metrics.default_method_count(), default);
-    assert_eq!(metrics.default_method_cc_sum(), cc_sum);
-    assert_eq!(metrics.implementor_burden(), burden);
+}
+
+fn assert_trait_metrics(metrics: &TraitMetrics, expected: ExpectedTraitMetrics) {
+    assert_eq!(metrics.trait_name(), expected.name);
+    assert_eq!(metrics.total_item_count(), expected.total);
+    assert_eq!(metrics.required_method_count(), expected.required);
+    assert_eq!(metrics.default_method_count(), expected.default);
+    assert_eq!(metrics.default_method_cc_sum(), expected.cc_sum);
+    assert_eq!(metrics.implementor_burden(), expected.burden);
 }
 
 fn assert_empty_item_metrics(items: &[TraitItemMetrics]) {
@@ -132,7 +130,17 @@ fn builder_builds_mixed_trait_metrics() {
 
     let metrics = builder.build();
 
-    assert_trait_metrics(&metrics, "Parser", 4, 1, 1, 12, 1);
+    assert_trait_metrics(
+        &metrics,
+        ExpectedTraitMetrics {
+            name: "Parser",
+            total: 4,
+            required: 1,
+            default: 1,
+            cc_sum: 12,
+            burden: 1,
+        },
+    );
 }
 
 #[rstest]
@@ -143,7 +151,17 @@ fn builder_add_item_supports_prebuilt_entries() {
 
     let metrics = builder.build();
 
-    assert_trait_metrics(&metrics, "Renderer", 2, 1, 1, 9, 1);
+    assert_trait_metrics(
+        &metrics,
+        ExpectedTraitMetrics {
+            name: "Renderer",
+            total: 2,
+            required: 1,
+            default: 1,
+            cc_sum: 9,
+            burden: 1,
+        },
+    );
 }
 
 #[rstest]
@@ -155,7 +173,17 @@ fn builder_filters_macro_expanded_default_methods() {
 
     let metrics = builder.build();
 
-    assert_trait_metrics(&metrics, "Parser", 2, 1, 1, 12, 1);
+    assert_trait_metrics(
+        &metrics,
+        ExpectedTraitMetrics {
+            name: "Parser",
+            total: 2,
+            required: 1,
+            default: 1,
+            cc_sum: 12,
+            burden: 1,
+        },
+    );
 }
 
 #[rstest]
@@ -176,7 +204,17 @@ fn implementor_burden_equals_required_method_count() {
 fn empty_trait_has_zeroed_metrics() {
     let metrics = TraitMetricsBuilder::new("EmptyTrait").build();
 
-    assert_trait_metrics(&metrics, "EmptyTrait", 0, 0, 0, 0, 0);
+    assert_trait_metrics(
+        &metrics,
+        ExpectedTraitMetrics {
+            name: "EmptyTrait",
+            total: 0,
+            required: 0,
+            default: 0,
+            cc_sum: 0,
+            burden: 0,
+        },
+    );
 }
 
 #[rstest]
