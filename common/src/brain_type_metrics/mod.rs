@@ -15,10 +15,12 @@
 //! See `docs/brain-trust-lints-design.md` §`brain_type` signals for the
 //! full design rationale.
 
+pub mod cognitive_complexity;
 pub mod diagnostic;
 pub mod evaluation;
 pub mod foreign_reach;
 
+pub use cognitive_complexity::CognitiveComplexityBuilder;
 pub use foreign_reach::{ForeignReferenceSet, foreign_reach_count};
 
 #[cfg(test)]
