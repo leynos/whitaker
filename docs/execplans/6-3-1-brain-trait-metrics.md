@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -85,15 +85,15 @@ Observable outcome:
 ## Progress
 
 - [x] Stage A: Draft this ExecPlan.
-- [ ] Stage B: Add failing unit and behaviour tests (red phase) for trait
+- [x] Stage B: Add failing unit and behaviour tests (red phase) for trait
   metrics contract.
-- [ ] Stage C: Implement new `common::brain_trait_metrics` module.
-- [ ] Stage D: Wire `common/src/lib.rs` exports.
-- [ ] Stage E: Make tests green and refactor while preserving behaviour.
-- [ ] Stage F: Record implementation decisions in design doc.
-- [ ] Stage G: Mark roadmap item 6.3.1 done.
-- [ ] Stage H: Run `make check-fmt`, `make lint`, and `make test` successfully.
-- [ ] Stage I: Complete outcomes and retrospective section.
+- [x] Stage C: Implement new `common::brain_trait_metrics` module.
+- [x] Stage D: Wire `common/src/lib.rs` exports.
+- [x] Stage E: Make tests green and refactor while preserving behaviour.
+- [x] Stage F: Record implementation decisions in design doc.
+- [x] Stage G: Mark roadmap item 6.3.1 done.
+- [x] Stage H: Run `make check-fmt`, `make lint`, and `make test` successfully.
+- [x] Stage I: Complete outcomes and retrospective section.
 
 ## Surprises & Discoveries
 
@@ -105,21 +105,40 @@ Observable outcome:
   `common/tests/` with indexed `#[scenario(..., index = N)]` bindings.
 - `rstest-bdd` fixture name matching is literal. Step functions must use
   `world` (not `_world`) for the world fixture parameter.
+- A dedicated `TraitItemMetrics` + `TraitMetricsBuilder` API works cleanly for
+  both unit and BDD tests without introducing extra helper structs.
+- `common/src/brain_trait_metrics/mod.rs` landed at 390 lines. This stayed
+  under the 400-line limit, but only narrowly; future additions should split
+  the module into sibling files early.
+- `make test` again showed the expected long-tail UI behaviour (`bumpy_road`
+  and `conditional_max_n_branches` UI suites), but completed successfully.
 
 ## Decision Log
 
-- Decision (planned): create a dedicated module
-  `common/src/brain_trait_metrics/` rather than extending
-  `common/src/brain_type_metrics/`. Rationale: keeps type and trait concerns
-  decoupled while mirroring the repository’s existing feature-oriented
-  organisation.
-- Decision (planned): model implementor burden as required-method count.
+- Decision: created a dedicated module `common/src/brain_trait_metrics/`
+  rather than extending `common/src/brain_type_metrics/`. Rationale: keeps type
+  and trait concerns decoupled while mirroring the repository’s existing
+  feature-oriented organisation. Date/Author: 2026-03-01 / Codex.
+- Decision: modelled implementor burden as required-method count.
   Rationale: this directly matches design language and keeps 6.3.1 strictly a
-  metric-collection task.
-- Decision (planned): include an optional expansion filter parameter for
-  default-method metric ingestion. Rationale: consistent with established
-  macro-filtering APIs (`ForeignReferenceSet`, `MethodInfoBuilder`,
-  `CognitiveComplexityBuilder`).
+  metric-collection task. Date/Author: 2026-03-01 / Codex.
+- Decision: included macro-expansion filtering in default method ingestion via
+  `add_default_method(name, cc, is_from_expansion)`. Rationale: consistent with
+  established macro-filtering APIs (`ForeignReferenceSet`, `MethodInfoBuilder`,
+  `CognitiveComplexityBuilder`). Date/Author: 2026-03-01 / Codex.
+- Decision: implemented `TraitItemKind` as four explicit variants
+  (`RequiredMethod`, `DefaultMethod`, `AssociatedType`, `AssociatedConst`) and
+  kept all per-item data in a single `TraitItemMetrics` struct. Rationale: this
+  keeps counting semantics transparent and avoids duplicating item containers.
+  Date/Author: 2026-03-01 / Codex.
+- Decision: implementor burden is computed as required-method count and exposed
+  on `TraitMetrics`. Rationale: this directly matches design intent and avoids
+  introducing speculative weighting rules in 6.3.1. Date/Author: 2026-03-01 /
+  Codex.
+- Decision: default methods marked `is_from_expansion = true` are discarded by
+  `TraitMetricsBuilder::add_default_method`. Rationale: preserves consistency
+  with existing macro-filtering semantics used elsewhere in `common`.
+  Date/Author: 2026-03-01 / Codex.
 
 ## Context and orientation
 
@@ -284,4 +303,36 @@ When the implementation completes, update this file:
 
 ## Outcomes & Retrospective
 
-Pending implementation.
+Implemented roadmap 6.3.1 end-to-end.
+
+Delivered:
+
+- Added `common/src/brain_trait_metrics/mod.rs` with:
+  - `TraitItemKind` and `TraitItemMetrics`,
+  - counting helpers (`trait_item_count`, `required_method_count`,
+    `default_method_count`, `default_method_cc_sum`),
+  - aggregate `TraitMetrics`,
+  - incremental `TraitMetricsBuilder` with macro-expansion filtering for
+    default methods.
+- Added unit coverage in `common/src/brain_trait_metrics/tests.rs` (16 tests)
+  covering happy, unhappy, and edge cases.
+- Added behaviour coverage with `rstest-bdd` v0.5.0:
+  - `common/tests/features/brain_trait_metrics.feature` (6 scenarios),
+  - `common/tests/brain_trait_metrics_behaviour.rs` step bindings.
+- Wired public exports through `common/src/lib.rs`.
+- Recorded implementation decisions in
+  `docs/brain-trust-lints-design.md` (`### Implementation decisions (6.3.1)`).
+- Marked roadmap item 6.3.1 done in `docs/roadmap.md`.
+
+Validation:
+
+- `make check-fmt` passed (`/tmp/6-3-1-check-fmt.log`).
+- `make lint` passed (`/tmp/6-3-1-lint.log`).
+- `make test` passed (`/tmp/6-3-1-test.log`) with summary:
+  `882 tests run: 882 passed (2 slow), 2 skipped`.
+
+Scope check:
+
+- Touched 8 files total (within tolerance).
+- New code files remain under 400 lines.
+- No new dependencies added.

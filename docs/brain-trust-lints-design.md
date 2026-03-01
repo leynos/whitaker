@@ -258,6 +258,28 @@ This will allow reuse in future cohesion-aware lints.
   the nesting stack is not empty, catching mismatched `push_nesting` /
   `pop_nesting` calls at the point of use.
 
+### Implementation decisions (6.3.1)
+
+- **Separate `brain_trait_metrics` module**: trait metric collection lives in
+  `common/src/brain_trait_metrics/mod.rs`, separate from `brain_type_metrics`.
+  The two lints share conceptual ground, but their signals differ enough to
+  keep modules focused and avoid overloading one API.
+- **Explicit trait item taxonomy**: interface-size counting uses
+  `TraitItemKind` with four variants: `RequiredMethod`, `DefaultMethod`,
+  `AssociatedType`, and `AssociatedConst`. This makes counting rules explicit
+  and testable.
+- **Implementor burden definition**: `implementor_burden` is defined as
+  exactly the required-method count. Default methods and associated items do
+  not increase burden.
+- **Macro filtering for default method CC**: `TraitMetricsBuilder` accepts
+  `add_default_method(name, cc, is_from_expansion)`. When `is_from_expansion`
+  is `true`, the entry is discarded and contributes to neither item counts nor
+  complexity, matching existing macro-filtering semantics in `common`.
+- **Single item struct with optional CC**: `TraitItemMetrics` stores
+  `default_method_cc: Option<usize>` rather than splitting default and
+  non-default items into separate structs. This keeps helper functions simple
+  while preserving exact default-method complexity data.
+
 ## Implementation approach
 
 ### Metric collection
