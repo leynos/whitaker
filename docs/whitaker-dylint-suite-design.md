@@ -1411,6 +1411,11 @@ pkg-fmt = "zip"
 This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
 `{target}`, `{archive-format}`, and `{bin}`.
 
+**Implementation status:** The `[package.metadata.binstall]` entries above have
+been added to `installer/Cargo.toml` and are validated by unit tests in
+`installer/src/binstall_metadata_tests.rs` and BDD scenarios in
+`installer/tests/features/binstall_metadata.feature`.
+
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 

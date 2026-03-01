@@ -115,7 +115,7 @@
 
 ### 4.2. Release metadata
 
-- [ ] 4.2.1. Add cargo-binstall metadata to `installer/Cargo.toml` for
+- [x] 4.2.1. Add cargo-binstall metadata to `installer/Cargo.toml` for
   published release artefacts.
 
 ### 4.3. Release workflow

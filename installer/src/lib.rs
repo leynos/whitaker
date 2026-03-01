@@ -7,6 +7,8 @@
 //! # Modules
 //!
 //! - [`artefact`] - Artefact naming, manifest schema, and verification policy
+//! - [`binstall_metadata`] - Cargo-binstall metadata constants and template
+//!   expansion
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
 //! - [`crate_name`] - Semantic wrapper for lint crate names
@@ -29,6 +31,7 @@
 //! - [`wrapper`] - Wrapper script generation
 
 pub mod artefact;
+pub mod binstall_metadata;
 pub mod builder;
 pub mod cli;
 pub mod crate_name;
