@@ -18,16 +18,16 @@ use whitaker_installer::binstall_metadata::{
 
 /// Mutable state threaded through Gherkin steps.
 ///
-/// Fields use `Option` because the world starts empty (`Default`) and is
-/// populated incrementally by Given/When steps. Each Then step asserts on
-/// the values set by preceding steps.
+/// `binstall_table` remains `Option` because `toml::Table` has no meaningful
+/// empty default; the remaining fields use plain `String` (defaulting to
+/// empty) and are populated by Given/When steps before Then steps read them.
 #[derive(Default)]
 struct BinstallWorld {
     binstall_table: Option<Table>,
-    target: Option<String>,
-    version: Option<String>,
-    expanded_url: Option<String>,
-    expanded_bin_dir: Option<String>,
+    target: String,
+    version: String,
+    expanded_url: String,
+    expanded_bin_dir: String,
 }
 
 #[fixture]
@@ -47,8 +47,8 @@ fn given_cargo_toml_loaded(world: &mut BinstallWorld) {
 
 #[given("target \"{target}\" and version \"{version}\"")]
 fn given_target_and_version(world: &mut BinstallWorld, target: String, version: String) {
-    world.target = Some(target);
-    world.version = Some(version);
+    world.target = target;
+    world.version = version;
 }
 
 #[when("the binstall metadata section is inspected")]
@@ -73,16 +73,12 @@ fn when_overrides_inspected(world: &mut BinstallWorld) {
 
 #[when("the pkg-url template is expanded")]
 fn when_pkg_url_expanded(world: &mut BinstallWorld) {
-    let version = world.version.as_deref().expect("version set");
-    let target = world.target.as_deref().expect("target set");
-    world.expanded_url = Some(expand_pkg_url(version, target));
+    world.expanded_url = expand_pkg_url(&world.version, &world.target);
 }
 
 #[when("the bin-dir template is expanded")]
 fn when_bin_dir_expanded(world: &mut BinstallWorld) {
-    let version = world.version.as_deref().expect("version set");
-    let target = world.target.as_deref().expect("target set");
-    world.expanded_bin_dir = Some(expand_bin_dir(version, target));
+    world.expanded_bin_dir = expand_bin_dir(&world.version, &world.target);
 }
 
 #[then("the pkg-url template is present")]
@@ -132,7 +128,7 @@ fn then_windows_override_pkg_fmt(world: &mut BinstallWorld, expected: String) {
 
 #[then("the URL ends with \"{suffix}\"")]
 fn then_url_ends_with(world: &mut BinstallWorld, suffix: String) {
-    let url = world.expanded_url.as_ref().expect("expanded URL set");
+    let url = &world.expanded_url;
     assert!(
         url.ends_with(&suffix),
         "expected URL to end with '{suffix}', got '{url}'"
@@ -141,20 +137,17 @@ fn then_url_ends_with(world: &mut BinstallWorld, suffix: String) {
 
 #[then("the URL contains the target triple")]
 fn then_url_contains_target(world: &mut BinstallWorld) {
-    let url = world.expanded_url.as_ref().expect("expanded URL set");
-    let target = world.target.as_deref().expect("target set");
+    let url = &world.expanded_url;
+    let target = &world.target;
     assert!(
-        url.contains(target),
+        url.contains(target.as_str()),
         "expected URL to contain '{target}', got '{url}'"
     );
 }
 
 #[then("the path ends with \"{suffix}\"")]
 fn then_path_ends_with(world: &mut BinstallWorld, suffix: String) {
-    let path = world
-        .expanded_bin_dir
-        .as_ref()
-        .expect("expanded bin-dir set");
+    let path = &world.expanded_bin_dir;
     assert!(
         path.ends_with(&suffix),
         "expected path to end with '{suffix}', got '{path}'"
