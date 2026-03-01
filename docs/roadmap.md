@@ -120,7 +120,7 @@
 
 ### 4.3. Release workflow
 
-- [ ] 4.3.1. Implement a release workflow that builds `whitaker-installer` for
+- [x] 4.3.1. Implement a release workflow that builds `whitaker-installer` for
   each supported target, packages `.tgz`/`.zip` archives, and uploads them to
   GitHub Releases tagged `v<version>`.
 

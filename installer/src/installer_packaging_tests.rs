@@ -1,0 +1,224 @@
+//! Unit tests for installer binary archive packaging.
+
+use super::*;
+use crate::binstall_metadata;
+use rstest::rstest;
+use std::fs;
+use std::io::Read;
+
+// ---------------------------------------------------------------------------
+// Pure function tests
+// ---------------------------------------------------------------------------
+
+#[rstest]
+#[case::linux_x86("x86_64-unknown-linux-gnu")]
+#[case::linux_arm("aarch64-unknown-linux-gnu")]
+#[case::macos_x86("x86_64-apple-darwin")]
+#[case::macos_arm("aarch64-apple-darwin")]
+fn archive_filename_tgz_for_non_windows(#[case] target: &str) {
+    let name = archive_filename("0.2.1", target);
+    assert!(name.ends_with(".tgz"), "expected .tgz suffix, got {name}");
+    assert!(name.contains(target), "expected target in name, got {name}");
+    assert!(
+        name.contains("v0.2.1"),
+        "expected version in name, got {name}"
+    );
+}
+
+#[test]
+fn archive_filename_zip_for_windows() {
+    let name = archive_filename("0.2.1", "x86_64-pc-windows-msvc");
+    assert_eq!(name, "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1.zip");
+}
+
+#[rstest]
+#[case::linux(
+    "x86_64-unknown-linux-gnu",
+    "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1"
+)]
+#[case::macos(
+    "aarch64-apple-darwin",
+    "whitaker-installer-aarch64-apple-darwin-v0.2.1"
+)]
+#[case::windows(
+    "x86_64-pc-windows-msvc",
+    "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1"
+)]
+fn inner_dir_name_matches_expected(#[case] target: &str, #[case] expected: &str) {
+    assert_eq!(inner_dir_name("0.2.1", target), expected);
+}
+
+#[rstest]
+#[case::linux("x86_64-unknown-linux-gnu")]
+#[case::macos("aarch64-apple-darwin")]
+fn binary_filename_unix(#[case] target: &str) {
+    assert_eq!(binary_filename(target), "whitaker-installer");
+}
+
+#[test]
+fn binary_filename_windows() {
+    assert_eq!(
+        binary_filename("x86_64-pc-windows-msvc"),
+        "whitaker-installer.exe"
+    );
+}
+
+#[rstest]
+#[case::linux_x86("x86_64-unknown-linux-gnu")]
+#[case::linux_arm("aarch64-unknown-linux-gnu")]
+#[case::macos_x86("x86_64-apple-darwin")]
+#[case::macos_arm("aarch64-apple-darwin")]
+fn archive_format_tgz_for_non_windows(#[case] target: &str) {
+    assert_eq!(archive_format(target), ArchiveFormat::Tgz);
+}
+
+#[test]
+fn archive_format_zip_for_windows() {
+    assert_eq!(archive_format("x86_64-pc-windows-msvc"), ArchiveFormat::Zip);
+}
+
+// ---------------------------------------------------------------------------
+// Archive creation tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn package_installer_creates_tgz() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let binary = temp.path().join("whitaker-installer");
+    fs::write(&binary, b"fake-binary-content").expect("write");
+
+    let params = InstallerPackageParams {
+        version: "0.2.1".to_owned(),
+        target: "x86_64-unknown-linux-gnu".to_owned(),
+        binary_path: binary,
+        output_dir: temp.path().to_path_buf(),
+    };
+
+    let output = package_installer(params).expect("packaging should succeed");
+    assert!(output.archive_path.exists(), "archive should exist");
+    assert_eq!(
+        output.archive_name,
+        "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz"
+    );
+
+    // Verify archive contents
+    let file = fs::File::open(&output.archive_path).expect("open archive");
+    let gz = flate2::read::GzDecoder::new(file);
+    let mut tar_archive = tar::Archive::new(gz);
+    let entries: Vec<String> = tar_archive
+        .entries()
+        .expect("entries")
+        .filter_map(|e| {
+            e.ok()
+                .and_then(|entry| entry.path().ok().map(|p| p.to_string_lossy().into_owned()))
+        })
+        .collect();
+
+    assert_eq!(entries.len(), 1, "expected 1 entry, got {entries:?}");
+    assert_eq!(
+        entries[0],
+        "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1/whitaker-installer"
+    );
+}
+
+#[test]
+fn package_installer_creates_zip() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let binary = temp.path().join("whitaker-installer.exe");
+    fs::write(&binary, b"fake-exe-content").expect("write");
+
+    let params = InstallerPackageParams {
+        version: "0.2.1".to_owned(),
+        target: "x86_64-pc-windows-msvc".to_owned(),
+        binary_path: binary,
+        output_dir: temp.path().to_path_buf(),
+    };
+
+    let output = package_installer(params).expect("packaging should succeed");
+    assert!(output.archive_path.exists(), "archive should exist");
+    assert_eq!(
+        output.archive_name,
+        "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1.zip"
+    );
+
+    // Verify archive contents
+    let file = fs::File::open(&output.archive_path).expect("open archive");
+    let mut zip_archive = zip::ZipArchive::new(file).expect("open zip");
+    assert_eq!(zip_archive.len(), 1, "expected 1 entry in zip");
+
+    let entry = zip_archive.by_index(0).expect("first entry");
+    assert_eq!(
+        entry.name(),
+        "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1/whitaker-installer.exe"
+    );
+}
+
+#[test]
+fn package_installer_rejects_missing_binary() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let missing = temp.path().join("does-not-exist");
+
+    let params = InstallerPackageParams {
+        version: "0.2.1".to_owned(),
+        target: "x86_64-unknown-linux-gnu".to_owned(),
+        binary_path: missing.clone(),
+        output_dir: temp.path().to_path_buf(),
+    };
+
+    let err = package_installer(params).expect_err("should fail");
+    assert!(
+        matches!(err, InstallerPackagingError::BinaryNotFound(ref p) if *p == missing),
+        "expected BinaryNotFound, got {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Cross-validation with binstall metadata
+// ---------------------------------------------------------------------------
+
+#[rstest]
+#[case::linux("x86_64-unknown-linux-gnu", "0.2.1")]
+#[case::windows("x86_64-pc-windows-msvc", "0.2.1")]
+#[case::macos_arm("aarch64-apple-darwin", "1.0.0")]
+fn archive_name_matches_binstall_template(#[case] target: &str, #[case] version: &str) {
+    let name = archive_filename(version, target);
+    let url = binstall_metadata::expand_pkg_url(version, target);
+    assert!(
+        url.ends_with(&name),
+        "expected binstall URL to end with archive filename\n  URL:  {url}\n  name: {name}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Tgz archive content verification
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tgz_archive_preserves_binary_content() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let content = b"binary-payload-12345";
+    let binary = temp.path().join("whitaker-installer");
+    fs::write(&binary, content).expect("write");
+
+    let params = InstallerPackageParams {
+        version: "0.2.1".to_owned(),
+        target: "aarch64-unknown-linux-gnu".to_owned(),
+        binary_path: binary,
+        output_dir: temp.path().to_path_buf(),
+    };
+
+    let output = package_installer(params).expect("packaging");
+    let file = fs::File::open(&output.archive_path).expect("open");
+    let gz = flate2::read::GzDecoder::new(file);
+    let mut tar_archive = tar::Archive::new(gz);
+
+    let mut entry = tar_archive
+        .entries()
+        .expect("entries")
+        .next()
+        .expect("one entry")
+        .expect("valid entry");
+    let mut extracted = Vec::new();
+    entry.read_to_end(&mut extracted).expect("read");
+    assert_eq!(extracted.as_slice(), content);
+}

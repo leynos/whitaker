@@ -17,6 +17,8 @@
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
 //! - [`install_metrics`] - Local installer metrics persistence and summaries
+//! - [`installer_packaging`] - Installer binary archive packaging for release
+//!   distribution
 //! - [`list`] - List command implementation
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
@@ -40,6 +42,7 @@ pub mod dirs;
 pub mod error;
 pub mod git;
 pub mod install_metrics;
+pub mod installer_packaging;
 pub mod list;
 pub mod list_output;
 pub mod output;
