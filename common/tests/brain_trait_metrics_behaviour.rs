@@ -50,28 +50,30 @@ fn given_required_method(world: &TraitMetricsWorld, name: String) {
         .push(PendingTraitItem::RequiredMethod(name));
 }
 
-#[given("a default method {name} with CC {cc}")]
-fn given_default_method(world: &TraitMetricsWorld, name: String, cc: usize) {
+fn add_default_method_item(
+    world: &TraitMetricsWorld,
+    name: String,
+    cc: usize,
+    is_from_expansion: bool,
+) {
     world
         .items
         .borrow_mut()
         .push(PendingTraitItem::DefaultMethod {
             name,
             cc,
-            is_from_expansion: false,
+            is_from_expansion,
         });
+}
+
+#[given("a default method {name} with CC {cc}")]
+fn given_default_method(world: &TraitMetricsWorld, name: String, cc: usize) {
+    add_default_method_item(world, name, cc, false);
 }
 
 #[given("a default method {name} with CC {cc} from expansion")]
 fn given_default_method_from_expansion(world: &TraitMetricsWorld, name: String, cc: usize) {
-    world
-        .items
-        .borrow_mut()
-        .push(PendingTraitItem::DefaultMethod {
-            name,
-            cc,
-            is_from_expansion: true,
-        });
+    add_default_method_item(world, name, cc, true);
 }
 
 #[given("an associated type {name}")]
