@@ -95,7 +95,7 @@ if the metadata is removed or altered.
 ## Surprises & discoveries
 
 - Observation: `cargo fmt` reflows multi-line `.expect()` chains and import
-  orderings differently from hand-written style. Evidence: first
+  orderings differently from handwritten style. Evidence: first
   `make check-fmt` run showed diffs in `binstall_metadata_tests.rs` and
   `behaviour_binstall.rs`. Impact: resolved by running `make fmt` before
   re-checking. No functional change.
@@ -109,7 +109,7 @@ if the metadata is removed or altered.
   decision record (ADR) 001). Binstall metadata is about the installer binary's
   own distribution packaging — a separate concern. A top-level module keeps
   concerns separated and avoids overloading the `artefact` namespace.
-  Date/Author: 2026-02-27 / plan author
+  Date/Author: 2026-02-27 / plan author.
 
 - Decision: Parse the actual `Cargo.toml` in tests via
   `env!("CARGO_MANIFEST_DIR")` rather than embedding expected values as string
@@ -117,7 +117,7 @@ if the metadata is removed or altered.
   changes the metadata without updating tests, assertions will catch the
   mismatch. The constants in the module serve as the single source of truth
   that both unit tests and BDD scenarios reference. Date/Author: 2026-02-27 /
-  plan author
+  plan author.
 
 ## Outcomes & retrospective
 

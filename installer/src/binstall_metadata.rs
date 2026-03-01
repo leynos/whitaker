@@ -98,11 +98,14 @@ pub fn expand_bin_dir(version: &str, target: &str) -> String {
 pub fn load_cargo_toml() -> toml::Table {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml_path = manifest_dir.join("Cargo.toml");
-    let content =
-        std::fs::read_to_string(&cargo_toml_path).expect("failed to read installer/Cargo.toml");
-    content
-        .parse::<toml::Table>()
-        .expect("failed to parse installer/Cargo.toml as TOML")
+    let content = std::fs::read_to_string(&cargo_toml_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", cargo_toml_path.display()));
+    content.parse::<toml::Table>().unwrap_or_else(|err| {
+        panic!(
+            "failed to parse {} as TOML: {err}",
+            cargo_toml_path.display()
+        )
+    })
 }
 
 /// Extract the `[package.metadata.binstall]` sub-table from a parsed
