@@ -21,8 +21,8 @@ strictly to the three signals specified by `docs/brain-trust-lints-design.md`
 
 After this change, the `common` crate provides a pure, compiler-independent
 metrics module for traits that future lint-driver work can populate from
-High-level Intermediate Representation (HIR).
-No threshold evaluation is included in 6.3.1; that remains roadmap 6.3.2.
+High-level Intermediate Representation (HIR). No threshold evaluation is
+included in 6.3.1; that remains roadmap 6.3.2.
 
 Observable outcome:
 
@@ -133,10 +133,6 @@ Observable outcome:
   kept all per-item data in a single `TraitItemMetrics` struct. Rationale: this
   keeps counting semantics transparent and avoids duplicating item containers.
   Date/Author: 2026-03-01 / Codex.
-- Decision: implementor burden is computed as required-method count and exposed
-  on `TraitMetrics`. Rationale: this directly matches design intent and avoids
-  introducing speculative weighting rules in 6.3.1. Date/Author: 2026-03-01 /
-  Codex.
 - Decision: default methods marked `is_from_expansion = true` are discarded by
   `TraitMetricsBuilder::add_default_method`. Rationale: preserves consistency
   with existing macro-filtering semantics used elsewhere in `common`.
