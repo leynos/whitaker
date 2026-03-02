@@ -1,4 +1,4 @@
-# Implement trait item counting, default method CC aggregation, and implementor burden metrics (roadmap 6.3.1)
+# Implement trait item counting, default method cognitive complexity (CC) aggregation, and implementor burden metrics (roadmap 6.3.1)
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -20,7 +20,8 @@ strictly to the three signals specified by `docs/brain-trust-lints-design.md`
 3. Implementor burden (required method count each implementor must provide).
 
 After this change, the `common` crate provides a pure, compiler-independent
-metrics module for traits that future lint-driver work can populate from HIR.
+metrics module for traits that future lint-driver work can populate from
+High-level Intermediate Representation (HIR).
 No threshold evaluation is included in 6.3.1; that remains roadmap 6.3.2.
 
 Observable outcome:
@@ -55,8 +56,8 @@ Observable outcome:
 
 ## Tolerances (exception triggers)
 
-- Scope tolerance: if implementation exceeds 10 touched files or 1000 net LOC,
-  stop and escalate.
+- Scope tolerance: if implementation exceeds 10 touched files or 1000 net lines
+  of code (LOC), stop and escalate.
 - API tolerance: if implementing 6.3.1 requires changing existing
   `brain_type_metrics` public APIs, stop and escalate.
 - Dependency tolerance: if any new dependency appears necessary, stop and
@@ -110,15 +111,16 @@ Observable outcome:
 - `common/src/brain_trait_metrics/mod.rs` landed at 390 lines. This stayed
   under the 400-line limit, but only narrowly; future additions should split
   the module into sibling files early.
-- `make test` again showed the expected long-tail UI behaviour (`bumpy_road`
-  and `conditional_max_n_branches` UI suites), but completed successfully.
+- `make test` again showed the expected long-tail user interface (UI) behaviour
+  (`bumpy_road` and `conditional_max_n_branches` UI suites), but completed
+  successfully.
 
 ## Decision Log
 
 - Decision: created a dedicated module `common/src/brain_trait_metrics/`
   rather than extending `common/src/brain_type_metrics/`. Rationale: keeps type
   and trait concerns decoupled while mirroring the repository’s existing
-  feature-oriented organisation. Date/Author: 2026-03-01 / Codex.
+  feature-oriented organization. Date/Author: 2026-03-01 / Codex.
 - Decision: modelled implementor burden as required-method count.
   Rationale: this directly matches design language and keeps 6.3.1 strictly a
   metric-collection task. Date/Author: 2026-03-01 / Codex.
@@ -291,7 +293,7 @@ make lint: exit code 0
 make test: exit code 0
 ```
 
-### Stage I: Finalise the living sections
+### Stage I: Finalize the living sections
 
 When the implementation completes, update this file:
 
