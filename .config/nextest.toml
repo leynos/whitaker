@@ -9,8 +9,14 @@ serial-toolchain-installs = { max-threads = 1 }
 
 [[profile.default.overrides]]
 # Include crate-local `ui::ui` entrypoints that wrap dylint UI fixtures.
+# On Windows, `dylint::driver_builder::get` persists a temporary file via
+# `tempfile::NamedTempFile::persist()`.  Windows Defender or indexing services
+# can briefly hold a handle on the file, causing the rename to fail with
+# "Access is denied (os error 5)".  Retrying with back-off is the standard
+# mitigation for this class of transient failure.
 filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui)"
 test-group = "serial-dylint-ui"
+retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 # Extend the timeout for toolchain auto-install behavioural tests, since the
 # isolated rustup setup may need to download and install a full nightly toolchain.
