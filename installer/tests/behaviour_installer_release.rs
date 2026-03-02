@@ -9,7 +9,7 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use std::path::PathBuf;
 use whitaker_installer::binstall_metadata;
 use whitaker_installer::installer_packaging::{
-    self, ArchiveFormat, InstallerPackageOutput, InstallerPackageParams,
+    self, ArchiveFormat, InstallerPackageOutput, InstallerPackageParams, TargetTriple, Version,
 };
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ fn given_version_and_target(world: &mut InstallerReleaseWorld, version: String, 
 #[given("a fake installer binary exists")]
 fn given_fake_binary_exists(world: &mut InstallerReleaseWorld) {
     let temp = tempfile::tempdir().expect("temp dir");
-    let bin_name = installer_packaging::binary_filename(&world.target);
+    let bin_name = installer_packaging::binary_filename(&TargetTriple::new(&world.target));
     let binary_path = temp.path().join(&bin_name);
     std::fs::write(&binary_path, b"fake-binary").expect("write fake binary");
     world.binary_path = Some(binary_path);
@@ -62,7 +62,10 @@ fn given_binary_missing(world: &mut InstallerReleaseWorld) {
 
 #[when("the archive filename is computed")]
 fn when_archive_filename_computed(world: &mut InstallerReleaseWorld) {
-    world.computed_filename = installer_packaging::archive_filename(&world.version, &world.target);
+    world.computed_filename = installer_packaging::archive_filename(
+        &Version::new(&world.version),
+        &TargetTriple::new(&world.target),
+    );
 }
 
 #[when("the installer is packaged")]
@@ -71,8 +74,8 @@ fn when_installer_packaged(world: &mut InstallerReleaseWorld) {
     let binary_path = world.binary_path.as_ref().expect("binary path set");
 
     let params = InstallerPackageParams {
-        version: world.version.clone(),
-        target: world.target.clone(),
+        version: Version::new(&world.version),
+        target: TargetTriple::new(&world.target),
         binary_path: binary_path.clone(),
         output_dir: temp_dir.path().to_path_buf(),
     };
@@ -89,8 +92,8 @@ fn when_packaging_attempted(world: &mut InstallerReleaseWorld) {
     let binary_path = world.binary_path.as_ref().expect("binary path set");
 
     let params = InstallerPackageParams {
-        version: world.version.clone(),
-        target: world.target.clone(),
+        version: Version::new(&world.version),
+        target: TargetTriple::new(&world.target),
         binary_path: binary_path.clone(),
         output_dir: temp_dir.path().to_path_buf(),
     };
@@ -116,7 +119,7 @@ fn then_archive_contains(world: &mut InstallerReleaseWorld, expected_path: Strin
         .as_ref()
         .expect("package output should be set");
 
-    let format = installer_packaging::archive_format(&world.target);
+    let format = installer_packaging::archive_format(&TargetTriple::new(&world.target));
     let entries = read_archive_entries(&output.archive_path, format);
 
     assert!(

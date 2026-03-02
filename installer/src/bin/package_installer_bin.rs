@@ -7,7 +7,9 @@
 use clap::Parser;
 use std::path::PathBuf;
 use thiserror::Error;
-use whitaker_installer::installer_packaging::{InstallerPackagingError, package_installer};
+use whitaker_installer::installer_packaging::{
+    InstallerPackagingError, TargetTriple, Version, package_installer,
+};
 
 /// Package the `whitaker-installer` binary into a release archive.
 ///
@@ -60,8 +62,8 @@ fn run(cli: Cli) -> Result<(), CliError> {
     std::fs::create_dir_all(&cli.output_dir)?;
 
     let params = whitaker_installer::installer_packaging::InstallerPackageParams {
-        version: cli.crate_version,
-        target: cli.target,
+        version: Version::new(cli.crate_version),
+        target: TargetTriple::new(cli.target),
         binary_path: cli.binary_path,
         output_dir: cli.output_dir,
     };

@@ -16,7 +16,9 @@ use std::io::Read;
 #[case::macos_x86("x86_64-apple-darwin")]
 #[case::macos_arm("aarch64-apple-darwin")]
 fn archive_filename_tgz_for_non_windows(#[case] target: &str) {
-    let name = archive_filename("0.2.1", target);
+    let v = Version::new("0.2.1");
+    let t = TargetTriple::new(target);
+    let name = archive_filename(&v, &t);
     assert!(name.ends_with(".tgz"), "expected .tgz suffix, got {name}");
     assert!(name.contains(target), "expected target in name, got {name}");
     assert!(
@@ -27,7 +29,9 @@ fn archive_filename_tgz_for_non_windows(#[case] target: &str) {
 
 #[test]
 fn archive_filename_zip_for_windows() {
-    let name = archive_filename("0.2.1", "x86_64-pc-windows-msvc");
+    let v = Version::new("0.2.1");
+    let t = TargetTriple::new("x86_64-pc-windows-msvc");
+    let name = archive_filename(&v, &t);
     assert_eq!(name, "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1.zip");
 }
 
@@ -45,20 +49,26 @@ fn archive_filename_zip_for_windows() {
     "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1"
 )]
 fn inner_dir_name_matches_expected(#[case] target: &str, #[case] expected: &str) {
-    assert_eq!(inner_dir_name("0.2.1", target), expected);
+    assert_eq!(
+        inner_dir_name(&Version::new("0.2.1"), &TargetTriple::new(target)),
+        expected
+    );
 }
 
 #[rstest]
 #[case::linux("x86_64-unknown-linux-gnu")]
 #[case::macos("aarch64-apple-darwin")]
 fn binary_filename_unix(#[case] target: &str) {
-    assert_eq!(binary_filename(target), "whitaker-installer");
+    assert_eq!(
+        binary_filename(&TargetTriple::new(target)),
+        "whitaker-installer"
+    );
 }
 
 #[test]
 fn binary_filename_windows() {
     assert_eq!(
-        binary_filename("x86_64-pc-windows-msvc"),
+        binary_filename(&TargetTriple::new("x86_64-pc-windows-msvc")),
         "whitaker-installer.exe"
     );
 }
@@ -69,12 +79,18 @@ fn binary_filename_windows() {
 #[case::macos_x86("x86_64-apple-darwin")]
 #[case::macos_arm("aarch64-apple-darwin")]
 fn archive_format_tgz_for_non_windows(#[case] target: &str) {
-    assert_eq!(archive_format(target), ArchiveFormat::Tgz);
+    assert_eq!(
+        archive_format(&TargetTriple::new(target)),
+        ArchiveFormat::Tgz
+    );
 }
 
 #[test]
 fn archive_format_zip_for_windows() {
-    assert_eq!(archive_format("x86_64-pc-windows-msvc"), ArchiveFormat::Zip);
+    assert_eq!(
+        archive_format(&TargetTriple::new("x86_64-pc-windows-msvc")),
+        ArchiveFormat::Zip
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -88,8 +104,8 @@ fn package_installer_creates_tgz() {
     fs::write(&binary, b"fake-binary-content").expect("write");
 
     let params = InstallerPackageParams {
-        version: "0.2.1".to_owned(),
-        target: "x86_64-unknown-linux-gnu".to_owned(),
+        version: Version::new("0.2.1"),
+        target: TargetTriple::new("x86_64-unknown-linux-gnu"),
         binary_path: binary,
         output_dir: temp.path().to_path_buf(),
     };
@@ -128,8 +144,8 @@ fn package_installer_creates_zip() {
     fs::write(&binary, b"fake-exe-content").expect("write");
 
     let params = InstallerPackageParams {
-        version: "0.2.1".to_owned(),
-        target: "x86_64-pc-windows-msvc".to_owned(),
+        version: Version::new("0.2.1"),
+        target: TargetTriple::new("x86_64-pc-windows-msvc"),
         binary_path: binary,
         output_dir: temp.path().to_path_buf(),
     };
@@ -159,8 +175,8 @@ fn package_installer_rejects_missing_binary() {
     let missing = temp.path().join("does-not-exist");
 
     let params = InstallerPackageParams {
-        version: "0.2.1".to_owned(),
-        target: "x86_64-unknown-linux-gnu".to_owned(),
+        version: Version::new("0.2.1"),
+        target: TargetTriple::new("x86_64-unknown-linux-gnu"),
         binary_path: missing.clone(),
         output_dir: temp.path().to_path_buf(),
     };
@@ -181,7 +197,9 @@ fn package_installer_rejects_missing_binary() {
 #[case::windows("x86_64-pc-windows-msvc", "0.2.1")]
 #[case::macos_arm("aarch64-apple-darwin", "1.0.0")]
 fn archive_name_matches_binstall_template(#[case] target: &str, #[case] version: &str) {
-    let name = archive_filename(version, target);
+    let v = Version::new(version);
+    let t = TargetTriple::new(target);
+    let name = archive_filename(&v, &t);
     let url = binstall_metadata::expand_pkg_url(version, target);
     assert!(
         url.ends_with(&name),
@@ -201,8 +219,8 @@ fn tgz_archive_preserves_binary_content() {
     fs::write(&binary, content).expect("write");
 
     let params = InstallerPackageParams {
-        version: "0.2.1".to_owned(),
-        target: "aarch64-unknown-linux-gnu".to_owned(),
+        version: Version::new("0.2.1"),
+        target: TargetTriple::new("aarch64-unknown-linux-gnu"),
         binary_path: binary,
         output_dir: temp.path().to_path_buf(),
     };

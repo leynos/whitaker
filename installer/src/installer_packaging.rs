@@ -25,6 +25,46 @@ use thiserror::Error;
 /// The crate name used in archive and directory names.
 const CRATE_NAME: &str = "whitaker-installer";
 
+/// A crate version string (e.g. `"0.2.1"`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Version(String);
+
+impl Version {
+    /// Create a new [`Version`] from any string-like value.
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// Borrow the underlying version string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A Rust target triple (e.g. `"x86_64-unknown-linux-gnu"`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetTriple(String);
+
+impl TargetTriple {
+    /// Create a new [`TargetTriple`] from any string-like value.
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// Borrow the underlying target triple string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Returns `true` if this target is the Windows MSVC target.
+    #[must_use]
+    pub fn is_windows(&self) -> bool {
+        self.0 == WINDOWS_OVERRIDE_TARGET
+    }
+}
+
 /// Supported archive formats for installer packaging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveFormat {
@@ -38,9 +78,9 @@ pub enum ArchiveFormat {
 #[derive(Debug)]
 pub struct InstallerPackageParams {
     /// The crate version (e.g. `"0.2.1"`).
-    pub version: String,
+    pub version: Version,
     /// The target triple (e.g. `"x86_64-unknown-linux-gnu"`).
-    pub target: String,
+    pub target: TargetTriple,
     /// Path to the compiled installer binary.
     pub binary_path: PathBuf,
     /// Directory where the output archive will be written.
@@ -79,19 +119,25 @@ pub enum InstallerPackagingError {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::archive_filename;
+/// use whitaker_installer::installer_packaging::{archive_filename, Version, TargetTriple};
 ///
-/// let name = archive_filename("0.2.1", "x86_64-unknown-linux-gnu");
+/// let v = Version::new("0.2.1");
+/// let t = TargetTriple::new("x86_64-unknown-linux-gnu");
+/// let name = archive_filename(&v, &t);
 /// assert_eq!(name, "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz");
 /// ```
 #[must_use]
-pub fn archive_filename(version: &str, target: &str) -> String {
-    let ext = if target == WINDOWS_OVERRIDE_TARGET {
+pub fn archive_filename(version: &Version, target: &TargetTriple) -> String {
+    let ext = if target.is_windows() {
         WINDOWS_PKG_FMT
     } else {
         DEFAULT_PKG_FMT
     };
-    format!("{CRATE_NAME}-{target}-v{version}.{ext}")
+    format!(
+        "{CRATE_NAME}-{}-v{}.{ext}",
+        target.as_str(),
+        version.as_str()
+    )
 }
 
 /// Compute the inner directory name for a given version and target.
@@ -102,14 +148,16 @@ pub fn archive_filename(version: &str, target: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::inner_dir_name;
+/// use whitaker_installer::installer_packaging::{inner_dir_name, Version, TargetTriple};
 ///
-/// let dir = inner_dir_name("0.2.1", "x86_64-unknown-linux-gnu");
+/// let v = Version::new("0.2.1");
+/// let t = TargetTriple::new("x86_64-unknown-linux-gnu");
+/// let dir = inner_dir_name(&v, &t);
 /// assert_eq!(dir, "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1");
 /// ```
 #[must_use]
-pub fn inner_dir_name(version: &str, target: &str) -> String {
-    format!("{CRATE_NAME}-{target}-v{version}")
+pub fn inner_dir_name(version: &Version, target: &TargetTriple) -> String {
+    format!("{CRATE_NAME}-{}-v{}", target.as_str(), version.as_str())
 }
 
 /// Compute the binary filename for a given target.
@@ -120,14 +168,20 @@ pub fn inner_dir_name(version: &str, target: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::binary_filename;
+/// use whitaker_installer::installer_packaging::{binary_filename, TargetTriple};
 ///
-/// assert_eq!(binary_filename("x86_64-unknown-linux-gnu"), "whitaker-installer");
-/// assert_eq!(binary_filename("x86_64-pc-windows-msvc"), "whitaker-installer.exe");
+/// assert_eq!(
+///     binary_filename(&TargetTriple::new("x86_64-unknown-linux-gnu")),
+///     "whitaker-installer"
+/// );
+/// assert_eq!(
+///     binary_filename(&TargetTriple::new("x86_64-pc-windows-msvc")),
+///     "whitaker-installer.exe"
+/// );
 /// ```
 #[must_use]
-pub fn binary_filename(target: &str) -> String {
-    if target == WINDOWS_OVERRIDE_TARGET {
+pub fn binary_filename(target: &TargetTriple) -> String {
+    if target.is_windows() {
         format!("{CRATE_NAME}.exe")
     } else {
         CRATE_NAME.to_owned()
@@ -142,14 +196,20 @@ pub fn binary_filename(target: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::{archive_format, ArchiveFormat};
+/// use whitaker_installer::installer_packaging::{archive_format, ArchiveFormat, TargetTriple};
 ///
-/// assert_eq!(archive_format("x86_64-unknown-linux-gnu"), ArchiveFormat::Tgz);
-/// assert_eq!(archive_format("x86_64-pc-windows-msvc"), ArchiveFormat::Zip);
+/// assert_eq!(
+///     archive_format(&TargetTriple::new("x86_64-unknown-linux-gnu")),
+///     ArchiveFormat::Tgz
+/// );
+/// assert_eq!(
+///     archive_format(&TargetTriple::new("x86_64-pc-windows-msvc")),
+///     ArchiveFormat::Zip
+/// );
 /// ```
 #[must_use]
-pub fn archive_format(target: &str) -> ArchiveFormat {
-    if target == WINDOWS_OVERRIDE_TARGET {
+pub fn archive_format(target: &TargetTriple) -> ArchiveFormat {
+    if target.is_windows() {
         ArchiveFormat::Zip
     } else {
         ArchiveFormat::Tgz
