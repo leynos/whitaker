@@ -164,7 +164,7 @@
 
 ### 6.3. `brain_trait` lint
 
-- [ ] 6.3.1. Implement trait item counting, default method CC aggregation, and
+- [x] 6.3.1. Implement trait item counting, default method CC aggregation, and
   implementor burden metrics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_trait`
   signals.
