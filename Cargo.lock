@@ -2919,6 +2919,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "whitaker_sarif"
+version = "0.2.1"
+dependencies = [
+ "camino",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "whitaker_suite"
 version = "0.2.1"
 dependencies = [
