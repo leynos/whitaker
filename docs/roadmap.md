@@ -168,7 +168,7 @@
   implementor burden metrics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_trait`
   signals.
-- [ ] 6.3.2. Apply warning and escalation thresholds, and surface measured
+- [x] 6.3.2. Apply warning and escalation thresholds, and surface measured
   values in diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_trait` rule
   set (initial defaults).
