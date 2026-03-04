@@ -59,6 +59,20 @@ fn read_tgz_entry_paths(archive_path: &std::path::Path) -> Vec<String> {
         .collect()
 }
 
+/// Read entry names from a `.zip` archive, failing explicitly on errors.
+fn read_zip_entry_names(archive_path: &std::path::Path) -> Vec<String> {
+    let file = fs::File::open(archive_path).expect("open archive");
+    let zip_archive = zip::ZipArchive::new(file).expect("open zip");
+    (0..zip_archive.len())
+        .map(|i| {
+            zip_archive
+                .name_for_index(i)
+                .expect("valid zip entry name")
+                .to_owned()
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Pure function tests
 // ---------------------------------------------------------------------------
@@ -150,48 +164,38 @@ fn archive_format_zip_for_windows() {
 // Archive creation tests
 // ---------------------------------------------------------------------------
 
-#[test]
-fn package_installer_creates_tgz() {
-    let fixture = packaging_fixture("x86_64-unknown-linux-gnu", b"fake-binary-content");
-    let params = params_from_fixture(&fixture, "0.2.1", "x86_64-unknown-linux-gnu");
-
+#[rstest]
+#[case::linux(
+    "x86_64-unknown-linux-gnu",
+    b"fake-binary-content" as &[u8],
+    "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz",
+    "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1/whitaker-installer",
+)]
+#[case::windows(
+    "x86_64-pc-windows-msvc",
+    b"fake-exe-content" as &[u8],
+    "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1.zip",
+    "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1/whitaker-installer.exe",
+)]
+fn package_installer_creates_archive(
+    #[case] target: &str,
+    #[case] content: &[u8],
+    #[case] expected_name: &str,
+    #[case] expected_entry: &str,
+) {
+    let fixture = packaging_fixture(target, content);
+    let params = params_from_fixture(&fixture, "0.2.1", target);
     let output = package_installer(params).expect("packaging should succeed");
     assert!(output.archive_path.exists(), "archive should exist");
-    assert_eq!(
-        output.archive_name,
-        "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz"
-    );
+    assert_eq!(output.archive_name, expected_name);
 
-    let entries = read_tgz_entry_paths(&output.archive_path);
+    let entries = if expected_name.ends_with(".tgz") {
+        read_tgz_entry_paths(&output.archive_path)
+    } else {
+        read_zip_entry_names(&output.archive_path)
+    };
     assert_eq!(entries.len(), 1, "expected 1 entry, got {entries:?}");
-    assert_eq!(
-        entries[0],
-        "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1/whitaker-installer"
-    );
-}
-
-#[test]
-fn package_installer_creates_zip() {
-    let fixture = packaging_fixture("x86_64-pc-windows-msvc", b"fake-exe-content");
-    let params = params_from_fixture(&fixture, "0.2.1", "x86_64-pc-windows-msvc");
-
-    let output = package_installer(params).expect("packaging should succeed");
-    assert!(output.archive_path.exists(), "archive should exist");
-    assert_eq!(
-        output.archive_name,
-        "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1.zip"
-    );
-
-    // Verify archive contents
-    let file = fs::File::open(&output.archive_path).expect("open archive");
-    let mut zip_archive = zip::ZipArchive::new(file).expect("open zip");
-    assert_eq!(zip_archive.len(), 1, "expected 1 entry in zip");
-
-    let entry = zip_archive.by_index(0).expect("first entry");
-    assert_eq!(
-        entry.name(),
-        "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1/whitaker-installer.exe"
-    );
+    assert_eq!(entries[0], expected_entry);
 }
 
 #[test]
