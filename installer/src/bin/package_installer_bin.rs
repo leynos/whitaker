@@ -136,6 +136,13 @@ mod tests {
             binary_path: PathBuf::from("/tmp/does-not-exist-xyz"),
             output_dir: std::env::temp_dir(),
         };
-        assert!(run(cli).is_err(), "should fail with missing binary");
+        let err = run(cli).expect_err("should fail with missing binary");
+        assert!(
+            matches!(
+                err,
+                CliError::Packaging(InstallerPackagingError::BinaryNotFound(_))
+            ),
+            "expected BinaryNotFound, got {err:?}"
+        );
     }
 }

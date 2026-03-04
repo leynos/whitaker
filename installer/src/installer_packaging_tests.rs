@@ -7,6 +7,59 @@ use std::fs;
 use std::io::Read;
 
 // ---------------------------------------------------------------------------
+// Shared fixtures
+// ---------------------------------------------------------------------------
+
+/// A temporary directory with a fake binary suitable for packaging.
+struct PackagingFixture {
+    temp: tempfile::TempDir,
+    binary_path: std::path::PathBuf,
+}
+
+/// Create a [`PackagingFixture`] for the given target, writing a fake binary
+/// with the provided content into a fresh temporary directory.
+fn packaging_fixture(target: &str, content: &[u8]) -> PackagingFixture {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let bin_name = binary_filename(&TargetTriple::new(target));
+    let binary_path = temp.path().join(bin_name);
+    fs::write(&binary_path, content).expect("write fake binary");
+    PackagingFixture { temp, binary_path }
+}
+
+/// Build [`InstallerPackageParams`] from a fixture, version, and target.
+fn params_from_fixture(
+    fixture: &PackagingFixture,
+    version: &str,
+    target: &str,
+) -> InstallerPackageParams {
+    InstallerPackageParams {
+        version: Version::new(version),
+        target: TargetTriple::new(target),
+        binary_path: fixture.binary_path.clone(),
+        output_dir: fixture.temp.path().to_path_buf(),
+    }
+}
+
+/// Read entry paths from a `.tgz` archive, failing explicitly on errors.
+fn read_tgz_entry_paths(archive_path: &std::path::Path) -> Vec<String> {
+    let file = fs::File::open(archive_path).expect("open archive");
+    let gz = flate2::read::GzDecoder::new(file);
+    let mut tar_archive = tar::Archive::new(gz);
+    tar_archive
+        .entries()
+        .expect("entries")
+        .map(|e| {
+            let entry = e.expect("valid tar entry");
+            entry
+                .path()
+                .expect("valid entry path")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Pure function tests
 // ---------------------------------------------------------------------------
 
@@ -99,16 +152,8 @@ fn archive_format_zip_for_windows() {
 
 #[test]
 fn package_installer_creates_tgz() {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let binary = temp.path().join("whitaker-installer");
-    fs::write(&binary, b"fake-binary-content").expect("write");
-
-    let params = InstallerPackageParams {
-        version: Version::new("0.2.1"),
-        target: TargetTriple::new("x86_64-unknown-linux-gnu"),
-        binary_path: binary,
-        output_dir: temp.path().to_path_buf(),
-    };
+    let fixture = packaging_fixture("x86_64-unknown-linux-gnu", b"fake-binary-content");
+    let params = params_from_fixture(&fixture, "0.2.1", "x86_64-unknown-linux-gnu");
 
     let output = package_installer(params).expect("packaging should succeed");
     assert!(output.archive_path.exists(), "archive should exist");
@@ -117,19 +162,7 @@ fn package_installer_creates_tgz() {
         "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz"
     );
 
-    // Verify archive contents
-    let file = fs::File::open(&output.archive_path).expect("open archive");
-    let gz = flate2::read::GzDecoder::new(file);
-    let mut tar_archive = tar::Archive::new(gz);
-    let entries: Vec<String> = tar_archive
-        .entries()
-        .expect("entries")
-        .filter_map(|e| {
-            e.ok()
-                .and_then(|entry| entry.path().ok().map(|p| p.to_string_lossy().into_owned()))
-        })
-        .collect();
-
+    let entries = read_tgz_entry_paths(&output.archive_path);
     assert_eq!(entries.len(), 1, "expected 1 entry, got {entries:?}");
     assert_eq!(
         entries[0],
@@ -139,16 +172,8 @@ fn package_installer_creates_tgz() {
 
 #[test]
 fn package_installer_creates_zip() {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let binary = temp.path().join("whitaker-installer.exe");
-    fs::write(&binary, b"fake-exe-content").expect("write");
-
-    let params = InstallerPackageParams {
-        version: Version::new("0.2.1"),
-        target: TargetTriple::new("x86_64-pc-windows-msvc"),
-        binary_path: binary,
-        output_dir: temp.path().to_path_buf(),
-    };
+    let fixture = packaging_fixture("x86_64-pc-windows-msvc", b"fake-exe-content");
+    let params = params_from_fixture(&fixture, "0.2.1", "x86_64-pc-windows-msvc");
 
     let output = package_installer(params).expect("packaging should succeed");
     assert!(output.archive_path.exists(), "archive should exist");
@@ -188,6 +213,29 @@ fn package_installer_rejects_missing_binary() {
     );
 }
 
+#[test]
+fn package_installer_returns_io_error_for_unwritable_output() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let binary = temp.path().join("whitaker-installer");
+    fs::write(&binary, b"content").expect("write");
+
+    // Use a path under /dev/null (Linux) which cannot be a directory.
+    let unwritable = std::path::PathBuf::from("/dev/null/impossible");
+
+    let params = InstallerPackageParams {
+        version: Version::new("0.2.1"),
+        target: TargetTriple::new("x86_64-unknown-linux-gnu"),
+        binary_path: binary,
+        output_dir: unwritable,
+    };
+
+    let err = package_installer(params).expect_err("should fail on unwritable output dir");
+    assert!(
+        matches!(err, InstallerPackagingError::Io(_)),
+        "expected Io error, got {err:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Cross-validation with binstall metadata
 // ---------------------------------------------------------------------------
@@ -213,17 +261,9 @@ fn archive_name_matches_binstall_template(#[case] target: &str, #[case] version:
 
 #[test]
 fn tgz_archive_preserves_binary_content() {
-    let temp = tempfile::tempdir().expect("temp dir");
     let content = b"binary-payload-12345";
-    let binary = temp.path().join("whitaker-installer");
-    fs::write(&binary, content).expect("write");
-
-    let params = InstallerPackageParams {
-        version: Version::new("0.2.1"),
-        target: TargetTriple::new("aarch64-unknown-linux-gnu"),
-        binary_path: binary,
-        output_dir: temp.path().to_path_buf(),
-    };
+    let fixture = packaging_fixture("aarch64-unknown-linux-gnu", content);
+    let params = params_from_fixture(&fixture, "0.2.1", "aarch64-unknown-linux-gnu");
 
     let output = package_installer(params).expect("packaging");
     let file = fs::File::open(&output.archive_path).expect("open");

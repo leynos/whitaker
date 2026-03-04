@@ -42,6 +42,24 @@ impl Version {
     }
 }
 
+impl AsRef<str> for Version {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for Version {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// A Rust target triple (e.g. `"x86_64-unknown-linux-gnu"`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetTriple(String);
@@ -62,6 +80,24 @@ impl TargetTriple {
     #[must_use]
     pub fn is_windows(&self) -> bool {
         self.0 == WINDOWS_OVERRIDE_TARGET
+    }
+}
+
+impl AsRef<str> for TargetTriple {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for TargetTriple {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl std::fmt::Display for TargetTriple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -236,6 +272,8 @@ pub fn package_installer(
         ));
     }
 
+    fs::create_dir_all(&params.output_dir)?;
+
     let name = archive_filename(&params.version, &params.target);
     let output_path = params.output_dir.join(&name);
     let inner_dir = inner_dir_name(&params.version, &params.target);
@@ -269,7 +307,8 @@ fn create_tgz_archive(
 
     let archive_entry_path = format!("{inner_dir}/{bin_name}");
     archive.append_path_with_name(binary_path, &archive_entry_path)?;
-    archive.finish()?;
+    let gz_encoder = archive.into_inner()?;
+    gz_encoder.finish()?;
 
     Ok(())
 }

@@ -26,7 +26,8 @@ change:
    (`whitaker-installer` or `whitaker-installer.exe`).
 4. All archives are uploaded as assets on a GitHub Release tagged `v<version>`.
 5. A new `installer_packaging` Rust module provides the archive creation logic,
-   validated by unit tests (`rstest`) and BDD scenarios (`rstest-bdd` v0.5.0).
+   validated by unit tests (`rstest`) and behaviour-driven development (BDD)
+   scenarios (`rstest-bdd` v0.5.0).
 6. The roadmap marks 4.3.1 as done.
 7. The design document records the implementation decision.
 8. `make check-fmt`, `make lint`, and `make test` all pass.
@@ -314,8 +315,8 @@ Create `installer/src/installer_packaging.rs` (~180 lines) with:
     `x86_64-pc-windows-msvc`, `Tgz` for all others.
 - Use `binstall_metadata::WINDOWS_OVERRIDE_TARGET` for the Windows check to
   stay consistent with the existing module.
-- An `InstallerPackageParams` struct grouping: `version: String`,
-  `target: String`, `binary_path: PathBuf`, `output_dir: PathBuf`.
+- An `InstallerPackageParams` struct grouping: `version: Version`,
+  `target: TargetTriple`, `binary_path: PathBuf`, `output_dir: PathBuf`.
 - An `InstallerPackageOutput` struct: `archive_path: PathBuf`,
   `archive_name: String`.
 - An `InstallerPackagingError` enum (derive `thiserror::Error`):
@@ -464,7 +465,7 @@ jobs:
       - Build packaging tool (cargo build --release -p whitaker-installer
         --bin whitaker-package-installer)
       - Package archive (invoke whitaker-package-installer with
-        --version, --target, --binary-path, --output-dir)
+        --crate-version, --target, --binary-path, --output-dir)
       - Upload artifact (actions/upload-artifact@v4,
         name: installer-${{ matrix.target }})
 
@@ -647,8 +648,8 @@ pub enum ArchiveFormat {
 
 /// Parameters for packaging the installer binary.
 pub struct InstallerPackageParams {
-    pub version: String,
-    pub target: String,
+    pub version: Version,
+    pub target: TargetTriple,
     pub binary_path: std::path::PathBuf,
     pub output_dir: std::path::PathBuf,
 }
@@ -672,19 +673,19 @@ pub enum InstallerPackagingError {
 
 /// Compute the archive filename for a given version and target.
 #[must_use]
-pub fn archive_filename(version: &str, target: &str) -> String;
+pub fn archive_filename(version: &Version, target: &TargetTriple) -> String;
 
 /// Compute the inner directory name for a given version and target.
 #[must_use]
-pub fn inner_dir_name(version: &str, target: &str) -> String;
+pub fn inner_dir_name(version: &Version, target: &TargetTriple) -> String;
 
 /// Compute the binary filename for a given target.
 #[must_use]
-pub fn binary_filename(target: &str) -> String;
+pub fn binary_filename(target: &TargetTriple) -> String;
 
 /// Determine the archive format for a given target.
 #[must_use]
-pub fn archive_format(target: &str) -> ArchiveFormat;
+pub fn archive_format(target: &TargetTriple) -> ArchiveFormat;
 
 /// Package the installer binary into the appropriate archive format.
 pub fn package_installer(

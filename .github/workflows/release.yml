@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag (e.g. v0.2.1) — must match an existing tag"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -102,6 +107,7 @@ jobs:
           retention-days: 5
 
   publish:
+    if: github.ref_type == 'tag'
     needs: build-installer
     runs-on: ubuntu-latest
     permissions:
@@ -109,6 +115,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Verify tag matches Cargo.toml version
+        run: |
+          set -euxo pipefail
+          CARGO_VERSION=$(awk -F '"' '/^version/ {print $2; exit}' installer/Cargo.toml)
+          TAG="${GITHUB_REF_NAME#v}"
+          if [[ "$TAG" != "$CARGO_VERSION" ]]; then
+            echo "::error::Tag version ($TAG) does not match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
 
       - name: Download all artefacts
         uses: actions/download-artifact@v4
@@ -143,9 +159,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Publish to crates.io
-        if: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+        if: env.CARGO_REGISTRY_TOKEN != ''
         run: |
           set -euxo pipefail
-          cargo publish -p whitaker-installer --allow-dirty
+          cargo publish -p whitaker-installer
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

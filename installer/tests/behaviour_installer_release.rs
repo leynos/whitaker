@@ -9,7 +9,8 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use std::path::PathBuf;
 use whitaker_installer::binstall_metadata;
 use whitaker_installer::installer_packaging::{
-    self, ArchiveFormat, InstallerPackageOutput, InstallerPackageParams, TargetTriple, Version,
+    self, ArchiveFormat, InstallerPackageOutput, InstallerPackageParams, InstallerPackagingError,
+    TargetTriple, Version,
 };
 
 // ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ struct InstallerReleaseWorld {
     temp_dir: Option<tempfile::TempDir>,
     binary_path: Option<PathBuf>,
     package_output: Option<InstallerPackageOutput>,
-    packaging_failed: bool,
+    packaging_error: Option<InstallerPackagingError>,
 }
 
 #[fixture]
@@ -68,8 +69,8 @@ fn when_archive_filename_computed(world: &mut InstallerReleaseWorld) {
     );
 }
 
-#[when("the installer is packaged")]
-fn when_installer_packaged(world: &mut InstallerReleaseWorld) {
+/// Run the packaging pipeline and store the result in the world.
+fn attempt_packaging(world: &mut InstallerReleaseWorld) {
     let temp_dir = world.temp_dir.as_ref().expect("temp dir set");
     let binary_path = world.binary_path.as_ref().expect("binary path set");
 
@@ -82,26 +83,18 @@ fn when_installer_packaged(world: &mut InstallerReleaseWorld) {
 
     match installer_packaging::package_installer(params) {
         Ok(output) => world.package_output = Some(output),
-        Err(_) => world.packaging_failed = true,
+        Err(e) => world.packaging_error = Some(e),
     }
+}
+
+#[when("the installer is packaged")]
+fn when_installer_packaged(world: &mut InstallerReleaseWorld) {
+    attempt_packaging(world);
 }
 
 #[when("packaging is attempted")]
 fn when_packaging_attempted(world: &mut InstallerReleaseWorld) {
-    let temp_dir = world.temp_dir.as_ref().expect("temp dir set");
-    let binary_path = world.binary_path.as_ref().expect("binary path set");
-
-    let params = InstallerPackageParams {
-        version: Version::new(&world.version),
-        target: TargetTriple::new(&world.target),
-        binary_path: binary_path.clone(),
-        output_dir: temp_dir.path().to_path_buf(),
-    };
-
-    match installer_packaging::package_installer(params) {
-        Ok(output) => world.package_output = Some(output),
-        Err(_) => world.packaging_failed = true,
-    }
+    attempt_packaging(world);
 }
 
 #[then("the archive filename is \"{expected}\"")]
@@ -140,9 +133,13 @@ fn then_binstall_url_ends_with_filename(world: &mut InstallerReleaseWorld) {
 
 #[then("a packaging error is returned")]
 fn then_packaging_error_returned(world: &mut InstallerReleaseWorld) {
+    let err = world
+        .packaging_error
+        .as_ref()
+        .expect("expected packaging to fail, but it succeeded");
     assert!(
-        world.packaging_failed,
-        "expected packaging to fail, but it succeeded"
+        matches!(err, InstallerPackagingError::BinaryNotFound(_)),
+        "expected BinaryNotFound, got {err:?}"
     );
 }
 
