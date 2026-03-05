@@ -7,6 +7,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 use thiserror::Error;
+use whitaker_installer::artefact::error::ArtefactError;
 use whitaker_installer::installer_packaging::{
     InstallerPackagingError, TargetTriple, Version, package_installer,
 };
@@ -46,6 +47,10 @@ enum CliError {
     /// An I/O error (e.g. creating the output directory).
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// An invalid target triple was provided.
+    #[error("{0}")]
+    Artefact(#[from] ArtefactError),
 }
 
 fn main() {
@@ -63,7 +68,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
 
     let params = whitaker_installer::installer_packaging::InstallerPackageParams {
         version: Version::new(cli.crate_version),
-        target: TargetTriple::new(cli.target),
+        target: TargetTriple::try_from(cli.target.as_str())?,
         binary_path: cli.binary_path,
         output_dir: cli.output_dir,
     };

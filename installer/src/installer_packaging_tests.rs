@@ -20,7 +20,7 @@ struct PackagingFixture {
 /// with the provided content into a fresh temporary directory.
 fn packaging_fixture(target: &str, content: &[u8]) -> PackagingFixture {
     let temp = tempfile::tempdir().expect("temp dir");
-    let bin_name = binary_filename(&TargetTriple::new(target));
+    let bin_name = binary_filename(&TargetTriple::try_from(target).expect("valid target"));
     let binary_path = temp.path().join(bin_name);
     fs::write(&binary_path, content).expect("write fake binary");
     PackagingFixture { temp, binary_path }
@@ -34,7 +34,7 @@ fn params_from_fixture(
 ) -> InstallerPackageParams {
     InstallerPackageParams {
         version: Version::new(version),
-        target: TargetTriple::new(target),
+        target: TargetTriple::try_from(target).expect("valid target"),
         binary_path: fixture.binary_path.clone(),
         output_dir: fixture.temp.path().to_path_buf(),
     }
@@ -84,7 +84,7 @@ fn read_zip_entry_names(archive_path: &std::path::Path) -> Vec<String> {
 #[case::macos_arm("aarch64-apple-darwin")]
 fn archive_filename_tgz_for_non_windows(#[case] target: &str) {
     let v = Version::new("0.2.1");
-    let t = TargetTriple::new(target);
+    let t = TargetTriple::try_from(target).expect("valid target");
     let name = archive_filename(&v, &t);
     assert!(name.ends_with(".tgz"), "expected .tgz suffix, got {name}");
     assert!(name.contains(target), "expected target in name, got {name}");
@@ -97,7 +97,7 @@ fn archive_filename_tgz_for_non_windows(#[case] target: &str) {
 #[test]
 fn archive_filename_zip_for_windows() {
     let v = Version::new("0.2.1");
-    let t = TargetTriple::new("x86_64-pc-windows-msvc");
+    let t = TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid target");
     let name = archive_filename(&v, &t);
     assert_eq!(name, "whitaker-installer-x86_64-pc-windows-msvc-v0.2.1.zip");
 }
@@ -117,7 +117,10 @@ fn archive_filename_zip_for_windows() {
 )]
 fn inner_dir_name_matches_expected(#[case] target: &str, #[case] expected: &str) {
     assert_eq!(
-        inner_dir_name(&Version::new("0.2.1"), &TargetTriple::new(target)),
+        inner_dir_name(
+            &Version::new("0.2.1"),
+            &TargetTriple::try_from(target).expect("valid target")
+        ),
         expected
     );
 }
@@ -127,7 +130,7 @@ fn inner_dir_name_matches_expected(#[case] target: &str, #[case] expected: &str)
 #[case::macos("aarch64-apple-darwin")]
 fn binary_filename_unix(#[case] target: &str) {
     assert_eq!(
-        binary_filename(&TargetTriple::new(target)),
+        binary_filename(&TargetTriple::try_from(target).expect("valid target")),
         "whitaker-installer"
     );
 }
@@ -135,7 +138,7 @@ fn binary_filename_unix(#[case] target: &str) {
 #[test]
 fn binary_filename_windows() {
     assert_eq!(
-        binary_filename(&TargetTriple::new("x86_64-pc-windows-msvc")),
+        binary_filename(&TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid target")),
         "whitaker-installer.exe"
     );
 }
@@ -147,7 +150,7 @@ fn binary_filename_windows() {
 #[case::macos_arm("aarch64-apple-darwin")]
 fn archive_format_tgz_for_non_windows(#[case] target: &str) {
     assert_eq!(
-        archive_format(&TargetTriple::new(target)),
+        archive_format(&TargetTriple::try_from(target).expect("valid target")),
         ArchiveFormat::Tgz
     );
 }
@@ -155,7 +158,7 @@ fn archive_format_tgz_for_non_windows(#[case] target: &str) {
 #[test]
 fn archive_format_zip_for_windows() {
     assert_eq!(
-        archive_format(&TargetTriple::new("x86_64-pc-windows-msvc")),
+        archive_format(&TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid target")),
         ArchiveFormat::Zip
     );
 }
@@ -205,7 +208,7 @@ fn package_installer_rejects_missing_binary() {
 
     let params = InstallerPackageParams {
         version: Version::new("0.2.1"),
-        target: TargetTriple::new("x86_64-unknown-linux-gnu"),
+        target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
         binary_path: missing.clone(),
         output_dir: temp.path().to_path_buf(),
     };
@@ -223,12 +226,13 @@ fn package_installer_returns_io_error_for_unwritable_output() {
     let binary = temp.path().join("whitaker-installer");
     fs::write(&binary, b"content").expect("write");
 
-    // Use a path under /dev/null (Linux) which cannot be a directory.
-    let unwritable = std::path::PathBuf::from("/dev/null/impossible");
+    // Use a path nested under the binary file itself — a regular file
+    // cannot be a directory, so create_dir_all will fail on all platforms.
+    let unwritable = binary.join("impossible");
 
     let params = InstallerPackageParams {
         version: Version::new("0.2.1"),
-        target: TargetTriple::new("x86_64-unknown-linux-gnu"),
+        target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
         binary_path: binary,
         output_dir: unwritable,
     };
@@ -250,7 +254,7 @@ fn package_installer_returns_io_error_for_unwritable_output() {
 #[case::macos_arm("aarch64-apple-darwin", "1.0.0")]
 fn archive_name_matches_binstall_template(#[case] target: &str, #[case] version: &str) {
     let v = Version::new(version);
-    let t = TargetTriple::new(target);
+    let t = TargetTriple::try_from(target).expect("valid target");
     let name = archive_filename(&v, &t);
     let url = binstall_metadata::expand_pkg_url(version, target);
     assert!(

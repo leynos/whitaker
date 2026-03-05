@@ -29,6 +29,7 @@
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
 //! - [`toolchain`] - Rust toolchain detection and validation
+//! - [`version`] - Semantic crate version wrapper
 //! - [`workspace`] - Workspace detection and path resolution
 //! - [`wrapper`] - Wrapper script generation
 
@@ -53,6 +54,7 @@ pub mod resolution;
 pub mod scanner;
 pub mod stager;
 pub mod toolchain;
+pub mod version;
 pub mod workspace;
 pub mod wrapper;
 

@@ -16,7 +16,10 @@
 //!
 //! Windows archives use `.zip` format and the `.exe` suffix.
 
-use crate::binstall_metadata::{DEFAULT_PKG_FMT, WINDOWS_OVERRIDE_TARGET, WINDOWS_PKG_FMT};
+pub use crate::artefact::target::TargetTriple;
+pub use crate::version::Version;
+
+use crate::binstall_metadata::{DEFAULT_PKG_FMT, WINDOWS_PKG_FMT};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -24,82 +27,6 @@ use thiserror::Error;
 
 /// The crate name used in archive and directory names.
 const CRATE_NAME: &str = "whitaker-installer";
-
-/// A crate version string (e.g. `"0.2.1"`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Version(String);
-
-impl Version {
-    /// Create a new [`Version`] from any string-like value.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    /// Borrow the underlying version string.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Version {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<&str> for Version {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-/// A Rust target triple (e.g. `"x86_64-unknown-linux-gnu"`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TargetTriple(String);
-
-impl TargetTriple {
-    /// Create a new [`TargetTriple`] from any string-like value.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    /// Borrow the underlying target triple string.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Returns `true` if this target is the Windows MSVC target.
-    #[must_use]
-    pub fn is_windows(&self) -> bool {
-        self.0 == WINDOWS_OVERRIDE_TARGET
-    }
-}
-
-impl AsRef<str> for TargetTriple {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<&str> for TargetTriple {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-impl std::fmt::Display for TargetTriple {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
 
 /// Supported archive formats for installer packaging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,7 +85,7 @@ pub enum InstallerPackagingError {
 /// use whitaker_installer::installer_packaging::{archive_filename, Version, TargetTriple};
 ///
 /// let v = Version::new("0.2.1");
-/// let t = TargetTriple::new("x86_64-unknown-linux-gnu");
+/// let t = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
 /// let name = archive_filename(&v, &t);
 /// assert_eq!(name, "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz");
 /// ```
@@ -187,7 +114,7 @@ pub fn archive_filename(version: &Version, target: &TargetTriple) -> String {
 /// use whitaker_installer::installer_packaging::{inner_dir_name, Version, TargetTriple};
 ///
 /// let v = Version::new("0.2.1");
-/// let t = TargetTriple::new("x86_64-unknown-linux-gnu");
+/// let t = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
 /// let dir = inner_dir_name(&v, &t);
 /// assert_eq!(dir, "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1");
 /// ```
@@ -207,11 +134,11 @@ pub fn inner_dir_name(version: &Version, target: &TargetTriple) -> String {
 /// use whitaker_installer::installer_packaging::{binary_filename, TargetTriple};
 ///
 /// assert_eq!(
-///     binary_filename(&TargetTriple::new("x86_64-unknown-linux-gnu")),
+///     binary_filename(&TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")),
 ///     "whitaker-installer"
 /// );
 /// assert_eq!(
-///     binary_filename(&TargetTriple::new("x86_64-pc-windows-msvc")),
+///     binary_filename(&TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid")),
 ///     "whitaker-installer.exe"
 /// );
 /// ```
@@ -235,11 +162,11 @@ pub fn binary_filename(target: &TargetTriple) -> String {
 /// use whitaker_installer::installer_packaging::{archive_format, ArchiveFormat, TargetTriple};
 ///
 /// assert_eq!(
-///     archive_format(&TargetTriple::new("x86_64-unknown-linux-gnu")),
+///     archive_format(&TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")),
 ///     ArchiveFormat::Tgz
 /// );
 /// assert_eq!(
-///     archive_format(&TargetTriple::new("x86_64-pc-windows-msvc")),
+///     archive_format(&TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid")),
 ///     ArchiveFormat::Zip
 /// );
 /// ```

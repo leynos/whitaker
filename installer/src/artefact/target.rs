@@ -101,7 +101,8 @@ impl TargetTriple {
     }
 
     /// Whether this target is a Windows platform.
-    fn is_windows(&self) -> bool {
+    #[must_use]
+    pub fn is_windows(&self) -> bool {
         self.0.contains("windows")
     }
 

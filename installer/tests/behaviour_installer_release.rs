@@ -47,7 +47,9 @@ fn given_version_and_target(world: &mut InstallerReleaseWorld, version: String, 
 #[given("a fake installer binary exists")]
 fn given_fake_binary_exists(world: &mut InstallerReleaseWorld) {
     let temp = tempfile::tempdir().expect("temp dir");
-    let bin_name = installer_packaging::binary_filename(&TargetTriple::new(&world.target));
+    let bin_name = installer_packaging::binary_filename(
+        &TargetTriple::try_from(world.target.as_str()).expect("valid target"),
+    );
     let binary_path = temp.path().join(&bin_name);
     std::fs::write(&binary_path, b"fake-binary").expect("write fake binary");
     world.binary_path = Some(binary_path);
@@ -65,7 +67,7 @@ fn given_binary_missing(world: &mut InstallerReleaseWorld) {
 fn when_archive_filename_computed(world: &mut InstallerReleaseWorld) {
     world.computed_filename = installer_packaging::archive_filename(
         &Version::new(&world.version),
-        &TargetTriple::new(&world.target),
+        &TargetTriple::try_from(world.target.as_str()).expect("valid target"),
     );
 }
 
@@ -76,7 +78,7 @@ fn attempt_packaging(world: &mut InstallerReleaseWorld) {
 
     let params = InstallerPackageParams {
         version: Version::new(&world.version),
-        target: TargetTriple::new(&world.target),
+        target: TargetTriple::try_from(world.target.as_str()).expect("valid target"),
         binary_path: binary_path.clone(),
         output_dir: temp_dir.path().to_path_buf(),
     };
@@ -112,7 +114,9 @@ fn then_archive_contains(world: &mut InstallerReleaseWorld, expected_path: Strin
         .as_ref()
         .expect("package output should be set");
 
-    let format = installer_packaging::archive_format(&TargetTriple::new(&world.target));
+    let format = installer_packaging::archive_format(
+        &TargetTriple::try_from(world.target.as_str()).expect("valid target"),
+    );
     let entries = read_archive_entries(&output.archive_path, format);
 
     assert!(
