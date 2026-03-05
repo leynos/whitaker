@@ -368,7 +368,9 @@ unit tests:
    and Windows `.zip` targets; creates a temp file as a fake binary, calls
    `package_installer`, reads back the archive entries and verifies the
    inner path matches
-   `whitaker-installer-<target>-v<version>/whitaker-installer`.
+   `whitaker-installer-<target>-v<version>/whitaker-installer` (Unix) or
+   `whitaker-installer-<target>-v<version>/whitaker-installer.exe`
+   (Windows).
 9. `package_installer_rejects_missing_binary` -- passes a non-existent path,
     asserts `BinaryNotFound` error.
 10. `archive_name_matches_binstall_template` -- cross-validates by calling
