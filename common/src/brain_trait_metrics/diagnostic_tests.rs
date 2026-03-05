@@ -103,29 +103,27 @@ fn primary_message_with_only_default_methods() {
 // ---------------------------------------------------------------------------
 
 #[rstest]
-fn note_mentions_interface_size() {
+#[case("Foo", (5, 5, 4),  BrainTraitDisposition::Warn, "interface size")]
+#[case("Foo", (5, 5, 4),  BrainTraitDisposition::Warn, "Default method CC sum")]
+#[case("Foo", (10, 0, 0), BrainTraitDisposition::Pass, "Implementor burden")]
+fn note_contains_expected_fragment(
+    #[case] name: &str,
+    #[case] shape: (usize, usize, usize),
+    #[case] disposition: BrainTraitDisposition,
+    #[case] fragment: &str,
+) {
+    let (required, default, cc_per_default) = shape;
     let diag = build_diagnostic(DiagnosticInput {
-        name: "Foo",
-        required: 5,
-        default: 5,
-        cc_per_default: 4,
-        disposition: BrainTraitDisposition::Warn,
+        name,
+        required,
+        default,
+        cc_per_default,
+        disposition,
     });
-    let note = format_note(&diag);
-    assert!(note.contains("interface size"));
-}
-
-#[rstest]
-fn note_mentions_cc_when_nonzero() {
-    let diag = build_diagnostic(DiagnosticInput {
-        name: "Foo",
-        required: 5,
-        default: 5,
-        cc_per_default: 4,
-        disposition: BrainTraitDisposition::Warn,
-    });
-    let note = format_note(&diag);
-    assert!(note.contains("Default method CC sum"));
+    assert!(
+        format_note(&diag).contains(fragment),
+        "missing fragment: {fragment}"
+    );
 }
 
 #[rstest]
@@ -137,24 +135,10 @@ fn note_omits_cc_when_no_default_methods() {
         cc_per_default: 0,
         disposition: BrainTraitDisposition::Pass,
     });
-    let note = format_note(&diag);
     assert!(
-        !note.contains("Default method CC"),
-        "should not mention CC when no default methods"
+        !format_note(&diag).contains("Default method CC"),
+        "should not mention CC when no default methods",
     );
-}
-
-#[rstest]
-fn note_mentions_implementor_burden() {
-    let diag = build_diagnostic(DiagnosticInput {
-        name: "Foo",
-        required: 10,
-        default: 0,
-        cc_per_default: 0,
-        disposition: BrainTraitDisposition::Pass,
-    });
-    let note = format_note(&diag);
-    assert!(note.contains("Implementor burden"));
 }
 
 // ---------------------------------------------------------------------------
@@ -162,55 +146,28 @@ fn note_mentions_implementor_burden() {
 // ---------------------------------------------------------------------------
 
 #[rstest]
-fn help_suggests_splitting_when_methods_present() {
+#[case("Big",     (15, 10, 4), BrainTraitDisposition::Warn, "splitting the trait into focused sub-traits")]
+#[case("Complex", (5, 10, 5),  BrainTraitDisposition::Warn, "extracting complex default method bodies")]
+#[case("Heavy",   (15, 0, 0),  BrainTraitDisposition::Pass, "default implementations to reduce implementor burden")]
+#[case("Empty",   (0, 0, 0),   BrainTraitDisposition::Pass, "splitting the trait into smaller")]
+fn help_suggestions(
+    #[case] name: &str,
+    #[case] shape: (usize, usize, usize),
+    #[case] disposition: BrainTraitDisposition,
+    #[case] fragment: &str,
+) {
+    let (required, default, cc_per_default) = shape;
     let diag = build_diagnostic(DiagnosticInput {
-        name: "Big",
-        required: 15,
-        default: 10,
-        cc_per_default: 4,
-        disposition: BrainTraitDisposition::Warn,
+        name,
+        required,
+        default,
+        cc_per_default,
+        disposition,
     });
-    let help = format_help(&diag);
-    assert!(help.contains("splitting the trait into focused sub-traits"));
-}
-
-#[rstest]
-fn help_suggests_extracting_defaults_when_cc_nonzero() {
-    let diag = build_diagnostic(DiagnosticInput {
-        name: "Complex",
-        required: 5,
-        default: 10,
-        cc_per_default: 5,
-        disposition: BrainTraitDisposition::Warn,
-    });
-    let help = format_help(&diag);
-    assert!(help.contains("extracting complex default method bodies"));
-}
-
-#[rstest]
-fn help_suggests_reducing_burden_when_required_present() {
-    let diag = build_diagnostic(DiagnosticInput {
-        name: "Heavy",
-        required: 15,
-        default: 0,
-        cc_per_default: 0,
-        disposition: BrainTraitDisposition::Pass,
-    });
-    let help = format_help(&diag);
-    assert!(help.contains("default implementations to reduce implementor burden"));
-}
-
-#[rstest]
-fn help_provides_fallback_when_empty_trait() {
-    let diag = build_diagnostic(DiagnosticInput {
-        name: "Empty",
-        required: 0,
-        default: 0,
-        cc_per_default: 0,
-        disposition: BrainTraitDisposition::Pass,
-    });
-    let help = format_help(&diag);
-    assert!(help.contains("splitting the trait into smaller"));
+    assert!(
+        format_help(&diag).contains(fragment),
+        "missing fragment: {fragment}"
+    );
 }
 
 // ---------------------------------------------------------------------------

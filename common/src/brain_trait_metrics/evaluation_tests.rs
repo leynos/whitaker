@@ -189,38 +189,33 @@ fn evaluate_deny_cases(
 // ---------------------------------------------------------------------------
 
 #[rstest]
-fn custom_methods_warn_threshold() {
-    // 15 methods total (10+5), CC sum = 5*8 = 40.
-    let metrics = build_trait_metrics("Custom", 10, 5, 8);
-    let thresholds = BrainTraitThresholdsBuilder::new().methods_warn(15).build();
-    assert_eq!(
-        evaluate_brain_trait(&metrics, &thresholds),
-        BrainTraitDisposition::Warn
-    );
-}
-
-#[rstest]
-fn custom_deny_threshold() {
-    // 20 methods total, deny at 20 instead of default 30.
-    let metrics = build_trait_metrics("Custom", 15, 5, 0);
-    let thresholds = BrainTraitThresholdsBuilder::new().methods_deny(20).build();
-    assert_eq!(
-        evaluate_brain_trait(&metrics, &thresholds),
-        BrainTraitDisposition::Deny
-    );
-}
-
-#[rstest]
-fn custom_cc_warn_threshold() {
-    // 20 methods total, CC sum = 5*6 = 30 >= custom 30.
-    let metrics = build_trait_metrics("Custom", 15, 5, 6);
-    let thresholds = BrainTraitThresholdsBuilder::new()
-        .default_cc_warn(30)
-        .build();
-    assert_eq!(
-        evaluate_brain_trait(&metrics, &thresholds),
-        BrainTraitDisposition::Warn
-    );
+#[case(
+    "custom methods_warn",
+    (10, 5, 8),
+    BrainTraitThresholdsBuilder::new().methods_warn(15).build(),
+    BrainTraitDisposition::Warn
+)]
+#[case(
+    "custom methods_deny",
+    (15, 5, 0),
+    BrainTraitThresholdsBuilder::new().methods_deny(20).build(),
+    BrainTraitDisposition::Deny
+)]
+#[case(
+    "custom default_cc_warn",
+    (15, 5, 6),
+    BrainTraitThresholdsBuilder::new().default_cc_warn(30).build(),
+    BrainTraitDisposition::Warn
+)]
+fn custom_threshold_overrides(
+    #[case] _label: &str,
+    #[case] shape: (usize, usize, usize),
+    #[case] thresholds: BrainTraitThresholds,
+    #[case] expected: BrainTraitDisposition,
+) {
+    let (required, default, cc_per_default) = shape;
+    let metrics = build_trait_metrics("Custom", required, default, cc_per_default);
+    assert_eq!(evaluate_brain_trait(&metrics, &thresholds), expected);
 }
 
 // ---------------------------------------------------------------------------
