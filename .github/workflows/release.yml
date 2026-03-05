@@ -135,6 +135,10 @@ jobs:
       - name: Verify tag matches Cargo.toml version
         run: |
           set -euxo pipefail
+          if [[ "$RELEASE_TAG" != v* ]]; then
+            echo "::error::Tag '$RELEASE_TAG' must start with 'v' (e.g. v0.2.1)"
+            exit 1
+          fi
           CARGO_VERSION=$(cargo metadata --manifest-path installer/Cargo.toml \
             --no-deps --format-version 1 | \
             jq -r '.packages[] | select(.name == "whitaker-installer") | .version')
@@ -180,6 +184,7 @@ jobs:
             gh release create "$TAG" \
               --title "Release ${TAG}" \
               --generate-notes \
+              --verify-tag \
               "${ASSETS[@]}"
           fi
         env:

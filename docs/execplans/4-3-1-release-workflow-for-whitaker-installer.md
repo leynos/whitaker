@@ -428,12 +428,18 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag (e.g. v0.2.1) — must match an existing tag"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read        # least privilege; publish job overrides to write
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build-installer:
@@ -457,11 +463,12 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
     steps:
-      - Checkout (actions/checkout@v5)
+      - Checkout (actions/checkout@v5, ref: RELEASE_TAG)
       - Setup Rust (leynos/shared-actions/.../setup-rust@...)
       - Install cross-compilation tools (if matrix.cross)
       - Add target (rustup target add)
-      - Read version from installer/Cargo.toml
+      - Read version from installer/Cargo.toml (cargo metadata + jq,
+        fail if empty)
       - Build installer binary (cargo build -p whitaker-installer
         --release --target)
       - Build packaging tool (cargo build --release -p whitaker-installer
@@ -472,16 +479,19 @@ jobs:
         name: installer-${{ matrix.target }})
 
   publish:
+    if: ref_type == 'tag' || (workflow_dispatch && inputs.tag != '')
     needs: build-installer
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - Checkout
+      - Checkout (ref: RELEASE_TAG)
+      - Verify v-prefix and tag matches Cargo.toml version
       - Download all artefacts (actions/download-artifact@v4,
         pattern: installer-*, merge-multiple: true)
       - List artefacts
-      - Create GitHub Release (gh release create $TAG with all archives)
+      - Create GitHub Release (idempotent: upload assets if release
+        exists, otherwise gh release create --verify-tag)
       - Publish to crates.io (conditional on CARGO_REGISTRY_TOKEN secret)
 ```
 
