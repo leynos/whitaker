@@ -44,10 +44,6 @@ enum CliError {
     #[error("{0}")]
     Packaging(#[from] InstallerPackagingError),
 
-    /// An I/O error (e.g. creating the output directory).
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-
     /// An invalid target triple was provided.
     #[error("{0}")]
     Artefact(#[from] ArtefactError),
@@ -61,11 +57,8 @@ fn main() {
     }
 }
 
-/// Validate inputs, create the output directory, and delegate to the
-/// packaging library.
+/// Validate inputs and delegate to the packaging library.
 fn run(cli: Cli) -> Result<(), CliError> {
-    std::fs::create_dir_all(&cli.output_dir)?;
-
     let params = whitaker_installer::installer_packaging::InstallerPackageParams {
         version: Version::new(cli.crate_version),
         target: TargetTriple::try_from(cli.target.as_str())?,

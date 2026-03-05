@@ -220,6 +220,7 @@ fn package_installer_rejects_missing_binary() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn package_installer_returns_io_error_for_unwritable_output() {
     let temp = tempfile::tempdir().expect("temp dir");

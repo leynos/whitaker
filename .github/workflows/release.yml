@@ -60,7 +60,8 @@ jobs:
         id: version
         run: |
           version=$(cargo metadata --manifest-path installer/Cargo.toml \
-            --no-deps --format-version 1 | jq -r '.packages[0].version')
+            --no-deps --format-version 1 | \
+            jq -r '.packages[] | select(.name == "whitaker-installer" and (.manifest_path | endswith("/installer/Cargo.toml"))) | .version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Build installer binary
@@ -87,7 +88,12 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p dist
-          ./target/release/whitaker-package-installer \
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            PACKAGER="./target/release/whitaker-package-installer.exe"
+          else
+            PACKAGER="./target/release/whitaker-package-installer"
+          fi
+          "$PACKAGER" \
             --crate-version "${{ steps.version.outputs.version }}" \
             --target "${{ matrix.target }}" \
             --binary-path "${{ steps.binary.outputs.path }}" \
@@ -121,7 +127,8 @@ jobs:
         run: |
           set -euxo pipefail
           CARGO_VERSION=$(cargo metadata --manifest-path installer/Cargo.toml \
-            --no-deps --format-version 1 | jq -r '.packages[0].version')
+            --no-deps --format-version 1 | \
+            jq -r '.packages[] | select(.name == "whitaker-installer" and (.manifest_path | endswith("/installer/Cargo.toml"))) | .version')
           TAG="${GITHUB_REF_NAME#v}"
           if [[ "$TAG" != "$CARGO_VERSION" ]]; then
             echo "::error::Tag version ($TAG) does not match Cargo.toml version ($CARGO_VERSION)"

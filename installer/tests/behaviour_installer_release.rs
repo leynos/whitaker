@@ -167,9 +167,13 @@ fn read_tgz_entries(path: &std::path::Path) -> Vec<String> {
     archive
         .entries()
         .expect("entries")
-        .filter_map(|e| {
-            e.ok()
-                .and_then(|entry| entry.path().ok().map(|p| p.to_string_lossy().into_owned()))
+        .map(|e| {
+            let entry = e.expect("valid tar entry");
+            entry
+                .path()
+                .expect("valid entry path")
+                .to_string_lossy()
+                .into_owned()
         })
         .collect()
 }

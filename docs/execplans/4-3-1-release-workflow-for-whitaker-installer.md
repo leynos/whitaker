@@ -140,7 +140,7 @@ download the correct archive.
 
 - Observation: `flate2` and `zip` crates integrated without version conflicts.
   `flate2` was indeed already a transitive dependency. `zip` v2 added cleanly.
-  Impact: none; the dependency risk was low and materialised as expected.
+  Impact: none; the dependency risk was low and materialized as expected.
 
 - Observation: The `zip` crate's `ZipWriter::start_file` API requires
   `SimpleFileOptions` (not `FileOptions` as in older versions). Using the v2
@@ -352,7 +352,7 @@ Acceptance: `cargo check -p whitaker-installer` compiles without errors.
 Create `installer/src/installer_packaging_tests.rs` (~200 lines) with `rstest`
 unit tests:
 
-1. `archive_filename_tgz_for_linux` -- parameterised over the four non-Windows
+1. `archive_filename_tgz_for_linux` -- parameterized over the four non-Windows
    targets, asserts filename ends with `.tgz` and contains the target and
    version.
 2. `archive_filename_zip_for_windows` -- asserts the Windows target produces
@@ -361,7 +361,7 @@ unit tests:
    matches the pattern for each target.
 4. `binary_filename_unix` -- asserts `whitaker-installer` for non-Windows.
 5. `binary_filename_windows` -- asserts `whitaker-installer.exe` for Windows.
-6. `archive_format_tgz_for_non_windows` -- parameterised over non-Windows
+6. `archive_format_tgz_for_non_windows` -- parameterized over non-Windows
    targets.
 7. `archive_format_zip_for_windows` -- asserts `Zip` for Windows.
 8. `package_installer_creates_tgz` -- creates a temp file as a fake binary,
@@ -376,7 +376,7 @@ unit tests:
     `binstall_metadata::expand_pkg_url` and asserting the URL ends with the
     archive filename from `archive_filename()`.
 
-Use parameterised `#[rstest]` `#[case]` where appropriate, keeping parameter
+Use parameterized `#[rstest]` `#[case]` where appropriate, keeping parameter
 count within the Clippy limit (use tuple cases if needed to keep under 4
 params).
 
