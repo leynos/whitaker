@@ -21,6 +21,9 @@ pub const REFINED_FILENAME: &str = "clones.refined.sarif";
 
 /// Returns the Whitaker artefact directory under the given target directory.
 ///
+/// The returned path always uses forward slashes, regardless of platform,
+/// because these paths appear in SARIF `artifactLocation.uri` fields.
+///
 /// # Examples
 ///
 /// ```
@@ -32,10 +35,12 @@ pub const REFINED_FILENAME: &str = "clones.refined.sarif";
 /// ```
 #[must_use]
 pub fn whitaker_dir(target_dir: &Utf8Path) -> Utf8PathBuf {
-    target_dir.join(WHITAKER_DIR)
+    Utf8PathBuf::from(format!("{target_dir}/{WHITAKER_DIR}"))
 }
 
 /// Returns the token-pass SARIF file path.
+///
+/// The returned path always uses forward slashes, regardless of platform.
 ///
 /// # Examples
 ///
@@ -48,10 +53,12 @@ pub fn whitaker_dir(target_dir: &Utf8Path) -> Utf8PathBuf {
 /// ```
 #[must_use]
 pub fn token_pass_path(target_dir: &Utf8Path) -> Utf8PathBuf {
-    whitaker_dir(target_dir).join(TOKEN_PASS_FILENAME)
+    Utf8PathBuf::from(format!("{target_dir}/{WHITAKER_DIR}/{TOKEN_PASS_FILENAME}"))
 }
 
 /// Returns the AST-pass SARIF file path.
+///
+/// The returned path always uses forward slashes, regardless of platform.
 ///
 /// # Examples
 ///
@@ -64,10 +71,12 @@ pub fn token_pass_path(target_dir: &Utf8Path) -> Utf8PathBuf {
 /// ```
 #[must_use]
 pub fn ast_pass_path(target_dir: &Utf8Path) -> Utf8PathBuf {
-    whitaker_dir(target_dir).join(AST_PASS_FILENAME)
+    Utf8PathBuf::from(format!("{target_dir}/{WHITAKER_DIR}/{AST_PASS_FILENAME}"))
 }
 
 /// Returns the refined (merged) SARIF file path.
+///
+/// The returned path always uses forward slashes, regardless of platform.
 ///
 /// # Examples
 ///
@@ -80,7 +89,7 @@ pub fn ast_pass_path(target_dir: &Utf8Path) -> Utf8PathBuf {
 /// ```
 #[must_use]
 pub fn refined_path(target_dir: &Utf8Path) -> Utf8PathBuf {
-    whitaker_dir(target_dir).join(REFINED_FILENAME)
+    Utf8PathBuf::from(format!("{target_dir}/{WHITAKER_DIR}/{REFINED_FILENAME}"))
 }
 
 #[cfg(test)]
