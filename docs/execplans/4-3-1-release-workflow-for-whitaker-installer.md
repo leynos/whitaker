@@ -364,15 +364,14 @@ unit tests:
 6. `archive_format_tgz_for_non_windows` -- parameterized over non-Windows
    targets.
 7. `archive_format_zip_for_windows` -- asserts `Zip` for Windows.
-8. `package_installer_creates_tgz` -- creates a temp file as a fake binary,
-   calls `package_installer`, reads back the `.tgz` archive entries and
-   verifies the inner path matches
+8. `package_installer_creates_archive` -- parameterized over Linux `.tgz`
+   and Windows `.zip` targets; creates a temp file as a fake binary, calls
+   `package_installer`, reads back the archive entries and verifies the
+   inner path matches
    `whitaker-installer-<target>-v<version>/whitaker-installer`.
-9. `package_installer_creates_zip` -- same for the Windows target, verifying
-   `.zip` archive structure.
-10. `package_installer_rejects_missing_binary` -- passes a non-existent path,
+9. `package_installer_rejects_missing_binary` -- passes a non-existent path,
     asserts `BinaryNotFound` error.
-11. `archive_name_matches_binstall_template` -- cross-validates by calling
+10. `archive_name_matches_binstall_template` -- cross-validates by calling
     `binstall_metadata::expand_pkg_url` and asserting the URL ends with the
     archive filename from `archive_filename()`.
 
@@ -401,10 +400,11 @@ Create `installer/tests/behaviour_installer_release.rs` (~250 lines) with:
 - Imports from `rstest::fixture`, `rstest_bdd_macros`, `tempfile`, and
   `whitaker_installer::installer_packaging`.
 - An `InstallerReleaseWorld` struct (derive `Default`) with fields:
-  `version: String`, `target: String`, `archive_filename: String`,
+  `version: String`, `target: String`, `computed_filename: String`,
   `temp_dir: Option<tempfile::TempDir>`, `binary_path: Option<PathBuf>`,
   `package_output: Option<InstallerPackageOutput>`,
-  `packaging_error: bool`.
+  `packaging_error: Option<InstallerPackagingError>` (`None` when packaging
+  succeeds, `Some(err)` when it fails).
 - A `#[fixture] fn world()` returning `InstallerReleaseWorld::default()`.
 - Step definitions (`#[given]`, `#[when]`, `#[then]`) matching the Gherkin
   steps. Each step function has at most 4 parameters.
@@ -601,7 +601,7 @@ revert the roadmap/design-doc edits.
 
 ## Artefacts and notes
 
-Summary of new files:
+Table: Summary of new files — list of added files and purpose.
 
 | File | Purpose | Est. lines |
 | --- | --- | --- |
@@ -613,7 +613,7 @@ Summary of new files:
 | `.github/workflows/release.yml` | GitHub Actions workflow | ~130 |
 | `docs/execplans/4-3-1-release-workflow-for-whitaker-installer.md` | ExecPlan | ~400 |
 
-Summary of modified files:
+Table: Summary of modified files — list of changed files and purpose.
 
 | File | Change |
 | --- | --- |

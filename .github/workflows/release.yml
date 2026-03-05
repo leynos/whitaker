@@ -15,6 +15,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build-installer:
@@ -41,6 +42,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
@@ -61,7 +64,11 @@ jobs:
         run: |
           version=$(cargo metadata --manifest-path installer/Cargo.toml \
             --no-deps --format-version 1 | \
-            jq -r '.packages[] | select(.name == "whitaker-installer" and (.manifest_path | endswith("/installer/Cargo.toml"))) | .version')
+            jq -r '.packages[] | select(.name == "whitaker-installer") | .version')
+          if [[ -z "$version" ]]; then
+            echo "::error::Failed to extract version from Cargo.toml"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Build installer binary
@@ -114,7 +121,7 @@ jobs:
           retention-days: 5
 
   publish:
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
     needs: build-installer
     runs-on: ubuntu-latest
     permissions:
@@ -122,14 +129,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Verify tag matches Cargo.toml version
         run: |
           set -euxo pipefail
           CARGO_VERSION=$(cargo metadata --manifest-path installer/Cargo.toml \
             --no-deps --format-version 1 | \
-            jq -r '.packages[] | select(.name == "whitaker-installer" and (.manifest_path | endswith("/installer/Cargo.toml"))) | .version')
-          TAG="${GITHUB_REF_NAME#v}"
+            jq -r '.packages[] | select(.name == "whitaker-installer") | .version')
+          if [[ -z "$CARGO_VERSION" ]]; then
+            echo "::error::Failed to extract version from Cargo.toml"
+            exit 1
+          fi
+          TAG="${RELEASE_TAG#v}"
           if [[ "$TAG" != "$CARGO_VERSION" ]]; then
             echo "::error::Tag version ($TAG) does not match Cargo.toml version ($CARGO_VERSION)"
             exit 1
@@ -153,7 +166,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           set -euxo pipefail
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${RELEASE_TAG}"
           shopt -s nullglob
           ASSETS=(dist/*.tgz dist/*.zip)
           if [[ "${#ASSETS[@]}" -eq 0 ]]; then
