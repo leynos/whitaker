@@ -475,7 +475,7 @@ jobs:
         --bin whitaker-package-installer)
       - Package archive (invoke whitaker-package-installer with
         --crate-version, --target, --binary-path, --output-dir)
-      - Upload artifact (actions/upload-artifact@v4,
+      - Upload artefact (actions/upload-artifact@v4,
         name: installer-${{ matrix.target }})
 
   publish:
