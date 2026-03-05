@@ -245,7 +245,8 @@ Contents:
 
 1. Module doc comment explaining threshold rules.
 2. Re-export diagnostic types from sibling `diagnostic` module:
-   `pub use super::diagnostic::{BrainTraitDiagnostic, format_help, format_note, format_primary_message};`
+   `pub use super::diagnostic::{BrainTraitDiagnostic,`
+   `format_help, format_note, format_primary_message};`
 3. Test module declaration: `#[cfg(test)] #[path = "evaluation_tests.rs"] mod tests;`
 4. `BrainTraitDisposition` enum with `Pass`, `Warn`, `Deny` variants.
    Derives: `Clone, Copy, Debug, Eq, PartialEq`.
@@ -273,8 +274,10 @@ Contents:
    }
    ```
 
-9. Public function `evaluate_brain_trait(&TraitMetrics, &BrainTraitThresholds) -> BrainTraitDisposition`
-   that checks deny first (OR-based), then warn (AND-based), then returns pass.
+9. Public function
+   `evaluate_brain_trait(&TraitMetrics, &BrainTraitThresholds)`
+   `-> BrainTraitDisposition` that checks deny first (OR-based),
+   then warn (AND-based), then returns pass.
 
 Include rustdoc examples on all public types and functions.
 
@@ -302,7 +305,8 @@ Contents:
    Constructor: `new(&TraitMetrics, BrainTraitDisposition) -> Self`.
    Accessors for all fields, plus derived `total_method_count() -> usize`.
 5. `format_primary_message(&BrainTraitDiagnostic) -> String`:
-   Format: `` `{name}` has {N} methods ({R} required, {D} default) with default method complexity CC={CC}. ``
+   Format: `` `{name}` has {N} methods ({R} required, ``
+   `` {D} default) with default method complexity CC={CC}. ``
    Omit the CC clause when `default_method_cc_sum == 0`.
 6. `format_note(&BrainTraitDiagnostic) -> String`:
    - Always mentions total method count as interface size.
@@ -324,6 +328,7 @@ Update `common/src/brain_trait_metrics/mod.rs` to:
 
 1. Declare new modules: `pub mod diagnostic;` and `pub mod evaluation;`.
 2. Re-export evaluation types:
+
    ```rust
    pub use evaluation::{
        BrainTraitDisposition, BrainTraitThresholds, BrainTraitThresholdsBuilder,
