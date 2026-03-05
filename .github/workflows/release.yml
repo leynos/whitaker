@@ -174,7 +174,8 @@ jobs:
             exit 1
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists, skipping creation."
+            echo "Release $TAG already exists, uploading assets."
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
             gh release create "$TAG" \
               --title "Release ${TAG}" \
