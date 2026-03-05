@@ -581,10 +581,11 @@ Quality criteria (what "done" means):
   implementation status note for 4.3.1.
 - Workflow: `.github/workflows/release.yml` is syntactically valid YAML
   following the conventions established by `rolling-release.yml`.
-- Archive structure: unit tests verify that a `.tgz` archive contains exactly
-  one entry at path
+- Archive structure: unit tests verify that a `.tgz` archive contains the
+  required binary entry path
   `whitaker-installer-<target>-v<version>/whitaker-installer`, and a `.zip`
-  archive contains `whitaker-installer-<target>-v<version>/whitaker-installer.exe`.
+  archive contains
+  `whitaker-installer-<target>-v<version>/whitaker-installer.exe`.
 - Binstall compatibility: a unit test cross-validates archive filenames against
   `binstall_metadata::expand_pkg_url` confirming the URL would resolve
   correctly.
@@ -619,7 +620,7 @@ Table: Summary of new files — list of added files and purpose.
 | --- | --- | --- |
 | `installer/src/installer_packaging.rs` | Archive naming and creation | ~180 |
 | `installer/src/installer_packaging_tests.rs` | Unit tests | ~200 |
-| `installer/src/bin/package_installer_bin.rs` | Thin CLI for CI | ~100 |
+| `installer/src/bin/package_installer_bin.rs` | Thin CLI for Continuous Integration (CI) | ~100 |
 | `installer/tests/features/installer_release.feature` | Gherkin scenarios | ~50 |
 | `installer/tests/behaviour_installer_release.rs` | BDD step defs | ~250 |
 | `.github/workflows/release.yml` | GitHub Actions workflow | ~130 |
