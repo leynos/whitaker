@@ -43,6 +43,9 @@ impl Default for EvaluationWorld {
 /// Distributes `cc_sum` across `count` default methods, adding each to
 /// `builder`. The remainder is assigned to the last method.
 fn add_distributed_defaults(builder: &mut TraitMetricsBuilder, count: usize, cc_sum: usize) {
+    if count == 0 {
+        return;
+    }
     let base_cc = cc_sum / count;
     let remainder = cc_sum % count;
     for i in 0..count {
