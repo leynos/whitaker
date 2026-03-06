@@ -1416,6 +1416,14 @@ been added to `installer/Cargo.toml` and are validated by unit tests in
 `installer/src/binstall_metadata_tests.rs` and BDD scenarios in
 `installer/tests/features/binstall_metadata.feature`.
 
+**Implementation status (4.3.1):** The release workflow at
+`.github/workflows/release.yml` builds and packages the installer binary
+for all five supported targets and publishes archives to GitHub Releases.
+The `installer_packaging` module in
+`installer/src/installer_packaging.rs` provides archive creation logic,
+validated by unit tests and BDD scenarios in
+`installer/tests/features/installer_release.feature`.
+
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 

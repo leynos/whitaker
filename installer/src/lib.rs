@@ -17,6 +17,8 @@
 //! - [`error`] - Semantic error types with recovery hints
 //! - [`git`] - Repository cloning and updating
 //! - [`install_metrics`] - Local installer metrics persistence and summaries
+//! - [`installer_packaging`] - Installer binary archive packaging for release
+//!   distribution
 //! - [`list`] - List command implementation
 //! - [`list_output`] - Output formatting for lint listing
 //! - [`output`] - Shell snippet generation for environment configuration
@@ -27,6 +29,7 @@
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
 //! - [`toolchain`] - Rust toolchain detection and validation
+//! - [`version`] - Semantic crate version wrapper
 //! - [`workspace`] - Workspace detection and path resolution
 //! - [`wrapper`] - Wrapper script generation
 
@@ -40,6 +43,7 @@ pub mod dirs;
 pub mod error;
 pub mod git;
 pub mod install_metrics;
+pub mod installer_packaging;
 pub mod list;
 pub mod list_output;
 pub mod output;
@@ -50,6 +54,7 @@ pub mod resolution;
 pub mod scanner;
 pub mod stager;
 pub mod toolchain;
+pub mod version;
 pub mod workspace;
 pub mod wrapper;
 
