@@ -86,37 +86,33 @@ download the correct archive.
 
 - Risk: The `flate2` crate (for gzip compression) is a transitive dependency
   already in `Cargo.lock` but not a direct workspace dependency. Adding it may
-  cause a version conflict.
-  Severity: low. Likelihood: low. Mitigation: use the same version already
-  resolved in `Cargo.lock` with a caret requirement.
+  cause a version conflict. Severity: low. Likelihood: low. Mitigation: use the
+  same version already resolved in `Cargo.lock` with a caret requirement.
 
 - Risk: The `zip` crate is not yet in the dependency tree. Adding it
-  introduces a new dependency with its own transitive closure.
-  Severity: low. Likelihood: certain (required for Windows `.zip` format).
-  Mitigation: use a well-maintained version (e.g. `zip = "2"`). The Windows
-  `.zip` format is a hard requirement from the design document.
+  introduces a new dependency with its own transitive closure. Severity: low.
+  Likelihood: certain (required for Windows `.zip` format). Mitigation: use a
+  well-maintained version (e.g. `zip = "2"`). The Windows `.zip` format is a
+  hard requirement from the design document.
 
 - Risk: Cross-compiling the `whitaker-installer` binary for
   `aarch64-unknown-linux-gnu` may require linking against C libraries not
-  available on the ubuntu-latest runner.
-  Severity: medium. Likelihood: low. Mitigation: install
-  `gcc-aarch64-linux-gnu` and set
+  available on the ubuntu-latest runner. Severity: medium. Likelihood: low.
+  Mitigation: install `gcc-aarch64-linux-gnu` and set
   `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc`, the
-  same pattern used in the existing `rolling-release.yml`. The installer
-  binary is simpler than the lint cdylibs (no `rustc_private` linkage).
+  same pattern used in the existing `rolling-release.yml`. The installer binary
+  is simpler than the lint cdylibs (no `rustc_private` linkage).
 
 - Risk: The crates.io publish step requires a `CARGO_REGISTRY_TOKEN` secret
-  that may not be configured in the repository.
-  Severity: medium. Likelihood: high. Mitigation: include the publish step in
-  the workflow with a conditional gate on the secret. The release workflow
-  succeeds (GitHub Release created) even if crates.io publishing is skipped.
-  Document the secret requirement.
+  that may not be configured in the repository. Severity: medium. Likelihood:
+  high. Mitigation: include the publish step in the workflow with a conditional
+  gate on the secret. The release workflow succeeds (GitHub Release created)
+  even if crates.io publishing is skipped. Document the secret requirement.
 
 - Risk: BDD step functions with archive path parameters may exceed the
-  4-argument Clippy limit.
-  Severity: low. Likelihood: medium. Mitigation: split Gherkin steps so each
-  step function parses at most 2-3 values from the feature text. Use the
-  world struct to carry state between steps.
+  4-argument Clippy limit. Severity: low. Likelihood: medium. Mitigation: split
+  Gherkin steps so each step function parses at most 2-3 values from the
+  feature text. Use the world struct to carry state between steps.
 
 ## Progress
 
@@ -150,63 +146,59 @@ download the correct archive.
   that conflicts with a `--version` CLI argument for the crate version. The
   field was renamed to `--crate-version` to avoid the conflict. Evidence: 3
   tests in `package_installer_bin.rs` failed with "Argument names must be
-  unique". Impact: renamed CLI argument and updated workflow YAML. Resolved
-  on first attempt.
+  unique". Impact: renamed CLI argument and updated workflow YAML. Resolved on
+  first attempt.
 
 ## Decision log
 
 - Decision: Implement archive packaging in Rust (a new module
   `installer/src/installer_packaging.rs`) rather than in shell within the
-  workflow YAML.
-  Rationale: Implementing in Rust enables unit testing and BDD testing of the
-  archive structure, naming conventions, and format selection logic.
-  Shell-based packaging in YAML is untestable locally and fragile. The existing
-  `artefact::packaging` module and `whitaker-package-lints` binary establish a
-  clear precedent for Rust-based packaging in this project.
+  workflow YAML. Rationale: Implementing in Rust enables unit testing and BDD
+  testing of the archive structure, naming conventions, and format selection
+  logic. Shell-based packaging in YAML is untestable locally and fragile. The
+  existing `artefact::packaging` module and `whitaker-package-lints` binary
+  establish a clear precedent for Rust-based packaging in this project.
   Date/Author: 2026-03-01 / plan author.
 
 - Decision: Place the new module at `installer/src/installer_packaging.rs`
-  (top-level peer to `binstall_metadata.rs`) rather than inside the
-  `artefact/` subtree.
-  Rationale: The `artefact/` module covers the prebuilt lint library artefact
-  system (ADR-001). Installer binary packaging is a separate concern: it
-  packages the installer itself for end-user distribution via cargo-binstall.
-  This parallels the rationale from the 4.2.1 execplan where
-  `binstall_metadata` was placed at top level.
-  Date/Author: 2026-03-01 / plan author.
+  (top-level peer to `binstall_metadata.rs`) rather than inside the `artefact/`
+  subtree. Rationale: The `artefact/` module covers the prebuilt lint library
+  artefact system (ADR-001). Installer binary packaging is a separate concern:
+  it packages the installer itself for end-user distribution via
+  cargo-binstall. This parallels the rationale from the 4.2.1 execplan where
+  `binstall_metadata` was placed at top level. Date/Author: 2026-03-01 / plan
+  author.
 
 - Decision: Create a new `whitaker-package-installer` binary target as a thin
   CLI wrapper around `package_installer()`, following the
-  `whitaker-package-lints` pattern.
-  Rationale: The existing `whitaker-package-lints` binary
-  (`installer/src/bin/package_lints.rs`) establishes a clear precedent. A Rust
-  binary enables in-process testing of the actual archive contents and keeps
-  archive creation logic authoritative in one place, eliminating drift between
-  shell and Rust implementations.
+  `whitaker-package-lints` pattern. Rationale: The existing
+  `whitaker-package-lints` binary (`installer/src/bin/package_lints.rs`)
+  establishes a clear precedent. A Rust binary enables in-process testing of
+  the actual archive contents and keeps archive creation logic authoritative in
+  one place, eliminating drift between shell and Rust implementations.
   Date/Author: 2026-03-01 / plan author.
 
 - Decision: Trigger the release workflow on `v*` tag push and
-  `workflow_dispatch` (manual).
-  Rationale: Tag-push trigger is the standard GitHub pattern for versioned
-  releases and integrates naturally with `git tag v0.2.1 && git push --tags`.
-  Manual dispatch provides a fallback for re-running failed releases.
-  Date/Author: 2026-03-01 / plan author.
+  `workflow_dispatch` (manual). Rationale: Tag-push trigger is the standard
+  GitHub pattern for versioned releases and integrates naturally with
+  `git tag v0.2.1 && git push --tags`. Manual dispatch provides a fallback for
+  re-running failed releases. Date/Author: 2026-03-01 / plan author.
 
 - Decision: Add `flate2` (gzip) and `zip` as workspace dependencies for
-  `.tgz` and `.zip` archive creation respectively.
-  Rationale: `flate2` is already a transitive dependency. `zip` is needed for
-  the Windows target. Both are well-maintained, widely-used crates. The `tar`
-  crate is already a direct dependency. No alternative avoids both crates while
-  satisfying the requirement for both `.tgz` and `.zip` formats.
-  Date/Author: 2026-03-01 / plan author.
+  `.tgz` and `.zip` archive creation respectively. Rationale: `flate2` is
+  already a transitive dependency. `zip` is needed for the Windows target. Both
+  are well-maintained, widely-used crates. The `tar` crate is already a direct
+  dependency. No alternative avoids both crates while satisfying the
+  requirement for both `.tgz` and `.zip` formats. Date/Author: 2026-03-01 /
+  plan author.
 
 - Decision: Include a crates.io publish step in the release workflow, gated by
-  the presence of a `CARGO_REGISTRY_TOKEN` secret.
-  Rationale: The design document (§ Installer release artefacts) requires
-  crates.io publishing so cargo-binstall can resolve the latest version from
-  the registry. The conditional gate means the workflow succeeds even without
-  the secret configured, and the secret can be added later.
-  Date/Author: 2026-03-01 / plan author.
+  the presence of a `CARGO_REGISTRY_TOKEN` secret. Rationale: The design
+  document (§ Installer release artefacts) requires crates.io publishing so
+  cargo-binstall can resolve the latest version from the registry. The
+  conditional gate means the workflow succeeds even without the secret
+  configured, and the secret can be added later. Date/Author: 2026-03-01 / plan
+  author.
 
 ## Outcomes & retrospective
 
@@ -227,8 +219,8 @@ All acceptance criteria met:
 Lessons learned:
 
 - clap's `#[command(version)]` auto-generates a `--version` flag that
-  conflicts with a `--version` CLI argument. Use a different name
-  (e.g. `--crate-version`) for version-like parameters in clap binaries.
+  conflicts with a `--version` CLI argument. Use a different name (e.g.
+  `--crate-version`) for version-like parameters in clap binaries.
 - The `zip` crate v2 uses `SimpleFileOptions` (not `FileOptions`). The
   `ZipWriter::start_file` API accepts `&str` for the path, not `Path`.
 
@@ -287,8 +279,8 @@ Cargo-binstall template placeholders (from the design document):
 - `{bin}` -- binary name (`whitaker-installer` or `whitaker-installer.exe`)
 
 Supported target triples (from `installer/src/artefact/target.rs`):
-`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
-`x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`,
+`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
 
 ## Plan of work
 
@@ -296,9 +288,8 @@ Supported target triples (from `installer/src/artefact/target.rs`):
 
 Add `flate2` and `zip` to `[workspace.dependencies]` in the root `Cargo.toml`
 with caret requirements. Add both as `[dependencies]` in
-`installer/Cargo.toml`. Add a `[[bin]]` entry for
-`whitaker-package-installer` pointing to
-`src/bin/package_installer_bin.rs`.
+`installer/Cargo.toml`. Add a `[[bin]]` entry for `whitaker-package-installer`
+pointing to `src/bin/package_installer_bin.rs`.
 
 Create `installer/src/installer_packaging.rs` (~180 lines) with:
 
@@ -366,10 +357,9 @@ unit tests:
 7. `archive_format_zip_for_windows` -- asserts `Zip` for Windows.
 8. `package_installer_creates_archive` -- parameterized over Linux `.tgz`
    and Windows `.zip` targets; creates a temp file as a fake binary, calls
-   `package_installer`, reads back the archive entries and verifies the
-   inner path matches
-   `whitaker-installer-<target>-v<version>/whitaker-installer` (Unix) or
-   `whitaker-installer-<target>-v<version>/whitaker-installer.exe`
+   `package_installer`, reads back the archive entries and verifies the inner
+   path matches `whitaker-installer-<target>-v<version>/whitaker-installer`
+   (Unix) or `whitaker-installer-<target>-v<version>/whitaker-installer.exe`
    (Windows).
 9. `package_installer_rejects_missing_binary` -- passes a non-existent path,
     asserts `BinaryNotFound` error.
@@ -413,8 +403,9 @@ Create `installer/tests/behaviour_installer_release.rs` (~250 lines) with:
 - Scenario bindings (`#[scenario]`) linking each Gherkin scenario to a binding
   function.
 
-Acceptance: `cargo test -p whitaker-installer --test
-behaviour_installer_release` passes all scenarios.
+Acceptance:
+`cargo test -p whitaker-installer --test behaviour_installer_release` passes
+all scenarios.
 
 ### Stage D: GitHub Actions release workflow
 
@@ -573,8 +564,8 @@ Quality criteria (what "done" means):
 
 - Tests: `make test` passes. New unit tests in
   `installer_packaging_tests.rs` and BDD scenarios in
-  `behaviour_installer_release.rs` all pass. The tests fail if the
-  packaging module is removed or the archive structure is altered.
+  `behaviour_installer_release.rs` all pass. The tests fail if the packaging
+  module is removed or the archive structure is altered.
 - Lint/typecheck: `make check-fmt` and `make lint` exit 0.
 - No regressions: all existing tests continue to pass.
 - Documentation: roadmap item 4.3.1 is checked. Design document has
@@ -607,34 +598,34 @@ Re-running quality gates produces the same result.
 
 To revert: remove the new files (`installer_packaging.rs`,
 `installer_packaging_tests.rs`, `behaviour_installer_release.rs`,
-`installer_release.feature`, `package_installer_bin.rs`, `release.yml`,
-the execplan), remove the `pub mod installer_packaging;` line and the
-`[[bin]]` entry, remove `flate2` and `zip` from both `Cargo.toml` files, and
-revert the roadmap/design-doc edits.
+`installer_release.feature`, `package_installer_bin.rs`, `release.yml`, the
+execplan), remove the `pub mod installer_packaging;` line and the `[[bin]]`
+entry, remove `flate2` and `zip` from both `Cargo.toml` files, and revert the
+roadmap/design-doc edits.
 
 ## Artefacts and notes
 
 Table: Summary of new files — list of added files and purpose.
 
-| File | Purpose | Est. lines |
-| --- | --- | --- |
-| `installer/src/installer_packaging.rs` | Archive naming and creation | ~180 |
-| `installer/src/installer_packaging_tests.rs` | Unit tests | ~200 |
-| `installer/src/bin/package_installer_bin.rs` | Thin CLI for Continuous Integration (CI) | ~100 |
-| `installer/tests/features/installer_release.feature` | Gherkin scenarios | ~50 |
-| `installer/tests/behaviour_installer_release.rs` | BDD step defs | ~250 |
-| `.github/workflows/release.yml` | GitHub Actions workflow | ~130 |
-| `docs/execplans/4-3-1-release-workflow-for-whitaker-installer.md` | ExecPlan | ~400 |
+| File                                                              | Purpose                                  | Est. lines |
+| ----------------------------------------------------------------- | ---------------------------------------- | ---------- |
+| `installer/src/installer_packaging.rs`                            | Archive naming and creation              | ~180       |
+| `installer/src/installer_packaging_tests.rs`                      | Unit tests                               | ~200       |
+| `installer/src/bin/package_installer_bin.rs`                      | Thin CLI for Continuous Integration (CI) | ~100       |
+| `installer/tests/features/installer_release.feature`              | Gherkin scenarios                        | ~50        |
+| `installer/tests/behaviour_installer_release.rs`                  | BDD step defs                            | ~250       |
+| `.github/workflows/release.yml`                                   | GitHub Actions workflow                  | ~130       |
+| `docs/execplans/4-3-1-release-workflow-for-whitaker-installer.md` | ExecPlan                                 | ~400       |
 
 Table: Summary of modified files — list of changed files and purpose.
 
-| File | Change |
-| --- | --- |
-| `Cargo.toml` | Add `flate2` and `zip` to `[workspace.dependencies]` |
-| `installer/Cargo.toml` | Add deps and `[[bin]]` entry |
-| `installer/src/lib.rs` | Add doc-comment entry + module declaration |
-| `docs/roadmap.md` | `[ ]` to `[x]` on 4.3.1 |
-| `docs/whitaker-dylint-suite-design.md` | Add implementation status note |
+| File                                   | Change                                               |
+| -------------------------------------- | ---------------------------------------------------- |
+| `Cargo.toml`                           | Add `flate2` and `zip` to `[workspace.dependencies]` |
+| `installer/Cargo.toml`                 | Add deps and `[[bin]]` entry                         |
+| `installer/src/lib.rs`                 | Add doc-comment entry + module declaration           |
+| `docs/roadmap.md`                      | `[ ]` to `[x]` on 4.3.1                              |
+| `docs/whitaker-dylint-suite-design.md` | Add implementation status note                       |
 
 Total: 7 new files + 5 modified files = 12 files (within 15-file tolerance).
 

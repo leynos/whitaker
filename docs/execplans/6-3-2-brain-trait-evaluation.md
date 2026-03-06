@@ -8,8 +8,9 @@ Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
-This plan must also be written to `docs/execplans/6-3-2-brain-trait-evaluation.md`
-as the first implementation step.
+This plan must also be written to
+`docs/execplans/6-3-2-brain-trait-evaluation.md` as the first implementation
+step.
 
 ## Purpose / big picture
 
@@ -29,9 +30,10 @@ can:
 Observable outcome:
 
 1. `common` exports new evaluation and diagnostic types:
-   `BrainTraitDisposition`, `BrainTraitThresholds`, `BrainTraitThresholdsBuilder`,
-   `evaluate_brain_trait`, `BrainTraitDiagnostic`, `format_primary_message`,
-   `format_note`, `format_help`.
+   `BrainTraitDisposition`, `BrainTraitThresholds`,
+   `BrainTraitThresholdsBuilder`, `evaluate_brain_trait`,
+   `BrainTraitDiagnostic`, `format_primary_message`, `format_note`,
+   `format_help`.
 2. Unit tests validate threshold boundary conditions for pass, warn, and deny.
 3. Unit tests validate diagnostic message content and formatting.
 4. Behaviour tests using `rstest-bdd` v0.5.0 validate end-to-end evaluation
@@ -45,8 +47,8 @@ Observable outcome:
 ## Constraints
 
 - Scope only roadmap item 6.3.2. Do not implement lint driver high-level
-  intermediate representation (HIR) walking, configuration loading, or
-  Static Analysis Results Interchange Format (SARIF) output.
+  intermediate representation (HIR) walking, configuration loading, or Static
+  Analysis Results Interchange Format (SARIF) output.
 - Keep `common` free of `rustc_private` dependencies. Accept plain Rust values
   only.
 - Follow established module layout and line-count constraints (< 400 lines per
@@ -58,8 +60,8 @@ Observable outcome:
 - Preserve deterministic behaviour (stable ordering for rendered metric lists).
 - Use en-GB-oxendict spelling in comments and docs.
 - Clippy `too_many_arguments` threshold is 4. Behaviour-driven development
-  (BDD) step functions can parse at most 3 values from feature text
-  (world + 3 = 4 args max).
+  (BDD) step functions can parse at most 3 values from feature text (world + 3
+  = 4 args max).
 - Do not modify existing `brain_type_metrics` public APIs.
 - Update design documentation with any final decisions made during
   implementation.
@@ -79,8 +81,8 @@ Observable outcome:
 
 - Clippy risk in tests: `rstest` and `rstest-bdd` parameter counts can trigger
   `too_many_arguments`. Mitigation: use tuple-style `#[case]` inputs and keep
-  BDD step placeholders to at most 3 parsed values (+ `world`).
-  Severity: low. Likelihood: medium.
+  BDD step placeholders to at most 3 parsed values (+ `world`). Severity: low.
+  Likelihood: medium.
 - File length risk: `evaluation.rs` or `diagnostic.rs` could approach 400 lines
   with full rustdoc examples. Mitigation: test files are in separate
   `evaluation_tests.rs` and `diagnostic_tests.rs` files via
@@ -98,11 +100,14 @@ Observable outcome:
 
 ## Progress
 
-- [x] Stage A: Write this ExecPlan to `docs/execplans/6-3-2-brain-trait-evaluation.md`.
-- [x] Stage B: Implement `evaluation.rs` (disposition, thresholds, evaluate function).
+- [x] Stage A: Write this ExecPlan to
+      `docs/execplans/6-3-2-brain-trait-evaluation.md`.
+- [x] Stage B: Implement `evaluation.rs` (disposition, thresholds, evaluate
+      function).
 - [x] Stage C: Implement `diagnostic.rs` (diagnostic struct, format functions).
 - [x] Stage D: Update `mod.rs` with module declarations and re-exports.
-- [x] Stage E: Implement unit tests (`evaluation_tests.rs`, `diagnostic_tests.rs`).
+- [x] Stage E: Implement unit tests (`evaluation_tests.rs`,
+      `diagnostic_tests.rs`).
 - [x] Stage F: Implement BDD tests (feature file + behaviour test file).
 - [x] Stage G: Update `lib.rs` re-exports.
 - [x] Stage H: Record implementation decisions in design doc.
@@ -154,8 +159,8 @@ Observable outcome:
 
 4. **`add_distributed_defaults` free function in BDD tests.** Extracted from
    the `EvaluationWorld::build_metrics` method to avoid `excessive_nesting`.
-   Takes `(builder, count, cc_sum)` and distributes CC evenly with remainder
-   on the last method.
+   Takes `(builder, count, cc_sum)` and distributes CC evenly with remainder on
+   the last method.
 
 5. **Builder pattern for `BrainTraitThresholds`.** Used for consistency with
    `BrainTypeThresholds` despite the struct having only 3 fields.
@@ -174,8 +179,8 @@ The module at `common/src/brain_trait_metrics/` contains:
 
 - `mod.rs` (25 lines) -- module declarations and re-exports.
 - `item.rs` (277 lines) -- `TraitItemKind`, `TraitItemMetrics`, and helper
-  functions (`trait_item_count`, `required_method_count`, `default_method_count`,
-  `default_method_cc_sum`).
+  functions (`trait_item_count`, `required_method_count`,
+  `default_method_count`, `default_method_cc_sum`).
 - `metrics.rs` (328 lines) -- `TraitMetrics` struct with accessors and
   `TraitMetricsBuilder`.
 - `tests.rs` (225 lines) -- unit tests.
@@ -229,8 +234,8 @@ The design doc says "at least 20 methods". The `TraitMetrics` struct
 distinguishes `total_item_count()` (includes associated types and consts) from
 individual method counts. The threshold must use total method count =
 `required_method_count() + default_method_count()`, NOT `total_item_count()`.
-Associated types and consts are not methods and must not count toward the method
-thresholds.
+Associated types and consts are not methods and must not count toward the
+method thresholds.
 
 ## Plan of work
 
@@ -249,7 +254,8 @@ Contents:
 2. Re-export diagnostic types from sibling `diagnostic` module:
    `pub use super::diagnostic::{BrainTraitDiagnostic,`
    `format_help, format_note, format_primary_message};`
-3. Test module declaration: `#[cfg(test)] #[path = "evaluation_tests.rs"] mod tests;`
+3. Test module declaration:
+   `#[cfg(test)] #[path = "evaluation_tests.rs"] mod tests;`
 4. `BrainTraitDisposition` enum with `Pass`, `Warn`, `Deny` variants.
    Derives: `Clone, Copy, Debug, Eq, PartialEq`.
 5. `BrainTraitThresholds` struct with 3 private fields:
@@ -278,8 +284,8 @@ Contents:
 
 9. Public function
    `evaluate_brain_trait(&TraitMetrics, &BrainTraitThresholds)`
-   `-> BrainTraitDisposition` that checks deny first (OR-based),
-   then warn (AND-based), then returns pass.
+   `-> BrainTraitDisposition` that checks deny first (OR-based), then warn
+   (AND-based), then returns pass.
 
 Include rustdoc examples on all public types and functions.
 
@@ -294,7 +300,8 @@ Contents:
 
 1. Module doc comment.
 2. Imports: `super::evaluation::BrainTraitDisposition`, `super::TraitMetrics`.
-3. Test module declaration: `#[cfg(test)] #[path = "diagnostic_tests.rs"] mod tests;`
+3. Test module declaration:
+   `#[cfg(test)] #[path = "diagnostic_tests.rs"] mod tests;`
 4. `BrainTraitDiagnostic` struct with private fields:
    - `trait_name: String`
    - `disposition: BrainTraitDisposition`
@@ -304,12 +311,12 @@ Contents:
    - `total_item_count: usize`
    - `implementor_burden: usize`
 
-   Constructor: `new(&TraitMetrics, BrainTraitDisposition) -> Self`.
-   Accessors for all fields, plus derived `total_method_count() -> usize`.
+   Constructor: `new(&TraitMetrics, BrainTraitDisposition) -> Self`. Accessors
+   for all fields, plus derived `total_method_count() -> usize`.
 5. `format_primary_message(&BrainTraitDiagnostic) -> String`:
    Format: `` `{name}` has {N} methods ({R} required, ``
-   `` {D} default) with default method complexity CC={CC}. ``
-   Omit the CC clause when `default_method_cc_sum == 0`.
+   `` {D} default) with default method complexity CC={CC}. `` Omit the CC
+   clause when `default_method_cc_sum == 0`.
 6. `format_note(&BrainTraitDiagnostic) -> String`:
    - Always mentions total method count as interface size.
    - Mentions default method CC sum when non-zero.
@@ -347,8 +354,9 @@ The file will grow from 25 lines to approximately 38 lines.
 
 **`common/src/brain_trait_metrics/evaluation_tests.rs`** (~200 lines):
 
-Helper: `build_trait_metrics(name, required_count, default_count, cc_per_default)`
-that creates `TraitMetrics` via `TraitMetricsBuilder`.
+Helper:
+`build_trait_metrics(name, required_count, default_count, cc_per_default)` that
+creates `TraitMetrics` via `TraitMetricsBuilder`.
 
 Test coverage:
 
@@ -414,13 +422,13 @@ Feature: Brain trait threshold evaluation
 
 **`common/tests/brain_trait_evaluation_behaviour.rs`** (~230 lines):
 
-World struct `EvaluationWorld` with `RefCell`/`Cell` fields for:
-`trait_name`, `required_count`, `default_count`, `associated_type_count`,
+World struct `EvaluationWorld` with `RefCell`/`Cell` fields for: `trait_name`,
+`required_count`, `default_count`, `associated_type_count`,
 `associated_const_count`, `default_cc_sum`, `thresholds`, `built_metrics`,
 `disposition`, `primary_message`.
 
 Helper `build_metrics(&self)` creates a `TraitMetricsBuilder`, adds required
-methods (named `req_0`, `req_1`, ...), distributes `default_cc_sum` across
+methods (named `req_0`, `req_1`, …), distributes `default_cc_sum` across
 `default_count` default methods (evenly with remainder on last), adds
 associated types/consts if configured.
 
@@ -554,26 +562,26 @@ New files (7):
 
 *Table 1: New files introduced by 6.3.2.*
 
-| File | Est. lines | Purpose |
-|---|---|---|
-| `common/src/brain_trait_metrics/evaluation.rs` | ~180 | Disposition, thresholds, evaluate function |
-| `common/src/brain_trait_metrics/diagnostic.rs` | ~180 | Diagnostic struct, format functions |
-| `common/src/brain_trait_metrics/evaluation_tests.rs` | ~200 | Unit tests for evaluation |
-| `common/src/brain_trait_metrics/diagnostic_tests.rs` | ~200 | Unit tests for diagnostics |
-| `common/tests/features/brain_trait_evaluation.feature` | ~75 | BDD feature file |
-| `common/tests/brain_trait_evaluation_behaviour.rs` | ~230 | BDD step bindings |
-| `docs/execplans/6-3-2-brain-trait-evaluation.md` | ~350 | This execution plan |
+| File                                                   | Est. lines | Purpose                                    |
+| ------------------------------------------------------ | ---------- | ------------------------------------------ |
+| `common/src/brain_trait_metrics/evaluation.rs`         | ~180       | Disposition, thresholds, evaluate function |
+| `common/src/brain_trait_metrics/diagnostic.rs`         | ~180       | Diagnostic struct, format functions        |
+| `common/src/brain_trait_metrics/evaluation_tests.rs`   | ~200       | Unit tests for evaluation                  |
+| `common/src/brain_trait_metrics/diagnostic_tests.rs`   | ~200       | Unit tests for diagnostics                 |
+| `common/tests/features/brain_trait_evaluation.feature` | ~75        | BDD feature file                           |
+| `common/tests/brain_trait_evaluation_behaviour.rs`     | ~230       | BDD step bindings                          |
+| `docs/execplans/6-3-2-brain-trait-evaluation.md`       | ~350       | This execution plan                        |
 
 Modified files (4):
 
 *Table 2: Existing files modified by 6.3.2.*
 
-| File | Current lines | Change |
-|---|---|---|
-| `common/src/brain_trait_metrics/mod.rs` | 25 | Add ~13 lines for module declarations and re-exports |
-| `common/src/lib.rs` | 48 | Add ~4 lines for new type re-exports |
-| `docs/brain-trust-lints-design.md` | ~400 | Add ~20 lines for implementation decisions (6.3.2) |
-| `docs/roadmap.md` | ~387 | Change `[ ]` to `[x]` on 6.3.2 line |
+| File                                    | Current lines | Change                                               |
+| --------------------------------------- | ------------- | ---------------------------------------------------- |
+| `common/src/brain_trait_metrics/mod.rs` | 25            | Add ~13 lines for module declarations and re-exports |
+| `common/src/lib.rs`                     | 48            | Add ~4 lines for new type re-exports                 |
+| `docs/brain-trust-lints-design.md`      | ~400          | Add ~20 lines for implementation decisions (6.3.2)   |
+| `docs/roadmap.md`                       | ~387          | Change `[ ]` to `[x]` on 6.3.2 line                  |
 
 Total: 11 files touched (within tolerance of 12).
 
@@ -595,10 +603,12 @@ Key test scenarios to verify:
 
 - A trait with 10 methods and CC=20 is classified as Pass.
 - A trait with 20 methods and CC=40 is classified as Warn (exact boundary).
-- A trait with 19 methods and CC=40 is classified as Pass (below method threshold).
+- A trait with 19 methods and CC=40 is classified as Pass (below method
+  threshold).
 - A trait with 20 methods and CC=39 is classified as Pass (below CC threshold).
 - A trait with 30 methods and CC=0 is classified as Deny (regardless of CC).
-- A trait with 30 methods and CC=50 is classified as Deny (deny supersedes warn).
+- A trait with 30 methods and CC=50 is classified as Deny (deny supersedes
+  warn).
 - Associated types and consts do NOT count toward method thresholds.
 - Diagnostic messages contain measured values: method count, CC sum, trait name.
 
@@ -625,14 +635,14 @@ All observable outcomes from the purpose section are met:
 
 *Table 3: Final line counts for new source files.*
 
-| File | Lines | Under 400? |
-|---|---|---|
-| `evaluation.rs` | 250 | Yes |
-| `diagnostic.rs` | 240 | Yes |
-| `evaluation_tests.rs` | 241 | Yes |
-| `diagnostic_tests.rs` | 278 | Yes |
-| `brain_trait_evaluation.feature` | 66 | Yes |
-| `brain_trait_evaluation_behaviour.rs` | 239 | Yes |
+| File                                  | Lines | Under 400? |
+| ------------------------------------- | ----- | ---------- |
+| `evaluation.rs`                       | 250   | Yes        |
+| `diagnostic.rs`                       | 240   | Yes        |
+| `evaluation_tests.rs`                 | 241   | Yes        |
+| `diagnostic_tests.rs`                 | 278   | Yes        |
+| `brain_trait_evaluation.feature`      | 66    | Yes        |
+| `brain_trait_evaluation_behaviour.rs` | 239   | Yes        |
 
 Modified files: `mod.rs` (34 lines), `lib.rs` (51 lines), plus design doc and
 roadmap updates.

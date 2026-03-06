@@ -283,17 +283,17 @@ This will allow reuse in future cohesion-aware lints.
 ### Implementation decisions (6.3.2)
 
 - **"Methods" threshold counts methods only, not all items**: the "at least 20
-  methods" threshold uses `required_method_count() + default_method_count()` and
-  explicitly excludes associated types and associated consts. The
+  methods" threshold uses `required_method_count() + default_method_count()`
+  and explicitly excludes associated types and associated consts. The
   `total_item_count()` accessor includes non-method items and is not used for
   threshold comparison. This aligns with the design document's use of "methods"
   rather than "items".
 - **Evaluation in `common`, not in the lint crate**: the threshold evaluation
   function `evaluate_brain_trait()` and diagnostic formatting live in
   `common/src/brain_trait_metrics/evaluation.rs` and
-  `common/src/brain_trait_metrics/diagnostic.rs`. This keeps the evaluation logic
-  pure (no `rustc_private` dependency), independently testable, and reusable,
-  following the pattern established by `brain_type` in 6.2.2.
+  `common/src/brain_trait_metrics/diagnostic.rs`. This keeps the evaluation
+  logic pure (no `rustc_private` dependency), independently testable, and
+  reusable, following the pattern established by `brain_type` in 6.2.2.
 - **Warn is AND-based, deny is OR-based**: the warn rule fires only when total
   method count >= `methods_warn` AND default method CC sum >= `default_cc_warn`
   simultaneously. The deny rule fires when total method count >=
