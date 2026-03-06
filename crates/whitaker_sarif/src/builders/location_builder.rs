@@ -83,11 +83,24 @@ impl RegionBuilder {
     /// # Errors
     ///
     /// Returns [`SarifError::InvalidRegion`] if `start_line` is zero, if
-    /// `end_line` is less than `start_line`, or if both columns are set
-    /// and `end_column` is less than `start_column` on the same line.
+    /// `start_column` or `end_column` is zero, if `end_line` is less than
+    /// `start_line`, or if both columns are set and `end_column` is less
+    /// than `start_column` on the same line (either explicit or implicit).
     pub fn build(self) -> crate::error::Result<Region> {
         if self.start_line < 1 {
             return Err(SarifError::InvalidRegion("start_line must be >= 1".into()));
+        }
+        if let Some(sc) = self.start_column
+            && sc < 1
+        {
+            return Err(SarifError::InvalidRegion(
+                "start_column must be >= 1".into(),
+            ));
+        }
+        if let Some(ec) = self.end_column
+            && ec < 1
+        {
+            return Err(SarifError::InvalidRegion("end_column must be >= 1".into()));
         }
         if let Some(end_line) = self.end_line {
             if end_line < self.start_line {
@@ -96,14 +109,12 @@ impl RegionBuilder {
                     self.start_line
                 )));
             }
-            if end_line == self.start_line
-                && let (Some(sc), Some(ec)) = (self.start_column, self.end_column)
-                && ec < sc
-            {
-                return Err(SarifError::InvalidRegion(format!(
-                    "end_column ({ec}) must be >= start_column ({sc}) on the same line"
-                )));
+            if end_line == self.start_line {
+                self.validate_same_line_columns()?;
             }
+        } else {
+            // When end_line is None the region is implicitly single-line.
+            self.validate_same_line_columns()?;
         }
         Ok(Region {
             start_line: self.start_line,
@@ -113,6 +124,19 @@ impl RegionBuilder {
             byte_offset: self.byte_offset,
             byte_length: self.byte_length,
         })
+    }
+
+    /// Validates that `end_column` is not less than `start_column` when both
+    /// are present and the region occupies a single line.
+    fn validate_same_line_columns(&self) -> crate::error::Result<()> {
+        if let (Some(sc), Some(ec)) = (self.start_column, self.end_column)
+            && ec < sc
+        {
+            return Err(SarifError::InvalidRegion(format!(
+                "end_column ({ec}) must be >= start_column ({sc}) on the same line"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -271,6 +295,33 @@ mod tests {
         assert!(matches!(
             RegionBuilder::new(10)
                 .with_end_line(10)
+                .with_start_column(20)
+                .with_end_column(5)
+                .build(),
+            Err(SarifError::InvalidRegion(msg)) if msg.contains("end_column")
+        ));
+    }
+
+    #[test]
+    fn region_rejects_zero_start_column() {
+        assert!(matches!(
+            RegionBuilder::new(1).with_start_column(0).build(),
+            Err(SarifError::InvalidRegion(msg)) if msg.contains("start_column")
+        ));
+    }
+
+    #[test]
+    fn region_rejects_zero_end_column() {
+        assert!(matches!(
+            RegionBuilder::new(1).with_end_column(0).build(),
+            Err(SarifError::InvalidRegion(msg)) if msg.contains("end_column")
+        ));
+    }
+
+    #[test]
+    fn region_rejects_inverted_columns_implicit_single_line() {
+        assert!(matches!(
+            RegionBuilder::new(10)
                 .with_start_column(20)
                 .with_end_column(5)
                 .build(),

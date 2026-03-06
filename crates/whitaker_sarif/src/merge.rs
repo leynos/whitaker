@@ -164,6 +164,15 @@ mod tests {
     use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder, RunBuilder};
     use crate::model::result::Level;
 
+    fn merged_result_count(r1: SarifResult, r2: SarifResult) -> usize {
+        let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();
+        let run_b = RunBuilder::new("tool", "1.0").with_result(r2).build();
+        match merge_runs(&[run_a, run_b]) {
+            Ok(merged) => merged.results.len(),
+            Err(e) => panic!("failed to merge: {e}"),
+        }
+    }
+
     fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
         let region = match RegionBuilder::new(line).with_end_line(line + 5).build() {
             Ok(r) => r,
@@ -232,28 +241,14 @@ mod tests {
     fn merge_runs_combines_results() {
         let r1 = make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
         let r2 = make_keyed_result("WHK002", "src/b.rs", 20, "fp2");
-
-        let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();
-        let run_b = RunBuilder::new("tool", "1.0").with_result(r2).build();
-
-        match merge_runs(&[run_a, run_b]) {
-            Ok(merged) => assert_eq!(merged.results.len(), 2),
-            Err(e) => panic!("failed to merge: {e}"),
-        }
+        assert_eq!(merged_result_count(r1, r2), 2);
     }
 
     #[test]
     fn merge_runs_deduplicates() {
         let r1 = make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
         let r2 = r1.clone();
-
-        let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();
-        let run_b = RunBuilder::new("tool", "1.0").with_result(r2).build();
-
-        match merge_runs(&[run_a, run_b]) {
-            Ok(merged) => assert_eq!(merged.results.len(), 1),
-            Err(e) => panic!("failed to merge: {e}"),
-        }
+        assert_eq!(merged_result_count(r1, r2), 1);
     }
 
     #[test]

@@ -115,6 +115,17 @@ mod tests {
     }
 
     #[test]
+    fn builds_run_with_chained_rules() {
+        let rules_a = vec![crate::rules::whk001_rule()];
+        let rules_b = vec![crate::rules::whk002_rule(), crate::rules::whk003_rule()];
+        let run = RunBuilder::new("tool", "1.0")
+            .with_rules(rules_a)
+            .with_rules(rules_b)
+            .build();
+        assert_eq!(run.tool.driver.rules.len(), 3);
+    }
+
+    #[test]
     fn builds_run_with_invocation() {
         let run = RunBuilder::new("tool", "1.0")
             .with_invocation(Invocation {
