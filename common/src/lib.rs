@@ -19,6 +19,10 @@ pub use attributes::{
     Attribute, AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER, has_test_like_attribute,
     has_test_like_attribute_with, outer_attributes, split_doc_attributes,
 };
+pub use brain_trait_metrics::evaluation::{
+    BrainTraitDiagnostic, BrainTraitDisposition, BrainTraitThresholds, BrainTraitThresholdsBuilder,
+    evaluate_brain_trait,
+};
 pub use brain_trait_metrics::{
     TraitItemKind, TraitItemMetrics, TraitMetrics, TraitMetricsBuilder, default_method_cc_sum,
     default_method_count, required_method_count, trait_item_count,
