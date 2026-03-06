@@ -131,21 +131,18 @@ fn when_evaluate(world: &EvaluationWorld) {
 }
 
 #[when("the diagnostic message is formatted")]
-#[expect(
-    clippy::expect_used,
-    reason = "metrics and disposition are required for this behaviour test"
-)]
-fn when_format_diagnostic(world: &EvaluationWorld) {
+fn when_format_diagnostic(world: &EvaluationWorld) -> Result<(), &'static str> {
     let metrics_ref = world.built_metrics.borrow();
     let metrics = metrics_ref
         .as_ref()
-        .expect("metrics must be built before formatting");
+        .ok_or("metrics must be built before formatting")?;
     let disposition = world
         .disposition
         .get()
-        .expect("disposition must be evaluated first");
+        .ok_or("disposition must be evaluated first")?;
     let diag = BrainTraitDiagnostic::new(metrics, disposition);
     *world.primary_message.borrow_mut() = Some(format_primary_message(&diag));
+    Ok(())
 }
 
 // --- Then steps ---
@@ -178,19 +175,16 @@ fn then_disposition_deny(world: &EvaluationWorld) {
 }
 
 #[then("the primary message contains {text}")]
-#[expect(
-    clippy::expect_used,
-    reason = "primary message is required for this behaviour test"
-)]
-fn then_primary_message_contains(world: &EvaluationWorld, text: String) {
+fn then_primary_message_contains(world: &EvaluationWorld, text: String) -> Result<(), String> {
     let msg = world.primary_message.borrow();
     let msg = msg
         .as_deref()
-        .expect("primary message must be formatted first");
+        .ok_or("primary message must be formatted first")?;
     assert!(
         msg.contains(&text),
         "expected primary message to contain '{text}', got: {msg}"
     );
+    Ok(())
 }
 
 // Scenario indices must match their declaration order in
