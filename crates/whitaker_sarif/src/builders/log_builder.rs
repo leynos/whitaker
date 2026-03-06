@@ -23,6 +23,16 @@ pub struct SarifLogBuilder {
 impl SarifLogBuilder {
     /// Creates a builder pre-populated with the SARIF 2.1.0 schema and
     /// version.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::SarifLogBuilder;
+    ///
+    /// let builder = SarifLogBuilder::new();
+    /// let log = builder.build();
+    /// assert_eq!(log.version, "2.1.0");
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -33,6 +43,16 @@ impl SarifLogBuilder {
     }
 
     /// Appends a run to the log.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::{SarifLogBuilder, RunBuilder};
+    ///
+    /// let run = RunBuilder::new("tool", "1.0").build();
+    /// let log = SarifLogBuilder::new().with_run(run).build();
+    /// assert_eq!(log.runs.len(), 1);
+    /// ```
     #[must_use]
     pub fn with_run(mut self, run: Run) -> Self {
         self.runs.push(run);
@@ -40,6 +60,16 @@ impl SarifLogBuilder {
     }
 
     /// Consumes the builder and produces a [`SarifLog`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::SarifLogBuilder;
+    ///
+    /// let log = SarifLogBuilder::new().build();
+    /// assert!(log.runs.is_empty());
+    /// assert_eq!(log.version, "2.1.0");
+    /// ```
     #[must_use]
     pub fn build(self) -> SarifLog {
         SarifLog {

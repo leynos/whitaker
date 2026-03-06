@@ -9,8 +9,8 @@ use super::run::Run;
 
 /// SARIF 2.1.0 schema URL.
 pub const SARIF_SCHEMA: &str = concat!(
-    "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/",
-    "main/Schemata/sarif-schema-2.1.0.json"
+    "https://docs.oasis-open.org/sarif/sarif/",
+    "v2.1.0/os/schemas/sarif-schema-2.1.0.json"
 );
 
 /// SARIF specification version.
@@ -38,7 +38,7 @@ pub struct SarifLog {
     pub version: String,
 
     /// Ordered collection of runs in the document.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub runs: Vec<Run>,
 }
 
@@ -71,22 +71,32 @@ mod tests {
     #[test]
     fn round_trip_empty_log() {
         let log = SarifLog::default();
-        let json = serde_json::to_string(&log).expect("serialize");
-        let parsed: SarifLog = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(log, parsed);
+        match serde_json::to_string(&log) {
+            Ok(json) => match serde_json::from_str::<SarifLog>(&json) {
+                Ok(parsed) => assert_eq!(log, parsed),
+                Err(e) => panic!("deserialization failed: {e}"),
+            },
+            Err(e) => panic!("serialization failed: {e}"),
+        }
     }
 
     #[test]
     fn schema_field_serializes_as_dollar_schema() {
         let log = SarifLog::default();
-        let json = serde_json::to_string(&log).expect("serialize");
-        assert!(json.contains("\"$schema\""));
+        match serde_json::to_string(&log) {
+            Ok(json) => assert!(json.contains("\"$schema\"")),
+            Err(e) => panic!("serialization failed: {e}"),
+        }
     }
 
     #[test]
-    fn empty_runs_omitted_from_json() {
+    fn empty_runs_present_in_json() {
         let log = SarifLog::default();
-        let json = serde_json::to_string(&log).expect("serialize");
-        assert!(!json.contains("\"runs\""));
+        match serde_json::to_string(&log) {
+            Ok(json) => {
+                assert!(json.contains("\"runs\":[]") || json.contains("\"runs\": []"));
+            }
+            Err(e) => panic!("serialization failed: {e}"),
+        }
     }
 }

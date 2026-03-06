@@ -38,6 +38,10 @@ pub enum SarifError {
     /// A required builder field was not set.
     #[error("missing required field: {0}")]
     MissingField(String),
+
+    /// A similarity score was non-finite (`NaN` or `±∞`).
+    #[error("invalid score for field `{0}`: value must be finite")]
+    InvalidScore(String),
 }
 
 /// Convenience alias for results using [`SarifError`].
@@ -63,5 +67,11 @@ mod tests {
     fn missing_field_formats_message() {
         let err = SarifError::MissingField("rule_id".into());
         assert_eq!(err.to_string(), "missing required field: rule_id");
+    }
+
+    #[test]
+    fn invalid_score_formats_message() {
+        let err = SarifError::InvalidScore("jaccard".into());
+        assert!(err.to_string().contains("jaccard"));
     }
 }

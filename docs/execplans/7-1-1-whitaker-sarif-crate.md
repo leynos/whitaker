@@ -28,8 +28,9 @@ downstream crates `whitaker_clones_core`, `whitaker_clones_cli`, and the
 
 Observable outcome: `make check-fmt`, `make lint`, and `make test` pass. Unit
 tests cover serialization round-trips, builder correctness, merge
-deduplication, and path construction. BDD scenarios exercise end-to-end
-construction and merge workflows using `rstest-bdd` v0.5.0.
+deduplication, and path construction. Behaviour-driven development (BDD)
+scenarios exercise end-to-end construction and merge workflows using
+`rstest-bdd` v0.5.0.
 
 ## Constraints
 
@@ -110,7 +111,7 @@ construction and merge workflows using `rstest-bdd` v0.5.0.
 - [x] Stage L: Run quality gates (`make check-fmt`, `make lint`, `make test`).
 - [x] Stage M: Record implementation decisions in design doc.
 - [x] Stage N: Mark roadmap item 7.1.1 done.
-- [x] Stage O: Finalise living sections of this ExecPlan.
+- [x] Stage O: Finalize living sections of this ExecPlan.
 
 ## Surprises & Discoveries
 
@@ -310,7 +311,7 @@ Update `docs/whitaker-clone-detector-design.md` with implementation decisions.
 
 Update `docs/roadmap.md` to mark 7.1.1 done.
 
-### Stage O: Finalise living sections
+### Stage O: Finalize living sections
 
 Set status to COMPLETE and populate remaining sections.
 

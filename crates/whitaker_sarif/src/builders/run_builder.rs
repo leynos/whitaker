@@ -47,10 +47,10 @@ impl RunBuilder {
         self
     }
 
-    /// Adds rules to the tool driver.
+    /// Appends rules to the tool driver.
     #[must_use]
     pub fn with_rules(mut self, rules: Vec<ReportingDescriptor>) -> Self {
-        self.rules = rules;
+        self.rules.extend(rules);
         self
     }
 

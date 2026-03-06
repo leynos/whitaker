@@ -118,22 +118,22 @@ mod tests {
 
     #[test]
     fn level_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&Level::Warning).expect("ser"),
-            "\"warning\""
-        );
-        assert_eq!(
-            serde_json::to_string(&Level::Note).expect("ser"),
-            "\"note\""
-        );
-        assert_eq!(
-            serde_json::to_string(&Level::Error).expect("ser"),
-            "\"error\""
-        );
-        assert_eq!(
-            serde_json::to_string(&Level::None).expect("ser"),
-            "\"none\""
-        );
+        match serde_json::to_string(&Level::Warning) {
+            Ok(json) => assert_eq!(json, "\"warning\""),
+            Err(e) => panic!("failed to serialize Warning: {e}"),
+        }
+        match serde_json::to_string(&Level::Note) {
+            Ok(json) => assert_eq!(json, "\"note\""),
+            Err(e) => panic!("failed to serialize Note: {e}"),
+        }
+        match serde_json::to_string(&Level::Error) {
+            Ok(json) => assert_eq!(json, "\"error\""),
+            Err(e) => panic!("failed to serialize Error: {e}"),
+        }
+        match serde_json::to_string(&Level::None) {
+            Ok(json) => assert_eq!(json, "\"none\""),
+            Err(e) => panic!("failed to serialize None: {e}"),
+        }
     }
 
     #[test]
@@ -155,9 +155,13 @@ mod tests {
             properties: None,
             baseline_state: None,
         };
-        let json = serde_json::to_string(&result).expect("serialize");
-        let parsed: SarifResult = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(result, parsed);
+        match serde_json::to_string(&result) {
+            Ok(json) => match serde_json::from_str::<SarifResult>(&json) {
+                Ok(parsed) => assert_eq!(result, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -172,10 +176,14 @@ mod tests {
             properties: None,
             baseline_state: None,
         };
-        let json = serde_json::to_string(&result).expect("serialize");
-        assert!(!json.contains("\"locations\""));
-        assert!(!json.contains("\"relatedLocations\""));
-        assert!(!json.contains("\"partialFingerprints\""));
+        match serde_json::to_string(&result) {
+            Ok(json) => {
+                assert!(!json.contains("\"locations\""));
+                assert!(!json.contains("\"relatedLocations\""));
+                assert!(!json.contains("\"partialFingerprints\""));
+            }
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -192,8 +200,12 @@ mod tests {
             properties: None,
             baseline_state: None,
         };
-        let json = serde_json::to_string(&result).expect("serialize");
-        assert!(json.contains("\"partialFingerprints\""));
-        assert!(json.contains("\"whitakerFragment\""));
+        match serde_json::to_string(&result) {
+            Ok(json) => {
+                assert!(json.contains("\"partialFingerprints\""));
+                assert!(json.contains("\"whitakerFragment\""));
+            }
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 }

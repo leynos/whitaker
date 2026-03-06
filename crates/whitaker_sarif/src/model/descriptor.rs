@@ -72,9 +72,13 @@ mod tests {
             }),
             help_uri: Some("https://example.com".into()),
         };
-        let json = serde_json::to_string(&desc).expect("serialize");
-        let parsed: ReportingDescriptor = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(desc, parsed);
+        match serde_json::to_string(&desc) {
+            Ok(json) => match serde_json::from_str::<ReportingDescriptor>(&json) {
+                Ok(parsed) => assert_eq!(desc, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -85,10 +89,14 @@ mod tests {
             short_description: None,
             help_uri: None,
         };
-        let json = serde_json::to_string(&desc).expect("serialize");
-        assert!(!json.contains("\"name\""));
-        assert!(!json.contains("\"shortDescription\""));
-        assert!(!json.contains("\"helpUri\""));
+        match serde_json::to_string(&desc) {
+            Ok(json) => {
+                assert!(!json.contains("\"name\""));
+                assert!(!json.contains("\"shortDescription\""));
+                assert!(!json.contains("\"helpUri\""));
+            }
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -101,8 +109,12 @@ mod tests {
             }),
             help_uri: Some("https://example.com".into()),
         };
-        let json = serde_json::to_string(&desc).expect("serialize");
-        assert!(json.contains("\"shortDescription\""));
-        assert!(json.contains("\"helpUri\""));
+        match serde_json::to_string(&desc) {
+            Ok(json) => {
+                assert!(json.contains("\"shortDescription\""));
+                assert!(json.contains("\"helpUri\""));
+            }
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 }

@@ -30,6 +30,8 @@ struct RegionKey {
     start_column: Option<usize>,
     end_line: Option<usize>,
     end_column: Option<usize>,
+    byte_offset: Option<usize>,
+    byte_length: Option<usize>,
 }
 
 impl RegionKey {
@@ -39,6 +41,8 @@ impl RegionKey {
             start_column: region.start_column,
             end_line: region.end_line,
             end_column: region.end_column,
+            byte_offset: region.byte_offset,
+            byte_length: region.byte_length,
         }
     }
 }
@@ -161,7 +165,7 @@ mod tests {
     use crate::model::result::Level;
 
     fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
-        ResultBuilder::new(rule)
+        match ResultBuilder::new(rule)
             .with_message("clone detected")
             .with_level(Level::Warning)
             .with_location(
@@ -171,7 +175,10 @@ mod tests {
             )
             .with_fingerprint("whitakerFragment", fp)
             .build()
-            .expect("build result")
+        {
+            Ok(result) => result,
+            Err(e) => panic!("failed to build keyed result: {e}"),
+        }
     }
 
     #[test]
@@ -208,10 +215,13 @@ mod tests {
 
     #[test]
     fn dedup_preserves_results_without_keys() {
-        let r1 = ResultBuilder::new("WHK001")
+        let r1 = match ResultBuilder::new("WHK001")
             .with_message("no location")
             .build()
-            .expect("build");
+        {
+            Ok(r) => r,
+            Err(e) => panic!("failed to build result: {e}"),
+        };
         let r2 = r1.clone();
         let deduped = deduplicate_results(&[r1, r2]);
         // Both preserved because they lack deduplication keys.
@@ -226,8 +236,10 @@ mod tests {
         let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();
         let run_b = RunBuilder::new("tool", "1.0").with_result(r2).build();
 
-        let merged = merge_runs(&[run_a, run_b]).expect("merge");
-        assert_eq!(merged.results.len(), 2);
+        match merge_runs(&[run_a, run_b]) {
+            Ok(merged) => assert_eq!(merged.results.len(), 2),
+            Err(e) => panic!("failed to merge: {e}"),
+        }
     }
 
     #[test]
@@ -238,8 +250,10 @@ mod tests {
         let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();
         let run_b = RunBuilder::new("tool", "1.0").with_result(r2).build();
 
-        let merged = merge_runs(&[run_a, run_b]).expect("merge");
-        assert_eq!(merged.results.len(), 1);
+        match merge_runs(&[run_a, run_b]) {
+            Ok(merged) => assert_eq!(merged.results.len(), 1),
+            Err(e) => panic!("failed to merge: {e}"),
+        }
     }
 
     #[test]
@@ -253,7 +267,9 @@ mod tests {
         let run_a = RunBuilder::new("alpha", "1.0").build();
         let run_b = RunBuilder::new("beta", "2.0").build();
 
-        let merged = merge_runs(&[run_a, run_b]).expect("merge");
-        assert_eq!(merged.tool.driver.name, "alpha");
+        match merge_runs(&[run_a, run_b]) {
+            Ok(merged) => assert_eq!(merged.tool.driver.name, "alpha"),
+            Err(e) => panic!("failed to merge: {e}"),
+        }
     }
 }

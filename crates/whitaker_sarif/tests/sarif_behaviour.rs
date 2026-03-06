@@ -1,5 +1,7 @@
 //! Behaviour-driven coverage for SARIF model construction and merge.
 
+mod test_helpers;
+
 use std::cell::RefCell;
 
 use camino::Utf8PathBuf;
@@ -86,23 +88,6 @@ fn with_computed_path(world: &SarifWorld, assert_fn: impl FnOnce(&Utf8PathBuf)) 
     }
 }
 
-fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
-    match ResultBuilder::new(rule)
-        .with_message("clone detected")
-        .with_level(Level::Warning)
-        .with_location(
-            LocationBuilder::new(file)
-                .with_region(RegionBuilder::new(line).with_end_line(line + 5).build())
-                .build(),
-        )
-        .with_fingerprint("whitakerFragment", fp)
-        .build()
-    {
-        Ok(result) => result,
-        Err(e) => panic!("failed to build keyed result: {e}"),
-    }
-}
-
 // -- Given steps --
 
 #[given("a run for tool {tool} version {version}")]
@@ -150,8 +135,8 @@ fn given_window_value(world: &SarifWorld, window: usize) {
 
 #[given("a run containing 2 unique results")]
 fn given_run_with_two_results(world: &SarifWorld) {
-    let r1 = make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
-    let r2 = make_keyed_result("WHK002", "src/b.rs", 20, "fp2");
+    let r1 = test_helpers::make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
+    let r2 = test_helpers::make_keyed_result("WHK002", "src/b.rs", 20, "fp2");
     let run = RunBuilder::new("tool", "1.0")
         .with_result(r1)
         .with_result(r2)
@@ -161,15 +146,15 @@ fn given_run_with_two_results(world: &SarifWorld) {
 
 #[given("another run containing 1 duplicate result")]
 fn given_run_with_duplicate(world: &SarifWorld) {
-    let r1 = make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
+    let r1 = test_helpers::make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
     let run = RunBuilder::new("tool", "1.0").with_result(r1).build();
     world.runs_to_merge.borrow_mut().push(run);
 }
 
 #[given("a SARIF log with one run and two results")]
 fn given_log_with_results(world: &SarifWorld) {
-    let r1 = make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
-    let r2 = make_keyed_result("WHK002", "src/b.rs", 20, "fp2");
+    let r1 = test_helpers::make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
+    let r2 = test_helpers::make_keyed_result("WHK002", "src/b.rs", 20, "fp2");
     let run = RunBuilder::new("tool", "1.0")
         .with_result(r1)
         .with_result(r2)
@@ -214,9 +199,13 @@ fn when_result_built(world: &SarifWorld) {
 fn when_properties_to_json(world: &SarifWorld) {
     let builder = world.props_builder.borrow_mut().take();
     if let Some(builder) = builder {
-        let props = builder.build();
-        let value: serde_json::Value = props.into();
-        *world.props_json.borrow_mut() = Some(value);
+        match builder.build() {
+            Ok(props) => match props.try_to_value() {
+                Ok(value) => *world.props_json.borrow_mut() = Some(value),
+                Err(e) => panic!("failed to convert properties to JSON: {e}"),
+            },
+            Err(e) => panic!("failed to build properties: {e}"),
+        }
     }
 }
 
@@ -269,16 +258,12 @@ fn when_token_path_requested(world: &SarifWorld) {
 
 #[then("the log version is {version}")]
 fn then_log_version(world: &SarifWorld, version: String) {
-    with_log(world, |log| {
-        assert_eq!(log.version, version);
-    });
+    with_log(world, |log| assert_eq!(log.version, version));
 }
 
 #[then("the log has {count} run")]
 fn then_log_has_runs(world: &SarifWorld, count: usize) {
-    with_log(world, |log| {
-        assert_eq!(log.runs.len(), count);
-    });
+    with_log(world, |log| assert_eq!(log.runs.len(), count));
 }
 
 #[then("the run tool name is {name}")]
@@ -291,23 +276,17 @@ fn then_run_tool_name(world: &SarifWorld, name: String) {
 
 #[then("the result rule ID is {rule_id}")]
 fn then_result_rule_id(world: &SarifWorld, rule_id: String) {
-    with_result(world, |result| {
-        assert_eq!(result.rule_id, rule_id);
-    });
+    with_result(world, |result| assert_eq!(result.rule_id, rule_id));
 }
 
 #[then("the result level is warning")]
 fn then_result_level_warning(world: &SarifWorld) {
-    with_result(world, |result| {
-        assert_eq!(result.level, Level::Warning);
-    });
+    with_result(world, |result| assert_eq!(result.level, Level::Warning));
 }
 
 #[then("the result has {count} location")]
 fn then_result_location_count(world: &SarifWorld, count: usize) {
-    with_result(world, |result| {
-        assert_eq!(result.locations.len(), count);
-    });
+    with_result(world, |result| assert_eq!(result.locations.len(), count));
 }
 
 #[then("the JSON contains whitaker profile {profile}")]
@@ -328,9 +307,7 @@ fn then_json_has_k(world: &SarifWorld, k: usize) {
 
 #[then("the merged run has {count} results")]
 fn then_merged_run_results(world: &SarifWorld, count: usize) {
-    with_merged_run(world, |merged| {
-        assert_eq!(merged.results.len(), count);
-    });
+    with_merged_run(world, |merged| assert_eq!(merged.results.len(), count));
 }
 
 #[then("the deserialized log equals the original")]

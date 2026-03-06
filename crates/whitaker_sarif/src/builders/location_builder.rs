@@ -77,8 +77,30 @@ impl RegionBuilder {
     }
 
     /// Consumes the builder and produces a [`Region`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `start_line` is zero, if `end_line` is less than
+    /// `start_line`, or if both columns are set and `end_column` is less
+    /// than `start_column` on the same line.
     #[must_use]
     pub fn build(self) -> Region {
+        assert!(self.start_line >= 1, "start_line must be >= 1");
+        if let Some(end_line) = self.end_line {
+            assert!(
+                end_line >= self.start_line,
+                "end_line ({end_line}) must be >= start_line ({})",
+                self.start_line
+            );
+            if end_line == self.start_line
+                && let (Some(sc), Some(ec)) = (self.start_column, self.end_column)
+            {
+                assert!(
+                    ec >= sc,
+                    "end_column ({ec}) must be >= start_column ({sc}) on the same line"
+                );
+            }
+        }
         Region {
             start_line: self.start_line,
             start_column: self.start_column,
@@ -190,8 +212,10 @@ mod tests {
         let loc = LocationBuilder::new("src/lib.rs")
             .with_region(RegionBuilder::new(42).build())
             .build();
-        let region = loc.physical_location.region.as_ref().expect("region");
-        assert_eq!(region.start_line, 42);
+        match loc.physical_location.region.as_ref() {
+            Some(region) => assert_eq!(region.start_line, 42),
+            None => panic!("expected region to be present"),
+        }
     }
 
     #[test]
@@ -206,5 +230,27 @@ mod tests {
                 .as_deref(),
             Some("%SRCROOT%")
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "start_line must be >= 1")]
+    fn region_rejects_zero_start_line() {
+        let _ = RegionBuilder::new(0).build();
+    }
+
+    #[test]
+    #[should_panic(expected = "end_line")]
+    fn region_rejects_inverted_lines() {
+        let _ = RegionBuilder::new(10).with_end_line(5).build();
+    }
+
+    #[test]
+    #[should_panic(expected = "end_column")]
+    fn region_rejects_inverted_columns_on_same_line() {
+        let _ = RegionBuilder::new(10)
+            .with_end_line(10)
+            .with_start_column(20)
+            .with_end_column(5)
+            .build();
     }
 }

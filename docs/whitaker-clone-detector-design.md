@@ -375,7 +375,7 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    `result_builder.rs`, `location_builder.rs`) to stay under the file-size
    limit and keep each builder self-contained.
 
-4. **Level enum serialization.** The `Level` enum serialises as lowercase
+4. **Level enum serialization.** The `Level` enum serializes as lowercase
    strings (`"none"`, `"note"`, `"warning"`, `"error"`) via
    `#[serde(rename_all = "lowercase")]`, matching the SARIF 2.1.0
    specification. `Warning` is the default variant.
@@ -392,9 +392,9 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    construction time.
 
 7. **WhitakerProperties envelope structure.** The `WhitakerProperties` type
-   serialises into a `{"whitaker": {...}}` JSON envelope via
-   `From<WhitakerProperties> for serde_json::Value`. Extraction uses
-   `TryFrom<&Value>` reading from the `"whitaker"` key. This keeps
+   serializes into a `{"whitaker": {...}}` JSON envelope via a fallible
+   `try_to_value` method. Extraction uses `TryFrom<&Value>` reading from
+   the `"whitaker"` key. This keeps
    Whitaker-specific metadata namespaced within the SARIF property bag.
 
 8. **BDD test pattern.** BDD step definitions follow the canonical

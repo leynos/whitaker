@@ -167,9 +167,13 @@ mod tests {
             results: Vec::new(),
             artifacts: Vec::new(),
         };
-        let json = serde_json::to_string(&run).expect("serialize");
-        let parsed: Run = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(run, parsed);
+        match serde_json::to_string(&run) {
+            Ok(json) => match serde_json::from_str::<Run>(&json) {
+                Ok(parsed) => assert_eq!(run, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -187,11 +191,15 @@ mod tests {
             results: Vec::new(),
             artifacts: Vec::new(),
         };
-        let json = serde_json::to_string(&run).expect("serialize");
-        assert!(!json.contains("\"invocations\""));
-        assert!(!json.contains("\"results\""));
-        assert!(!json.contains("\"artifacts\""));
-        assert!(!json.contains("\"rules\""));
+        match serde_json::to_string(&run) {
+            Ok(json) => {
+                assert!(!json.contains("\"invocations\""));
+                assert!(!json.contains("\"results\""));
+                assert!(!json.contains("\"artifacts\""));
+                assert!(!json.contains("\"rules\""));
+            }
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -203,8 +211,12 @@ mod tests {
             },
             mime_type: Some("text/x-rust".into()),
         };
-        let json = serde_json::to_string(&artifact).expect("serialize");
-        let parsed: Artifact = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(artifact, parsed);
+        match serde_json::to_string(&artifact) {
+            Ok(json) => match serde_json::from_str::<Artifact>(&json) {
+                Ok(parsed) => assert_eq!(artifact, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 }

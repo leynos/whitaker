@@ -140,9 +140,13 @@ mod tests {
             byte_offset: None,
             byte_length: None,
         };
-        let json = serde_json::to_string(&region).expect("serialize");
-        let parsed: Region = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(region, parsed);
+        match serde_json::to_string(&region) {
+            Ok(json) => match serde_json::from_str::<Region>(&json) {
+                Ok(parsed) => assert_eq!(region, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -155,9 +159,13 @@ mod tests {
             byte_offset: None,
             byte_length: None,
         };
-        let json = serde_json::to_string(&region).expect("serialize");
-        assert!(!json.contains("startColumn"));
-        assert!(!json.contains("endLine"));
+        match serde_json::to_string(&region) {
+            Ok(json) => {
+                assert!(!json.contains("startColumn"));
+                assert!(!json.contains("endLine"));
+            }
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -178,9 +186,13 @@ mod tests {
                 }),
             },
         };
-        let json = serde_json::to_string(&loc).expect("serialize");
-        let parsed: Location = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(loc, parsed);
+        match serde_json::to_string(&loc) {
+            Ok(json) => match serde_json::from_str::<Location>(&json) {
+                Ok(parsed) => assert_eq!(loc, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 
     #[test]
@@ -198,8 +210,12 @@ mod tests {
                 region: None,
             },
         };
-        let json = serde_json::to_string(&rl).expect("serialize");
-        let parsed: RelatedLocation = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(rl, parsed);
+        match serde_json::to_string(&rl) {
+            Ok(json) => match serde_json::from_str::<RelatedLocation>(&json) {
+                Ok(parsed) => assert_eq!(rl, parsed),
+                Err(e) => panic!("failed to deserialize: {e}"),
+            },
+            Err(e) => panic!("failed to serialize: {e}"),
+        }
     }
 }

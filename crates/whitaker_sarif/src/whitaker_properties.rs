@@ -26,7 +26,8 @@ use crate::error::SarifError;
 ///     .with_cosine(0.88)
 ///     .with_group_id(1)
 ///     .with_class_size(4)
-///     .build();
+///     .build()
+///     .expect("finite scores");
 ///
 /// assert_eq!(props.profile, "T1");
 /// assert_eq!(props.k, 25);
@@ -50,26 +51,30 @@ pub struct WhitakerProperties {
     pub class_size: usize,
 }
 
-/// Wraps properties under a `"whitaker"` key for embedding in a SARIF
-/// property bag.
-///
-/// # Examples
-///
-/// ```
-/// use whitaker_sarif::{WhitakerPropertiesBuilder};
-/// use serde_json::Value;
-///
-/// let props = WhitakerPropertiesBuilder::new("T2")
-///     .with_k(25)
-///     .build();
-/// let value: Value = props.into();
-/// assert!(value.get("whitaker").is_some());
-/// ```
-impl From<WhitakerProperties> for Value {
-    fn from(props: WhitakerProperties) -> Self {
-        // Safety: WhitakerProperties always serializes to a JSON object.
-        let inner = serde_json::to_value(props).unwrap_or(Value::Null);
-        serde_json::json!({ "whitaker": inner })
+impl WhitakerProperties {
+    /// Wraps these properties under a `"whitaker"` key for embedding in a
+    /// SARIF property bag.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SarifError::Serialization`] if JSON serialization fails
+    /// (for example, when scores contain non-finite values).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::WhitakerPropertiesBuilder;
+    ///
+    /// let props = WhitakerPropertiesBuilder::new("T2")
+    ///     .with_k(25)
+    ///     .build()
+    ///     .expect("finite scores");
+    /// let value = props.try_to_value().expect("serialize");
+    /// assert!(value.get("whitaker").is_some());
+    /// ```
+    pub fn try_to_value(&self) -> crate::error::Result<Value> {
+        let inner = serde_json::to_value(self)?;
+        Ok(serde_json::json!({ "whitaker": inner }))
     }
 }
 
@@ -88,8 +93,9 @@ impl From<WhitakerProperties> for Value {
 ///
 /// let props = WhitakerPropertiesBuilder::new("T1")
 ///     .with_k(25)
-///     .build();
-/// let value: Value = props.clone().into();
+///     .build()
+///     .expect("finite scores");
+/// let value = props.try_to_value().expect("serialize");
 /// let extracted = WhitakerProperties::try_from(&value).expect("extract");
 /// assert_eq!(extracted, props);
 /// ```
@@ -114,7 +120,8 @@ impl TryFrom<&Value> for WhitakerProperties {
 /// let props = WhitakerPropertiesBuilder::new("T3")
 ///     .with_jaccard(0.85)
 ///     .with_cosine(0.90)
-///     .build();
+///     .build()
+///     .expect("finite scores");
 /// assert_eq!(props.profile, "T3");
 /// ```
 #[derive(Debug, Clone)]
@@ -186,9 +193,19 @@ impl WhitakerPropertiesBuilder {
     }
 
     /// Consumes the builder and produces [`WhitakerProperties`].
-    #[must_use]
-    pub fn build(self) -> WhitakerProperties {
-        WhitakerProperties {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SarifError::InvalidScore`] if `jaccard` or `cosine` is
+    /// non-finite (`NaN` or `±∞`).
+    pub fn build(self) -> crate::error::Result<WhitakerProperties> {
+        if !self.jaccard.is_finite() {
+            return Err(SarifError::InvalidScore("jaccard".into()));
+        }
+        if !self.cosine.is_finite() {
+            return Err(SarifError::InvalidScore("cosine".into()));
+        }
+        Ok(WhitakerProperties {
             profile: self.profile,
             k: self.k,
             window: self.window,
@@ -196,7 +213,7 @@ impl WhitakerPropertiesBuilder {
             cosine: self.cosine,
             group_id: self.group_id,
             class_size: self.class_size,
-        }
+        })
     }
 }
 
@@ -214,26 +231,46 @@ mod tests {
             .with_group_id(174)
             .with_class_size(4)
             .build();
-        assert_eq!(props.profile, "T1");
-        assert_eq!(props.k, 25);
-        assert_eq!(props.window, 16);
-        assert_eq!(props.group_id, 174);
-        assert_eq!(props.class_size, 4);
+        match props {
+            Ok(props) => {
+                assert_eq!(props.profile, "T1");
+                assert_eq!(props.k, 25);
+                assert_eq!(props.window, 16);
+                assert_eq!(props.group_id, 174);
+                assert_eq!(props.class_size, 4);
+            }
+            Err(e) => panic!("unexpected error: {e}"),
+        }
     }
 
     #[test]
     fn into_value_wraps_under_whitaker_key() {
         let props = WhitakerPropertiesBuilder::new("T2").build();
-        let value: Value = props.into();
-        assert!(value.get("whitaker").is_some());
+        match props {
+            Ok(props) => {
+                let value = props.try_to_value();
+                match value {
+                    Ok(value) => assert!(value.get("whitaker").is_some()),
+                    Err(e) => panic!("unexpected serialization error: {e}"),
+                }
+            }
+            Err(e) => panic!("unexpected build error: {e}"),
+        }
     }
 
     #[test]
     fn try_from_value_extracts_properties() {
         let props = WhitakerPropertiesBuilder::new("T1").with_k(10).build();
-        let value: Value = props.clone().into();
-        let extracted = WhitakerProperties::try_from(&value).expect("extract");
-        assert_eq!(extracted, props);
+        match props {
+            Ok(props) => match props.try_to_value() {
+                Ok(value) => match WhitakerProperties::try_from(&value) {
+                    Ok(extracted) => assert_eq!(extracted, props),
+                    Err(e) => panic!("unexpected extraction error: {e}"),
+                },
+                Err(e) => panic!("unexpected serialization error: {e}"),
+            },
+            Err(e) => panic!("unexpected build error: {e}"),
+        }
     }
 
     #[test]
@@ -249,8 +286,34 @@ mod tests {
             .with_jaccard(0.85)
             .with_cosine(0.90)
             .build();
-        let json = serde_json::to_string(&props).expect("serialize");
-        let parsed: WhitakerProperties = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(props, parsed);
+        match props {
+            Ok(props) => {
+                let json = serde_json::to_string(&props);
+                match json {
+                    Ok(json) => match serde_json::from_str::<WhitakerProperties>(&json) {
+                        Ok(parsed) => assert_eq!(props, parsed),
+                        Err(e) => panic!("deserialization failed: {e}"),
+                    },
+                    Err(e) => panic!("serialization failed: {e}"),
+                }
+            }
+            Err(e) => panic!("unexpected build error: {e}"),
+        }
+    }
+
+    #[test]
+    fn build_rejects_nan_jaccard() {
+        let result = WhitakerPropertiesBuilder::new("T1")
+            .with_jaccard(f64::NAN)
+            .build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_rejects_infinite_cosine() {
+        let result = WhitakerPropertiesBuilder::new("T1")
+            .with_cosine(f64::INFINITY)
+            .build();
+        assert!(result.is_err());
     }
 }

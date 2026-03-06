@@ -134,16 +134,25 @@ impl ResultBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn builds_minimal_result() {
-        let result = ResultBuilder::new("WHK001")
-            .with_message("msg")
+    #[rstest]
+    #[case("WHK001", "msg", Level::Warning)]
+    #[case("WHK002", "clone found", Level::Note)]
+    #[case("WHK003", "match", Level::Error)]
+    fn builds_result_with_level(#[case] rule: &str, #[case] msg: &str, #[case] level: Level) {
+        match ResultBuilder::new(rule)
+            .with_message(msg)
+            .with_level(level)
             .build()
-            .expect("build");
-        assert_eq!(result.rule_id, "WHK001");
-        assert_eq!(result.message.text, "msg");
-        assert_eq!(result.level, Level::Warning);
+        {
+            Ok(result) => {
+                assert_eq!(result.rule_id, rule);
+                assert_eq!(result.message.text, msg);
+                assert_eq!(result.level, level);
+            }
+            Err(e) => panic!("failed to build result: {e}"),
+        }
     }
 
     #[test]
@@ -160,27 +169,20 @@ mod tests {
 
     #[test]
     fn adds_fingerprints() {
-        let result = ResultBuilder::new("WHK001")
+        match ResultBuilder::new("WHK001")
             .with_message("msg")
             .with_fingerprint("whitakerFragment", "abc123")
             .build()
-            .expect("build");
-        assert_eq!(
-            result
-                .partial_fingerprints
-                .get("whitakerFragment")
-                .map(String::as_str),
-            Some("abc123")
-        );
-    }
-
-    #[test]
-    fn sets_custom_level() {
-        let result = ResultBuilder::new("WHK001")
-            .with_message("msg")
-            .with_level(Level::Note)
-            .build()
-            .expect("build");
-        assert_eq!(result.level, Level::Note);
+        {
+            Ok(r) => {
+                assert_eq!(
+                    r.partial_fingerprints
+                        .get("whitakerFragment")
+                        .map(String::as_str),
+                    Some("abc123")
+                );
+            }
+            Err(e) => panic!("failed to build: {e}"),
+        }
     }
 }
