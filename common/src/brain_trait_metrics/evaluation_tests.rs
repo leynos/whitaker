@@ -131,8 +131,8 @@ fn evaluate_pass_cases(
 
 #[rstest]
 fn pass_when_at_methods_warn_but_cc_one_below() {
-    // 20 methods total (15+5), CC sum = 5*7 = 35 < 40.
-    let metrics = build_trait_metrics("Foo", 15, 5, 7);
+    // 20 methods total (7+13), CC sum = 13*3 = 39 < 40 (one below warn).
+    let metrics = build_trait_metrics("Foo", 7, 13, 3);
     let thresholds = BrainTraitThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_trait(&metrics, &thresholds),

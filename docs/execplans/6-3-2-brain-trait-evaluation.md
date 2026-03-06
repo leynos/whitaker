@@ -44,8 +44,9 @@ Observable outcome:
 
 ## Constraints
 
-- Scope only roadmap item 6.3.2. Do not implement lint driver HIR walking,
-  configuration loading, or SARIF output.
+- Scope only roadmap item 6.3.2. Do not implement lint driver high-level
+  intermediate representation (HIR) walking, configuration loading, or
+  Static Analysis Results Interchange Format (SARIF) output.
 - Keep `common` free of `rustc_private` dependencies. Accept plain Rust values
   only.
 - Follow established module layout and line-count constraints (< 400 lines per
@@ -56,8 +57,9 @@ Observable outcome:
   (`0.5.0`).
 - Preserve deterministic behaviour (stable ordering for rendered metric lists).
 - Use en-GB-oxendict spelling in comments and docs.
-- Clippy `too_many_arguments` threshold is 4. BDD step functions can parse at
-  most 3 values from feature text (world + 3 = 4 args max).
+- Clippy `too_many_arguments` threshold is 4. Behaviour-driven development
+  (BDD) step functions can parse at most 3 values from feature text
+  (world + 3 = 4 args max).
 - Do not modify existing `brain_type_metrics` public APIs.
 - Update design documentation with any final decisions made during
   implementation.
@@ -65,8 +67,8 @@ Observable outcome:
 
 ## Tolerances (exception triggers)
 
-- Scope: if implementation exceeds 12 touched files or 1200 net LOC, stop and
-  escalate.
+- Scope: if implementation exceeds 12 touched files or 1200 net lines of
+  code (LOC), stop and escalate.
 - Interface: if implementing 6.3.2 requires changing existing
   `brain_type_metrics` or `brain_trait_metrics` public APIs, stop and escalate.
 - Dependencies: if any new external dependency is required, stop and escalate.
@@ -106,7 +108,7 @@ Observable outcome:
 - [x] Stage H: Record implementation decisions in design doc.
 - [x] Stage I: Mark roadmap 6.3.2 done.
 - [x] Stage J: Run `make check-fmt`, `make lint`, and `make test` successfully.
-- [x] Stage K: Finalise living sections.
+- [x] Stage K: Finalize living sections.
 
 ## Surprises & discoveries
 
@@ -148,7 +150,7 @@ Observable outcome:
 
 3. **`DiagnosticInput` parameter struct in tests.** Introduced to stay within
    the workspace `too_many_arguments` threshold of 4. All `build_diagnostic`
-   call sites use struct initialisation syntax for readability.
+   call sites use struct initialization syntax for readability.
 
 4. **`add_distributed_defaults` free function in BDD tests.** Extracted from
    the `EvaluationWorld::build_metrics` method to avoid `excessive_nesting`.
@@ -200,7 +202,7 @@ The canonical pattern lives at `common/src/brain_type_metrics/`:
   helpers, `evaluate_brain_type()` function, re-exports diagnostic types.
 - `diagnostic.rs` (293 lines) -- `BrainTypeDiagnostic` struct carrying measured
   values, `format_primary_message()`, `format_note()`, `format_help()`.
-- `evaluation_tests.rs` (248 lines) -- rstest parameterised unit tests.
+- `evaluation_tests.rs` (248 lines) -- rstest parameterized unit tests.
 - `diagnostic_tests.rs` (304 lines) -- rstest unit tests for formatting.
 
 BDD tests:
@@ -350,20 +352,20 @@ that creates `TraitMetrics` via `TraitMetricsBuilder`.
 
 Test coverage:
 
-1. Default threshold values (parameterised).
+1. Default threshold values (parameterized).
 2. Builder overrides individual fields.
 3. Builder chaining sets all fields.
 4. Builder `Default` trait matches `new()`.
-5. Pass cases (parameterised):
+5. Pass cases (parameterized):
    - All below thresholds (10 methods, CC=20).
    - Many methods but low CC (19 methods, CC=10) -- just below warn threshold.
    - High CC but few methods (5 methods, CC=50).
    - Exactly at `methods_warn` but CC below threshold (20 methods, CC=39).
-6. Warn cases (parameterised):
+6. Warn cases (parameterized):
    - Exact warn thresholds (20 methods, CC=40).
    - Above warn below deny (25 methods, CC=60).
    - Just below `methods_deny` (29 methods, CC=40).
-7. Deny cases (parameterised):
+7. Deny cases (parameterized):
    - Method count at deny threshold (30 methods, CC=0).
    - Method count above deny (35 methods, CC=0).
    - Deny supersedes warn (30 methods, CC=50).
@@ -477,7 +479,7 @@ make test 2>&1 | tee /tmp/6-3-2-test.log
 
 Expected: all three pass with exit code 0.
 
-### Stage K: Finalise living sections
+### Stage K: Finalize living sections
 
 Update this execplan:
 
@@ -550,6 +552,8 @@ No new external dependencies. Uses only existing workspace-pinned crates:
 
 New files (7):
 
+*Table 1: New files introduced by 6.3.2.*
+
 | File | Est. lines | Purpose |
 |---|---|---|
 | `common/src/brain_trait_metrics/evaluation.rs` | ~180 | Disposition, thresholds, evaluate function |
@@ -561,6 +565,8 @@ New files (7):
 | `docs/execplans/6-3-2-brain-trait-evaluation.md` | ~350 | This execution plan |
 
 Modified files (4):
+
+*Table 2: Existing files modified by 6.3.2.*
 
 | File | Current lines | Change |
 |---|---|---|
@@ -617,6 +623,8 @@ All observable outcomes from the purpose section are met:
 
 ### File metrics
 
+*Table 3: Final line counts for new source files.*
+
 | File | Lines | Under 400? |
 |---|---|---|
 | `evaluation.rs` | 250 | Yes |
@@ -649,5 +657,5 @@ dependencies.
   two additional fix iterations. Future plans should anticipate parameter
   struct needs when test helpers exceed 3 non-world parameters.
 - The ExecPlan estimated `diagnostic_tests.rs` at ~200 lines; it came in at
-  278 due to the `DiagnosticInput` struct and more comprehensive parameterised
+  278 due to the `DiagnosticInput` struct and more comprehensive parameterized
   test cases. Estimates should include overhead for parameter objects.
