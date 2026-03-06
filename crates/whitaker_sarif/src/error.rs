@@ -42,6 +42,10 @@ pub enum SarifError {
     /// A similarity score was non-finite (`NaN` or `±∞`).
     #[error("invalid score for field `{0}`: value must be finite")]
     InvalidScore(String),
+
+    /// A region has invalid coordinates.
+    #[error("invalid region: {0}")]
+    InvalidRegion(String),
 }
 
 /// Convenience alias for results using [`SarifError`].
@@ -73,5 +77,11 @@ mod tests {
     fn invalid_score_formats_message() {
         let err = SarifError::InvalidScore("jaccard".into());
         assert!(err.to_string().contains("jaccard"));
+    }
+
+    #[test]
+    fn invalid_region_formats_message() {
+        let err = SarifError::InvalidRegion("start_line must be >= 1".into());
+        assert_eq!(err.to_string(), "invalid region: start_line must be >= 1");
     }
 }

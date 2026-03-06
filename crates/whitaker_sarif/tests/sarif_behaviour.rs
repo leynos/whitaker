@@ -109,9 +109,11 @@ fn given_result_message(world: &SarifWorld, msg: String) {
 
 #[given("a location at file {file} line {line}")]
 fn given_location(world: &SarifWorld, file: String, line: usize) {
-    let loc = LocationBuilder::new(file)
-        .with_region(RegionBuilder::new(line).build())
-        .build();
+    let region = match RegionBuilder::new(line).build() {
+        Ok(r) => r,
+        Err(e) => panic!("failed to build region: {e}"),
+    };
+    let loc = LocationBuilder::new(file).with_region(region).build();
     let builder = world.result_builder.borrow_mut().take();
     *world.result_builder.borrow_mut() = builder.map(|b| b.with_location(loc));
 }
