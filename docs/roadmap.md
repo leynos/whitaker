@@ -214,7 +214,7 @@
 
 ### 7.1. SARIF model and shared types
 
-- [ ] 7.1.1. Create the `whitaker_sarif` crate with SARIF 2.1.0 models,
+- [x] 7.1.1. Create the `whitaker_sarif` crate with SARIF 2.1.0 models,
   builders, and merge logic. See
   [clone detector design](whitaker-clone-detector-design.md) §Crate
   responsibilities and §SARIF schema and mapping.
