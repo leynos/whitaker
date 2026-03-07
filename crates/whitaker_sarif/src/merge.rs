@@ -171,8 +171,8 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder, RunBuilder};
-    use crate::model::result::Level;
+    use crate::builders::{ResultBuilder, RunBuilder};
+    use crate::test_support::make_keyed_result;
 
     fn merged_result_count(r1: SarifResult, r2: SarifResult) -> usize {
         let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();
@@ -180,23 +180,6 @@ mod tests {
         match merge_runs(&[run_a, run_b]) {
             Ok(merged) => merged.results.len(),
             Err(e) => panic!("failed to merge: {e}"),
-        }
-    }
-
-    fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
-        let region = match RegionBuilder::new(line).with_end_line(line + 5).build() {
-            Ok(r) => r,
-            Err(e) => panic!("failed to build region: {e}"),
-        };
-        match ResultBuilder::new(rule)
-            .with_message("clone detected")
-            .with_level(Level::Warning)
-            .with_location(LocationBuilder::new(file).with_region(region).build())
-            .with_fingerprint(WHITAKER_FRAGMENT_KEY, fp)
-            .build()
-        {
-            Ok(result) => result,
-            Err(e) => panic!("failed to build keyed result: {e}"),
         }
     }
 

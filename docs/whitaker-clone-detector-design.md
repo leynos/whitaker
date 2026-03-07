@@ -397,7 +397,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    `"whitaker"` key. This keeps Whitaker-specific metadata namespaced within
    the SARIF property bag.
 
-8. **BDD test pattern.** BDD step definitions follow the canonical
+8. **Behaviour-Driven Development (BDD) test pattern.** BDD step
+   definitions follow the canonical
    `brain_trait_metrics_behaviour.rs` pattern: a `SarifWorld` struct with
    `RefCell` fields, `with_*()` helper functions using `match` arms (not
    `expect()`) to access world state, and indexed `#[scenario]` bindings.

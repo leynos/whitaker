@@ -152,10 +152,12 @@ scenarios exercise end-to-end construction and merge workflows using
   same file-size constraint; each builder is self-contained. Date/Author:
   2026-03-04 / DevBoxer.
 
-- Decision: deduplication key uses `(whitakerFragment fingerprint, file URI,
-  region)
-  ` tuple. Results lacking any component are preserved unconditionally. Rationale: safe default that avoids discarding unkeyed results while efficiently deduplicating keyed ones via `
-  HashSet<ResultKey>`. Date/Author: 2026-03-04 / DevBoxer.
+- Decision: deduplication key uses a
+  `(whitakerFragment fingerprint, file URI, region)` tuple. Results
+  lacking any component are preserved unconditionally. Rationale: safe
+  default that avoids discarding unkeyed results while efficiently
+  deduplicating keyed ones via `HashSet<ResultKey>`. Date/Author:
+  2026-03-04 / DevBoxer.
 
 - Decision: `ResultBuilder::build()` returns `Result<SarifResult>` validating
   required fields (`rule_id`, `message`). Other builders return values
