@@ -115,11 +115,14 @@ scenarios exercise end-to-end construction and merge workflows using
 
 ## Surprises & Discoveries
 
-- Clippy's `expect_used` and `unwrap_used` denials in `[lints.clippy]` apply
-  to integration test files as well as library code. The canonical BDD test
+- The workspace `clippy.toml` sets `allow-expect-in-tests = true`, which
+  permits `.expect()` in `#[cfg(test)]` unit tests. However, integration
+  tests in `tests/` are separate compilation units where this exemption
+  does not apply, so `.expect()` and `.unwrap()` remain denied there by
+  the crate-level `[lints.clippy]` settings. The canonical BDD test
   pattern in `brain_trait_metrics_behaviour.rs` avoids this by using
-  `match`/`panic!` arms and `with_*()` helper functions instead of `.expect()`.
-  The initial BDD test file had to be rewritten to follow this pattern.
+  `match`/`panic!` arms and `with_*()` helper functions. The initial BDD
+  test file had to be rewritten to follow this pattern.
 
 - Rustdoc's `redundant_explicit_links` warning fires when module-level doc
   comments use `[`Type`](super::Type)` syntax and the type is already
@@ -160,10 +163,12 @@ scenarios exercise end-to-end construction and merge workflows using
   2026-03-04 / DevBoxer.
 
 - Decision: `ResultBuilder::build()` returns `Result<SarifResult>` validating
-  required fields (`rule_id`, `message`). Other builders return values
-  directly. Rationale: only `SarifResult` has fields that are truly required by
-  the SARIF spec and could reasonably be missing at build time. Date/Author:
-  2026-03-04 / DevBoxer.
+  required fields (`rule_id`, `message`). `RegionBuilder::build()` returns
+  `Result<Region>` validating 1-based line/column bounds and same-line
+  column ordering. Other builders (log, run, location) return values
+  directly. Rationale: `SarifResult` has fields that are truly required by
+  the SARIF spec, and `Region` has invariants that must be enforced at
+  build time. Date/Author: 2026-03-04 / DevBoxer.
 
 - Decision: BDD step definitions use `match`/`panic!` and `with_*()` helpers
   instead of `.expect()` to satisfy the workspace-wide `expect_used = "deny"`

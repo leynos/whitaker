@@ -8,6 +8,7 @@
 use std::collections::HashSet;
 
 use crate::error::{Result, SarifError};
+use crate::model::descriptor::ReportingDescriptor;
 use crate::model::location::Region;
 use crate::model::result::SarifResult;
 use crate::model::run::Run;
@@ -124,8 +125,9 @@ pub fn deduplicate_results(results: &[SarifResult]) -> Vec<SarifResult> {
 
 /// Merges multiple runs into a single run.
 ///
-/// The tool metadata is taken from the first run. Results are collected from
-/// all runs and deduplicated. Artifacts and invocations are concatenated.
+/// The tool metadata is taken from the first run. Rules are unioned across all
+/// runs by `id` (first occurrence wins). Results are collected from all runs
+/// and deduplicated. Artifacts and invocations are concatenated.
 ///
 /// # Errors
 ///
@@ -146,7 +148,8 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
         .first()
         .ok_or_else(|| SarifError::MergeConflict("cannot merge zero runs".into()))?;
 
-    let tool = first.tool.clone();
+    let mut tool = first.tool.clone();
+    tool.driver.rules = union_rules(runs);
 
     let mut all_results = Vec::new();
     let mut all_artifacts = Vec::new();
@@ -166,6 +169,23 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
         results,
         artifacts: all_artifacts,
     })
+}
+
+/// Collects rules from all runs, deduplicating by `id`.
+///
+/// The first occurrence of each rule id is kept; later duplicates are
+/// discarded. Ordering follows first-seen insertion order.
+fn union_rules(runs: &[Run]) -> Vec<ReportingDescriptor> {
+    let mut seen = HashSet::new();
+    let mut merged = Vec::new();
+    for run in runs {
+        for rule in &run.tool.driver.rules {
+            if seen.insert(rule.id.clone()) {
+                merged.push(rule.clone());
+            }
+        }
+    }
+    merged
 }
 
 #[cfg(test)]
@@ -242,6 +262,59 @@ mod tests {
         let r1 = make_keyed_result("WHK001", "src/a.rs", 10, "fp1");
         let r2 = r1.clone();
         assert_eq!(merged_result_count(r1, r2), 1);
+    }
+
+    #[test]
+    fn merge_unions_disjoint_rules() {
+        let run_a = RunBuilder::new("tool", "1.0")
+            .with_rules(vec![crate::rules::whk001_rule()])
+            .build();
+        let run_b = RunBuilder::new("tool", "1.0")
+            .with_rules(vec![
+                crate::rules::whk002_rule(),
+                crate::rules::whk003_rule(),
+            ])
+            .build();
+
+        match merge_runs(&[run_a, run_b]) {
+            Ok(merged) => {
+                assert_eq!(merged.tool.driver.rules.len(), 3);
+                assert_eq!(
+                    merged.tool.driver.rules.first().map(|r| r.id.as_str()),
+                    Some("WHK001")
+                );
+                assert_eq!(
+                    merged.tool.driver.rules.get(1).map(|r| r.id.as_str()),
+                    Some("WHK002")
+                );
+                assert_eq!(
+                    merged.tool.driver.rules.get(2).map(|r| r.id.as_str()),
+                    Some("WHK003")
+                );
+            }
+            Err(e) => panic!("failed to merge: {e}"),
+        }
+    }
+
+    #[test]
+    fn merge_deduplicates_overlapping_rules() {
+        let run_a = RunBuilder::new("tool", "1.0")
+            .with_rules(vec![
+                crate::rules::whk001_rule(),
+                crate::rules::whk002_rule(),
+            ])
+            .build();
+        let run_b = RunBuilder::new("tool", "1.0")
+            .with_rules(vec![
+                crate::rules::whk002_rule(),
+                crate::rules::whk003_rule(),
+            ])
+            .build();
+
+        match merge_runs(&[run_a, run_b]) {
+            Ok(merged) => assert_eq!(merged.tool.driver.rules.len(), 3),
+            Err(e) => panic!("failed to merge: {e}"),
+        }
     }
 
     #[test]

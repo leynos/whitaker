@@ -386,9 +386,11 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    tracks seen keys for efficient O(n) deduplication.
 
 6. **Builder validation strategy.** `ResultBuilder::build()` returns
-   `Result<SarifResult>` and validates that both `rule_id` and `message` are
-   set. Other builders (log, run, location, region) do not return `Result`
-   because they have either no required fields or all fields are provided at
+   `Result<SarifResult>` and validates that both `rule_id` and `message`
+   are set. `RegionBuilder::build()` returns `Result<Region>` and
+   validates 1-based line/column bounds and same-line column ordering.
+   Other builders (log, run, location) do not return `Result` because
+   they have either no required fields or all fields are provided at
    construction time.
 
 7. **WhitakerProperties envelope structure.** The `WhitakerProperties` type
@@ -464,13 +466,17 @@ pub fn ast_hash(node: &ra_ap_syntax::SyntaxNode) -> u64 {
 ```rust
 use whitaker_sarif as sarif;
 
-pub fn make_result(rule: &str, loc_a: Loc, loc_b: Loc, sim: f32, props: Props) -> sarif::Result {
-    sarif::Result::new(rule)
-        .with_level("warning")
+pub fn make_result(
+    rule: &str, loc_a: Loc, loc_b: Loc, sim: f32, props: Props,
+) -> sarif::SarifResult {
+    sarif::ResultBuilder::new(rule)
+        .with_level(sarif::Level::Warning)
         .with_message(format!("{} <-> {} (sim = {sim:.2})", loc_a, loc_b))
-        .with_locations(vec![loc_a.into()])
-        .with_related_locations(vec![loc_b.into()])
+        .with_location(loc_a.into())
+        .with_related_location(loc_b.into())
         .with_properties(props.into())
+        .build()
+        .expect("valid result")
 }
 ```
 

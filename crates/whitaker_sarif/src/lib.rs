@@ -18,7 +18,7 @@ pub mod merge;
 pub mod model;
 pub mod paths;
 pub mod rules;
-#[doc(hidden)]
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod whitaker_properties;
 
