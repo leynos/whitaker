@@ -1,6 +1,8 @@
 //! Shared test helpers for `whitaker_sarif` integration tests.
 
-use whitaker_sarif::{Level, LocationBuilder, RegionBuilder, ResultBuilder, SarifResult};
+use whitaker_sarif::{
+    Level, LocationBuilder, RegionBuilder, ResultBuilder, SarifResult, WHITAKER_FRAGMENT_KEY,
+};
 
 /// Builds a [`SarifResult`] with a fingerprint, location, and region.
 ///
@@ -14,7 +16,7 @@ pub fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> Sarif
         .with_message("clone detected")
         .with_level(Level::Warning)
         .with_location(LocationBuilder::new(file).with_region(region).build())
-        .with_fingerprint("whitakerFragment", fp)
+        .with_fingerprint(WHITAKER_FRAGMENT_KEY, fp)
         .build()
     {
         Ok(result) => result,

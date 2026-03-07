@@ -41,6 +41,17 @@ impl RunBuilder {
     }
 
     /// Sets the tool information URI.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::RunBuilder;
+    ///
+    /// let run = RunBuilder::new("tool", "1.0")
+    ///     .with_information_uri("https://example.com")
+    ///     .build();
+    /// assert_eq!(run.tool.driver.information_uri.as_deref(), Some("https://example.com"));
+    /// ```
     #[must_use]
     pub fn with_information_uri(mut self, uri: impl Into<String>) -> Self {
         self.information_uri = Some(uri.into());
@@ -48,6 +59,17 @@ impl RunBuilder {
     }
 
     /// Appends rules to the tool driver.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::{RunBuilder, all_rules};
+    ///
+    /// let run = RunBuilder::new("tool", "1.0")
+    ///     .with_rules(all_rules())
+    ///     .build();
+    /// assert_eq!(run.tool.driver.rules.len(), 3);
+    /// ```
     #[must_use]
     pub fn with_rules(mut self, rules: Vec<ReportingDescriptor>) -> Self {
         self.rules.extend(rules);
@@ -55,6 +77,19 @@ impl RunBuilder {
     }
 
     /// Appends a result to the run.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::{RunBuilder, ResultBuilder};
+    ///
+    /// let result = ResultBuilder::new("WHK001")
+    ///     .with_message("clone")
+    ///     .build()
+    ///     .expect("valid result");
+    /// let run = RunBuilder::new("tool", "1.0").with_result(result).build();
+    /// assert_eq!(run.results.len(), 1);
+    /// ```
     #[must_use]
     pub fn with_result(mut self, result: SarifResult) -> Self {
         self.results.push(result);
@@ -62,6 +97,20 @@ impl RunBuilder {
     }
 
     /// Appends an invocation record.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::{RunBuilder, Invocation};
+    ///
+    /// let run = RunBuilder::new("tool", "1.0")
+    ///     .with_invocation(Invocation {
+    ///         execution_successful: true,
+    ///         command_line: None,
+    ///     })
+    ///     .build();
+    /// assert_eq!(run.invocations.len(), 1);
+    /// ```
     #[must_use]
     pub fn with_invocation(mut self, invocation: Invocation) -> Self {
         self.invocations.push(invocation);
@@ -69,6 +118,23 @@ impl RunBuilder {
     }
 
     /// Appends an artifact reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::{RunBuilder, Artifact, ArtifactLocation};
+    ///
+    /// let run = RunBuilder::new("tool", "1.0")
+    ///     .with_artifact(Artifact {
+    ///         location: ArtifactLocation {
+    ///             uri: "src/main.rs".into(),
+    ///             uri_base_id: None,
+    ///         },
+    ///         mime_type: Some("text/x-rust".into()),
+    ///     })
+    ///     .build();
+    /// assert_eq!(run.artifacts.len(), 1);
+    /// ```
     #[must_use]
     pub fn with_artifact(mut self, artifact: Artifact) -> Self {
         self.artifacts.push(artifact);
@@ -76,6 +142,17 @@ impl RunBuilder {
     }
 
     /// Consumes the builder and produces a [`Run`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use whitaker_sarif::RunBuilder;
+    ///
+    /// let run = RunBuilder::new("tool", "1.0").build();
+    /// assert_eq!(run.tool.driver.name, "tool");
+    /// assert_eq!(run.tool.driver.version.as_deref(), Some("1.0"));
+    /// assert!(run.results.is_empty());
+    /// ```
     #[must_use]
     pub fn build(self) -> Run {
         Run {
@@ -96,38 +173,41 @@ impl RunBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for [`RunBuilder`] construction and method chaining.
+
     use super::*;
     use crate::rules::all_rules;
+    use rstest::{fixture, rstest};
 
-    #[test]
-    fn builds_run_with_tool() {
-        let run = RunBuilder::new("tool", "1.0").build();
+    #[fixture]
+    fn builder() -> RunBuilder {
+        RunBuilder::new("tool", "1.0")
+    }
+
+    #[rstest]
+    fn builds_run_with_tool(builder: RunBuilder) {
+        let run = builder.build();
         assert_eq!(run.tool.driver.name, "tool");
         assert_eq!(run.tool.driver.version.as_deref(), Some("1.0"));
     }
 
-    #[test]
-    fn builds_run_with_rules() {
-        let run = RunBuilder::new("tool", "1.0")
-            .with_rules(all_rules())
-            .build();
+    #[rstest]
+    fn builds_run_with_rules(builder: RunBuilder) {
+        let run = builder.with_rules(all_rules()).build();
         assert_eq!(run.tool.driver.rules.len(), 3);
     }
 
-    #[test]
-    fn builds_run_with_chained_rules() {
+    #[rstest]
+    fn builds_run_with_chained_rules(builder: RunBuilder) {
         let rules_a = vec![crate::rules::whk001_rule()];
         let rules_b = vec![crate::rules::whk002_rule(), crate::rules::whk003_rule()];
-        let run = RunBuilder::new("tool", "1.0")
-            .with_rules(rules_a)
-            .with_rules(rules_b)
-            .build();
+        let run = builder.with_rules(rules_a).with_rules(rules_b).build();
         assert_eq!(run.tool.driver.rules.len(), 3);
     }
 
-    #[test]
-    fn builds_run_with_invocation() {
-        let run = RunBuilder::new("tool", "1.0")
+    #[rstest]
+    fn builds_run_with_invocation(builder: RunBuilder) {
+        let run = builder
             .with_invocation(Invocation {
                 execution_successful: true,
                 command_line: None,

@@ -12,6 +12,13 @@ use crate::model::location::Region;
 use crate::model::result::SarifResult;
 use crate::model::run::Run;
 
+/// Fingerprint key used by the Whitaker clone detector for result deduplication.
+///
+/// Results that share the same value under this key, along with identical file
+/// and region, are considered duplicates by [`merge_runs`] and
+/// [`deduplicate_results`].
+pub const WHITAKER_FRAGMENT_KEY: &str = "whitakerFragment";
+
 /// Composite key used for result deduplication.
 ///
 /// Two results are considered duplicates when they share the same Whitaker
@@ -52,7 +59,10 @@ impl RegionKey {
 /// Returns `None` if the result lacks the required fingerprint, location, or
 /// region data needed to form a key.
 fn extract_key(result: &SarifResult) -> Option<ResultKey> {
-    let fingerprint = result.partial_fingerprints.get("whitakerFragment")?.clone();
+    let fingerprint = result
+        .partial_fingerprints
+        .get(WHITAKER_FRAGMENT_KEY)?
+        .clone();
 
     let location = result.locations.first()?;
     let file = location.physical_location.artifact_location.uri.clone();
@@ -182,7 +192,7 @@ mod tests {
             .with_message("clone detected")
             .with_level(Level::Warning)
             .with_location(LocationBuilder::new(file).with_region(region).build())
-            .with_fingerprint("whitakerFragment", fp)
+            .with_fingerprint(WHITAKER_FRAGMENT_KEY, fp)
             .build()
         {
             Ok(result) => result,

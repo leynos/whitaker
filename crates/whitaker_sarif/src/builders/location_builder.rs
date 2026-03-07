@@ -203,6 +203,7 @@ impl LocationBuilder {
 mod tests {
     use super::*;
     use crate::error::SarifError;
+    use rstest::rstest;
 
     #[test]
     fn region_builder_minimal() {
@@ -274,58 +275,38 @@ mod tests {
         );
     }
 
-    #[test]
-    fn region_rejects_zero_start_line() {
-        assert!(matches!(
-            RegionBuilder::new(0).build(),
-            Err(SarifError::InvalidRegion(msg)) if msg.contains("start_line must be >= 1")
-        ));
+    /// Builds a [`RegionBuilder`] from an `(start, end_line, start_col, end_col)` tuple.
+    fn region_from_spec(
+        spec: (usize, Option<usize>, Option<usize>, Option<usize>),
+    ) -> RegionBuilder {
+        let (start, end_line, start_col, end_col) = spec;
+        let mut b = RegionBuilder::new(start);
+        if let Some(el) = end_line {
+            b = b.with_end_line(el);
+        }
+        if let Some(sc) = start_col {
+            b = b.with_start_column(sc);
+        }
+        if let Some(ec) = end_col {
+            b = b.with_end_column(ec);
+        }
+        b
     }
 
-    #[test]
-    fn region_rejects_inverted_lines() {
+    #[rstest]
+    #[case((0, None, None, None), "start_line must be >= 1")]
+    #[case((10, Some(5), None, None), "end_line")]
+    #[case((10, Some(10), Some(20), Some(5)), "end_column")]
+    #[case((1, None, Some(0), None), "start_column")]
+    #[case((1, None, None, Some(0)), "end_column")]
+    #[case((10, None, Some(20), Some(5)), "end_column")]
+    fn region_rejects_invalid_input(
+        #[case] spec: (usize, Option<usize>, Option<usize>, Option<usize>),
+        #[case] expected_substr: &str,
+    ) {
         assert!(matches!(
-            RegionBuilder::new(10).with_end_line(5).build(),
-            Err(SarifError::InvalidRegion(msg)) if msg.contains("end_line")
-        ));
-    }
-
-    #[test]
-    fn region_rejects_inverted_columns_on_same_line() {
-        assert!(matches!(
-            RegionBuilder::new(10)
-                .with_end_line(10)
-                .with_start_column(20)
-                .with_end_column(5)
-                .build(),
-            Err(SarifError::InvalidRegion(msg)) if msg.contains("end_column")
-        ));
-    }
-
-    #[test]
-    fn region_rejects_zero_start_column() {
-        assert!(matches!(
-            RegionBuilder::new(1).with_start_column(0).build(),
-            Err(SarifError::InvalidRegion(msg)) if msg.contains("start_column")
-        ));
-    }
-
-    #[test]
-    fn region_rejects_zero_end_column() {
-        assert!(matches!(
-            RegionBuilder::new(1).with_end_column(0).build(),
-            Err(SarifError::InvalidRegion(msg)) if msg.contains("end_column")
-        ));
-    }
-
-    #[test]
-    fn region_rejects_inverted_columns_implicit_single_line() {
-        assert!(matches!(
-            RegionBuilder::new(10)
-                .with_start_column(20)
-                .with_end_column(5)
-                .build(),
-            Err(SarifError::InvalidRegion(msg)) if msg.contains("end_column")
+            region_from_spec(spec).build(),
+            Err(SarifError::InvalidRegion(msg)) if msg.contains(expected_substr)
         ));
     }
 }

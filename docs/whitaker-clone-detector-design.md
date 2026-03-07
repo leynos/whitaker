@@ -393,9 +393,9 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 7. **WhitakerProperties envelope structure.** The `WhitakerProperties` type
    serializes into a `{"whitaker": {...}}` JSON envelope via a fallible
-   `try_to_value` method. Extraction uses `TryFrom<&Value>` reading from
-   the `"whitaker"` key. This keeps
-   Whitaker-specific metadata namespaced within the SARIF property bag.
+   `try_to_value` method. Extraction uses `TryFrom<&Value>` reading from the
+   `"whitaker"` key. This keeps Whitaker-specific metadata namespaced within
+   the SARIF property bag.
 
 8. **BDD test pattern.** BDD step definitions follow the canonical
    `brain_trait_metrics_behaviour.rs` pattern: a `SarifWorld` struct with

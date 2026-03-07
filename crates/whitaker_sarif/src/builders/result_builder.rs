@@ -134,6 +134,7 @@ impl ResultBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::merge::WHITAKER_FRAGMENT_KEY;
     use rstest::rstest;
 
     #[rstest]
@@ -171,13 +172,13 @@ mod tests {
     fn adds_fingerprints() {
         match ResultBuilder::new("WHK001")
             .with_message("msg")
-            .with_fingerprint("whitakerFragment", "abc123")
+            .with_fingerprint(WHITAKER_FRAGMENT_KEY, "abc123")
             .build()
         {
             Ok(r) => {
                 assert_eq!(
                     r.partial_fingerprints
-                        .get("whitakerFragment")
+                        .get(WHITAKER_FRAGMENT_KEY)
                         .map(String::as_str),
                     Some("abc123")
                 );

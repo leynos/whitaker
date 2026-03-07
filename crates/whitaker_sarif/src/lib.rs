@@ -42,7 +42,7 @@ pub use rules::{
 pub use whitaker_properties::{WhitakerProperties, WhitakerPropertiesBuilder};
 
 // Merge logic
-pub use merge::{deduplicate_results, merge_runs};
+pub use merge::{WHITAKER_FRAGMENT_KEY, deduplicate_results, merge_runs};
 
 // Path helpers
 pub use paths::{

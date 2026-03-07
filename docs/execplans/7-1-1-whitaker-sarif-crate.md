@@ -22,9 +22,9 @@ detector pipeline (roadmap §7). After this change a developer can:
 5. Resolve stable file paths for the token pass, AST pass, and refined SARIF
    outputs under `target/whitaker/`.
 
-The crate is a pure library with no compiler dependencies, usable by
-downstream crates `whitaker_clones_core`, `whitaker_clones_cli`, and the
-`clone_detected` Dylint lint.
+The crate is a pure library with no compiler dependencies, usable by downstream
+crates `whitaker_clones_core`, `whitaker_clones_cli`, and the `clone_detected`
+Dylint lint.
 
 Observable outcome: `make check-fmt`, `make lint`, and `make test` pass. Unit
 tests cover serialization round-trips, builder correctness, merge
@@ -71,9 +71,9 @@ scenarios exercise end-to-end construction and merge workflows using
   `unwrap_used`, `expect_used`, `indexing_slicing`, `string_slice`,
   `cognitive_complexity`, and enforces `missing_docs`. All code must comply.
   Severity: medium. Likelihood: high. Mitigation: use `get()` instead of
-  indexing, `?` operator for fallible operations, and builders to avoid
-  complex constructors. Store similarity scores as `f64` fields without
-  performing arithmetic in this crate.
+  indexing, `?` operator for fallible operations, and builders to avoid complex
+  constructors. Store similarity scores as `f64` fields without performing
+  arithmetic in this crate.
 
 - File size risk: SARIF has many types. A single `model.rs` could exceed 400
   lines. Severity: medium. Likelihood: high. Mitigation: split model into a
@@ -81,8 +81,8 @@ scenarios exercise end-to-end construction and merge workflows using
 
 - BDD step argument limit risk: Clippy counts BDD step parameters toward
   `too_many_arguments`. Severity: low. Likelihood: medium. Mitigation: keep
-  step functions to at most `world` + 3 parsed values. Split complex setup
-  into multiple `And` steps.
+  step functions to at most `world` + 3 parsed values. Split complex setup into
+  multiple `And` steps.
 
 - Serde attribute complexity risk: SARIF uses `camelCase` field naming plus a
   `$schema` field requiring `#[serde(rename = "$schema")]`. Severity: low.
@@ -139,30 +139,29 @@ scenarios exercise end-to-end construction and merge workflows using
 - Decision: use `SarifResult` rather than `Result` for the SARIF result type
   to avoid collision with `std::result::Result`. Rationale: idiomatic Rust
   re-exports `Result` from the error module; naming the SARIF type
-  `SarifResult` keeps both usable without qualification.
-  Date/Author: 2026-03-04 / DevBoxer.
+  `SarifResult` keeps both usable without qualification. Date/Author:
+  2026-03-04 / DevBoxer.
 
 - Decision: split model types across a `model/` directory module rather than a
-  single file. Rationale: the 400-line-per-file constraint would be violated
-  by a monolithic `model.rs` containing all SARIF types. Splitting by concept
+  single file. Rationale: the 400-line-per-file constraint would be violated by
+  a monolithic `model.rs` containing all SARIF types. Splitting by concept
   (log, run, result, location, descriptor) keeps each file focused.
   Date/Author: 2026-03-04 / DevBoxer.
 
 - Decision: split builders across a `builders/` directory module. Rationale:
-  same file-size constraint; each builder is self-contained.
-  Date/Author: 2026-03-04 / DevBoxer.
+  same file-size constraint; each builder is self-contained. Date/Author:
+  2026-03-04 / DevBoxer.
 
 - Decision: deduplication key uses `(whitakerFragment fingerprint, file URI,
-  region)` tuple. Results lacking any component are preserved unconditionally.
-  Rationale: safe default that avoids discarding unkeyed results while
-  efficiently deduplicating keyed ones via `HashSet<ResultKey>`.
-  Date/Author: 2026-03-04 / DevBoxer.
+  region)
+  ` tuple. Results lacking any component are preserved unconditionally. Rationale: safe default that avoids discarding unkeyed results while efficiently deduplicating keyed ones via `
+  HashSet<ResultKey>`. Date/Author: 2026-03-04 / DevBoxer.
 
 - Decision: `ResultBuilder::build()` returns `Result<SarifResult>` validating
   required fields (`rule_id`, `message`). Other builders return values
-  directly. Rationale: only `SarifResult` has fields that are truly required
-  by the SARIF spec and could reasonably be missing at build time.
-  Date/Author: 2026-03-04 / DevBoxer.
+  directly. Rationale: only `SarifResult` has fields that are truly required by
+  the SARIF spec and could reasonably be missing at build time. Date/Author:
+  2026-03-04 / DevBoxer.
 
 - Decision: BDD step definitions use `match`/`panic!` and `with_*()` helpers
   instead of `.expect()` to satisfy the workspace-wide `expect_used = "deny"`
@@ -171,8 +170,8 @@ scenarios exercise end-to-end construction and merge workflows using
 
 - Decision: `WhitakerProperties` wraps under a `{"whitaker": {...}}` JSON
   envelope to namespace Whitaker-specific metadata within the SARIF property
-  bag, avoiding conflicts with other tool-specific properties.
-  Date/Author: 2026-03-04 / DevBoxer.
+  bag, avoiding conflicts with other tool-specific properties. Date/Author:
+  2026-03-04 / DevBoxer.
 
 ## Outcomes & Retrospective
 
@@ -189,8 +188,8 @@ Delivered:
   `tests/sarif_behaviour.rs` following the canonical rstest-bdd v0.5.0 pattern.
 - Wired public exports through `src/lib.rs`.
 - Recorded 8 implementation decisions in
-  `docs/whitaker-clone-detector-design.md` (`## Implementation decisions
-  (7.1.1)`).
+  `docs/whitaker-clone-detector-design.md`
+  (`## Implementation decisions (7.1.1)`).
 - Marked roadmap item 7.1.1 done in `docs/roadmap.md`.
 
 Validation:
@@ -272,9 +271,9 @@ functions for WHK001, WHK002, WHK003. Provides `all_rules()`.
 
 ### Stage F: Implement Whitaker properties extension
 
-File: `crates/whitaker_sarif/src/whitaker_properties.rs` —
-`WhitakerProperties` struct with `From<WhitakerProperties>` for
-`serde_json::Value` and `TryFrom<&Value>`. Builder for fluent construction.
+File: `crates/whitaker_sarif/src/whitaker_properties.rs` — `WhitakerProperties`
+struct with `From<WhitakerProperties>` for `serde_json::Value` and
+`TryFrom<&Value>`. Builder for fluent construction.
 
 ### Stage G: Implement builders
 
