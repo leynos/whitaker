@@ -175,7 +175,7 @@
 
 ### 6.4. Decomposition advice
 
-- [ ] 6.4.1. Build feature vectors for methods and cluster with community
+- [x] 6.4.1. Build feature vectors for methods and cluster with community
   detection to form decomposition suggestions. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.2.1.
