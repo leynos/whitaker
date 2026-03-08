@@ -386,12 +386,11 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    tracks seen keys for efficient O(n) deduplication.
 
 6. **Builder validation strategy.** `ResultBuilder::build()` returns
-   `Result<SarifResult>` and validates that both `rule_id` and `message`
-   are set. `RegionBuilder::build()` returns `Result<Region>` and
-   validates 1-based line/column bounds and same-line column ordering.
-   Other builders (log, run, location) do not return `Result` because
-   they have either no required fields or all fields are provided at
-   construction time.
+   `Result<SarifResult>` and validates that both `rule_id` and `message` are
+   set. `RegionBuilder::build()` returns `Result<Region>` and validates 1-based
+   line/column bounds and same-line column ordering. Other builders (log, run,
+   location) do not return `Result` because they have either no required fields
+   or all fields are provided at construction time.
 
 7. **WhitakerProperties envelope structure.** The `WhitakerProperties` type
    serializes into a `{"whitaker": {...}}` JSON envelope via a fallible
@@ -400,10 +399,10 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the SARIF property bag.
 
 8. **Behaviour-Driven Development (BDD) test pattern.** BDD step
-   definitions follow the canonical
-   `brain_trait_metrics_behaviour.rs` pattern: a `SarifWorld` struct with
-   `RefCell` fields, `with_*()` helper functions using `match` arms (not
-   `expect()`) to access world state, and indexed `#[scenario]` bindings.
+   definitions follow the canonical `brain_trait_metrics_behaviour.rs` pattern:
+   a `SarifWorld` struct with `RefCell` fields, `with_*()` helper functions
+   using `match` arms (not `expect()`) to access world state, and indexed
+   `#[scenario]` bindings.
 
 ## Minimal code skeletons (selected)
 
