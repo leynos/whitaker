@@ -359,6 +359,52 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 - **M2**: Pass B refinement (AST) to merged SARIF; T3 results; HTML diff.
 - **M3**: Incremental cache; continuous integration (CI) integration; docs.
 
+## Implementation decisions (7.1.1)
+
+1. **SARIF result type naming.** The SARIF result type is named `SarifResult`
+   rather than `Result` to avoid collision with `std::result::Result`. This
+   keeps both types usable without qualification across the codebase.
+
+2. **Model directory structure.** Model types are split across a `model/`
+   directory module (`log.rs`, `run.rs`, `result.rs`, `location.rs`,
+   `descriptor.rs`) rather than a single `model.rs` file. This satisfies the
+   400-line-per-file constraint while grouping types by SARIF concept.
+
+3. **Builder directory structure.** Builder types are similarly split across a
+   `builders/` directory module (`log_builder.rs`, `run_builder.rs`,
+   `result_builder.rs`, `location_builder.rs`) to stay under the file-size
+   limit and keep each builder self-contained.
+
+4. **Level enum serialization.** The `Level` enum serializes as lowercase
+   strings (`"none"`, `"note"`, `"warning"`, `"error"`) via
+   `#[serde(rename_all = "lowercase")]`, matching the SARIF 2.1.0
+   specification. `Warning` is the default variant.
+
+5. **Deduplication key composition.** Result deduplication uses a composite key
+   of `(whitakerFragment fingerprint, file URI, region)`. Results lacking any
+   of these components are preserved unconditionally. A `HashSet<ResultKey>`
+   tracks seen keys for efficient O(n) deduplication.
+
+6. **Builder validation strategy.** `ResultBuilder::build()` returns
+   `Result<SarifResult>` and validates that both `rule_id` and `message`
+   are set. `RegionBuilder::build()` returns `Result<Region>` and
+   validates 1-based line/column bounds and same-line column ordering.
+   Other builders (log, run, location) do not return `Result` because
+   they have either no required fields or all fields are provided at
+   construction time.
+
+7. **WhitakerProperties envelope structure.** The `WhitakerProperties` type
+   serializes into a `{"whitaker": {...}}` JSON envelope via a fallible
+   `try_to_value` method. Extraction uses `TryFrom<&Value>` reading from the
+   `"whitaker"` key. This keeps Whitaker-specific metadata namespaced within
+   the SARIF property bag.
+
+8. **Behaviour-Driven Development (BDD) test pattern.** BDD step
+   definitions follow the canonical
+   `brain_trait_metrics_behaviour.rs` pattern: a `SarifWorld` struct with
+   `RefCell` fields, `with_*()` helper functions using `match` arms (not
+   `expect()`) to access world state, and indexed `#[scenario]` bindings.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates
@@ -420,13 +466,17 @@ pub fn ast_hash(node: &ra_ap_syntax::SyntaxNode) -> u64 {
 ```rust
 use whitaker_sarif as sarif;
 
-pub fn make_result(rule: &str, loc_a: Loc, loc_b: Loc, sim: f32, props: Props) -> sarif::Result {
-    sarif::Result::new(rule)
-        .with_level("warning")
+pub fn make_result(
+    rule: &str, loc_a: Loc, loc_b: Loc, sim: f32, props: Props,
+) -> sarif::SarifResult {
+    sarif::ResultBuilder::new(rule)
+        .with_level(sarif::Level::Warning)
         .with_message(format!("{} <-> {} (sim = {sim:.2})", loc_a, loc_b))
-        .with_locations(vec![loc_a.into()])
-        .with_related_locations(vec![loc_b.into()])
+        .with_location(loc_a.into())
+        .with_related_location(loc_b.into())
         .with_properties(props.into())
+        .build()
+        .expect("valid result")
 }
 ```
 
