@@ -68,27 +68,8 @@ pub(crate) fn detect_communities(vectors: &[MethodFeatureVector]) -> Vec<Vec<usi
 
     let edges = build_similarity_edges(vectors);
     let adjacency = build_adjacency(vectors.len(), &edges);
-    let mut labels: Vec<usize> = (0..vectors.len()).collect();
     let max_iterations = vectors.len().saturating_mul(2).max(1);
-
-    for _ in 0..max_iterations {
-        let mut changed = false;
-
-        for node in 0..vectors.len() {
-            let Some(best_label) = best_neighbour_label(node, &labels, &adjacency, vectors) else {
-                continue;
-            };
-
-            if best_label != labels[node] {
-                labels[node] = best_label;
-                changed = true;
-            }
-        }
-
-        if !changed {
-            break;
-        }
-    }
+    let labels = propagate_labels(vectors, &adjacency, max_iterations);
 
     let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
     for (node, label) in labels.into_iter().enumerate() {
@@ -127,6 +108,35 @@ fn build_adjacency(node_count: usize, edges: &[SimilarityEdge]) -> Vec<Vec<(usiz
     }
 
     adjacency
+}
+
+fn propagate_labels(
+    vectors: &[MethodFeatureVector],
+    adjacency: &[Vec<(usize, u64)>],
+    max_iterations: usize,
+) -> Vec<usize> {
+    let mut labels: Vec<usize> = (0..vectors.len()).collect();
+
+    for _ in 0..max_iterations {
+        let mut changed = false;
+
+        for node in 0..vectors.len() {
+            let Some(best_label) = best_neighbour_label(node, &labels, adjacency, vectors) else {
+                continue;
+            };
+
+            if best_label != labels[node] {
+                labels[node] = best_label;
+                changed = true;
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    labels
 }
 
 fn best_neighbour_label(
