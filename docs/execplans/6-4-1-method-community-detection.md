@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -118,18 +118,18 @@ Observable outcome:
 ## Progress
 
 - [x] Stage A: Draft this ExecPlan and capture the current repository state.
-- [ ] Stage B: Add failing unit tests and BDD scenarios that define the
+- [x] Stage B: Add failing unit tests and BDD scenarios that define the
   decomposition-analysis contract.
-- [ ] Stage C: Implement a shared decomposition module in `common`.
-- [ ] Stage D: Export the new API from `common/src/lib.rs`.
-- [ ] Stage E: Make tests green and refactor for readability while keeping
+- [x] Stage C: Implement a shared decomposition module in `common`.
+- [x] Stage D: Export the new API from `common/src/lib.rs`.
+- [x] Stage E: Make tests green and refactor for readability while keeping
   deterministic behaviour.
-- [ ] Stage F: Record implementation decisions for 6.4.1 in
+- [x] Stage F: Record implementation decisions for 6.4.1 in
   `docs/brain-trust-lints-design.md`.
-- [ ] Stage G: Mark roadmap item 6.4.1 done.
-- [ ] Stage H: Run `make check-fmt`, `make lint`, and `make test`
+- [x] Stage G: Mark roadmap item 6.4.1 done.
+- [x] Stage H: Run `make check-fmt`, `make lint`, and `make test`
   successfully.
-- [ ] Stage I: Finalize the living sections in this document.
+- [x] Stage I: Finalize the living sections in this document.
 
 ## Surprises & Discoveries
 
@@ -148,6 +148,16 @@ Observable outcome:
   `too_many_arguments` and `expect_used` in integration tests. The new BDD
   harness should use helper structs, `Result`-returning steps where useful, and
   no `.expect()` in `tests/`.
+- Workspace lint policy also denies `float_arithmetic`, which made the
+  original floating-point vector plan a poor fit. The implementation uses
+  integer weights and compares cosine thresholds via cross-multiplication
+  instead.
+- During targeted BDD reruns, changing only the `.feature` file was not always
+  enough to rebuild the behaviour binary. Touching the `.rs` harness source was
+  sufficient to force recompilation when iterating on scenarios.
+- The final label precedence means strong keyword communities can legitimately
+  outrank local-type names. In practice that produced stable labels such as
+  `report` and `summary` instead of `ReportState` and `SummaryState`.
 
 ## Decision Log
 
@@ -166,6 +176,19 @@ Observable outcome:
   testable than a full Louvain/Leiden implementation. Final algorithm choice
   must still be recorded in the design doc during implementation. Date/Author:
   2026-03-06 / Codex.
+- Decision: implement feature vectors with integer weights and an integer-only
+  cosine-threshold comparison. Rationale: this satisfies the intended scoring
+  model while conforming to the workspace `float_arithmetic` lint and keeping
+  deterministic ordering simple. Date/Author: 2026-03-07 / Codex.
+- Decision: suppress advice unless clustering yields at least two non-singleton
+  communities. Rationale: a single cohesive cluster or one cluster plus
+  singleton noise does not justify decomposition advice and would create noisy
+  diagnostics for roadmap 6.4.2. Date/Author: 2026-03-07 / Codex.
+- Decision: final label precedence is domain -> field -> keyword -> signature
+  type -> local type. Rationale: external domains and shared state are stronger
+  responsibility signals than incidental local helper types, while keywords
+  remain useful when only name-level intent is shared. Date/Author: 2026-03-07
+  / Codex.
 
 ## Context and orientation
 
@@ -485,11 +508,28 @@ Expected implementation-time outcomes:
 
 ## Outcomes & Retrospective
 
-This draft captures the intended delivery path for roadmap item 6.4.1. No code
-implementation has started yet, the roadmap entry remains unchecked, and the
-current repository still has only generic decomposition help text.
+Roadmap item 6.4.1 is now implemented. `common` exports a new
+`decomposition_advice` module with:
 
-The plan intentionally keeps 6.4.1 focused on pure analysis and suggestion
-generation. That preserves a clean boundary for 6.4.2, which can later decide
-how many suggestions to emit and how to phrase them in diagnostics without
-reopening the clustering algorithm itself.
+- `MethodProfile` and `MethodProfileBuilder` for compiler-independent
+  per-method metadata,
+- sparse feature-vector construction over fields, domains, signature types,
+  local types, and derived keywords,
+- deterministic similarity-graph construction and weighted label-propagation
+  community detection,
+- `DecompositionSuggestion` values with stable labels, extraction kinds, and
+  rationales.
+
+Validation now covers both unit and behavioural contracts:
+
+- unit tests exercise tokenization, vector construction, similarity edges,
+  order-invariant community detection, suppression of weak decompositions, and
+  extraction-kind selection,
+- `rstest-bdd` scenarios cover happy paths for type and trait decomposition,
+  unhappy paths with no meaningful split, singleton-noise suppression, and
+  stable clustering under reordered input.
+
+The roadmap entry is marked done, and the design document records the final
+algorithm and heuristics actually shipped. This keeps roadmap 6.4.2 focused on
+diagnostic presentation only; it can consume the structured suggestions without
+needing to revisit clustering behaviour.

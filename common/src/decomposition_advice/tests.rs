@@ -1,0 +1,320 @@
+use super::community::{build_similarity_edges, detect_communities};
+use super::profile::{DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind};
+use super::suggestion::{SuggestedExtractionKind, suggest_decomposition};
+use super::vector::{build_feature_vector, dot_product, identifier_keywords};
+
+struct ExpectedSuggestion<'a> {
+    label: &'a str,
+    extraction_kind: SuggestedExtractionKind,
+    methods: &'a [&'a str],
+}
+
+struct MethodInput<'a> {
+    name: &'a str,
+    fields: &'a [&'a str],
+    signature_types: &'a [&'a str],
+    local_types: &'a [&'a str],
+    domains: &'a [&'a str],
+}
+
+fn assert_suggestion(actual: &super::DecompositionSuggestion, expected: ExpectedSuggestion<'_>) {
+    assert_eq!(actual.label(), expected.label);
+    assert_eq!(actual.extraction_kind(), expected.extraction_kind);
+    assert_eq!(actual.methods(), expected.methods);
+}
+
+fn profile(input: MethodInput<'_>) -> MethodProfile {
+    let mut builder = MethodProfileBuilder::new(input.name);
+    for field in input.fields {
+        builder.record_accessed_field(*field);
+    }
+    for type_name in input.signature_types {
+        builder.record_signature_type(*type_name);
+    }
+    for type_name in input.local_types {
+        builder.record_local_type(*type_name);
+    }
+    for domain in input.domains {
+        builder.record_external_domain(*domain);
+    }
+    builder.build()
+}
+
+fn parser_serde_fs_fixture() -> Vec<MethodProfile> {
+    vec![
+        profile(MethodInput {
+            name: "parse_tokens",
+            fields: &["grammar", "tokens"],
+            signature_types: &["TokenStream"],
+            local_types: &[],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "parse_nodes",
+            fields: &["grammar", "ast"],
+            signature_types: &[],
+            local_types: &["ParseState"],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "encode_json",
+            fields: &[],
+            signature_types: &["Serializer"],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "decode_json",
+            fields: &[],
+            signature_types: &["Deserializer"],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "load_from_disk",
+            fields: &[],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+        profile(MethodInput {
+            name: "save_to_disk",
+            fields: &[],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+    ]
+}
+
+#[test]
+fn identifier_keywords_split_camel_case_and_remove_stop_words() {
+    let keywords = identifier_keywords("buildRenderTree");
+    assert_eq!(keywords, ["tree"]);
+}
+
+#[test]
+fn feature_vector_prefixes_categories() {
+    let vector = build_feature_vector(&profile(MethodInput {
+        name: "state",
+        fields: &["state"],
+        signature_types: &[],
+        local_types: &[],
+        domains: &[],
+    }));
+
+    assert!(vector.weights().contains_key("field:state"));
+    assert!(vector.weights().contains_key("keyword:state"));
+}
+
+#[test]
+fn dot_product_is_zero_for_disjoint_profiles() {
+    let left = build_feature_vector(&profile(MethodInput {
+        name: "parse",
+        fields: &["grammar"],
+        signature_types: &[],
+        local_types: &[],
+        domains: &[],
+    }));
+    let right = build_feature_vector(&profile(MethodInput {
+        name: "write",
+        fields: &[],
+        signature_types: &[],
+        local_types: &[],
+        domains: &["std::fs"],
+    }));
+
+    assert_eq!(dot_product(left.weights(), right.weights()), 0);
+}
+
+#[test]
+fn similarity_edges_include_related_methods_only() {
+    let vectors = vec![
+        build_feature_vector(&profile(MethodInput {
+            name: "parse_tokens",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        })),
+        build_feature_vector(&profile(MethodInput {
+            name: "parse_nodes",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        })),
+        build_feature_vector(&profile(MethodInput {
+            name: "write_file",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &["std::fs"],
+        })),
+    ];
+
+    let edges = build_similarity_edges(&vectors);
+
+    assert_eq!(edges.len(), 1);
+    assert_eq!((edges[0].left(), edges[0].right()), (0, 1));
+    assert!(edges[0].weight() > 0);
+}
+
+#[test]
+fn detect_communities_is_order_invariant() {
+    let fixture = parser_serde_fs_fixture();
+    let mut original_vectors: Vec<_> = fixture.iter().map(build_feature_vector).collect();
+    original_vectors.sort_by(|left, right| left.method_name().cmp(right.method_name()));
+
+    let reordered_fixture = [
+        fixture[4].clone(),
+        fixture[1].clone(),
+        fixture[5].clone(),
+        fixture[0].clone(),
+        fixture[3].clone(),
+        fixture[2].clone(),
+    ];
+    let mut reordered_vectors: Vec<_> =
+        reordered_fixture.iter().map(build_feature_vector).collect();
+    reordered_vectors.sort_by(|left, right| left.method_name().cmp(right.method_name()));
+
+    assert_eq!(
+        detect_communities(&original_vectors),
+        detect_communities(&reordered_vectors)
+    );
+}
+
+#[test]
+fn suggest_decomposition_returns_empty_for_single_community() {
+    let context = DecompositionContext::new("Parser", SubjectKind::Type);
+    let methods = vec![
+        profile(MethodInput {
+            name: "parse_tokens",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "parse_nodes",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "parse_tree",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "parse_stream",
+            fields: &["grammar"],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        }),
+    ];
+
+    assert!(suggest_decomposition(&context, &methods).is_empty());
+}
+
+#[test]
+fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct() {
+    let context = DecompositionContext::new("Foo", SubjectKind::Type);
+    let suggestions = suggest_decomposition(&context, &parser_serde_fs_fixture());
+
+    assert_eq!(suggestions.len(), 3);
+    assert_suggestion(
+        &suggestions[0],
+        ExpectedSuggestion {
+            label: "grammar",
+            extraction_kind: SuggestedExtractionKind::HelperStruct,
+            methods: &["parse_nodes", "parse_tokens"],
+        },
+    );
+    assert_suggestion(
+        &suggestions[1],
+        ExpectedSuggestion {
+            label: "serde::json",
+            extraction_kind: SuggestedExtractionKind::Module,
+            methods: &["decode_json", "encode_json"],
+        },
+    );
+    assert_suggestion(
+        &suggestions[2],
+        ExpectedSuggestion {
+            label: "std::fs",
+            extraction_kind: SuggestedExtractionKind::Module,
+            methods: &["load_from_disk", "save_to_disk"],
+        },
+    );
+}
+
+#[test]
+fn suggest_decomposition_for_trait_returns_sub_trait_suggestions() {
+    let context = DecompositionContext::new("Transport", SubjectKind::Trait);
+    let methods = vec![
+        profile(MethodInput {
+            name: "encode_request",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "decode_request",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "read_frame",
+            fields: &[],
+            signature_types: &["IoBuffer"],
+            local_types: &[],
+            domains: &["std::io"],
+        }),
+        profile(MethodInput {
+            name: "write_frame",
+            fields: &[],
+            signature_types: &["IoBuffer"],
+            local_types: &[],
+            domains: &["std::io"],
+        }),
+    ];
+
+    let suggestions = suggest_decomposition(&context, &methods);
+
+    assert_eq!(suggestions.len(), 2);
+    assert!(
+        suggestions.iter().all(|suggestion| {
+            suggestion.extraction_kind() == SuggestedExtractionKind::SubTrait
+        })
+    );
+}
+
+#[test]
+fn suggestions_drop_singleton_noise_methods() {
+    let context = DecompositionContext::new("Foo", SubjectKind::Type);
+    let mut methods = parser_serde_fs_fixture();
+    methods.push(profile(MethodInput {
+        name: "run",
+        fields: &[],
+        signature_types: &[],
+        local_types: &[],
+        domains: &[],
+    }));
+
+    let suggestions = suggest_decomposition(&context, &methods);
+
+    assert_eq!(suggestions.len(), 3);
+    assert!(
+        suggestions
+            .iter()
+            .all(|suggestion| !suggestion.methods().contains(&String::from("run")))
+    );
+}
