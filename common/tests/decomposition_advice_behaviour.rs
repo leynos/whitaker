@@ -9,6 +9,29 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone)]
+struct CsvList(Vec<String>);
+
+impl CsvList {
+    fn into_vec(self) -> Vec<String> {
+        self.0
+    }
+}
+
+impl std::str::FromStr for CsvList {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let items = s
+            .split(',')
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+        Ok(CsvList(items))
+    }
+}
+
 #[derive(Debug, Default)]
 struct DecompositionWorld {
     context: RefCell<Option<DecompositionContext>>,
@@ -19,32 +42,6 @@ struct DecompositionWorld {
 #[fixture]
 fn world() -> DecompositionWorld {
     DecompositionWorld::default()
-}
-
-fn parse_subject_kind(kind: &str) -> Result<SubjectKind, String> {
-    match kind {
-        "type" => Ok(SubjectKind::Type),
-        "trait" => Ok(SubjectKind::Trait),
-        _ => Err(format!("unknown subject kind: {kind}")),
-    }
-}
-
-fn parse_extraction_kind(kind: &str) -> Result<SuggestedExtractionKind, String> {
-    match kind {
-        "helper struct" => Ok(SuggestedExtractionKind::HelperStruct),
-        "module" => Ok(SuggestedExtractionKind::Module),
-        "sub trait" => Ok(SuggestedExtractionKind::SubTrait),
-        _ => Err(format!("unknown extraction kind: {kind}")),
-    }
-}
-
-fn csv_values(values: &str) -> Vec<String> {
-    values
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 fn with_method_builder(
@@ -73,9 +70,12 @@ fn with_suggestions(
 }
 
 #[given("decomposition analysis for a {kind} named {name}")]
-fn given_context(world: &DecompositionWorld, kind: String, name: String) -> Result<(), String> {
-    let subject_kind = parse_subject_kind(&kind)?;
-    *world.context.borrow_mut() = Some(DecompositionContext::new(name, subject_kind));
+fn given_context(
+    world: &DecompositionWorld,
+    kind: SubjectKind,
+    name: String,
+) -> Result<(), String> {
+    *world.context.borrow_mut() = Some(DecompositionContext::new(name, kind));
     Ok(())
 }
 
@@ -85,8 +85,8 @@ fn given_method(world: &DecompositionWorld, name: String) {
 }
 
 #[given("method {name} accesses fields {fields}")]
-fn given_fields(world: &DecompositionWorld, name: String, fields: String) {
-    let parsed_fields = csv_values(&fields);
+fn given_fields(world: &DecompositionWorld, name: String, fields: CsvList) {
+    let parsed_fields = fields.into_vec();
     with_method_builder(world, &name, |builder| {
         for field in &parsed_fields {
             builder.record_accessed_field(field.as_str());
@@ -95,8 +95,8 @@ fn given_fields(world: &DecompositionWorld, name: String, fields: String) {
 }
 
 #[given("method {name} uses signature types {types}")]
-fn given_signature_types(world: &DecompositionWorld, name: String, types: String) {
-    let parsed_types = csv_values(&types);
+fn given_signature_types(world: &DecompositionWorld, name: String, types: CsvList) {
+    let parsed_types = types.into_vec();
     with_method_builder(world, &name, |builder| {
         for type_name in &parsed_types {
             builder.record_signature_type(type_name.as_str());
@@ -105,8 +105,8 @@ fn given_signature_types(world: &DecompositionWorld, name: String, types: String
 }
 
 #[given("method {name} uses local types {types}")]
-fn given_local_types(world: &DecompositionWorld, name: String, types: String) {
-    let parsed_types = csv_values(&types);
+fn given_local_types(world: &DecompositionWorld, name: String, types: CsvList) {
+    let parsed_types = types.into_vec();
     with_method_builder(world, &name, |builder| {
         for type_name in &parsed_types {
             builder.record_local_type(type_name.as_str());
@@ -115,8 +115,8 @@ fn given_local_types(world: &DecompositionWorld, name: String, types: String) {
 }
 
 #[given("method {name} uses external domains {domains}")]
-fn given_external_domains(world: &DecompositionWorld, name: String, domains: String) {
-    let parsed_domains = csv_values(&domains);
+fn given_external_domains(world: &DecompositionWorld, name: String, domains: CsvList) {
+    let parsed_domains = domains.into_vec();
     with_method_builder(world, &name, |builder| {
         for domain in &parsed_domains {
             builder.record_external_domain(domain.as_str());
@@ -171,17 +171,16 @@ fn then_no_suggestion_label(world: &DecompositionWorld, label: String) -> Result
 #[then("there is a {kind} suggestion labelled {label} containing methods {methods}")]
 fn then_matching_suggestion(
     world: &DecompositionWorld,
-    kind: String,
+    kind: SuggestedExtractionKind,
     label: String,
-    methods: String,
+    methods: CsvList,
 ) -> Result<(), String> {
-    let expected_kind = parse_extraction_kind(&kind)?;
-    let expected_methods = csv_values(&methods);
+    let expected_methods = methods.into_vec();
 
     with_suggestions(world, |suggestions| {
         let matches = suggestions.iter().any(|suggestion| {
             suggestion.label() == label
-                && suggestion.extraction_kind() == expected_kind
+                && suggestion.extraction_kind() == kind
                 && suggestion.methods() == expected_methods
         });
 
@@ -190,18 +189,7 @@ fn then_matching_suggestion(
         } else {
             let actual = suggestions
                 .iter()
-                .map(|suggestion| {
-                    format!(
-                        "{}:{}:{:?}",
-                        suggestion.label(),
-                        match suggestion.extraction_kind() {
-                            SuggestedExtractionKind::HelperStruct => "helper struct",
-                            SuggestedExtractionKind::Module => "module",
-                            SuggestedExtractionKind::SubTrait => "sub trait",
-                        },
-                        suggestion.methods()
-                    )
-                })
+                .map(|s| format!("{}:{}:{:?}", s.label(), s.extraction_kind(), s.methods()))
                 .collect::<Vec<_>>();
             Err(format!(
                 "missing {kind} suggestion labelled {label} containing methods {:?}; actual suggestions: {:?}",

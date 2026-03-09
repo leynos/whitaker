@@ -28,6 +28,29 @@ pub enum SuggestedExtractionKind {
     SubTrait,
 }
 
+impl std::str::FromStr for SuggestedExtractionKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "helper struct" => Ok(Self::HelperStruct),
+            "module" => Ok(Self::Module),
+            "sub trait" => Ok(Self::SubTrait),
+            _ => Err(format!("unknown extraction kind: {s}")),
+        }
+    }
+}
+
+impl std::fmt::Display for SuggestedExtractionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::HelperStruct => "helper struct",
+            Self::Module => "module",
+            Self::SubTrait => "sub trait",
+        })
+    }
+}
+
 /// Structured output from decomposition analysis.
 ///
 /// # Examples

@@ -20,6 +20,18 @@ pub enum SubjectKind {
     Trait,
 }
 
+impl std::str::FromStr for SubjectKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "type" => Ok(Self::Type),
+            "trait" => Ok(Self::Trait),
+            _ => Err(format!("unknown subject kind: {s}")),
+        }
+    }
+}
+
 /// Context about the analysed subject.
 ///
 /// # Examples
