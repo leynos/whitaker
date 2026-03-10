@@ -37,6 +37,8 @@ zip = "2"
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = "0.5.0"
+rustc_lexer = "0.1.0"
+whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.1" }
 whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.1" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"

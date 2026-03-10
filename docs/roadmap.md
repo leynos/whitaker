@@ -240,7 +240,7 @@
 
 ### 7.2. Token pass (Type-1/Type-2)
 
-- [ ] 7.2.1. Implement `rustc_lexer` normalization, k-shingling, winnowing, and
+- [x] 7.2.1. Implement `rustc_lexer` normalization, k-shingling, winnowing, and
   Rabin-Karp hashing. See
   [clone detector design](whitaker-clone-detector-design.md) §Pass A: token
   engine (rustc_lexer).

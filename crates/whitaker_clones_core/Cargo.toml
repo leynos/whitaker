@@ -1,0 +1,23 @@
+[package]
+name = "whitaker_clones_core"
+version = "0.2.1"
+edition = "2024"
+publish = false
+description = "Token and AST clone-detection primitives for Whitaker"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+rustc_lexer = { workspace = true }
+
+[dev-dependencies]
+rstest = { workspace = true }
+rstest-bdd = { workspace = true }
+rstest-bdd-macros = { workspace = true }
+
+[lints.clippy]
+expect_used = "deny"
+unwrap_used = "deny"

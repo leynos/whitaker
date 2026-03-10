@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -113,20 +113,20 @@ Observable outcome:
 ## Progress
 
 - [x] Stage A: Gather context and draft this ExecPlan.
-- [ ] Stage B: Scaffold `crates/whitaker_clones_core/` and workspace wiring.
-- [ ] Stage C: Add failing unit tests for normalization, parameter validation,
+- [x] Stage B: Scaffold `crates/whitaker_clones_core/` and workspace wiring.
+- [x] Stage C: Add failing unit tests for normalization, parameter validation,
   shingling, Rabin-Karp hashing, and winnowing.
-- [ ] Stage D: Implement core token-pass domain types and validation helpers.
-- [ ] Stage E: Implement `rustc_lexer` normalization for `T1` and `T2`.
-- [ ] Stage F: Implement `k`-shingling and Rabin-Karp rolling hash support.
-- [ ] Stage G: Implement deterministic winnowing over hashed shingles.
-- [ ] Stage H: Add `rstest-bdd` behaviour coverage for end-to-end token-pass
+- [x] Stage D: Implement core token-pass domain types and validation helpers.
+- [x] Stage E: Implement `rustc_lexer` normalization for `T1` and `T2`.
+- [x] Stage F: Implement `k`-shingling and Rabin-Karp rolling hash support.
+- [x] Stage G: Implement deterministic winnowing over hashed shingles.
+- [x] Stage H: Add `rstest-bdd` behaviour coverage for end-to-end token-pass
   scenarios.
-- [ ] Stage I: Update `docs/whitaker-clone-detector-design.md` with final 7.2.1
+- [x] Stage I: Update `docs/whitaker-clone-detector-design.md` with final 7.2.1
   implementation decisions.
-- [ ] Stage J: Mark roadmap item 7.2.1 done in `docs/roadmap.md`.
-- [ ] Stage K: Run documentation and code quality gates successfully.
-- [ ] Stage L: Finalize living sections and outcomes in this ExecPlan.
+- [x] Stage J: Mark roadmap item 7.2.1 done in `docs/roadmap.md`.
+- [x] Stage K: Run documentation and code quality gates successfully.
+- [x] Stage L: Finalize living sections and outcomes in this ExecPlan.
 
 ## Surprises & Discoveries
 
@@ -144,6 +144,17 @@ Observable outcome:
   integration tests must avoid `expect()` and `unwrap()`, and BDD step
   functions should parse no more than three values to stay under Clippy's
   argument threshold.
+- The design sketch's `tok.kind as u32` normalization is not sufficient for a
+  correct Type-1 pipeline because `rustc_lexer` tokenizes all identifiers as
+  `Ident` and all literal values as `Literal { .. }`. The shipped
+  implementation therefore preserves original identifier and literal text for
+  `T1`, and only canonicalizes them in `T2`.
+- `rustc_lexer` exposes unterminated block comments and literals directly in
+  the token stream. Treating those as typed errors produces clearer unhappy
+  paths than silently emitting `Unknown`-like placeholder symbols.
+- Changing only `tests/features/token_pass.feature` did not reliably refresh
+  the targeted behaviour test binary; touching the Rust harness forced
+  recompilation, matching the earlier project note about `rstest-bdd`.
 
 ## Decision Log
 
@@ -163,6 +174,19 @@ Observable outcome:
   instead of silent coercions. Rationale: the feature request requires unhappy
   path coverage, and zero-valued `k` or window sizes are genuine domain errors.
   Date/Author: 2026-03-08 / Codex.
+- Decision: make normalization itself fallible for unsupported tokens and
+  unterminated block comments or literals. Rationale: this keeps malformed
+  source handling explicit and testable, and avoids emitting misleading token
+  symbols for invalid input. Date/Author: 2026-03-10 / Codex.
+- Decision: preserve original identifier, lifetime, and literal text for `T1`,
+  but canonicalize identifiers and lifetimes by encounter order and literals by
+  category for `T2`. Rationale: this matches Type-1 versus Type-2 semantics
+  more closely than the sketch in the design doc, which was too coarse for
+  `rustc_lexer`'s token model. Date/Author: 2026-03-10 / Codex.
+- Decision: winnowing uses the rightmost minimum in each window, and when the
+  fingerprint list is shorter than the window it retains the global rightmost
+  minimum once. Rationale: this is deterministic, easy to test, and stable
+  across overlapping windows. Date/Author: 2026-03-10 / Codex.
 - Decision: the final implementation must append a distinct
   `## Implementation decisions (7.2.1)` subsection to
   `docs/whitaker-clone-detector-design.md` rather than editing the completed
@@ -171,14 +195,45 @@ Observable outcome:
 
 ## Outcomes & Retrospective
 
-Not started. On completion, this section must summarise:
+Roadmap item 7.2.1 now lands as a new library crate,
+`crates/whitaker_clones_core`, exporting a focused token-pass API:
+`normalize`, `hash_shingles`, `winnow`, `NormProfile`, `ShingleSize`,
+`WinnowWindow`, `NormalizedToken`, `NormalizedTokenKind`,
+`IdentifierSymbol`, `LiteralSymbol`, `Fingerprint`, and `TokenPassError`.
+The implementation keeps normalization fallible for malformed source, preserves
+original identifier and literal text for `T1`, canonicalizes identifiers,
+lifetimes, and literal categories for `T2`, and carries byte-accurate source
+ranges through hashing and winnowing.
 
-1. The final public API exported by `whitaker_clones_core`.
-2. The test inventory (unit and BDD scenario counts).
-3. The design decisions recorded in
-   `docs/whitaker-clone-detector-design.md`.
-4. The exact validation commands run and their log paths.
-5. Any scope cuts or follow-on work intentionally left for 7.2.2 and later.
+Validation coverage consists of 14 unit tests in
+`crates/whitaker_clones_core/src/token/tests.rs`, 6 `rstest-bdd` behavioural
+scenarios in `crates/whitaker_clones_core/tests/token_pass_behaviour.rs`, and
+3 Rustdoc examples exercised by `cargo test --doc` through `make test`.
+Behavioural coverage includes happy paths for `T1`, `T2`, shingling, and
+winnowing plus unhappy paths for invalid `k` values and unterminated literals.
+
+`docs/whitaker-clone-detector-design.md` now records the final 7.2.1 decisions
+under `## Implementation decisions (7.2.1)`, including the new crate boundary,
+the explicit `T1`/`T2` symbol strategy required by `rustc_lexer`, typed error
+handling for malformed source, the stable rolling-hash token-code scheme, and
+the rightmost-minimum winnowing rule for both overlapping and short inputs.
+`docs/roadmap.md` marks 7.2.1 done.
+
+The exact validation commands run were:
+
+1. `set -o pipefail; make fmt | tee /tmp/7-2-1-fmt.log`
+2. `set -o pipefail; make markdownlint | tee /tmp/7-2-1-markdownlint.log`
+3. `set -o pipefail; make nixie | tee /tmp/7-2-1-nixie.log`
+4. `set -o pipefail; make check-fmt | tee /tmp/7-2-1-check-fmt.log`
+5. `set -o pipefail; make lint | tee /tmp/7-2-1-lint.log`
+6. `set -o pipefail; make test | tee /tmp/7-2-1-test.log`
+
+All six commands succeeded. `make test` completed with `1104 passed, 2
+skipped`.
+
+Intentionally deferred work remains aligned with later roadmap items: MinHash
+and LSH candidate generation stay in 7.2.2, while scoring, SARIF emission, and
+CLI or lint integration remain in 7.2.3 and beyond.
 
 ## Context and orientation
 
