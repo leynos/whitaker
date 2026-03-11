@@ -19,7 +19,7 @@ Roadmap item 6.4.1 adds the analysis layer behind decomposition advice for
 take per-method metadata, turn each method into a feature vector, run a
 deterministic community-detection pass, and return structured decomposition
 suggestions such as "these parsing methods belong together" or "these
-serialisation methods should move into a dedicated module".
+serialization methods should move into a dedicated module".
 
 This is not the diagnostic-emission step. Roadmap item 6.4.2 will decide how to
 render concise notes in lint output. The deliverable for 6.4.1 is the shared,
@@ -44,7 +44,7 @@ Observable outcome:
 ## Constraints
 
 - Scope only roadmap item 6.4.1. Do not implement 6.4.2 diagnostic note
-  rendering, configuration loading, localization wiring, or SARIF output in
+  rendering, configuration loading, localisation wiring, or SARIF output in
   this change.
 - Keep the analysis engine in `common` and keep `common` free of
   `rustc_private` dependencies. The compiler-facing lint drivers remain
@@ -362,16 +362,16 @@ Create `MethodProfile` and `DecompositionContext`, plus helper functions for:
   `domain:serde::de`, `sig:AstNode`, `local:PathBuf`, and `keyword:parse`,
 - weighting features so structural/domain signals dominate keywords.
 
-Use a sparse vector representation such as `BTreeMap<String, f64>` for
-deterministic iteration and easy cosine-similarity testing.
+Use a sparse vector representation such as `BTreeMap<String, u64>` for
+deterministic iteration and integer-only cosine-similarity testing.
 
 Initial weighting heuristic:
 
-- `field:*` -> `3.0`
-- `domain:*` -> `2.5`
-- `sig:*` -> `2.0`
-- `local:*` -> `1.5`
-- `keyword:*` -> `1.0`
+- `field:*` -> `6`
+- `domain:*` -> `5`
+- `sig:*` -> `4`
+- `local:*` -> `3`
+- `keyword:*` -> `2`
 
 These weights may be tuned during implementation, but the final values must be
 recorded in the design doc and reflected in tests.
@@ -412,7 +412,7 @@ drop singleton groups
 ```
 
 This is sufficient for 6.4.1 because the requirement is community detection,
-not a specific named library or modularity optimiser. If this approach cannot
+not a specific named library or modularity optimizer. If this approach cannot
 produce stable, meaningful communities for the synthetic fixtures, escalate
 before reaching for a new dependency.
 
@@ -502,8 +502,8 @@ make test 2>&1 | tee /tmp/6-4-1-test.log
 Expected implementation-time outcomes:
 
 - the new unit tests fail before implementation and pass afterwards,
-- the new BDD scenarios fail before implementation and pass afterwards,
-- `make check-fmt`, `make lint`, and `make test` all finish successfully,
+- the new BDD scenarios fail before implementation and pass afterwards
+- `make check-fmt`, `make lint`, and `make test` all finish successfully
 - no existing brain-metric tests regress.
 
 ## Outcomes & Retrospective

@@ -310,7 +310,7 @@ This will allow reuse in future cohesion-aware lints.
 
 - **Shared `decomposition_advice` module in `common`**: decomposition analysis
   lives in `common/src/decomposition_advice/` rather than under
-  `brain_type_metrics` or `brain_trait_metrics`. The API is compiler
+  `brain_type_metrics` or `brain_trait_metrics`. The API is compiler-
   independent and reuses the same pure-library split established by roadmap
   6.2.1 and 6.3.1.
 - **Integer-weighted sparse feature vectors**: `MethodProfile` records accessed

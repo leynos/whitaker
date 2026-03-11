@@ -55,7 +55,7 @@ impl FeatureCategory {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct FeatureMetadata {
     category: FeatureCategory,
     display: String,
@@ -76,7 +76,7 @@ impl FeatureMetadata {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct MethodFeatureVector {
     method_name: String,
     weights: BTreeMap<String, u64>,
@@ -177,8 +177,11 @@ pub(crate) fn cosine_threshold_met(
         return false;
     }
 
-    let dot_squared = dot * dot;
-    min_similarity_denominator * dot_squared >= min_similarity_numerator * left_norm * right_norm
+    let dot_squared = u128::from(dot) * u128::from(dot);
+    let left_side = u128::from(min_similarity_denominator) * dot_squared;
+    let right_side =
+        u128::from(min_similarity_numerator) * u128::from(left_norm) * u128::from(right_norm);
+    left_side >= right_side
 }
 
 pub(crate) fn dot_product(left: &BTreeMap<String, u64>, right: &BTreeMap<String, u64>) -> u64 {

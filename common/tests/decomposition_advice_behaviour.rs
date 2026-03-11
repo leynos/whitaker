@@ -69,6 +69,21 @@ fn with_suggestions(
     assert_fn(suggestions)
 }
 
+#[test]
+fn csv_list_trims_values() {
+    let values: CsvList = "a, b ,c".parse().unwrap_or_else(|never| match never {});
+    assert_eq!(values.into_vec(), ["a", "b", "c"]);
+}
+
+#[test]
+fn csv_list_handles_empty_and_extra_commas() {
+    let empty: CsvList = "".parse().unwrap_or_else(|never| match never {});
+    assert!(empty.into_vec().is_empty());
+
+    let values: CsvList = ",a,,b,".parse().unwrap_or_else(|never| match never {});
+    assert_eq!(values.into_vec(), ["a", "b"]);
+}
+
 #[given("decomposition analysis for a {kind} named {name}")]
 fn given_context(
     world: &DecompositionWorld,
@@ -194,6 +209,32 @@ fn then_matching_suggestion(
             Err(format!(
                 "missing {kind} suggestion labelled {label} containing methods {:?}; actual suggestions: {:?}",
                 expected_methods, actual
+            ))
+        }
+    })
+}
+
+#[then("suggestion {label} has rationale {rationale}")]
+fn then_suggestion_has_rationale(
+    world: &DecompositionWorld,
+    label: String,
+    rationale: CsvList,
+) -> Result<(), String> {
+    let expected = rationale.into_vec();
+
+    with_suggestions(world, |suggestions| {
+        let suggestion = suggestions
+            .iter()
+            .find(|suggestion| suggestion.label() == label)
+            .ok_or_else(|| format!("missing suggestion labelled {label}"))?;
+
+        if suggestion.rationale() == expected {
+            Ok(())
+        } else {
+            Err(format!(
+                "suggestion {label} rationale mismatch: expected {:?}, found {:?}",
+                expected,
+                suggestion.rationale()
             ))
         }
     })

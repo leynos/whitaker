@@ -133,10 +133,8 @@ pub fn suggest_decomposition(
     context: &DecompositionContext,
     methods: &[MethodProfile],
 ) -> Vec<DecompositionSuggestion> {
-    let mut sorted_methods = methods.to_vec();
-    sorted_methods.sort_by(|left, right| left.name().cmp(right.name()));
-
-    let vectors: Vec<_> = sorted_methods.iter().map(build_feature_vector).collect();
+    let mut vectors: Vec<_> = methods.iter().map(build_feature_vector).collect();
+    vectors.sort();
     let communities: Vec<_> = detect_communities(&vectors)
         .into_iter()
         .filter(|community| community.len() > 1)
@@ -148,8 +146,12 @@ pub fn suggest_decomposition(
 
     let mut suggestions: Vec<_> = communities
         .iter()
-        .map(|community| build_suggestion(context, community, &vectors))
+        .filter_map(|community| build_suggestion(context, community, &vectors))
         .collect();
+
+    if suggestions.len() < 2 {
+        return Vec::new();
+    }
 
     suggestions.sort_by(|left, right| {
         right
@@ -165,12 +167,12 @@ fn build_suggestion(
     context: &DecompositionContext,
     community: &[usize],
     vectors: &[MethodFeatureVector],
-) -> DecompositionSuggestion {
+) -> Option<DecompositionSuggestion> {
     let aggregated = aggregate_features(community, vectors);
-    let label_feature = choose_label_feature(&aggregated);
+    let label_feature = choose_label_feature(&aggregated)?;
     let rationale = choose_rationale(&aggregated);
 
-    DecompositionSuggestion {
+    Some(DecompositionSuggestion {
         label: label_feature.display.clone(),
         extraction_kind: infer_extraction_kind(context.subject_kind(), label_feature.category),
         methods: community
@@ -178,7 +180,7 @@ fn build_suggestion(
             .map(|index| vectors[*index].method_name().to_owned())
             .collect(),
         rationale,
-    }
+    })
 }
 
 fn aggregate_features(
@@ -205,7 +207,7 @@ fn aggregate_features(
     aggregated.into_values().collect()
 }
 
-fn choose_label_feature(features: &[AggregatedFeature]) -> &AggregatedFeature {
+fn choose_label_feature(features: &[AggregatedFeature]) -> Option<&AggregatedFeature> {
     const LABEL_PRIORITIES: &[FeatureCategory] = &[
         FeatureCategory::Domain,
         FeatureCategory::Field,
@@ -230,10 +232,10 @@ fn choose_label_feature(features: &[AggregatedFeature]) -> &AggregatedFeature {
                 .cmp(&left.score)
                 .then_with(|| left.display.cmp(&right.display))
         });
-        return matches[0];
+        return Some(matches[0]);
     }
 
-    panic!("community must contain at least one feature");
+    None
 }
 
 fn choose_rationale(features: &[AggregatedFeature]) -> Vec<String> {

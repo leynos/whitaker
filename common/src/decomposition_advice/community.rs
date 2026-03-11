@@ -116,11 +116,16 @@ fn propagate_labels(
     max_iterations: usize,
 ) -> Vec<usize> {
     let mut labels: Vec<usize> = (0..vectors.len()).collect();
+    let active_nodes: Vec<_> = adjacency
+        .iter()
+        .enumerate()
+        .filter_map(|(node, neighbours)| (!neighbours.is_empty()).then_some(node))
+        .collect();
 
     for _ in 0..max_iterations {
         let mut changed = false;
 
-        for node in 0..vectors.len() {
+        for &node in &active_nodes {
             let Some(best_label) = best_neighbour_label(node, &labels, adjacency, vectors) else {
                 continue;
             };
@@ -151,19 +156,33 @@ fn best_neighbour_label(
     }
 
     let mut scores: BTreeMap<usize, u64> = BTreeMap::new();
+    let mut best: Option<(usize, u64)> = None;
+
     for &(neighbour, weight) in neighbours {
         let label = labels[neighbour];
-        *scores.entry(label).or_insert(0) += weight;
+        let score = scores.entry(label).or_insert(0);
+        *score += weight;
+
+        if should_replace_best(best, label, *score, vectors) {
+            best = Some((label, *score));
+        }
     }
 
-    scores
-        .into_iter()
-        .max_by(|(left_label, left_score), (right_label, right_score)| {
-            left_score.cmp(right_score).then_with(|| {
-                vectors[*right_label]
-                    .method_name()
-                    .cmp(vectors[*left_label].method_name())
-            })
-        })
-        .map(|(label, _)| label)
+    best.map(|(label, _)| label)
+}
+
+fn should_replace_best(
+    current_best: Option<(usize, u64)>,
+    candidate_label: usize,
+    candidate_score: u64,
+    vectors: &[MethodFeatureVector],
+) -> bool {
+    match current_best {
+        None => true,
+        Some((best_label, best_score)) => {
+            candidate_score > best_score
+                || (candidate_score == best_score
+                    && vectors[candidate_label].cmp(&vectors[best_label]).is_lt())
+        }
+    }
 }

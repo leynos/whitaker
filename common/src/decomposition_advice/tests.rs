@@ -1,3 +1,5 @@
+//! Unit tests covering decomposition feature extraction and clustering.
+
 use super::community::{build_similarity_edges, detect_communities};
 use super::profile::{DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind};
 use super::suggestion::{SuggestedExtractionKind, suggest_decomposition};
@@ -94,6 +96,27 @@ fn identifier_keywords_split_camel_case_and_remove_stop_words() {
 }
 
 #[test]
+fn identifier_keywords_handle_acronyms_and_mixed_case() {
+    assert_eq!(identifier_keywords("HTTPRequest"), ["http", "request"]);
+    assert_eq!(
+        identifier_keywords("XMLHttpRequest"),
+        ["xml", "http", "request"]
+    );
+}
+
+#[test]
+fn identifier_keywords_split_on_non_alphanumeric_separators() {
+    assert_eq!(identifier_keywords("build_render_tree"), ["tree"]);
+    assert_eq!(identifier_keywords("build-render-tree"), ["tree"]);
+}
+
+#[test]
+fn identifier_keywords_only_stop_words_or_empty_input_yield_empty() {
+    assert!(identifier_keywords("build_render").is_empty());
+    assert!(identifier_keywords("").is_empty());
+}
+
+#[test]
 fn feature_vector_prefixes_categories() {
     let vector = build_feature_vector(&profile(MethodInput {
         name: "state",
@@ -164,7 +187,7 @@ fn similarity_edges_include_related_methods_only() {
 fn detect_communities_is_order_invariant() {
     let fixture = parser_serde_fs_fixture();
     let mut original_vectors: Vec<_> = fixture.iter().map(build_feature_vector).collect();
-    original_vectors.sort_by(|left, right| left.method_name().cmp(right.method_name()));
+    original_vectors.sort();
 
     let reordered_fixture = [
         fixture[4].clone(),
@@ -176,7 +199,7 @@ fn detect_communities_is_order_invariant() {
     ];
     let mut reordered_vectors: Vec<_> =
         reordered_fixture.iter().map(build_feature_vector).collect();
-    reordered_vectors.sort_by(|left, right| left.method_name().cmp(right.method_name()));
+    reordered_vectors.sort();
 
     assert_eq!(
         detect_communities(&original_vectors),
@@ -298,6 +321,53 @@ fn suggest_decomposition_for_trait_returns_sub_trait_suggestions() {
 }
 
 #[test]
+fn suggest_decomposition_is_order_invariant_for_duplicate_method_names() {
+    let context = DecompositionContext::new("Importer", SubjectKind::Type);
+    let methods = vec![
+        profile(MethodInput {
+            name: "load",
+            fields: &[],
+            signature_types: &["JsonDecoder"],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "load",
+            fields: &[],
+            signature_types: &["JsonReader"],
+            local_types: &[],
+            domains: &["serde::json"],
+        }),
+        profile(MethodInput {
+            name: "load",
+            fields: &["cache"],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+        profile(MethodInput {
+            name: "load",
+            fields: &["cache"],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+    ];
+
+    let reordered = vec![
+        methods[2].clone(),
+        methods[0].clone(),
+        methods[3].clone(),
+        methods[1].clone(),
+    ];
+
+    assert_eq!(
+        suggest_decomposition(&context, &methods),
+        suggest_decomposition(&context, &reordered)
+    );
+}
+
+#[test]
 fn suggestions_drop_singleton_noise_methods() {
     let context = DecompositionContext::new("Foo", SubjectKind::Type);
     let mut methods = parser_serde_fs_fixture();
@@ -317,4 +387,41 @@ fn suggestions_drop_singleton_noise_methods() {
             .iter()
             .all(|suggestion| !suggestion.methods().contains(&String::from("run")))
     );
+}
+
+#[test]
+fn suggestions_skip_degenerate_groups_without_features() {
+    let context = DecompositionContext::new("Runner", SubjectKind::Type);
+    let methods = vec![
+        profile(MethodInput {
+            name: "build",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "make",
+            fields: &[],
+            signature_types: &[],
+            local_types: &[],
+            domains: &[],
+        }),
+        profile(MethodInput {
+            name: "load_from_disk",
+            fields: &[],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+        profile(MethodInput {
+            name: "save_to_disk",
+            fields: &[],
+            signature_types: &[],
+            local_types: &["PathBuf"],
+            domains: &["std::fs"],
+        }),
+    ];
+
+    assert!(suggest_decomposition(&context, &methods).is_empty());
 }
