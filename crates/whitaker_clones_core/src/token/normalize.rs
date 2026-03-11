@@ -146,7 +146,7 @@ fn ensure_literal_is_terminated(kind: LiteralKind, range: &Range<usize>) -> Resu
         Ok(())
     } else {
         Err(TokenPassError::UnterminatedLiteral {
-            literal_kind: literal_kind_label(kind),
+            literal_kind: literal_labels(kind).kind,
             start: range.start,
             end: range.end,
         })
@@ -169,14 +169,12 @@ fn normalize_identifier_text(
     profile: NormProfile,
     state: &mut CanonicalState,
 ) -> NormalizedTokenKind {
-    match profile {
-        NormProfile::T1 => {
-            NormalizedTokenKind::Identifier(IdentifierSymbol::Original(text.to_owned()))
-        }
-        NormProfile::T2 => NormalizedTokenKind::Identifier(IdentifierSymbol::Canonical(
-            state.identifier_index(text),
-        )),
-    }
+    normalize_symbolic_text(
+        text,
+        profile,
+        || state.identifier_index(text),
+        NormalizedTokenKind::Identifier,
+    )
 }
 
 fn normalize_lifetime(
@@ -184,21 +182,19 @@ fn normalize_lifetime(
     profile: NormProfile,
     state: &mut CanonicalState,
 ) -> NormalizedTokenKind {
-    match profile {
-        NormProfile::T1 => {
-            NormalizedTokenKind::Lifetime(IdentifierSymbol::Original(text.to_owned()))
-        }
-        NormProfile::T2 => {
-            NormalizedTokenKind::Lifetime(IdentifierSymbol::Canonical(state.lifetime_index(text)))
-        }
-    }
+    normalize_symbolic_text(
+        text,
+        profile,
+        || state.lifetime_index(text),
+        NormalizedTokenKind::Lifetime,
+    )
 }
 
 fn normalize_literal(text: &str, kind: LiteralKind, profile: NormProfile) -> NormalizedTokenKind {
     match profile {
         NormProfile::T1 => NormalizedTokenKind::Literal(LiteralSymbol::Original(text.to_owned())),
         NormProfile::T2 => {
-            NormalizedTokenKind::Literal(LiteralSymbol::Canonical(canonical_literal_label(kind)))
+            NormalizedTokenKind::Literal(LiteralSymbol::Canonical(literal_labels(kind).canonical))
         }
     }
 }
@@ -207,25 +203,51 @@ fn keyword_label(text: &str) -> Option<&'static str> {
     KEYWORDS.iter().copied().find(|keyword| *keyword == text)
 }
 
-fn canonical_literal_label(kind: LiteralKind) -> &'static str {
+struct LiteralLabels {
+    canonical: &'static str,
+    kind: &'static str,
+}
+
+fn literal_labels(kind: LiteralKind) -> LiteralLabels {
     match kind {
-        LiteralKind::Int { .. } | LiteralKind::Float { .. } => "<NUM>",
-        LiteralKind::Char { .. } => "<CHAR>",
-        LiteralKind::Byte { .. } => "<BYTE>",
-        LiteralKind::Str { .. } | LiteralKind::RawStr { .. } => "<STR>",
-        LiteralKind::ByteStr { .. } | LiteralKind::RawByteStr { .. } => "<BYTE_STR>",
+        LiteralKind::Int { .. } => LiteralLabels {
+            canonical: "<NUM>",
+            kind: "integer",
+        },
+        LiteralKind::Float { .. } => LiteralLabels {
+            canonical: "<NUM>",
+            kind: "float",
+        },
+        LiteralKind::Char { .. } => LiteralLabels {
+            canonical: "<CHAR>",
+            kind: "character",
+        },
+        LiteralKind::Byte { .. } => LiteralLabels {
+            canonical: "<BYTE>",
+            kind: "byte",
+        },
+        LiteralKind::Str { .. } | LiteralKind::RawStr { .. } => LiteralLabels {
+            canonical: "<STR>",
+            kind: "string",
+        },
+        LiteralKind::ByteStr { .. } | LiteralKind::RawByteStr { .. } => LiteralLabels {
+            canonical: "<BYTE_STR>",
+            kind: "byte string",
+        },
     }
 }
 
-fn literal_kind_label(kind: LiteralKind) -> &'static str {
-    match kind {
-        LiteralKind::Int { .. } => "integer",
-        LiteralKind::Float { .. } => "float",
-        LiteralKind::Char { .. } => "character",
-        LiteralKind::Byte { .. } => "byte",
-        LiteralKind::Str { .. } | LiteralKind::RawStr { .. } => "string",
-        LiteralKind::ByteStr { .. } | LiteralKind::RawByteStr { .. } => "byte string",
-    }
+fn normalize_symbolic_text(
+    text: &str,
+    profile: NormProfile,
+    canonical_index: impl FnOnce() -> usize,
+    wrap: fn(IdentifierSymbol) -> NormalizedTokenKind,
+) -> NormalizedTokenKind {
+    let symbol = match profile {
+        NormProfile::T1 => IdentifierSymbol::Original(text.to_owned()),
+        NormProfile::T2 => IdentifierSymbol::Canonical(canonical_index()),
+    };
+    wrap(symbol)
 }
 
 fn atom_label(kind: TokenKind) -> &'static str {
