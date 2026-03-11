@@ -182,6 +182,22 @@
 - [ ] 6.4.2. Emit concise diagnostic notes mapping clusters to extraction
   suggestions, capped for large types. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition advice.
+- [ ] 6.4.3. Use Verus to prove `cosine_threshold_met`'s cross-multiplied
+  threshold check is equivalent to `cosine >= 0.20` for non-zero norms and
+  cannot divide by zero. See
+  [brain trust lints design](brain-trust-lints-design.md) §Decomposition advice.
+- [ ] 6.4.4. Use Verus to prove `dot_product` and `norm_squared` algebraic
+  properties, including commutativity, non-negativity, and zero-result
+  behaviour when vectors have no overlapping positive features. See
+  [brain trust lints design](brain-trust-lints-design.md) §Decomposition advice.
+- [ ] 6.4.5. Use Kani to verify `build_adjacency` preserves similarity edges,
+  keeps neighbour indices in bounds, and produces symmetric adjacency lists.
+  See [brain trust lints design](brain-trust-lints-design.md) §Decomposition
+  advice.
+- [ ] 6.4.6. Use Kani to verify `propagate_labels` preserves valid label
+  indices, returns one label per input vector, and terminates within the
+  supplied iteration bound. See
+  [brain trust lints design](brain-trust-lints-design.md) §Decomposition advice.
 
 ### 6.5. SARIF output
 
