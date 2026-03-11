@@ -4,6 +4,7 @@ use super::community::{build_similarity_edges, detect_communities};
 use super::profile::{DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind};
 use super::suggestion::{SuggestedExtractionKind, suggest_decomposition};
 use super::vector::{build_feature_vector, dot_product, identifier_keywords};
+use std::str::FromStr;
 
 struct ExpectedSuggestion<'a> {
     label: &'a str,
@@ -93,6 +94,19 @@ fn parser_serde_fs_fixture() -> Vec<MethodProfile> {
 fn identifier_keywords_split_camel_case_and_remove_stop_words() {
     let keywords = identifier_keywords("buildRenderTree");
     assert_eq!(keywords, ["tree"]);
+}
+
+#[test]
+fn suggested_extraction_kind_accepts_both_sub_trait_spellings() {
+    assert_eq!(
+        SuggestedExtractionKind::from_str("sub trait"),
+        Ok(SuggestedExtractionKind::SubTrait)
+    );
+    assert_eq!(
+        SuggestedExtractionKind::from_str("sub-trait"),
+        Ok(SuggestedExtractionKind::SubTrait)
+    );
+    assert_eq!(SuggestedExtractionKind::SubTrait.to_string(), "sub-trait");
 }
 
 #[test]

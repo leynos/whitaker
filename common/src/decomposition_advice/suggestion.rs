@@ -35,7 +35,7 @@ impl std::str::FromStr for SuggestedExtractionKind {
         match s {
             "helper struct" => Ok(Self::HelperStruct),
             "module" => Ok(Self::Module),
-            "sub trait" => Ok(Self::SubTrait),
+            "sub trait" | "sub-trait" => Ok(Self::SubTrait),
             _ => Err(format!("unknown extraction kind: {s}")),
         }
     }
@@ -46,7 +46,7 @@ impl std::fmt::Display for SuggestedExtractionKind {
         f.write_str(match self {
             Self::HelperStruct => "helper struct",
             Self::Module => "module",
-            Self::SubTrait => "sub trait",
+            Self::SubTrait => "sub-trait",
         })
     }
 }
@@ -128,6 +128,28 @@ struct AggregatedFeature {
 ///
 /// Returns an empty vector when the method set does not yield at least two
 /// non-singleton communities.
+///
+/// # Examples
+///
+/// ```
+/// use common::decomposition_advice::{
+///     DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
+/// };
+///
+/// let context = DecompositionContext::new("Parser", SubjectKind::Type);
+///
+/// let mut parse_tokens = MethodProfileBuilder::new("parse_tokens");
+/// parse_tokens.record_accessed_field("grammar");
+///
+/// let mut parse_nodes = MethodProfileBuilder::new("parse_nodes");
+/// parse_nodes.record_accessed_field("grammar");
+///
+/// let methods = vec![parse_tokens.build(), parse_nodes.build()];
+///
+/// let suggestions = suggest_decomposition(&context, &methods);
+///
+/// assert!(suggestions.is_empty());
+/// ```
 #[must_use]
 pub fn suggest_decomposition(
     context: &DecompositionContext,

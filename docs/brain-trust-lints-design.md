@@ -386,23 +386,39 @@ Messages are localized via Fluent entries, using the existing Whitaker tone.
 ### Decomposition advice
 
 When a brain type or trait is detected, the lint produces decomposition advice
-based on method clustering. The analysis uses a feature vector per method built
-from:
+based on method clustering implemented in `common/src/decomposition_advice/`.
+The analysis uses one integer-weighted sparse feature vector per method,
+represented as `BTreeMap<String, u64>` with category-prefixed keys:
 
-- Accessed fields.
-- Types used in signatures or local variables.
-- External domains (for example, `serde::de` or `tokio::fs`).
-- Method name keywords (excluding common verbs like "get" or "set").
+- `field:*` with weight `6`
+- `domain:*` with weight `5`
+- `sig:*` with weight `4`
+- `local:*` with weight `3`
+- `keyword:*` with weight `2`
 
-The clustering pipeline is:
+The method metadata comes from accessed fields, signature types, local types,
+external domains, and method-name keywords. Keyword extraction lowercases
+tokens split from `snake_case`, `camelCase`, acronyms, and punctuation, then
+removes the fixed stop-word list: `build`, `create`, `do`, `get`, `handle`,
+`make`, `process`, `render`, `run`, `set`, and `update`.
 
-- Build a similarity graph using cosine similarity across feature vectors.
-- Apply community detection (for example, Louvain or Leiden) to group related
-  methods. When method counts are large, consider approximate neighbour search
-  such as Hierarchical Navigable Small Worlds (HNSW) to avoid O(n^2) cost.
-- Label clusters using common field names, domains, and keywords.
-- Generate suggestions that map clusters to likely extractions (new helper
-  struct, module, or trait).
+The shipped clustering pipeline is:
+
+- Build a similarity graph by comparing feature vectors with cosine similarity
+  using integer cross-multiplication against threshold `1/25`. The
+  implementation avoids floating-point square roots and floating-point vector
+  weights entirely.
+- Apply deterministic weighted label-propagation to group related methods.
+  Nodes are visited in lexical method-name order, neighbouring labels are
+  scored by summed edge weight, and ties break lexically.
+- Drop singleton communities and suppress suggestions unless at least two
+  non-singleton communities remain.
+- Label each surviving community using the strongest shared feature with this
+  precedence: external domain -> field -> keyword -> signature type -> local
+  type.
+- Map communities to extraction kinds with fixed rules: trait subjects produce
+  `SubTrait`, domain-led type communities produce `Module`, and all other type
+  communities produce `HelperStruct`.
 
 Example help output:
 

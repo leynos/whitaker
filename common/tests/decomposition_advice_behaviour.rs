@@ -35,7 +35,9 @@ impl std::str::FromStr for CsvList {
 #[derive(Debug, Default)]
 struct DecompositionWorld {
     context: RefCell<Option<DecompositionContext>>,
-    methods: RefCell<BTreeMap<String, MethodProfileBuilder>>,
+    methods: RefCell<BTreeMap<usize, MethodProfileBuilder>>,
+    method_ids_by_name: RefCell<BTreeMap<String, Vec<usize>>>,
+    next_method_id: RefCell<usize>,
     suggestions: RefCell<Option<Vec<DecompositionSuggestion>>>,
 }
 
@@ -44,15 +46,51 @@ fn world() -> DecompositionWorld {
     DecompositionWorld::default()
 }
 
+fn create_method_builder(world: &DecompositionWorld, method_name: &str) {
+    let mut next_method_id = world.next_method_id.borrow_mut();
+    let method_id = *next_method_id;
+    *next_method_id += 1;
+
+    world
+        .methods
+        .borrow_mut()
+        .insert(method_id, MethodProfileBuilder::new(method_name));
+    world
+        .method_ids_by_name
+        .borrow_mut()
+        .entry(method_name.to_owned())
+        .or_default()
+        .push(method_id);
+}
+
 fn with_method_builder(
     world: &DecompositionWorld,
     method_name: &str,
     update: impl FnOnce(&mut MethodProfileBuilder),
 ) {
+    let method_id = world
+        .method_ids_by_name
+        .borrow()
+        .get(method_name)
+        .and_then(|ids| ids.last().copied());
+
+    let method_id = match method_id {
+        Some(method_id) => method_id,
+        None => {
+            create_method_builder(world, method_name);
+            world
+                .method_ids_by_name
+                .borrow()
+                .get(method_name)
+                .and_then(|ids| ids.last().copied())
+                .unwrap_or_else(|| unreachable!("method id must exist after creation"))
+        }
+    };
+
     let mut methods = world.methods.borrow_mut();
-    let builder = methods
-        .entry(method_name.to_owned())
-        .or_insert_with(|| MethodProfileBuilder::new(method_name));
+    let Some(builder) = methods.get_mut(&method_id) else {
+        panic!("method id {method_id} must exist while applying updates");
+    };
     update(builder);
 }
 
@@ -84,6 +122,33 @@ fn csv_list_handles_empty_and_extra_commas() {
     assert_eq!(values.into_vec(), ["a", "b"]);
 }
 
+#[test]
+fn duplicate_method_names_use_distinct_builders() {
+    let world = DecompositionWorld::default();
+
+    create_method_builder(&world, "load");
+    create_method_builder(&world, "load");
+
+    with_method_builder(&world, "load", |builder| {
+        builder.record_external_domain("serde::json");
+    });
+
+    let builders: Vec<_> = world.methods.borrow().values().cloned().collect();
+    let profiles = builders
+        .into_iter()
+        .map(MethodProfileBuilder::build)
+        .collect::<Vec<_>>();
+
+    assert_eq!(profiles.len(), 2);
+    assert_eq!(
+        profiles
+            .iter()
+            .filter(|profile| profile.external_domains().contains("serde::json"))
+            .count(),
+        1
+    );
+}
+
 #[given("decomposition analysis for a {kind} named {name}")]
 fn given_context(
     world: &DecompositionWorld,
@@ -96,7 +161,7 @@ fn given_context(
 
 #[given("a method named {name}")]
 fn given_method(world: &DecompositionWorld, name: String) {
-    with_method_builder(world, &name, |_| {});
+    create_method_builder(world, &name);
 }
 
 #[given("method {name} accesses fields {fields}")]
