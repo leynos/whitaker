@@ -90,6 +90,14 @@ fn parser_serde_fs_fixture() -> Vec<MethodProfile> {
     ]
 }
 
+fn assert_type_decomposition_is_empty(subject: &str, methods: Vec<MethodProfile>) {
+    let context = DecompositionContext::new(subject, SubjectKind::Type);
+    assert!(
+        suggest_decomposition(&context, &methods).is_empty(),
+        "expected no decomposition suggestions for {subject}"
+    );
+}
+
 #[test]
 fn identifier_keywords_split_camel_case_and_remove_stop_words() {
     let keywords = identifier_keywords("buildRenderTree");
@@ -223,8 +231,9 @@ fn detect_communities_is_order_invariant() {
 
 #[test]
 fn suggest_decomposition_returns_empty_for_single_community() {
-    let context = DecompositionContext::new("Parser", SubjectKind::Type);
-    let methods = vec![
+    assert_type_decomposition_is_empty(
+        "Parser",
+        vec![
         profile(MethodInput {
             name: "parse_tokens",
             fields: &["grammar"],
@@ -253,9 +262,8 @@ fn suggest_decomposition_returns_empty_for_single_community() {
             local_types: &[],
             domains: &[],
         }),
-    ];
-
-    assert!(suggest_decomposition(&context, &methods).is_empty());
+        ],
+    );
 }
 
 #[test]
@@ -405,37 +413,37 @@ fn suggestions_drop_singleton_noise_methods() {
 
 #[test]
 fn suggestions_skip_degenerate_groups_without_features() {
-    let context = DecompositionContext::new("Runner", SubjectKind::Type);
-    let methods = vec![
-        profile(MethodInput {
-            name: "build",
-            fields: &[],
-            signature_types: &[],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "make",
-            fields: &[],
-            signature_types: &[],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "load_from_disk",
-            fields: &[],
-            signature_types: &[],
-            local_types: &["PathBuf"],
-            domains: &["std::fs"],
-        }),
-        profile(MethodInput {
-            name: "save_to_disk",
-            fields: &[],
-            signature_types: &[],
-            local_types: &["PathBuf"],
-            domains: &["std::fs"],
-        }),
-    ];
-
-    assert!(suggest_decomposition(&context, &methods).is_empty());
+    assert_type_decomposition_is_empty(
+        "Runner",
+        vec![
+            profile(MethodInput {
+                name: "build",
+                fields: &[],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "make",
+                fields: &[],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "load_from_disk",
+                fields: &[],
+                signature_types: &[],
+                local_types: &["PathBuf"],
+                domains: &["std::fs"],
+            }),
+            profile(MethodInput {
+                name: "save_to_disk",
+                fields: &[],
+                signature_types: &[],
+                local_types: &["PathBuf"],
+                domains: &["std::fs"],
+            }),
+        ],
+    );
 }
