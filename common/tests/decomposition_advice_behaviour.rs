@@ -83,10 +83,10 @@ fn with_method_builder(
                 .borrow()
                 .get(method_name)
                 .and_then(|ids| ids.last().copied());
-            match method_id {
-                Some(method_id) => method_id,
-                None => panic!("method id must exist after creation"),
-            }
+            let Some(method_id) = method_id else {
+                panic!("method id must exist after creation");
+            };
+            method_id
         }
     };
 
