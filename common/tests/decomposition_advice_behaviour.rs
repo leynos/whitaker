@@ -78,12 +78,15 @@ fn with_method_builder(
         Some(method_id) => method_id,
         None => {
             create_method_builder(world, method_name);
-            world
+            let method_id = world
                 .method_ids_by_name
                 .borrow()
                 .get(method_name)
-                .and_then(|ids| ids.last().copied())
-                .unwrap_or_else(|| unreachable!("method id must exist after creation"))
+                .and_then(|ids| ids.last().copied());
+            match method_id {
+                Some(method_id) => method_id,
+                None => panic!("method id must exist after creation"),
+            }
         }
     };
 

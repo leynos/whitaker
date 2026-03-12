@@ -336,7 +336,7 @@ This will allow reuse in future cohesion-aware lints.
   orchestration verbs from dominating the communities.
 - **Suggestion suppression for weak decompositions**: decomposition analysis
   returns no suggestions unless at least two non-singleton communities remain
-  after clustering. Singleton noise methods are dropped so diagnostics can
+  after clustering. Singleton noise methods are dropped, so diagnostics can
   later omit advice when no meaningful split exists.
 - **Label and extraction-kind rules**: community labels prefer external domain
   features first, then fields, keywords, signature types, and local types.

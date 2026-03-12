@@ -1,102 +1,16 @@
 //! Unit tests covering decomposition feature extraction and clustering.
 
+mod test_fixtures;
+
+use self::test_fixtures::{
+    ExpectedSuggestion, MethodInput, assert_suggestion, assert_type_decomposition_is_empty,
+    parser_serde_fs_fixture, profile,
+};
 use super::community::{build_similarity_edges, detect_communities};
-use super::profile::{DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind};
+use super::profile::{DecompositionContext, SubjectKind};
 use super::suggestion::{SuggestedExtractionKind, suggest_decomposition};
 use super::vector::{build_feature_vector, dot_product, identifier_keywords};
 use std::str::FromStr;
-
-struct ExpectedSuggestion<'a> {
-    label: &'a str,
-    extraction_kind: SuggestedExtractionKind,
-    methods: &'a [&'a str],
-}
-
-struct MethodInput<'a> {
-    name: &'a str,
-    fields: &'a [&'a str],
-    signature_types: &'a [&'a str],
-    local_types: &'a [&'a str],
-    domains: &'a [&'a str],
-}
-
-fn assert_suggestion(actual: &super::DecompositionSuggestion, expected: ExpectedSuggestion<'_>) {
-    assert_eq!(actual.label(), expected.label);
-    assert_eq!(actual.extraction_kind(), expected.extraction_kind);
-    assert_eq!(actual.methods(), expected.methods);
-}
-
-fn profile(input: MethodInput<'_>) -> MethodProfile {
-    let mut builder = MethodProfileBuilder::new(input.name);
-    for field in input.fields {
-        builder.record_accessed_field(*field);
-    }
-    for type_name in input.signature_types {
-        builder.record_signature_type(*type_name);
-    }
-    for type_name in input.local_types {
-        builder.record_local_type(*type_name);
-    }
-    for domain in input.domains {
-        builder.record_external_domain(*domain);
-    }
-    builder.build()
-}
-
-fn parser_serde_fs_fixture() -> Vec<MethodProfile> {
-    vec![
-        profile(MethodInput {
-            name: "parse_tokens",
-            fields: &["grammar", "tokens"],
-            signature_types: &["TokenStream"],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "parse_nodes",
-            fields: &["grammar", "ast"],
-            signature_types: &[],
-            local_types: &["ParseState"],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "encode_json",
-            fields: &[],
-            signature_types: &["Serializer"],
-            local_types: &[],
-            domains: &["serde::json"],
-        }),
-        profile(MethodInput {
-            name: "decode_json",
-            fields: &[],
-            signature_types: &["Deserializer"],
-            local_types: &[],
-            domains: &["serde::json"],
-        }),
-        profile(MethodInput {
-            name: "load_from_disk",
-            fields: &[],
-            signature_types: &[],
-            local_types: &["PathBuf"],
-            domains: &["std::fs"],
-        }),
-        profile(MethodInput {
-            name: "save_to_disk",
-            fields: &[],
-            signature_types: &[],
-            local_types: &["PathBuf"],
-            domains: &["std::fs"],
-        }),
-    ]
-}
-
-fn assert_type_decomposition_is_empty(subject: &str, methods: Vec<MethodProfile>) {
-    let context = DecompositionContext::new(subject, SubjectKind::Type);
-    assert!(
-        suggest_decomposition(&context, &methods).is_empty(),
-        "expected no decomposition suggestions for {subject}"
-    );
-}
 
 #[test]
 fn identifier_keywords_split_camel_case_and_remove_stop_words() {
@@ -234,34 +148,34 @@ fn suggest_decomposition_returns_empty_for_single_community() {
     assert_type_decomposition_is_empty(
         "Parser",
         vec![
-        profile(MethodInput {
-            name: "parse_tokens",
-            fields: &["grammar"],
-            signature_types: &[],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "parse_nodes",
-            fields: &["grammar"],
-            signature_types: &[],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "parse_tree",
-            fields: &["grammar"],
-            signature_types: &[],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "parse_stream",
-            fields: &["grammar"],
-            signature_types: &[],
-            local_types: &[],
-            domains: &[],
-        }),
+            profile(MethodInput {
+                name: "parse_tokens",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "parse_nodes",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "parse_tree",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
+            profile(MethodInput {
+                name: "parse_stream",
+                fields: &["grammar"],
+                signature_types: &[],
+                local_types: &[],
+                domains: &[],
+            }),
         ],
     );
 }
