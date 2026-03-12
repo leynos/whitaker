@@ -111,11 +111,21 @@ pub fn normalize(source: &str, profile: NormProfile) -> Result<Vec<NormalizedTok
                 range.clone(),
             )),
             TokenKind::RawIdent => normalized.push(NormalizedToken::new(
-                normalize_identifier_text(text, profile, &mut state),
+                normalize_symbolic_text(
+                    text,
+                    profile,
+                    || state.identifier_index(text),
+                    NormalizedTokenKind::Identifier,
+                ),
                 range.clone(),
             )),
             TokenKind::Lifetime { .. } => normalized.push(NormalizedToken::new(
-                normalize_lifetime(text, profile, &mut state),
+                normalize_symbolic_text(
+                    text,
+                    profile,
+                    || state.lifetime_index(text),
+                    NormalizedTokenKind::Lifetime,
+                ),
                 range.clone(),
             )),
             other => normalized.push(NormalizedToken::new(
@@ -160,34 +170,13 @@ fn normalize_ident(
 ) -> NormalizedTokenKind {
     match keyword_label(text) {
         Some(keyword) => NormalizedTokenKind::Atom(keyword),
-        None => normalize_identifier_text(text, profile, state),
+        None => normalize_symbolic_text(
+            text,
+            profile,
+            || state.identifier_index(text),
+            NormalizedTokenKind::Identifier,
+        ),
     }
-}
-
-fn normalize_identifier_text(
-    text: &str,
-    profile: NormProfile,
-    state: &mut CanonicalState,
-) -> NormalizedTokenKind {
-    normalize_symbolic_text(
-        text,
-        profile,
-        || state.identifier_index(text),
-        NormalizedTokenKind::Identifier,
-    )
-}
-
-fn normalize_lifetime(
-    text: &str,
-    profile: NormProfile,
-    state: &mut CanonicalState,
-) -> NormalizedTokenKind {
-    normalize_symbolic_text(
-        text,
-        profile,
-        || state.lifetime_index(text),
-        NormalizedTokenKind::Lifetime,
-    )
 }
 
 fn normalize_literal(text: &str, kind: LiteralKind, profile: NormProfile) -> NormalizedTokenKind {
