@@ -283,17 +283,17 @@ This will allow reuse in future cohesion-aware lints.
 ### Implementation decisions (6.3.2)
 
 - **"Methods" threshold counts methods only, not all items**: the "at least 20
-  methods" threshold uses `required_method_count() + default_method_count()` and
-  explicitly excludes associated types and associated consts. The
+  methods" threshold uses `required_method_count() + default_method_count()`
+  and explicitly excludes associated types and associated consts. The
   `total_item_count()` accessor includes non-method items and is not used for
   threshold comparison. This aligns with the design document's use of "methods"
   rather than "items".
 - **Evaluation in `common`, not in the lint crate**: the threshold evaluation
   function `evaluate_brain_trait()` and diagnostic formatting live in
   `common/src/brain_trait_metrics/evaluation.rs` and
-  `common/src/brain_trait_metrics/diagnostic.rs`. This keeps the evaluation logic
-  pure (no `rustc_private` dependency), independently testable, and reusable,
-  following the pattern established by `brain_type` in 6.2.2.
+  `common/src/brain_trait_metrics/diagnostic.rs`. This keeps the evaluation
+  logic pure (no `rustc_private` dependency), independently testable, and
+  reusable, following the pattern established by `brain_type` in 6.2.2.
 - **Warn is AND-based, deny is OR-based**: the warn rule fires only when total
   method count >= `methods_warn` AND default method CC sum >= `default_cc_warn`
   simultaneously. The deny rule fires when total method count >=
@@ -305,6 +305,44 @@ This will allow reuse in future cohesion-aware lints.
 - **`BrainTraitThresholds` uses a builder**: although only 3 fields (under the
   Clippy limit), a builder is used for consistency with `BrainTypeThresholds`
   and future extensibility.
+
+### Implementation decisions (6.4.1)
+
+- **Shared `decomposition_advice` module in `common`**: decomposition analysis
+  lives in `common/src/decomposition_advice/` rather than under
+  `brain_type_metrics` or `brain_trait_metrics`. The API is compiler-
+  independent and reuses the same pure-library split established by roadmap
+  6.2.1 and 6.3.1.
+- **Integer-weighted sparse feature vectors**: `MethodProfile` records accessed
+  fields, signature types, local types, and external domains as `BTreeSet`
+  values. Feature vectors are sparse `BTreeMap<String, u64>` collections with
+  category-prefixed keys and integer weights: field = 6, domain = 5, signature
+  type = 4, local type = 3, keyword = 2. Integer weights were chosen to avoid
+  workspace `float_arithmetic` lint friction while keeping deterministic
+  scoring.
+- **Cosine threshold by integer cross-multiplication**: the similarity graph
+  uses cosine similarity with a threshold of 0.20, represented as `1 / 25`.
+  Rather than computing floating-point square roots, the implementation
+  compares squared dot products using integer cross-multiplication.
+- **Deterministic weighted label propagation**: the clustering step uses a
+  deterministic weighted label-propagation pass instead of Louvain or Leiden.
+  Nodes are visited in lexical method-name order, neighbouring labels are
+  scored by summed edge weight, and ties break lexically. This satisfies the
+  community-detection requirement without adding a graph dependency.
+- **Keyword extraction and stop-word policy**: method names are split across
+  snake_case, camelCase, and punctuation boundaries, lowercased, and filtered
+  through a fixed stop-word list: `build`, `create`, `do`, `get`, `handle`,
+  `make`, `process`, `render`, `run`, `set`, and `update`. This keeps common
+  orchestration verbs from dominating the communities.
+- **Suggestion suppression for weak decompositions**: decomposition analysis
+  returns no suggestions unless at least two non-singleton communities remain
+  after clustering. Singleton noise methods are dropped, so diagnostics can
+  later omit advice when no meaningful split exists.
+- **Label and extraction-kind rules**: community labels prefer external domain
+  features first, then fields, keywords, signature types, and local types.
+  Suggested extraction kinds follow fixed rules: trait subjects produce
+  `SubTrait`; type subjects with domain-led labels produce `Module`; all other
+  type subjects produce `HelperStruct`.
 
 ## Implementation approach
 
@@ -348,23 +386,39 @@ Messages are localized via Fluent entries, using the existing Whitaker tone.
 ### Decomposition advice
 
 When a brain type or trait is detected, the lint produces decomposition advice
-based on method clustering. The analysis uses a feature vector per method built
-from:
+based on method clustering implemented in `common/src/decomposition_advice/`.
+The analysis uses one integer-weighted sparse feature vector per method,
+represented as `BTreeMap<String, u64>` with category-prefixed keys:
 
-- Accessed fields.
-- Types used in signatures or local variables.
-- External domains (for example, `serde::de` or `tokio::fs`).
-- Method name keywords (excluding common verbs like "get" or "set").
+- `field:*` with weight `6`
+- `domain:*` with weight `5`
+- `sig:*` with weight `4`
+- `local:*` with weight `3`
+- `keyword:*` with weight `2`
 
-The clustering pipeline is:
+The method metadata comes from accessed fields, signature types, local types,
+external domains, and method-name keywords. Keyword extraction lowercases
+tokens split from `snake_case`, `camelCase`, acronyms, and punctuation, then
+removes the fixed stop-word list: `build`, `create`, `do`, `get`, `handle`,
+`make`, `process`, `render`, `run`, `set`, and `update`.
 
-- Build a similarity graph using cosine similarity across feature vectors.
-- Apply community detection (for example, Louvain or Leiden) to group related
-  methods. When method counts are large, consider approximate neighbour search
-  such as Hierarchical Navigable Small Worlds (HNSW) to avoid O(n^2) cost.
-- Label clusters using common field names, domains, and keywords.
-- Generate suggestions that map clusters to likely extractions (new helper
-  struct, module, or trait).
+The shipped clustering pipeline is:
+
+- Build a similarity graph by comparing feature vectors with cosine similarity
+  using integer cross-multiplication against threshold `1/25`. The
+  implementation avoids floating-point square roots and floating-point vector
+  weights entirely.
+- Apply deterministic weighted label-propagation to group related methods.
+  Nodes are visited in lexical method-name order, neighbouring labels are
+  scored by summed edge weight, and ties break lexically.
+- Drop singleton communities and suppress suggestions unless at least two
+  non-singleton communities remain.
+- Label each surviving community using the strongest shared feature with this
+  precedence: external domain -> field -> keyword -> signature type -> local
+  type.
+- Map communities to extraction kinds with fixed rules: trait subjects produce
+  `SubTrait`, domain-led type communities produce `Module`, and all other type
+  communities produce `HelperStruct`.
 
 Example help output:
 

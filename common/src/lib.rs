@@ -7,6 +7,7 @@ pub mod brain_trait_metrics;
 pub mod brain_type_metrics;
 pub mod complexity_signal;
 pub mod context;
+pub mod decomposition_advice;
 pub mod diagnostics;
 pub mod expr;
 pub mod i18n;
@@ -38,6 +39,10 @@ pub use brain_type_metrics::{
 pub use context::{
     ContextEntry, ContextKind, in_test_like_context, in_test_like_context_with, is_in_main_fn,
     is_test_fn, is_test_fn_with,
+};
+pub use decomposition_advice::{
+    DecompositionContext, DecompositionSuggestion, MethodProfile, MethodProfileBuilder,
+    SubjectKind, SuggestedExtractionKind, suggest_decomposition,
 };
 pub use diagnostics::{Applicability, Diagnostic, DiagnosticBuilder, Suggestion, span_lint};
 pub use expr::{Expr, def_id_of_expr_callee, is_path_to, recv_is_option_or_result};
