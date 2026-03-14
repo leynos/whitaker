@@ -17,7 +17,8 @@
 use super::TraitMetrics;
 
 pub use super::diagnostic::{
-    BrainTraitDiagnostic, format_help, format_note, format_primary_message,
+    BrainTraitDiagnostic, format_decomposition_note, format_help, format_note,
+    format_primary_message,
 };
 
 #[cfg(test)]

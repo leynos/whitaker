@@ -3,6 +3,9 @@
 use super::*;
 use crate::brain_trait_metrics::TraitMetricsBuilder;
 use crate::brain_trait_metrics::evaluation::BrainTraitDisposition;
+use crate::decomposition_advice::{
+    DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
+};
 use rstest::rstest;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +141,56 @@ fn note_omits_cc_when_no_default_methods() {
     assert!(
         !format_note(&diag).contains("Default method CC"),
         "should not mention CC when no default methods",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic - decomposition note
+// ---------------------------------------------------------------------------
+
+#[rstest]
+fn decomposition_note_delegates_to_shared_renderer_for_traits() {
+    let diagnostic = build_diagnostic(DiagnosticInput {
+        name: "Transport",
+        required: 2,
+        default: 2,
+        cc_per_default: 5,
+        disposition: BrainTraitDisposition::Warn,
+    });
+    let context = DecompositionContext::new(diagnostic.trait_name(), SubjectKind::Trait);
+
+    let mut encode_request = MethodProfileBuilder::new("encode_request");
+    encode_request.record_external_domain("serde::json");
+
+    let mut decode_request = MethodProfileBuilder::new("decode_request");
+    decode_request.record_external_domain("serde::json");
+
+    let mut read_frame = MethodProfileBuilder::new("read_frame");
+    read_frame.record_external_domain("std::io");
+
+    let mut write_frame = MethodProfileBuilder::new("write_frame");
+    write_frame.record_external_domain("std::io");
+
+    let suggestions = suggest_decomposition(
+        &context,
+        &[
+            encode_request.build(),
+            decode_request.build(),
+            read_frame.build(),
+            write_frame.build(),
+        ],
+    );
+
+    assert_eq!(
+        format_decomposition_note(&diagnostic, &suggestions),
+        Some(
+            concat!(
+                "Potential decomposition for `Transport`:\n",
+                "- [serde::json] sub-trait for `decode_request`, `encode_request`\n",
+                "- [std::io] sub-trait for `read_frame`, `write_frame`",
+            )
+            .to_owned()
+        )
     );
 }
 

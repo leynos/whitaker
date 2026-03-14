@@ -16,7 +16,8 @@
 use super::TypeMetrics;
 
 pub use super::diagnostic::{
-    BrainTypeDiagnostic, format_help, format_note, format_primary_message,
+    BrainTypeDiagnostic, format_decomposition_note, format_help, format_note,
+    format_primary_message,
 };
 
 #[cfg(test)]

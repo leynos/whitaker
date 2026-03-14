@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -114,19 +114,19 @@ Observable outcome:
 
 - [x] 2026-03-13: Draft this ExecPlan and capture the current repository
   state.
-- [ ] Stage B: Add failing unit tests and BDD scenarios that define the
+- [x] Stage B: Add failing unit tests and BDD scenarios that define the
   decomposition-note rendering contract.
-- [ ] Stage C: Implement shared decomposition-note rendering in `common`.
-- [ ] Stage D: Wire brain-type and brain-trait diagnostic wrappers to the
+- [x] Stage C: Implement shared decomposition-note rendering in `common`.
+- [x] Stage D: Wire brain-type and brain-trait diagnostic wrappers to the
   shared renderer.
-- [ ] Stage E: Make tests green and refactor for readability while preserving
+- [x] Stage E: Make tests green and refactor for readability while preserving
   current metric-note and help behaviour.
-- [ ] Stage F: Record implementation decisions for 6.4.2 in
+- [x] Stage F: Record implementation decisions for 6.4.2 in
   `docs/brain-trust-lints-design.md`.
-- [ ] Stage G: Mark roadmap item 6.4.2 done.
-- [ ] Stage H: Run `make check-fmt`, `make lint`, and `make test`
+- [x] Stage G: Mark roadmap item 6.4.2 done.
+- [x] Stage H: Run `make check-fmt`, `make lint`, and `make test`
   successfully.
-- [ ] Stage I: Finalize the living sections in this document.
+- [x] Stage I: Finalize the living sections in this document.
 
 ## Surprises & Discoveries
 
@@ -147,6 +147,13 @@ Observable outcome:
 - Existing BDD coverage in `common/tests/` follows indexed `#[scenario]`
   bindings, fixture-backed world structs, and `Result`-returning step functions
   to stay compatible with Clippy's workspace denies.
+- `common::decomposition_advice::format_diagnostic_note()` fits cleanly as a
+  shared renderer, and the type/trait modules only need subject-kind wrappers
+  plus re-exports through their existing `evaluation` modules.
+- The workspace `clippy::too_many_arguments` threshold also applies to plain
+  unit-test helpers in `common/src/**/tests.rs`; helper fixtures for note
+  rendering had to use a small input struct instead of a five-parameter
+  function.
 
 ## Decision Log
 
@@ -168,6 +175,11 @@ Observable outcome:
   Rationale: 6.4.1 provides stable labels and extraction kinds, but not safe
   canonical names. Inventing names here would add product behaviour not
   required by the roadmap. Date/Author: 2026-03-13 / Codex.
+- Decision: render note bullets as `- [label] <kind> for <methods>` and cap the
+  visible list at 3 suggestions and 3 methods per suggestion. Rationale: the
+  format stays short, deterministic, and easy to migrate to Fluent while still
+  naming the extracted area and the methods that motivate it. Date/Author:
+  2026-03-14 / Codex.
 
 ## Context and orientation
 
@@ -426,5 +438,28 @@ Expected implementation-time outcomes:
 
 ## Outcomes & Retrospective
 
-Not started. This section must be completed during the implementation turn
-after the work is approved and delivered.
+Implemented roadmap 6.4.2 with a shared note renderer at
+`common/src/decomposition_advice/note.rs`, plus thin
+`format_decomposition_note()` wrappers for `brain_type` and `brain_trait`.
+Diagnostic notes now render as:
+
+```plaintext
+Potential decomposition for `Foo`:
+- [grammar] helper struct for `parse_nodes`, `parse_tokens`
+- [serde::json] module for `decode_json`, `encode_json`
+```
+
+The renderer emits no note for an empty suggestion list, caps output at 3
+suggestions and 3 method names per suggestion, and reports omissions as
+`+N more methods` and `N more areas omitted`.
+
+Validation completed with:
+
+- `make fmt`
+- `make markdownlint`
+- `make nixie`
+- `make check-fmt`
+- `make lint`
+- `make test`
+
+Final test result: `1119 passed, 2 skipped`.

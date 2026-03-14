@@ -11,6 +11,9 @@ use std::fmt::Write;
 
 use super::evaluation::BrainTypeDisposition;
 use super::{MethodMetrics, TypeMetrics};
+use crate::decomposition_advice::{
+    DecompositionContext, DecompositionSuggestion, SubjectKind, format_diagnostic_note,
+};
 
 #[cfg(test)]
 #[path = "diagnostic_tests.rs"]
@@ -244,6 +247,32 @@ pub fn format_note(diagnostic: &BrainTypeDiagnostic) -> String {
         );
     }
     note
+}
+
+/// Formats a decomposition note from precomputed community suggestions.
+///
+/// Returns `None` when there are no suggestions to render.
+///
+/// # Examples
+///
+/// ```
+/// use common::brain_type_metrics::evaluation::{
+///     BrainTypeDiagnostic, BrainTypeDisposition, format_decomposition_note,
+/// };
+/// use common::brain_type_metrics::TypeMetricsBuilder;
+///
+/// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
+/// let diagnostic = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+///
+/// assert_eq!(format_decomposition_note(&diagnostic, &[]), None);
+/// ```
+#[must_use]
+pub fn format_decomposition_note(
+    diagnostic: &BrainTypeDiagnostic,
+    suggestions: &[DecompositionSuggestion],
+) -> Option<String> {
+    let context = DecompositionContext::new(diagnostic.type_name(), SubjectKind::Type);
+    format_diagnostic_note(&context, suggestions)
 }
 
 /// Formats help text with tailored decomposition guidance.

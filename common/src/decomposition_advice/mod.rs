@@ -8,6 +8,7 @@
 //! `rustc_private` dependencies to `common`.
 
 mod community;
+mod note;
 mod profile;
 mod suggestion;
 mod vector;
@@ -15,5 +16,6 @@ mod vector;
 #[cfg(test)]
 mod tests;
 
+pub use note::format_diagnostic_note;
 pub use profile::{DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind};
 pub use suggestion::{DecompositionSuggestion, SuggestedExtractionKind, suggest_decomposition};
