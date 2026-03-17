@@ -43,7 +43,10 @@ struct TokenInput<'src> {
     profile: NormProfile,
 }
 
-fn process_token(input: TokenInput<'_>, state: &mut CanonicalState) -> Result<Option<NormalizedToken>> {
+fn process_token(
+    input: TokenInput<'_>,
+    state: &mut CanonicalState,
+) -> Result<Option<NormalizedToken>> {
     let TokenInput {
         kind,
         text,
