@@ -36,6 +36,73 @@ impl CanonicalState {
     }
 }
 
+struct TokenInput<'src> {
+    kind: TokenKind,
+    text: &'src str,
+    range: std::ops::Range<usize>,
+    profile: NormProfile,
+}
+
+fn process_token(input: TokenInput<'_>, state: &mut CanonicalState) -> Result<Option<NormalizedToken>> {
+    let TokenInput {
+        kind,
+        text,
+        range,
+        profile,
+    } = input;
+
+    match kind {
+        TokenKind::Whitespace | TokenKind::LineComment => Ok(None),
+        TokenKind::BlockComment { terminated } => {
+            if terminated {
+                Ok(None)
+            } else {
+                Err(TokenPassError::UnterminatedBlockComment {
+                    start: range.start,
+                    end: range.end,
+                })
+            }
+        }
+        TokenKind::Unknown => Err(TokenPassError::UnsupportedToken {
+            start: range.start,
+            end: range.end,
+        }),
+        TokenKind::Literal { kind, .. } => {
+            ensure_literal_is_terminated(kind, &range)?;
+            Ok(Some(NormalizedToken::new(
+                normalize_literal(text, kind, profile),
+                range,
+            )))
+        }
+        TokenKind::Ident => Ok(Some(NormalizedToken::new(
+            normalize_ident(text, profile, state),
+            range,
+        ))),
+        TokenKind::RawIdent => Ok(Some(NormalizedToken::new(
+            normalize_symbolic_text(
+                text,
+                profile,
+                || state.identifier_index(text),
+                NormalizedTokenKind::Identifier,
+            ),
+            range,
+        ))),
+        TokenKind::Lifetime { .. } => Ok(Some(NormalizedToken::new(
+            normalize_symbolic_text(
+                text,
+                profile,
+                || state.lifetime_index(text),
+                NormalizedTokenKind::Lifetime,
+            ),
+            range,
+        ))),
+        other => Ok(Some(NormalizedToken::new(
+            NormalizedTokenKind::Atom(atom_label(other)),
+            range,
+        ))),
+    }
+}
+
 /// Normalizes Rust source for the requested clone-detection profile.
 ///
 /// The returned tokens retain their original byte ranges so later stages can
@@ -68,70 +135,26 @@ pub fn normalize(source: &str, profile: NormProfile) -> Result<Vec<NormalizedTok
     let mut state = CanonicalState::default();
     let mut normalized = Vec::new();
     let mut offset = shebang_len;
-    let body = match source.get(shebang_len..) {
-        Some(body) => body,
-        None => source,
-    };
+    let body = source.get(shebang_len..).unwrap_or(source);
 
     for token in tokenize(body) {
         let end = offset + token.len;
         let range = offset..end;
-        let text = source.get(range.clone()).ok_or({
-            TokenPassError::UnsupportedToken {
+        let text = source
+            .get(range.clone())
+            .ok_or(TokenPassError::UnsupportedToken {
                 start: range.start,
                 end: range.end,
-            }
-        })?;
+            })?;
 
-        match token.kind {
-            TokenKind::Whitespace | TokenKind::LineComment => {}
-            TokenKind::BlockComment { terminated } => {
-                if !terminated {
-                    return Err(TokenPassError::UnterminatedBlockComment {
-                        start: range.start,
-                        end: range.end,
-                    });
-                }
-            }
-            TokenKind::Unknown => {
-                return Err(TokenPassError::UnsupportedToken {
-                    start: range.start,
-                    end: range.end,
-                });
-            }
-            TokenKind::Literal { kind, .. } => {
-                ensure_literal_is_terminated(kind, &range)?;
-                normalized.push(NormalizedToken::new(
-                    normalize_literal(text, kind, profile),
-                    range.clone(),
-                ));
-            }
-            TokenKind::Ident => normalized.push(NormalizedToken::new(
-                normalize_ident(text, profile, &mut state),
-                range.clone(),
-            )),
-            TokenKind::RawIdent => normalized.push(NormalizedToken::new(
-                normalize_symbolic_text(
-                    text,
-                    profile,
-                    || state.identifier_index(text),
-                    NormalizedTokenKind::Identifier,
-                ),
-                range.clone(),
-            )),
-            TokenKind::Lifetime { .. } => normalized.push(NormalizedToken::new(
-                normalize_symbolic_text(
-                    text,
-                    profile,
-                    || state.lifetime_index(text),
-                    NormalizedTokenKind::Lifetime,
-                ),
-                range.clone(),
-            )),
-            other => normalized.push(NormalizedToken::new(
-                NormalizedTokenKind::Atom(atom_label(other)),
-                range.clone(),
-            )),
+        let input = TokenInput {
+            kind: token.kind,
+            text,
+            range,
+            profile,
+        };
+        if let Some(tok) = process_token(input, &mut state)? {
+            normalized.push(tok);
         }
 
         offset = end;
