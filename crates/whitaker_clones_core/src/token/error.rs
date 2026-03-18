@@ -16,10 +16,20 @@ pub enum TokenPassError {
     ZeroWinnowWindow,
     /// The lexer emitted an unknown token that cannot be normalized.
     #[error("unsupported token at byte range {start}..{end}")]
-    UnsupportedToken { start: usize, end: usize },
+    UnsupportedToken {
+        /// Inclusive start byte.
+        start: usize,
+        /// Exclusive end byte.
+        end: usize,
+    },
     /// The source ended before a block comment was terminated.
     #[error("unterminated block comment at byte range {start}..{end}")]
-    UnterminatedBlockComment { start: usize, end: usize },
+    UnterminatedBlockComment {
+        /// Inclusive start byte.
+        start: usize,
+        /// Exclusive end byte.
+        end: usize,
+    },
     /// The source ended before a literal token was terminated.
     #[error("unterminated {literal_kind} literal at byte range {start}..{end}")]
     UnterminatedLiteral {

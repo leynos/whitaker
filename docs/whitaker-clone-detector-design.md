@@ -436,8 +436,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 5. **Winnowing tie-breaking and small-input behaviour.** Winnowing selects the
    rightmost minimum in each window. When the fingerprint list is shorter than
    or equal to the window size, it retains the global rightmost minimum once.
-   Duplicate selections across overlapping windows are suppressed by index so a
-   repeated minimum is emitted once while distinct equal-hash regions remain
+   Duplicate selections across overlapping windows are suppressed by index, so
+   a repeated minimum is emitted once while distinct equal-hash regions remain
    distinguishable.
 
 ## Minimal code skeletons (selected)

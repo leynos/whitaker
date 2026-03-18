@@ -197,19 +197,18 @@ Observable outcome:
 ## Outcomes & Retrospective
 
 Roadmap item 7.2.1 now lands as a new library crate,
-`crates/whitaker_clones_core`, exporting a focused token-pass API:
-`normalize`, `hash_shingles`, `winnow`, `NormProfile`, `ShingleSize`,
-`WinnowWindow`, `NormalizedToken`, `NormalizedTokenKind`,
-`IdentifierSymbol`, `LiteralSymbol`, `Fingerprint`, and `TokenPassError`.
-The implementation keeps normalization fallible for malformed source, preserves
-original identifier and literal text for `T1`, canonicalizes identifiers,
-lifetimes, and literal categories for `T2`, and carries byte-accurate source
-ranges through hashing and winnowing.
+`crates/whitaker_clones_core`, exporting a focused token-pass API: `normalize`,
+`hash_shingles`, `winnow`, `NormProfile`, `ShingleSize`, `WinnowWindow`,
+`NormalizedToken`, `NormalizedTokenKind`, `IdentifierSymbol`, `LiteralSymbol`,
+`Fingerprint`, and `TokenPassError`. The implementation keeps normalization
+fallible for malformed source, preserves original identifier and literal text
+for `T1`, canonicalizes identifiers, lifetimes, and literal categories for
+`T2`, and carries byte-accurate source ranges through hashing and winnowing.
 
 Validation coverage consists of 14 unit tests in
 `crates/whitaker_clones_core/src/token/tests.rs`, 6 `rstest-bdd` behavioural
-scenarios in `crates/whitaker_clones_core/tests/token_pass_behaviour.rs`, and
-3 Rustdoc examples exercised by `cargo test --doc` through `make test`.
+scenarios in `crates/whitaker_clones_core/tests/token_pass_behaviour.rs`, and 3
+Rustdoc examples exercised by `cargo test --doc` through `make test`.
 Behavioural coverage includes happy paths for `T1`, `T2`, shingling, and
 winnowing plus unhappy paths for invalid `k` values and unterminated literals.
 
@@ -229,8 +228,7 @@ The exact validation commands run were:
 5. `set -o pipefail; make lint | tee /tmp/7-2-1-lint.log`
 6. `set -o pipefail; make test | tee /tmp/7-2-1-test.log`
 
-All six commands succeeded. `make test` completed with `1104 passed, 2
-skipped`.
+All six commands succeeded. `make test` completed with `1104 passed, 2 skipped`.
 
 Intentionally deferred work remains aligned with later roadmap items: MinHash
 and LSH candidate generation stay in 7.2.2, while scoring, SARIF emission, and
@@ -317,12 +315,12 @@ pub fn normalize(source: &str, profile: NormProfile) -> Vec<NormalizedToken>;
 pub fn hash_shingles(
     tokens: &[NormalizedToken],
     k: ShingleSize,
-) -> Result<Vec<Fingerprint>, TokenPassError>;
+) -> Vec<Fingerprint>;
 
 pub fn winnow(
     fingerprints: &[Fingerprint],
     window: WinnowWindow,
-) -> Result<Vec<Fingerprint>, TokenPassError>;
+) -> Vec<Fingerprint>;
 ```
 
 The exact names may change during implementation, but the API must preserve
@@ -332,6 +330,10 @@ three properties:
 2. invalid parameters are rejected with typed errors;
 3. later stages can consume retained fingerprints without knowing about the
    lexer internals.
+
+The shipped implementation keeps parameter validation on the `ShingleSize` and
+`WinnowWindow` constructors, so `hash_shingles` and `winnow` return `Vec<_>`
+directly once callers hold validated inputs.
 
 ### Stage C: Write failing tests first
 

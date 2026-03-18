@@ -153,9 +153,9 @@ download the correct archive.
 
 - Decision: Implement archive packaging in Rust (a new module
   `installer/src/installer_packaging.rs`) rather than in shell within the
-  workflow YAML.
-  Rationale: Implementing in Rust enables unit testing and BDD testing of the
-  archive structure, naming conventions, and format selection logic. Shell-based packaging in YAML is untestable locally and fragile. The
+  workflow YAML. Rationale: Implementing in Rust enables unit testing and BDD
+  testing of the archive structure, naming conventions, and format selection
+  logic. Shell-based packaging in YAML is untestable locally and fragile. The
   existing `artefact::packaging` module and `whitaker-package-lints` binary
   establish a clear precedent for Rust-based packaging in this project.
   Date/Author: 2026-03-01 / plan author.
@@ -185,9 +185,9 @@ download the correct archive.
   re-running failed releases. Date/Author: 2026-03-01 / plan author.
 
 - Decision: Add `flate2` (gzip) and `zip` as workspace dependencies for
-  `.tgz` and `.zip` archive creation, respectively.
-  Rationale: `flate2` is already a transitive dependency. `zip` is needed for
-  the Windows target. Both are well-maintained, widely used crates. The `tar` crate is already a direct
+  `.tgz` and `.zip` archive creation, respectively. Rationale: `flate2` is
+  already a transitive dependency. `zip` is needed for the Windows target. Both
+  are well-maintained, widely used crates. The `tar` crate is already a direct
   dependency. No alternative avoids both crates while satisfying the
   requirement for both `.tgz` and `.zip` formats. Date/Author: 2026-03-01 /
   plan author.

@@ -4,7 +4,9 @@ use rstest::rstest;
 
 use super::{
     Fingerprint, IdentifierSymbol, LiteralSymbol, NormProfile, NormalizedTokenKind, ShingleSize,
-    TokenPassError, WinnowWindow, hash_shingles, normalize, winnow,
+    TokenPassError, WinnowWindow,
+    fingerprint::{FNV_OFFSET_BASIS, FNV_PRIME, RABIN_KARP_BASE},
+    hash_shingles, normalize, winnow,
 };
 
 fn labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassError> {
@@ -14,6 +16,21 @@ fn labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassEr
             .map(|token| token.kind.to_string())
             .collect()
     })
+}
+
+fn literal_symbols(source: &str, profile: NormProfile) -> Vec<LiteralSymbol> {
+    normalize(source, profile)
+        .expect("literal normalization should succeed")
+        .into_iter()
+        .filter_map(|token| match token.kind {
+            NormalizedTokenKind::Literal(symbol) => Some(symbol),
+            _ => None,
+        })
+        .collect()
+}
+
+fn token_labels(tokens: &[super::NormalizedToken]) -> Vec<String> {
+    tokens.iter().map(|token| token.kind.to_string()).collect()
 }
 
 #[test]
@@ -95,16 +112,25 @@ fn rolling_hash_matches_naive_recomputation() {
     let width = ShingleSize::try_from(4).expect("validated size");
     let rolling = hash_shingles(&tokens, width);
 
+    // Mirror the production constants deliberately so the test cross-checks the
+    // rolling implementation against an equivalent naive recomputation.
     let expected = tokens
         .windows(width.get())
         .map(|window| {
             Fingerprint::new(
                 window.iter().fold(0_u64, |hash, token| {
-                    let mut value = 0xcbf2_9ce4_8422_2325_u64;
+                    let mut value = FNV_OFFSET_BASIS;
+                    value = value.wrapping_mul(FNV_PRIME)
+                        ^ u64::from(match token.kind {
+                            NormalizedTokenKind::Atom(_) => b'a',
+                            NormalizedTokenKind::Identifier(_) => b'i',
+                            NormalizedTokenKind::Lifetime(_) => b'l',
+                            NormalizedTokenKind::Literal(_) => b'v',
+                        });
                     for byte in token.kind.to_string().bytes() {
-                        value = value.wrapping_mul(0x0000_0100_0000_01b3) ^ u64::from(byte);
+                        value = value.wrapping_mul(FNV_PRIME) ^ u64::from(byte);
                     }
-                    hash.wrapping_mul(1_000_003).wrapping_add(value)
+                    hash.wrapping_mul(RABIN_KARP_BASE).wrapping_add(value)
                 }),
                 window
                     .first()
@@ -193,18 +219,21 @@ fn normalized_kinds_are_readable() {
 
 #[test]
 fn shebang_is_stripped_equivalently_to_shebang_free_source() {
-    let with_shebang = normalize(
-        "#!/usr/bin/env rustc\nfn main() { let x = 1; }",
-        NormProfile::T1,
-    )
-    .expect("normalization with shebang should succeed");
+    let source_with_shebang = "#!/usr/bin/env rustc\nfn main() { let x = 1; }";
+    let with_shebang = normalize(source_with_shebang, NormProfile::T1)
+        .expect("normalization with shebang should succeed");
 
     let without_shebang =
         normalize("fn main() { let x = 1; }", NormProfile::T1).expect("shebang-free source");
 
     assert_eq!(
-        with_shebang, without_shebang,
-        "shebang should be fully stripped from the token stream"
+        token_labels(&with_shebang),
+        token_labels(&without_shebang),
+        "shebang should not affect the normalized token kinds"
+    );
+    assert_eq!(
+        with_shebang[0].range.start,
+        source_with_shebang.find("fn").expect("fn present")
     );
 }
 
@@ -216,14 +245,16 @@ fn raw_ident_normalizes_like_regular_ident_in_t1_and_t2() {
     let t1_raw = normalize(src_raw, NormProfile::T1).expect("T1 raw ident");
     let t1_plain = normalize(src_plain, NormProfile::T1).expect("T1 plain ident");
     assert_eq!(
-        t1_raw, t1_plain,
+        token_labels(&t1_raw),
+        token_labels(&t1_plain),
         "raw identifiers should normalize to the same token stream as plain identifiers in T1"
     );
 
     let t2_raw = normalize(src_raw, NormProfile::T2).expect("T2 raw ident");
     let t2_plain = normalize(src_plain, NormProfile::T2).expect("T2 plain ident");
     assert_eq!(
-        t2_raw, t2_plain,
+        token_labels(&t2_raw),
+        token_labels(&t2_plain),
         "raw identifiers should normalize to the same token stream as plain identifiers in T2"
     );
 }
@@ -233,70 +264,55 @@ fn raw_ident_keyword_is_treated_as_identifier_not_keyword() {
     let src = "fn main() { let r#match = 1; let x = r#match + 1; }";
     let normalized = normalize(src, NormProfile::T1).expect("raw keyword ident");
 
-    let mut seen_id_symbol = None;
-    let mut occurrences = 0_usize;
+    let match_occurrences = normalized
+        .iter()
+        .filter(|token| {
+            matches!(
+                &token.kind,
+                NormalizedTokenKind::Identifier(IdentifierSymbol::Original(symbol))
+                    if symbol == "match"
+            )
+        })
+        .count();
 
-    for token in &normalized {
-        if let NormalizedTokenKind::Identifier(sym) = &token.kind {
-            match seen_id_symbol {
-                None => {
-                    seen_id_symbol = Some(sym.clone());
-                    occurrences += 1;
-                }
-                Some(ref s) if s == sym => {
-                    occurrences += 1;
-                }
-                _ => {}
-            }
-        }
-    }
-
-    assert!(
-        occurrences >= 2,
-        "expected at least two occurrences of the same identifier symbol for `r#match`"
+    assert_eq!(
+        match_occurrences, 2,
+        "expected two identifier occurrences for normalized `r#match`"
     );
 }
 
-#[test]
-fn raw_string_literal_is_terminated_and_canonicalized() {
-    let src = r#"fn main() { let _ = r"foo"; let _ = r"foo"; }"#;
-    let normalized = normalize(src, NormProfile::T1).expect("raw string normalization");
-
-    let mut literal_syms = Vec::new();
-    for token in &normalized {
-        if let NormalizedTokenKind::Literal(sym) = &token.kind {
-            literal_syms.push(sym.clone());
-        }
-    }
+#[rstest]
+#[case(
+    r#"fn main() { let _ = r"foo"; let _ = r"foo"; }"#,
+    "equal raw string literals should canonicalize to the same symbol"
+)]
+#[case(
+    r#"fn main() { let _ = br"foo"; let _ = br"foo"; }"#,
+    "equal raw byte string literals should canonicalize to the same symbol"
+)]
+fn literal_variants_are_terminated_and_canonicalized(
+    #[case] source: &str,
+    #[case] assertion_message: &str,
+) {
+    let literal_syms = literal_symbols(source, NormProfile::T1);
 
     assert!(
         literal_syms.len() >= 2,
-        "expected at least two literal tokens for the two raw string literals"
+        "expected at least two literal tokens for the repeated literal pair"
     );
-    assert_eq!(
-        literal_syms[0], literal_syms[1],
-        "equal raw string literals should canonicalize to the same symbol"
-    );
+    assert_eq!(literal_syms[0], literal_syms[1], "{assertion_message}");
 }
 
 #[test]
-fn raw_byte_string_literal_is_terminated_and_canonicalized() {
-    let src = r#"fn main() { let _ = br"foo"; let _ = br"foo"; }"#;
-    let normalized = normalize(src, NormProfile::T1).expect("raw byte string normalization");
+fn weak_keywords_normalize_as_atoms() {
+    let labels = labels(
+        "fn main() { macro_rules! demo { () => {} } let _ = raw + safe + gen; }",
+        NormProfile::T1,
+    )
+    .expect("normalization should succeed");
 
-    let mut literal_syms = Vec::new();
-    for token in &normalized {
-        if let NormalizedTokenKind::Literal(sym) = &token.kind {
-            literal_syms.push(sym.clone());
-        }
-    }
-
-    assert!(
-        literal_syms.len() >= 2,
-        "expected at least two literal tokens for the two raw byte string literals"
-    );
-    assert_eq!(
-        literal_syms[0], literal_syms[1],
-        "equal raw byte string literals should canonicalize to the same symbol"
-    );
+    assert!(labels.iter().any(|label| label == "macro_rules"));
+    assert!(labels.iter().any(|label| label == "raw"));
+    assert!(labels.iter().any(|label| label == "safe"));
+    assert!(labels.iter().any(|label| label == "gen"));
 }

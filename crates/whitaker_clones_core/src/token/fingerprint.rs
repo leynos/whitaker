@@ -2,9 +2,9 @@
 
 use super::types::{Fingerprint, NormalizedToken, ShingleSize, WinnowWindow};
 
-const RABIN_KARP_BASE: u64 = 1_000_003;
-const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+pub(super) const RABIN_KARP_BASE: u64 = 1_000_003;
+pub(super) const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+pub(super) const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// Builds Rabin-Karp fingerprints for all `k`-sized normalized token windows.
 ///
@@ -45,15 +45,24 @@ pub fn hash_shingles(tokens: &[NormalizedToken], k: ShingleSize) -> Vec<Fingerpr
     ));
 
     for start in 1..=(tokens.len() - width) {
-        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "bounds pre-validated by loop range"
+        )]
         let outgoing = codes[start - 1];
-        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "bounds pre-validated by loop range"
+        )]
         let incoming = codes[start + width - 1];
         rolling = rolling
             .wrapping_sub(outgoing.wrapping_mul(highest_power))
             .wrapping_mul(RABIN_KARP_BASE)
             .wrapping_add(incoming);
-        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "bounds pre-validated by loop range"
+        )]
         hashes.push(Fingerprint::new(
             rolling,
             tokens[start].range.start..tokens[start + width - 1].range.end,
@@ -102,10 +111,16 @@ pub fn winnow(fingerprints: &[Fingerprint], window: WinnowWindow) -> Vec<Fingerp
 
     for start in 0..=(fingerprints.len() - width) {
         let end = start + width;
-        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "bounds pre-validated by loop range"
+        )]
         let index = start + rightmost_minimum_index(&fingerprints[start..end]);
         if last_index != Some(index) {
-            #[expect(clippy::indexing_slicing, reason = "index derived from valid window slice")]
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "index derived from valid window slice"
+            )]
             retained.push(fingerprints[index].clone());
             last_index = Some(index);
         }

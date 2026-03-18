@@ -11,11 +11,62 @@ use super::{
 };
 
 const KEYWORDS: &[&str] = &[
-    "Self", "abstract", "as", "async", "await", "become", "box", "break", "const", "continue",
-    "crate", "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if",
-    "impl", "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub",
-    "ref", "return", "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
-    "union", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
+    "Self",
+    "abstract",
+    "as",
+    "async",
+    "await",
+    "become",
+    "box",
+    "break",
+    "const",
+    "continue",
+    "crate",
+    "do",
+    "dyn",
+    "else",
+    "enum",
+    "extern",
+    "false",
+    "final",
+    "fn",
+    "for",
+    "gen",
+    "if",
+    "impl",
+    "in",
+    "let",
+    "loop",
+    "macro",
+    "match",
+    "mod",
+    "move",
+    "mut",
+    "override",
+    "priv",
+    "pub",
+    "ref",
+    "return",
+    "self",
+    "static",
+    "struct",
+    "super",
+    "trait",
+    "true",
+    "try",
+    "type",
+    "typeof",
+    "union",
+    "unsafe",
+    "unsized",
+    "use",
+    "virtual",
+    "where",
+    "while",
+    "yield",
+    "macro_rules",
+    "raw",
+    "safe",
 ];
 
 #[derive(Default)]
@@ -83,9 +134,9 @@ fn process_token(
         ))),
         TokenKind::RawIdent => Ok(Some(NormalizedToken::new(
             normalize_symbolic_text(
-                text,
+                raw_identifier_text(text),
                 profile,
-                || state.identifier_index(text),
+                || state.identifier_index(raw_identifier_text(text)),
                 NormalizedTokenKind::Identifier,
             ),
             range,
@@ -214,6 +265,8 @@ fn normalize_literal(text: &str, kind: LiteralKind, profile: NormProfile) -> Nor
     }
 }
 
+/// A flat slice keeps keyword lookup dependency-free; 57 entries are cheap to
+/// scan and avoid pulling in a perfect-hash crate for an unprofiled path.
 fn keyword_label(text: &str) -> Option<&'static str> {
     KEYWORDS.iter().copied().find(|keyword| *keyword == text)
 }
@@ -263,6 +316,10 @@ fn normalize_symbolic_text(
         NormProfile::T2 => IdentifierSymbol::Canonical(canonical_index()),
     };
     wrap(symbol)
+}
+
+fn raw_identifier_text(text: &str) -> &str {
+    text.strip_prefix("r#").unwrap_or(text)
 }
 
 fn atom_label(kind: TokenKind) -> &'static str {

@@ -314,8 +314,10 @@ Contents:
    Constructor: `new(&TraitMetrics, BrainTraitDisposition) -> Self`. Accessors
    for all fields, plus derived `total_method_count() -> usize`.
 5. `format_primary_message(&BrainTraitDiagnostic) -> String`:
-   Format: `` `{name}` has {N} methods ({R} required, {D} default) with default method complexity CC={CC}.``
-   Omit the CC clause when `default_method_cc_sum == 0`.
+   Format:
+   - `` `{name}` has {N} methods ({R} required, {D} default) with default
+     method complexity CC={CC}.``
+   - Omit the CC clause when `default_method_cc_sum == 0`.
 6. `format_note(&BrainTraitDiagnostic) -> String`:
    - Always mentions total method count as interface size.
    - Mentions default method CC sum when non-zero.
@@ -421,8 +423,8 @@ Feature: Brain trait threshold evaluation
 
 **`common/tests/brain_trait_evaluation_behaviour.rs`** (~230 lines):
 
-World struct `EvaluationWorld` with `RefCell`/`Cell` fields include `trait_name`,
-`required_count`, `default_count`, `associated_type_count`,
+World struct `EvaluationWorld` with `RefCell`/`Cell` fields include
+`trait_name`, `required_count`, `default_count`, `associated_type_count`,
 `associated_const_count`, `default_cc_sum`, `thresholds`, `built_metrics`,
 `disposition`, `primary_message`.
 

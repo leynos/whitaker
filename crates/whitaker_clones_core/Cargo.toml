@@ -20,7 +20,3 @@ rstest-bdd-macros = { workspace = true }
 
 [lints]
 workspace = true
-
-[lints.clippy]
-expect_used = "deny"
-unwrap_used = "deny"
