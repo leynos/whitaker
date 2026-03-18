@@ -10,8 +10,10 @@ Feature: Token-pass normalization and fingerprinting
 
   Scenario: Type-2 normalization matches renamed functions
     Given the source snippet renamed_function_a
+    And the comparison source snippet renamed_function_b
     And the profile is T2
-    When the source is normalized
+    When both sources are normalized
+    Then the normalized labels match exactly
     Then the normalized labels are fn <ID_0> ( <ID_1> : <ID_2> ) { <ID_1> + <NUM> }
 
   Scenario: Exact k tokens produce one fingerprint with a stable span

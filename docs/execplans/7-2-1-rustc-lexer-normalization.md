@@ -205,12 +205,12 @@ fallible for malformed source, preserves original identifier and literal text
 for `T1`, canonicalizes identifiers, lifetimes, and literal categories for
 `T2`, and carries byte-accurate source ranges through hashing and winnowing.
 
-Validation coverage consists of 14 unit tests in
-`crates/whitaker_clones_core/src/token/tests.rs`, 6 `rstest-bdd` behavioural
-scenarios in `crates/whitaker_clones_core/tests/token_pass_behaviour.rs`, and 3
-Rustdoc examples exercised by `cargo test --doc` through `make test`.
-Behavioural coverage includes happy paths for `T1`, `T2`, shingling, and
-winnowing plus unhappy paths for invalid `k` values and unterminated literals.
+Validation coverage consists of unit tests in
+`crates/whitaker_clones_core/src/token/tests.rs`, behavioural scenarios in
+`crates/whitaker_clones_core/tests/token_pass_behaviour.rs`, and Rustdoc
+examples exercised by `cargo test --doc` through `make test`. The behavioural
+coverage includes happy paths for `T1`, `T2`, shingling, and winnowing plus
+unhappy paths for invalid `k` values and unterminated literals.
 
 `docs/whitaker-clone-detector-design.md` now records the final 7.2.1 decisions
 under `## Implementation decisions (7.2.1)`, including the new crate boundary,

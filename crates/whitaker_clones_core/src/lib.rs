@@ -1,4 +1,4 @@
-//! Token and abstract syntax tree building blocks for Whitaker clone detection.
+//! Token building blocks for Whitaker clone detection.
 //!
 //! This crate hosts the pure-library algorithms that underpin Whitaker's clone
 //! detector. Roadmap item 7.2.1 introduces the token pipeline:

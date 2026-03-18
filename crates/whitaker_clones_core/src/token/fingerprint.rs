@@ -141,6 +141,8 @@ fn stable_token_code(token: &NormalizedToken) -> u64 {
     let mut hash = FNV_OFFSET_BASIS;
 
     hash = hash_byte(hash, token_kind_tag(token));
+    // Formatting through `Display` keeps the token-code scheme aligned with the
+    // public labels; profile before replacing this with a more bespoke path.
     for byte in token.kind.to_string().bytes() {
         hash = hash_byte(hash, byte);
     }
@@ -163,7 +165,7 @@ fn hash_byte(current: u64, byte: u8) -> u64 {
 
 /// Returns the index of the rightmost minimum hash in the window.
 ///
-/// # Safety
+/// # Panics
 ///
 /// The `window` slice must be non-empty. Calling this function with an empty
 /// slice will cause out-of-bounds access.

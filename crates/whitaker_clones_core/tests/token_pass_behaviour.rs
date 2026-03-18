@@ -15,8 +15,10 @@ use whitaker_clones_core::{
 #[derive(Debug, Default)]
 struct TokenPassWorld {
     source: RefCell<String>,
+    comparison_source: RefCell<String>,
     profile: RefCell<NormProfile>,
     normalized_labels: RefCell<Vec<String>>,
+    comparison_labels: RefCell<Vec<String>>,
     normalization_error: RefCell<Option<TokenPassError>>,
     fingerprints: RefCell<Vec<Fingerprint>>,
     retained: RefCell<Vec<Fingerprint>>,
@@ -40,6 +42,15 @@ fn with_retained(world: &TokenPassWorld, assert_fn: impl FnOnce(&[Fingerprint]))
     assert_fn(&retained);
 }
 
+fn normalize_labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassError> {
+    normalize(source, profile).map(|tokens| {
+        tokens
+            .into_iter()
+            .map(|token| token.kind.to_string())
+            .collect()
+    })
+}
+
 #[given("the source snippet {name}")]
 fn given_source(world: &TokenPassWorld, name: String) {
     let source = match name.as_str() {
@@ -52,6 +63,20 @@ fn given_source(world: &TokenPassWorld, name: String) {
     };
 
     *world.source.borrow_mut() = source.to_owned();
+}
+
+#[given("the comparison source snippet {name}")]
+fn given_comparison_source(world: &TokenPassWorld, name: String) {
+    let source = match name.as_str() {
+        "commented_function" => "fn demo(x: i32) { /* note */ x + 1 }",
+        "renamed_function_a" => "fn alpha(total: i32) { total + 1 }",
+        "renamed_function_b" => "fn beta(count: i32) { count + 9 }",
+        "short_function" => "fn tiny() {}",
+        "unterminated_string" => "let value = \"open",
+        other => panic!("unknown comparison source snippet: {other}"),
+    };
+
+    *world.comparison_source.borrow_mut() = source.to_owned();
 }
 
 #[given("the profile is {profile}")]
@@ -96,16 +121,37 @@ fn given_known_sequence(world: &TokenPassWorld, name: String) {
 
 #[when("the source is normalized")]
 fn when_source_is_normalized(world: &TokenPassWorld) {
-    match normalize(&world.source.borrow(), *world.profile.borrow()) {
+    match normalize_labels(&world.source.borrow(), *world.profile.borrow()) {
         Ok(tokens) => {
-            *world.normalized_labels.borrow_mut() = tokens
-                .into_iter()
-                .map(|token| token.kind.to_string())
-                .collect();
+            *world.normalized_labels.borrow_mut() = tokens;
             *world.normalization_error.borrow_mut() = None;
         }
         Err(error) => {
             world.normalized_labels.borrow_mut().clear();
+            *world.normalization_error.borrow_mut() = Some(error);
+        }
+    }
+}
+
+#[when("both sources are normalized")]
+fn when_both_sources_are_normalized(world: &TokenPassWorld) {
+    match normalize_labels(&world.source.borrow(), *world.profile.borrow()) {
+        Ok(tokens) => {
+            *world.normalized_labels.borrow_mut() = tokens;
+            *world.normalization_error.borrow_mut() = None;
+        }
+        Err(error) => {
+            world.normalized_labels.borrow_mut().clear();
+            world.comparison_labels.borrow_mut().clear();
+            *world.normalization_error.borrow_mut() = Some(error);
+            return;
+        }
+    }
+
+    match normalize_labels(&world.comparison_source.borrow(), *world.profile.borrow()) {
+        Ok(tokens) => *world.comparison_labels.borrow_mut() = tokens,
+        Err(error) => {
+            world.comparison_labels.borrow_mut().clear();
             *world.normalization_error.borrow_mut() = Some(error);
         }
     }
@@ -142,6 +188,15 @@ fn then_normalized_labels_are(world: &TokenPassWorld, labels: String) {
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
     assert_eq!(*world.normalized_labels.borrow(), expected);
+}
+
+#[then("the normalized labels match exactly")]
+fn then_normalized_labels_match_exactly(world: &TokenPassWorld) {
+    assert_eq!(
+        *world.normalized_labels.borrow(),
+        *world.comparison_labels.borrow(),
+        "both sources should normalize to identical Type-2 labels"
+    );
 }
 
 #[then("the fingerprint count is {count}")]
