@@ -38,18 +38,22 @@ pub fn hash_shingles(tokens: &[NormalizedToken], k: ShingleSize) -> Vec<Fingerpr
     for code in codes.iter().take(width) {
         rolling = rolling.wrapping_mul(RABIN_KARP_BASE).wrapping_add(*code);
     }
+    #[expect(clippy::indexing_slicing, reason = "bounds pre-validated at line 29")]
     hashes.push(Fingerprint::new(
         rolling,
         tokens[0].range.start..tokens[width - 1].range.end,
     ));
 
     for start in 1..=(tokens.len() - width) {
+        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
         let outgoing = codes[start - 1];
+        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
         let incoming = codes[start + width - 1];
         rolling = rolling
             .wrapping_sub(outgoing.wrapping_mul(highest_power))
             .wrapping_mul(RABIN_KARP_BASE)
             .wrapping_add(incoming);
+        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
         hashes.push(Fingerprint::new(
             rolling,
             tokens[start].range.start..tokens[start + width - 1].range.end,
@@ -89,6 +93,7 @@ pub fn winnow(fingerprints: &[Fingerprint], window: WinnowWindow) -> Vec<Fingerp
 
     let width = window.get();
     if fingerprints.len() <= width {
+        #[expect(clippy::indexing_slicing, reason = "bounds pre-checked at line 86")]
         return vec![fingerprints[rightmost_minimum_index(fingerprints)].clone()];
     }
 
@@ -97,8 +102,10 @@ pub fn winnow(fingerprints: &[Fingerprint], window: WinnowWindow) -> Vec<Fingerp
 
     for start in 0..=(fingerprints.len() - width) {
         let end = start + width;
+        #[expect(clippy::indexing_slicing, reason = "bounds pre-validated by loop range")]
         let index = start + rightmost_minimum_index(&fingerprints[start..end]);
         if last_index != Some(index) {
+            #[expect(clippy::indexing_slicing, reason = "index derived from valid window slice")]
             retained.push(fingerprints[index].clone());
             last_index = Some(index);
         }
@@ -139,10 +146,18 @@ fn hash_byte(current: u64, byte: u8) -> u64 {
     current.wrapping_mul(FNV_PRIME) ^ u64::from(byte)
 }
 
+/// Returns the index of the rightmost minimum hash in the window.
+///
+/// # Safety
+///
+/// The `window` slice must be non-empty. Calling this function with an empty
+/// slice will cause out-of-bounds access.
 fn rightmost_minimum_index(window: &[Fingerprint]) -> usize {
+    debug_assert!(!window.is_empty(), "window must be non-empty");
     let mut best_index = 0_usize;
 
     for (index, fingerprint) in window.iter().enumerate().skip(1) {
+        #[expect(clippy::indexing_slicing, reason = "best_index always < window.len()")]
         let best = &window[best_index];
         if fingerprint.hash <= best.hash {
             best_index = index;

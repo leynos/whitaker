@@ -114,7 +114,7 @@ fn when_source_is_normalized(world: &TokenPassWorld) {
 #[when("fingerprints are generated")]
 fn when_fingerprints_are_generated(world: &TokenPassWorld) {
     let Some(k) = *world.k.borrow() else {
-        return;
+        panic!("shingle size must be set before generating fingerprints");
     };
     match normalize(&world.source.borrow(), *world.profile.borrow()) {
         Ok(tokens) => {
@@ -130,7 +130,7 @@ fn when_fingerprints_are_generated(world: &TokenPassWorld) {
 #[when("fingerprints are winnowed")]
 fn when_fingerprints_are_winnowed(world: &TokenPassWorld) {
     let Some(window) = *world.window.borrow() else {
-        return;
+        panic!("winnow window must be set before winnowing fingerprints");
     };
     *world.retained.borrow_mut() = winnow(&world.fingerprints.borrow(), window);
 }
@@ -167,7 +167,7 @@ fn then_retained_hashes_are(world: &TokenPassWorld, hashes: String) {
         .split_whitespace()
         .map(|value| value.parse::<u64>())
         .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_else(|error| panic!("invalid expected hash list: {error}"));
+        .expect("expected hash list should be valid");
 
     with_retained(world, |retained| {
         assert_eq!(

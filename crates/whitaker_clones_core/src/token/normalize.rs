@@ -12,9 +12,9 @@ use super::{
 
 const KEYWORDS: &[&str] = &[
     "Self", "abstract", "as", "async", "await", "become", "box", "break", "const", "continue",
-    "crate", "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "if", "impl",
-    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
-    "return", "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
+    "crate", "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if",
+    "impl", "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub",
+    "ref", "return", "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
     "union", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
 ];
 
@@ -294,6 +294,20 @@ fn atom_label(kind: TokenKind) -> &'static str {
         TokenKind::Slash => "/",
         TokenKind::Caret => "^",
         TokenKind::Percent => "%",
-        _ => "<UNREACHABLE>",
+        TokenKind::Whitespace
+        | TokenKind::LineComment
+        | TokenKind::BlockComment { .. }
+        | TokenKind::Ident
+        | TokenKind::RawIdent
+        | TokenKind::Literal { .. }
+        | TokenKind::Lifetime { .. }
+        | TokenKind::Unknown => {
+            debug_assert!(
+                false,
+                "Token kind {:?} should be handled before atom_label",
+                kind
+            );
+            "<UNREACHABLE>"
+        }
     }
 }

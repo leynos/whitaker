@@ -24,7 +24,8 @@ that can:
    MinHash and locality-sensitive hashing (LSH) work in roadmap item 7.2.2.
 
 This stage must stop at fingerprint production. It must not implement candidate
-generation, SARIF emission, command-line interface (CLI) wiring, or Dylint
+generation, Static Analysis Results Interchange Format (SARIF) emission,
+command-line interface (CLI) wiring, or Dylint Rust lints framework (Dylint)
 integration; those belong to later roadmap items.
 
 Observable outcome:
@@ -33,8 +34,8 @@ Observable outcome:
    API.
 2. Unit tests cover happy paths, unhappy paths, and edge cases for
    normalization, shingling, rolling hashing, and winnowing.
-3. Behaviour tests using `rstest-bdd` v0.5.0 exercise end-to-end token-pass
-   workflows from source text to retained fingerprints.
+3. Behaviour-driven development (BDD) tests using `rstest-bdd` v0.5.0 exercise
+   end-to-end token-pass workflows from source text to retained fingerprints.
 4. `docs/whitaker-clone-detector-design.md` records the final 7.2.1 design
    decisions under a new implementation-decisions subsection.
 5. `docs/roadmap.md` marks 7.2.1 done only after all quality gates pass.
@@ -44,8 +45,8 @@ Observable outcome:
 ## Constraints
 
 - Scope only roadmap item 7.2.1. Do not implement MinHash, LSH, candidate
-  pairing, Jaccard scoring, SARIF emission, AST refinement, caching, CLI
-  commands, or lint integration.
+  pairing, Jaccard scoring, SARIF emission, abstract syntax tree (AST)
+  refinement, caching, CLI commands, or lint integration.
 - Create `crates/whitaker_clones_core/` because the design document assigns the
   token engine to that crate and no such crate exists in the current tree.
 - Keep the new crate free of `rustc_private` dependencies. It must be usable as

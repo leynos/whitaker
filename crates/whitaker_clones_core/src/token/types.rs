@@ -139,7 +139,7 @@ impl TryFrom<usize> for WinnowWindow {
 }
 
 /// A retained fingerprint and its source range.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Fingerprint {
     /// The 64-bit Rabin-Karp or winnowed hash value.
     pub hash: u64,
