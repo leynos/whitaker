@@ -83,6 +83,12 @@ fn parser_serde_fs_suggestions() -> (
     (context, suggestions)
 }
 
+fn render_note(subject: &str, kind: SubjectKind, methods: Vec<MethodProfile>) -> String {
+    let context = DecompositionContext::new(subject, kind);
+    let suggestions = suggest_decomposition(&context, &methods);
+    format_diagnostic_note(&context, &suggestions).unwrap_or_default()
+}
+
 #[test]
 fn format_diagnostic_note_returns_none_for_empty_suggestions() {
     let context = DecompositionContext::new("Foo", SubjectKind::Type);
@@ -107,7 +113,6 @@ fn format_diagnostic_note_renders_type_suggestions() {
 
 #[test]
 fn format_diagnostic_note_renders_trait_sub_traits() {
-    let context = DecompositionContext::new("Transport", SubjectKind::Trait);
     let methods = vec![
         profile(MethodInput {
             name: "encode_request",
@@ -139,8 +144,7 @@ fn format_diagnostic_note_renders_trait_sub_traits() {
         }),
     ];
 
-    let rendered = format_diagnostic_note(&context, &suggest_decomposition(&context, &methods))
-        .unwrap_or_default();
+    let rendered = render_note("Transport", SubjectKind::Trait, methods);
 
     assert!(rendered.contains("- [serde::json] sub-trait for `decode_request`, `encode_request`"));
     assert!(rendered.contains("- [std::io] sub-trait for `read_frame`, `write_frame`"));
@@ -148,7 +152,6 @@ fn format_diagnostic_note_renders_trait_sub_traits() {
 
 #[test]
 fn format_diagnostic_note_caps_rendered_suggestions() {
-    let context = DecompositionContext::new("Coordinator", SubjectKind::Type);
     let methods = vec![
         profile(MethodInput {
             name: "grammar_alpha",
@@ -207,9 +210,8 @@ fn format_diagnostic_note_caps_rendered_suggestions() {
             domains: &["std::fs"],
         }),
     ];
-    let suggestions = suggest_decomposition(&context, &methods);
 
-    let rendered = format_diagnostic_note(&context, &suggestions).unwrap_or_default();
+    let rendered = render_note("Coordinator", SubjectKind::Type, methods);
 
     assert!(rendered.contains("- [grammar] helper struct"));
     assert!(rendered.contains("- [serde::json] module"));
@@ -220,7 +222,6 @@ fn format_diagnostic_note_caps_rendered_suggestions() {
 
 #[test]
 fn format_diagnostic_note_caps_methods_per_suggestion() {
-    let context = DecompositionContext::new("Reporter", SubjectKind::Type);
     let methods = vec![
         profile(MethodInput {
             name: "report_alpha",
@@ -272,9 +273,8 @@ fn format_diagnostic_note_caps_methods_per_suggestion() {
             domains: &["std::io"],
         }),
     ];
-    let suggestions = suggest_decomposition(&context, &methods);
 
-    let rendered = format_diagnostic_note(&context, &suggestions).unwrap_or_default();
+    let rendered = render_note("Reporter", SubjectKind::Type, methods);
 
     assert!(rendered.contains(
         "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more methods"
