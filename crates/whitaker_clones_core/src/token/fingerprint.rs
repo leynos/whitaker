@@ -1,6 +1,9 @@
 //! Shingling, Rabin-Karp rolling hashing, and winnowing helpers.
 
-use super::types::{Fingerprint, NormalizedToken, ShingleSize, WinnowWindow};
+use super::types::{
+    Fingerprint, IdentifierSymbol, LiteralSymbol, NormalizedToken, NormalizedTokenKind,
+    ShingleSize, WinnowWindow,
+};
 
 pub(super) const RABIN_KARP_BASE: u64 = 1_000_003;
 pub(super) const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
@@ -141,12 +144,71 @@ fn stable_token_code(token: &NormalizedToken) -> u64 {
     let mut hash = FNV_OFFSET_BASIS;
 
     hash = hash_byte(hash, token_kind_tag(token));
-    // Formatting through `Display` keeps the token-code scheme aligned with the
-    // public labels; profile before replacing this with a more bespoke path.
-    for byte in token.kind.to_string().bytes() {
-        hash = hash_byte(hash, byte);
+    hash_token_kind_bytes(hash, &token.kind)
+}
+
+fn hash_token_kind_bytes(hash: u64, kind: &NormalizedTokenKind) -> u64 {
+    match kind {
+        NormalizedTokenKind::Atom(atom) => hash_bytes(hash, atom.as_bytes()),
+        NormalizedTokenKind::Identifier(symbol) | NormalizedTokenKind::Lifetime(symbol) => {
+            hash_identifier_symbol_bytes(hash, symbol)
+        }
+        NormalizedTokenKind::Literal(symbol) => hash_literal_symbol_bytes(hash, symbol),
+    }
+}
+
+fn hash_identifier_symbol_bytes(hash: u64, symbol: &IdentifierSymbol) -> u64 {
+    match symbol {
+        IdentifierSymbol::Original(value) => hash_bytes(hash, value.as_bytes()),
+        IdentifierSymbol::Canonical(index) => hash_canonical_identifier_bytes(hash, *index),
+    }
+}
+
+fn hash_literal_symbol_bytes(hash: u64, symbol: &LiteralSymbol) -> u64 {
+    match symbol {
+        LiteralSymbol::Original(value) => hash_bytes(hash, value.as_bytes()),
+        LiteralSymbol::Canonical(value) => hash_bytes(hash, value.as_bytes()),
+    }
+}
+
+fn hash_canonical_identifier_bytes(mut hash: u64, index: usize) -> u64 {
+    hash = hash_bytes(hash, b"<ID_");
+    hash = hash_usize_bytes(hash, index);
+    hash_byte(hash, b'>')
+}
+
+fn hash_usize_bytes(mut hash: u64, value: usize) -> u64 {
+    let mut buffer = [0_u8; 20];
+    let mut value = value;
+    let mut cursor = buffer.len();
+
+    if value == 0 {
+        return hash_byte(hash, b'0');
     }
 
+    while value > 0 {
+        cursor -= 1;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a decimal digit always fits in u8"
+        )]
+        {
+            buffer[cursor] = b'0' + (value % 10) as u8;
+        }
+        value /= 10;
+    }
+
+    for byte in &buffer[cursor..] {
+        hash = hash_byte(hash, *byte);
+    }
+
+    hash
+}
+
+fn hash_bytes(mut hash: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        hash = hash_byte(hash, *byte);
+    }
     hash
 }
 
