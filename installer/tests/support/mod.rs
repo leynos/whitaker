@@ -90,6 +90,22 @@ fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
         "failed to initialise isolated rustup: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
+
+    let self_update_output = Command::new("rustup")
+        .args(["set", "auto-self-update", "disable"])
+        .current_dir(rustup_home)
+        .env("RUSTUP_HOME", rustup_home)
+        .env("CARGO_HOME", cargo_home)
+        .env("RUSTUP_AUTO_INSTALL", "0")
+        .env_remove("RUSTUP_TOOLCHAIN")
+        .output()
+        .expect("failed to disable rustup self-update in isolated environment");
+
+    assert!(
+        self_update_output.status.success(),
+        "failed to disable rustup self-update: {}",
+        String::from_utf8_lossy(&self_update_output.stderr)
+    );
 }
 
 /// Parses the output of a command that locates rustup, extracting the first path.

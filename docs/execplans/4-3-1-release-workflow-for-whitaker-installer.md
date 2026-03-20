@@ -111,7 +111,7 @@ download the correct archive.
 
 - Risk: BDD step functions with archive path parameters may exceed the
   4-argument Clippy limit. Severity: low. Likelihood: medium. Mitigation: split
-  Gherkin steps so each step function parses at most 2-3 values from the
+  Gherkin steps so each step function parses at most 2–3 values from the
   feature text. Use the world struct to carry state between steps.
 
 ## Progress
@@ -128,7 +128,7 @@ download the correct archive.
   (`whitaker-package-installer` CLI). Used `--crate-version` instead of
   `--version` to avoid clap conflict.
 - [x] (2026-03-01) Stage F: Update documentation (roadmap, design doc,
-  execplan).
+  execplan), including clarity edits per review feedback.
 - [x] (2026-03-01) Stage G: Quality gates. `make check-fmt`, `make lint`,
   and `make test` all exit 0. 914 tests passed, 2 skipped, 0 failed.
 
@@ -165,7 +165,7 @@ download the correct archive.
   subtree. Rationale: The `artefact/` module covers the prebuilt lint library
   artefact system (ADR-001). Installer binary packaging is a separate concern:
   it packages the installer itself for end-user distribution via
-  cargo-binstall. This parallels the rationale from the 4.2.1 execplan where
+  cargo-binstall. This parallels the rationale from the 4.2.1 execplan, where
   `binstall_metadata` was placed at top level. Date/Author: 2026-03-01 / plan
   author.
 
@@ -185,9 +185,9 @@ download the correct archive.
   re-running failed releases. Date/Author: 2026-03-01 / plan author.
 
 - Decision: Add `flate2` (gzip) and `zip` as workspace dependencies for
-  `.tgz` and `.zip` archive creation respectively. Rationale: `flate2` is
+  `.tgz` and `.zip` archive creation, respectively. Rationale: `flate2` is
   already a transitive dependency. `zip` is needed for the Windows target. Both
-  are well-maintained, widely-used crates. The `tar` crate is already a direct
+  are well-maintained, widely used crates. The `tar` crate is already a direct
   dependency. No alternative avoids both crates while satisfying the
   requirement for both `.tgz` and `.zip` formats. Date/Author: 2026-03-01 /
   plan author.

@@ -386,12 +386,11 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    tracks seen keys for efficient O(n) deduplication.
 
 6. **Builder validation strategy.** `ResultBuilder::build()` returns
-   `Result<SarifResult>` and validates that both `rule_id` and `message`
-   are set. `RegionBuilder::build()` returns `Result<Region>` and
-   validates 1-based line/column bounds and same-line column ordering.
-   Other builders (log, run, location) do not return `Result` because
-   they have either no required fields or all fields are provided at
-   construction time.
+   `Result<SarifResult>` and validates that both `rule_id` and `message` are
+   set. `RegionBuilder::build()` returns `Result<Region>` and validates 1-based
+   line/column bounds and same-line column ordering. Other builders (log, run,
+   location) do not return `Result` because they have either no required fields
+   or all fields are provided at construction time.
 
 7. **WhitakerProperties envelope structure.** The `WhitakerProperties` type
    serializes into a `{"whitaker": {...}}` JSON envelope via a fallible
@@ -400,10 +399,46 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the SARIF property bag.
 
 8. **Behaviour-Driven Development (BDD) test pattern.** BDD step
-   definitions follow the canonical
-   `brain_trait_metrics_behaviour.rs` pattern: a `SarifWorld` struct with
-   `RefCell` fields, `with_*()` helper functions using `match` arms (not
-   `expect()`) to access world state, and indexed `#[scenario]` bindings.
+   definitions follow the canonical `brain_trait_metrics_behaviour.rs` pattern:
+   a `SarifWorld` struct with `RefCell` fields, `with_*()` helper functions
+   using `match` arms (not `expect()`) to access world state, and indexed
+   `#[scenario]` bindings.
+
+## Implementation decisions (7.2.1)
+
+1. **New `whitaker_clones_core` crate.** Roadmap item 7.2.1 is implemented in a
+   new crate, `crates/whitaker_clones_core/`, with a `token/` module subtree.
+   The public surface currently exports normalization profiles, validated
+   `ShingleSize` and `WinnowWindow` newtypes, normalized tokens, fingerprints,
+   and the `normalize`, `hash_shingles`, and `winnow` functions.
+
+2. **Type-1 versus Type-2 symbol encoding.** The design sketch's
+   `tok.kind as u32` approach was too coarse for `rustc_lexer`, which does not
+   distinguish keywords from ordinary identifiers and does not preserve literal
+   values in the token kind alone. The shipped implementation therefore:
+   preserves original identifier, lifetime, and literal text for `T1`; treats
+   Rust keywords and punctuation as fixed atoms; and canonicalizes identifiers
+   and lifetimes by encounter order plus literals by category (`<NUM>`,
+   `<STR>`, `<CHAR>`, `<BYTE>`, `<BYTE_STR>`) for `T2`.
+
+3. **Malformed source handling.** Normalization is fallible. Unsupported tokens
+   and unterminated block comments or literals are reported as typed
+   `TokenPassError` values rather than silently mapped to placeholder symbols.
+   This gives the token pass explicit unhappy-path behaviour that later CLI
+   layers can surface or downgrade to per-file skips.
+
+4. **Rolling hash and stable token codes.** Rabin-Karp hashes use the design's
+   `1_000_003` base over deterministic per-token `u64` codes. Those codes are
+   derived from the normalized token label plus a variant tag using a stable
+   FNV-1a-style hash, which avoids `DefaultHasher` randomness while keeping the
+   public API readable.
+
+5. **Winnowing tie-breaking and small-input behaviour.** Winnowing selects the
+   rightmost minimum in each window. When the fingerprint list is shorter than
+   or equal to the window size, it retains the global rightmost minimum once.
+   Duplicate selections across overlapping windows are suppressed by index, so
+   a repeated minimum is emitted once while distinct equal-hash regions remain
+   distinguishable.
 
 ## Minimal code skeletons (selected)
 
