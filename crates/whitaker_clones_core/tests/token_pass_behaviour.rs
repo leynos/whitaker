@@ -51,32 +51,25 @@ fn normalize_labels(source: &str, profile: NormProfile) -> Result<Vec<String>, T
     })
 }
 
-#[given("the source snippet {name}")]
-fn given_source(world: &TokenPassWorld, name: String) {
-    let source = match name.as_str() {
+fn snippet_for_name(name: &str) -> &'static str {
+    match name {
         "commented_function" => "fn demo(x: i32) { /* note */ x + 1 }",
         "renamed_function_a" => "fn alpha(total: i32) { total + 1 }",
         "renamed_function_b" => "fn beta(count: i32) { count + 9 }",
         "short_function" => "fn tiny() {}",
         "unterminated_string" => "let value = \"open",
         other => panic!("unknown source snippet: {other}"),
-    };
+    }
+}
 
-    *world.source.borrow_mut() = source.to_owned();
+#[given("the source snippet {name}")]
+fn given_source(world: &TokenPassWorld, name: String) {
+    *world.source.borrow_mut() = snippet_for_name(&name).to_owned();
 }
 
 #[given("the comparison source snippet {name}")]
 fn given_comparison_source(world: &TokenPassWorld, name: String) {
-    let source = match name.as_str() {
-        "commented_function" => "fn demo(x: i32) { /* note */ x + 1 }",
-        "renamed_function_a" => "fn alpha(total: i32) { total + 1 }",
-        "renamed_function_b" => "fn beta(count: i32) { count + 9 }",
-        "short_function" => "fn tiny() {}",
-        "unterminated_string" => "let value = \"open",
-        other => panic!("unknown comparison source snippet: {other}"),
-    };
-
-    *world.comparison_source.borrow_mut() = source.to_owned();
+    *world.comparison_source.borrow_mut() = snippet_for_name(&name).to_owned();
 }
 
 #[given("the profile is {profile}")]

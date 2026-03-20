@@ -41,7 +41,10 @@ pub fn hash_shingles(tokens: &[NormalizedToken], k: ShingleSize) -> Vec<Fingerpr
     for code in codes.iter().take(width) {
         rolling = rolling.wrapping_mul(RABIN_KARP_BASE).wrapping_add(*code);
     }
-    #[expect(clippy::indexing_slicing, reason = "bounds pre-validated at line 29")]
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "bounds pre-validated by the tokens.len() < width check above"
+    )]
     hashes.push(Fingerprint::new(
         rolling,
         tokens[0].range.start..tokens[width - 1].range.end,
@@ -105,7 +108,10 @@ pub fn winnow(fingerprints: &[Fingerprint], window: WinnowWindow) -> Vec<Fingerp
 
     let width = window.get();
     if fingerprints.len() <= width {
-        #[expect(clippy::indexing_slicing, reason = "bounds pre-checked at line 86")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "bounds checked by the preceding fingerprints.len() <= width comparison"
+        )]
         return vec![fingerprints[rightmost_minimum_index(fingerprints)].clone()];
     }
 
