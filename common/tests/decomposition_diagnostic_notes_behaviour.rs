@@ -4,6 +4,7 @@ use common::decomposition_advice::{
     DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
     suggest_decomposition,
 };
+use common::test_support::decomposition::{parser_serde_fs_fixture, transport_trait_fixture};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
@@ -55,7 +56,8 @@ struct DiagnosticNoteWorld {
     methods: RefCell<BTreeMap<usize, MethodProfileBuilder>>,
     method_ids_by_name: RefCell<BTreeMap<String, Vec<usize>>>,
     next_method_id: RefCell<usize>,
-    rendered_note: RefCell<Option<Option<String>>>,
+    render_attempted: RefCell<bool>,
+    rendered_note: RefCell<Option<String>>,
 }
 
 #[fixture]
@@ -115,11 +117,45 @@ fn with_rendered_note(
     world: &DiagnosticNoteWorld,
     assert_fn: impl FnOnce(&Option<String>) -> Result<(), String>,
 ) -> Result<(), String> {
+    if !*world.render_attempted.borrow() {
+        return Err(String::from(
+            "note must be rendered before running assertions",
+        ));
+    }
     let rendered_note = world.rendered_note.borrow();
-    let rendered_note = rendered_note
-        .as_ref()
-        .ok_or_else(|| String::from("note must be rendered before running assertions"))?;
-    assert_fn(rendered_note)
+    assert_fn(&rendered_note)
+}
+
+fn seed_methods(world: &DiagnosticNoteWorld, methods: Vec<common::MethodProfile>) {
+    for method in methods {
+        let method_name = method.name().to_owned();
+        let method_id = {
+            let mut next_method_id = world.next_method_id.borrow_mut();
+            let method_id = *next_method_id;
+            *next_method_id += 1;
+            method_id
+        };
+        let mut builder = MethodProfileBuilder::new(&method_name);
+        for field in method.accessed_fields() {
+            builder.record_accessed_field(field);
+        }
+        for type_name in method.signature_types() {
+            builder.record_signature_type(type_name);
+        }
+        for type_name in method.local_types() {
+            builder.record_local_type(type_name);
+        }
+        for domain in method.external_domains() {
+            builder.record_external_domain(domain);
+        }
+        world.methods.borrow_mut().insert(method_id, builder);
+        world
+            .method_ids_by_name
+            .borrow_mut()
+            .entry(method_name)
+            .or_default()
+            .push(method_id);
+    }
 }
 
 #[given("note rendering for a {kind} named {name}")]
@@ -130,6 +166,16 @@ fn given_context(world: &DiagnosticNoteWorld, kind: SubjectKind, name: String) {
 #[given("a method named {name}")]
 fn given_method(world: &DiagnosticNoteWorld, name: String) {
     create_method_builder(world, &name);
+}
+
+#[given("the parser, serde, and filesystem methods are tracked")]
+fn given_parser_serde_fs_fixture(world: &DiagnosticNoteWorld) {
+    seed_methods(world, parser_serde_fs_fixture());
+}
+
+#[given("the transport serde and io methods are tracked")]
+fn given_transport_fixture(world: &DiagnosticNoteWorld) {
+    seed_methods(world, transport_trait_fixture());
 }
 
 #[given("method {name} accesses fields {fields}")]
@@ -165,7 +211,8 @@ fn when_note_is_rendered(world: &DiagnosticNoteWorld) -> Result<(), String> {
         .map(MethodProfileBuilder::build)
         .collect::<Vec<_>>();
     let suggestions = suggest_decomposition(&context, &profiles);
-    *world.rendered_note.borrow_mut() = Some(format_diagnostic_note(&context, &suggestions));
+    *world.render_attempted.borrow_mut() = true;
+    *world.rendered_note.borrow_mut() = format_diagnostic_note(&context, &suggestions);
     Ok(())
 }
 

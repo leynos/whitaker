@@ -4,18 +4,7 @@ Feature: Decomposition diagnostic notes
 
   Scenario: Type note renders grammar, serde, and filesystem areas
     Given note rendering for a type named Foo
-    And a method named parse_tokens
-    And method parse_tokens accesses fields grammar,tokens
-    And a method named parse_nodes
-    And method parse_nodes accesses fields grammar,ast
-    And a method named encode_json
-    And method encode_json uses external domains serde::json
-    And a method named decode_json
-    And method decode_json uses external domains serde::json
-    And a method named load_from_disk
-    And method load_from_disk uses external domains std::fs
-    And a method named save_to_disk
-    And method save_to_disk uses external domains std::fs
+    And the parser, serde, and filesystem methods are tracked
     When the decomposition diagnostic note is rendered
     Then the note is present
     And the note contains line "- [grammar] helper struct for `parse_nodes`, `parse_tokens`"
@@ -24,14 +13,7 @@ Feature: Decomposition diagnostic notes
 
   Scenario: Trait note renders focused sub-traits
     Given note rendering for a trait named Transport
-    And a method named encode_request
-    And method encode_request uses external domains serde::json
-    And a method named decode_request
-    And method decode_request uses external domains serde::json
-    And a method named read_frame
-    And method read_frame uses external domains std::io
-    And a method named write_frame
-    And method write_frame uses external domains std::io
+    And the transport serde and io methods are tracked
     When the decomposition diagnostic note is rendered
     Then the note is present
     And the note contains line "- [serde::json] sub-trait for `decode_request`, `encode_request`"

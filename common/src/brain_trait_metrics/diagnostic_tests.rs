@@ -3,9 +3,8 @@
 use super::*;
 use crate::brain_trait_metrics::TraitMetricsBuilder;
 use crate::brain_trait_metrics::evaluation::BrainTraitDisposition;
-use crate::decomposition_advice::{
-    DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
-};
+use crate::decomposition_advice::SubjectKind;
+use crate::test_support::decomposition::{decomposition_suggestions, transport_trait_fixture};
 use rstest::rstest;
 
 // ---------------------------------------------------------------------------
@@ -157,28 +156,10 @@ fn decomposition_note_delegates_to_shared_renderer_for_traits() {
         cc_per_default: 5,
         disposition: BrainTraitDisposition::Warn,
     });
-    let context = DecompositionContext::new(diagnostic.trait_name(), SubjectKind::Trait);
-
-    let mut encode_request = MethodProfileBuilder::new("encode_request");
-    encode_request.record_external_domain("serde::json");
-
-    let mut decode_request = MethodProfileBuilder::new("decode_request");
-    decode_request.record_external_domain("serde::json");
-
-    let mut read_frame = MethodProfileBuilder::new("read_frame");
-    read_frame.record_external_domain("std::io");
-
-    let mut write_frame = MethodProfileBuilder::new("write_frame");
-    write_frame.record_external_domain("std::io");
-
-    let suggestions = suggest_decomposition(
-        &context,
-        &[
-            encode_request.build(),
-            decode_request.build(),
-            read_frame.build(),
-            write_frame.build(),
-        ],
+    let (_, suggestions) = decomposition_suggestions(
+        diagnostic.trait_name(),
+        SubjectKind::Trait,
+        &transport_trait_fixture(),
     );
 
     assert_eq!(

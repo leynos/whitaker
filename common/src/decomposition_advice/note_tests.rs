@@ -1,91 +1,21 @@
 //! Unit tests for decomposition diagnostic-note rendering.
 
 use super::format_diagnostic_note;
-use crate::decomposition_advice::{
-    DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind, suggest_decomposition,
+use crate::decomposition_advice::{DecompositionContext, MethodProfile, SubjectKind};
+use crate::test_support::decomposition::{
+    MethodInput, decomposition_suggestions, parser_serde_fs_fixture, profile,
+    transport_trait_fixture,
 };
-
-struct MethodInput<'a> {
-    name: &'a str,
-    fields: &'a [&'a str],
-    signature_types: &'a [&'a str],
-    local_types: &'a [&'a str],
-    domains: &'a [&'a str],
-}
-
-fn profile(input: MethodInput<'_>) -> MethodProfile {
-    let mut builder = MethodProfileBuilder::new(input.name);
-    for field in input.fields {
-        builder.record_accessed_field(*field);
-    }
-    for type_name in input.signature_types {
-        builder.record_signature_type(*type_name);
-    }
-    for type_name in input.local_types {
-        builder.record_local_type(*type_name);
-    }
-    for domain in input.domains {
-        builder.record_external_domain(*domain);
-    }
-    builder.build()
-}
 
 fn parser_serde_fs_suggestions() -> (
     DecompositionContext,
     Vec<crate::decomposition_advice::DecompositionSuggestion>,
 ) {
-    let context = DecompositionContext::new("Foo", SubjectKind::Type);
-    let methods = vec![
-        profile(MethodInput {
-            name: "parse_tokens",
-            fields: &["grammar", "tokens"],
-            signature_types: &["TokenStream"],
-            local_types: &[],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "parse_nodes",
-            fields: &["grammar", "ast"],
-            signature_types: &[],
-            local_types: &["ParseState"],
-            domains: &[],
-        }),
-        profile(MethodInput {
-            name: "encode_json",
-            fields: &[],
-            signature_types: &["Serializer"],
-            local_types: &[],
-            domains: &["serde::json"],
-        }),
-        profile(MethodInput {
-            name: "decode_json",
-            fields: &[],
-            signature_types: &["Deserializer"],
-            local_types: &[],
-            domains: &["serde::json"],
-        }),
-        profile(MethodInput {
-            name: "load_from_disk",
-            fields: &[],
-            signature_types: &[],
-            local_types: &["PathBuf"],
-            domains: &["std::fs"],
-        }),
-        profile(MethodInput {
-            name: "save_to_disk",
-            fields: &[],
-            signature_types: &[],
-            local_types: &["PathBuf"],
-            domains: &["std::fs"],
-        }),
-    ];
-    let suggestions = suggest_decomposition(&context, &methods);
-    (context, suggestions)
+    decomposition_suggestions("Foo", SubjectKind::Type, &parser_serde_fs_fixture())
 }
 
 fn render_note(subject: &str, kind: SubjectKind, methods: Vec<MethodProfile>) -> String {
-    let context = DecompositionContext::new(subject, kind);
-    let suggestions = suggest_decomposition(&context, &methods);
+    let (context, suggestions) = decomposition_suggestions(subject, kind, &methods);
     format_diagnostic_note(&context, &suggestions).unwrap_or_default()
 }
 
@@ -113,38 +43,7 @@ fn format_diagnostic_note_renders_type_suggestions() {
 
 #[test]
 fn format_diagnostic_note_renders_trait_sub_traits() {
-    let methods = vec![
-        profile(MethodInput {
-            name: "encode_request",
-            fields: &[],
-            signature_types: &[],
-            local_types: &[],
-            domains: &["serde::json"],
-        }),
-        profile(MethodInput {
-            name: "decode_request",
-            fields: &[],
-            signature_types: &[],
-            local_types: &[],
-            domains: &["serde::json"],
-        }),
-        profile(MethodInput {
-            name: "read_frame",
-            fields: &[],
-            signature_types: &["IoBuffer"],
-            local_types: &[],
-            domains: &["std::io"],
-        }),
-        profile(MethodInput {
-            name: "write_frame",
-            fields: &[],
-            signature_types: &["IoBuffer"],
-            local_types: &[],
-            domains: &["std::io"],
-        }),
-    ];
-
-    let rendered = render_note("Transport", SubjectKind::Trait, methods);
+    let rendered = render_note("Transport", SubjectKind::Trait, transport_trait_fixture());
 
     assert!(rendered.contains("- [serde::json] sub-trait for `decode_request`, `encode_request`"));
     assert!(rendered.contains("- [std::io] sub-trait for `read_frame`, `write_frame`"));

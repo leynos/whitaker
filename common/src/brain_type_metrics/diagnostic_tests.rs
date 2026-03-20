@@ -3,9 +3,8 @@
 use super::*;
 use crate::brain_type_metrics::TypeMetricsBuilder;
 use crate::brain_type_metrics::evaluation::BrainTypeDisposition;
-use crate::decomposition_advice::{
-    DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
-};
+use crate::decomposition_advice::SubjectKind;
+use crate::test_support::decomposition::{decomposition_suggestions, parser_serde_fs_fixture};
 use rstest::rstest;
 
 // ---------------------------------------------------------------------------
@@ -194,28 +193,10 @@ fn note_omits_foreign_reach_when_zero() {
 fn decomposition_note_delegates_to_shared_renderer_for_types() {
     let metrics = build_note_metrics(0, 1);
     let diagnostic = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
-    let context = DecompositionContext::new(diagnostic.type_name(), SubjectKind::Type);
-
-    let mut parse_tokens = MethodProfileBuilder::new("parse_tokens");
-    parse_tokens.record_accessed_field("grammar");
-
-    let mut parse_nodes = MethodProfileBuilder::new("parse_nodes");
-    parse_nodes.record_accessed_field("grammar");
-
-    let mut encode_json = MethodProfileBuilder::new("encode_json");
-    encode_json.record_external_domain("serde::json");
-
-    let mut decode_json = MethodProfileBuilder::new("decode_json");
-    decode_json.record_external_domain("serde::json");
-
-    let suggestions = suggest_decomposition(
-        &context,
-        &[
-            parse_tokens.build(),
-            parse_nodes.build(),
-            encode_json.build(),
-            decode_json.build(),
-        ],
+    let (_, suggestions) = decomposition_suggestions(
+        diagnostic.type_name(),
+        SubjectKind::Type,
+        &parser_serde_fs_fixture(),
     );
 
     assert_eq!(
@@ -224,7 +205,8 @@ fn decomposition_note_delegates_to_shared_renderer_for_types() {
             concat!(
                 "Potential decomposition for `Foo`:\n",
                 "- [grammar] helper struct for `parse_nodes`, `parse_tokens`\n",
-                "- [serde::json] module for `decode_json`, `encode_json`",
+                "- [serde::json] module for `decode_json`, `encode_json`\n",
+                "- [std::fs] module for `load_from_disk`, `save_to_disk`",
             )
             .to_owned()
         )
