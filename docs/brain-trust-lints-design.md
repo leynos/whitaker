@@ -445,7 +445,7 @@ further decomposition analysis was omitted.
   keeps the renderer free of `rustc_private`.
 - **English-only multi-line template**: the current note format is
   `Potential decomposition for \`subject\`:` followed by one bullet per
-  suggestion. Wording remains English-only until the later localisation work
+  suggestion. Wording remains English-only until the later localization work
   moves it behind Fluent messages.
 - **Hard caps for readability**: diagnostic notes show at most 3 suggestion
   areas and at most 3 method names per area. Hidden method names are reported

@@ -48,7 +48,7 @@ Feature: Decomposition diagnostic notes
     And method fs_beta uses external domains std::fs
     When the decomposition diagnostic note is rendered
     Then the note is present
-    And the note contains line "1 more areas omitted"
+    And the note contains line "1 more area omitted"
     And the note does not contain "[std::io]"
 
   Scenario: Large communities cap rendered method names

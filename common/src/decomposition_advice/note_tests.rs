@@ -115,7 +115,7 @@ fn format_diagnostic_note_caps_rendered_suggestions() {
     assert!(rendered.contains("- [grammar] helper struct"));
     assert!(rendered.contains("- [serde::json] module"));
     assert!(rendered.contains("- [std::fs] module"));
-    assert!(rendered.contains("1 more areas omitted"));
+    assert!(rendered.contains("1 more area omitted"));
     assert!(!rendered.contains("[std::io]"));
 }
 

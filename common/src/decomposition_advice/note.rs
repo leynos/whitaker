@@ -3,7 +3,7 @@
 //! This module keeps the developer-facing wording for decomposition advice in
 //! one place so `brain_type` and `brain_trait` stay aligned. Rendering is
 //! deterministic and compiler independent, which keeps it suitable for reuse
-//! from future lint drivers and localisation layers.
+//! from future lint drivers and localization layers.
 
 use super::{DecompositionContext, DecompositionSuggestion};
 
@@ -73,10 +73,19 @@ pub fn format_diagnostic_note(
 
     let omitted_suggestions = suggestions.len().saturating_sub(MAX_SUGGESTIONS);
     if omitted_suggestions > 0 {
-        lines.push(format!("{omitted_suggestions} more areas omitted"));
+        lines.push(format_omitted_areas_line(omitted_suggestions));
     }
 
     Some(lines.join("\n"))
+}
+
+fn format_omitted_areas_line(omitted_suggestions: usize) -> String {
+    let noun = if omitted_suggestions == 1 {
+        "area"
+    } else {
+        "areas"
+    };
+    format!("{omitted_suggestions} more {noun} omitted")
 }
 
 fn render_suggestion_line(suggestion: &DecompositionSuggestion) -> String {

@@ -178,13 +178,13 @@ pub fn transport_trait_fixture() -> Vec<MethodProfile> {
 /// ```ignore
 /// use common::decomposition_advice::SubjectKind;
 /// use common::test_support::decomposition::{
-///     parser_serde_fs_suggestions,
+///     decomposition_suggestions,
 ///     parser_serde_fs_fixture,
 /// };
 ///
 /// let methods = parser_serde_fs_fixture();
 /// let (_context, suggestions) =
-///     parser_serde_fs_suggestions("Foo", SubjectKind::Type, methods);
+///     decomposition_suggestions("Foo", SubjectKind::Type, &methods);
 /// assert!(!suggestions.is_empty());
 /// ```
 #[must_use]

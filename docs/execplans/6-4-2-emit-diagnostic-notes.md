@@ -42,7 +42,7 @@ Observable outcome:
 ## Constraints
 
 - Scope only roadmap item 6.4.2. Do not change the clustering algorithm from
-  6.4.1, add configuration loading, add localisation wiring, add SARIF output,
+  6.4.1, add configuration loading, add localization wiring, add SARIF output,
   or start the Verus/Kani tasks from 6.4.3 onwards in this change.
 - Keep the rendering logic in `common` and keep `common` free of
   `rustc_private` dependencies. Diagnostic-note rendering must remain
@@ -93,7 +93,7 @@ Observable outcome:
 - Wording risk: roadmap 6.6.2 will later move brain-trust diagnostics into
   Fluent, but 6.4.2 needs English strings now. Severity: medium. Likelihood:
   high. Mitigation: keep note assembly in one shared renderer with short,
-  template-driven phrasing that can later move behind localisation keys.
+  template-driven phrasing that can later move behind localization keys.
 - Length risk: raw cluster data can produce unwieldy notes for very large
   types. Severity: high. Likelihood: high. Mitigation: cap both the number of
   communities shown and the number of method names shown per community, then
@@ -305,7 +305,7 @@ Behaviour-test scenarios (`rstest-bdd` v0.5.0):
    renders three concise note entries.
 2. Happy path: a brain trait renders sub-trait suggestions for two focused
    default-method communities.
-3. Unhappy path: no suggestions means no decomposition note is emitted.
+3. Unhappy path: no suggestions mean no decomposition note is emitted.
 4. Edge path: more than three communities yields a capped note with an omitted
    areas line.
 5. Edge path: a large community yields a per-community `+N more methods`
@@ -399,7 +399,7 @@ Record at least:
 1. the final note template and whether it is multi-line,
 2. the cap policy for suggestions and per-suggestion method names,
 3. the rule for when no note is emitted,
-4. the decision to keep this renderer English-only until localisation work,
+4. the decision to keep this renderer English-only until localization work,
 5. the reason for using a shared renderer plus per-lint wrappers.
 
 ### Stage G: Mark roadmap complete
