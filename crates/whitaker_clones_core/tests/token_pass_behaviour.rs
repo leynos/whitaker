@@ -23,8 +23,9 @@ struct TokenPassWorld {
     fingerprints: RefCell<Vec<Fingerprint>>,
     retained: RefCell<Vec<Fingerprint>>,
     k: RefCell<Option<ShingleSize>>,
+    k_error: RefCell<Option<TokenPassError>>,
     window: RefCell<Option<WinnowWindow>>,
-    size_error: RefCell<Option<TokenPassError>>,
+    window_error: RefCell<Option<TokenPassError>>,
 }
 
 #[fixture]
@@ -84,16 +85,28 @@ fn given_profile(world: &TokenPassWorld, profile: String) {
 #[given("shingle size {size}")]
 fn given_shingle_size(world: &TokenPassWorld, size: usize) {
     match ShingleSize::try_from(size) {
-        Ok(size) => *world.k.borrow_mut() = Some(size),
-        Err(error) => *world.size_error.borrow_mut() = Some(error),
+        Ok(size) => {
+            *world.k.borrow_mut() = Some(size);
+            *world.k_error.borrow_mut() = None;
+        }
+        Err(error) => {
+            *world.k.borrow_mut() = None;
+            *world.k_error.borrow_mut() = Some(error);
+        }
     }
 }
 
 #[given("winnow window {window}")]
 fn given_window(world: &TokenPassWorld, window: usize) {
     match WinnowWindow::try_from(window) {
-        Ok(window) => *world.window.borrow_mut() = Some(window),
-        Err(error) => *world.size_error.borrow_mut() = Some(error),
+        Ok(window) => {
+            *world.window.borrow_mut() = Some(window);
+            *world.window_error.borrow_mut() = None;
+        }
+        Err(error) => {
+            *world.window.borrow_mut() = None;
+            *world.window_error.borrow_mut() = Some(error);
+        }
     }
 }
 
@@ -160,9 +173,15 @@ fn when_fingerprints_are_generated(world: &TokenPassWorld) {
             *world.normalized_labels.borrow_mut() =
                 tokens.iter().map(|token| token.kind.to_string()).collect();
             *world.fingerprints.borrow_mut() = hash_shingles(&tokens, k);
+            world.retained.borrow_mut().clear();
             *world.normalization_error.borrow_mut() = None;
         }
-        Err(error) => *world.normalization_error.borrow_mut() = Some(error),
+        Err(error) => {
+            world.normalized_labels.borrow_mut().clear();
+            world.fingerprints.borrow_mut().clear();
+            world.retained.borrow_mut().clear();
+            *world.normalization_error.borrow_mut() = Some(error);
+        }
     }
 }
 
@@ -230,12 +249,15 @@ fn then_retained_hashes_are(world: &TokenPassWorld, hashes: String) {
 
 #[then("the error is {message}")]
 fn then_error_is(world: &TokenPassWorld, message: String) {
-    if let Some(error) = world.normalization_error.borrow().as_ref() {
-        assert_eq!(error.to_string(), message);
-        return;
-    }
+    let normalization_error = world.normalization_error.borrow().clone();
+    let k_error = world.k_error.borrow().clone();
+    let window_error = world.window_error.borrow().clone();
+    let errors = [normalization_error, k_error, window_error]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
 
-    if let Some(error) = world.size_error.borrow().as_ref() {
+    if let [error] = errors.as_slice() {
         assert_eq!(error.to_string(), message);
         return;
     }

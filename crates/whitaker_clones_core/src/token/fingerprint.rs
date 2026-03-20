@@ -186,25 +186,30 @@ fn hash_canonical_identifier_bytes(mut hash: u64, index: usize) -> u64 {
 fn hash_usize_bytes(mut hash: u64, value: usize) -> u64 {
     let mut buffer = [0_u8; 20];
     let mut value = value;
-    let mut cursor = buffer.len();
+    let mut remaining = buffer.as_mut_slice();
 
     if value == 0 {
         return hash_byte(hash, b'0');
     }
 
     while value > 0 {
-        cursor -= 1;
+        let (slot, rest) = match remaining.split_last_mut() {
+            Some(parts) => parts,
+            None => unreachable!("usize decimal digits always fit within the buffer"),
+        };
         #[expect(
             clippy::cast_possible_truncation,
             reason = "a decimal digit always fits in u8"
         )]
         {
-            buffer[cursor] = b'0' + (value % 10) as u8;
+            *slot = b'0' + (value % 10) as u8;
         }
+        remaining = rest;
         value /= 10;
     }
 
-    for byte in &buffer[cursor..] {
+    let start = remaining.len();
+    for byte in buffer.iter().skip(start) {
         hash = hash_byte(hash, *byte);
     }
 
