@@ -6,7 +6,8 @@
 
 use crate::decomposition_advice::{
     DecompositionContext, DecompositionSuggestion, MethodProfile, MethodProfileBuilder,
-    SubjectKind, suggest_decomposition,
+    SubjectKind, methods_meet_cosine_threshold as runtime_methods_meet_cosine_threshold,
+    suggest_decomposition,
 };
 
 /// Input data for building a [`MethodProfile`] in tests.
@@ -196,4 +197,36 @@ pub fn decomposition_suggestions(
     let context = DecompositionContext::new(subject, kind);
     let suggestions = suggest_decomposition(&context, methods);
     (context, suggestions)
+}
+
+/// Evaluates whether two methods satisfy Whitaker's cosine threshold.
+///
+/// This helper exists for behaviour tests that need an observable seam without
+/// widening the production decomposition API.
+///
+/// # Examples
+///
+/// ```ignore
+/// use common::test_support::decomposition::{MethodInput, methods_meet_cosine_threshold, profile};
+///
+/// let left = profile(MethodInput {
+///     name: "parse_tokens",
+///     fields: &["grammar"],
+///     signature_types: &[],
+///     local_types: &[],
+///     domains: &[],
+/// });
+/// let right = profile(MethodInput {
+///     name: "parse_nodes",
+///     fields: &["grammar"],
+///     signature_types: &[],
+///     local_types: &[],
+///     domains: &[],
+/// });
+///
+/// assert!(methods_meet_cosine_threshold(&left, &right));
+/// ```
+#[must_use]
+pub fn methods_meet_cosine_threshold(left: &MethodProfile, right: &MethodProfile) -> bool {
+    runtime_methods_meet_cosine_threshold(left, right)
 }

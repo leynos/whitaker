@@ -455,6 +455,39 @@ further decomposition analysis was omitted.
   clustering yields no surviving decomposition suggestions, so diagnostics stay
   quiet for weakly related subjects.
 
+### Implementation decisions (6.4.3)
+
+- **Verus proof workflow lives in a sidecar**: roadmap 6.4.3 adds
+  `verus/decomposition_cosine_threshold.rs` plus shell wrappers at
+  `scripts/install-verus.sh` and `scripts/run-verus.sh`. The `Makefile` exposes
+  this as `make verus`, keeping proof tooling outside the Cargo workspace build
+  path.
+- **Pinned Verus release for reproducibility**: the install script currently
+  pins Verus release `0.2026.03.17.a96bad0` and downloads the host-specific
+  binary release into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`. On
+  2026-03-22, that release required Rust toolchain
+  `1.94.0-x86_64-unknown-linux-gnu` on Linux; the script lets Verus report the
+  required toolchain, installs it with `rustup`, and then reruns the proof.
+- **Squared threshold constants made explicit in runtime code**: the
+  decomposition runtime now shares `MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED = 1`
+  and `MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED = 25` from
+  `common/src/decomposition_advice/vector.rs`. These names make the shipped
+  mathematics harder to misread than the prior generic similarity names.
+- **`1 / 25` means squared cosine, not raw cosine**: the runtime comparison
+  `25 * dot^2 >= left_norm * right_norm` is the squared-denominator form of
+  `cosine >= 0.20` for non-zero norms. The proof models the cosine predicate
+  via positive real vector lengths whose squares are `left_norm` and
+  `right_norm`, then uses Verus nonlinear reasoning to prove the equivalence.
+- **Zero norms are handled by control flow, not denominator arithmetic**: the
+  proof and runtime both model zero-norm safety as an early return to `false`
+  before any denominator-bearing reasoning is needed. This keeps the executable
+  code free of division and clarifies why divide-by-zero cannot occur.
+- **Behaviour tests use a narrow test-support seam**: integration tests call
+  `common::test_support::decomposition::methods_meet_cosine_threshold()` rather
+  than exposing `MethodFeatureVector` or `cosine_threshold_met` publicly. The
+  helper builds feature vectors internally and follows the same threshold path
+  as production code.
+
 ## SARIF output
 
 The lints can optionally emit SARIF 2.1.0 (Static Analysis Results Interchange

@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus
 
 APP ?= whitaker
 CARGO ?= cargo
@@ -107,6 +107,9 @@ nixie:
 
 typecheck:
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS)
+
+verus: ## Run the pinned Verus proof sidecar
+	./scripts/run-verus.sh
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \

@@ -2,10 +2,10 @@
 
 use std::collections::BTreeMap;
 
-use super::vector::{MethodFeatureVector, cosine_threshold_met, dot_product};
-
-const MIN_SIMILARITY_NUMERATOR: u64 = 1;
-const MIN_SIMILARITY_DENOMINATOR: u64 = 25;
+use super::vector::{
+    MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED, MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+    MethodFeatureVector, cosine_threshold_met, dot_product,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SimilarityEdge {
@@ -39,8 +39,8 @@ pub(crate) fn build_similarity_edges(vectors: &[MethodFeatureVector]) -> Vec<Sim
             if !cosine_threshold_met(
                 &vectors[left],
                 &vectors[right],
-                MIN_SIMILARITY_NUMERATOR,
-                MIN_SIMILARITY_DENOMINATOR,
+                MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+                MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
             ) {
                 continue;
             }

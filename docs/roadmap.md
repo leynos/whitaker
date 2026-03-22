@@ -182,7 +182,7 @@
 - [x] 6.4.2. Emit concise diagnostic notes mapping clusters to extraction
   suggestions, capped for large types. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition advice.
-- [ ] 6.4.3. Use Verus to prove `cosine_threshold_met`'s cross-multiplied
+- [x] 6.4.3. Use Verus to prove `cosine_threshold_met`'s cross-multiplied
   threshold check is equivalent to `cosine >= 0.20` for non-zero norms and
   cannot divide by zero. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
