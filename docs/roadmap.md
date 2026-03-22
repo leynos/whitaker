@@ -179,7 +179,7 @@
   detection to form decomposition suggestions. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.2.1.
-- [ ] 6.4.2. Emit concise diagnostic notes mapping clusters to extraction
+- [x] 6.4.2. Emit concise diagnostic notes mapping clusters to extraction
   suggestions, capped for large types. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition advice.
 - [ ] 6.4.3. Use Verus to prove `cosine_threshold_met`'s cross-multiplied

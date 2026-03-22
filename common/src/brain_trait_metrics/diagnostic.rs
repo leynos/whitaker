@@ -9,6 +9,9 @@
 
 use super::TraitMetrics;
 use super::evaluation::BrainTraitDisposition;
+use crate::decomposition_advice::{
+    DecompositionContext, DecompositionSuggestion, SubjectKind, format_diagnostic_note,
+};
 
 #[cfg(test)]
 #[path = "diagnostic_tests.rs"]
@@ -189,6 +192,32 @@ pub fn format_note(diagnostic: &BrainTraitDiagnostic) -> String {
         );
     }
     note
+}
+
+/// Formats a decomposition note from precomputed community suggestions.
+///
+/// Returns `None` when there are no suggestions to render.
+///
+/// # Examples
+///
+/// ```
+/// use common::brain_trait_metrics::evaluation::{
+///     BrainTraitDiagnostic, BrainTraitDisposition, format_decomposition_note,
+/// };
+/// use common::brain_trait_metrics::TraitMetricsBuilder;
+///
+/// let metrics = TraitMetricsBuilder::new("Foo").build();
+/// let diagnostic = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
+///
+/// assert_eq!(format_decomposition_note(&diagnostic, &[]), None);
+/// ```
+#[must_use]
+pub fn format_decomposition_note(
+    diagnostic: &BrainTraitDiagnostic,
+    suggestions: &[DecompositionSuggestion],
+) -> Option<String> {
+    let context = DecompositionContext::new(diagnostic.trait_name(), SubjectKind::Trait);
+    format_diagnostic_note(&context, suggestions)
 }
 
 /// Formats help text with tailored decomposition guidance.

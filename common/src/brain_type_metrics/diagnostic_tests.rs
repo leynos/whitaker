@@ -3,6 +3,8 @@
 use super::*;
 use crate::brain_type_metrics::TypeMetricsBuilder;
 use crate::brain_type_metrics::evaluation::BrainTypeDisposition;
+use crate::decomposition_advice::SubjectKind;
+use crate::test_support::decomposition::{decomposition_suggestions, parser_serde_fs_fixture};
 use rstest::rstest;
 
 // ---------------------------------------------------------------------------
@@ -181,6 +183,34 @@ fn note_omits_foreign_reach_when_zero() {
     let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
     let note = format_note(&diag);
     assert!(!note.contains("Foreign reach"));
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic - decomposition note
+// ---------------------------------------------------------------------------
+
+#[rstest]
+fn decomposition_note_delegates_to_shared_renderer_for_types() {
+    let metrics = build_note_metrics(0, 1);
+    let diagnostic = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
+    let (_, suggestions) = decomposition_suggestions(
+        diagnostic.type_name(),
+        SubjectKind::Type,
+        &parser_serde_fs_fixture(),
+    );
+
+    assert_eq!(
+        format_decomposition_note(&diagnostic, &suggestions),
+        Some(
+            concat!(
+                "Potential decomposition for `Foo`:\n",
+                "- [grammar] helper struct for `parse_nodes`, `parse_tokens`\n",
+                "- [serde::json] module for `decode_json`, `encode_json`\n",
+                "- [std::fs] module for `load_from_disk`, `save_to_disk`",
+            )
+            .to_owned()
+        )
+    );
 }
 
 // ---------------------------------------------------------------------------

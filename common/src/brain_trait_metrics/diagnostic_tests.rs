@@ -3,6 +3,8 @@
 use super::*;
 use crate::brain_trait_metrics::TraitMetricsBuilder;
 use crate::brain_trait_metrics::evaluation::BrainTraitDisposition;
+use crate::decomposition_advice::SubjectKind;
+use crate::test_support::decomposition::{decomposition_suggestions, transport_trait_fixture};
 use rstest::rstest;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,38 @@ fn note_omits_cc_when_no_default_methods() {
     assert!(
         !format_note(&diag).contains("Default method CC"),
         "should not mention CC when no default methods",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic - decomposition note
+// ---------------------------------------------------------------------------
+
+#[rstest]
+fn decomposition_note_delegates_to_shared_renderer_for_traits() {
+    let diagnostic = build_diagnostic(DiagnosticInput {
+        name: "Transport",
+        required: 2,
+        default: 2,
+        cc_per_default: 5,
+        disposition: BrainTraitDisposition::Warn,
+    });
+    let (_, suggestions) = decomposition_suggestions(
+        diagnostic.trait_name(),
+        SubjectKind::Trait,
+        &transport_trait_fixture(),
+    );
+
+    assert_eq!(
+        format_decomposition_note(&diagnostic, &suggestions),
+        Some(
+            concat!(
+                "Potential decomposition for `Transport`:\n",
+                "- [serde::json] sub-trait for `decode_request`, `encode_request`\n",
+                "- [std::io] sub-trait for `read_frame`, `write_frame`",
+            )
+            .to_owned()
+        )
     );
 }
 

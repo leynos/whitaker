@@ -8,11 +8,14 @@
 //!
 //! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and
 //!   support directories) into isolated workspaces for dylint UI harnesses.
+//! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and
+//!   behaviour tests.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint
 //!   UI tests with consistent panic handling.
 //! - [`LocaleOverride`]: Temporarily mutates `DYLINT_LOCALE` so locale-sensitive
 //!   tests can execute without leaking global state between cases.
 
+pub mod decomposition;
 pub mod fixtures;
 pub mod ui;
 

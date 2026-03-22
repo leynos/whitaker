@@ -420,18 +420,40 @@ The shipped clustering pipeline is:
   `SubTrait`, domain-led type communities produce `Module`, and all other type
   communities produce `HelperStruct`.
 
-Example help output:
+Example note output:
 
 ```plaintext
-Note: `Foo` splits into three areas:
-- [parse]: 11 methods using grammar and tokens (extract `FooParser`).
-- [serde]: 6 methods for serialisation (move to `foo::serde_glue`).
-- [fs_io]: 5 methods for file I/O (extract `FooStorage` trait).
+Potential decomposition for `Foo`:
+- [grammar] helper struct for `parse_nodes`, `parse_tokens`
+- [serde::json] module for `decode_json`, `encode_json`
+- [std::fs] module for `load_from_disk`, `save_to_disk`
 ```
 
 Advice is concise and only emitted when clustering yields meaningful groups. If
 the type is extremely large, the lint may cap advice length and report that
 further decomposition analysis was omitted.
+
+### Implementation decisions (6.4.2)
+
+- **Dedicated note channel**: decomposition guidance is rendered as a separate
+  diagnostic note instead of being folded into the existing metric note or help
+  text. This keeps the previously shipped metric explanations stable while
+  making cluster-based advice easy to spot.
+- **Shared renderer in `common::decomposition_advice`**: both `brain_type` and
+  `brain_trait` call the same `format_diagnostic_note()` helper, then expose
+  thin per-lint wrappers. This avoids wording drift between the two lints and
+  keeps the renderer free of `rustc_private`.
+- **English-only multi-line template**: the current note format is
+  `Potential decomposition for \`subject\`:` followed by one bullet per
+  suggestion. Wording remains English-only until the later localization work
+  moves it behind Fluent messages.
+- **Hard caps for readability**: diagnostic notes show at most 3 suggestion
+  areas and at most 3 method names per area. Hidden method names are reported
+  inline as `+N more methods`, and hidden suggestion areas are reported on a
+  trailing line as `N more areas omitted`.
+- **Emit only for non-empty suggestions**: the renderer returns no note when
+  clustering yields no surviving decomposition suggestions, so diagnostics stay
+  quiet for weakly related subjects.
 
 ## SARIF output
 
