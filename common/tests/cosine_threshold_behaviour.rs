@@ -106,17 +106,28 @@ fn given_method(world: &CosineThresholdWorld, side: MethodSide, name: String) {
     ensure_method_builder(world, side, &name);
 }
 
+fn apply_csv_items_to_builder(
+    world: &CosineThresholdWorld,
+    side: MethodSide,
+    items: CsvList,
+    mut record: impl FnMut(&mut MethodProfileBuilder, &str),
+) -> Result<(), String> {
+    let parsed_items = items.into_vec();
+    with_method_builder(world, side, |builder| {
+        for item in &parsed_items {
+            record(builder, item.as_str());
+        }
+    })
+}
+
 #[given("the {side} method accesses fields {fields}")]
 fn given_fields(
     world: &CosineThresholdWorld,
     side: MethodSide,
     fields: CsvList,
 ) -> Result<(), String> {
-    let parsed_fields = fields.into_vec();
-    with_method_builder(world, side, |builder| {
-        for field in &parsed_fields {
-            builder.record_accessed_field(field.as_str());
-        }
+    apply_csv_items_to_builder(world, side, fields, |builder, field| {
+        builder.record_accessed_field(field);
     })
 }
 
@@ -126,11 +137,8 @@ fn given_domains(
     side: MethodSide,
     domains: CsvList,
 ) -> Result<(), String> {
-    let parsed_domains = domains.into_vec();
-    with_method_builder(world, side, |builder| {
-        for domain in &parsed_domains {
-            builder.record_external_domain(domain.as_str());
-        }
+    apply_csv_items_to_builder(world, side, domains, |builder, domain| {
+        builder.record_external_domain(domain);
     })
 }
 
