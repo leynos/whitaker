@@ -440,6 +440,36 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    a repeated minimum is emitted once while distinct equal-hash regions remain
    distinguishable.
 
+## Implementation decisions (7.2.2)
+
+1. **Deterministic 128-seed MinHash family.** Roadmap item 7.2.2 ships a new
+   `index/` module subtree inside `crates/whitaker_clones_core/` with a
+   `MinHasher` that derives its fixed 128 seeds from a constant SplitMix64
+   stream. This keeps sketch generation deterministic without introducing a new
+   hashing dependency or any runtime randomness.
+
+2. **Set semantics before sketching.** `MinHasher::sketch` collapses duplicate
+   `Fingerprint.hash` values into a sorted set before applying the 128 MinHash
+   functions. Repeated minima from winnowing therefore do not bias the sketch
+   relative to distinct retained hashes.
+
+3. **Validated bands and rows.** `LshConfig` accepts configurable band and row
+   counts, but `bands` and `rows` must both be greater than zero and their
+   product must equal the fixed `MINHASH_SIZE` of 128. Invalid settings are
+   reported as typed `IndexError` values rather than silently rounded or
+   clamped.
+
+4. **Explicit empty-input behaviour.** Sketching an empty retained-fingerprint
+   list returns `IndexError::EmptyFingerprintSet`. Candidate generation stops
+   at that error so later pipeline stages can decide whether to skip the
+   fragment or surface the failure.
+
+5. **Canonical, deduplicated candidate pairs.** `LshIndex` buckets fragments by
+   `(band_index, band_values)` and stores members in ordered sets. Candidate
+   pairs are emitted in lexical `FragmentId` order, self-pairs are suppressed,
+   and repeated collisions across multiple bands still produce one stable
+   `CandidatePair`.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates

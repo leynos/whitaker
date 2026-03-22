@@ -244,7 +244,7 @@
   Rabin-Karp hashing. See
   [clone detector design](whitaker-clone-detector-design.md) §Pass A: token
   engine (rustc_lexer).
-- [ ] 7.2.2. Implement MinHash + LSH candidate generation with configurable
+- [x] 7.2.2. Implement MinHash + LSH candidate generation with configurable
   bands and rows. See
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
 - [ ] 7.2.3. Emit SARIF run 0 for accepted Type-1 and Type-2 pairs with stable

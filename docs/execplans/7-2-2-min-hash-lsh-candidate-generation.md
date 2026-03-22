@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -122,20 +122,22 @@ Observable outcome:
 
 - [x] Stage A: Gather repository context and draft this ExecPlan
   (2026-03-21).
-- [ ] Stage B: Add failing unit tests for MinHash configuration, empty input,
-  deterministic sketches, and LSH pair generation.
-- [ ] Stage C: Add failing `rstest-bdd` feature scenarios for happy,
-  unhappy, and edge-case candidate generation.
-- [ ] Stage D: Implement the new `index` module and export its public API from
-  `crates/whitaker_clones_core/src/lib.rs`.
-- [ ] Stage E: Make the targeted tests green and refactor for readability
-  while keeping files below 400 lines.
-- [ ] Stage F: Update `docs/whitaker-clone-detector-design.md` with
-  `## Implementation decisions (7.2.2)`.
-- [ ] Stage G: Mark roadmap item 7.2.2 done in `docs/roadmap.md`.
-- [ ] Stage H: Run documentation and code quality gates successfully.
-- [ ] Stage I: Finalize the living sections in this ExecPlan after
-  implementation.
+- [x] Stage B: Add failing unit tests for MinHash configuration, empty input,
+  deterministic sketches, and LSH pair generation (2026-03-22).
+- [x] Stage C: Add failing `rstest-bdd` feature scenarios for happy,
+  unhappy, and edge-case candidate generation (2026-03-22).
+- [x] Stage D: Implement the new `index` module and export its public API from
+  `crates/whitaker_clones_core/src/lib.rs` (2026-03-22).
+- [x] Stage E: Make the targeted tests green and refactor for readability
+  while keeping files below 400 lines (2026-03-22).
+- [x] Stage F: Update `docs/whitaker-clone-detector-design.md` with
+  `## Implementation decisions (7.2.2)` (2026-03-22).
+- [x] Stage G: Mark roadmap item 7.2.2 done in `docs/roadmap.md`
+  (2026-03-22).
+- [x] Stage H: Run documentation and code quality gates successfully
+  (2026-03-22).
+- [x] Stage I: Finalize the living sections in this ExecPlan after
+  implementation (2026-03-22).
 
 ## Surprises & Discoveries
 
@@ -157,6 +159,10 @@ Observable outcome:
 - The repository guidance and prior project notes emphasise that doc changes
   require `make fmt`, `make markdownlint`, and `make nixie` in addition to the
   requested Rust gates.
+- `rstest` tuple cases in `src/index/tests.rs` needed to be wrapped as a
+  single `#[case(((...), ...))]` argument tuple to match the helper signature.
+  The first attempt compiled the implementation cleanly but failed test macro
+  expansion.
 
 ## Decision Log
 
@@ -178,6 +184,10 @@ Observable outcome:
   scoring plus acceptance thresholds for 7.2.3. Rationale: the roadmap and
   design doc split candidate generation from token-level scoring. Date/Author:
   2026-03-21 / Codex.
+- Decision: derive the 128 MinHash seeds from a fixed SplitMix64 stream and
+  mix each retained fingerprint hash with a deterministic avalanche function.
+  Rationale: this keeps the sketch stable without adding a dependency or
+  relying on `DefaultHasher` randomness. Date/Author: 2026-03-22 / Codex.
 
 ## Context and orientation
 
@@ -368,6 +378,42 @@ the 7.2.2 decisions, and `docs/roadmap.md` marks 7.2.2 done.
 
 ## Outcomes & Retrospective
 
-Not started. Replace this section during implementation with a concise summary
-of what shipped, what changed from the original plan, which validation commands
-ran successfully, and any lessons that should shape roadmap item 7.2.3.
+Implemented a new `crates/whitaker_clones_core/src/index/` module subtree with
+typed configuration and error handling, deterministic 128-slot MinHash
+sketching, ordered-band LSH bucketing, and canonical deduplicated
+`CandidatePair` output. The crate root now re-exports the index API alongside
+the token API.
+
+Added unit coverage in `src/index/tests.rs` plus BDD coverage in
+`tests/min_hash_lsh_behaviour.rs` and `tests/features/min_hash_lsh.feature`.
+The implementation stayed within the planned scope: no Jaccard acceptance,
+clone grouping, SARIF emission, CLI wiring, or AST work was added.
+
+Documentation changes shipped as planned:
+
+- `docs/whitaker-clone-detector-design.md` now records the 7.2.2
+  implementation decisions.
+- `docs/roadmap.md` marks 7.2.2 done.
+
+Validation commands run successfully, with logs captured at:
+
+- `/tmp/7-2-2-fmt.log`
+- `/tmp/7-2-2-markdownlint.log`
+- `/tmp/7-2-2-nixie.log`
+- `/tmp/7-2-2-check-fmt.log`
+- `/tmp/7-2-2-lint.log`
+- `/tmp/7-2-2-test.log`
+
+Additional targeted crate logs used during implementation:
+
+- `/tmp/7-2-2-crate-test.log`
+- `/tmp/7-2-2-crate-clippy.log`
+
+Final verification outcome:
+
+- `make fmt` passed.
+- `make markdownlint` passed.
+- `make nixie` passed.
+- `make check-fmt` passed.
+- `make lint` passed.
+- `make test` passed with `1147` tests run, `1147` passed, and `2` skipped.
