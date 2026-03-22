@@ -14,6 +14,9 @@ const STOP_WORDS: &[&str] = &[
     "build", "create", "do", "get", "handle", "make", "process", "render", "run", "set", "update",
 ];
 
+pub(crate) const MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED: u64 = 1;
+pub(crate) const MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED: u64 = 25;
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum FeatureCategory {
     Domain,
@@ -160,6 +163,23 @@ pub(crate) fn build_feature_vector(profile: &MethodProfile) -> MethodFeatureVect
     }
 }
 
+/// Evaluates Whitaker's shipped cosine threshold for two method profiles.
+///
+/// The runtime compares the squared cosine form `25 * dot^2 >= left_norm *
+/// right_norm`, which is equivalent to `cosine >= 0.20` when both norms are
+/// non-zero.
+#[must_use]
+pub(crate) fn methods_meet_cosine_threshold(left: &MethodProfile, right: &MethodProfile) -> bool {
+    let left_vector = build_feature_vector(left);
+    let right_vector = build_feature_vector(right);
+    cosine_threshold_met(
+        &left_vector,
+        &right_vector,
+        MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
+        MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED,
+    )
+}
+
 pub(crate) fn cosine_threshold_met(
     left: &MethodFeatureVector,
     right: &MethodFeatureVector,
@@ -182,6 +202,21 @@ pub(crate) fn cosine_threshold_met(
     let right_side =
         u128::from(min_similarity_numerator) * u128::from(left_norm) * u128::from(right_norm);
     left_side >= right_side
+}
+
+#[cfg(test)]
+pub(crate) fn test_feature_vector(
+    method_name: &str,
+    weights: &[(&str, u64)],
+) -> MethodFeatureVector {
+    MethodFeatureVector {
+        method_name: method_name.to_owned(),
+        weights: weights
+            .iter()
+            .map(|(feature, weight)| ((*feature).to_owned(), *weight))
+            .collect(),
+        metadata: BTreeMap::new(),
+    }
 }
 
 pub(crate) fn dot_product(left: &BTreeMap<String, u64>, right: &BTreeMap<String, u64>) -> u64 {

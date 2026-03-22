@@ -4,11 +4,11 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 This document must be maintained in accordance with `AGENTS.md`.
 
-Do not begin implementation until the user explicitly approves this plan.
+Implementation began after explicit user approval in the follow-up task.
 
 ## Purpose / big picture
 
@@ -124,18 +124,23 @@ Observable outcome:
 
 - [x] 2026-03-22: Draft this ExecPlan, inspect the current decomposition code,
   and capture the proof/testing/tooling constraints.
-- [ ] Stage B: Add failing unit tests that pin exact-threshold, below-threshold,
-  and zero-norm runtime behaviour.
-- [ ] Stage C: Add failing `rstest-bdd` scenarios for happy, unhappy, and
-  zero-feature edge cases through test support.
-- [ ] Stage D: Add the Verus sidecar workflow and proof files.
-- [ ] Stage E: Make the Rust tests and Verus proof green while preserving the
-  current runtime behaviour.
-- [ ] Stage F: Record 6.4.3 implementation decisions in
+- [x] 2026-03-22: Add unit tests covering exact-boundary, below-threshold,
+  zero-dot, and zero-norm runtime behaviour in
+  `common/src/decomposition_advice/tests.rs`.
+- [x] 2026-03-22: Add `rstest-bdd` scenarios for strong overlap,
+  below-threshold overlap, and empty-vector safety through
+  `common::test_support::decomposition::methods_meet_cosine_threshold()`.
+- [x] 2026-03-22: Add the Verus sidecar workflow with
+  `scripts/install-verus.sh`, `scripts/run-verus.sh`,
+  `verus/decomposition_cosine_threshold.rs`, and `make verus`.
+- [x] 2026-03-22: Keep runtime behaviour unchanged while clarifying the shared
+  squared-threshold constants in `common/src/decomposition_advice/vector.rs`.
+- [x] 2026-03-22: Record 6.4.3 implementation decisions in
   `docs/brain-trust-lints-design.md`.
-- [ ] Stage G: Mark roadmap item 6.4.3 done.
-- [ ] Stage H: Run formatting, lint, test, and proof gates successfully.
-- [ ] Stage I: Finalize the living sections in this document.
+- [x] 2026-03-22: Mark roadmap item 6.4.3 done in `docs/roadmap.md`.
+- [x] 2026-03-22: Run `make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, `make test`, and `make verus` successfully.
+- [x] 2026-03-22: Finalize the living sections in this ExecPlan.
 
 ## Surprises & Discoveries
 
@@ -157,6 +162,14 @@ Observable outcome:
 - Existing integration tests already rely on `common::test_support` for
   decomposition fixtures, which makes that module the safest seam for the new
   BDD coverage.
+- The current pinned Verus release `0.2026.03.17.a96bad0` ships binaries in
+  its zip archive without executable mode preserved in this environment, so the
+  install script must `chmod +x` `verus`, `cargo-verus`, `rust_verify`, and
+  `z3` after extraction.
+- On 2026-03-22, that pinned Verus release required Rust toolchain
+  `1.94.0-x86_64-unknown-linux-gnu` on Linux. The install script can discover
+  the requirement by running `verus --version`, parsing the suggested
+  `rustup install ...` command, and then retrying.
 
 ## Decision Log
 
@@ -177,6 +190,10 @@ Observable outcome:
   `make verus` delegating to `scripts/run-verus.sh`. Rationale: the project
   conventions prefer Makefile targets, and proof execution should be as easy to
   repeat as `make test`. Date/Author: 2026-03-22 / Codex.
+- Decision: pin Verus release `0.2026.03.17.a96bad0` in the install script and
+  allow override via environment variables. Rationale: this keeps the proof
+  workflow reproducible while still permitting later upgrades without editing
+  the wrapper shape. Date/Author: 2026-03-22 / Codex.
 
 ## Context and orientation
 
@@ -414,10 +431,36 @@ The implementation is complete only when all of the following are true:
 
 ## Outcomes & Retrospective
 
-Not started. At completion, replace this section with a short summary of:
+Completed on 2026-03-22.
 
-- what was proved,
-- what runtime clarifications were needed,
-- which tests were added,
-- the final proof and gate commands that passed,
-- and any follow-on work that remains for 6.4.4 or later.
+- Proved:
+  - `25 * dot^2 >= left_norm * right_norm` is equivalent to
+    `cosine >= 0.20` for non-zero norms, modelled in Verus via positive real
+    vector lengths whose squares are the integer norms.
+  - Zero norms and zero dot product short-circuit the runtime algorithm before
+    any denominator-bearing reasoning is needed.
+  - Exact boundary equality is accepted.
+- Runtime clarifications:
+  - Shared squared-threshold constants now live in
+    `common/src/decomposition_advice/vector.rs` as
+    `MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED` and
+    `MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED`.
+  - A crate-visible helper
+    `methods_meet_cosine_threshold(left, right)` keeps behavioural tests on the
+    same threshold path without exposing `MethodFeatureVector`.
+- Tests added:
+  - Unit tests for exact-boundary, below-threshold, zero-dot, and zero-norm
+    cases in `common/src/decomposition_advice/tests.rs`.
+  - BDD scenarios in `common/tests/cosine_threshold_behaviour.rs` and
+    `common/tests/features/cosine_threshold.feature`.
+- Proof and gate commands that passed:
+  - `set -o pipefail; make fmt 2>&1 | tee /tmp/6-4-3-fmt.log`
+  - `set -o pipefail; make markdownlint 2>&1 | tee /tmp/6-4-3-markdownlint.log`
+  - `set -o pipefail; make nixie 2>&1 | tee /tmp/6-4-3-nixie.log`
+  - `set -o pipefail; make check-fmt 2>&1 | tee /tmp/6-4-3-check-fmt.log`
+  - `set -o pipefail; make lint 2>&1 | tee /tmp/6-4-3-lint.log`
+  - `set -o pipefail; make test 2>&1 | tee /tmp/6-4-3-test.log`
+  - `set -o pipefail; make verus 2>&1 | tee /tmp/6-4-3-verus.log`
+- Follow-on work:
+  - Roadmap 6.4.4 still needs separate algebraic proofs for `dot_product` and
+    `norm_squared`.
