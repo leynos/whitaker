@@ -14,8 +14,8 @@ pub mod index;
 pub mod token;
 
 pub use index::{
-    CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
-    MinHasher,
+    CandidatePair, FragmentId, IndexError, IndexResult, LshConfig, LshIndex, MINHASH_SIZE,
+    MinHashSignature, MinHasher,
 };
 pub use token::{
     Fingerprint, IdentifierSymbol, LiteralSymbol, NormProfile, NormalizedToken,

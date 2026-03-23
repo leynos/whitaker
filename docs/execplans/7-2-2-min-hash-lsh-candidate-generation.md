@@ -156,7 +156,7 @@ Observable outcome:
 - Existing behaviour tests in this crate already use a fixture-backed world and
   `tests/features/` layout, so 7.2.2 can follow the same pattern instead of
   inventing a second BDD style.
-- The repository guidance and prior project notes emphasise that doc changes
+- The repository guidance and prior project notes emphasize that doc changes
   require `make fmt`, `make markdownlint`, and `make nixie` in addition to the
   requested Rust gates.
 - `rstest` tuple cases in `src/index/tests.rs` needed to be wrapped as a

@@ -33,6 +33,22 @@ pub enum IndexError {
 
 impl IndexError {
     /// Builds the product-mismatch error for the fixed 7.2.2 sketch size.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use whitaker_clones_core::index::{IndexError, MINHASH_SIZE};
+    ///
+    /// let error = IndexError::invalid_band_row_product(8, 8);
+    /// assert_eq!(
+    ///     error,
+    ///     IndexError::InvalidBandRowProduct {
+    ///         bands: 8,
+    ///         rows: 8,
+    ///         expected: MINHASH_SIZE,
+    ///     }
+    /// );
+    /// ```
     #[must_use]
     pub const fn invalid_band_row_product(bands: usize, rows: usize) -> Self {
         Self::InvalidBandRowProduct {

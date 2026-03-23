@@ -218,6 +218,13 @@ impl MinHashSignature {
     }
 
     pub(crate) fn bands(&self, rows: usize) -> ChunksExact<'_, u64> {
+        debug_assert!(
+            self.0.len().is_multiple_of(rows),
+            "MinHashSignature length ({}) must divide evenly by rows ({}); \
+             LshConfig ensures bands * rows == MINHASH_SIZE",
+            self.0.len(),
+            rows
+        );
         self.0.chunks_exact(rows)
     }
 }

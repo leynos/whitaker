@@ -78,11 +78,20 @@ fn mix_hash(seed: u64, hash: u64) -> u64 {
     splitmix64(seed ^ hash.wrapping_mul(HASH_MIX))
 }
 
+/// Generates the next seed in the deterministic stream.
+///
+/// Both `next_seed` and `splitmix64` intentionally add `SEED_STREAM_STEP` to
+/// create a non-overlapping, deterministic seed sequence compatible with the
+/// seed-streaming approach. This double-increment is deliberate, not a bug.
 fn next_seed(state: &mut u64) -> u64 {
     *state = state.wrapping_add(SEED_STREAM_STEP);
     splitmix64(*state)
 }
 
+/// SplitMix64 generator with deliberate `SEED_STREAM_STEP` addition.
+///
+/// This function applies `SEED_STREAM_STEP` in addition to the increment in
+/// `next_seed` to ensure deterministic, non-overlapping seed values.
 fn splitmix64(value: u64) -> u64 {
     let mut mixed = value.wrapping_add(SEED_STREAM_STEP);
     mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);

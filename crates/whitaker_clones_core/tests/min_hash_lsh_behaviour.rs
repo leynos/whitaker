@@ -47,6 +47,7 @@ fn expected_error(name: &str) -> Result<IndexError, String> {
         "ZeroBands" => Ok(IndexError::ZeroBands),
         "ZeroRows" => Ok(IndexError::ZeroRows),
         "EmptyFingerprintSet" => Ok(IndexError::EmptyFingerprintSet),
+        "InvalidBandRowProduct" => Ok(IndexError::invalid_band_row_product(0, 0)),
         other => Err(format!("unknown error name `{other}`")),
     }
 }
@@ -115,10 +116,16 @@ fn then_candidate_pair_count_is(world: &MinHashLshWorld, count: usize) {
 
 #[then("the only candidate pair is {left} and {right}")]
 fn then_only_candidate_pair_is(world: &MinHashLshWorld, left: String, right: String) {
-    let expected = CandidatePair::new(FragmentId::from(left), FragmentId::from(right));
-    with_candidates(world, |candidates| match (candidates, expected) {
-        ([candidate], Some(expected)) => assert_eq!(candidate, &expected),
-        _ => panic!("exactly one canonical candidate pair must be present"),
+    with_candidates(world, |candidates| {
+        let [candidate] = candidates else {
+            panic!(
+                "exactly one candidate pair must be present, found {}",
+                candidates.len()
+            );
+        };
+        let expected = CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
+            .expect("distinct fragment IDs should form a canonical pair");
+        assert_eq!(candidate, &expected);
     });
 }
 
