@@ -190,12 +190,9 @@ fn canonical_ordering_across_multiple_pairs_and_bands(
     reverse.insert(&alpha, &shared_signature);
 
     let expected = vec![
-        CandidatePair::new(alpha.clone(), beta.clone())
-            .expect("distinct ids should form a pair"),
-        CandidatePair::new(alpha.clone(), gamma.clone())
-            .expect("distinct ids should form a pair"),
-        CandidatePair::new(beta.clone(), gamma.clone())
-            .expect("distinct ids should form a pair"),
+        CandidatePair::new(alpha.clone(), beta.clone()).expect("distinct ids should form a pair"),
+        CandidatePair::new(alpha.clone(), gamma.clone()).expect("distinct ids should form a pair"),
+        CandidatePair::new(beta.clone(), gamma.clone()).expect("distinct ids should form a pair"),
     ];
 
     assert_eq!(forward.candidate_pairs(), expected);
