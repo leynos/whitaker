@@ -2,10 +2,19 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
 VERUS_CACHE_DIR=${WHITAKER_VERUS_CACHE_DIR:-"${XDG_CACHE_HOME:-${HOME}/.cache}/whitaker/verus"}
 VERUS_RELEASE_VERSION=${VERUS_RELEASE_VERSION:-0.2026.03.17.a96bad0}
 VERUS_RELEASE_TAG=${VERUS_RELEASE_TAG:-release/0.2026.03.17.a96bad0}
+
+tmp_dir=""
+toolchain_log=""
+
+cleanup() {
+    [ -n "${tmp_dir}" ] && rm -rf "${tmp_dir}"
+    [ -n "${toolchain_log}" ] && rm -f "${toolchain_log}"
+}
+
+trap cleanup EXIT INT TERM HUP
 
 platform_asset_suffix() {
     case "$(uname -s):$(uname -m)" in
@@ -37,7 +46,6 @@ verus_bin="${install_dir}/verus"
 
 if [ ! -x "${verus_bin}" ]; then
     tmp_dir=$(mktemp -d)
-    trap 'rm -rf "${tmp_dir}"' EXIT INT TERM HUP
     mkdir -p "${install_root}"
     curl -fsSL \
         -o "${tmp_dir}/${asset_name}" \
@@ -58,7 +66,6 @@ PY
 fi
 
 toolchain_log=$(mktemp)
-trap 'rm -f "${toolchain_log}"' EXIT INT TERM HUP
 if ! "${verus_bin}" --version >"${toolchain_log}" 2>&1; then
     required_toolchain=$(python3 - "${toolchain_log}" <<'PY'
 import pathlib

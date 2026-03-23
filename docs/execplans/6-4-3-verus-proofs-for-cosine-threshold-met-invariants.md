@@ -298,7 +298,7 @@ The exact-boundary and just-below cases should use tiny synthetic weights so
 the expected inequality is obvious to a reader, ideally with a short comment
 showing the arithmetic.
 
-### Stage C: Add BDD coverage through test support
+### Stage C: Add Behaviour-Driven Development (BDD) coverage through test support
 
 Create a narrow helper in `common/src/test_support/decomposition.rs`, for
 example:

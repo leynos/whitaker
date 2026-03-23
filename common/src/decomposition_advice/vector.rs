@@ -168,6 +168,22 @@ pub(crate) fn build_feature_vector(profile: &MethodProfile) -> MethodFeatureVect
 /// The runtime compares the squared cosine form `25 * dot^2 >= left_norm *
 /// right_norm`, which is equivalent to `cosine >= 0.20` when both norms are
 /// non-zero.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_common::decomposition_advice::profile::MethodProfileBuilder;
+/// use whitaker_common::decomposition_advice::vector::methods_meet_cosine_threshold;
+///
+/// let left = MethodProfileBuilder::new("parse_tokens")
+///     .record_accessed_field("grammar")
+///     .build();
+/// let right = MethodProfileBuilder::new("parse_nodes")
+///     .record_accessed_field("grammar")
+///     .build();
+///
+/// assert!(methods_meet_cosine_threshold(&left, &right));
+/// ```
 #[must_use]
 pub(crate) fn methods_meet_cosine_threshold(left: &MethodProfile, right: &MethodProfile) -> bool {
     let left_vector = build_feature_vector(left);
