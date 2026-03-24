@@ -171,16 +171,19 @@ pub(crate) fn build_feature_vector(profile: &MethodProfile) -> MethodFeatureVect
 ///
 /// # Examples
 ///
-/// ```
-/// use whitaker_common::decomposition_advice::profile::MethodProfileBuilder;
-/// use whitaker_common::decomposition_advice::vector::methods_meet_cosine_threshold;
+/// For testing and integration purposes, use the public test support wrapper:
 ///
-/// let left = MethodProfileBuilder::new("parse_tokens")
-///     .record_accessed_field("grammar")
-///     .build();
-/// let right = MethodProfileBuilder::new("parse_nodes")
-///     .record_accessed_field("grammar")
-///     .build();
+/// ```
+/// use common::MethodProfileBuilder;
+/// use common::test_support::decomposition::methods_meet_cosine_threshold;
+///
+/// let mut left_builder = MethodProfileBuilder::new("parse_tokens");
+/// left_builder.record_accessed_field("grammar");
+/// let left = left_builder.build();
+///
+/// let mut right_builder = MethodProfileBuilder::new("parse_nodes");
+/// right_builder.record_accessed_field("grammar");
+/// let right = right_builder.build();
 ///
 /// assert!(methods_meet_cosine_threshold(&left, &right));
 /// ```
