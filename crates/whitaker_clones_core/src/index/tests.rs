@@ -63,6 +63,28 @@ fn gamma_id() -> FragmentId {
     FragmentId::from("gamma")
 }
 
+#[fixture]
+fn delta_id() -> FragmentId {
+    FragmentId::from("delta")
+}
+
+struct FragmentIds {
+    alpha: FragmentId,
+    beta: FragmentId,
+    gamma: FragmentId,
+    delta: FragmentId,
+}
+
+#[fixture]
+fn fragment_ids() -> FragmentIds {
+    FragmentIds {
+        alpha: FragmentId::from("alpha"),
+        beta: FragmentId::from("beta"),
+        gamma: FragmentId::from("gamma"),
+        delta: FragmentId::from("delta"),
+    }
+}
+
 #[rstest]
 #[case(((0, 4), IndexError::ZeroBands))]
 #[case(((4, 0), IndexError::ZeroRows))]
@@ -144,55 +166,53 @@ fn identical_sets_yield_identical_signatures() {
 #[rstest]
 fn insertion_order_does_not_change_candidate_output(
     single_band_config: LshConfig,
+    fragment_ids: FragmentIds,
     shared_signature: MinHashSignature,
     distinct_signature: MinHashSignature,
 ) {
-    let alpha = FragmentId::from("alpha");
-    let beta = FragmentId::from("beta");
-    let gamma = FragmentId::from("gamma");
-
     let mut forward = LshIndex::new(single_band_config);
-    forward.insert(&alpha, &shared_signature);
-    forward.insert(&beta, &shared_signature);
-    forward.insert(&gamma, &distinct_signature);
+    forward.insert(&fragment_ids.alpha, &shared_signature);
+    forward.insert(&fragment_ids.beta, &shared_signature);
+    forward.insert(&fragment_ids.gamma, &distinct_signature);
 
     let mut reverse = LshIndex::new(single_band_config);
-    reverse.insert(&gamma, &distinct_signature);
-    reverse.insert(&beta, &shared_signature);
-    reverse.insert(&alpha, &shared_signature);
+    reverse.insert(&fragment_ids.gamma, &distinct_signature);
+    reverse.insert(&fragment_ids.beta, &shared_signature);
+    reverse.insert(&fragment_ids.alpha, &shared_signature);
 
-    let expected = CandidatePair::new(alpha, beta).expect("distinct ids should form a pair");
+    let expected = CandidatePair::new(fragment_ids.alpha, fragment_ids.beta)
+        .expect("distinct ids should form a pair");
     assert_eq!(forward.candidate_pairs(), vec![expected.clone()]);
     assert_eq!(reverse.candidate_pairs(), vec![expected]);
 }
 
 #[rstest]
 fn canonical_ordering_across_multiple_pairs_and_bands(
+    fragment_ids: FragmentIds,
     shared_signature: MinHashSignature,
     distinct_signature: MinHashSignature,
 ) {
     let config = LshConfig::new(4, MINHASH_SIZE / 4).expect("LSH config should validate");
-    let alpha = FragmentId::from("alpha");
-    let beta = FragmentId::from("beta");
-    let gamma = FragmentId::from("gamma");
-    let delta = FragmentId::from("delta");
 
     let mut forward = LshIndex::new(config);
-    forward.insert(&alpha, &shared_signature);
-    forward.insert(&beta, &shared_signature);
-    forward.insert(&gamma, &shared_signature);
-    forward.insert(&delta, &distinct_signature);
+    forward.insert(&fragment_ids.alpha, &shared_signature);
+    forward.insert(&fragment_ids.beta, &shared_signature);
+    forward.insert(&fragment_ids.gamma, &shared_signature);
+    forward.insert(&fragment_ids.delta, &distinct_signature);
 
     let mut reverse = LshIndex::new(config);
-    reverse.insert(&delta, &distinct_signature);
-    reverse.insert(&gamma, &shared_signature);
-    reverse.insert(&beta, &shared_signature);
-    reverse.insert(&alpha, &shared_signature);
+    reverse.insert(&fragment_ids.delta, &distinct_signature);
+    reverse.insert(&fragment_ids.gamma, &shared_signature);
+    reverse.insert(&fragment_ids.beta, &shared_signature);
+    reverse.insert(&fragment_ids.alpha, &shared_signature);
 
     let expected = vec![
-        CandidatePair::new(alpha.clone(), beta.clone()).expect("distinct ids should form a pair"),
-        CandidatePair::new(alpha.clone(), gamma.clone()).expect("distinct ids should form a pair"),
-        CandidatePair::new(beta.clone(), gamma.clone()).expect("distinct ids should form a pair"),
+        CandidatePair::new(fragment_ids.alpha.clone(), fragment_ids.beta.clone())
+            .expect("distinct ids should form a pair"),
+        CandidatePair::new(fragment_ids.alpha.clone(), fragment_ids.gamma.clone())
+            .expect("distinct ids should form a pair"),
+        CandidatePair::new(fragment_ids.beta.clone(), fragment_ids.gamma.clone())
+            .expect("distinct ids should form a pair"),
     ];
 
     assert_eq!(forward.candidate_pairs(), expected);
