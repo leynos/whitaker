@@ -1,3 +1,11 @@
+//! Unit tests for cosine threshold behaviour.
+//!
+//! Validates that `cosine_threshold_met` correctly evaluates the minimum
+//! similarity threshold (cosine >= 0.20) using the runtime integer form
+//! `25 * dot^2 >= left_norm * right_norm`. Tests verify boundary conditions,
+//! zero-norm handling, and the use of `MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED`
+//! and `MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED` constants.
+
 use crate::decomposition_advice::vector::{
     MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED, MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED,
     cosine_threshold_met, test_feature_vector,

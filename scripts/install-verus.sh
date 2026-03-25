@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 VERUS_CACHE_DIR=${WHITAKER_VERUS_CACHE_DIR:-"${XDG_CACHE_HOME:-${HOME}/.cache}/whitaker/verus"}
 VERUS_RELEASE_VERSION=${VERUS_RELEASE_VERSION:-0.2026.03.17.a96bad0}
 VERUS_RELEASE_TAG=${VERUS_RELEASE_TAG:-release/0.2026.03.17.a96bad0}

@@ -1,3 +1,12 @@
+//! Verus proof establishing the correctness of the cosine similarity threshold.
+//!
+//! This module proves that Whitaker's runtime integer threshold check
+//! `25 * dot^2 >= left_norm * right_norm` is equivalent to the semantic
+//! predicate `cosine >= 0.20` for non-zero vector norms. The proof assumes
+//! positive squared norms and integer dot products, demonstrating that the
+//! cross-multiplied form safely avoids floating-point arithmetic while
+//! preserving the intended similarity boundary.
+
 use vstd::prelude::*;
 
 verus! {
