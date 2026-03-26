@@ -1,5 +1,6 @@
 //! Unit tests covering decomposition feature extraction and clustering.
 
+mod cosine_threshold;
 mod test_fixtures;
 
 use self::test_fixtures::{
