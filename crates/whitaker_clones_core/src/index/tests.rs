@@ -48,26 +48,6 @@ fn identical_signature() -> MinHashSignature {
     sketch(&[5, 7, 11, 13])
 }
 
-#[fixture]
-fn alpha_id() -> FragmentId {
-    FragmentId::from("alpha")
-}
-
-#[fixture]
-fn beta_id() -> FragmentId {
-    FragmentId::from("beta")
-}
-
-#[fixture]
-fn gamma_id() -> FragmentId {
-    FragmentId::from("gamma")
-}
-
-#[fixture]
-fn delta_id() -> FragmentId {
-    FragmentId::from("delta")
-}
-
 struct FragmentIds {
     alpha: FragmentId,
     beta: FragmentId,
@@ -222,28 +202,30 @@ fn canonical_ordering_across_multiple_pairs_and_bands(
 #[rstest]
 fn duplicate_band_collisions_emit_one_pair(
     multi_band_config: LshConfig,
-    alpha_id: FragmentId,
-    beta_id: FragmentId,
+    fragment_ids: FragmentIds,
     identical_signature: MinHashSignature,
 ) {
     let mut index = LshIndex::new(multi_band_config);
 
-    index.insert(&beta_id, &identical_signature);
-    index.insert(&alpha_id, &identical_signature);
+    index.insert(&fragment_ids.beta, &identical_signature);
+    index.insert(&fragment_ids.alpha, &identical_signature);
 
     assert_eq!(
         index.candidate_pairs(),
-        vec![CandidatePair::new(alpha_id, beta_id).expect("distinct ids should form a pair")]
+        vec![
+            CandidatePair::new(fragment_ids.alpha, fragment_ids.beta)
+                .expect("distinct ids should form a pair")
+        ]
     );
 }
 
 #[rstest]
-fn self_pairs_are_not_emitted(single_band_config: LshConfig, alpha_id: FragmentId) {
+fn self_pairs_are_not_emitted(single_band_config: LshConfig, fragment_ids: FragmentIds) {
     let signature = sketch(&[2, 4, 6, 8]);
     let mut index = LshIndex::new(single_band_config);
 
-    index.insert(&alpha_id, &signature);
-    index.insert(&alpha_id, &signature);
+    index.insert(&fragment_ids.alpha, &signature);
+    index.insert(&fragment_ids.alpha, &signature);
 
     assert!(index.candidate_pairs().is_empty());
 }
