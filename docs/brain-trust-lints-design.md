@@ -467,7 +467,9 @@ further decomposition analysis was omitted.
   binary release into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`. On
   2026-03-22, that release required Rust toolchain
   `1.94.0-x86_64-unknown-linux-gnu` on Linux; the script lets Verus report the
-  required toolchain, installs it with `rustup`, and then reruns the proof.
+  required toolchain, replays Verus's suggested `rustup install ...` command,
+  falls back to the bare semantic version when the host-qualified name is not
+  accepted by local `rustup`, and then reruns the proof.
 - **Squared threshold constants made explicit in runtime code**: the
   decomposition runtime now shares `MIN_COSINE_THRESHOLD_NUMERATOR_SQUARED = 1`
   and `MIN_COSINE_THRESHOLD_DENOMINATOR_SQUARED = 25` from
@@ -487,6 +489,36 @@ further decomposition analysis was omitted.
   than exposing `MethodFeatureVector` or `cosine_threshold_met` publicly. The
   helper builds feature vectors internally and follows the same threshold path
   as production code.
+
+### Implementation decisions (6.4.4)
+
+- **Verus models sparse vectors as aligned non-negative sequences**: the new
+  proof file `verus/decomposition_vector_algebra.rs` treats absent sparse-map
+  entries as `0` in aligned `Seq<nat>` values. This keeps the proof close to
+  the shipped `u64` runtime semantics while avoiding proof-only dependence on
+  `BTreeMap<String, u64>`.
+- **`make verus` now runs an explicit proof list**: `scripts/run-verus.sh`
+  executes both `verus/decomposition_cosine_threshold.rs` and
+  `verus/decomposition_vector_algebra.rs` in deterministic order. Once the
+  repository had multiple proof files, a single-file default was no longer a
+  trustworthy quality gate.
+- **"No overlapping positive features" means positive-weight intersection is
+  empty**: the zero-dot-product theorem is stated as "for every feature index,
+  not both weights are positive". Shared zero-weight entries therefore remain
+  valid inputs for the theorem, matching the roadmap wording more closely than
+  a strict "no shared keys" rule.
+- **Runtime behaviour stays private; tests observe a report seam**:
+  behavioural coverage uses
+  `common::test_support::decomposition::method_vector_algebra()` and its
+  `MethodVectorAlgebraReport` instead of exposing `MethodFeatureVector`,
+  `dot_product`, or `norm_squared` publicly. The helper computes the shipped
+  runtime values and returns only the numeric observations needed by BDD
+  assertions.
+- **Unit coverage includes explicit zero-weight edge cases**: internal tests
+  use `test_feature_vector(...)` to exercise shared-key inputs where one side
+  carries weight `0`. Production builders currently emit only positive weights,
+  but the roadmap theorem is about positive overlap, so the edge case is tested
+  directly.
 
 ## SARIF output
 

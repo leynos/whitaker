@@ -187,7 +187,7 @@
   cannot divide by zero. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.4.1.
-- [ ] 6.4.4. Use Verus to prove `dot_product` and `norm_squared` algebraic
+- [x] 6.4.4. Use Verus to prove `dot_product` and `norm_squared` algebraic
   properties, including commutativity, non-negativity, and zero-result
   behaviour when vectors have no overlapping positive features. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition

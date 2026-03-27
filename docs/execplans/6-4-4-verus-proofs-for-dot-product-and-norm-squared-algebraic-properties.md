@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -123,18 +123,18 @@ Observable success after implementation:
   implementation.
 - [x] 2026-03-26: Draft this ExecPlan with concrete file targets, proof scope,
   testing strategy, and validation commands.
-- [ ] Add a new Verus proof file for vector algebra and wire `make verus` to
+- [x] Add a new Verus proof file for vector algebra and wire `make verus` to
   execute it deterministically.
-- [ ] Add unit tests for `dot_product` and `norm_squared` happy paths,
+- [x] Add unit tests for `dot_product` and `norm_squared` happy paths,
   unhappy paths, and edge cases.
-- [ ] Add `rstest-bdd` behavioural coverage using a narrow
+- [x] Add `rstest-bdd` behavioural coverage using a narrow
   `common::test_support::decomposition` seam.
-- [ ] Record 6.4.4 implementation decisions in
+- [x] Record 6.4.4 implementation decisions in
   `docs/brain-trust-lints-design.md`.
-- [ ] Mark roadmap item 6.4.4 done in `docs/roadmap.md`.
-- [ ] Run `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
+- [x] Mark roadmap item 6.4.4 done in `docs/roadmap.md`.
+- [x] Run `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
   `make lint`, `make test`, and `make verus` successfully.
-- [ ] Finalize the living sections in this ExecPlan after implementation.
+- [x] Finalize the living sections in this ExecPlan after implementation.
 
 ## Surprises & Discoveries
 
@@ -157,6 +157,10 @@ Observable success after implementation:
 - The 6.4.3 implementation already established the sidecar pattern this item
   should reuse: top-level `verus/` files, shell wrappers under `scripts/`, and
   design-document decisions recorded under a dedicated subsection.
+- Verus's required toolchain hint currently includes the host triple
+  (`1.94.0-x86_64-unknown-linux-gnu` on Linux), but local `rustup` may reject
+  that exact name. The installer therefore needs a fallback that strips the
+  host suffix and installs the bare semantic version instead.
 
 ## Decision Log
 
@@ -179,6 +183,15 @@ Observable success after implementation:
   decomposition module. Rationale: tests need observable results, but the
   production API should stay narrow and compiler-independent. Date/Author:
   2026-03-26 / Codex.
+- Decision: return a small numeric report struct from the behavioural-test seam
+  instead of exposing multiple helper functions. Rationale: one report keeps
+  BDD assertions explicit while avoiding extra public test-support surface.
+  Date/Author: 2026-03-27 / Codex.
+- Decision: keep the proof model in `Seq<nat>` rather than a Verus map model.
+  Rationale: the roadmap properties are algebraic, absent sparse-map entries
+  naturally map to zero-weight sequence positions, and recursive proofs over
+  aligned sequences are smaller than map-domain proofs. Date/Author: 2026-03-27
+  / Codex.
 
 ## Context and orientation
 
@@ -370,6 +383,33 @@ the new proof file and the new BDD test binary both actually ran.
 
 ## Outcomes & Retrospective
 
-Not started yet. On completion, replace this section with a concise record of
-what shipped, which commands proved it, and what future work remains for
-roadmap items 6.4.5 and 6.4.6.
+Shipped:
+
+- `verus/decomposition_vector_algebra.rs` proves dot-product commutativity,
+  squared-norm non-negativity, and zero dot product under no overlapping
+  positive features.
+- `scripts/run-verus.sh` now executes an explicit proof-file list, and
+  `scripts/install-verus.sh` handles Verus's host-qualified toolchain hint
+  robustly.
+- Runtime coverage now includes
+  `common/src/decomposition_advice/tests/vector_algebra.rs`,
+  `common/tests/decomposition_vector_algebra_behaviour.rs`, and
+  `common/tests/features/decomposition_vector_algebra.feature`.
+- Behaviour tests observe runtime results through
+  `common::test_support::decomposition::method_vector_algebra()`.
+
+Evidence gathered during implementation:
+
+- `make verus` passed after the new proof and runner changes.
+- `cargo test -p common decomposition_advice::tests::vector_algebra -- --nocapture`
+  passed.
+- `cargo test -p common --test decomposition_vector_algebra_behaviour -- --nocapture`
+  passed.
+- Full gates passed with captured logs:
+  `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`,
+  `make test`, and `make verus`.
+
+Remaining roadmap work:
+
+- 6.4.5 still needs Kani coverage for adjacency construction.
+- 6.4.6 still needs Kani coverage for label propagation.
