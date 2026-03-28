@@ -21,7 +21,7 @@ thiserror = { workspace = true }
 unic-langid = { workspace = true }
 
 [dev-dependencies]
-# Testing: Behavioural specs use rstest-bdd 0.2.x (workspace pin). Capture any
+# Testing: Behavioural specs use rstest-bdd 0.5.x (workspace pin). Capture any
 # regressions with `make test` and coordinate with the maintainers per
 # `docs/rstest-bdd-users-guide.md` before gating behaviour tests or backporting
 # fixes.
