@@ -13,6 +13,7 @@ pub mod expr;
 pub mod i18n;
 pub mod lcom4;
 pub mod path;
+pub mod rstest;
 pub mod span;
 pub mod test_support;
 
@@ -53,4 +54,9 @@ pub use i18n::{
 };
 pub use lcom4::{MethodInfo, MethodInfoBuilder, cohesion_components, collect_method_infos};
 pub use path::SimplePath;
+pub use rstest::{
+    ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
+    classify_rstest_parameter, fixture_local_names, is_rstest_fixture, is_rstest_fixture_with,
+    is_rstest_test, is_rstest_test_with,
+};
 pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};

@@ -355,3 +355,29 @@ The following work is intentionally excluded from this design:
 These constraints keep runtime cost predictable, diagnostics explainable, and
 false-positive control practical for iterative promotion from experimental to
 standard lints.
+
+## Implementation decisions (8.1.1)
+
+- Shared `rstest` detection now lives in `common::rstest` rather than being
+  folded into the broader `common::context` or `common::attributes` helpers.
+  The generic helpers still answer "test-like" questions for wider lint logic,
+  while `common::rstest` keeps the stricter semantics that later fixture
+  hygiene lints need.
+- Strict test detection matches only `rstest` and `rstest::rstest`. Strict
+  fixture detection matches only `fixture` and `rstest::fixture`. This avoids
+  the broader `case` and `rstest::case` handling that remains useful in the
+  generic context helpers.
+- Provider-parameter detection defaults to bare and namespaced forms of
+  `case`, `values`, `files`, `future`, and `context`. Parameters with those
+  attributes are classified as provider-driven rather than fixture-local.
+- Expansion-trace fallback is modelled as a pure `ExpansionTrace` value owned
+  by `common`. Callers may pass it into `is_rstest_test_with` and
+  `is_rstest_fixture_with`, but fallback remains disabled unless
+  `RstestDetectionOptions` enables it explicitly.
+- Version one continues to classify only simple identifier bindings as
+  fixture-local. Unsupported or destructured bindings are reported as
+  unsupported and excluded from `fixture_local_names` so later lints do not
+  overstate fixture semantics.
+- `common/Cargo.toml` now describes the current `rstest-bdd` 0.5.x workspace
+  pin rather than the stale 0.2.x comment. That was documentation hygiene, not
+  a behavioural change.

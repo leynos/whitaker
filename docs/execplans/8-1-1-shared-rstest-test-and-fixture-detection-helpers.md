@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DONE
 
 This document must be maintained in accordance with `AGENTS.md`. The canonical
 plan file is
@@ -112,19 +112,22 @@ Success is observable when:
 ## Progress
 
 - [x] (2026-03-26) Stage A: Draft this ExecPlan and capture repository state.
-- [ ] Stage B: Add failing unit tests that define the 8.1.1 detection
+- [x] (2026-03-28) Stage B: Add unit tests that define the 8.1.1 detection
   contract.
-- [ ] Stage C: Add failing `rstest-bdd` scenarios for the same contract.
-- [ ] Stage D: Implement the shared pure-library `rstest` detection module in
+- [x] (2026-03-28) Stage C: Add `rstest-bdd` scenarios for the same contract.
+- [x] (2026-03-28) Stage D: Implement the shared pure-library `rstest`
+      detection module in
   `common`.
-- [ ] Stage E: Re-export the new API from `common/src/lib.rs` and add Rustdoc
+- [x] (2026-03-28) Stage E: Re-export the new API from `common/src/lib.rs` and
+      add Rustdoc
   examples.
-- [ ] Stage F: Record implementation decisions in
+- [x] (2026-03-28) Stage F: Record implementation decisions in
   `docs/lints-for-rstest-fixtures-and-test-hygiene.md`.
-- [ ] Stage G: Mark roadmap item 8.1.1 done.
-- [ ] Stage H: Run documentation gates plus `make check-fmt`, `make lint`, and
+- [x] (2026-03-28) Stage G: Mark roadmap item 8.1.1 done.
+- [x] (2026-03-28) Stage H: Run documentation gates plus `make check-fmt`,
+      `make lint`, and
   `make test`.
-- [ ] Stage I: Finalize the living sections in this document.
+- [x] (2026-03-28) Stage I: Finalize the living sections in this document.
 
 ## Surprises & Discoveries
 
@@ -144,6 +147,14 @@ Success is observable when:
 - Existing pure-library helpers for macro filtering use the
   `is_from_expansion: bool` pattern. 8.1.1 needs an analogous pure metadata
   seam for optional expansion-trace fallback.
+- `rstest-bdd` binds `And` to the keyword family of the previous step. The
+  fixture-local behaviour scenario therefore cannot use an `And` line to
+  trigger a `#[when]` step after a `#[then]`; the harness now derives
+  `fixture_local_names` lazily inside the final assertion instead.
+- Targeted validation passed before the full gate run:
+  `cargo test -p common rstest::`,
+  `cargo test -p common --test rstest_detection_behaviour`, and
+  `cargo clippy -p common --all-targets --all-features -- -D warnings`.
 
 ## Decision Log
 
@@ -441,10 +452,34 @@ The implementation is complete only when all of the following are true:
 
 ## Outcomes & Retrospective
 
-Populate this section during implementation with:
-
-- the final file list,
-- the accepted API surface,
-- the exact behaviour scenarios added,
-- any deviations from the draft plan,
-- final gate results and notable follow-up work for 8.1.2 or 8.1.3.
+- Final file list:
+  `common/src/lib.rs`, `common/src/rstest/mod.rs`,
+  `common/src/rstest/detection.rs`, `common/src/rstest/parameter.rs`,
+  `common/src/rstest/tests.rs`, `common/tests/rstest_detection_behaviour.rs`,
+  `common/tests/features/rstest_detection.feature`, `common/Cargo.toml`,
+  `docs/lints-for-rstest-fixtures-and-test-hygiene.md`, `docs/roadmap.md`,
+  `docs/execplans/8-1-1-shared-rstest-test-and-fixture-detection-helpers.md`.
+- Accepted API surface:
+  `ExpansionTrace`, `RstestDetectionOptions`, `is_rstest_test`,
+  `is_rstest_test_with`, `is_rstest_fixture`, `is_rstest_fixture_with`,
+  `ParameterBinding`, `RstestParameter`, `RstestParameterKind`,
+  `classify_rstest_parameter`, and `fixture_local_names`, all re-exported from
+  `common`.
+- Behaviour scenarios added:
+  direct `rstest` test detection, direct `rstest::fixture` detection,
+  fixture-local identifier classification, provider classification for
+  `#[case]`, unsupported binding handling, fallback-disabled trace ignoring,
+  and fallback-enabled trace detection.
+- Deviation from the draft plan:
+  the behaviour harness computes `fixture_local_names` lazily inside the final
+  assertion instead of using a separate `When` step because `rstest-bdd`
+  carries `And` into the prior keyword family.
+- Final gate results:
+  `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`,
+  and `make test` all passed on 2026-03-28. `make test` finished with
+  `Summary [123.240s] 1186 tests run: 1186 passed, 2 skipped`.
+- Follow-up work:
+  8.1.2 can now consume the strict `rstest` detection and `ExpansionTrace` seam
+  for user-editable span recovery, and 8.1.3 can layer argument fingerprinting
+  on top of `RstestParameterKind` without needing to re-solve
+  provider-versus-fixture classification.
