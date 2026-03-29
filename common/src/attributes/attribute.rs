@@ -234,3 +234,40 @@ fn is_prelude_test_attribute(path: &AttributePath) -> bool {
 
     matches!(root.as_str(), "core" | "std") && prelude == "prelude" && test == "test"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::core_v1("core::prelude::v1::test", true)]
+    #[case::std_rust_2021("std::prelude::rust_2021::test", true)]
+    #[case::std_rust_2023("std::prelude::rust_2023::test", true)]
+    #[case::std_rust_2024("std::prelude::rust_2024::test", true)]
+    #[case::three_segments("core::prelude::test", false)]
+    #[case::five_segments("core::prelude::v1::extra::test", false)]
+    #[case::wrong_middle("core::not_prelude::v1::test", false)]
+    #[case::wrong_root("alloc::prelude::v1::test", false)]
+    #[case::wrong_final("core::prelude::v1::bench", false)]
+    fn prelude_test_attribute_shape(#[case] path: &str, #[case] expected: bool) {
+        assert_eq!(
+            is_prelude_test_attribute(&AttributePath::from(path)),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::builtin_test("test", true)]
+    #[case::builtin_tokio("tokio::test", true)]
+    #[case::prelude_test("std::prelude::rust_2024::test", true)]
+    #[case::short_prelude("std::prelude::test", false)]
+    #[case::long_prelude("std::prelude::rust_2024::extra::test", false)]
+    #[case::wrong_prelude_segment("std::not_prelude::rust_2024::test", false)]
+    fn builtin_test_like_paths(#[case] path: &str, #[case] expected: bool) {
+        assert_eq!(
+            matches_builtin_test_like_path(&AttributePath::from(path)),
+            expected
+        );
+    }
+}

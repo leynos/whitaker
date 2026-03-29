@@ -68,7 +68,7 @@ fn attribute_is_test_like(#[case] path: &str, #[case] expected: bool) {
     assert_eq!(attribute.is_test_like(), expected);
 }
 
-#[rstest]
+#[test]
 fn split_doc_groups() {
     let doc = Attribute::new(AttributePath::from("doc"), AttributeKind::Outer);
     let allow = Attribute::new(AttributePath::from("allow"), AttributeKind::Outer);
