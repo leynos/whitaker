@@ -142,8 +142,11 @@ impl Attribute {
 
     /// Indicates whether the attribute marks a test-like context.
     ///
-    /// Test-like attributes include `test`, `tokio::test`, `async_std::test`,
-    /// and `rstest`.
+    /// Builtin test-like attributes include direct paths such as `test`,
+    /// `tokio::test`, `async_std::test`, and `rstest`, plus prelude-qualified
+    /// builtin forms such as `::core::prelude::v1::test` and
+    /// `::std::prelude::rust_2024::test`. The latter are recognized via
+    /// `matches_builtin_test_like_path` on `self.path`.
     ///
     /// # Examples
     ///
@@ -161,8 +164,14 @@ impl Attribute {
     /// Indicates whether the attribute marks a test-like context when supplied
     /// with additional recognised paths.
     ///
-    /// Test-like attributes include `test`, `tokio::test`, `async_std::test`,
-    /// `rstest`, and any entries provided via the `additional` parameter.
+    /// Builtin test-like attributes include direct paths such as `test`,
+    /// `tokio::test`, `async_std::test`, and `rstest`, plus prelude-qualified
+    /// builtin forms such as `::core::prelude::v1::test` and
+    /// `::std::prelude::rust_2024::test`. These builtin forms are recognised
+    /// first by calling `matches_builtin_test_like_path` on `self.path`.
+    ///
+    /// Use `additional` only for extra runtime-configured `AttributePath`
+    /// values that should count as test-like in addition to the builtin set.
     ///
     /// # Examples
     ///
@@ -242,9 +251,11 @@ mod tests {
 
     #[rstest]
     #[case::core_v1("core::prelude::v1::test", true)]
+    #[case::absolute_core_v1("::core::prelude::v1::test", true)]
     #[case::std_rust_2021("std::prelude::rust_2021::test", true)]
     #[case::std_rust_2023("std::prelude::rust_2023::test", true)]
     #[case::std_rust_2024("std::prelude::rust_2024::test", true)]
+    #[case::absolute_std_rust_2024("::std::prelude::rust_2024::test", true)]
     #[case::three_segments("core::prelude::test", false)]
     #[case::five_segments("core::prelude::v1::extra::test", false)]
     #[case::wrong_middle("core::not_prelude::v1::test", false)]
