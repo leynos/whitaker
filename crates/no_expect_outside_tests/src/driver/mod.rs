@@ -17,7 +17,7 @@ use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::sym;
+use rustc_span::{Span, Symbol, sym};
 use serde::Deserialize;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
@@ -161,17 +161,10 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 // #[test] (which may happen in integration test crates where the test harness
 // processes attributes differently).
 fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>) -> bool {
-    // First, check if any enclosing function has a test attribute
-    let has_test_attr = cx
-        .tcx
-        .hir_parent_iter(expr.hir_id)
-        .filter_map(|(_, node)| extract_function_item(node))
-        .any(|item| {
-            let attrs = cx.tcx.hir_attrs(item.hir_id());
-            has_test_attribute(attrs)
-        });
-
-    if has_test_attr {
+    if enclosing_function_item(cx, expr).is_some_and(|item| {
+        let attrs = cx.tcx.hir_attrs(item.hir_id());
+        has_test_attribute(attrs) || is_harness_marked_test_function(cx, item)
+    }) {
         return true;
     }
 
@@ -220,11 +213,87 @@ fn is_test_named_module(node: hir::Node<'_>) -> bool {
     matches!(ident.name.as_str(), "test" | "tests")
 }
 
-fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
-    let hir::Node::Item(item) = node else {
+fn enclosing_function_item<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &hir::Expr<'tcx>,
+) -> Option<&'tcx hir::Item<'tcx>> {
+    let owner = cx.tcx.hir_enclosing_body_owner(expr.hir_id);
+    let hir::Node::Item(item) = cx.tcx.hir_node_by_def_id(owner) else {
         return None;
     };
     matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(item)
+}
+
+fn is_harness_marked_test_function<'tcx>(
+    cx: &LateContext<'tcx>,
+    item: &'tcx hir::Item<'tcx>,
+) -> bool {
+    if !cx.tcx.sess.opts.test {
+        return false;
+    }
+
+    let Some(function_ident) = item.kind.ident() else {
+        return false;
+    };
+
+    let function_hir_id = item.hir_id();
+    let function_name = function_ident.name;
+    let function_span = item.span;
+    let mut parents = cx.tcx.hir_parent_iter(item.hir_id());
+    let Some((_, parent_node)) = parents.next() else {
+        return false;
+    };
+
+    match parent_node {
+        hir::Node::Item(parent_item) => {
+            let hir::ItemKind::Mod(_, module) = parent_item.kind else {
+                return false;
+            };
+            module
+                .item_ids
+                .iter()
+                .map(|id| cx.tcx.hir_item(*id))
+                .any(|sibling| {
+                    is_matching_harness_test_descriptor(
+                        function_hir_id,
+                        function_name,
+                        function_span,
+                        sibling,
+                    )
+                })
+        }
+        hir::Node::Crate(_) => cx
+            .tcx
+            .hir_crate_items(())
+            .free_items()
+            .map(|id| cx.tcx.hir_item(id))
+            .any(|sibling| {
+                is_matching_harness_test_descriptor(
+                    function_hir_id,
+                    function_name,
+                    function_span,
+                    sibling,
+                )
+            }),
+        _ => false,
+    }
+}
+
+fn is_matching_harness_test_descriptor(
+    function_hir_id: hir::HirId,
+    function_name: Symbol,
+    function_span: Span,
+    sibling: &hir::Item<'_>,
+) -> bool {
+    // `rustc --test` may synthesise a const descriptor that shares the test
+    // function's name and source range. The wrapper function and descriptor can
+    // carry different syntax contexts, so this must compare source bytes
+    // rather than exact `Span` identity.
+    sibling.hir_id() != function_hir_id
+        && matches!(sibling.kind, hir::ItemKind::Const(..))
+        && sibling.kind.ident().is_some_and(|ident| {
+            ident.name == function_name && sibling.span.source_equal(function_span)
+        })
 }
 
 // Check if any attribute is #[test].
@@ -232,12 +301,12 @@ fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
     has_test_like_hir_attributes(attrs, &[])
 }
 
-// Detect test framework attributes.
+// Detect source-level test framework attributes.
 //
-// Test attributes (#[test], #[rstest], #[tokio::test], etc.) are represented as
-// Unparsed HIR attributes. The Parsed variant is reserved for compiler-internal
-// attributes like #[must_use] and #[doc], not for test framework annotations.
-// This function therefore only inspects Unparsed attributes.
+// The `rustc --test` harness may consume the original builtin marker entirely
+// and replace it with a sibling const descriptor. That recovery path is
+// covered by the example-based regression in `lib_ui_tests.rs`; this helper
+// still only inspects source-level HIR attributes.
 #[cfg(test)]
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
     has_test_like_hir_attributes(std::slice::from_ref(attr), &[])
