@@ -2,6 +2,7 @@
 
 mod cosine_threshold;
 mod test_fixtures;
+mod vector_algebra;
 
 use self::test_fixtures::{
     ExpectedSuggestion, MethodInput, assert_suggestion, assert_type_decomposition_is_empty,
