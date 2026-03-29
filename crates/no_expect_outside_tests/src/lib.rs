@@ -9,6 +9,8 @@ mod diagnostics;
 #[cfg(feature = "dylint-driver")]
 mod driver;
 #[cfg(all(feature = "dylint-driver", test))]
+mod lib_ui_tests;
+#[cfg(all(feature = "dylint-driver", test))]
 mod tests;
 #[cfg(all(feature = "dylint-driver", test))]
 mod ui {

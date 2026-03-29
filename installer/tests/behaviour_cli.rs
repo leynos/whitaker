@@ -16,12 +16,15 @@ use whitaker_installer::dirs::SystemBaseDirs;
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
+const TEST_STAGE_SUITE_ENV: &str = "WHITAKER_INSTALLER_TEST_STAGE_SUITE";
+
 #[derive(Default)]
 struct CliWorld {
     args: RefCell<Vec<String>>,
     output: RefCell<Option<Output>>,
     skip_assertions: Cell<bool>,
     requires_toolchain: Cell<bool>,
+    use_test_staged_suite: Cell<bool>,
     toolchain: RefCell<Option<String>>,
     // Keep temp_dir alive for the lifetime of the scenario.
     _temp_dir: RefCell<Option<TempDir>>,
@@ -198,16 +201,14 @@ fn given_suite_install(cli_world: &CliWorld) {
     };
 
     let target_dir = setup_temp_dir(cli_world);
+    cli_world.use_test_staged_suite.set(true);
 
     // Suite-only is the default, so no extra lint-selection flag is needed.
-    // Use --build-only to keep this behavioural scenario off the network; the
-    // prebuilt download path is covered separately in dedicated prebuilt tests.
+    // The behavioural test sets a dedicated env var so the installer stages a
+    // synthetic suite library instead of recursively building the workspace.
     // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
     // Use --skip-deps to avoid slow dependency downloads during test.
     cli_world.args.replace(vec![
-        "--jobs".to_owned(),
-        "1".to_owned(),
-        "--build-only".to_owned(),
         "--target-dir".to_owned(),
         target_dir,
         "--skip-wrapper".to_owned(),
@@ -223,6 +224,9 @@ fn when_installer_cli_run(cli_world: &CliWorld) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
+    if cli_world.use_test_staged_suite.get() {
+        cmd.env(TEST_STAGE_SUITE_ENV, "1");
+    }
 
     let output = cmd.output().expect("failed to run whitaker-installer");
     cli_world.output.replace(Some(output));

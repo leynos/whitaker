@@ -12,6 +12,7 @@ use crate::install_flow::{
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
+use std::fs;
 use std::io::Write;
 use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
@@ -27,10 +28,13 @@ use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{
-    CrateResolutionOptions, resolve_crates, validate_crate_names,
+    CrateResolutionOptions, SUITE_CRATE, resolve_crates, validate_crate_names,
 };
+use whitaker_installer::stager::Stager;
 use whitaker_installer::toolchain::Toolchain;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
+
+const TEST_STAGE_SUITE_ENV: &str = "WHITAKER_INSTALLER_TEST_STAGE_SUITE";
 
 fn main() {
     let cli = Cli::parse();
@@ -103,6 +107,19 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         return finish_install_and_record_metrics(&finish_context, stderr);
     }
 
+    if let Some(staging_path) =
+        try_test_staged_suite_installation(&requested_crates, &toolchain, &target_dir)?
+    {
+        let finish_context = FinishInstallContext {
+            args,
+            dirs: &dirs,
+            staging_path: &staging_path,
+            install_mode: InstallMode::Build,
+            install_started,
+        };
+        return finish_install_and_record_metrics(&finish_context, stderr);
+    }
+
     let context = PipelineContext {
         workspace_root: &workspace_root,
         toolchain: &toolchain,
@@ -152,6 +169,37 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
+}
+
+fn try_test_staged_suite_installation(
+    requested_crates: &[CrateName],
+    toolchain: &Toolchain,
+    target_dir: &Utf8Path,
+) -> Result<Option<Utf8PathBuf>> {
+    if std::env::var_os(TEST_STAGE_SUITE_ENV).is_none() || !is_suite_only_request(requested_crates)
+    {
+        return Ok(None);
+    }
+
+    let stager = Stager::new(target_dir.to_owned(), toolchain.channel());
+    stager.prepare()?;
+
+    let staged_path = stager
+        .staging_path()
+        .join(stager.staged_filename(&CrateName::from(SUITE_CRATE)));
+    fs::write(staged_path.as_std_path(), b"test-only staged suite library").map_err(|error| {
+        InstallerError::StagingFailed {
+            reason: format!(
+                "failed to write test-only staged suite library at {staged_path}: {error}"
+            ),
+        }
+    })?;
+
+    Ok(Some(stager.staging_path()))
+}
+
+fn is_suite_only_request(requested_crates: &[CrateName]) -> bool {
+    matches!(requested_crates, [crate_name] if crate_name.as_str() == SUITE_CRATE)
 }
 
 fn determine_dry_run_target_dir(
