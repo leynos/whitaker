@@ -146,12 +146,12 @@ fn given_domains(
 fn when_vector_algebra_is_evaluated(world: &VectorAlgebraWorld) -> Result<(), String> {
     let methods = world.methods.borrow();
     let left = methods
-        .get("left")
+        .get(MethodSide::Left.key())
         .ok_or_else(|| String::from("left method must be configured before evaluation"))?
         .clone()
         .build();
     let right = methods
-        .get("right")
+        .get(MethodSide::Right.key())
         .ok_or_else(|| String::from("right method must be configured before evaluation"))?
         .clone()
         .build();

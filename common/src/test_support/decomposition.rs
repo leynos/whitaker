@@ -266,21 +266,121 @@ pub struct MethodVectorAlgebraReport {
 }
 
 impl MethodVectorAlgebraReport {
+    /// Returns the result of [`MethodVectorAlgebraReport::left_dot_right`].
+    ///
+    /// This is the dot product of the left and right method vectors.
+    ///
+    /// ```rust
+    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    ///
+    /// let left = profile(MethodInput {
+    ///     name: "parse_tokens",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    /// let right = profile(MethodInput {
+    ///     name: "parse_nodes",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    ///
+    /// let report = method_vector_algebra(&left, &right);
+    /// assert_eq!(report.left_dot_right(), 40);
+    /// ```
     #[must_use]
     pub fn left_dot_right(self) -> u64 {
         self.left_dot_right
     }
 
+    /// Returns the result of [`MethodVectorAlgebraReport::right_dot_left`].
+    ///
+    /// This is the dot product of the right and left method vectors.
+    ///
+    /// ```rust
+    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    ///
+    /// let left = profile(MethodInput {
+    ///     name: "parse_tokens",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    /// let right = profile(MethodInput {
+    ///     name: "parse_nodes",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    ///
+    /// let report = method_vector_algebra(&left, &right);
+    /// assert_eq!(report.right_dot_left(), 40);
+    /// ```
     #[must_use]
     pub fn right_dot_left(self) -> u64 {
         self.right_dot_left
     }
 
+    /// Returns the result of [`MethodVectorAlgebraReport::left_norm_squared`].
+    ///
+    /// This is the squared L2 norm of the left method vector.
+    ///
+    /// ```rust
+    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    ///
+    /// let left = profile(MethodInput {
+    ///     name: "parse_tokens",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    /// let right = profile(MethodInput {
+    ///     name: "parse_nodes",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    ///
+    /// let report = method_vector_algebra(&left, &right);
+    /// assert_eq!(report.left_norm_squared(), 44);
+    /// ```
     #[must_use]
     pub fn left_norm_squared(self) -> u64 {
         self.left_norm_squared
     }
 
+    /// Returns the result of [`MethodVectorAlgebraReport::right_norm_squared`].
+    ///
+    /// This is the squared L2 norm of the right method vector.
+    ///
+    /// ```rust
+    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    ///
+    /// let left = profile(MethodInput {
+    ///     name: "parse_tokens",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    /// let right = profile(MethodInput {
+    ///     name: "parse_nodes",
+    ///     fields: &["grammar"],
+    ///     signature_types: &[],
+    ///     local_types: &[],
+    ///     domains: &[],
+    /// });
+    ///
+    /// let report = method_vector_algebra(&left, &right);
+    /// assert_eq!(report.right_norm_squared(), 44);
+    /// ```
     #[must_use]
     pub fn right_norm_squared(self) -> u64 {
         self.right_norm_squared

@@ -81,7 +81,7 @@ PY
         cat "${toolchain_log}" >&2
         exit 1
     fi
-    if ! rustup install "${required_toolchain}" >&2; then
+    if ! rustup toolchain install "${required_toolchain}" >&2; then
         fallback_toolchain=$(python3 - "${required_toolchain}" <<'PY'
 import re
 import sys
@@ -90,11 +90,13 @@ match = re.match(r"^(\d+\.\d+\.\d+)", sys.argv[1])
 if match is not None:
     print(match.group(1))
 PY
-)
+        )
         if [ -z "${fallback_toolchain}" ]; then
             exit 1
         fi
-        rustup toolchain install "${fallback_toolchain}" >&2
+        if ! rustup toolchain install "${fallback_toolchain}" >&2; then
+            exit 1
+        fi
     fi
     "${verus_bin}" --version >/dev/null
 fi

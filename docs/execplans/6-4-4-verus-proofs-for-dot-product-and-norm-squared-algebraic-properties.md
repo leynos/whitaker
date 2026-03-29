@@ -1,8 +1,9 @@
 # Prove `dot_product` and `norm_squared` algebraic properties with Verus (roadmap 6.4.4)
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -58,8 +59,8 @@ Observable success after implementation:
 - Use the workspace-pinned `rstest`, `rstest-bdd`, and `rstest-bdd-macros`
   `0.5.0` for new behavioural coverage.
 - Behaviour tests must respect the workspace Clippy `too_many_arguments`
-  threshold of 4. Each BDD step may parse at most 3 values from feature text in
-  addition to the world fixture.
+  threshold of 4. Each behaviour-driven development (BDD) step may parse at
+  most 3 values from feature text in addition to the world fixture.
 - Public helpers added to `common::test_support` require Rustdoc comments with
   examples that follow `docs/rust-doctest-dry-guide.md`.
 - Update `docs/brain-trust-lints-design.md` with the implementation decisions
@@ -111,10 +112,11 @@ Observable success after implementation:
   `methods_meet_cosine_threshold()` through `common::test_support`. Severity:
   medium. Likelihood: high. Mitigation: add a narrow test-support report or
   helper functions for dot product and squared norm results.
-- Clippy-and-BDD ergonomics risk: behavioural tests are subject to the same
-  argument-count and `expect` restrictions as production code. Severity:
-  medium. Likelihood: medium. Mitigation: use a small world fixture, return
-  `Result<(), String>` from step functions, and split overly wide steps.
+- Clippy-and-behaviour-driven development (BDD) ergonomics risk: behavioural
+  tests are subject to the same argument-count and `expect` restrictions as
+  production code. Severity: medium. Likelihood: medium. Mitigation: use a
+  small world fixture, return `Result<(), String>` from step functions, and
+  split overly wide steps.
 
 ## Progress
 

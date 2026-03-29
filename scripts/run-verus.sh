@@ -16,5 +16,8 @@ if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
 fi
 
 for proof_file in "${PROOF_FILES[@]}"; do
-    "${VERUS_BIN}" "${proof_file}" "$@"
+    if ! "${VERUS_BIN}" "${proof_file}" "$@"; then
+        printf 'Verus proof failed: %s\n' "${proof_file}" >&2
+        exit 1
+    fi
 done

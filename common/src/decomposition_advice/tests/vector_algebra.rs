@@ -1,37 +1,35 @@
 //! Validates the runtime vector algebra used by decomposition advice.
 
 use crate::decomposition_advice::vector::{dot_product, test_feature_vector};
+use rstest::rstest;
 
-#[test]
-fn dot_product_is_commutative_when_left_is_smaller() {
-    let left = test_feature_vector("left", &[("field:grammar", 6), ("keyword:parse", 2)]);
-    let right = test_feature_vector(
+#[rstest]
+#[case::left_smaller(
+    test_feature_vector("left", &[("field:grammar", 6), ("keyword:parse", 2)]),
+    test_feature_vector(
         "right",
         &[
             ("field:grammar", 6),
             ("keyword:parse", 2),
             ("domain:serde::json", 5),
         ],
-    );
-
-    assert_eq!(
-        dot_product(left.weights(), right.weights()),
-        dot_product(right.weights(), left.weights())
-    );
-}
-
-#[test]
-fn dot_product_is_commutative_when_right_is_smaller() {
-    let left = test_feature_vector(
+    )
+)]
+#[case::right_smaller(
+    test_feature_vector(
         "left",
         &[
             ("field:grammar", 6),
             ("keyword:parse", 2),
             ("domain:serde::json", 5),
         ],
-    );
-    let right = test_feature_vector("right", &[("field:grammar", 6), ("keyword:parse", 2)]);
-
+    ),
+    test_feature_vector("right", &[("field:grammar", 6), ("keyword:parse", 2)])
+)]
+fn dot_product_is_commutative(
+    #[case] left: crate::decomposition_advice::vector::MethodFeatureVector,
+    #[case] right: crate::decomposition_advice::vector::MethodFeatureVector,
+) {
     assert_eq!(
         dot_product(left.weights(), right.weights()),
         dot_product(right.weights(), left.weights())
