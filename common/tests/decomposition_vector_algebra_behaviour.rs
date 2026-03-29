@@ -159,15 +159,27 @@ fn when_vector_algebra_is_evaluated(world: &VectorAlgebraWorld) -> Result<(), St
     Ok(())
 }
 
-#[then("the dot product is commutative")]
-fn then_dot_product_is_commutative(world: &VectorAlgebraWorld) -> Result<(), String> {
+fn assert_on_report(
+    world: &VectorAlgebraWorld,
+    predicate: impl FnOnce(MethodVectorAlgebraReport) -> bool,
+    message: &'static str,
+) -> Result<(), String> {
     with_report(world, |report| {
-        if report.left_dot_right() == report.right_dot_left() {
+        if predicate(report) {
             Ok(())
         } else {
-            Err(String::from("expected dot product to be commutative"))
+            Err(String::from(message))
         }
     })
+}
+
+#[then("the dot product is commutative")]
+fn then_dot_product_is_commutative(world: &VectorAlgebraWorld) -> Result<(), String> {
+    assert_on_report(
+        world,
+        |report| report.left_dot_right() == report.right_dot_left(),
+        "expected dot product to be commutative",
+    )
 }
 
 #[then("the {side} squared norm is {expected}")]
@@ -194,15 +206,11 @@ fn then_squared_norm_matches(
 
 #[then("the dot product is zero")]
 fn then_dot_product_is_zero(world: &VectorAlgebraWorld) -> Result<(), String> {
-    with_report(world, |report| {
-        if report.left_dot_right() == 0 && report.right_dot_left() == 0 {
-            Ok(())
-        } else {
-            Err(String::from(
-                "expected the methods to have zero dot product",
-            ))
-        }
-    })
+    assert_on_report(
+        world,
+        |report| report.left_dot_right() == 0 && report.right_dot_left() == 0,
+        "expected the methods to have zero dot product",
+    )
 }
 
 // Scenario indices must match declaration order in
