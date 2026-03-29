@@ -224,6 +224,10 @@ fn matches_builtin_test_like_path(path: &AttributePath) -> bool {
 }
 
 fn is_prelude_test_attribute(path: &AttributePath) -> bool {
+    // `is_prelude_test_attribute` treats the third segment from
+    // `AttributePath::segments()` as a wildcard because `_edition` may vary
+    // across toolchains (`v1`, `rust_2021`, `rust_2024`). The matcher
+    // therefore fixes only the root, `prelude`, and trailing `test`.
     let [root, prelude, _edition, test] = path.segments() else {
         return false;
     };
