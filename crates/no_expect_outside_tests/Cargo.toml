@@ -42,3 +42,5 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
+tokio = { version = "1.50.0", features = ["macros", "rt", "rt-multi-thread"] }
+temp-env = { workspace = true }
