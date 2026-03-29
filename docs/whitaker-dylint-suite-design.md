@@ -609,7 +609,12 @@ text, including fences that start with backticks or tildes.
 - Test detection reuses the shared `common::Attribute::is_test_like_with`
   matrix via `whitaker::hir::has_test_like_hir_attributes`, so this lint and
   `no_expect_outside_tests` rely on one canonical set of recognized test
-  attribute paths and one HIR-adaptation helper.
+  attribute paths and one HIR-adaptation helper. Builtin detection comes from
+  `matches_builtin_test_like_path` on each `AttributePath`, so direct builtin
+  paths and prelude-qualified builtin forms such as `::core::prelude::v1::test`
+  and `::std::prelude::rust_2024::test` both count as test-like. Callers should
+  only pass extra `AttributePath` values to `is_test_like_with` when they need
+  to extend that builtin set at runtime.
 - The driver adds a harness-only fallback that treats function/const pairs with
   the same span as test functions when `rustc` rewrites `#[test]` into
   synthetic descriptors. This path is gated behind `--test` and assumes

@@ -2,6 +2,7 @@
 //! Positive UI fixture: allow `.expect(...)` in `#[tokio::test]` contexts.
 #![deny(no_expect_outside_tests)]
 
+extern crate core;
 extern crate tokio;
 
 #[tokio::test]
