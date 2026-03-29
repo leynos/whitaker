@@ -175,10 +175,7 @@ impl Attribute {
     /// ```
     #[must_use]
     pub fn is_test_like_with(&self, additional: &[AttributePath]) -> bool {
-        if TEST_LIKE_PATHS
-            .iter()
-            .any(|candidate| self.path.matches(candidate.iter().copied()))
-        {
+        if matches_builtin_test_like_path(&self.path) {
             return true;
         }
 
@@ -217,4 +214,19 @@ impl Attribute {
     pub const fn is_outer(&self) -> bool {
         self.kind.is_outer()
     }
+}
+
+fn matches_builtin_test_like_path(path: &AttributePath) -> bool {
+    TEST_LIKE_PATHS
+        .iter()
+        .any(|candidate| path.matches(candidate.iter().copied()))
+        || is_prelude_test_attribute(path)
+}
+
+fn is_prelude_test_attribute(path: &AttributePath) -> bool {
+    let [root, prelude, _edition, test] = path.segments() else {
+        return false;
+    };
+
+    matches!(root.as_str(), "core" | "std") && prelude == "prelude" && test == "test"
 }

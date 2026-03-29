@@ -59,7 +59,10 @@ fn path_is_doc(#[case] path: AttributePath, #[case] expected: bool) {
 #[case::rstest_qualified("rstest::rstest", true)]
 #[case::case_imported("case", true)]
 #[case::case_qualified("rstest::case", true)]
+#[case::core_prelude_test("core::prelude::v1::test", true)]
+#[case::std_prelude_test("std::prelude::rust_2024::test", true)]
 #[case::other("allow", false)]
+#[case::other_qualified_test("foo::prelude::v1::test", false)]
 fn attribute_is_test_like(#[case] path: &str, #[case] expected: bool) {
     let attribute = Attribute::new(AttributePath::from(path), AttributeKind::Outer);
     assert_eq!(attribute.is_test_like(), expected);
