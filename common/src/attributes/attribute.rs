@@ -167,7 +167,7 @@ impl Attribute {
     /// Builtin test-like attributes include direct paths such as `test`,
     /// `tokio::test`, `async_std::test`, and `rstest`, plus prelude-qualified
     /// builtin forms such as `::core::prelude::v1::test` and
-    /// `::std::prelude::rust_2024::test`. These builtin forms are recognised
+    /// `::std::prelude::rust_2024::test`. These builtin forms are recognized
     /// first by calling `matches_builtin_test_like_path` on `self.path`.
     ///
     /// Use `additional` only for extra runtime-configured `AttributePath`
