@@ -459,7 +459,11 @@ mod tests {
     fn run_install_scenario(
         dependency_name: &str,
         writes_binary: bool,
-    ) -> (tempfile::TempDir, PathBuf, Result<PathBuf, DependencyBinaryInstallError>) {
+    ) -> (
+        tempfile::TempDir,
+        PathBuf,
+        Result<PathBuf, DependencyBinaryInstallError>,
+    ) {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let bin_dir = temp_dir.path().join("bin");
         let dirs = StubDirs {
