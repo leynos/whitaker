@@ -131,7 +131,7 @@ fn has_test_attribute_handles_parsed_attributes() {
 }
 
 // -------------------------------------------------------------------------
-// Coverage notes for is_test_named_module, enclosing_function_item, and the
+// Coverage notes for is_test_named_module, extract_function_item, and the
 // is_likely_test_function fallback
 //
 // These helpers require full HIR context (hir::Node, hir::Item) which cannot
@@ -151,8 +151,9 @@ fn has_test_attribute_handles_parsed_attributes() {
 //
 // 3. Example-based regression coverage for the `rustc --test` harness path:
 //    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
-//      example target under `--test`, which exercises the sibling const
-//      descriptor fallback instead of only source-level attributes.
+//      example target under `--test`, placing `.expect(...)` calls inside
+//      nested closure and async-block bodies so the parent walk and sibling
+//      const descriptor fallback are both exercised.
 //
 // 4. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works
@@ -160,5 +161,5 @@ fn has_test_attribute_handles_parsed_attributes() {
 //
 // The individual helper functions have straightforward pattern matching:
 // - is_test_named_module: matches!(name, "test" | "tests")
-// - enclosing_function_item: relies on rustc's enclosing body-owner lookup
+// - extract_function_item: matches `hir::Node::Item` values whose kind is `Fn`
 // -------------------------------------------------------------------------

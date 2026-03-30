@@ -31,10 +31,9 @@ use whitaker_installer::resolution::{
     CrateResolutionOptions, SUITE_CRATE, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::stager::Stager;
+use whitaker_installer::test_support::synthetic_suite_staging_requested;
 use whitaker_installer::toolchain::Toolchain;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
-
-const TEST_STAGE_SUITE_ENV: &str = "WHITAKER_INSTALLER_TEST_STAGE_SUITE";
 
 fn main() {
     let cli = Cli::parse();
@@ -176,8 +175,7 @@ fn try_test_staged_suite_installation(
     toolchain: &Toolchain,
     target_dir: &Utf8Path,
 ) -> Result<Option<Utf8PathBuf>> {
-    if std::env::var_os(TEST_STAGE_SUITE_ENV).is_none() || !is_suite_only_request(requested_crates)
-    {
+    if !synthetic_suite_staging_requested() || !is_suite_only_request(requested_crates) {
         return Ok(None);
     }
 

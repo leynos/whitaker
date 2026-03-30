@@ -161,10 +161,15 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 // #[test] (which may happen in integration test crates where the test harness
 // processes attributes differently).
 fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>) -> bool {
-    if enclosing_function_item(cx, expr).is_some_and(|item| {
-        let attrs = cx.tcx.hir_attrs(item.hir_id());
-        has_test_attribute(attrs) || is_harness_marked_test_function(cx, item)
-    }) {
+    if cx
+        .tcx
+        .hir_parent_iter(expr.hir_id)
+        .filter_map(|(_, node)| extract_function_item(node))
+        .any(|item| {
+            let attrs = cx.tcx.hir_attrs(item.hir_id());
+            has_test_attribute(attrs) || is_harness_marked_test_function(cx, item)
+        })
+    {
         return true;
     }
 
@@ -213,12 +218,8 @@ fn is_test_named_module(node: hir::Node<'_>) -> bool {
     matches!(ident.name.as_str(), "test" | "tests")
 }
 
-fn enclosing_function_item<'tcx>(
-    cx: &LateContext<'tcx>,
-    expr: &hir::Expr<'tcx>,
-) -> Option<&'tcx hir::Item<'tcx>> {
-    let owner = cx.tcx.hir_enclosing_body_owner(expr.hir_id);
-    let hir::Node::Item(item) = cx.tcx.hir_node_by_def_id(owner) else {
+fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
+    let hir::Node::Item(item) = node else {
         return None;
     };
     matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(item)

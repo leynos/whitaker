@@ -53,6 +53,8 @@ pub mod prebuilt_path;
 pub mod resolution;
 pub mod scanner;
 pub mod stager;
+#[doc(hidden)]
+pub mod test_support;
 pub mod toolchain;
 pub mod version;
 pub mod workspace;

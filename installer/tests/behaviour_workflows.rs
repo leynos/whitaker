@@ -9,9 +9,8 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use tempfile::TempDir;
+use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
 use whitaker_installer::toolchain::parse_toolchain_channel;
-
-const TEST_STAGE_SUITE_ENV: &str = "WHITAKER_INSTALLER_TEST_STAGE_SUITE";
 
 #[derive(Default)]
 struct WorkflowWorld {
