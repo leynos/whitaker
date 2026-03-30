@@ -125,18 +125,18 @@ fn ensure_dylint_tools_installs_missing_tools(
             result: Ok(failure_output("missing dylint-link")),
         },
         ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "--version"],
+            cmd: "cargo-binstall",
+            args: vec!["--version"],
             result: Ok(success_output()),
         },
         ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "-y", "cargo-dylint"],
+            cmd: "cargo-binstall",
+            args: vec!["-y", "cargo-dylint"],
             result: Ok(success_output()),
         },
         ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "-y", "dylint-link"],
+            cmd: "cargo-binstall",
+            args: vec!["-y", "dylint-link"],
             result: Ok(success_output()),
         },
     ]);
@@ -178,13 +178,13 @@ fn ensure_dylint_tools_propagates_install_failures() {
             result: Ok(success_output()),
         },
         ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "--version"],
+            cmd: "cargo-binstall",
+            args: vec!["--version"],
             result: Ok(success_output()),
         },
         ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "-y", "cargo-dylint"],
+            cmd: "cargo-binstall",
+            args: vec!["-y", "cargo-dylint"],
             result: Ok(failure_output("install failed")),
         },
     ]);

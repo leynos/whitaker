@@ -66,6 +66,14 @@ pub struct DylintToolStatus {
     pub dylint_link: bool,
 }
 
+/// Available installation backends for dependency crates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallBackend {
+    Binstall,
+    BinstallSubcommand,
+    Install,
+}
+
 impl DylintToolStatus {
     /// Returns `true` if both tools are installed.
     ///
@@ -124,8 +132,8 @@ pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> DylintToolStatus {
 
 /// Installs missing Dylint tools.
 ///
-/// Uses `cargo binstall` if available for faster installation, otherwise
-/// falls back to `cargo install`.
+/// Uses `cargo-binstall` if available for faster installation, otherwise falls
+/// back to `cargo binstall` or `cargo install`.
 ///
 /// # Arguments
 ///
@@ -143,14 +151,14 @@ pub fn install_dylint_tools(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
 ) -> Result<()> {
-    let use_binstall = is_binstall_available(executor);
+    let backend = install_backend(executor);
 
     if !status.cargo_dylint {
-        install_tool(executor, "cargo-dylint", use_binstall)?;
+        install_tool(executor, "cargo-dylint", backend)?;
     }
 
     if !status.dylint_link {
-        install_tool(executor, "dylint-link", use_binstall)?;
+        install_tool(executor, "dylint-link", backend)?;
     }
 
     Ok(())
@@ -166,21 +174,27 @@ fn is_dylint_link_installed(executor: &dyn CommandExecutor) -> bool {
     command_succeeds(executor, "dylint-link", &["--version"])
 }
 
-/// Checks if `cargo binstall` is available.
-fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
-    command_succeeds(executor, "cargo", &["binstall", "--version"])
+/// Selects the preferred backend for installing dependency crates.
+fn install_backend(executor: &dyn CommandExecutor) -> InstallBackend {
+    if command_succeeds(executor, "cargo-binstall", &["--version"]) {
+        InstallBackend::Binstall
+    } else if command_succeeds(executor, "cargo", &["binstall", "--version"]) {
+        InstallBackend::BinstallSubcommand
+    } else {
+        InstallBackend::Install
+    }
 }
 
 /// Installs a single tool using binstall or cargo install.
 fn install_tool(
     executor: &dyn CommandExecutor,
     name: &'static str,
-    use_binstall: bool,
+    backend: InstallBackend,
 ) -> Result<()> {
-    let output = if use_binstall {
-        executor.run("cargo", &["binstall", "-y", name])?
-    } else {
-        executor.run("cargo", &["install", name])?
+    let output = match backend {
+        InstallBackend::Binstall => executor.run("cargo-binstall", &["-y", name])?,
+        InstallBackend::BinstallSubcommand => executor.run("cargo", &["binstall", "-y", name])?,
+        InstallBackend::Install => executor.run("cargo", &["install", name])?,
     };
 
     if !output.status.success() {
