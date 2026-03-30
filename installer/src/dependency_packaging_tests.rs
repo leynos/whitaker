@@ -2,11 +2,35 @@
 
 use crate::dependency_binaries::find_dependency_binary;
 use crate::dependency_packaging::{
-    ArchiveFormat, DependencyPackageParams, archive_format, inner_dir_name,
-    package_dependency_binary, render_provenance_markdown,
+    ArchiveFormat, DependencyPackageParams, DependencyPackagingError, archive_format,
+    inner_dir_name, package_dependency_binary, render_provenance_markdown,
+    write_provenance_markdown,
 };
 use crate::installer_packaging::TargetTriple;
+use rstest::{fixture, rstest};
 use std::fs;
+
+struct PackagingCase<'a> {
+    package: &'a str,
+    binary_name: &'a str,
+    create_binary: bool,
+    expected_archive_name: Option<&'a str>,
+}
+
+#[fixture]
+fn linux_target() -> TargetTriple {
+    TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")
+}
+
+#[fixture]
+fn windows_target() -> TargetTriple {
+    TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid target")
+}
+
+#[fixture]
+fn temp_dir() -> tempfile::TempDir {
+    tempfile::tempdir().expect("temp dir")
+}
 
 #[test]
 fn archive_format_matches_target_platform() {
@@ -19,7 +43,9 @@ fn archive_format_matches_target_platform() {
 
 #[test]
 fn inner_dir_name_uses_dependency_version() {
-    let dependency = find_dependency_binary("cargo-dylint").expect("dependency should exist");
+    let dependency = find_dependency_binary("cargo-dylint")
+        .expect("dependency manifest should load")
+        .expect("dependency should exist");
     let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
 
     assert_eq!(
@@ -28,53 +54,65 @@ fn inner_dir_name_uses_dependency_version() {
     );
 }
 
-#[test]
-fn package_dependency_binary_rejects_missing_binary() {
-    let dependency = find_dependency_binary("dylint-link").expect("dependency should exist");
-    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-    let temp_dir = tempfile::tempdir().expect("temp dir");
+#[rstest]
+#[case(PackagingCase {
+    package: "dylint-link",
+    binary_name: "missing",
+    create_binary: false,
+    expected_archive_name: None,
+})]
+#[case(PackagingCase {
+    package: "cargo-dylint",
+    binary_name: "cargo-dylint",
+    create_binary: true,
+    expected_archive_name: Some("cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"),
+})]
+fn package_dependency_binary_handles_binary_presence(
+    linux_target: TargetTriple,
+    temp_dir: tempfile::TempDir,
+    #[case] case: PackagingCase<'_>,
+) {
+    let dependency = find_dependency_binary(case.package)
+        .expect("dependency manifest should load")
+        .expect("dependency should exist");
+    let binary_path = temp_dir.path().join(case.binary_name);
+    if case.create_binary {
+        fs::write(&binary_path, b"binary").expect("write fake binary");
+    }
 
-    let error = package_dependency_binary(DependencyPackageParams {
+    let result = package_dependency_binary(DependencyPackageParams {
         dependency: dependency.clone(),
-        target,
-        binary_path: temp_dir.path().join("missing"),
+        target: linux_target.clone(),
+        binary_path: binary_path.clone(),
         output_dir: temp_dir.path().join("dist"),
-    })
-    .expect_err("missing binary should fail");
+    });
 
-    assert!(error.to_string().contains("binary file not found"));
-}
-
-#[test]
-fn package_dependency_binary_creates_expected_archive() {
-    let dependency = find_dependency_binary("cargo-dylint").expect("dependency should exist");
-    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let binary_path = temp_dir.path().join("cargo-dylint");
-    fs::write(&binary_path, b"binary").expect("write fake binary");
-
-    let output = package_dependency_binary(DependencyPackageParams {
-        dependency: dependency.clone(),
-        target: target.clone(),
-        binary_path,
-        output_dir: temp_dir.path().join("dist"),
-    })
-    .expect("packaging should succeed");
-
-    assert_eq!(
-        output.archive_name,
-        "cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"
-    );
-    assert!(output.archive_path.is_file());
+    match case.expected_archive_name {
+        Some(expected_archive_name) => {
+            let output = result.expect("packaging should succeed");
+            assert_eq!(output.archive_name, expected_archive_name);
+            assert!(output.archive_path.is_file());
+            assert!(output.archive_path.is_absolute());
+        }
+        None => {
+            let error = result.expect_err("missing binary should fail");
+            assert!(matches!(
+                error,
+                DependencyPackagingError::BinaryNotFound(path) if path == binary_path
+            ));
+        }
+    }
 }
 
 #[test]
 fn provenance_markdown_includes_all_dependency_fields() {
     let dependencies = [
         find_dependency_binary("cargo-dylint")
+            .expect("dependency manifest should load")
             .expect("dependency should exist")
             .clone(),
         find_dependency_binary("dylint-link")
+            .expect("dependency manifest should load")
             .expect("dependency should exist")
             .clone(),
     ];
@@ -86,4 +124,32 @@ fn provenance_markdown_includes_all_dependency_fields() {
     assert!(markdown.contains("dylint-link"));
     assert!(markdown.contains("MIT OR Apache-2.0"));
     assert!(markdown.contains("https://github.com/trailofbits/dylint"));
+}
+
+#[test]
+fn write_provenance_markdown_writes_expected_file() {
+    let dependencies = [
+        find_dependency_binary("cargo-dylint")
+            .expect("dependency manifest should load")
+            .expect("dependency should exist")
+            .clone(),
+        find_dependency_binary("dylint-link")
+            .expect("dependency manifest should load")
+            .expect("dependency should exist")
+            .clone(),
+    ];
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let path = write_provenance_markdown(temp_dir.path(), &dependencies)
+        .expect("provenance file should be written");
+
+    assert!(path.is_file());
+    assert_eq!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(crate::dependency_binaries::provenance_filename())
+    );
+    assert_eq!(
+        fs::read_to_string(&path).expect("provenance should be readable"),
+        render_provenance_markdown(&dependencies)
+    );
 }

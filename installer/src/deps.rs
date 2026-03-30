@@ -117,15 +117,18 @@ pub fn install_dylint_tools_with_output(
     let system_dirs = SystemBaseDirs::new();
     let target = host_target();
     let dirs = system_dirs.as_ref().map(|dirs| dirs as &dyn BaseDirs);
+    let cargo_fallback_mode = cargo_fallback_mode(executor);
     install_missing_tools(
         executor,
         status,
         stderr,
-        InstallContext {
-            dirs,
-            repository_installer: Some(&repository_installer),
-            target: target.as_ref(),
-            cargo_fallback_mode: InstallMode::CargoInstall,
+        &InstallContext {
+            repo: repository_install_context(
+                dirs,
+                Some(&repository_installer as &dyn DependencyBinaryInstaller),
+                target.as_ref(),
+            ),
+            cargo_fallback_mode,
             quiet,
         },
     )
@@ -140,24 +143,31 @@ pub fn install_dylint_tools_with_options(
     stderr: &mut dyn Write,
     options: DependencyInstallOptions<'_>,
 ) -> Result<()> {
+    let cargo_fallback_mode = cargo_fallback_mode(executor);
     install_missing_tools(
         executor,
         status,
         stderr,
-        InstallContext {
-            dirs: Some(options.dirs),
-            repository_installer: Some(options.repository_installer),
-            target: options.target.as_ref(),
-            cargo_fallback_mode: InstallMode::CargoInstall,
+        &InstallContext {
+            repo: repository_install_context(
+                Some(options.dirs),
+                Some(options.repository_installer),
+                options.target.as_ref(),
+            ),
+            cargo_fallback_mode,
             quiet: options.quiet,
         },
     )
 }
 
+struct RepositoryInstallContext<'a> {
+    dirs: &'a dyn BaseDirs,
+    installer: &'a dyn DependencyBinaryInstaller,
+    target: &'a TargetTriple,
+}
+
 struct InstallContext<'a> {
-    dirs: Option<&'a dyn BaseDirs>,
-    repository_installer: Option<&'a dyn DependencyBinaryInstaller>,
-    target: Option<&'a TargetTriple>,
+    repo: Option<RepositoryInstallContext<'a>>,
     cargo_fallback_mode: InstallMode,
     quiet: bool,
 }
@@ -166,34 +176,50 @@ fn install_missing_tools(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
     stderr: &mut dyn Write,
-    context: InstallContext<'_>,
+    context: &InstallContext<'_>,
 ) -> Result<()> {
-    let cargo_fallback_mode = if is_binstall_available(executor) {
-        InstallMode::Binstall
-    } else {
-        InstallMode::CargoInstall
-    };
-    let context = InstallContext {
-        cargo_fallback_mode,
-        ..context
-    };
-
     for tool in missing_tools(status) {
-        install_tool(executor, tool, stderr, &context)?;
+        install_tool(executor, tool, stderr, context)?;
     }
 
     Ok(())
 }
 
-fn missing_tools(status: &DylintToolStatus) -> Vec<&'static DependencyTool> {
-    let mut tools = Vec::new();
-    if !status.cargo_dylint {
-        tools.push(&DEPENDENCY_TOOLS[0]);
+fn repository_install_context<'a>(
+    dirs: Option<&'a dyn BaseDirs>,
+    installer: Option<&'a dyn DependencyBinaryInstaller>,
+    target: Option<&'a TargetTriple>,
+) -> Option<RepositoryInstallContext<'a>> {
+    match (dirs, installer, target) {
+        (Some(dirs), Some(installer), Some(target)) => Some(RepositoryInstallContext {
+            dirs,
+            installer,
+            target,
+        }),
+        _ => None,
     }
-    if !status.dylint_link {
-        tools.push(&DEPENDENCY_TOOLS[1]);
+}
+
+fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> InstallMode {
+    if is_binstall_available(executor) {
+        InstallMode::Binstall
+    } else {
+        InstallMode::CargoInstall
     }
-    tools
+}
+
+fn missing_tools(status: &DylintToolStatus) -> impl Iterator<Item = &'static DependencyTool> + '_ {
+    DEPENDENCY_TOOLS
+        .iter()
+        .filter(move |tool| should_install_tool(status, tool))
+}
+
+fn should_install_tool(status: &DylintToolStatus, tool: &DependencyTool) -> bool {
+    match tool.package {
+        "cargo-dylint" => !status.cargo_dylint,
+        "dylint-link" => !status.dylint_link,
+        _ => false,
+    }
 }
 
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
@@ -223,20 +249,20 @@ fn try_repository_install(
     stderr: &mut dyn Write,
     context: &InstallContext<'_>,
 ) -> Result<bool> {
-    let Some(target) = context.target else {
+    let Some(repo) = &context.repo else {
         return Ok(false);
     };
-    let Some(dirs) = context.dirs else {
-        return Ok(false);
-    };
-    let Some(repository_installer) = context.repository_installer else {
-        return Ok(false);
-    };
-    let Some(dependency) = find_dependency_binary(tool.package) else {
+    let Some(dependency) = find_dependency_binary(tool.package).map_err(|error| {
+        InstallerError::DependencyInstall {
+            tool: tool.package,
+            message: error.to_string(),
+        }
+    })?
+    else {
         return Ok(false);
     };
 
-    match repository_installer.install(dependency, target, dirs) {
+    match repo.installer.install(dependency, repo.target, repo.dirs) {
         Ok(_) if is_tool_installed(executor, tool) => {
             write_message(
                 stderr,
@@ -300,6 +326,15 @@ fn install_with_cargo(
         InstallMode::Binstall => "cargo binstall",
         InstallMode::CargoInstall => "cargo install",
     };
+    if !is_tool_installed(executor, tool) {
+        return Err(InstallerError::DependencyInstall {
+            tool: tool.package,
+            message: format!(
+                "{mode_message} reported success, but {} is still unavailable",
+                tool.package
+            ),
+        });
+    }
     write_message(
         stderr,
         context.quiet,

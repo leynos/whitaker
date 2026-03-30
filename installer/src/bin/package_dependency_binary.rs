@@ -55,6 +55,9 @@ enum CliError {
     #[error("unknown dependency package: {0}")]
     UnknownPackage(String),
 
+    #[error("dependency manifest error: {0}")]
+    Manifest(String),
+
     #[error("{0}")]
     Packaging(#[from] DependencyPackagingError),
 
@@ -79,6 +82,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
             output_dir,
         } => {
             let dependency = find_dependency_binary(&package)
+                .map_err(|error| CliError::Manifest(error.to_string()))?
                 .cloned()
                 .ok_or(CliError::UnknownPackage(package))?;
             let target = TargetTriple::try_from(target.as_str())?;
@@ -91,7 +95,9 @@ fn run(cli: Cli) -> Result<(), CliError> {
             println!("Created {}", output.archive_path.display());
         }
         Command::Provenance { output_dir } => {
-            let output = write_provenance_markdown(&output_dir, required_dependency_binaries())?;
+            let dependencies = required_dependency_binaries()
+                .map_err(|error| CliError::Manifest(error.to_string()))?;
+            let output = write_provenance_markdown(&output_dir, dependencies)?;
             println!("Created {}", output.display());
         }
     }

@@ -197,6 +197,7 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(success_output())),
+        cargo_dylint_check(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
@@ -225,6 +226,7 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(failure_output("missing binstall"))),
         cargo_install("cargo-dylint", Ok(success_output())),
+        cargo_dylint_check(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
@@ -253,6 +255,7 @@ fn install_dylint_tools_falls_back_when_repository_verification_fails() {
         binstall_version_check(Ok(success_output())),
         cargo_dylint_check(Ok(failure_output("still missing"))),
         binstall_install("cargo-dylint", Ok(success_output())),
+        cargo_dylint_check(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 

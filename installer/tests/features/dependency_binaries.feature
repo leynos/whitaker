@@ -23,6 +23,14 @@ Feature: Dependency binary installation
     Then the install succeeds
     And stderr contains "Installed cargo-dylint with cargo binstall."
 
+  Scenario: Repository asset is unavailable, cargo binstall fails, and the error propagates
+    Given the missing tool is "cargo-dylint"
+    And the repository installer fails with "not found"
+    And cargo binstall is available
+    And the cargo fallback fails with "binstall failed"
+    When dependency installation runs
+    Then the install fails for "cargo-dylint" with message containing "binstall failed"
+
   Scenario: Repository asset and cargo binstall are unavailable and cargo install succeeds
     Given the missing tool is "cargo-dylint"
     And the repository installer fails with "not found"
@@ -47,7 +55,15 @@ Feature: Dependency binary installation
     Then the install succeeds
     And stderr contains "Installed cargo-dylint with cargo binstall."
 
-  Scenario: Provenance document lists both repositories
+  Scenario: Repository install succeeds when cargo binstall is unavailable
+    Given the missing tool is "cargo-dylint"
+    And the repository installer succeeds
+    And cargo binstall is unavailable
+    When dependency installation runs
+    Then the install succeeds
+    And stderr contains "Installed cargo-dylint from repository release."
+
+  Scenario: Provenance document lists both dependencies
     Given the dependency manifest is loaded
     When provenance markdown is rendered
     Then the provenance contains "https://github.com/trailofbits/dylint"
