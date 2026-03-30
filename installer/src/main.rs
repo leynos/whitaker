@@ -208,7 +208,7 @@ fn ensure_dylint_tools_with_executor(
         write_stderr_line(stderr, "Installing required Dylint tools...");
     }
 
-    install_dylint_tools(executor, &status)?;
+    install_dylint_tools_with_output(executor, &status, quiet, stderr)?;
 
     if !quiet {
         write_stderr_line(stderr, "Dylint tools installed successfully.");

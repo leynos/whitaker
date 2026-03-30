@@ -10,16 +10,16 @@ homepage.workspace = true
 documentation.workspace = true
 
 [[bin]]
-name = "whitaker-installer"
-path = "src/main.rs"
+name = "whitaker-package-dependency-binary"
+path = "src/bin/package_dependency_binary.rs"
 
 [[bin]]
-name = "whitaker-package-lints"
-path = "src/bin/package_lints.rs"
+name = "whitaker-package-dependency-binary"
+path = "src/bin/package_dependency_binary.rs"
 
 [[bin]]
-name = "whitaker-package-installer"
-path = "src/bin/package_installer_bin.rs"
+name = "whitaker-package-dependency-binary"
+path = "src/bin/package_dependency_binary.rs"
 
 [features]
 ## Exposes test utilities for use by external test suites.

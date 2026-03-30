@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -140,15 +140,22 @@ Observable outcome:
   unchecked item for dependency binaries, so the implementation must add one.
 - [x] (2026-03-30) Drafted this ExecPlan in
   `docs/execplans/install-dependency-binaries.md`.
-- [ ] Implementation approved by user.
-- [ ] Add repository-owned dependency-binary manifest and Rust domain model.
-- [ ] Extend rolling and tagged release workflows to build, package, and
-  publish dependency binaries plus licence metadata.
-- [ ] Update installer dependency resolution to prefer repository-hosted
-  binaries before Cargo-based installation.
-- [ ] Add unit tests and `rstest-bdd` scenarios.
-- [ ] Update design doc, add and complete roadmap entry, then run
-  `make check-fmt`, `make lint`, and `make test`.
+- [x] (2026-03-30) Implementation approved by user.
+- [x] (2026-03-30) Added `installer/dependency-binaries.toml` plus
+  `installer/src/dependency_binaries/` for manifest parsing, archive naming,
+  local installation, and host-target detection.
+- [x] (2026-03-30) Extended `release.yml` and `rolling-release.yml` to build
+  and package dependency binaries, and to publish
+  `dependency-binaries-licences.md`.
+- [x] (2026-03-30) Updated `installer/src/deps.rs` to prefer repository-hosted
+  dependency binaries before `cargo binstall` or `cargo install`, with
+  verification and fallback logging.
+- [x] (2026-03-30) Added unit tests plus
+      `installer/tests/behaviour_dependency_binaries.rs`
+  and `installer/tests/features/dependency_binaries.feature`.
+- [x] (2026-03-30) Updated the design doc, added and completed roadmap item
+  `4.3.2`, and ran `make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, and `make test` successfully.
 
 ## Surprises & Discoveries
 
@@ -167,6 +174,11 @@ Observable outcome:
 - The repository already has two strong precedents that this feature should
   follow instead of inventing a new pattern: `installer_packaging` for archive
   creation and `prebuilt` for download-first/fallback behaviour.
+
+- `rstest-bdd` step macros expect `std::result::Result<_, StepError>` under the
+  hood; importing the installer's `Result<T>` alias into a behaviour test file
+  causes the generated wrappers to fail type-checking. Keep behaviour harnesses
+  on plain `std::result::Result` or omit the alias entirely.
 
 ## Decision Log
 
@@ -555,15 +567,34 @@ Acceptance for Stage I:
 
 ## Outcomes & Retrospective
 
-Pending implementation approval.
+This feature shipped as planned.
 
-Success for this ExecPlan means:
+Outcomes:
 
-1. Whitaker publishes exact-version `cargo-dylint` and `dylint-link` binaries
-   from repository releases.
-2. Those published assets include clear provenance and licence information with
-   links to upstream repositories.
-3. The installer consumes repository-hosted binaries first and keeps Cargo as a
-   fallback, not the default.
-4. Behaviour is covered by both unit tests and `rstest-bdd` scenarios.
-5. The design document and roadmap accurately reflect the shipped feature.
+1. Whitaker now publishes exact-version `cargo-dylint` and `dylint-link`
+   archives from both rolling and tagged releases using the committed
+   `installer/dependency-binaries.toml` manifest.
+2. Release assets now include a generated provenance/licence Markdown sidecar
+   describing package names, versions, licences, and upstream repositories.
+3. The installer now attempts repository-hosted dependency binaries first,
+   verifies the installed tool command, and falls back to `cargo binstall` or
+   `cargo install` when the repository path is unavailable or invalid.
+4. Coverage includes unit tests for manifest parsing, packaging, and install
+   orchestration plus `rstest-bdd` behavioural scenarios for repository
+   success, fallback, verification failure, unsupported targets, and provenance
+   rendering.
+5. Required gates passed:
+   `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
+   `make lint`, and `make test`.
+
+Retrospective:
+
+1. The implementation stayed within the intended seam by keeping `deps.rs`
+   focused on orchestration and moving dependency-binary rules into dedicated
+   modules.
+2. The only repair needed during validation was in the behaviour-test stub
+   expectations: repository-failure scenarios should not expect a verification
+   command that only occurs after a successful repository install.
+3. Full-workspace `make test` remained dominated by existing slow UI suites;
+   preserving logs and polling patiently was necessary to distinguish slow
+   progress from a real hang.
