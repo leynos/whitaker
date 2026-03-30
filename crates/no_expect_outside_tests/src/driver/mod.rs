@@ -286,7 +286,7 @@ fn is_matching_harness_test_descriptor(
     function_span: Span,
     sibling: &hir::Item<'_>,
 ) -> bool {
-    // `rustc --test` may synthesise a const descriptor that shares the test
+    // `rustc --test` may synthesize a const descriptor that shares the test
     // function's name and source range. The wrapper function and descriptor can
     // carry different syntax contexts, so this must compare source bytes
     // rather than exact `Span` identity.
@@ -304,7 +304,7 @@ fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
 
 // Detect source-level test framework attributes.
 //
-// The `rustc --test` harness may consume the original builtin marker entirely
+// The `rustc --test` harness may consume the original built-in marker entirely
 // and replace it with a sibling const descriptor. That recovery path is
 // covered by the example-based regression in `lib_ui_tests.rs`; this helper
 // still only inspects source-level HIR attributes.
