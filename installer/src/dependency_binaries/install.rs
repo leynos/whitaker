@@ -379,6 +379,8 @@ fn ensure_executable(path: &Path) -> Result<(), DependencyBinaryInstallError> {
             }
         })?;
     }
+    #[cfg(not(unix))]
+    let _ = path;
     Ok(())
 }
 
@@ -454,6 +456,39 @@ mod tests {
         }
     }
 
+    fn run_install_scenario(
+        dependency_name: &str,
+        writes_binary: bool,
+    ) -> (tempfile::TempDir, PathBuf, Result<PathBuf, DependencyBinaryInstallError>) {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        let dirs = StubDirs {
+            bin_dir: Some(bin_dir.clone()),
+        };
+        let dependency = crate::dependency_binaries::find_dependency_binary(dependency_name)
+            .expect("dependency should exist");
+        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
+        let downloader = StubDownloader {
+            content: b"archive".to_vec(),
+            fail: false,
+        };
+        let extractor = StubExtractor {
+            writes_binary,
+            extracted_path: Cell::new(None),
+        };
+        let result = install_with(
+            dependency,
+            &target,
+            &InstallSupport {
+                dirs: &dirs,
+                downloader: &downloader,
+                extractor: &extractor,
+            },
+        );
+
+        (temp_dir, bin_dir, result)
+    }
+
     #[test]
     fn archive_filename_uses_dependency_version() {
         let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
@@ -475,34 +510,8 @@ mod tests {
 
     #[test]
     fn install_with_creates_missing_bin_directory() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let bin_dir = temp_dir.path().join("bin");
-        let dirs = StubDirs {
-            bin_dir: Some(bin_dir.clone()),
-        };
-        let dependency = crate::dependency_binaries::find_dependency_binary("cargo-dylint")
-            .expect("dependency should exist");
-        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-        let downloader = StubDownloader {
-            content: b"archive".to_vec(),
-            fail: false,
-        };
-        let extractor = StubExtractor {
-            writes_binary: true,
-            extracted_path: Cell::new(None),
-        };
-
-        let installed_path = install_with(
-            dependency,
-            &target,
-            &InstallSupport {
-                dirs: &dirs,
-                downloader: &downloader,
-                extractor: &extractor,
-            },
-        )
-        .expect("install");
-
+        let (_temp_dir, bin_dir, result) = run_install_scenario("cargo-dylint", true);
+        let installed_path = result.expect("install");
         assert!(bin_dir.is_dir());
         assert_eq!(installed_path, bin_dir.join("cargo-dylint"));
         assert!(installed_path.is_file());
@@ -510,32 +519,8 @@ mod tests {
 
     #[test]
     fn install_with_returns_error_when_binary_missing_after_extract() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let dirs = StubDirs {
-            bin_dir: Some(temp_dir.path().join("bin")),
-        };
-        let dependency =
-            crate::dependency_binaries::find_dependency_binary("dylint-link").expect("dependency");
-        let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-        let downloader = StubDownloader {
-            content: b"archive".to_vec(),
-            fail: false,
-        };
-        let extractor = StubExtractor {
-            writes_binary: false,
-            extracted_path: Cell::new(None),
-        };
-
-        let error = install_with(
-            dependency,
-            &target,
-            &InstallSupport {
-                dirs: &dirs,
-                downloader: &downloader,
-                extractor: &extractor,
-            },
-        )
-        .expect_err("install should fail");
+        let (_temp_dir, _bin_dir, result) = run_install_scenario("dylint-link", false);
+        let error = result.expect_err("install should fail");
         assert!(matches!(
             error,
             DependencyBinaryInstallError::MissingBinaryInArchive { .. }
