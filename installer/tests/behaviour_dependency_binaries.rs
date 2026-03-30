@@ -69,11 +69,19 @@ struct DependencyBinaryWorld {
     repository_behaviour: Option<RepositoryInstallerBehaviour>,
     repository_verification_fails: bool,
     binstall_available: bool,
+    cargo_fallback_failure: Option<String>,
     unsupported_target: bool,
     stderr: Vec<u8>,
     install_result: Option<std::result::Result<(), whitaker_installer::error::InstallerError>>,
     provenance: Option<String>,
     dependencies: Vec<DependencyBinary>,
+}
+
+struct ExpectedCallConfig<'a> {
+    binstall_available: bool,
+    verify_repository_install: bool,
+    verification_fails: bool,
+    cargo_fallback_failure: Option<&'a str>,
 }
 
 #[fixture]
@@ -112,6 +120,11 @@ fn given_binstall_unavailable(world: &mut DependencyBinaryWorld) {
     world.binstall_available = false;
 }
 
+#[given("the cargo fallback fails with \"{message}\"")]
+fn given_cargo_fallback_failure(world: &mut DependencyBinaryWorld, message: String) {
+    world.cargo_fallback_failure = Some(message);
+}
+
 #[given("the target is unsupported")]
 fn given_unsupported_target(world: &mut DependencyBinaryWorld) {
     world.unsupported_target = true;
@@ -119,7 +132,9 @@ fn given_unsupported_target(world: &mut DependencyBinaryWorld) {
 
 #[given("the dependency manifest is loaded")]
 fn given_manifest_loaded(world: &mut DependencyBinaryWorld) {
-    world.dependencies = required_dependency_binaries().to_vec();
+    world.dependencies = required_dependency_binaries()
+        .expect("dependency manifest should load")
+        .to_vec();
 }
 
 #[when("dependency installation runs")]
@@ -144,9 +159,12 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
 
     let executor = StubExecutor::new(expected_calls(
         &tool,
-        world.binstall_available,
-        expect_repository_verification,
-        world.repository_verification_fails,
+        ExpectedCallConfig {
+            binstall_available: world.binstall_available,
+            verify_repository_install: expect_repository_verification,
+            verification_fails: world.repository_verification_fails,
+            cargo_fallback_failure: world.cargo_fallback_failure.as_deref(),
+        },
     ));
 
     let target = if world.unsupported_target {
@@ -192,6 +210,31 @@ fn then_stderr_contains(world: &mut DependencyBinaryWorld, expected: String) {
     );
 }
 
+#[then("the install fails for \"{tool}\" with message containing \"{expected}\"")]
+fn then_install_fails_with_message(
+    world: &mut DependencyBinaryWorld,
+    tool: String,
+    expected: String,
+) {
+    let result = world
+        .install_result
+        .as_ref()
+        .expect("install result should exist");
+    match result {
+        Err(whitaker_installer::error::InstallerError::DependencyInstall {
+            tool: actual_tool,
+            message,
+        }) => {
+            assert_eq!(actual_tool, &tool);
+            assert!(
+                message.contains(&expected),
+                "expected error message to contain {expected:?}, got {message:?}"
+            );
+        }
+        other => panic!("expected dependency install error, got {other:?}"),
+    }
+}
+
 #[then("the provenance contains \"{expected}\"")]
 fn then_provenance_contains(world: &mut DependencyBinaryWorld, expected: String) {
     let provenance = world
@@ -204,28 +247,23 @@ fn then_provenance_contains(world: &mut DependencyBinaryWorld, expected: String)
     );
 }
 
-fn expected_calls(
-    tool: &str,
-    binstall_available: bool,
-    verify_repository_install: bool,
-    verification_fails: bool,
-) -> Vec<ExpectedCall> {
+fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
     let mut calls = vec![ExpectedCall {
         cmd: "cargo",
         args: vec!["binstall", "--version"],
-        result: if binstall_available {
+        result: if config.binstall_available {
             Ok(success_output())
         } else {
             Ok(failure_output("missing binstall"))
         },
     }];
 
-    if verify_repository_install {
+    if config.verify_repository_install {
         calls.push(match tool {
             "cargo-dylint" => ExpectedCall {
                 cmd: "cargo",
                 args: vec!["dylint", "--version"],
-                result: if verification_fails {
+                result: if config.verification_fails {
                     Ok(failure_output("still missing"))
                 } else {
                     Ok(success_output())
@@ -234,7 +272,7 @@ fn expected_calls(
             "dylint-link" => ExpectedCall {
                 cmd: "dylint-link",
                 args: vec!["--version"],
-                result: if verification_fails {
+                result: if config.verification_fails {
                     Ok(failure_output("still missing"))
                 } else {
                     Ok(success_output())
@@ -242,14 +280,14 @@ fn expected_calls(
             },
             other => panic!("unexpected tool: {other}"),
         });
-        if !verification_fails {
+        if !config.verification_fails {
             return calls;
         }
     }
 
     calls.push(ExpectedCall {
         cmd: "cargo",
-        args: if binstall_available {
+        args: if config.binstall_available {
             vec![
                 "binstall",
                 "-y",
@@ -258,9 +296,35 @@ fn expected_calls(
         } else {
             vec!["install", Box::leak(tool.to_owned().into_boxed_str())]
         },
-        result: Ok(success_output()),
+        result: Ok(match config.cargo_fallback_failure {
+            Some(message) => failure_output(message),
+            None => success_output(),
+        }),
     });
+    if config.cargo_fallback_failure.is_none() {
+        calls.push(match tool {
+            "cargo-dylint" => cargo_dylint_check(),
+            "dylint-link" => dylint_link_check(),
+            other => panic!("unexpected tool: {other}"),
+        });
+    }
     calls
+}
+
+fn cargo_dylint_check() -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["dylint", "--version"],
+        result: Ok(success_output()),
+    }
+}
+
+fn dylint_link_check() -> ExpectedCall {
+    ExpectedCall {
+        cmd: "dylint-link",
+        args: vec!["--version"],
+        result: Ok(success_output()),
+    }
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 0)]
@@ -279,21 +343,31 @@ fn scenario_repository_falls_back_to_binstall(world: DependencyBinaryWorld) {
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 3)]
-fn scenario_repository_and_binstall_fall_back_to_cargo_install(world: DependencyBinaryWorld) {
+fn scenario_repository_and_binstall_and_cargo_all_fail(world: DependencyBinaryWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 4)]
-fn scenario_repository_verification_failure_uses_binstall(world: DependencyBinaryWorld) {
+fn scenario_repository_and_binstall_fall_back_to_cargo_install(world: DependencyBinaryWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 5)]
-fn scenario_unsupported_target_uses_binstall(world: DependencyBinaryWorld) {
+fn scenario_repository_verification_failure_uses_binstall(world: DependencyBinaryWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 6)]
-fn scenario_provenance_lists_both_repositories(world: DependencyBinaryWorld) {
+fn scenario_unsupported_target_uses_binstall(world: DependencyBinaryWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/dependency_binaries.feature", index = 7)]
+fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/dependency_binaries.feature", index = 8)]
+fn scenario_provenance_lists_both_dependencies(world: DependencyBinaryWorld) {
     let _ = world;
 }

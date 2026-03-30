@@ -125,7 +125,8 @@
   GitHub Releases tagged `v<version>`.
 - [x] 4.3.2. Publish repository-hosted dependency binaries for
   `cargo-dylint` and `dylint-link`, and teach the installer to prefer them
-  before Cargo-based installation.
+  before Cargo-based installation. (`design.execplan.dependency-binary`,
+  `docs/execplans/install-dependency-binaries.md` Stage C-D)
 
 ## 5. Experimental Bumpy Road lint
 

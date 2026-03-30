@@ -136,7 +136,17 @@ fn ensure_dylint_tools_installs_missing_tools(
         },
         ExpectedCall {
             cmd: "cargo",
+            args: vec!["dylint", "--version"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
             args: vec!["binstall", "-y", "dylint-link"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "dylint-link",
+            args: vec!["--version"],
             result: Ok(success_output()),
         },
     ]);

@@ -174,13 +174,7 @@ jobs:
           set -euxo pipefail
           mkdir -p dist
           mkdir -p dependency-root
-          python - <<'PY' > /tmp/dependency-binaries.tsv
-          import tomllib
-          with open("installer/dependency-binaries.toml", "rb") as handle:
-              manifest = tomllib.load(handle)
-          for entry in manifest["dependency_binaries"]:
-              print(f"{entry['package']}\t{entry['binary']}\t{entry['version']}")
-          PY
+          python installer/scripts/dependency_binaries_manifest.py > /tmp/dependency-binaries.tsv
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
           else

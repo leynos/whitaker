@@ -291,15 +291,15 @@ Recommended fields per entry:
 - `package` — Cargo package name (`cargo-dylint`, `dylint-link`).
 - `binary` — executable filename without extension.
 - `version` — required upstream version.
-- `license` — SPDX identifier or the exact licence string supplied by the
-  upstream crate metadata.
+- `license` — Software Package Data Exchange (SPDX) identifier or the exact
+  licence string supplied by the upstream crate metadata.
 - `repository` — upstream repository URL.
 
 Optional fields if they simplify implementation:
 
 - `check_command` — how the installer verifies that the tool is installed.
-- `windows_binary` — explicit `.exe` filename if you want the manifest to be
-  fully literal.
+- `windows_binary` — explicit `.exe` filename if the manifest is to be fully
+  literal.
 
 Acceptance for Stage A:
 

@@ -96,6 +96,8 @@ pub fn package_dependency_binary(
         }
     }
 
+    let archive_path = archive_path.canonicalize()?;
+
     Ok(DependencyPackageOutput {
         archive_path,
         archive_name,
@@ -139,6 +141,7 @@ fn create_tgz_archive(
     let output_file = fs::File::create(output_path)?;
     let gz_encoder = flate2::write::GzEncoder::new(output_file, flate2::Compression::default());
     let mut archive = tar::Builder::new(gz_encoder);
+    archive.mode(tar::HeaderMode::Deterministic);
     archive.append_path_with_name(binary_path, format!("{inner_dir}/{binary_name}"))?;
     let gz_encoder = archive.into_inner()?;
     gz_encoder.finish()?;
@@ -154,6 +157,7 @@ fn create_zip_archive(
     let output_file = fs::File::create(output_path)?;
     let mut zip_writer = zip::ZipWriter::new(output_file);
     let options = zip::write::SimpleFileOptions::default()
+        .last_modified_time(zip::DateTime::default())
         .compression_method(zip::CompressionMethod::Deflated);
     zip_writer.start_file(format!("{inner_dir}/{binary_name}"), options)?;
     let mut binary_file = fs::File::open(binary_path)?;

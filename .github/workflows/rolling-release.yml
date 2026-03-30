@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Check whether dependency manifest changed
         id: check
@@ -161,7 +163,6 @@ jobs:
 
   build-dependency-binaries:
     needs: dependency-manifest-changes
-    if: needs.dependency-manifest-changes.outputs.should_build == 'true'
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -208,13 +209,7 @@ jobs:
           set -euxo pipefail
           mkdir -p dist
           mkdir -p dependency-root
-          python - <<'PY' > /tmp/dependency-binaries.tsv
-          import tomllib
-          with open("installer/dependency-binaries.toml", "rb") as handle:
-              manifest = tomllib.load(handle)
-          for entry in manifest["dependency_binaries"]:
-              print(f"{entry['package']}\t{entry['binary']}\t{entry['version']}")
-          PY
+          python installer/scripts/dependency_binaries_manifest.py > /tmp/dependency-binaries.tsv
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
           else
@@ -290,11 +285,6 @@ jobs:
           merge-multiple: true
           path: dist
 
-      - name: Generate dependency provenance asset
-        run: |
-          set -euxo pipefail
-          ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
-
       - name: List artefacts
         run: |
           if [[ ! -d dist ]]; then
@@ -308,13 +298,20 @@ jobs:
         run: |
           set -euxo pipefail
           shopt -s nullglob
-          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip dist/*.md)
+          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "has_assets=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           printf '%s\n' "${assets[@]}" > dist/release-assets.txt
           echo "has_assets=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate dependency provenance asset
+        if: steps.assets.outputs.has_assets == 'true'
+        run: |
+          set -euxo pipefail
+          ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
+          printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
 
       - name: Delete existing rolling release
         if: steps.assets.outputs.has_assets == 'true'
@@ -341,5 +338,5 @@ jobs:
       - name: Skip release publish when no assets were built
         if: steps.assets.outputs.has_assets != 'true'
         run: |
-          echo "No rolling-release assets were produced by build-lints."
+          echo "No rolling-release assets were produced by the build jobs."
           echo "Skipping release publication."

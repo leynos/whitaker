@@ -4,6 +4,8 @@
 //! of truth for required dependency-tool versions, licences, and provenance.
 
 use serde::Deserialize;
+use std::error::Error;
+use std::fmt;
 use std::sync::OnceLock;
 
 /// One repository-owned dependency binary requirement.
@@ -53,6 +55,17 @@ struct DependencyBinaryManifest {
     dependency_binaries: Vec<DependencyBinary>,
 }
 
+#[derive(Debug, Clone)]
+struct ManifestLoadError(String);
+
+impl fmt::Display for ManifestLoadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl Error for ManifestLoadError {}
+
 /// Return the embedded manifest contents.
 #[must_use]
 pub fn manifest_contents() -> &'static str {
@@ -70,23 +83,24 @@ pub fn parse_manifest(contents: &str) -> Result<Vec<DependencyBinary>, toml::de:
 }
 
 /// Return the committed dependency binaries from the embedded manifest.
-#[must_use]
-pub fn required_dependency_binaries() -> &'static [DependencyBinary] {
-    static MANIFEST: OnceLock<Vec<DependencyBinary>> = OnceLock::new();
-    MANIFEST
-        .get_or_init(|| {
-            parse_manifest(manifest_contents())
-                .expect("dependency-binaries.toml must stay parseable in the repository")
-        })
-        .as_slice()
+pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Box<dyn Error>> {
+    static MANIFEST: OnceLock<Result<Vec<DependencyBinary>, ManifestLoadError>> = OnceLock::new();
+
+    match MANIFEST.get_or_init(|| {
+        parse_manifest(manifest_contents()).map_err(|error| ManifestLoadError(error.to_string()))
+    }) {
+        Ok(dependencies) => Ok(dependencies.as_slice()),
+        Err(error) => Err(Box::new(error.clone())),
+    }
 }
 
 /// Find a dependency binary by its Cargo package name.
-#[must_use]
-pub fn find_dependency_binary(package: &str) -> Option<&'static DependencyBinary> {
-    required_dependency_binaries()
+pub fn find_dependency_binary(
+    package: &str,
+) -> Result<Option<&'static DependencyBinary>, Box<dyn Error>> {
+    Ok(required_dependency_binaries()?
         .iter()
-        .find(|dependency| dependency.package() == package)
+        .find(|dependency| dependency.package() == package))
 }
 
 #[cfg(test)]
@@ -95,7 +109,8 @@ mod tests {
 
     #[test]
     fn manifest_contains_expected_tools() {
-        let dependencies = required_dependency_binaries();
+        let dependencies =
+            required_dependency_binaries().expect("embedded manifest should stay parseable");
         assert_eq!(dependencies.len(), 2);
         assert!(
             dependencies
@@ -126,7 +141,9 @@ mod tests {
 
     #[test]
     fn find_dependency_binary_returns_matching_package() {
-        let tool = find_dependency_binary("cargo-dylint").expect("tool should exist");
+        let tool = find_dependency_binary("cargo-dylint")
+            .expect("embedded manifest should stay parseable")
+            .expect("tool should exist");
         assert_eq!(tool.binary(), "cargo-dylint");
         assert_eq!(tool.version(), "4.1.0");
     }
