@@ -251,7 +251,7 @@
 - [x] 7.2.2. Implement MinHash + LSH candidate generation with configurable
   bands and rows. See
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-- [ ] 7.2.3. Emit SARIF run 0 for accepted Type-1 and Type-2 pairs with stable
+- [x] 7.2.3. Emit SARIF run 0 for accepted Type-1 and Type-2 pairs with stable
   fingerprints and spans. See
   [clone detector design](whitaker-clone-detector-design.md) §SARIF emission
   (Run 0). Requires 7.1.1.

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -122,20 +122,20 @@ Observable outcome:
 
 - [x] Stage A: Gather repository context and draft this ExecPlan
   (2026-03-29).
-- [ ] Stage B: Add failing unit tests for threshold acceptance, byte-range to
+- [x] Stage B: Add failing unit tests for threshold acceptance, byte-range to
   SARIF-region conversion, stable fingerprints, and deterministic result
-  ordering.
-- [ ] Stage C: Add failing `rstest-bdd` feature scenarios for accepted,
+  ordering (completed 2026-03-30).
+- [x] Stage C: Add failing `rstest-bdd` feature scenarios for accepted,
   rejected, and malformed Run 0 emission.
-- [ ] Stage D: Add the new acceptance and Run 0 emission modules in
+- [x] Stage D: Add the new acceptance and Run 0 emission modules in
   `crates/whitaker_clones_core/` and wire their public exports.
-- [ ] Stage E: Make the targeted tests green and refactor for readability while
+- [x] Stage E: Make the targeted tests green and refactor for readability while
   keeping files below 400 lines.
-- [ ] Stage F: Update `docs/whitaker-clone-detector-design.md` with
+- [x] Stage F: Update `docs/whitaker-clone-detector-design.md` with
   `## Implementation decisions (7.2.3)`.
-- [ ] Stage G: Mark roadmap item 7.2.3 done in `docs/roadmap.md`.
-- [ ] Stage H: Run documentation and code quality gates successfully.
-- [ ] Stage I: Finalize the living sections in this ExecPlan after
+- [x] Stage G: Mark roadmap item 7.2.3 done in `docs/roadmap.md`.
+- [x] Stage H: Run documentation and code quality gates successfully.
+- [x] Stage I: Finalize the living sections in this ExecPlan after
   implementation.
 
 ## Surprises & Discoveries
@@ -159,6 +159,12 @@ Observable outcome:
 - Workspace dependencies already include `whitaker_sarif`, `camino`, and
   `sha2`. If a stable hash beyond `FragmentId` is needed, 7.2.3 can likely use
   existing dependencies without widening the dependency surface.
+- `whitaker_sarif::WhitakerProperties` still requires numeric `jaccard` and
+  `cosine` fields, so 7.2.3 needs one narrowly scoped decimal-string-to-`f64`
+  conversion helper even though the acceptance logic itself stays integer-only.
+- The workspace Clippy threshold of four arguments shaped the final public API:
+  `TokenFragment::new` now sets source identity only, while retained
+  fingerprints are supplied via `.with_retained_fingerprints(...)`.
 
 ## Decision Log
 
@@ -182,6 +188,15 @@ Observable outcome:
   offset-length data in the `Region`. Rationale: retained fingerprints are
   byte-based today, so the mapping should stay lossless and deterministic.
   Date/Author: 2026-03-29 / Codex.
+- Decision: use SHA-256 hex digests for both the pair fingerprint and the
+  combined token hash. Rationale: `sha2` is already a workspace dependency,
+  while the earlier Blake3 shape was only aspirational and not yet committed
+  anywhere else in the codebase. Date/Author: 2026-03-30 / Codex.
+- Decision: derive the primary SARIF span from the first retained fingerprint
+  of each accepted fragment. Rationale: 7.2.3 only needs stable pair emission,
+  not clone-class region aggregation, and the first retained fingerprint is the
+  narrowest deterministic span already available from 7.2.1. Date/Author:
+  2026-03-30 / Codex.
 
 ## Context and orientation
 
@@ -242,6 +257,28 @@ self-contained:
   implementation split into small, readable helpers.
 - `docs/whitaker-dylint-suite-design.md` for workspace testing and quality-gate
   expectations.
+
+## Outcomes & Retrospective
+
+- 7.2.3 now ships as a dedicated `run0/` module inside
+  `crates/whitaker_clones_core/`, exposing acceptance and SARIF-emission APIs
+  without pulling in CLI concerns.
+- Accepted Type-1 and Type-2 pairs now emit deterministic SARIF Run 0 results
+  via `whitaker_sarif`, including stable ordering, primary-versus-related
+  locations, SHA-256 partial fingerprints, Whitaker properties, and byte-range
+  to region conversion.
+- Unit coverage and `rstest-bdd` behavioural coverage now exercise threshold
+  boundaries, malformed inputs, multi-line spans, duplicate suppression, and
+  deterministic primary-location selection.
+- `docs/whitaker-clone-detector-design.md` records the final 7.2.3
+  implementation decisions, and `docs/roadmap.md` now marks roadmap item 7.2.3
+  complete.
+- Final quality gates passed with logs captured at:
+  `/tmp/7-2-3-final-fmt.log`, `/tmp/7-2-3-final-markdownlint.log`,
+  `/tmp/7-2-3-final-nixie.log`, `/tmp/7-2-3-final-check-fmt.log`,
+  `/tmp/7-2-3-final-lint.log`, and `/tmp/7-2-3-final-test.log`.
+- Final validation summary: `make test` completed successfully with
+  `Summary [ 111.463s] 1188 tests run: 1188 passed, 2 skipped`.
 
 ## Proposed implementation shape
 
@@ -509,13 +546,3 @@ The implementation is complete when a novice can verify all of the following:
    SARIF span fields and matching byte offset-length fields.
 6. Serializing the emitted run to JSON twice yields identical output for the
    same input.
-
-## Outcomes & Retrospective
-
-This section is intentionally empty during the draft phase. The implementation
-turn must replace it with:
-
-- what shipped,
-- what changed from the draft,
-- final validation results and log paths,
-- and any follow-up work that should remain out of scope for 7.2.3.
