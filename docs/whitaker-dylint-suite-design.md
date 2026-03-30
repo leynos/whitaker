@@ -378,23 +378,49 @@ production-only functions that merely relax warnings or lints under test builds
 from being misclassified as test code, eliminating a class of false negatives
 observed during feature rollout.
 
-**Test harness fallback.** When compiled with `--test` (typically for
-integration test crates), functions bearing `#[test]` may not be detected via
-the standard attribute traversal if the test framework processes them
-differently. A fallback heuristic supplements standard detection by checking:
-(1) whether any enclosing function has a recognized test attribute, (2) whether
-the code lives inside a module named `test` or `tests`, and (3) whether the
-source file resides in a `tests/` directory. This fallback only activates when
-`rustc` is running with the test harness flag (`--test`), ensuring production
-builds remain strict. The file-path check uses platform-agnostic path component
-comparison for Windows compatibility.
+**Test harness fallback.** When compiled with `--test`, the builtin
+`#[test]` marker may be consumed by the Rust test harness before the lint sees
+the function body. This occurs for async wrappers such as `#[tokio::test]`,
+where the wrapper function still contains Tokio's runtime
+`.expect("Failed building the Runtime")` call even though the original marker
+has been rewritten into a sibling const descriptor. The fallback therefore
+supplements direct attribute detection by checking whether the enclosing
+function is paired with a harness-generated sibling `const` item whose symbol
+name and source span match the function. If that descriptor is present, the
+lint treats the function as test-only code. The broader module-name and
+`tests/` path heuristics remain as secondary signals for conventional test
+layouts. This recovery path only activates when `rustc` is running with the
+test harness flag (`--test`), keeping production builds strict.
+
+The following flowchart shows how `no_expect_outside_tests` decides whether a
+function is treated as test-only code, including the async harness recovery
+path for wrapper functions such as `#[tokio::test]`.
+
+```mermaid
+flowchart TD
+    Start(["Encounter function item during linting"]) --> CheckAttrs
+
+    CheckAttrs["Does function have a direct #[test] or supported test attribute?"]
+    CheckAttrs -->|Yes| MarkAsTestDirect["Mark function as test (existing path)"]
+    CheckAttrs -->|No| CheckHarness["Is compilation using rustc --test harness?"]
+
+    CheckHarness -->|No| NotTest["Treat function as non-test for no_expect_outside_tests"]
+    CheckHarness -->|Yes| FindSiblingConst["Locate harness-generated sibling const descriptor"]
+
+    FindSiblingConst --> HasAsyncDescriptor["Does sibling const describe an async test harness (e.g. tokio::test)?"]
+
+    HasAsyncDescriptor -->|Yes| MarkAsTestAsync["Mark function as test (new async-harness path)"]
+    HasAsyncDescriptor -->|No| NotTest
+
+    MarkAsTestDirect --> ApplyLintRules["Allow expect! usage inside recognized tests"]
+    MarkAsTestAsync --> ApplyLintRules
+    NotTest --> ApplyNonTestRules["Apply no_expect_outside_tests rules (disallow expect! here)"]
+```
 
 Behaviour-driven unit tests exercise the summarizer in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
 paths added via configuration. UI fixtures demonstrate the denial emitted for
 ordinary functions and the absence of findings inside `#[test]` contexts.
-
-```
 
 ### 3.3 `public_fn_must_have_docs` (pedantic, warn)
 
@@ -490,10 +516,9 @@ the internal nodes of the predicate tree.
 **Algorithm.** Traverse the HIR expression and compute the number of branches:
 
 ```text
-count_branches(e) =
-  if e is Binary(And|Or, lhs, rhs): count_branches(lhs) + count_branches(rhs)
-  if e is Unary(Not, inner):         count_branches(inner)
-  else:                              1
+count_branches(e) = if e is Binary(And|Or, lhs, rhs): count_branches(lhs) +
+count_branches(rhs) if e is Unary(Not, inner):         count_branches(inner)
+else:                              1
 ```
 
 Emit a diagnostic when `count_branches(e) > max_branches`, where the default
@@ -502,10 +527,9 @@ Emit a diagnostic when `count_branches(e) > max_branches`, where the default
 **Implementation sketch (`src/lib.rs`).**
 
 ```rust
-use dylint_linting::{declare_late_lint, impl_late_lint};
-use rustc_hir as hir;
-use rustc_hir::{BinOpKind, Expr, ExprKind, Guard, UnOp};
-use rustc_lint::{LateContext, LateLintPass};
+use dylint_linting::{declare_late_lint, impl_late_lint}; use rustc_hir as hir;
+use rustc_hir::{BinOpKind, Expr, ExprKind, Guard, UnOp}; use
+rustc_lint::{LateContext, LateLintPass};
 
 declare_late_lint!(
     pub CONDITIONAL_MAX_N_BRANCHES,
@@ -583,14 +607,14 @@ in `dylint.toml`.
 **UI tests.**
 
 ```text
-crates/conditional_max_n_branches/ui/
-├─ fail_if_three_branches.rs     # default limit hit via three-way conjunction
-├─ fail_while_guard.rs           # `while` guard with nested disjunction
-├─ fail_match_guard.rs           # match guard with three branches
-├─ fail_configured_limit.rs      # `max_branches = 1` highlights two-branch cond
-├─ pass_if_two_branches.rs       # default limit allows two branches
-├─ pass_custom_limit.rs          # raised limit accepts three branches
-└─ pass_if_let.rs                # pattern guards remain out of scope
+crates/conditional_max_n_branches/ui/ ├─ fail_if_three_branches.rs     #
+default limit hit via three-way conjunction ├─ fail_while_guard.rs           #
+`while` guard with nested disjunction ├─ fail_match_guard.rs           # match
+guard with three branches ├─ fail_configured_limit.rs      # `max_branches = 1`
+highlights two-branch cond ├─ pass_if_two_branches.rs       # default limit
+allows two branches ├─ pass_custom_limit.rs          # raised limit accepts
+three branches └─ pass_if_let.rs                # pattern guards remain out of
+scope
 ```
 
 Each `.rs` pairs with a `.stderr` expectation via `dylint_testing::ui_test`.
@@ -717,49 +741,38 @@ returns.
 ### Crate layout
 
 ```text
-crates/no_unwrap_or_else_panic/
-├─ Cargo.toml
-└─ src/
-   ├─ lib.rs           # feature gating, public surface
-   ├─ context.rs       # context detection (tests/main/doctest)
-   ├─ policy.rs        # pure decision logic (unit tested)
-   ├─ panic_detector.rs# shared panic + unwrap/expect detector
-   └─ diagnostics.rs   # localization + emission
-crates/no_unwrap_or_else_panic/ui/
-  ├─ bad_unwrap_or_else_panic.rs       # direct panic
-  ├─ bad_unwrap_or_else_panic_any.rs   # panic_any
-  ├─ bad_unwrap_or_else_unwrap.rs      # inner unwrap panic
-  ├─ bad_main.rs                       # main panics without allow
-  ├─ bad_in_test.rs                    # test context denied
-  ├─ ok_in_test.rs                     # safe fallback in tests
-  ├─ ok_main_allowed.rs                # allow_in_main config
-  ├─ ok_map_err.rs                     # propagates errors
-  ├─ ok_unwrap_or_else_safe.rs         # safe fallback
-  ├─ ok_plain_unwrap.rs                # plain unwrap allowed
-  ├─ ok_plain_expect.rs                # plain expect allowed
-  └─ ok_custom_unwrap_or_else.rs       # non-Option/Result receiver ignored
+crates/no_unwrap_or_else_panic/ ├─ Cargo.toml └─ src/ ├─ lib.rs           #
+feature gating, public surface ├─ context.rs       # context detection
+(tests/main/doctest) ├─ policy.rs        # pure decision logic (unit tested) ├─
+panic_detector.rs# shared panic + unwrap/expect detector └─ diagnostics.rs   #
+localization + emission crates/no_unwrap_or_else_panic/ui/ ├─
+bad_unwrap_or_else_panic.rs       # direct panic ├─
+bad_unwrap_or_else_panic_any.rs   # panic_any ├─
+bad_unwrap_or_else_unwrap.rs      # inner unwrap panic ├─
+bad_main.rs                       # main panics without allow ├─
+bad_in_test.rs                    # test context denied ├─
+ok_in_test.rs                     # safe fallback in tests ├─
+ok_main_allowed.rs                # allow_in_main config ├─
+ok_map_err.rs                     # propagates errors ├─
+ok_unwrap_or_else_safe.rs         # safe fallback ├─
+ok_plain_unwrap.rs                # plain unwrap allowed ├─
+ok_plain_expect.rs                # plain expect allowed └─
+ok_custom_unwrap_or_else.rs       # non-Option/Result receiver ignored
 ```
 
 ### `Cargo.toml`
 
 ```toml
-[package]
-name = "no_unwrap_or_else_panic"
-version = "0.1.0"
-edition = "2024"
+[package] name = "no_unwrap_or_else_panic" version = "0.1.0" edition = "2024"
 
-[lib]
-crate-type = ["cdylib"]
+[lib] crate-type = ["cdylib"]
 
-[dependencies]
-dylint_linting = { workspace = true }
-common          = { path = "../../common" }
-serde           = { version = "1", features = ["derive"] }
+[dependencies] dylint_linting = { workspace = true } common          = { path =
+"../../common" } serde           = { version = "1", features = ["derive"] }
 
 clippy_utils    = { workspace = true, optional = true }
 
-[features]
-dylint-driver = [
+[features] dylint-driver = [
     "dep:dylint_linting",
     "dep:log",
     "dep:rustc_ast",
@@ -769,11 +782,9 @@ dylint-driver = [
     "dep:rustc_span",
     "dep:serde",
     "dep:whitaker",
-]
-clippy = ["dylint-driver", "dep:clippy_utils"]
+] clippy = ["dylint-driver", "dep:clippy_utils"]
 
-[dev-dependencies]
-dylint_testing = { workspace = true }
+[dev-dependencies] dylint_testing = { workspace = true }
 ```
 
 > `dylint-driver` gates rustc_private linkage; tests build without it to avoid
@@ -833,10 +844,9 @@ Pair each `.rs` with a `.stderr` expectation using `dylint_testing::ui_test`.
   separately when the policy fits.
 
 ```toml
-[workspace.metadata.dylint]
-libraries = [
-  { git = "https://example.com/your/repo.git", pattern = "crates/no_unwrap_or_else_panic" }
-]
+[workspace.metadata.dylint] libraries = [ { git =
+"https://example.com/your/repo.git", pattern = "crates/no_unwrap_or_else_panic"
+} ]
 ```
 
 ### CI and build matrix
@@ -882,17 +892,12 @@ dependency so their individual dylint entrypoints stay dormant while the
 combined pass exposes a single `register_lints` symbol.
 
 ```toml
-[package]
-name = "whitaker_suite"
-version = "0.1.0"
-edition = "2024"
+[package] name = "whitaker_suite" version = "0.1.0" edition = "2024"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+[lib] crate-type = ["cdylib", "rlib"]
 
-[dependencies]
-dylint_linting = { workspace = true }
-function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs",
+[dependencies] dylint_linting = { workspace = true } function_attrs_follow_docs
+= { path = "../crates/function_attrs_follow_docs",
     features = ["dylint-driver", "constituent"] }
 no_expect_outside_tests = { path = "../crates/no_expect_outside_tests",
     features = ["dylint-driver", "constituent"] }
@@ -909,16 +914,15 @@ no_std_fs_operations = { path = "../crates/no_std_fs_operations",
 ```
 
 ```rust
-use conditional_max_n_branches::ConditionalMaxNBranches;
-use dylint_linting::{declare_combined_late_lint_pass, dylint_library};
-use function_attrs_follow_docs::FunctionAttrsFollowDocs;
-use module_max_lines::ModuleMaxLines;
-use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
-use no_expect_outside_tests::NoExpectOutsideTests;
-use no_std_fs_operations::NoStdFsOperations;
-use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
-use rustc_lint::{LateLintPass, LintStore};
-use rustc_session::Session;
+use conditional_max_n_branches::ConditionalMaxNBranches; use
+dylint_linting::{declare_combined_late_lint_pass, dylint_library}; use
+function_attrs_follow_docs::FunctionAttrsFollowDocs; use
+module_max_lines::ModuleMaxLines; use
+module_must_have_inner_docs::ModuleMustHaveInnerDocs; use
+no_expect_outside_tests::NoExpectOutsideTests; use
+no_std_fs_operations::NoStdFsOperations; use
+no_unwrap_or_else_panic::NoUnwrapOrElsePanic; use rustc_lint::{LateLintPass,
+LintStore}; use rustc_session::Session;
 
 dylint_library!();
 
@@ -981,15 +985,14 @@ fn ui() { dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui"); }
 **Workspace metadata** (preferred):
 
 ```toml
-[workspace.metadata.dylint]
-libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" } ]
+[workspace.metadata.dylint] libraries = [ { git =
+"https://example.com/your/repo.git", pattern = "crates/*" } ]
 ```
 
 Then:
 
 ```bash
-cargo install cargo-dylint dylint-link
-cargo dylint --all
+cargo install cargo-dylint dylint-link cargo dylint --all
 ```
 
 VS Code rust-analyser integration uses `cargo dylint` as the check command.
@@ -1008,10 +1011,7 @@ VS Code rust-analyser integration uses `cargo dylint` as the check command.
 ```rust
 // bad
 #[inline]
-/// Frobnicate.
-pub fn frob() {}
-// good
-/// Frobnicate.
+/// Frobnicate. pub fn frob() {} // good /// Frobnicate.
 #[inline]
 pub fn frob() {}
 ```
@@ -1019,37 +1019,28 @@ pub fn frob() {}
 - **`.expect(…)` outside tests**
 
 ```rust
-// bad
-let n = env::var("PORT").expect("PORT missing");
-// good
-let n = env::var("PORT").map_err(|e| anyhow::anyhow!("PORT: {e}"))?;
+// bad let n = env::var("PORT").expect("PORT missing"); // good let n =
+env::var("PORT").map_err(|e| anyhow::anyhow!("PORT: {e}"))?;
 ```
 
 - **Public fn must have docs**
 
 ```rust
-// bad
-pub fn important() {}
-// good
-/// Important entry point.
-pub fn important() {}
+// bad pub fn important() {} // good /// Important entry point. pub fn
+important() {}
 ```
 
 - **Module must have `//!`**
 
 ```rust
-//! Utilities
-mod util { /* … */ }
+//! Utilities mod util { /* … */ }
 ```
 
 - **Complex predicate (decompose conditional)**
 
 ```rust
-// bad
-if x.started() && y.running() { … }
-// better
-if should_process(x, y) { … }
-fn should_process(x:&X,y:&Y)->bool{ x.started() && y.running() }
+// bad if x.started() && y.running() { … } // better if should_process(x, y) {
+… } fn should_process(x:&X,y:&Y)->bool{ x.started() && y.running() }
 ```
 
 - **Tests without examples**
@@ -1151,12 +1142,8 @@ highlight the top two intervals in the diagnostic.
 **Configuration** (via `dylint.toml`).
 
 ```toml
-[bumpy_road_function]
-threshold = 3.0
-window = 3
-min_bump_lines = 2
-include_closures = false
-weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
+[bumpy_road_function] threshold = 3.0 window = 3 min_bump_lines = 2
+include_closures = false weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
 ```
 
 **Diagnostics and guidance.** The lint recommends extracting helper functions
@@ -1407,13 +1394,11 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 - The metadata should mirror the archive layout explicitly. Example:
 
 ```toml
-[package.metadata.binstall]
-pkg-url = "https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
-bin-dir = "{name}-{target}-v{version}/{bin}"
-pkg-fmt = "tgz"
+[package.metadata.binstall] pkg-url =
+"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
+ bin-dir = "{name}-{target}-v{version}/{bin}" pkg-fmt = "tgz"
 
-[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
-pkg-fmt = "zip"
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc] pkg-fmt = "zip"
 ```
 
 This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
@@ -1510,7 +1495,7 @@ flowchart TD
     I_version_pin -->|Tag| J_tag_pin[Pin using tag field
     tag = v0.1.0]
     I_version_pin -->|Commit| K_rev_pin[Pin using rev field
-    rev = abc123...]
+    rev = abc123…]
     I_version_pin -->|No| L_unpinned[Use git without tag or rev]
 
     G_run_installer --> M_workspace_path[Configure workspace_metadata_dylint
