@@ -23,6 +23,33 @@ env:
     whitaker_suite
 
 jobs:
+  dependency-manifest-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Check whether dependency manifest changed
+        id: check
+        run: |
+          set -euxo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --quiet "$BEFORE" "${{ github.sha }}" -- installer/dependency-binaries.toml; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-lints:
     runs-on: ${{ matrix.os }}
     defaults:
@@ -132,15 +159,120 @@ jobs:
             dist/manifest-*.json
           retention-days: 1
 
+  build-dependency-binaries:
+    needs: dependency-manifest-changes
+    if: needs.dependency-manifest-changes.outputs.should_build == 'true'
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
+
+      - name: Install cross-compilation tools (aarch64-linux)
+        if: matrix.cross
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
+      - name: Add target
+        run: rustup target add "${{ matrix.target }}"
+
+      - name: Build dependency packaging tool
+        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+
+      - name: Build and package dependency binaries
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          mkdir -p dependency-root
+          python - <<'PY' > /tmp/dependency-binaries.tsv
+          import tomllib
+          with open("installer/dependency-binaries.toml", "rb") as handle:
+              manifest = tomllib.load(handle)
+          for entry in manifest["dependency_binaries"]:
+              print(f"{entry['package']}\t{entry['binary']}\t{entry['version']}")
+          PY
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
+          else
+            PACKAGER="./target/release/whitaker-package-dependency-binary"
+          fi
+          while IFS=$'\t' read -r package binary version; do
+            cargo install \
+              --locked \
+              --force \
+              --root dependency-root \
+              --target "${{ matrix.target }}" \
+              --version "$version" \
+              "$package"
+            if [[ "${{ matrix.target }}" == *windows* ]]; then
+              executable="dependency-root/bin/${binary}.exe"
+            else
+              executable="dependency-root/bin/${binary}"
+            fi
+            "$PACKAGER" package \
+              --package "$package" \
+              --target "${{ matrix.target }}" \
+              --binary-path "$executable" \
+              --output-dir dist
+          done < /tmp/dependency-binaries.tsv
+
+      - name: Diagnostics (dependency binaries)
+        if: failure()
+        run: |
+          set -euxo pipefail
+          ls -lah dependency-root/bin || true
+          ls -lah dist || true
+
+      - name: Upload dependency artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-binaries-${{ matrix.target }}
+          path: |
+            dist/*.tgz
+            dist/*.zip
+          retention-days: 1
+
   publish:
     if: ${{ always() }}
-    needs: build-lints
+    needs:
+      - build-lints
+      - build-dependency-binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
+
+      - name: Build dependency packaging tool
+        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
 
       - name: Download all artefacts
         continue-on-error: true
@@ -149,6 +281,19 @@ jobs:
           pattern: lints-*
           merge-multiple: true
           path: dist
+
+      - name: Download dependency artefacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dependency-binaries-*
+          merge-multiple: true
+          path: dist
+
+      - name: Generate dependency provenance asset
+        run: |
+          set -euxo pipefail
+          ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
 
       - name: List artefacts
         run: |
@@ -163,7 +308,7 @@ jobs:
         run: |
           set -euxo pipefail
           shopt -s nullglob
-          assets=(dist/*.tar.zst dist/manifest-*.json)
+          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip dist/*.md)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "has_assets=false" >> "$GITHUB_OUTPUT"
             exit 0
