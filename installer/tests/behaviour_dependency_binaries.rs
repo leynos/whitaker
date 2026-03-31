@@ -13,23 +13,9 @@ use whitaker_installer::deps::{
 };
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, failure_output, success_output};
-
-struct StubDirs;
-
-impl BaseDirs for StubDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
-
-    fn bin_dir(&self) -> Option<PathBuf> {
-        Some(PathBuf::from("/tmp/bin"))
-    }
-
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        None
-    }
-}
+use whitaker_installer::test_utils::{
+    ExpectedCall, StubDirs, StubExecutor, failure_output, success_output,
+};
 
 enum RepositoryInstallerBehaviour {
     Success,
@@ -172,7 +158,9 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     } else {
         Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"))
     };
-    let dirs = StubDirs;
+    let dirs = StubDirs {
+        bin_dir: Some(PathBuf::from("/tmp/bin")),
+    };
     world.install_result = Some(install_dylint_tools_with_options(
         &executor,
         &status,
@@ -291,9 +279,13 @@ fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCal
             vec![
                 "binstall",
                 "-y",
+                // Intentionally leak the tool name so the stubbed call can own
+                // a `'static` argument in test scope without borrow plumbing.
                 Box::leak(tool.to_owned().into_boxed_str()),
             ]
         } else {
+            // Intentionally leak the tool name so the stubbed call can own a
+            // `'static` argument in test scope without borrow plumbing.
             vec!["install", Box::leak(tool.to_owned().into_boxed_str())]
         },
         result: Ok(match config.cargo_fallback_failure {
@@ -353,21 +345,28 @@ fn scenario_repository_and_binstall_fall_back_to_cargo_install(world: Dependency
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 5)]
-fn scenario_repository_verification_failure_uses_binstall(world: DependencyBinaryWorld) {
+fn scenario_repository_and_binstall_fall_back_to_failed_cargo_install(
+    world: DependencyBinaryWorld,
+) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 6)]
-fn scenario_unsupported_target_uses_binstall(world: DependencyBinaryWorld) {
+fn scenario_repository_verification_failure_uses_binstall(world: DependencyBinaryWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 7)]
-fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) {
+fn scenario_unsupported_target_uses_binstall(world: DependencyBinaryWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 8)]
+fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/dependency_binaries.feature", index = 9)]
 fn scenario_provenance_lists_both_dependencies(world: DependencyBinaryWorld) {
     let _ = world;
 }

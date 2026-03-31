@@ -3,26 +3,8 @@
 use super::*;
 use crate::dependency_binaries::DependencyBinaryInstallError;
 use crate::dirs::BaseDirs;
-use crate::test_utils::{ExpectedCall, StubExecutor, failure_output, success_output};
+use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
-
-struct StubDirs {
-    bin_dir: Option<PathBuf>,
-}
-
-impl BaseDirs for StubDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
-
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
-
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        None
-    }
-}
 
 struct StubRepositoryInstaller {
     result: std::result::Result<PathBuf, DependencyBinaryInstallError>,
@@ -62,9 +44,6 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
             }
             Err(DependencyBinaryInstallError::MissingBinDir) => {
                 Err(DependencyBinaryInstallError::MissingBinDir)
-            }
-            Err(DependencyBinaryInstallError::NonUtf8BinDir(path)) => {
-                Err(DependencyBinaryInstallError::NonUtf8BinDir(path.clone()))
             }
             Err(DependencyBinaryInstallError::Io(error)) => Err(DependencyBinaryInstallError::Io(
                 std::io::Error::new(error.kind(), error.to_string()),

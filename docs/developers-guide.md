@@ -61,7 +61,7 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
-## Dependency Binary Packaging
+## Dependency binary packaging
 
 Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
 for the installer's supported targets. The installer prefers these repository

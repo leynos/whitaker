@@ -1,83 +1,15 @@
 //! Unit tests for repository-hosted dependency-binary installation helpers.
 
+use super::downloader::MockDependencyArchiveDownloader;
+use super::extractor::MockDependencyArchiveExtractor;
 use super::installer::{InstallSupport, install_with};
 use super::*;
-use crate::dirs::BaseDirs;
+use crate::dirs::MockBaseDirs;
 use crate::installer_packaging::TargetTriple;
+use mockall::predicate::always;
 use rstest::{fixture, rstest};
-use std::cell::Cell;
 use std::fs;
-use std::fs::File;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-
-struct StubDirs {
-    bin_dir: Option<PathBuf>,
-}
-
-impl BaseDirs for StubDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
-
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
-
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        None
-    }
-}
-
-struct StubDownloader {
-    content: Vec<u8>,
-    fail: bool,
-}
-
-impl DependencyArchiveDownloader for StubDownloader {
-    fn download(
-        &self,
-        _filename: &str,
-        destination: &Path,
-    ) -> Result<(), DependencyBinaryInstallError> {
-        if self.fail {
-            return Err(DependencyBinaryInstallError::Download {
-                url: "https://example.test/archive".to_owned(),
-                reason: "download failed".to_owned(),
-            });
-        }
-        fs::write(destination, &self.content)?;
-        Ok(())
-    }
-}
-
-struct StubExtractor {
-    writes_binary: bool,
-    extracted_path: Cell<Option<PathBuf>>,
-}
-
-impl DependencyArchiveExtractor for StubExtractor {
-    fn extract_binary(
-        &self,
-        _archive_path: &Path,
-        expected_member_path: &str,
-        destination_dir: &Path,
-    ) -> Result<PathBuf, DependencyBinaryInstallError> {
-        if !self.writes_binary {
-            return Err(DependencyBinaryInstallError::MissingBinaryInArchive {
-                binary: expected_member_path.to_owned(),
-            });
-        }
-        let binary_name = Path::new(expected_member_path)
-            .file_name()
-            .expect("member path should include a filename");
-        let path = destination_dir.join(binary_name);
-        let mut file = File::create(&path)?;
-        file.write_all(b"fake binary")?;
-        self.extracted_path.set(Some(path.clone()));
-        Ok(path)
-    }
-}
 
 /// Build a deterministic installation setup for success and missing-binary
 /// scenarios.
@@ -91,21 +23,41 @@ fn run_install_scenario(
 ) {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let bin_dir = temp_dir.path().join("bin");
-    let dirs = StubDirs {
-        bin_dir: Some(bin_dir.clone()),
-    };
+    let mut dirs = MockBaseDirs::new();
+    dirs.expect_bin_dir()
+        .once()
+        .return_const(Some(bin_dir.clone()));
     let dependency = crate::dependency_binaries::find_dependency_binary(dependency_name)
         .expect("dependency manifest should load")
         .expect("dependency should exist");
     let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-    let downloader = StubDownloader {
-        content: b"archive".to_vec(),
-        fail: false,
-    };
-    let extractor = StubExtractor {
-        writes_binary,
-        extracted_path: Cell::new(None),
-    };
+    let mut downloader = MockDependencyArchiveDownloader::new();
+    downloader
+        .expect_download()
+        .once()
+        .with(always(), always())
+        .returning(|_, destination| {
+            fs::write(destination, b"archive")?;
+            Ok(())
+        });
+    let mut extractor = MockDependencyArchiveExtractor::new();
+    extractor
+        .expect_extract_binary()
+        .once()
+        .with(always(), always(), always())
+        .returning(move |_, expected_member_path, destination_dir| {
+            if !writes_binary {
+                return Err(DependencyBinaryInstallError::MissingBinaryInArchive {
+                    binary: expected_member_path.to_owned(),
+                });
+            }
+            let binary_name = Path::new(expected_member_path)
+                .file_name()
+                .expect("member path should include a filename");
+            let path = destination_dir.join(binary_name);
+            fs::write(&path, b"fake binary")?;
+            Ok(path)
+        });
     let result = install_with(
         dependency,
         &target,
@@ -171,6 +123,13 @@ fn install_with_creates_missing_bin_directory(
     assert!(bin_dir.is_dir());
     assert_eq!(installed_path, bin_dir.join("cargo-dylint"));
     assert!(installed_path.is_file());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let metadata = fs::metadata(&installed_path).expect("metadata");
+        assert_ne!(metadata.permissions().mode() & 0o111, 0);
+    }
 }
 
 #[rstest]

@@ -112,42 +112,74 @@ fn run(cli: Cli) -> Result<(), CliError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
+    use whitaker_installer::dependency_binaries::provenance_filename;
 
     #[test]
-    fn package_subcommand_parses_required_arguments() {
-        let cli = Cli::parse_from([
-            "whitaker-package-dependency-binary",
-            "package",
-            "--package",
-            "cargo-dylint",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-            "--binary-path",
-            "/tmp/cargo-dylint",
-            "--output-dir",
-            "/tmp/dist",
-        ]);
+    fn run_package_command_creates_archive() {
+        let temp_dir = tempdir().expect("temp dir");
+        let binary_path = temp_dir.path().join("cargo-dylint");
+        std::fs::write(&binary_path, b"fake binary").expect("write binary");
 
-        match cli.command {
-            Command::Package {
-                package, target, ..
-            } => {
-                assert_eq!(package, "cargo-dylint");
-                assert_eq!(target, "x86_64-unknown-linux-gnu");
-            }
-            Command::Provenance { .. } => panic!("expected package command"),
-        }
+        let cli = Cli {
+            command: Command::Package {
+                package: "cargo-dylint".to_owned(),
+                target: "x86_64-unknown-linux-gnu".to_owned(),
+                binary_path,
+                output_dir: temp_dir.path().join("dist"),
+            },
+        };
+
+        let result = run(cli);
+        assert!(
+            result.is_ok(),
+            "expected package command to succeed: {result:?}"
+        );
+        assert!(
+            temp_dir
+                .path()
+                .join("dist/cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz")
+                .is_file()
+        );
     }
 
     #[test]
-    fn provenance_subcommand_parses_output_dir() {
-        let cli = Cli::parse_from([
-            "whitaker-package-dependency-binary",
-            "provenance",
-            "--output-dir",
-            "/tmp/dist",
-        ]);
+    fn run_provenance_command_writes_markdown() {
+        let temp_dir = tempdir().expect("temp dir");
+        let output_dir = temp_dir.path().join("dist");
 
-        assert!(matches!(cli.command, Command::Provenance { .. }));
+        let cli = Cli {
+            command: Command::Provenance {
+                output_dir: output_dir.clone(),
+            },
+        };
+
+        let result = run(cli);
+        assert!(
+            result.is_ok(),
+            "expected provenance command to succeed: {result:?}"
+        );
+        assert!(output_dir.join(provenance_filename()).is_file());
+    }
+
+    #[test]
+    fn run_package_command_rejects_unknown_package() {
+        let temp_dir = tempdir().expect("temp dir");
+        let binary_path = temp_dir.path().join("fake-binary");
+        std::fs::write(&binary_path, b"fake binary").expect("write binary");
+
+        let cli = Cli {
+            command: Command::Package {
+                package: "missing-package".to_owned(),
+                target: "x86_64-unknown-linux-gnu".to_owned(),
+                binary_path,
+                output_dir: temp_dir.path().join("dist"),
+            },
+        };
+
+        let result = run(cli);
+        assert!(
+            matches!(result, Err(CliError::UnknownPackage(package)) if package == "missing-package")
+        );
     }
 }

@@ -29,7 +29,12 @@ def main() -> int:
         manifest = tomllib.load(handle)
 
     for entry in manifest["dependency_binaries"]:
-        print(f"{entry['package']}\t{entry['binary']}\t{entry['version']}")
+        line = (
+            f"{entry['package']}\t{entry['binary']}\t{entry['version']}\n".encode(
+                "utf-8"
+            )
+        )
+        sys.stdout.buffer.write(line)
     return 0
 
 

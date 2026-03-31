@@ -31,7 +31,7 @@ pub fn host_target() -> Option<TargetTriple> {
     if target.is_empty() {
         None
     } else {
-        Some(TargetTriple::try_from(target).expect("supported target"))
+        TargetTriple::try_from(target).ok()
     }
 }
 

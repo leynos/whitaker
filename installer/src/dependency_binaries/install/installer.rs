@@ -1,6 +1,5 @@
 //! Installer orchestration for repository-hosted dependency binaries.
 
-use camino::Utf8PathBuf;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,10 +19,6 @@ pub enum DependencyBinaryInstallError {
     /// The platform executable directory could not be determined.
     #[error("could not determine local bin directory")]
     MissingBinDir,
-
-    /// The platform executable directory was not UTF-8.
-    #[error("local bin directory is not valid UTF-8: {0}")]
-    NonUtf8BinDir(PathBuf),
 
     /// Downloading the archive failed.
     #[error("download failed for {url}: {reason}")]
@@ -123,9 +118,7 @@ pub(crate) fn install_with(
         .dirs
         .bin_dir()
         .ok_or(DependencyBinaryInstallError::MissingBinDir)?;
-    let bin_dir =
-        Utf8PathBuf::from_path_buf(bin_dir).map_err(DependencyBinaryInstallError::NonUtf8BinDir)?;
-    fs::create_dir_all(bin_dir.as_std_path())?;
+    fs::create_dir_all(bin_dir.as_path())?;
 
     let temp_dir = tempfile::tempdir()?;
     let filename = archive_filename(dependency, target);
@@ -136,7 +129,7 @@ pub(crate) fn install_with(
     let installed_path =
         support
             .extractor
-            .extract_binary(&archive_path, &member_path, bin_dir.as_std_path())?;
+            .extract_binary(&archive_path, &member_path, bin_dir.as_path())?;
     ensure_executable(&installed_path)?;
     Ok(installed_path)
 }

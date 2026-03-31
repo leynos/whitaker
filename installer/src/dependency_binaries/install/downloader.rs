@@ -10,6 +10,7 @@ use std::path::Path;
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
 /// Downloads dependency archives.
+#[cfg_attr(test, mockall::automock)]
 pub trait DependencyArchiveDownloader {
     /// Download `filename` into `destination`.
     ///

@@ -39,6 +39,14 @@ Feature: Dependency binary installation
     Then the install succeeds
     And stderr contains "Installed cargo-dylint with cargo install."
 
+  Scenario: Repository asset and cargo binstall are unavailable and cargo install fails
+    Given the missing tool is "cargo-dylint"
+    And the repository installer fails with "not found"
+    And cargo binstall is unavailable
+    And the cargo fallback fails with "cargo install failed"
+    When dependency installation runs
+    Then the install fails for "cargo-dylint" with message containing "cargo install failed"
+
   Scenario: Repository install fails verification and cargo binstall is used
     Given the missing tool is "cargo-dylint"
     And the repository installer succeeds but verification fails
