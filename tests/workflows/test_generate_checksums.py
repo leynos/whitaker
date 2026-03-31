@@ -21,6 +21,8 @@ Run specific test:
 from __future__ import annotations
 
 import importlib.util
+import sys
+import types
 from hashlib import sha256
 from pathlib import Path
 from unittest.mock import patch
@@ -28,7 +30,7 @@ from unittest.mock import patch
 import pytest
 
 
-def _load_generate_checksums_module():
+def _load_generate_checksums_module() -> types.ModuleType:
     """Load the generate_checksums script as a module via importlib.
 
     This helper avoids sys.path mutation and provides a stable import
@@ -239,25 +241,21 @@ class TestMain:
         assert result == 0, f"Expected exit code 0, got {result}"
         assert (tmp_path / "archive.tgz.sha256").exists(), "checksum file should exist"
 
-    def test_main_default_directory(self, tmp_path: Path) -> None:
+    def test_main_default_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """main uses 'dist' as default directory when no argument given."""
         dist_dir = tmp_path / "dist"
         dist_dir.mkdir()
         (dist_dir / "archive.tgz").write_text("content")
 
         # Change to tmp_path to make default "dist" resolve correctly
-        import os
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "argv", ["generate_checksums.py"])
+        result = main()
 
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(tmp_path)
-            with patch("sys.argv", ["generate_checksums.py"]):
-                result = main()
-
-            assert result == 0, f"Expected exit code 0, got {result}"
-            assert (dist_dir / "archive.tgz.sha256").exists(), "checksum file should exist in dist/"
-        finally:
-            os.chdir(original_cwd)
+        assert result == 0, f"Expected exit code 0, got {result}"
+        assert (dist_dir / "archive.tgz.sha256").exists(), "checksum file should exist in dist/"
 
     def test_main_nonexistent_directory(self, tmp_path: Path) -> None:
         """main returns 1 when directory does not exist."""
