@@ -132,6 +132,7 @@ pub fn write_provenance_markdown(
     Ok(path)
 }
 
+/// Create a deterministic `.tgz` archive containing one packaged executable.
 fn create_tgz_archive(
     output_path: &Path,
     inner_dir: &str,
@@ -148,6 +149,7 @@ fn create_tgz_archive(
     Ok(())
 }
 
+/// Create a deterministic `.zip` archive containing one packaged executable.
 fn create_zip_archive(
     output_path: &Path,
     inner_dir: &str,

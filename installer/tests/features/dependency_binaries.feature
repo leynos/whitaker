@@ -46,6 +46,7 @@ Feature: Dependency binary installation
     When dependency installation runs
     Then the install succeeds
     And stderr contains "failed verification"
+    And stderr contains "Installed cargo-dylint with cargo binstall."
 
   Scenario: Unsupported target skips the repository path and uses cargo binstall
     Given the missing tool is "cargo-dylint"

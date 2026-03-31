@@ -12,6 +12,10 @@
 //! - [`builder`] - Cargo build orchestration for lint crates
 //! - [`cli`] - Command-line argument definitions
 //! - [`crate_name`] - Semantic wrapper for lint crate names
+//! - [`dependency_binaries`] - Repository-owned dependency manifest and install
+//!   helpers for `cargo-dylint` and `dylint-link`
+//! - [`dependency_packaging`] - Archive packaging and provenance generation for
+//!   repository-hosted dependency binaries
 //! - [`deps`] - Dylint tool dependency management
 //! - [`dirs`] - Directory resolution abstraction for platform-specific paths
 //! - [`error`] - Semantic error types with recovery hints

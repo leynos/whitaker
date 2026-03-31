@@ -30,6 +30,9 @@ whitaker --all
 This:
 
 1. Installs `cargo-dylint` and `dylint-link` if not present
+   The installer first tries Whitaker's repository-hosted dependency archives
+   for supported targets, then falls back to `cargo binstall`, and finally to
+   `cargo install` when needed.
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes

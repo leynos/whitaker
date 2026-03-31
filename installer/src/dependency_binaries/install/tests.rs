@@ -1,3 +1,5 @@
+//! Unit tests for repository-hosted dependency-binary installation helpers.
+
 use super::installer::{InstallSupport, install_with};
 use super::*;
 use crate::dirs::BaseDirs;
@@ -77,6 +79,8 @@ impl DependencyArchiveExtractor for StubExtractor {
     }
 }
 
+/// Build a deterministic installation setup for success and missing-binary
+/// scenarios.
 fn run_install_scenario(
     dependency_name: &str,
     writes_binary: bool,

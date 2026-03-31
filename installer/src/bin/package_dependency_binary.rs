@@ -21,6 +21,7 @@ struct Cli {
     command: Command,
 }
 
+/// Supported release-packaging subcommands.
 #[derive(Subcommand, Debug)]
 enum Command {
     /// Package one dependency executable for one target.
@@ -50,6 +51,7 @@ enum Command {
     },
 }
 
+/// Command-line errors returned by the dependency-binary packaging tool.
 #[derive(Debug, Error)]
 enum CliError {
     #[error("unknown dependency package: {0}")]
@@ -65,6 +67,8 @@ enum CliError {
     Target(#[from] whitaker_installer::artefact::error::ArtefactError),
 }
 
+/// Parse command-line arguments, execute the requested subcommand, and report
+/// failures to stderr.
 fn main() {
     let cli = Cli::parse();
     if let Err(error) = run(cli) {
@@ -73,6 +77,7 @@ fn main() {
     }
 }
 
+/// Execute one dependency-binary packaging command.
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Package {
