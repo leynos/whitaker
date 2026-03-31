@@ -510,21 +510,27 @@ the internal nodes of the predicate tree.
 
 **Algorithm.** Traverse the HIR expression and compute the number of branches:
 
-```text
-count_branches(e) = if e is Binary(And|Or, lhs, rhs): count_branches(lhs) +
-count_branches(rhs) if e is Unary(Not, inner):         count_branches(inner)
-else:                              1
-```
+<!-- markdownlint-disable MD033 -->
+<pre><code>count_branches(e) =
+  if e is Binary(And|Or, lhs, rhs):
+    count_branches(lhs) + count_branches(rhs)
+  if e is Unary(Not, inner):
+    count_branches(inner)
+  else:
+    1
+</code></pre>
+<!-- markdownlint-enable MD033 -->
 
 Emit a diagnostic when `count_branches(e) > max_branches`, where the default
 `max_branches` is `2`.
 
 **Implementation sketch (`src/lib.rs`).**
 
-```rust
-use dylint_linting::{declare_late_lint, impl_late_lint}; use rustc_hir as hir;
-use rustc_hir::{BinOpKind, Expr, ExprKind, Guard, UnOp}; use
-rustc_lint::{LateContext, LateLintPass};
+<!-- markdownlint-disable MD033 MD013 -->
+<pre><code class="language-rust">use dylint_linting::{declare_late_lint, impl_late_lint};
+use rustc_hir as hir;
+use rustc_hir::{BinOpKind, Expr, ExprKind, Guard, UnOp};
+use rustc_lint::{LateContext, LateLintPass};
 
 declare_late_lint!(
     pub CONDITIONAL_MAX_N_BRANCHES,
@@ -560,7 +566,8 @@ impl_late_lint! {
         }
     }
 }
-```
+</code></pre>
+<!-- markdownlint-enable MD033 MD013 -->
 
 The runtime implementation tracks the configured limit, loads localization via
 `SharedConfig`, and feeds both `branches` and `limit` plus their rendered
@@ -601,16 +608,17 @@ in `dylint.toml`.
 
 **UI tests.**
 
-```text
-crates/conditional_max_n_branches/ui/ ├─ fail_if_three_branches.rs     #
-default limit hit via three-way conjunction ├─ fail_while_guard.rs           #
-`while` guard with nested disjunction ├─ fail_match_guard.rs           # match
-guard with three branches ├─ fail_configured_limit.rs      # `max_branches = 1`
-highlights two-branch cond ├─ pass_if_two_branches.rs       # default limit
-allows two branches ├─ pass_custom_limit.rs          # raised limit accepts
-three branches └─ pass_if_let.rs                # pattern guards remain out of
-scope
-```
+<!-- markdownlint-disable MD033 -->
+<pre><code>crates/conditional_max_n_branches/ui/
+├─ fail_if_three_branches.rs  # default limit hit via three-way conjunction
+├─ fail_while_guard.rs        # `while` guard with nested disjunction
+├─ fail_match_guard.rs        # match guard with three branches
+├─ fail_configured_limit.rs   # `max_branches = 1` highlights two-branch cond
+├─ pass_if_two_branches.rs    # default limit allows two branches
+├─ pass_custom_limit.rs       # raised limit accepts three branches
+└─ pass_if_let.rs             # pattern guards remain out of scope
+</code></pre>
+<!-- markdownlint-enable MD033 -->
 
 Each `.rs` pairs with a `.stderr` expectation via `dylint_testing::ui_test`.
 
@@ -735,39 +743,50 @@ returns.
 
 ### Crate layout
 
-```text
-crates/no_unwrap_or_else_panic/ ├─ Cargo.toml └─ src/ ├─ lib.rs           #
-feature gating, public surface ├─ context.rs       # context detection
-(tests/main/doctest) ├─ policy.rs        # pure decision logic (unit tested) ├─
-panic_detector.rs# shared panic + unwrap/expect detector └─ diagnostics.rs   #
-localization + emission crates/no_unwrap_or_else_panic/ui/ ├─
-bad_unwrap_or_else_panic.rs       # direct panic ├─
-bad_unwrap_or_else_panic_any.rs   # panic_any ├─
-bad_unwrap_or_else_unwrap.rs      # inner unwrap panic ├─
-bad_main.rs                       # main panics without allow ├─
-bad_in_test.rs                    # test context denied ├─
-ok_in_test.rs                     # safe fallback in tests ├─
-ok_main_allowed.rs                # allow_in_main config ├─
-ok_map_err.rs                     # propagates errors ├─
-ok_unwrap_or_else_safe.rs         # safe fallback ├─
-ok_plain_unwrap.rs                # plain unwrap allowed ├─
-ok_plain_expect.rs                # plain expect allowed └─
-ok_custom_unwrap_or_else.rs       # non-Option/Result receiver ignored
-```
+<!-- markdownlint-disable MD033 -->
+<pre><code>crates/no_unwrap_or_else_panic/
+├─ Cargo.toml
+├─ src/
+│  ├─ lib.rs               # feature gating, public surface
+│  ├─ context.rs           # context detection (tests/main/doctest)
+│  ├─ policy.rs            # pure decision logic (unit tested)
+│  ├─ panic_detector.rs    # shared panic + unwrap/expect detector
+│  └─ diagnostics.rs       # localization + emission
+└─ ui/
+   ├─ bad_unwrap_or_else_panic.rs      # direct panic
+   ├─ bad_unwrap_or_else_panic_any.rs  # panic_any
+   ├─ bad_unwrap_or_else_unwrap.rs     # inner unwrap panic
+   ├─ bad_main.rs                      # main panics without allow
+   ├─ bad_in_test.rs                   # test context denied
+   ├─ ok_in_test.rs                    # safe fallback in tests
+   ├─ ok_main_allowed.rs               # allow_in_main config
+   ├─ ok_map_err.rs                    # propagates errors
+   ├─ ok_unwrap_or_else_safe.rs        # safe fallback
+   ├─ ok_plain_unwrap.rs               # plain unwrap allowed
+   ├─ ok_plain_expect.rs               # plain expect allowed
+   └─ ok_custom_unwrap_or_else.rs      # non-Option/Result receiver ignored
+</code></pre>
+<!-- markdownlint-enable MD033 -->
 
 ### `Cargo.toml`
 
-```toml
-[package] name = "no_unwrap_or_else_panic" version = "0.1.0" edition = "2024"
+<!-- markdownlint-disable MD033 MD013 -->
+<pre><code class="language-toml">[package]
+name = "no_unwrap_or_else_panic"
+version = "0.1.0"
+edition = "2024"
 
-[lib] crate-type = ["cdylib"]
+[lib]
+crate-type = ["cdylib"]
 
-[dependencies] dylint_linting = { workspace = true } common          = { path =
-"../../common" } serde           = { version = "1", features = ["derive"] }
+[dependencies]
+dylint_linting = { workspace = true }
+common = { path = "../../common" }
+serde = { version = "1", features = ["derive"] }
+clippy_utils = { workspace = true, optional = true }
 
-clippy_utils    = { workspace = true, optional = true }
-
-[features] dylint-driver = [
+[features]
+dylint-driver = [
     "dep:dylint_linting",
     "dep:log",
     "dep:rustc_ast",
@@ -777,10 +796,13 @@ clippy_utils    = { workspace = true, optional = true }
     "dep:rustc_span",
     "dep:serde",
     "dep:whitaker",
-] clippy = ["dylint-driver", "dep:clippy_utils"]
+]
+clippy = ["dylint-driver", "dep:clippy_utils"]
 
-[dev-dependencies] dylint_testing = { workspace = true }
-```
+[dev-dependencies]
+dylint_testing = { workspace = true }
+</code></pre>
+<!-- markdownlint-enable MD033 MD013 -->
 
 > `dylint-driver` gates rustc_private linkage; tests build without it to avoid
 > duplicate std/core. `clippy` is optional and now shares the same panic-path
@@ -838,11 +860,13 @@ Pair each `.rs` with a `.stderr` expectation using `dylint_testing::ui_test`.
 - Intentionally excluded from the aggregated `suite` crate so teams can opt in
   separately when the policy fits.
 
-```toml
-[workspace.metadata.dylint] libraries = [ { git =
-"https://example.com/your/repo.git", pattern = "crates/no_unwrap_or_else_panic"
-} ]
-```
+<!-- markdownlint-disable MD033 MD013 -->
+<pre><code class="language-toml">[workspace.metadata.dylint]
+libraries = [
+    { git = "https://example.com/your/repo.git", pattern = "crates/no_unwrap_or_else_panic" },
+]
+</code></pre>
+<!-- markdownlint-enable MD033 MD013 -->
 
 ### CI and build matrix
 
@@ -886,38 +910,38 @@ Bundle all lint crates for users who prefer a single dynamic library. The
 dependency so their individual dylint entrypoints stay dormant while the
 combined pass exposes a single `register_lints` symbol.
 
-```toml
-[package] name = "whitaker_suite" version = "0.1.0" edition = "2024"
+<!-- markdownlint-disable MD033 MD013 -->
+<pre><code class="language-toml">[package]
+name = "whitaker_suite"
+version = "0.1.0"
+edition = "2024"
 
-[lib] crate-type = ["cdylib", "rlib"]
+[lib]
+crate-type = ["cdylib", "rlib"]
 
-[dependencies] dylint_linting = { workspace = true } function_attrs_follow_docs
-= { path = "../crates/function_attrs_follow_docs",
-    features = ["dylint-driver", "constituent"] }
-no_expect_outside_tests = { path = "../crates/no_expect_outside_tests",
-    features = ["dylint-driver", "constituent"] }
-module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs",
-    features = ["dylint-driver", "constituent"] }
-conditional_max_n_branches = { path = "../crates/conditional_max_n_branches",
-    features = ["dylint-driver", "constituent"] }
-module_max_lines = { path = "../crates/module_max_lines",
-    features = ["dylint-driver", "constituent"] }
-no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic",
-    features = ["dylint-driver", "constituent"] }
-no_std_fs_operations = { path = "../crates/no_std_fs_operations",
-    features = ["dylint-driver", "constituent"] }
-```
+[dependencies]
+dylint_linting = { workspace = true }
+function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs", features = ["dylint-driver", "constituent"] }
+no_expect_outside_tests = { path = "../crates/no_expect_outside_tests", features = ["dylint-driver", "constituent"] }
+module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs", features = ["dylint-driver", "constituent"] }
+conditional_max_n_branches = { path = "../crates/conditional_max_n_branches", features = ["dylint-driver", "constituent"] }
+module_max_lines = { path = "../crates/module_max_lines", features = ["dylint-driver", "constituent"] }
+no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic", features = ["dylint-driver", "constituent"] }
+no_std_fs_operations = { path = "../crates/no_std_fs_operations", features = ["dylint-driver", "constituent"] }
+</code></pre>
+<!-- markdownlint-enable MD033 MD013 -->
 
-```rust
-use conditional_max_n_branches::ConditionalMaxNBranches; use
-dylint_linting::{declare_combined_late_lint_pass, dylint_library}; use
-function_attrs_follow_docs::FunctionAttrsFollowDocs; use
-module_max_lines::ModuleMaxLines; use
-module_must_have_inner_docs::ModuleMustHaveInnerDocs; use
-no_expect_outside_tests::NoExpectOutsideTests; use
-no_std_fs_operations::NoStdFsOperations; use
-no_unwrap_or_else_panic::NoUnwrapOrElsePanic; use rustc_lint::{LateLintPass,
-LintStore}; use rustc_session::Session;
+<!-- markdownlint-disable MD033 MD013 -->
+<pre><code class="language-rust">use conditional_max_n_branches::ConditionalMaxNBranches;
+use dylint_linting::{declare_combined_late_lint_pass, dylint_library};
+use function_attrs_follow_docs::FunctionAttrsFollowDocs;
+use module_max_lines::ModuleMaxLines;
+use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
+use no_expect_outside_tests::NoExpectOutsideTests;
+use no_std_fs_operations::NoStdFsOperations;
+use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
+use rustc_lint::{LateLintPass, LintStore};
+use rustc_session::Session;
 
 dylint_library!();
 
@@ -945,7 +969,8 @@ pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
     ]);
     store.register_late_pass(|_| Box::new(SuitePass));
 }
-```
+</code></pre>
+<!-- markdownlint-enable MD033 MD013 -->
 
 Re-export `register_suite_lints` and `suite_lint_decls` so tests and
 documentation can assert the wiring without needing a `Session`. Behaviour
@@ -1194,10 +1219,15 @@ highlight the top two intervals in the diagnostic.
 
 **Configuration** (via `dylint.toml`).
 
-```toml
-[bumpy_road_function] threshold = 3.0 window = 3 min_bump_lines = 2
-include_closures = false weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
-```
+<!-- markdownlint-disable MD033 MD013 -->
+<pre><code class="language-toml">[bumpy_road_function]
+threshold = 3.0
+window = 3
+min_bump_lines = 2
+include_closures = false
+weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
+</code></pre>
+<!-- markdownlint-enable MD033 MD013 -->
 
 **Diagnostics and guidance.** The lint recommends extracting helper functions
 or refactoring highlighted sections. Secondary labels point to the top bumps,
