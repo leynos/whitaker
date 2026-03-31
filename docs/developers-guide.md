@@ -15,7 +15,7 @@ Whitaker itself. For using Whitaker lints in a project, see the
 
 ## Running Tests
 
-Run the full test suite from the workspace root:
+Run the test suite from the workspace root:
 
 ```sh
 make test
@@ -24,7 +24,31 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
-Other useful commands:
+### Test profiles
+
+By default, `make test` excludes slow installer integration tests
+(`behaviour_toolchain` and `behaviour_cli`) via a nextest default-filter
+defined in `.config/nextest.toml`. These tests perform real `rustup` installs
+and `cargo` builds, so they can take upwards of fifteen minutes.
+
+To run the full suite including installer tests, pass the `ci` profile:
+
+```sh
+make test NEXTEST_PROFILE=ci
+```
+
+CI always uses the `ci` profile, so installer tests are never silently skipped
+in the pipeline.
+
+| Profile   | What runs                                  | Typical use        |
+| --------- | ------------------------------------------ | ------------------ |
+| (default) | All tests **except** installer integration | Local development  |
+| `ci`      | All tests                                  | CI and pre-release |
+
+If you are working on `whitaker-installer` code, run the full suite locally
+before pushing to catch installer regressions early.
+
+### Other useful commands
 
 ```sh
 make lint       # Run Clippy
