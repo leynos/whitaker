@@ -37,8 +37,8 @@ To run the full suite including installer tests, pass the `ci` profile:
 make test NEXTEST_PROFILE=ci
 ```
 
-CI always uses the `ci` profile, so installer tests are never silently skipped
-in the pipeline.
+Continuous Integration (CI) always uses the `ci` profile, so installer tests
+are never silently skipped in the pipeline.
 
 Table: Test profiles and typical usage.
 
