@@ -31,8 +31,6 @@ READ_BUFFER_SIZE: int = 64 * 1024
 class NoArchivesFoundError(Exception):
     """Raised when no archive files are found in the specified directory."""
 
-    pass
-
 
 def compute_sha256(path: Path) -> str:
     """Compute SHA-256 hex digest for a file using streaming reads.
@@ -95,6 +93,12 @@ def generate_checksums(directory: Path) -> None:
     ----------
     directory : Path
         Directory containing archive files.
+
+    Raises
+    ------
+    NoArchivesFoundError
+        If no archives matching the configured patterns are found
+        in the directory (propagated from find_archives).
     """
     archive_paths = find_archives(directory)
 
