@@ -1386,8 +1386,11 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 - Ensure the archive contains a top-level directory named
   `whitaker-installer-<target>-v<version>/` with the binary inside
   (`whitaker-installer` or `whitaker-installer.exe`).
-- Publish the archives as assets on a GitHub Release tagged `v<version>` so
-  binstall can resolve the `pkg-url` template.
+- Generate an SHA-256 sidecar for each archive named
+  `whitaker-installer-<target>-v<version>.<ext>.sha256`.
+- Publish the archives and checksum sidecars as assets on a GitHub Release
+  tagged `v<version>` so binstall can resolve the `pkg-url` template and users
+  can verify downloaded archives independently.
 - Publish `whitaker-installer` to crates.io with the same `version` used for
   the release tag and asset names; cargo-binstall resolves the latest version
   from the registry before downloading GitHub assets.
@@ -1423,7 +1426,8 @@ been added to `installer/Cargo.toml` and are validated by unit tests in
 
 **Implementation status (4.3.1):** The release workflow at
 `.github/workflows/release.yml` builds and packages the installer binary for
-all five supported targets and publishes archives to GitHub Releases. The
+all five supported targets, generates per-archive SHA-256 sidecars, and
+publishes the archives plus checksums to GitHub Releases. The
 `installer_packaging` module in `installer/src/installer_packaging.rs` provides
 archive creation logic, validated by unit tests and BDD scenarios in
 `installer/tests/features/installer_release.feature`.
