@@ -64,6 +64,7 @@ pub fn archive_filename(dependency: &DependencyBinary, target: &TargetTriple) ->
     )
 }
 
+/// Compute the exact archive member path that should contain the executable.
 #[must_use]
 pub(crate) fn expected_member_path(dependency: &DependencyBinary, target: &TargetTriple) -> String {
     format!(

@@ -43,6 +43,7 @@ impl DependencyArchiveExtractor for RepositoryArchiveExtractor {
     }
 }
 
+/// Extract the expected executable from a `.tgz` archive into `destination_dir`.
 pub(crate) fn extract_from_tgz(
     archive_path: &Path,
     expected_member_path: &str,
@@ -79,6 +80,7 @@ pub(crate) fn extract_from_tgz(
     })
 }
 
+/// Extract the expected executable from a ZIP archive into `destination_dir`.
 pub(crate) fn extract_from_zip(
     archive_path: &Path,
     expected_member_path: &str,
@@ -110,6 +112,7 @@ pub(crate) fn extract_from_zip(
     })
 }
 
+/// Write a matched archive member to a temporary file and rename it atomically.
 fn extract_entry_to_destination(
     reader: &mut dyn Read,
     expected_member_path: &str,
@@ -132,6 +135,7 @@ fn extract_entry_to_destination(
     Ok(destination)
 }
 
+/// Stream one archive member into a temporary file on disk.
 fn write_entry(
     reader: &mut dyn Read,
     temporary_destination: &Path,

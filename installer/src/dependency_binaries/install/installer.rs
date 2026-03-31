@@ -104,12 +104,16 @@ impl DependencyBinaryInstaller for RepositoryDependencyBinaryInstaller {
     }
 }
 
+/// Collaborators used by [`install_with`] to isolate directory, download, and
+/// extraction behaviour in tests.
 pub(crate) struct InstallSupport<'a> {
     pub(crate) dirs: &'a dyn BaseDirs,
     pub(crate) downloader: &'a dyn DependencyArchiveDownloader,
     pub(crate) extractor: &'a dyn DependencyArchiveExtractor,
 }
 
+/// Install one dependency binary using injected directory, download, and
+/// extraction support.
 pub(crate) fn install_with(
     dependency: &DependencyBinary,
     target: &TargetTriple,
@@ -137,6 +141,8 @@ pub(crate) fn install_with(
     Ok(installed_path)
 }
 
+/// Apply executable permissions on platforms that require an explicit mode
+/// change after extraction.
 pub(crate) fn ensure_executable(path: &Path) -> Result<(), DependencyBinaryInstallError> {
     #[cfg(unix)]
     {

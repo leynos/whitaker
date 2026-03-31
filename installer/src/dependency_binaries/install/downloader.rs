@@ -52,6 +52,7 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
     }
 }
 
+/// Build the rolling-release asset URL for one dependency archive filename.
 fn asset_url(filename: &str) -> String {
     // Dependency binaries are published to the rolling release so the
     // repository-owned manifest can advance independently of installer tags.
