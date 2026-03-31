@@ -393,27 +393,22 @@ layouts. This recovery path only activates when `rustc` is running with the
 test harness flag (`--test`), keeping production builds strict.
 
 The following flowchart shows how `no_expect_outside_tests` decides whether a
-function is treated as test-only code, including the async harness recovery
-path for wrapper functions such as `#[tokio::test]`.
+function is treated as test-only code.
 
 ```mermaid
 flowchart TD
-    Start(["Encounter function item during linting"]) --> CheckAttrs
+    Start(["Encounter function item during linting"]) --> CheckFunction
 
-    CheckAttrs["Does function have a direct #[test] or supported test attribute?"]
-    CheckAttrs -->|Yes| MarkAsTestDirect["Mark function as test (existing path)"]
-    CheckAttrs -->|No| CheckHarness["Is compilation using rustc --test harness?"]
+    CheckFunction["Does any enclosing function item have a direct #[test]
+    or supported test attribute, or a sibling const descriptor with a
+    matching symbol and source-equal span?"]
+    CheckFunction -->|Yes| MarkAsTest["Mark function as test"]
+    CheckFunction -->|No| CheckConventions["Is the code inside a module named test/tests or a file path under tests/?"]
 
-    CheckHarness -->|No| NotTest["Treat function as non-test for no_expect_outside_tests"]
-    CheckHarness -->|Yes| FindSiblingConst["Locate harness-generated sibling const descriptor"]
+    CheckConventions -->|Yes| MarkAsTest
+    CheckConventions -->|No| NotTest["Treat function as non-test"]
 
-    FindSiblingConst --> HasAsyncDescriptor["Does sibling const describe an async test harness (e.g. tokio::test)?"]
-
-    HasAsyncDescriptor -->|Yes| MarkAsTestAsync["Mark function as test (new async-harness path)"]
-    HasAsyncDescriptor -->|No| NotTest
-
-    MarkAsTestDirect --> ApplyLintRules["Allow expect! usage inside recognized tests"]
-    MarkAsTestAsync --> ApplyLintRules
+    MarkAsTest --> ApplyLintRules["Allow expect! usage inside recognized tests"]
     NotTest --> ApplyNonTestRules["Apply no_expect_outside_tests rules (disallow expect! here)"]
 ```
 
@@ -985,14 +980,21 @@ fn ui() { dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui"); }
 **Workspace metadata** (preferred):
 
 ```toml
-[workspace.metadata.dylint] libraries = [ { git =
-"https://example.com/your/repo.git", pattern = "crates/*" } ]
+[workspace.metadata.dylint]
+
+[[workspace.metadata.dylint.libraries]]
+
+git = "https://example.com/your/repo.git"
+
+pattern = "crates/*"
 ```
 
 Then:
 
 ```bash
-cargo install cargo-dylint dylint-link cargo dylint --all
+cargo install cargo-dylint dylint-link
+
+cargo dylint --all
 ```
 
 VS Code rust-analyser integration uses `cargo dylint` as the check command.
@@ -1011,7 +1013,13 @@ VS Code rust-analyser integration uses `cargo dylint` as the check command.
 ```rust
 // bad
 #[inline]
-/// Frobnicate. pub fn frob() {} // good /// Frobnicate.
+pub fn frob() {}
+```
+
+```rust
+// good
+
+/// Frobnicate.
 #[inline]
 pub fn frob() {}
 ```
@@ -1019,28 +1027,73 @@ pub fn frob() {}
 - **`.expect(…)` outside tests**
 
 ```rust
-// bad let n = env::var("PORT").expect("PORT missing"); // good let n =
-env::var("PORT").map_err(|e| anyhow::anyhow!("PORT: {e}"))?;
+// bad
+
+let n = env::var("PORT").expect("PORT missing");
+```
+
+```rust
+// good
+
+let n = env::var("PORT").map_err(|e| anyhow::anyhow!("PORT: {e}"))?;
 ```
 
 - **Public fn must have docs**
 
 ```rust
-// bad pub fn important() {} // good /// Important entry point. pub fn
-important() {}
+// bad
+
+pub fn important() {}
+```
+
+```rust
+// good
+
+/// Important entry point.
+
+pub fn important() {}
 ```
 
 - **Module must have `//!`**
 
 ```rust
-//! Utilities mod util { /* … */ }
+// bad
+
+mod util {
+    /* … */
+}
+```
+
+```rust
+// good
+
+mod util {
+    //! Utilities.
+
+    /* … */
+}
 ```
 
 - **Complex predicate (decompose conditional)**
 
 ```rust
-// bad if x.started() && y.running() { … } // better if should_process(x, y) {
-… } fn should_process(x:&X,y:&Y)->bool{ x.started() && y.running() }
+// bad
+
+if x.started() && y.running() {
+    process(x, y);
+}
+```
+
+```rust
+// better
+
+fn should_process(x: &X, y: &Y) -> bool {
+    x.started() && y.running()
+}
+
+if should_process(x, y) {
+    process(x, y);
+}
 ```
 
 - **Tests without examples**
@@ -1394,11 +1447,18 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 - The metadata should mirror the archive layout explicitly. Example:
 
 ```toml
-[package.metadata.binstall] pkg-url =
-"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
- bin-dir = "{name}-{target}-v{version}/{bin}" pkg-fmt = "tgz"
+[package.metadata.binstall]
 
-[package.metadata.binstall.overrides.x86_64-pc-windows-msvc] pkg-fmt = "zip"
+pkg-url =
+"https://github.com/leynos/whitaker/releases/download/v{version}/{name}-{target}-v{version}.{archive-format}"
+
+bin-dir = "{name}-{target}-v{version}/{bin}"
+
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+
+pkg-fmt = "zip"
 ```
 
 This template relies on cargo-binstall placeholders for `{name}`, `{version}`,
