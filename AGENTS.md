@@ -134,12 +134,16 @@ project:
   - `make test` executes:
 
     ```sh
-    cargo test --workspace
+    cargo nextest run --workspace
     ```
 
-    running the full workspace test suite. Use `make fmt`
-    (`cargo fmt --workspace`) to apply formatting fixes reported by the
-    formatter check.
+    running the workspace test suite. By default, slow installer
+    integration tests (`behaviour_toolchain`, `behaviour_cli`) are
+    excluded via the nextest default-filter in
+    `.config/nextest.toml`. To run the full suite including installer
+    tests, use `make test NEXTEST_PROFILE=ci`. CI always uses the
+    `ci` profile. Use `make fmt` (`cargo fmt --workspace`) to apply
+    formatting fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
