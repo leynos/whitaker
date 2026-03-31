@@ -2,9 +2,9 @@
 //!
 //! This crate exists to catch production `Option` and `Result` expectations
 //! while still allowing explicit expectations in unit tests, doctests, and
-//! recognised test frameworks. When the `dylint-driver` feature is disabled,
-//! the crate exports only a tiny stub so the package still builds cleanly in
-//! non-driver configurations.
+//! recognized test frameworks. When the `dylint-driver` feature is disabled,
+//! the crate retains only a tiny internal stub so the package still builds
+//! cleanly in non-driver configurations.
 
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 

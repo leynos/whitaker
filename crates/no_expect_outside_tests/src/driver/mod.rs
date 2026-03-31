@@ -9,6 +9,7 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::Component;
 
@@ -43,6 +44,7 @@ pub struct NoExpectOutsideTests {
     is_doctest: bool,
     is_test_harness: bool,
     additional_test_attributes: Vec<AttributePath>,
+    harness_marked_test_functions: HashSet<hir::HirId>,
     localizer: Localizer,
 }
 
@@ -52,6 +54,7 @@ impl Default for NoExpectOutsideTests {
             is_doctest: false,
             is_test_harness: false,
             additional_test_attributes: Vec::new(),
+            harness_marked_test_functions: HashSet::new(),
             localizer: Localizer::new(None),
         }
     }
@@ -64,6 +67,11 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .env_var_os("UNSTABLE_RUSTDOC_TEST_PATH".as_ref())
             .is_some();
         self.is_test_harness = cx.tcx.sess.opts.test;
+        self.harness_marked_test_functions = if self.is_test_harness {
+            collect_harness_marked_test_functions(cx)
+        } else {
+            HashSet::new()
+        };
         let config_name = "no_expect_outside_tests";
         let config = match dylint_linting::config::<Config>(config_name) {
             Ok(Some(config)) => config,
@@ -122,7 +130,9 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
         // with #[test] may not be detected via attributes if the test framework
         // processes them differently. Allow expect() in functions that appear to
         // be tests based on the harness context.
-        if self.is_test_harness && is_likely_test_function(cx, expr) {
+        if self.is_test_harness
+            && is_likely_test_function(cx, expr, &self.harness_marked_test_functions)
+        {
             return;
         }
 
@@ -160,14 +170,19 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 // This is a fallback for when the standard attribute detection doesn't find
 // #[test] (which may happen in integration test crates where the test harness
 // processes attributes differently).
-fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>) -> bool {
+fn is_likely_test_function<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &hir::Expr<'tcx>,
+    harness_marked_test_functions: &HashSet<hir::HirId>,
+) -> bool {
     if cx
         .tcx
         .hir_parent_iter(expr.hir_id)
         .filter_map(|(_, node)| extract_function_item(node))
         .any(|item| {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            has_test_attribute(attrs) || is_harness_marked_test_function(cx, item)
+            has_test_attribute(attrs)
+                || is_harness_marked_test_function(item.hir_id(), harness_marked_test_functions)
         })
     {
         return true;
@@ -225,58 +240,65 @@ fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
     matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(item)
 }
 
-fn is_harness_marked_test_function<'tcx>(
-    cx: &LateContext<'tcx>,
-    item: &'tcx hir::Item<'tcx>,
+fn is_harness_marked_test_function(
+    function_hir_id: hir::HirId,
+    harness_marked_test_functions: &HashSet<hir::HirId>,
 ) -> bool {
-    if !cx.tcx.sess.opts.test {
-        return false;
+    harness_marked_test_functions.contains(&function_hir_id)
+}
+
+fn collect_harness_marked_test_functions<'tcx>(cx: &LateContext<'tcx>) -> HashSet<hir::HirId> {
+    let root_items = cx
+        .tcx
+        .hir_crate_items(())
+        .free_items()
+        .map(|id| cx.tcx.hir_item(id))
+        .collect::<Vec<_>>();
+    let mut harness_marked = HashSet::new();
+    collect_harness_marked_test_functions_in_group(cx, root_items.as_slice(), &mut harness_marked);
+    harness_marked
+}
+
+fn collect_harness_marked_test_functions_in_group<'tcx>(
+    cx: &LateContext<'tcx>,
+    items: &[&'tcx hir::Item<'tcx>],
+    harness_marked: &mut HashSet<hir::HirId>,
+) {
+    for item in items
+        .iter()
+        .copied()
+        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
+    {
+        let Some(function_ident) = item.kind.ident() else {
+            continue;
+        };
+
+        let function_hir_id = item.hir_id();
+        let function_name = function_ident.name;
+        let function_span = item.span;
+        if items.iter().copied().any(|sibling| {
+            is_matching_harness_test_descriptor(
+                function_hir_id,
+                function_name,
+                function_span,
+                sibling,
+            )
+        }) {
+            harness_marked.insert(function_hir_id);
+        }
     }
 
-    let Some(function_ident) = item.kind.ident() else {
-        return false;
-    };
+    for item in items {
+        let hir::ItemKind::Mod(_, module) = item.kind else {
+            continue;
+        };
 
-    let function_hir_id = item.hir_id();
-    let function_name = function_ident.name;
-    let function_span = item.span;
-    let mut parents = cx.tcx.hir_parent_iter(item.hir_id());
-    let Some((_, parent_node)) = parents.next() else {
-        return false;
-    };
-
-    match parent_node {
-        hir::Node::Item(parent_item) => {
-            let hir::ItemKind::Mod(_, module) = parent_item.kind else {
-                return false;
-            };
-            module
-                .item_ids
-                .iter()
-                .map(|id| cx.tcx.hir_item(*id))
-                .any(|sibling| {
-                    is_matching_harness_test_descriptor(
-                        function_hir_id,
-                        function_name,
-                        function_span,
-                        sibling,
-                    )
-                })
-        }
-        hir::Node::Crate(_) => cx
-            .tcx
-            .hir_crate_items(())
-            .free_items()
-            .map(|id| cx.tcx.hir_item(id))
-            .any(|sibling| {
-                is_matching_harness_test_descriptor(
-                    function_hir_id,
-                    function_name,
-                    function_span,
-                    sibling,
-                )
-            }),
-        _ => false,
+        let module_items = module
+            .item_ids
+            .iter()
+            .map(|id| cx.tcx.hir_item(*id))
+            .collect::<Vec<_>>();
+        collect_harness_marked_test_functions_in_group(cx, module_items.as_slice(), harness_marked);
     }
 }
 
