@@ -95,6 +95,7 @@ pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Box
 }
 
 /// Find a dependency binary by its Cargo package name.
+#[must_use = "callers should handle missing packages and manifest parse failures"]
 pub fn find_dependency_binary(
     package: &str,
 ) -> Result<Option<&'static DependencyBinary>, Box<dyn Error>> {

@@ -7,6 +7,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Extracts a single executable from dependency archives.
+#[cfg_attr(test, mockall::automock)]
 pub trait DependencyArchiveExtractor {
     /// Extract the expected executable into `destination_dir`.
     ///
@@ -52,24 +53,13 @@ pub(crate) fn extract_from_tgz(
     let file = File::open(archive_path)?;
     let decoder = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
-    for entry in archive
-        .entries()
-        .map_err(|error| DependencyBinaryInstallError::Extraction {
-            archive: archive_path.to_path_buf(),
-            reason: error.to_string(),
-        })?
-    {
-        let mut entry = entry.map_err(|error| DependencyBinaryInstallError::Extraction {
-            archive: archive_path.to_path_buf(),
-            reason: error.to_string(),
-        })?;
-        let path = entry
-            .path()
-            .map_err(|error| DependencyBinaryInstallError::Extraction {
-                archive: archive_path.to_path_buf(),
-                reason: error.to_string(),
-            })?
-            .into_owned();
+    let map_archive_err = |error: io::Error| DependencyBinaryInstallError::Extraction {
+        archive: archive_path.to_path_buf(),
+        reason: error.to_string(),
+    };
+    for entry in archive.entries().map_err(map_archive_err)? {
+        let mut entry = entry.map_err(map_archive_err)?;
+        let path = entry.path().map_err(map_archive_err)?.into_owned();
         if path == Path::new(expected_member_path) {
             return extract_entry_to_destination(&mut entry, expected_member_path, destination_dir);
         }

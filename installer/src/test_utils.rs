@@ -2,11 +2,13 @@
 
 #[cfg(any(test, feature = "test-support"))]
 use crate::deps::CommandExecutor;
+use crate::dirs::BaseDirs;
 #[cfg(any(test, feature = "test-support"))]
 use crate::error::InstallerError;
 use crate::error::Result;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::process::{ExitStatus, Output};
 
 /// Creates an `ExitStatus` from an exit code (Unix implementation).
@@ -87,6 +89,27 @@ pub fn failure_output(stderr: impl AsRef<str>) -> Output {
         status: exit_status(1),
         stdout: Vec::new(),
         stderr: stderr.as_bytes().to_vec(),
+    }
+}
+
+/// Minimal directory stub for tests that only care about the binary path.
+#[derive(Debug, Clone, Default)]
+pub struct StubDirs {
+    /// Directory returned by [`BaseDirs::bin_dir`].
+    pub bin_dir: Option<PathBuf>,
+}
+
+impl BaseDirs for StubDirs {
+    fn home_dir(&self) -> Option<PathBuf> {
+        None
+    }
+
+    fn bin_dir(&self) -> Option<PathBuf> {
+        self.bin_dir.clone()
+    }
+
+    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+        None
     }
 }
 
