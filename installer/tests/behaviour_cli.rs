@@ -199,12 +199,15 @@ fn given_suite_install(cli_world: &CliWorld) {
 
     let target_dir = setup_temp_dir(cli_world);
 
-    // Suite-only is the default, so no extra flag is needed.
+    // Suite-only is the default, so no extra lint-selection flag is needed.
+    // Use --build-only to keep this behavioural scenario off the network; the
+    // prebuilt download path is covered separately in dedicated prebuilt tests.
     // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
     // Use --skip-deps to avoid slow dependency downloads during test.
     cli_world.args.replace(vec![
         "--jobs".to_owned(),
         "1".to_owned(),
+        "--build-only".to_owned(),
         "--target-dir".to_owned(),
         target_dir,
         "--skip-wrapper".to_owned(),

@@ -142,8 +142,11 @@ impl Attribute {
 
     /// Indicates whether the attribute marks a test-like context.
     ///
-    /// Test-like attributes include `test`, `tokio::test`, `async_std::test`,
-    /// and `rstest`.
+    /// Builtin test-like attributes include direct paths such as `test`,
+    /// `tokio::test`, `async_std::test`, and `rstest`, plus prelude-qualified
+    /// builtin forms such as `::core::prelude::v1::test` and
+    /// `::std::prelude::rust_2024::test`. The latter are recognized via
+    /// `matches_builtin_test_like_path` on `self.path`.
     ///
     /// # Examples
     ///
@@ -161,8 +164,14 @@ impl Attribute {
     /// Indicates whether the attribute marks a test-like context when supplied
     /// with additional recognised paths.
     ///
-    /// Test-like attributes include `test`, `tokio::test`, `async_std::test`,
-    /// `rstest`, and any entries provided via the `additional` parameter.
+    /// Builtin test-like attributes include direct paths such as `test`,
+    /// `tokio::test`, `async_std::test`, and `rstest`, plus prelude-qualified
+    /// builtin forms such as `::core::prelude::v1::test` and
+    /// `::std::prelude::rust_2024::test`. These builtin forms are recognized
+    /// first by calling `matches_builtin_test_like_path` on `self.path`.
+    ///
+    /// Use `additional` only for extra runtime-configured `AttributePath`
+    /// values that should count as test-like in addition to the builtin set.
     ///
     /// # Examples
     ///
@@ -175,10 +184,7 @@ impl Attribute {
     /// ```
     #[must_use]
     pub fn is_test_like_with(&self, additional: &[AttributePath]) -> bool {
-        if TEST_LIKE_PATHS
-            .iter()
-            .any(|candidate| self.path.matches(candidate.iter().copied()))
-        {
+        if matches_builtin_test_like_path(&self.path) {
             return true;
         }
 
@@ -216,5 +222,63 @@ impl Attribute {
     #[must_use]
     pub const fn is_outer(&self) -> bool {
         self.kind.is_outer()
+    }
+}
+
+fn matches_builtin_test_like_path(path: &AttributePath) -> bool {
+    TEST_LIKE_PATHS
+        .iter()
+        .any(|candidate| path.matches(candidate.iter().copied()))
+        || is_prelude_test_attribute(path)
+}
+
+fn is_prelude_test_attribute(path: &AttributePath) -> bool {
+    // `is_prelude_test_attribute` treats the third segment from
+    // `AttributePath::segments()` as a wildcard because `_edition` may vary
+    // across toolchains (`v1`, `rust_2021`, `rust_2024`). The matcher
+    // therefore fixes only the root, `prelude`, and trailing `test`.
+    let [root, prelude, _edition, test] = path.segments() else {
+        return false;
+    };
+
+    matches!(root.as_str(), "core" | "std") && prelude == "prelude" && test == "test"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::core_v1("core::prelude::v1::test", true)]
+    #[case::absolute_core_v1("::core::prelude::v1::test", true)]
+    #[case::std_rust_2021("std::prelude::rust_2021::test", true)]
+    #[case::std_rust_2023("std::prelude::rust_2023::test", true)]
+    #[case::std_rust_2024("std::prelude::rust_2024::test", true)]
+    #[case::absolute_std_rust_2024("::std::prelude::rust_2024::test", true)]
+    #[case::three_segments("core::prelude::test", false)]
+    #[case::five_segments("core::prelude::v1::extra::test", false)]
+    #[case::wrong_middle("core::not_prelude::v1::test", false)]
+    #[case::wrong_root("alloc::prelude::v1::test", false)]
+    #[case::wrong_final("core::prelude::v1::bench", false)]
+    fn prelude_test_attribute_shape(#[case] path: &str, #[case] expected: bool) {
+        assert_eq!(
+            is_prelude_test_attribute(&AttributePath::from(path)),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::builtin_test("test", true)]
+    #[case::builtin_tokio("tokio::test", true)]
+    #[case::prelude_test("std::prelude::rust_2024::test", true)]
+    #[case::short_prelude("std::prelude::test", false)]
+    #[case::long_prelude("std::prelude::rust_2024::extra::test", false)]
+    #[case::wrong_prelude_segment("std::not_prelude::rust_2024::test", false)]
+    fn builtin_test_like_paths(#[case] path: &str, #[case] expected: bool) {
+        assert_eq!(
+            matches_builtin_test_like_path(&AttributePath::from(path)),
+            expected
+        );
     }
 }

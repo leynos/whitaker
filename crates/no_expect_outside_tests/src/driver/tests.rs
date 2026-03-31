@@ -49,6 +49,8 @@ fn parsed_must_use_attribute() -> hir::Attribute {
 #[case::rstest_single(&["rstest"])]
 #[case::case_single(&["case"])]
 #[case::tokio_test(&["tokio", "test"])]
+#[case::core_prelude_test(&["core", "prelude", "v1", "test"])]
+#[case::std_prelude_test(&["std", "prelude", "rust_2024", "test"])]
 #[case::async_std_test(&["async_std", "test"])]
 #[case::gpui_test(&["gpui", "test"])]
 #[case::rstest_rstest(&["rstest", "rstest"])]
@@ -68,6 +70,7 @@ fn is_test_attribute_accepts_test_patterns(#[case] segments: &[&str]) {
 #[case::allow(&["allow"])]
 #[case::cfg(&["cfg"])]
 #[case::three_segments(&["foo", "bar", "test"])]
+#[case::wrong_prelude_root(&["foo", "prelude", "v1", "test"])]
 fn is_test_attribute_rejects_non_test_attributes(#[case] segments: &[&str]) {
     create_default_session_globals_then(|| {
         let attr = hir_attribute_from_segments(segments);
@@ -99,11 +102,13 @@ fn assert_has_test_attribute(attr_segments: &[&[&str]], expected: bool) {
 #[case::inline_and_test(0)]
 #[case::rstest_only(1)]
 #[case::tokio_test(2)]
+#[case::core_prelude_test(3)]
 fn has_test_attribute_detects_test_attributes(#[case] case_index: usize) {
     let test_cases: &[&[&[&str]]] = &[
         &[&["inline"], &["test"]],
         &[&["rstest"]],
         &[&["tokio", "test"]],
+        &[&["core", "prelude", "v1", "test"]],
     ];
     assert_has_test_attribute(test_cases[case_index], true);
 }

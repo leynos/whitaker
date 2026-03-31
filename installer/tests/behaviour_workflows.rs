@@ -143,10 +143,13 @@ fn given_skip_wrapper_install(world: &WorkflowWorld) {
 
     let target_dir = setup_temp_dir(world);
 
+    // Use --build-only to keep this behavioural scenario off the network; the
+    // prebuilt download path is covered separately in dedicated prebuilt tests.
     // Use --skip-deps to avoid slow dependency downloads during test.
     world.args.replace(vec![
         "--jobs".to_owned(),
         "1".to_owned(),
+        "--build-only".to_owned(),
         "--target-dir".to_owned(),
         target_dir,
         "--skip-wrapper".to_owned(),
