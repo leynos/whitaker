@@ -61,6 +61,48 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Regression Infrastructure
+
+Two recent regression families rely on infrastructure that is easy to miss when
+adding coverage or refactoring helpers.
+
+### Async test harness detection
+
+`no_expect_outside_tests` prefers source-level test attributes such as
+`#[test]`, `#[rstest]`, and `#[tokio::test]`. In real `rustc --test`
+compilations, async wrappers can lose that source-level marker and instead be
+represented by a sibling `#[rustc_test_marker = "..."] const ...` descriptor.
+The driver therefore falls back to matching that harness descriptor by symbol
+name plus source range when direct attribute detection fails.
+
+Keep the regression split aligned with that compiler boundary:
+
+- Source-level attribute-shape coverage belongs in `ui/` fixtures.
+- Regressions that need `--test`, example targets, or extra compiler flags
+  belong in `crates/no_expect_outside_tests/src/lib_ui_tests.rs`.
+- Real async framework regressions should use `examples/` targets when the bug
+  depends on the same lowering path external consumers hit.
+
+This separation exists so a proc-macro stub test cannot accidentally mask a
+failure in the real harness-descriptor path.
+
+### Staged-suite installer shortcut
+
+Installer behavioural tests occasionally need the suite staging path without
+recursively rebuilding the workspace from inside `nextest`. The debug-only
+helper in `installer/src/staged_suite.rs` provides that shortcut.
+
+- Behavioural tests opt in with `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1`.
+- The helper only activates for an exact suite-only request
+  (`whitaker_suite` and nothing else).
+- The helper returns `Ok(None)` in release binaries before reading the
+  environment variable, so production installers never stage the placeholder
+  artefact.
+
+Use this hook only for installer orchestration tests. Release validation,
+prebuilt-download coverage, and user-facing installation flows must continue to
+exercise the real build or download paths.
+
 ## Using whitaker-installer
 
 The `whitaker-installer` command-line interface (CLI) builds, links, and stages

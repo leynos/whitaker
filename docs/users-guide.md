@@ -303,6 +303,10 @@ Forbids calling `.expect()` on `Option` or `Result` outside test contexts.
 additional_test_attributes = ["my_framework::test", "async_std::test"]
 ```
 
+Whitaker recognizes `#[test]`, `#[rstest]`, and async wrappers such as
+`#[tokio::test]` by default. Use `additional_test_attributes` for other
+frameworks such as `#[async_std::test]`.
+
 **How to fix:** Use proper error handling (`?`, `map_err`) or move the code to
 a test context.
 
