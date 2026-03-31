@@ -45,8 +45,8 @@ in the pipeline.
 | (default) | All tests **except** installer integration | Local development  |
 | `ci`      | All tests                                  | CI and pre-release |
 
-If you are working on `whitaker-installer` code, run the full suite locally
-before pushing to catch installer regressions early.
+When working on `whitaker-installer` code, run the full suite locally before
+pushing to catch installer regressions early.
 
 ### Other useful commands
 

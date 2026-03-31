@@ -133,7 +133,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build --workspace --all-features $(BUILD_JOBS); \
-	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
+	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	if ! command -v cargo-dylint >/dev/null 2>&1; then \

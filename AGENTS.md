@@ -134,16 +134,20 @@ project:
   - `make test` executes:
 
     ```sh
-    cargo nextest run --workspace
+    cargo nextest run --workspace --all-targets --all-features \
+      --exclude rustc_ast … (see TEST_EXCLUDES in Makefile)
     ```
 
-    running the workspace test suite. By default, slow installer
-    integration tests (`behaviour_toolchain`, `behaviour_cli`) are
-    excluded via the nextest default-filter in
-    `.config/nextest.toml`. To run the full suite including installer
+    running the workspace test suite with all features enabled and
+    excluding vendored rustc crates (the full `--exclude` list is
+    defined by the `TEST_EXCLUDES` variable in the Makefile). By
+    default, slow installer integration tests (`behaviour_toolchain`,
+    `behaviour_cli`) are excluded via the nextest default-filter in
+    `.config/nextest.toml`. To run the full suite, including installer
     tests, use `make test NEXTEST_PROFILE=ci`. CI always uses the
-    `ci` profile. Use `make fmt` (`cargo fmt --workspace`) to apply
-    formatting fixes reported by the formatter check.
+    `ci` profile.
+  - Use `make fmt` (`cargo fmt --workspace`) to apply formatting
+    fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
