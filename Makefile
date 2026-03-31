@@ -6,6 +6,7 @@ BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
+NEXTEST_PROFILE ?=
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 MDLINT ?= markdownlint-cli2
@@ -68,7 +69,7 @@ test: ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -132,7 +133,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build --workspace --all-features $(BUILD_JOBS); \
-	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
+	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	if ! command -v cargo-dylint >/dev/null 2>&1; then \

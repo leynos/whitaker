@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euxo pipefail
           cargo binstall --no-confirm --locked cargo-nextest
-          make test
+          make test NEXTEST_PROFILE=ci
 
       - name: Installer smoke test
         run: make install-smoke
