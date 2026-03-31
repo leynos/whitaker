@@ -116,6 +116,25 @@ mod tests {
     use whitaker_installer::dependency_binaries::provenance_filename;
 
     #[test]
+    fn run_package_command_rejects_invalid_target() {
+        let temp_dir = tempdir().expect("temp dir");
+        let binary_path = temp_dir.path().join("cargo-dylint");
+        std::fs::write(&binary_path, b"fake binary").expect("write binary");
+
+        let cli = Cli {
+            command: Command::Package {
+                package: "cargo-dylint".to_owned(),
+                target: "invalid-target-triple".to_owned(),
+                binary_path,
+                output_dir: temp_dir.path().join("dist"),
+            },
+        };
+
+        let result = run(cli);
+        assert!(matches!(result, Err(CliError::Target(_))));
+    }
+
+    #[test]
     fn run_package_command_creates_archive() {
         let temp_dir = tempdir().expect("temp dir");
         let binary_path = temp_dir.path().join("cargo-dylint");

@@ -4,9 +4,8 @@
 //! of truth for required dependency-tool versions, licences, and provenance.
 
 use serde::Deserialize;
-use std::error::Error;
-use std::fmt;
 use std::sync::OnceLock;
+use thiserror::Error;
 
 /// One repository-owned dependency binary requirement.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -55,16 +54,22 @@ struct DependencyBinaryManifest {
     dependency_binaries: Vec<DependencyBinary>,
 }
 
-#[derive(Debug, Clone)]
-struct ManifestLoadError(String);
-
-impl fmt::Display for ManifestLoadError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
+/// Errors that can occur when loading or parsing the dependency manifest.
+#[derive(Debug, Clone, Error)]
+pub enum ManifestError {
+    /// The manifest TOML is malformed or missing required fields.
+    #[error("manifest parse error: {0}")]
+    ParseError(String),
+    /// An I/O error occurred while accessing the manifest.
+    #[error("manifest I/O error: {0}")]
+    Io(String),
 }
 
-impl Error for ManifestLoadError {}
+impl From<toml::de::Error> for ManifestError {
+    fn from(error: toml::de::Error) -> Self {
+        ManifestError::ParseError(error.to_string())
+    }
+}
 
 /// Return the embedded manifest contents.
 #[must_use]
@@ -83,14 +88,13 @@ pub fn parse_manifest(contents: &str) -> Result<Vec<DependencyBinary>, toml::de:
 }
 
 /// Return the committed dependency binaries from the embedded manifest.
-pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Box<dyn Error>> {
-    static MANIFEST: OnceLock<Result<Vec<DependencyBinary>, ManifestLoadError>> = OnceLock::new();
+pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], ManifestError> {
+    static MANIFEST: OnceLock<Result<Vec<DependencyBinary>, ManifestError>> = OnceLock::new();
 
-    match MANIFEST.get_or_init(|| {
-        parse_manifest(manifest_contents()).map_err(|error| ManifestLoadError(error.to_string()))
-    }) {
+    match MANIFEST.get_or_init(|| parse_manifest(manifest_contents()).map_err(ManifestError::from))
+    {
         Ok(dependencies) => Ok(dependencies.as_slice()),
-        Err(error) => Err(Box::new(error.clone())),
+        Err(error) => Err(error.clone()),
     }
 }
 
@@ -98,7 +102,7 @@ pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Box
 #[must_use = "callers should handle missing packages and manifest parse failures"]
 pub fn find_dependency_binary(
     package: &str,
-) -> Result<Option<&'static DependencyBinary>, Box<dyn Error>> {
+) -> Result<Option<&'static DependencyBinary>, ManifestError> {
     Ok(required_dependency_binaries()?
         .iter()
         .find(|dependency| dependency.package() == package))
