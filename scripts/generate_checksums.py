@@ -5,7 +5,8 @@ This script generates `.sha256` checksum files for all archive files
 in the specified directory. Archives are processed using a streaming
 approach to avoid memory pressure with large files.
 
-Example:
+Example
+-------
     python scripts/generate_checksums.py dist/
 
 The script expects to find archive files matching the configured patterns
@@ -27,16 +28,27 @@ ARCHIVE_PATTERNS: tuple[str, ...] = ("*.tgz", "*.zip")
 READ_BUFFER_SIZE: int = 64 * 1024
 
 
+class NoArchivesFoundError(Exception):
+    """Raised when no archive files are found in the specified directory."""
+
+    pass
+
+
 def compute_sha256(path: Path) -> str:
     """Compute SHA-256 hex digest for a file using streaming reads.
 
-    Args:
-        path: Path to the file to hash.
+    Parameters
+    ----------
+    path : Path
+        Path to the file to hash.
 
-    Returns:
+    Returns
+    -------
+    str
         Hexadecimal SHA-256 digest string.
 
-    Example:
+    Example
+    -------
         >>> digest = compute_sha256(Path("archive.tgz"))
         >>> len(digest)
         64
@@ -51,27 +63,27 @@ def compute_sha256(path: Path) -> str:
 def find_archives(directory: Path) -> list[Path]:
     """Find all archive files matching configured patterns.
 
-    Args:
-        directory: Directory to search for archives.
+    Parameters
+    ----------
+    directory : Path
+        Directory to search for archives.
 
-    Returns:
+    Returns
+    -------
+    list[Path]
         Sorted list of paths to archive files.
 
-    Raises:
-        SystemExit: If no archives are found.
+    Raises
+    ------
+    NoArchivesFoundError
+        If no archives matching the configured patterns are found.
     """
     archives = sorted(
-        path
-        for pattern in ARCHIVE_PATTERNS
-        for path in directory.glob(pattern)
+        path for pattern in ARCHIVE_PATTERNS for path in directory.glob(pattern)
     )
 
     if not archives:
-        print(
-            f"No archives found in {directory} matching patterns: {ARCHIVE_PATTERNS}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise NoArchivesFoundError(directory)
 
     return archives
 
@@ -79,8 +91,10 @@ def find_archives(directory: Path) -> list[Path]:
 def generate_checksums(directory: Path) -> None:
     """Generate SHA-256 checksum files for all archives in directory.
 
-    Args:
-        directory: Directory containing archive files.
+    Parameters
+    ----------
+    directory : Path
+        Directory containing archive files.
     """
     archive_paths = find_archives(directory)
 
@@ -94,7 +108,9 @@ def generate_checksums(directory: Path) -> None:
 def main() -> int:
     """Entry point for the checksum generation script.
 
-    Returns:
+    Returns
+    -------
+    int
         Exit code (0 for success, non-zero for failure).
     """
     parser = argparse.ArgumentParser(
@@ -113,7 +129,15 @@ def main() -> int:
         print(f"Error: Not a directory: {args.directory}", file=sys.stderr)
         return 1
 
-    generate_checksums(args.directory)
+    try:
+        generate_checksums(args.directory)
+    except NoArchivesFoundError:
+        print(
+            f"No archives found in {args.directory} matching patterns: {ARCHIVE_PATTERNS}",
+            file=sys.stderr,
+        )
+        return 1
+
     return 0
 
 
