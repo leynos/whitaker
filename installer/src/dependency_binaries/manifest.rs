@@ -60,9 +60,6 @@ pub enum ManifestError {
     /// The manifest TOML is malformed or missing required fields.
     #[error("manifest parse error: {0}")]
     ParseError(String),
-    /// An I/O error occurred while accessing the manifest.
-    #[error("manifest I/O error: {0}")]
-    Io(String),
 }
 
 impl From<toml::de::Error> for ManifestError {

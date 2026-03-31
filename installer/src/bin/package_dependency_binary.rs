@@ -140,6 +140,15 @@ mod tests {
         let binary_path = temp_dir.path().join("cargo-dylint");
         std::fs::write(&binary_path, b"fake binary").expect("write binary");
 
+        // Look up the expected version from the manifest to avoid hardcoding.
+        let dependency = find_dependency_binary("cargo-dylint")
+            .expect("manifest should be parseable")
+            .expect("cargo-dylint should be in manifest");
+        let expected_filename = format!(
+            "dist/cargo-dylint-x86_64-unknown-linux-gnu-v{}.tgz",
+            dependency.version()
+        );
+
         let cli = Cli {
             command: Command::Package {
                 package: "cargo-dylint".to_owned(),
@@ -154,12 +163,7 @@ mod tests {
             result.is_ok(),
             "expected package command to succeed: {result:?}"
         );
-        assert!(
-            temp_dir
-                .path()
-                .join("dist/cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz")
-                .is_file()
-        );
+        assert!(temp_dir.path().join(expected_filename).is_file());
     }
 
     #[test]
