@@ -77,7 +77,10 @@ mod tests {
                     .expect("expected staged-suite installation to be skipped");
             assert!(result.is_none());
             assert!(
-                !target_dir.join(toolchain.channel()).join("release").exists(),
+                !target_dir
+                    .join(toolchain.channel())
+                    .join("release")
+                    .exists(),
                 "expected no staging directory to be created"
             );
         };

@@ -170,19 +170,19 @@ ______________________________________________________________________
 
 ### `bumpy_road_function`
 
-#### Purpose
+#### Purpose for `no_expect_outside_tests`
 
 Detects functions with multiple distinct clusters of nested conditional
 complexity.
 
-#### Scope and behaviour
+#### Scope and behaviour for `no_expect_outside_tests`
 
 Flags a function when peak detection finds two or more separated complexity
 regions above the configured threshold. Detection smooths the local complexity
 signal with the configured `window` and only considers peaks spanning at least
 `min_bump_lines`.
 
-#### Configuration
+#### Configuration for `no_expect_outside_tests`
 
 ```toml
 [bumpy_road_function]
@@ -191,16 +191,16 @@ window = 3
 min_bump_lines = 2
 ```
 
-#### What is allowed
+#### What is allowed for `no_expect_outside_tests`
 
 - A single complexity peak in a function.
 - Simple predicates that remain below the configured threshold.
 
-#### What is denied
+#### What is denied for `no_expect_outside_tests`
 
 - Two or more separated complexity peaks above the configured threshold.
 
-#### How to fix
+#### How to fix `no_expect_outside_tests` findings
 
 Split complex regions into helper functions and simplify branch-heavy
 predicates.
@@ -294,21 +294,49 @@ ______________________________________________________________________
 
 ### `no_expect_outside_tests`
 
-Forbids calling `.expect()` on `Option` or `Result` outside test contexts.
+#### Purpose
 
-**Configuration:**
+Detect test attributes correctly so `no_expect_outside_tests` can allow
+`.expect()` in recognised test-only code while still flagging production use.
+
+#### Scope and behaviour
+
+Whitaker recognises `#[test]`, `#[rstest]`, and async wrappers such as
+`#[tokio::test]` by default. The `additional_test_attributes` setting extends
+that matching list with project-specific markers so the lint treats those
+annotated functions as tests too.
+
+#### Configuration
 
 ```toml
 [no_expect_outside_tests]
 additional_test_attributes = ["my_framework::test", "wasm_bindgen_test"]
 ```
 
-Whitaker recognizes `#[test]`, `#[rstest]`, and async wrappers such as
-`#[tokio::test]` by default. Use `additional_test_attributes` for other
-frameworks that are not built in, such as `#[wasm_bindgen_test]`.
+Set `additional_test_attributes` to an array of attribute paths written as
+strings. Each entry should match the path Whitaker sees on the test function,
+for example `my_framework::test` or `wasm_bindgen_test`.
 
-**How to fix:** Use proper error handling (`?`, `map_err`) or move the code to
-a test context.
+#### What is allowed
+
+- Default markers such as `#[test]`, `#[rstest]`, and `#[tokio::test]`
+- Project-specific markers listed in `additional_test_attributes`, such as
+  `#[wasm_bindgen_test]`
+
+#### What is denied
+
+Functions using `.expect()` will still be flagged when their test attribute is
+not in Whitaker's default list and is not listed in
+`additional_test_attributes`.
+
+#### How to fix
+
+- Add the missing test marker to `additional_test_attributes` if the function is
+  genuinely part of a supported test framework
+- Change the attribute usage to a recognised form such as `#[test]`,
+  `#[rstest]`, or `#[tokio::test]` where appropriate
+- If the function is not test-only code, replace `.expect()` with explicit error
+  handling such as `?` or `map_err`
 
 ______________________________________________________________________
 
