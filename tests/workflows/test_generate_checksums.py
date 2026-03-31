@@ -20,33 +20,41 @@ Run specific test:
 
 from __future__ import annotations
 
-import sys
+import importlib.util
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 
-# Add scripts directory to path for importing
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
-if TYPE_CHECKING:
-    from scripts.generate_checksums import (  # type: ignore[import-not-found]
-        NoArchivesFoundError,
-        compute_sha256,
-        find_archives,
-        generate_checksums,
-        main,
-    )
-else:
-    from generate_checksums import (
-        NoArchivesFoundError,
-        compute_sha256,
-        find_archives,
-        generate_checksums,
-        main,
-    )
+def _load_generate_checksums_module():
+    """Load the generate_checksums script as a module via importlib.
+
+    This helper avoids sys.path mutation and provides a stable import
+    mechanism for scripts located outside the package hierarchy.
+
+    Returns
+    -------
+    module
+        The loaded generate_checksums module with all public APIs.
+    """
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "generate_checksums.py"
+    spec = importlib.util.spec_from_file_location("generate_checksums", script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# Load the module once at import time
+_generate_checksums = _load_generate_checksums_module()
+
+# Expose public API for tests
+NoArchivesFoundError = _generate_checksums.NoArchivesFoundError
+compute_sha256 = _generate_checksums.compute_sha256
+find_archives = _generate_checksums.find_archives
+generate_checksums = _generate_checksums.generate_checksums
+main = _generate_checksums.main
 
 
 class TestComputeSha256:

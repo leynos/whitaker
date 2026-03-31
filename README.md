@@ -74,13 +74,13 @@ command-line tools.
 Using GNU coreutils `sha256sum`:
 
 ```sh
-sha256sum -c whitaker-0.1.0-x86_64-unknown-linux-gnu.tgz.sha256
+sha256sum -c whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz.sha256
 ```
 
 Or compute and compare manually:
 
 ```sh
-sha256sum whitaker-0.1.0-x86_64-unknown-linux-gnu.tgz
+sha256sum whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz
 ```
 
 ### macOS
@@ -88,13 +88,13 @@ sha256sum whitaker-0.1.0-x86_64-unknown-linux-gnu.tgz
 Using `shasum` (included with macOS):
 
 ```sh
-shasum -a 256 -c whitaker-0.1.0-x86_64-apple-darwin.tgz.sha256
+shasum -a 256 -c whitaker-<VERSION>-x86_64-apple-darwin.tgz.sha256
 ```
 
 Or compute and compare manually:
 
 ```sh
-shasum -a 256 whitaker-0.1.0-x86_64-apple-darwin.tgz
+shasum -a 256 whitaker-<VERSION>-x86_64-apple-darwin.tgz
 ```
 
 ### Windows
@@ -102,13 +102,13 @@ shasum -a 256 whitaker-0.1.0-x86_64-apple-darwin.tgz
 Using PowerShell:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -Path whitaker-0.1.0-x86_64-pc-windows-msvc.zip
+Get-FileHash -Algorithm SHA256 -Path whitaker-<VERSION>-x86_64-pc-windows-msvc.zip
 ```
 
 Or using `CertUtil` (Command Prompt):
 
 ```cmd
-certutil -hashfile whitaker-0.1.0-x86_64-pc-windows-msvc.zip SHA256
+certutil -hashfile whitaker-<VERSION>-x86_64-pc-windows-msvc.zip SHA256
 ```
 
 ## Documentation
