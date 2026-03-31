@@ -16,6 +16,28 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, Ref, RefCell};
 
+fn unquote(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|stripped| stripped.strip_suffix('"'))
+        .unwrap_or(value)
+}
+
+fn format_receiver(receiver: &str) -> String {
+    if receiver.is_empty() || receiver.starts_with('`') {
+        receiver.to_string()
+    } else {
+        format!("`{receiver}`")
+    }
+}
+
+fn normalize_for_assertion(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
+        .collect()
+}
+
 #[derive(Default)]
 struct LocalisationWorld {
     localizer: RefCell<Option<Localizer>>,
@@ -37,7 +59,7 @@ impl LocalisationWorld {
     }
 
     fn set_receiver_type(&self, receiver: &str) {
-        *self.receiver.borrow_mut() = ReceiverLabel::new(receiver);
+        *self.receiver.borrow_mut() = ReceiverLabel::new(format_receiver(receiver));
     }
 
     fn set_function(&self, name: Option<&str>) {
@@ -79,21 +101,18 @@ fn world() -> LocalisationWorld {
 
 #[given("the locale {locale} is selected")]
 fn given_locale(world: &LocalisationWorld, locale: String) {
-    world.use_localizer(&locale);
+    world.use_localizer(unquote(&locale));
 }
 
 #[given("the receiver type is {receiver}")]
 fn given_receiver(world: &LocalisationWorld, receiver: String) {
-    world.set_receiver_type(&receiver);
+    world.set_receiver_type(unquote(&receiver));
 }
 
 #[given("the function context is {name}")]
 fn given_function(world: &LocalisationWorld, name: String) {
-    let value = if name.is_empty() {
-        None
-    } else {
-        Some(name.as_str())
-    };
+    let name = unquote(&name);
+    let value = if name.is_empty() { None } else { Some(name) };
     world.set_function(value);
 }
 
@@ -139,17 +158,32 @@ fn when_localise(world: &LocalisationWorld) {
 
 #[then("the diagnostic mentions {snippet}")]
 fn then_primary(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().primary().contains(&snippet));
+    let snippet = normalize_for_assertion(unquote(&snippet));
+    let primary = normalize_for_assertion(world.messages().primary());
+    assert!(
+        primary.contains(&snippet),
+        "primary message `{primary}` did not contain `{snippet}`"
+    );
 }
 
 #[then("the note references {snippet}")]
 fn then_note(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().note().contains(&snippet));
+    let snippet = normalize_for_assertion(unquote(&snippet));
+    let note = normalize_for_assertion(world.messages().note());
+    assert!(
+        note.contains(&snippet),
+        "note `{note}` did not contain `{snippet}`"
+    );
 }
 
 #[then("the help references {snippet}")]
 fn then_help(world: &LocalisationWorld, snippet: String) {
-    assert!(world.messages().help().contains(&snippet));
+    let snippet = normalize_for_assertion(unquote(&snippet));
+    let help = normalize_for_assertion(world.messages().help());
+    assert!(
+        help.contains(&snippet),
+        "help `{help}` did not contain `{snippet}`"
+    );
 }
 
 #[then("the fallback and localisation logic should handle the receiver type robustly")]
@@ -168,9 +202,10 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalisationWorld) {
 
 #[then("localisation fails for {key}")]
 fn then_failure(world: &LocalisationWorld, key: String) {
+    let key = unquote(&key);
     let error = world.error();
     match &*error {
-        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
+        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, key),
     }
 }
 
@@ -211,12 +246,17 @@ fn scenario_failure(world: LocalisationWorld) {
 
 #[then("the fallback help mentions {snippet}")]
 fn then_fallback(world: &LocalisationWorld, snippet: String) {
+    let snippet = normalize_for_assertion(unquote(&snippet));
     let summary = world.summary.borrow().clone();
     let context = context_label(&summary);
     let receiver = world.receiver.borrow().clone();
     let category = ReceiverCategory::for_label(&receiver);
     let fallback = fallback_messages(&receiver, &context, category);
-    assert!(fallback.help().contains(&snippet));
+    let help = normalize_for_assertion(fallback.help());
+    assert!(
+        help.contains(&snippet),
+        "fallback help `{help}` did not contain `{snippet}`"
+    );
 }
 
 fn execute_localisation(
