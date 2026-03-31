@@ -40,6 +40,8 @@ make test NEXTEST_PROFILE=ci
 CI always uses the `ci` profile, so installer tests are never silently skipped
 in the pipeline.
 
+Table: Test profiles and typical usage.
+
 | Profile   | What runs                                  | Typical use        |
 | --------- | ------------------------------------------ | ------------------ |
 | (default) | All tests **except** installer integration | Local development  |
