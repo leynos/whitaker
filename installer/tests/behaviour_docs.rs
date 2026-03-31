@@ -253,7 +253,7 @@ fn then_no_expect_outside_tests_additional_test_attributes_present(toml_world: &
 
     assert_eq!(
         values,
-        vec!["my_framework::test", "async_std::test"],
+        vec!["my_framework::test", "wasm_bindgen_test"],
         "unexpected no_expect_outside_tests.additional_test_attributes"
     );
 }

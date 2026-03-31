@@ -52,14 +52,9 @@ fn is_suite_only_request(requested_crates: &[CrateName]) -> bool {
 mod tests {
     use super::*;
     use rstest::rstest;
-    use std::sync::{Mutex, OnceLock};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
-
-    fn test_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
+    use whitaker_installer::test_support::env_test_guard;
 
     fn test_toolchain() -> Toolchain {
         Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18")
@@ -87,9 +82,7 @@ mod tests {
 
     #[test]
     fn staged_suite_installation_returns_none_when_env_is_unset() {
-        let _guard = test_env_lock()
-            .lock()
-            .expect("expected staged suite env lock");
+        let _guard = env_test_guard();
         let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
         let target_dir = utf8_temp_dir(&temp_dir);
         let toolchain = test_toolchain();
@@ -112,9 +105,7 @@ mod tests {
 
     #[test]
     fn staged_suite_installation_returns_none_for_non_suite_requests() {
-        let _guard = test_env_lock()
-            .lock()
-            .expect("expected staged suite env lock");
+        let _guard = env_test_guard();
         let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
         let target_dir = utf8_temp_dir(&temp_dir);
         let toolchain = test_toolchain();
@@ -137,9 +128,7 @@ mod tests {
 
     #[test]
     fn staged_suite_installation_writes_placeholder_library_for_suite_requests() {
-        let _guard = test_env_lock()
-            .lock()
-            .expect("expected staged suite env lock");
+        let _guard = env_test_guard();
         let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
         let target_dir = utf8_temp_dir(&temp_dir);
         let toolchain = test_toolchain();
@@ -163,9 +152,7 @@ mod tests {
 
     #[test]
     fn staged_suite_installation_surfaces_write_failures() {
-        let _guard = test_env_lock()
-            .lock()
-            .expect("expected staged suite env lock");
+        let _guard = env_test_guard();
         let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
         let target_dir = utf8_temp_dir(&temp_dir);
         let toolchain = test_toolchain();

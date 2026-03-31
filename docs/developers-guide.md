@@ -61,7 +61,7 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
-## Regression Infrastructure
+## Regression infrastructure
 
 Two recent regression families rely on infrastructure that is easy to miss when
 adding coverage or refactoring helpers.
