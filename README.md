@@ -63,6 +63,54 @@ Whitaker is under active development. One additional lint
 (`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
 details.
 
+## Verifying Release Checksums
+
+Each Whitaker release includes SHA-256 checksum files alongside the archive
+downloads. You can verify the integrity of downloaded archives using standard
+command-line tools.
+
+### Linux
+
+Using GNU coreutils `sha256sum`:
+
+```sh
+sha256sum -c whitaker-0.1.0-x86_64-unknown-linux-gnu.tgz.sha256
+```
+
+Or compute and compare manually:
+
+```sh
+sha256sum whitaker-0.1.0-x86_64-unknown-linux-gnu.tgz
+```
+
+### macOS
+
+Using `shasum` (included with macOS):
+
+```sh
+shasum -a 256 -c whitaker-0.1.0-x86_64-apple-darwin.tgz.sha256
+```
+
+Or compute and compare manually:
+
+```sh
+shasum -a 256 whitaker-0.1.0-x86_64-apple-darwin.tgz
+```
+
+### Windows
+
+Using PowerShell:
+
+```powershell
+Get-FileHash -Algorithm SHA256 -Path whitaker-0.1.0-x86_64-pc-windows-msvc.zip
+```
+
+Or using `CertUtil` (Command Prompt):
+
+```cmd
+certutil -hashfile whitaker-0.1.0-x86_64-pc-windows-msvc.zip SHA256
+```
+
 ## Documentation
 
 - [User's Guide](docs/users-guide.md) — Installation, configuration, and
