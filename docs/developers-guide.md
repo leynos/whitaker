@@ -290,7 +290,7 @@ To add a new locale:
 2. Add `.ftl` files with translated messages
 3. Update `common::i18n::available_locales()` to include the new locale
 
-## Release Tooling
+## Release tooling
 
 Whitaker includes tooling for automating release-related tasks.
 

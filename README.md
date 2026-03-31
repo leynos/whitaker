@@ -99,16 +99,20 @@ shasum -a 256 whitaker-<VERSION>-x86_64-apple-darwin.tgz
 
 ### Windows
 
-Using PowerShell:
+Using PowerShell (compares against the `.sha256` sidecar file):
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -Path whitaker-<VERSION>-x86_64-pc-windows-msvc.zip
+$expected = (Get-Content whitaker-<VERSION>-x86_64-pc-windows-msvc.zip.sha256).Split()[0]
+$actual = (Get-FileHash -Algorithm SHA256 -Path whitaker-<VERSION>-x86_64-pc-windows-msvc.zip).Hash
+if ($actual -eq $expected) { Write-Output "OK" } else { Write-Output "FAILED" }
 ```
 
-Or using `CertUtil` (Command Prompt):
+Or using `CertUtil` (Command Prompt) — compare the printed hash to the one
+in the `.sha256` file:
 
 ```cmd
 certutil -hashfile whitaker-<VERSION>-x86_64-pc-windows-msvc.zip SHA256
+type whitaker-<VERSION>-x86_64-pc-windows-msvc.zip.sha256
 ```
 
 ## Documentation
