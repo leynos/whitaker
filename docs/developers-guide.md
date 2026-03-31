@@ -29,7 +29,10 @@ This executes unit, behaviour, and UI harness tests. The shared target enables
 By default, `make test` excludes slow installer integration tests
 (`behaviour_toolchain` and `behaviour_cli`) via a nextest default-filter
 defined in `.config/nextest.toml`. These tests perform real `rustup` installs
-and `cargo` builds, so they can take upwards of fifteen minutes.
+and `cargo` builds, so they can take upwards of fifteen minutes. Note that the
+exclusion relies on hardcoded binary names in `.config/nextest.toml`; renaming
+or splitting these test binaries requires updating the filter to match (see
+[#180][issue-180]).
 
 To run the full suite including installer tests, pass the `ci` profile:
 
@@ -326,3 +329,5 @@ make publish-check
 
 This builds, tests, and validates packages in a production-like environment
 without the `prefer-dynamic` flag used during development.
+
+[issue-180]: https://github.com/leynos/whitaker/issues/180
