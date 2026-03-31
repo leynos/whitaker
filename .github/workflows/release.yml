@@ -109,24 +109,7 @@ jobs:
       - name: Generate SHA-256 checksum
         run: |
           set -euxo pipefail
-          python - <<'PY'
-          from hashlib import sha256
-          from pathlib import Path
-
-          dist_dir = Path("dist")
-          archive_paths = sorted(
-              path
-              for pattern in ("*.tgz", "*.zip")
-              for path in dist_dir.glob(pattern)
-          )
-          if not archive_paths:
-              raise SystemExit("No archive was produced for checksum generation.")
-
-          for archive_path in archive_paths:
-              digest = sha256(archive_path.read_bytes()).hexdigest()
-              checksum_path = archive_path.with_name(f"{archive_path.name}.sha256")
-              checksum_path.write_text(f"{digest}  {archive_path.name}\n", encoding="ascii")
-          PY
+          python scripts/generate_checksums.py dist/
 
       - name: Diagnostics (package archive)
         if: failure()
@@ -194,6 +177,8 @@ jobs:
           set -euxo pipefail
           TAG="${RELEASE_TAG}"
           shopt -s nullglob
+          # Archive patterns must be kept in sync with ARCHIVE_PATTERNS
+          # in scripts/generate_checksums.py
           ASSETS=(dist/*.tgz dist/*.zip dist/*.sha256)
           if [[ "${#ASSETS[@]}" -eq 0 ]]; then
             echo "No release assets found."

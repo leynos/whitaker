@@ -1381,7 +1381,7 @@ assets; otherwise `cargo binstall` will fail for the most recent version.
 - Ensure the archive contains a top-level directory named
   `whitaker-installer-<target>-v<version>/` with the binary inside
   (`whitaker-installer` or `whitaker-installer.exe`).
-- Generate a SHA-256 sidecar for each archive named
+- Generate an SHA-256 sidecar for each archive named
   `whitaker-installer-<target>-v<version>.<ext>.sha256`.
 - Publish the archives and checksum sidecars as assets on a GitHub Release
   tagged `v<version>` so binstall can resolve the `pkg-url` template and users
