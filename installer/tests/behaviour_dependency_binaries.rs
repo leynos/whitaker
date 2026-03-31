@@ -273,6 +273,8 @@ fn cargo_fallback_calls(
     binstall_available: bool,
     cargo_fallback_failure: Option<&str>,
 ) -> Vec<ExpectedCall> {
+    // Intentional leak in tests to extend lifetime for static string usage;
+    // acceptable here as it will not be freed.
     let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
     let install_call = ExpectedCall {
         cmd: "cargo",

@@ -10,6 +10,34 @@ import tomllib
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the dependency-binaries manifest tool.
+
+    Reads CLI arguments to determine the path to the dependency-binaries
+    manifest file. The default path is "installer/dependency-binaries.toml".
+
+    Parameters
+    ----------
+    None
+        Arguments are read from sys.argv.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments with the 'manifest' attribute containing the path to
+        the dependency-binaries manifest.
+
+    Example
+    -------
+    >>> args = parse_args()
+    >>> print(args.manifest)
+    'installer/dependency-binaries.toml'
+
+    Notes
+    -----
+    The manifest argument is optional and defaults to the standard location
+    within the installer directory.
+
+    """
     parser = argparse.ArgumentParser(
         description="Read installer/dependency-binaries.toml and emit TSV rows."
     )
@@ -23,6 +51,49 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Emit dependency-binary manifest entries as tab-separated rows.
+
+    Parses CLI arguments, reads the TOML manifest at the specified path,
+    and writes package/binary/version lines to stdout as tab-separated
+    values (one line per dependency binary).
+
+    Parameters
+    ----------
+    None
+        Arguments are obtained via parse_args() from sys.argv.
+
+    Returns
+    -------
+    int
+        Exit code 0 on success.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the specified manifest file does not exist.
+    IOError
+        If the manifest file cannot be read.
+    tomllib.TOMLDecodeError
+        If the manifest file contains invalid TOML syntax.
+
+    Side Effects
+    ------------
+    Writes tab-separated rows to sys.stdout.buffer (one per dependency
+    binary, with columns: package, binary, version).
+
+    Example
+    -------
+    >>> import sys
+    >>> sys.argv = ["script.py", "my-manifest.toml"]
+    >>> main()
+    0
+
+    Notes
+    -----
+    The output format is suitable for shell processing with tools like
+    cut, awk, or while-read loops.
+
+    """
     args = parse_args()
     manifest_path = pathlib.Path(args.manifest)
     with manifest_path.open("rb") as handle:
