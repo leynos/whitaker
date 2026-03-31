@@ -1,10 +1,10 @@
 //! Archive extraction helpers for repository-hosted dependency binaries.
 
 use super::installer::DependencyBinaryInstallError;
-use std::fs;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 /// Extracts a single executable from dependency archives.
 #[cfg_attr(test, mockall::automock)]
@@ -114,24 +114,17 @@ fn extract_entry_to_destination(
         }
     })?;
     let destination = destination_dir.join(binary_name);
-    let temporary_destination =
-        destination_dir.join(format!(".tmp_{}", binary_name.to_string_lossy()));
-    let write_result = write_entry(reader, &temporary_destination);
-    if let Err(error) = write_result {
-        let _ = fs::remove_file(&temporary_destination);
-        return Err(error);
-    }
-    fs::rename(&temporary_destination, &destination)?;
-    Ok(destination)
-}
 
-/// Stream one archive member into a temporary file on disk.
-fn write_entry(
-    reader: &mut dyn Read,
-    temporary_destination: &Path,
-) -> Result<(), DependencyBinaryInstallError> {
-    let mut output = File::create(temporary_destination)?;
-    io::copy(reader, &mut output)?;
-    output.flush()?;
-    Ok(())
+    let mut temp_file = NamedTempFile::with_prefix_in(
+        format!(".tmp_{}", binary_name.to_string_lossy()),
+        destination_dir,
+    )
+    .map_err(DependencyBinaryInstallError::Io)?;
+    io::copy(reader, &mut temp_file)?;
+    temp_file.flush()?;
+    temp_file
+        .persist(&destination)
+        .map_err(|error| DependencyBinaryInstallError::Io(error.error))?;
+
+    Ok(destination)
 }

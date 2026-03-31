@@ -235,71 +235,86 @@ fn then_provenance_contains(world: &mut DependencyBinaryWorld, expected: String)
     );
 }
 
-fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
-    let mut calls = vec![ExpectedCall {
+fn binstall_version_check(binstall_available: bool) -> ExpectedCall {
+    ExpectedCall {
         cmd: "cargo",
         args: vec!["binstall", "--version"],
-        result: if config.binstall_available {
+        result: if binstall_available {
             Ok(success_output())
         } else {
             Ok(failure_output("missing binstall"))
         },
-    }];
-
-    if config.verify_repository_install {
-        calls.push(match tool {
-            "cargo-dylint" => ExpectedCall {
-                cmd: "cargo",
-                args: vec!["dylint", "--version"],
-                result: if config.verification_fails {
-                    Ok(failure_output("still missing"))
-                } else {
-                    Ok(success_output())
-                },
-            },
-            "dylint-link" => ExpectedCall {
-                cmd: "dylint-link",
-                args: vec!["--version"],
-                result: if config.verification_fails {
-                    Ok(failure_output("still missing"))
-                } else {
-                    Ok(success_output())
-                },
-            },
-            other => panic!("unexpected tool: {other}"),
-        });
-        if !config.verification_fails {
-            return calls;
-        }
     }
+}
 
-    calls.push(ExpectedCall {
-        cmd: "cargo",
-        args: if config.binstall_available {
-            vec![
-                "binstall",
-                "-y",
-                // Intentionally leak the tool name so the stubbed call can own
-                // a `'static` argument in test scope without borrow plumbing.
-                Box::leak(tool.to_owned().into_boxed_str()),
-            ]
-        } else {
-            // Intentionally leak the tool name so the stubbed call can own a
-            // `'static` argument in test scope without borrow plumbing.
-            vec!["install", Box::leak(tool.to_owned().into_boxed_str())]
+fn repository_verification_call(tool: &str, verification_fails: bool) -> ExpectedCall {
+    let result = if verification_fails {
+        Ok(failure_output("still missing"))
+    } else {
+        Ok(success_output())
+    };
+    match tool {
+        "cargo-dylint" => ExpectedCall {
+            cmd: "cargo",
+            args: vec!["dylint", "--version"],
+            result,
         },
-        result: Ok(match config.cargo_fallback_failure {
+        "dylint-link" => ExpectedCall {
+            cmd: "dylint-link",
+            args: vec!["--version"],
+            result,
+        },
+        other => panic!("unexpected tool: {other}"),
+    }
+}
+
+fn cargo_fallback_calls(
+    tool: &str,
+    binstall_available: bool,
+    cargo_fallback_failure: Option<&str>,
+) -> Vec<ExpectedCall> {
+    let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
+    let install_call = ExpectedCall {
+        cmd: "cargo",
+        args: if binstall_available {
+            vec!["binstall", "-y", tool_static]
+        } else {
+            vec!["install", tool_static]
+        },
+        result: Ok(match cargo_fallback_failure {
             Some(message) => failure_output(message),
             None => success_output(),
         }),
-    });
-    if config.cargo_fallback_failure.is_none() {
+    };
+    let mut calls = vec![install_call];
+    if cargo_fallback_failure.is_none() {
         calls.push(match tool {
             "cargo-dylint" => cargo_dylint_check(),
             "dylint-link" => dylint_link_check(),
             other => panic!("unexpected tool: {other}"),
         });
     }
+    calls
+}
+
+fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
+    let mut calls = vec![binstall_version_check(config.binstall_available)];
+
+    if config.verify_repository_install {
+        calls.push(repository_verification_call(
+            tool,
+            config.verification_fails,
+        ));
+        if !config.verification_fails {
+            return calls;
+        }
+    }
+
+    calls.extend(cargo_fallback_calls(
+        tool,
+        config.binstall_available,
+        config.cargo_fallback_failure,
+    ));
     calls
 }
 

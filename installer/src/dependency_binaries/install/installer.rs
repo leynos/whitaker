@@ -60,6 +60,7 @@ pub enum DependencyBinaryInstallError {
 }
 
 /// Installs dependency binaries from repository-hosted release assets.
+#[cfg_attr(test, mockall::automock)]
 pub trait DependencyBinaryInstaller {
     /// Install one dependency binary for the current target into the local bin
     /// directory.

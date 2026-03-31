@@ -1,56 +1,9 @@
 //! Tests for Dylint tool dependency installation and fallback behaviour.
 
 use super::*;
-use crate::dependency_binaries::DependencyBinaryInstallError;
-use crate::dirs::BaseDirs;
+use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
 use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
-
-struct StubRepositoryInstaller {
-    result: std::result::Result<PathBuf, DependencyBinaryInstallError>,
-}
-
-impl DependencyBinaryInstaller for StubRepositoryInstaller {
-    fn install(
-        &self,
-        _dependency: &crate::dependency_binaries::DependencyBinary,
-        _target: &TargetTriple,
-        _dirs: &dyn BaseDirs,
-    ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
-        match &self.result {
-            Ok(path) => Ok(path.clone()),
-            Err(DependencyBinaryInstallError::Download { url, reason }) => {
-                Err(DependencyBinaryInstallError::Download {
-                    url: url.clone(),
-                    reason: reason.clone(),
-                })
-            }
-            Err(DependencyBinaryInstallError::Extraction { archive, reason }) => {
-                Err(DependencyBinaryInstallError::Extraction {
-                    archive: archive.clone(),
-                    reason: reason.clone(),
-                })
-            }
-            Err(DependencyBinaryInstallError::MissingBinaryInArchive { binary }) => {
-                Err(DependencyBinaryInstallError::MissingBinaryInArchive {
-                    binary: binary.clone(),
-                })
-            }
-            Err(DependencyBinaryInstallError::Install { binary, reason }) => {
-                Err(DependencyBinaryInstallError::Install {
-                    binary: binary.clone(),
-                    reason: reason.clone(),
-                })
-            }
-            Err(DependencyBinaryInstallError::MissingBinDir) => {
-                Err(DependencyBinaryInstallError::MissingBinDir)
-            }
-            Err(DependencyBinaryInstallError::Io(error)) => Err(DependencyBinaryInstallError::Io(
-                std::io::Error::new(error.kind(), error.to_string()),
-            )),
-        }
-    }
-}
 
 fn binstall_version_check(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
@@ -101,6 +54,7 @@ fn install_options<'a>(
     };
     let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
     DependencyInstallOptions {
+        // Intentional leak in tests to extend lifetime for trait object; acceptable here.
         dirs: Box::leak(Box::new(dirs)),
         repository_installer,
         target: Some(target),
@@ -140,9 +94,10 @@ fn check_dylint_tools_reports_installed_tools() {
 
 #[test]
 fn install_dylint_tools_uses_repository_release_first() {
-    let repository_installer = StubRepositoryInstaller {
-        result: Ok(PathBuf::from("/tmp/bin/cargo-dylint")),
-    };
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(success_output())),
         cargo_dylint_check(Ok(success_output())),
@@ -167,12 +122,13 @@ fn install_dylint_tools_uses_repository_release_first() {
 
 #[test]
 fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
-    let repository_installer = StubRepositoryInstaller {
-        result: Err(DependencyBinaryInstallError::Download {
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer.expect_install().returning(|_, _, _| {
+        Err(DependencyBinaryInstallError::Download {
             url: "https://example.test/archive".to_owned(),
             reason: "not found".to_owned(),
-        }),
-    };
+        })
+    });
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(success_output())),
@@ -199,9 +155,10 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
 
 #[test]
 fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
-    let repository_installer = StubRepositoryInstaller {
-        result: Err(DependencyBinaryInstallError::MissingBinDir),
-    };
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .returning(|_, _, _| Err(DependencyBinaryInstallError::MissingBinDir));
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(failure_output("missing binstall"))),
         cargo_install("cargo-dylint", Ok(success_output())),
@@ -227,9 +184,10 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
 
 #[test]
 fn install_dylint_tools_falls_back_when_repository_verification_fails() {
-    let repository_installer = StubRepositoryInstaller {
-        result: Ok(PathBuf::from("/tmp/bin/cargo-dylint")),
-    };
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(success_output())),
         cargo_dylint_check(Ok(failure_output("still missing"))),
@@ -256,9 +214,10 @@ fn install_dylint_tools_falls_back_when_repository_verification_fails() {
 
 #[test]
 fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
-    let repository_installer = StubRepositoryInstaller {
-        result: Err(DependencyBinaryInstallError::MissingBinDir),
-    };
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .returning(|_, _, _| Err(DependencyBinaryInstallError::MissingBinDir));
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(failure_output("binstall failed"))),

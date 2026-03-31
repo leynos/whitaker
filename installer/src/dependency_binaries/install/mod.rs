@@ -14,6 +14,8 @@ mod tests;
 
 pub use downloader::DependencyArchiveDownloader;
 pub use extractor::DependencyArchiveExtractor;
+#[cfg(test)]
+pub use installer::MockDependencyBinaryInstaller;
 pub use installer::{
     DependencyBinaryInstallError, DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller,
 };

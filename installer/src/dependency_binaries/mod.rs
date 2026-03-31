@@ -7,12 +7,14 @@
 mod install;
 mod manifest;
 
+#[cfg(test)]
+pub use install::MockDependencyBinaryInstaller;
 pub use install::{
     DependencyArchiveDownloader, DependencyArchiveExtractor, DependencyBinaryInstallError,
     DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller, archive_filename,
     binary_filename, host_target, provenance_filename,
 };
 pub use manifest::{
-    DependencyBinary, find_dependency_binary, manifest_contents, parse_manifest,
+    DependencyBinary, ManifestError, find_dependency_binary, manifest_contents, parse_manifest,
     required_dependency_binaries,
 };
