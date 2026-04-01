@@ -3191,6 +3191,7 @@ version = "0.2.1"
 dependencies = [
  "camino",
  "clap",
+ "common",
  "directories-next",
  "flate2",
  "fs2",

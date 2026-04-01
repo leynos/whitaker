@@ -160,6 +160,7 @@ mod tests {
         }
     }
 
+    #[cfg(debug_assertions)]
     #[rstest]
     fn staged_suite_installation_writes_placeholder_library_for_suite_requests(
         staged_suite_setup: StagedSuiteSetup,
@@ -185,6 +186,7 @@ mod tests {
         });
     }
 
+    #[cfg(debug_assertions)]
     #[rstest]
     fn staged_suite_installation_surfaces_write_failures(staged_suite_setup: StagedSuiteSetup) {
         let requested_crates = staged_suite_setup.requested_suite_crates();
@@ -203,6 +205,24 @@ mod tests {
                     if reason.contains("failed to write test-only staged suite library")
                         && reason.contains(blocked_path.as_str())
             ));
+        });
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[rstest]
+    fn staged_suite_installation_is_disabled_in_release_builds(
+        staged_suite_setup: StagedSuiteSetup,
+    ) {
+        let requested_crates = staged_suite_setup.requested_suite_crates();
+
+        with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
+            let result = try_test_staged_suite_installation(
+                &requested_crates,
+                &staged_suite_setup.toolchain,
+                &staged_suite_setup.target_dir,
+            )
+            .expect("expected release builds to skip staged-suite installation");
+            assert!(result.is_none());
         });
     }
 }

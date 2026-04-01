@@ -170,19 +170,19 @@ ______________________________________________________________________
 
 ### `bumpy_road_function`
 
-#### Purpose for `bumpy_road_function`
+#### Purpose <!-- bumpy_road_function -->
 
 Detects functions with multiple distinct clusters of nested conditional
 complexity.
 
-#### Scope and behaviour for `bumpy_road_function`
+#### Scope and behaviour <!-- bumpy_road_function -->
 
 Flags a function when peak detection finds two or more separated complexity
 regions above the configured threshold. Detection smooths the local complexity
 signal with the configured `window` and only considers peaks spanning at least
 `min_bump_lines`.
 
-#### Configuration for `bumpy_road_function`
+#### Configuration <!-- bumpy_road_function -->
 
 ```toml
 [bumpy_road_function]
@@ -191,16 +191,16 @@ window = 3
 min_bump_lines = 2
 ```
 
-#### What is allowed for `bumpy_road_function`
+#### What is allowed <!-- bumpy_road_function -->
 
 - A single complexity peak in a function.
 - Simple predicates that remain below the configured threshold.
 
-#### What is denied for `bumpy_road_function`
+#### What is denied <!-- bumpy_road_function -->
 
 - Two or more separated complexity peaks above the configured threshold.
 
-#### How to fix `bumpy_road_function` findings
+#### How to fix <!-- bumpy_road_function -->
 
 Split complex regions into helper functions and simplify branch-heavy
 predicates.
