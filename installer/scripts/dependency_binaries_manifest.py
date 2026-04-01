@@ -71,10 +71,14 @@ def main() -> int:
     ------
     FileNotFoundError
         If the specified manifest file does not exist.
-    IOError
+    OSError
         If the manifest file cannot be read.
     tomllib.TOMLDecodeError
         If the manifest file contains invalid TOML syntax.
+    KeyError
+        If the manifest is missing the top-level 'dependency_binaries' key
+        or when individual entries are missing required keys (package,
+        binary, version).
 
     Side Effects
     ------------
