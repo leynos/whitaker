@@ -103,7 +103,7 @@ Use this hook only for installer orchestration tests. Release validation,
 prebuilt-download coverage, and user-facing installation flows must continue to
 exercise the real build or download paths.
 
-### Test environment synchronisation
+### Test environment synchronization
 
 Installer regression helpers that mutate process-wide environment variables
 must coordinate through `installer/src/test_support.rs`.

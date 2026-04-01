@@ -143,7 +143,7 @@ fn has_test_attribute_handles_parsed_attributes() {
 //
 // 1. UI tests for attribute detection (is_test_attribute, has_test_attribute):
 //    - pass_expect_in_test.rs, pass_expect_in_rstest.rs, pass_expect_in_tokio_test.rs
-//    - These verify that test attributes are recognised without the fallback
+//    - These verify that test attributes are recognized without the fallback
 //
 // 2. UI tests for cfg(test) module detection:
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs

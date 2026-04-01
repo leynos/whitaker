@@ -305,7 +305,7 @@ Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
 `#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
 `#[rstest::rstest]`, `#[case]`, and `#[rstest::case]` by default. The
 `additional_test_attributes` setting extends that matching list with
-project-specific markers so the lint treats those annotated functions as tests
+project-specific markers, so the lint treats those annotated functions as tests
 too.
 
 #### Configuration

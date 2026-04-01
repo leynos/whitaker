@@ -4,354 +4,70 @@
 //! error handling, and (when possible) installation results.
 
 mod prebuilt_markers;
+#[path = "behaviour_cli/scenarios.rs"]
+mod scenarios;
+#[path = "behaviour_cli/support.rs"]
+mod support;
 
-use prebuilt_markers::PREBUILT_INSTALL_MARKER;
-use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
-use std::process::{Command, Output};
-use tempfile::TempDir;
-use whitaker_installer::dirs::SystemBaseDirs;
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
-use whitaker_installer::toolchain::parse_toolchain_channel;
-
-#[derive(Default)]
-struct CliWorld {
-    args: RefCell<Vec<String>>,
-    output: RefCell<Option<Output>>,
-    skip_assertions: Cell<bool>,
-    requires_toolchain: Cell<bool>,
-    use_test_staged_suite: Cell<bool>,
-    toolchain: RefCell<Option<String>>,
-    // Keep temp_dir alive for the lifetime of the scenario.
-    _temp_dir: RefCell<Option<TempDir>>,
-}
-
-#[fixture]
-fn cli_world() -> CliWorld {
-    CliWorld::default()
-}
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("manifest dir should have parent")
-        .to_owned()
-}
-
-fn pinned_toolchain_channel() -> String {
-    let toolchain_path = workspace_root().join("rust-toolchain.toml");
-    let contents = std::fs::read_to_string(&toolchain_path).unwrap_or_else(|err| {
-        panic!(
-            "failed to read rust-toolchain.toml at {}: {err}",
-            toolchain_path.display()
-        )
-    });
-    parse_toolchain_channel(&contents).unwrap_or_else(|err| {
-        panic!(
-            "failed to parse rust-toolchain.toml at {}: {err}",
-            toolchain_path.display()
-        )
-    })
-}
-
-fn is_toolchain_installed(channel: &str) -> bool {
-    Command::new("rustup")
-        .args(["run", channel, "rustc", "--version"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
-
-fn skip_scenario_when_toolchain_missing(cli_world: &CliWorld, channel: &str) {
-    if !is_toolchain_installed(channel) {
-        eprintln!(
-            "Skipping scenario because rustup toolchain '{}' is not installed. Install this toolchain to run these tests.",
-            channel
-        );
-        cli_world.skip_assertions.set(true);
-        rstest_bdd::skip!(
-            "rustup toolchain '{channel}' is not installed. Install this toolchain to run these tests.",
-            channel = channel
-        );
-    }
-}
-
-fn ensure_toolchain_available(cli_world: &CliWorld) -> Option<String> {
-    let channel = pinned_toolchain_channel();
-    cli_world.toolchain.replace(Some(channel.clone()));
-    if cli_world.requires_toolchain.get() {
-        skip_scenario_when_toolchain_missing(cli_world, &channel);
-    }
-    (!cli_world.skip_assertions.get()).then_some(channel)
-}
-
-/// Ensures a toolchain is available for scenarios that strictly require it.
-/// Returns the channel if available, or None if the scenario should be skipped.
-fn ensure_required_toolchain_available(cli_world: &CliWorld) -> Option<String> {
-    cli_world.requires_toolchain.set(true);
-    ensure_toolchain_available(cli_world)
-}
-
-macro_rules! skip_if_needed {
-    ($cli_world:expr) => {
-        if $cli_world.skip_assertions.get() {
-            return;
-        }
-    };
-}
-
-/// Sets up a temporary directory and returns its path as a string.
-fn setup_temp_dir(cli_world: &CliWorld) -> String {
-    let temp_dir = TempDir::new().expect("failed to create temp dir");
-    let target_dir = temp_dir.path().to_string_lossy().to_string();
-    cli_world._temp_dir.replace(Some(temp_dir));
-    target_dir
-}
-
-fn detect_host_target() -> Option<String> {
-    let output = Command::new("rustc").args(["-vV"]).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8(output.stdout).ok()?;
-    stdout.lines().find_map(|line| {
-        line.strip_prefix("host: ")
-            .map(str::trim)
-            .map(ToOwned::to_owned)
-    })
-}
-
-fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
-    let dirs = SystemBaseDirs::new()?;
-    let host_target = detect_host_target()?;
-    prebuilt_library_dir(&dirs, toolchain, &host_target)
-        .ok()
-        .map(|path| path.into_string())
-}
-
-/// Lists filenames in `dir` whose name contains `substring`.
-/// Returns an empty vec when `dir` does not exist.
-/// Pass an empty string to list all entries.
-///
-/// # Panics
-///
-/// Panics on I/O errors other than `NotFound` (e.g. permission denied).
-fn matching_files(dir: &std::path::Path, substring: &str) -> Vec<String> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
-        Err(e) => panic!("failed to read directory {}: {e}", dir.display()),
-    };
-    entries
-        .map(|entry| match entry {
-            Ok(e) => e.file_name().to_string_lossy().to_string(),
-            Err(e) => panic!("failed to read entry in {}: {e}", dir.display()),
-        })
-        .filter(|name| name.contains(substring))
-        .collect()
-}
-
-/// Asserts that the CLI exit status matches the expected success state.
-fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
-    skip_if_needed!(cli_world);
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        output.status.success(),
-        expected_success,
-        "expected success={expected_success}, stdout={}, stderr={stderr}",
-        String::from_utf8_lossy(&output.stdout),
-    );
-}
+use rstest_bdd_macros::{given, then, when};
+use std::process::Command;
+pub(crate) use support::{CliWorld, cli_world};
+use support::{
+    assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,
+    assert_installation_succeeds_or_is_skipped, assert_suite_library_is_staged,
+    assert_unknown_lint_message_is_shown, configure_dry_run_unknown_lint,
+    configure_dry_run_with_target_dir, configure_suite_install, is_toolchain_installed,
+    pinned_toolchain_channel, run_installer_cli, workspace_root,
+};
 
 #[given("the installer is invoked with dry-run and a target directory")]
 fn given_dry_run_with_target_dir(cli_world: &CliWorld) {
-    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
-        return;
-    };
-
-    let target_dir = setup_temp_dir(cli_world);
-
-    cli_world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--toolchain".to_owned(),
-        channel,
-        "--target-dir".to_owned(),
-        target_dir,
-    ]);
+    configure_dry_run_with_target_dir(cli_world);
 }
 
 #[given("the installer is invoked with dry-run and an unknown lint")]
 fn given_dry_run_unknown_lint(cli_world: &CliWorld) {
-    cli_world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--lint".to_owned(),
-        "nonexistent_lint".to_owned(),
-    ]);
+    configure_dry_run_unknown_lint(cli_world);
 }
 
 #[given("the installer is invoked to a temporary directory")]
 fn given_suite_install(cli_world: &CliWorld) {
-    let Some(_channel) = ensure_required_toolchain_available(cli_world) else {
-        return;
-    };
-
-    let target_dir = setup_temp_dir(cli_world);
-    cli_world.use_test_staged_suite.set(true);
-
-    // Suite-only is the default, so no extra lint-selection flag is needed.
-    // The behavioural test sets a dedicated env var so the installer stages a
-    // synthetic suite library instead of recursively building the workspace.
-    // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
-    // Use --skip-deps to avoid slow dependency downloads during test.
-    cli_world.args.replace(vec![
-        "--target-dir".to_owned(),
-        target_dir,
-        "--skip-wrapper".to_owned(),
-        "--skip-deps".to_owned(),
-    ]);
+    configure_suite_install(cli_world);
 }
 
 #[when("the installer CLI is run")]
 fn when_installer_cli_run(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let args = cli_world.args.borrow();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
-    cmd.args(args.iter());
-    cmd.current_dir(workspace_root());
-    if cli_world.use_test_staged_suite.get() {
-        cmd.env(TEST_STAGE_SUITE_ENV, "1");
-    }
-
-    let output = cmd.output().expect("failed to run whitaker-installer");
-    cli_world.output.replace(Some(output));
-}
-
-/// Helper function to retrieve the command output from the CLI world.
-fn get_output(cli_world: &CliWorld) -> std::cell::Ref<'_, Output> {
-    let output = cli_world.output.borrow();
-    std::cell::Ref::map(output, |opt| opt.as_ref().expect("output not set"))
+    run_installer_cli(cli_world);
 }
 
 #[then("the CLI exits successfully")]
 fn then_cli_exits_successfully(cli_world: &CliWorld) {
-    assert_exit_status(cli_world, true);
+    assert_cli_exits_successfully(cli_world);
 }
 
 #[then("dry-run output is shown")]
 fn then_dry_run_output_is_shown(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let toolchain = cli_world.toolchain.borrow();
-    let toolchain = toolchain.as_ref().expect("toolchain not set");
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(stderr.contains("Dry run - no files will be modified"));
-    assert!(stderr.contains(&format!("Toolchain: {toolchain}")));
-    assert!(stderr.contains("Crates to build:"));
-    // Default is suite-only, so we expect only the suite crate.
-    assert!(stderr.contains("whitaker_suite"));
-    // Ensure individual lint crates are NOT present in suite-only mode.
-    assert!(
-        !stderr.contains("module_max_lines"),
-        "individual lint crate should not appear in suite-only mode, stderr: {stderr}"
-    );
-
-    let temp_dir = cli_world._temp_dir.borrow();
-    let temp_dir = temp_dir.as_ref().expect("temp dir not set");
-    let target_dir = temp_dir.path().to_string_lossy();
-    let expected_target_dir =
-        expected_prebuilt_target_dir(toolchain).unwrap_or_else(|| target_dir.into_owned());
-    assert!(stderr.contains(&format!("Target directory: {expected_target_dir}")));
+    assert_dry_run_output_is_shown(cli_world);
 }
 
 #[then("the CLI exits with an error")]
 fn then_cli_exits_with_error(cli_world: &CliWorld) {
-    assert_exit_status(cli_world, false);
+    assert_cli_exits_with_error(cli_world);
 }
 
 #[then("an unknown lint message is shown")]
 fn then_unknown_lint_message_is_shown(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    // Lint validation fails before dry-run configuration output is rendered.
-    assert!(
-        !stderr.contains("Dry run - no files will be modified"),
-        "dry-run configuration output should not be printed on unknown-lint error, stderr: {stderr}"
-    );
-    assert!(
-        !stderr.contains("Crates to build:"),
-        "dry-run configuration output should not be printed on unknown-lint error, stderr: {stderr}"
-    );
-
-    assert!(
-        stderr.contains("lint crate nonexistent_lint not found"),
-        "unexpected stderr: {stderr}"
-    );
+    assert_unknown_lint_message_is_shown(cli_world);
 }
 
 #[then("installation succeeds or is skipped")]
 fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let output = get_output(cli_world);
-    assert!(
-        output.status.success(),
-        "installation failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_installation_succeeds_or_is_skipped(cli_world);
 }
 
 #[then("the suite library is staged")]
 fn then_suite_library_is_staged(cli_world: &CliWorld) {
-    skip_if_needed!(cli_world);
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let channel = cli_world.toolchain.borrow();
-    let channel = channel.as_ref().expect("toolchain not set");
-    let needle = format!("whitaker_suite@{channel}");
-
-    // When the installer reports a successful prebuilt installation, verify
-    // that the canonical prebuilt directory contains at least one matching
-    // library. We only take this path when stderr confirms the installer
-    // actually used prebuilt artefacts in this run.
-    if stderr.contains(PREBUILT_INSTALL_MARKER)
-        && let Some(dir) = expected_prebuilt_target_dir(channel)
-    {
-        let prebuilt_path = PathBuf::from(&dir);
-        let matches = matching_files(&prebuilt_path, &needle);
-        assert!(
-            !matches.is_empty(),
-            "prebuilt marker found in stderr but no library matching \
-             '{needle}' in {prebuilt_path:?}, entries={:?}",
-            matching_files(&prebuilt_path, ""),
-        );
-        return;
-    }
-
-    let temp_dir = cli_world._temp_dir.borrow();
-    let temp_dir = temp_dir.as_ref().expect("temp dir not set");
-    let staging_dir = temp_dir.path().join(channel).join("release");
-    let matches = matching_files(&staging_dir, &needle);
-
-    assert!(
-        matches.len() == 1,
-        "expected exactly one suite library matching '{needle}' in \
-         {staging_dir:?}, matches={matches:?}, entries={:?}, \
-         stdout={}, stderr={stderr}",
-        matching_files(&staging_dir, ""),
-        String::from_utf8_lossy(&output.stdout),
-    );
+    assert_suite_library_is_staged(cli_world);
 }
 
 #[test]
@@ -388,25 +104,4 @@ fn dry_run_reports_verbosity_levels() {
 
     let double_output = run_dry_run(&["-vv"]);
     assert!(double_output.contains("Verbosity level: 2"));
-}
-
-// ---------------------------------------------------------------------------
-// Scenario bindings
-// ---------------------------------------------------------------------------
-
-// Do not reorder scenarios in tests/features/installer.feature — bindings are
-// index-based.
-#[scenario(path = "tests/features/installer.feature", index = 12)]
-fn scenario_dry_run_outputs_configuration(cli_world: CliWorld) {
-    let _ = cli_world;
-}
-
-#[scenario(path = "tests/features/installer.feature", index = 13)]
-fn scenario_dry_run_rejects_unknown_lint(cli_world: CliWorld) {
-    let _ = cli_world;
-}
-
-#[scenario(path = "tests/features/installer.feature", index = 14)]
-fn scenario_install_suite_to_temp_dir(cli_world: CliWorld) {
-    let _ = cli_world;
 }

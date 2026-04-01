@@ -63,6 +63,30 @@ mod tests {
         target_dir: Utf8PathBuf,
     }
 
+    impl StagedSuiteSetup {
+        fn requested_suite_crates(&self) -> Vec<CrateName> {
+            vec![CrateName::from(SUITE_CRATE)]
+        }
+
+        fn stager(&self) -> Stager {
+            Stager::new(self.target_dir.clone(), self.toolchain.channel())
+        }
+
+        fn create_blocked_suite_output(&self) -> Utf8PathBuf {
+            let stager = self.stager();
+            stager
+                .prepare()
+                .expect("expected staging directory to be writable for test setup");
+
+            let blocked_path = stager
+                .staging_path()
+                .join(stager.staged_filename(&CrateName::from(SUITE_CRATE)));
+            std::fs::create_dir_all(blocked_path.as_std_path())
+                .expect("expected to pre-create staged filename as a directory");
+            blocked_path
+        }
+    }
+
     fn test_toolchain() -> Toolchain {
         Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18")
     }
@@ -134,20 +158,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn staged_suite_installation_writes_placeholder_library_for_suite_requests() {
-        let _guard = env_test_guard();
-        let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
-        let target_dir = utf8_temp_dir(&temp_dir);
-        let toolchain = test_toolchain();
-        let requested_crates = vec![CrateName::from(SUITE_CRATE)];
-        let stager = Stager::new(target_dir.clone(), toolchain.channel());
+    #[rstest]
+    fn staged_suite_installation_writes_placeholder_library_for_suite_requests(
+        staged_suite_setup: StagedSuiteSetup,
+    ) {
+        let requested_crates = staged_suite_setup.requested_suite_crates();
+        let stager = staged_suite_setup.stager();
 
         with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-            let staging_path =
-                try_test_staged_suite_installation(&requested_crates, &toolchain, &target_dir)
-                    .expect("expected staged-suite installation to succeed")
-                    .expect("expected suite request to stage a placeholder library");
+            let staging_path = try_test_staged_suite_installation(
+                &requested_crates,
+                &staged_suite_setup.toolchain,
+                &staged_suite_setup.target_dir,
+            )
+            .expect("expected staged-suite installation to succeed")
+            .expect("expected suite request to stage a placeholder library");
             assert_eq!(staging_path, stager.staging_path());
 
             let staged_file =
@@ -158,28 +183,18 @@ mod tests {
         });
     }
 
-    #[test]
-    fn staged_suite_installation_surfaces_write_failures() {
-        let _guard = env_test_guard();
-        let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
-        let target_dir = utf8_temp_dir(&temp_dir);
-        let toolchain = test_toolchain();
-        let requested_crates = vec![CrateName::from(SUITE_CRATE)];
-        let stager = Stager::new(target_dir.clone(), toolchain.channel());
-        stager
-            .prepare()
-            .expect("expected staging directory to be writable for test setup");
-
-        let blocked_path = stager
-            .staging_path()
-            .join(stager.staged_filename(&CrateName::from(SUITE_CRATE)));
-        std::fs::create_dir_all(blocked_path.as_std_path())
-            .expect("expected to pre-create staged filename as a directory");
+    #[rstest]
+    fn staged_suite_installation_surfaces_write_failures(staged_suite_setup: StagedSuiteSetup) {
+        let requested_crates = staged_suite_setup.requested_suite_crates();
+        let blocked_path = staged_suite_setup.create_blocked_suite_output();
 
         with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
-            let err =
-                try_test_staged_suite_installation(&requested_crates, &toolchain, &target_dir)
-                    .expect_err("expected directory collision to fail staged-suite write");
+            let err = try_test_staged_suite_installation(
+                &requested_crates,
+                &staged_suite_setup.toolchain,
+                &staged_suite_setup.target_dir,
+            )
+            .expect_err("expected directory collision to fail staged-suite write");
             assert!(matches!(
                 err,
                 InstallerError::StagingFailed { reason }

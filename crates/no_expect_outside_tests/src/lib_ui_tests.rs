@@ -23,7 +23,7 @@ fn tokio_example_compiles_under_test_harness() {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "Tokio example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+            "Tokio example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}"
         )
     });
 }
