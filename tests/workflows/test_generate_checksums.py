@@ -40,9 +40,16 @@ def _load_generate_checksums_module() -> types.ModuleType:
     -------
     module
         The loaded generate_checksums module with all public APIs.
+
+    Raises
+    ------
+    ImportError
+        If the module spec cannot be created or the loader is unavailable.
     """
     script_path = Path(__file__).resolve().parents[2] / "scripts" / "generate_checksums.py"
     spec = importlib.util.spec_from_file_location("generate_checksums", script_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Failed to load module spec from {script_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -73,33 +80,17 @@ class TestComputeSha256:
         assert result == expected, f"Expected {expected}, got {result}"
         assert len(result) == 64, f"Expected digest length 64, got {len(result)}"
 
-    def test_compute_sha256_small_file(self, tmp_path: Path) -> None:
-        """SHA-256 of small file matches hashlib reference."""
-        content = b"Hello, World!"
-        test_file = tmp_path / "small.txt"
-        test_file.write_bytes(content)
-
-        result = compute_sha256(test_file)
-        expected = sha256(content).hexdigest()
-
-        assert result == expected, f"Expected {expected}, got {result}"
-
-    def test_compute_sha256_large_file(self, tmp_path: Path) -> None:
-        """SHA-256 handles files larger than buffer size via streaming."""
-        # Create file larger than 64KB buffer
-        content = b"x" * (128 * 1024)
-        test_file = tmp_path / "large.txt"
-        test_file.write_bytes(content)
-
-        result = compute_sha256(test_file)
-        expected = sha256(content).hexdigest()
-
-        assert result == expected, f"Expected {expected}, got {result}"
-
-    def test_compute_sha256_binary_content(self, tmp_path: Path) -> None:
-        """SHA-256 correctly handles binary content."""
-        content = bytes(range(256))
-        test_file = tmp_path / "binary.bin"
+    @pytest.mark.parametrize(
+        ("content", "filename"),
+        [
+            (b"Hello, World!", "small.txt"),
+            (b"x" * (128 * 1024), "large.txt"),  # Larger than 64KB buffer
+            (bytes(range(256)), "binary.bin"),
+        ],
+    )
+    def test_compute_sha256_various_content(self, tmp_path: Path, content: bytes, filename: str) -> None:
+        """SHA-256 correctly handles various content types and sizes."""
+        test_file = tmp_path / filename
         test_file.write_bytes(content)
 
         result = compute_sha256(test_file)
@@ -118,25 +109,16 @@ class TestComputeSha256:
 class TestFindArchives:
     """Tests for find_archives() function."""
 
-    def test_find_archives_finds_tgz_files(self, tmp_path: Path) -> None:
-        """find_archives discovers .tgz files."""
-        (tmp_path / "archive1.tgz").write_text("content1")
-        (tmp_path / "archive2.tgz").write_text("content2")
+    @pytest.mark.parametrize("suffix", [".tgz", ".zip"])
+    def test_find_archives_finds_by_suffix(self, tmp_path: Path, suffix: str) -> None:
+        """find_archives discovers archives by file suffix."""
+        (tmp_path / f"archive1{suffix}").write_text("content1")
+        (tmp_path / f"archive2{suffix}").write_text("content2")
 
         result = find_archives(tmp_path)
 
         assert len(result) == 2, f"Expected 2 archives, got {len(result)}"
-        assert all(path.suffix == ".tgz" for path in result), "Expected all .tgz files"
-
-    def test_find_archives_finds_zip_files(self, tmp_path: Path) -> None:
-        """find_archives discovers .zip files."""
-        (tmp_path / "archive1.zip").write_text("content1")
-        (tmp_path / "archive2.zip").write_text("content2")
-
-        result = find_archives(tmp_path)
-
-        assert len(result) == 2, f"Expected 2 archives, got {len(result)}"
-        assert all(path.suffix == ".zip" for path in result), "Expected all .zip files"
+        assert all(path.suffix == suffix for path in result), f"Expected all {suffix} files"
 
     def test_find_archives_finds_mixed_archives(self, tmp_path: Path) -> None:
         """find_archives discovers both .tgz and .zip files."""
@@ -300,7 +282,7 @@ class TestNoArchivesFoundError:
 
     def test_exception_can_be_caught_as_generic(self) -> None:
         """NoArchivesFoundError can be caught as generic Exception."""
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match=r"test") as exc_info:
             raise NoArchivesFoundError("test")
 
         assert isinstance(exc_info.value, NoArchivesFoundError), "Caught exception should be NoArchivesFoundError"

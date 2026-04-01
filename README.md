@@ -81,6 +81,7 @@ Or compute and compare manually:
 
 ```sh
 sha256sum whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz
+cat whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz.sha256
 ```
 
 ### macOS
@@ -95,6 +96,7 @@ Or compute and compare manually:
 
 ```sh
 shasum -a 256 whitaker-<VERSION>-x86_64-apple-darwin.tgz
+cat whitaker-<VERSION>-x86_64-apple-darwin.tgz.sha256
 ```
 
 ### Windows
