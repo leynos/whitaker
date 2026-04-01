@@ -321,7 +321,8 @@ for example `my_framework::test` or `wasm_bindgen_test`.
 
 #### What is allowed
 
-- Default markers such as `#[test]`, `#[tokio::test]`, `#[async_std::test]`,
+- Default markers such as `#[test]`, `#[::test]`,
+  `#[::std::prelude::v1::test]`, `#[tokio::test]`, `#[async_std::test]`,
   `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`, `#[case]`, and
   `#[rstest::case]`
 - Project-specific markers listed in `additional_test_attributes`, such as

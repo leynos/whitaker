@@ -22,7 +22,8 @@ pub(crate) fn try_test_staged_suite_installation(
         return Ok(None);
     }
 
-    if std::env::var_os(TEST_STAGE_SUITE_ENV).is_none() || !is_suite_only_request(requested_crates)
+    if std::env::var_os(TEST_STAGE_SUITE_ENV).as_deref() != Some(std::ffi::OsStr::new("1"))
+        || !is_suite_only_request(requested_crates)
     {
         return Ok(None);
     }
@@ -128,6 +129,7 @@ mod tests {
 
     #[rstest]
     #[case::env_unset((vec![CrateName::from(SUITE_CRATE)], None))]
+    #[case::env_disabled((vec![CrateName::from(SUITE_CRATE)], Some("0")))]
     #[case::non_suite((vec![CrateName::from("module_max_lines")], Some("1")))]
     fn staged_suite_installation_skips_non_staging_requests(
         staged_suite_setup: StagedSuiteSetup,
