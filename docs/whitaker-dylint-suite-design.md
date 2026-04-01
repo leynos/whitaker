@@ -408,9 +408,11 @@ flowchart TD
     CheckConventions -->|Yes| MarkAsTest
     CheckConventions -->|No| NotTest["Treat function as non-test"]
 
-    MarkAsTest --> ApplyLintRules["Allow expect! usage inside recognized tests"]
-    NotTest --> ApplyNonTestRules["Apply no_expect_outside_tests rules (disallow expect! here)"]
+    MarkAsTest --> ApplyLintRules["Allow .expect(…) usage inside recognized tests"]
+    NotTest --> ApplyNonTestRules["Apply no_expect_outside_tests rules (disallow .expect(…) here)"]
 ```
+
+*Figure 2: Flowchart showing how function items are classified as tests during linting.*
 
 Behaviour-driven unit tests exercise the summarizer in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and

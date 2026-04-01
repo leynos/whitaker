@@ -51,10 +51,17 @@ fn is_suite_only_request(requested_crates: &[CrateName]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
     use whitaker_installer::test_support::env_test_guard;
+
+    struct StagedSuiteSetup {
+        _guard: std::sync::MutexGuard<'static, ()>,
+        _temp_dir: TempDir,
+        toolchain: Toolchain,
+        target_dir: Utf8PathBuf,
+    }
 
     fn test_toolchain() -> Toolchain {
         Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18")
@@ -65,29 +72,18 @@ mod tests {
             .expect("expected UTF-8 temp path for staged suite tests")
     }
 
-    fn assert_installation_skipped(requested_crates: Vec<CrateName>, env_val: Option<&str>) {
-        let _guard = env_test_guard();
+    #[fixture]
+    fn staged_suite_setup() -> StagedSuiteSetup {
+        let guard = env_test_guard();
         let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
         let target_dir = utf8_temp_dir(&temp_dir);
         let toolchain = test_toolchain();
 
-        let run = || {
-            let result =
-                try_test_staged_suite_installation(&requested_crates, &toolchain, &target_dir)
-                    .expect("expected staged-suite installation to be skipped");
-            assert!(result.is_none());
-            assert!(
-                !target_dir
-                    .join(toolchain.channel())
-                    .join("release")
-                    .exists(),
-                "expected no staging directory to be created"
-            );
-        };
-
-        match env_val {
-            Some(val) => with_var(TEST_STAGE_SUITE_ENV, Some(val), run),
-            None => with_var_unset(TEST_STAGE_SUITE_ENV, run),
+        StagedSuiteSetup {
+            _guard: guard,
+            _temp_dir: temp_dir,
+            toolchain,
+            target_dir,
         }
     }
 
@@ -106,14 +102,36 @@ mod tests {
         assert_eq!(is_suite_only_request(&requested_crates), expected);
     }
 
-    #[test]
-    fn staged_suite_installation_returns_none_when_env_is_unset() {
-        assert_installation_skipped(vec![CrateName::from(SUITE_CRATE)], None);
-    }
+    #[rstest]
+    #[case::env_unset((vec![CrateName::from(SUITE_CRATE)], None))]
+    #[case::non_suite((vec![CrateName::from("module_max_lines")], Some("1")))]
+    fn staged_suite_installation_skips_non_staging_requests(
+        staged_suite_setup: StagedSuiteSetup,
+        #[case] case: (Vec<CrateName>, Option<&str>),
+    ) {
+        let (requested_crates, env_val) = case;
+        let run = || {
+            let result = try_test_staged_suite_installation(
+                &requested_crates,
+                &staged_suite_setup.toolchain,
+                &staged_suite_setup.target_dir,
+            )
+            .expect("expected staged-suite installation to be skipped");
+            assert!(result.is_none());
+            assert!(
+                !staged_suite_setup
+                    .target_dir
+                    .join(staged_suite_setup.toolchain.channel())
+                    .join("release")
+                    .exists(),
+                "expected no staging directory to be created"
+            );
+        };
 
-    #[test]
-    fn staged_suite_installation_returns_none_for_non_suite_requests() {
-        assert_installation_skipped(vec![CrateName::from("module_max_lines")], Some("1"));
+        match env_val {
+            Some(val) => with_var(TEST_STAGE_SUITE_ENV, Some(val), run),
+            None => with_var_unset(TEST_STAGE_SUITE_ENV, run),
+        }
     }
 
     #[test]

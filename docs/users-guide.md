@@ -170,19 +170,19 @@ ______________________________________________________________________
 
 ### `bumpy_road_function`
 
-#### Purpose for `no_expect_outside_tests`
+#### Purpose for `bumpy_road_function`
 
 Detects functions with multiple distinct clusters of nested conditional
 complexity.
 
-#### Scope and behaviour for `no_expect_outside_tests`
+#### Scope and behaviour for `bumpy_road_function`
 
 Flags a function when peak detection finds two or more separated complexity
 regions above the configured threshold. Detection smooths the local complexity
 signal with the configured `window` and only considers peaks spanning at least
 `min_bump_lines`.
 
-#### Configuration for `no_expect_outside_tests`
+#### Configuration for `bumpy_road_function`
 
 ```toml
 [bumpy_road_function]
@@ -191,16 +191,16 @@ window = 3
 min_bump_lines = 2
 ```
 
-#### What is allowed for `no_expect_outside_tests`
+#### What is allowed for `bumpy_road_function`
 
 - A single complexity peak in a function.
 - Simple predicates that remain below the configured threshold.
 
-#### What is denied for `no_expect_outside_tests`
+#### What is denied for `bumpy_road_function`
 
 - Two or more separated complexity peaks above the configured threshold.
 
-#### How to fix `no_expect_outside_tests` findings
+#### How to fix `bumpy_road_function` findings
 
 Split complex regions into helper functions and simplify branch-heavy
 predicates.
@@ -297,14 +297,16 @@ ______________________________________________________________________
 #### Purpose
 
 Detect test attributes correctly so `no_expect_outside_tests` can allow
-`.expect()` in recognised test-only code while still flagging production use.
+`.expect()` in recognized test-only code while still flagging production use.
 
 #### Scope and behaviour
 
-Whitaker recognises `#[test]`, `#[rstest]`, and async wrappers such as
-`#[tokio::test]` by default. The `additional_test_attributes` setting extends
-that matching list with project-specific markers so the lint treats those
-annotated functions as tests too.
+Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
+`#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
+`#[rstest::rstest]`, `#[case]`, and `#[rstest::case]` by default. The
+`additional_test_attributes` setting extends that matching list with
+project-specific markers so the lint treats those annotated functions as tests
+too.
 
 #### Configuration
 
@@ -319,7 +321,9 @@ for example `my_framework::test` or `wasm_bindgen_test`.
 
 #### What is allowed
 
-- Default markers such as `#[test]`, `#[rstest]`, and `#[tokio::test]`
+- Default markers such as `#[test]`, `#[tokio::test]`, `#[async_std::test]`,
+  `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`, `#[case]`, and
+  `#[rstest::case]`
 - Project-specific markers listed in `additional_test_attributes`, such as
   `#[wasm_bindgen_test]`
 
@@ -333,8 +337,9 @@ not in Whitaker's default list and is not listed in
 
 - Add the missing test marker to `additional_test_attributes` if the function is
   genuinely part of a supported test framework
-- Change the attribute usage to a recognised form such as `#[test]`,
-  `#[rstest]`, or `#[tokio::test]` where appropriate
+- Change the attribute usage to a recognized form such as `#[test]`,
+  `#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
+  `#[rstest::rstest]`, `#[case]`, or `#[rstest::case]` where appropriate
 - If the function is not test-only code, replace `.expect()` with explicit error
   handling such as `?` or `map_err`
 
@@ -353,7 +358,8 @@ additional_test_attributes = ["actix_rt::test", "my_framework::test"]
 ```
 
 Use `additional_test_attributes` for frameworks not covered by default test
-markers such as `#[test]`, `#[tokio::test]`, and `#[rstest]`.
+markers such as `#[test]`, `#[tokio::test]`, `#[async_std::test]`,
+`#[gpui::test]`, and `#[rstest]`.
 
 **How to fix:** Keep test docs focused on intent and assertions, and move
 example/tutorial snippets into user-facing documentation.

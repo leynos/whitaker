@@ -31,6 +31,7 @@ fn format_receiver(receiver: &str) -> String {
     }
 }
 
+// Strip Fluent's bidi isolation marks (U+2068 FSI and U+2069 PDI) before assertions.
 fn normalize_for_assertion(value: &str) -> String {
     value
         .chars()
