@@ -138,7 +138,7 @@ max_branches = 3
 
 # Custom test attributes
 [no_expect_outside_tests]
-additional_test_attributes = ["my_framework::test", "async_std::test"]
+additional_test_attributes = ["my_framework::test", "wasm_bindgen_test"]
 
 # Additional test markers for `test_must_not_have_example`
 [test_must_not_have_example]
@@ -170,19 +170,19 @@ ______________________________________________________________________
 
 ### `bumpy_road_function`
 
-#### Purpose
+#### Purpose <!-- bumpy_road_function -->
 
 Detects functions with multiple distinct clusters of nested conditional
 complexity.
 
-#### Scope and behaviour
+#### Scope and behaviour <!-- bumpy_road_function -->
 
 Flags a function when peak detection finds two or more separated complexity
 regions above the configured threshold. Detection smooths the local complexity
 signal with the configured `window` and only considers peaks spanning at least
 `min_bump_lines`.
 
-#### Configuration
+#### Configuration <!-- bumpy_road_function -->
 
 ```toml
 [bumpy_road_function]
@@ -191,16 +191,16 @@ window = 3
 min_bump_lines = 2
 ```
 
-#### What is allowed
+#### What is allowed <!-- bumpy_road_function -->
 
 - A single complexity peak in a function.
 - Simple predicates that remain below the configured threshold.
 
-#### What is denied
+#### What is denied <!-- bumpy_road_function -->
 
 - Two or more separated complexity peaks above the configured threshold.
 
-#### How to fix
+#### How to fix <!-- bumpy_road_function -->
 
 Split complex regions into helper functions and simplify branch-heavy
 predicates.
@@ -294,17 +294,56 @@ ______________________________________________________________________
 
 ### `no_expect_outside_tests`
 
-Forbids calling `.expect()` on `Option` or `Result` outside test contexts.
+#### Purpose
 
-**Configuration:**
+Detect test attributes correctly so `no_expect_outside_tests` can allow
+`.expect()` in recognized test-only code while still flagging production use.
+
+#### Scope and behaviour
+
+Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
+`#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
+`#[rstest::rstest]`, `#[case]`, and `#[rstest::case]` by default. The
+`additional_test_attributes` setting extends that matching list with
+project-specific markers, so the lint treats those annotated functions as tests
+too.
+
+#### Configuration
 
 ```toml
 [no_expect_outside_tests]
-additional_test_attributes = ["my_framework::test", "async_std::test"]
+additional_test_attributes = ["my_framework::test", "wasm_bindgen_test"]
 ```
 
-**How to fix:** Use proper error handling (`?`, `map_err`) or move the code to
-a test context.
+Set `additional_test_attributes` to an array of attribute paths written as
+strings. Each entry should match the path Whitaker sees on the test function,
+for example `my_framework::test` or `wasm_bindgen_test`.
+
+#### What is allowed
+
+- Default markers such as `#[test]`, `#[::test]`,
+  `#[::std::prelude::v1::test]`, `#[tokio::test]`, `#[async_std::test]`,
+  `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`, `#[case]`, and
+  `#[rstest::case]`
+- Project-specific markers listed in `additional_test_attributes`, such as
+  `#[wasm_bindgen_test]`
+
+#### What is denied
+
+Functions using `.expect()` will still be flagged when their test attribute is
+not in Whitaker's default list and is not listed in
+`additional_test_attributes`.
+
+#### How to fix
+
+- Add the missing test marker to `additional_test_attributes` if the function is
+  genuinely part of a supported test framework
+- Change the attribute usage to a recognized form such as `#[test]`,
+  `#[::test]`, `#[::std::prelude::v1::test]`, `#[tokio::test]`,
+  `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`,
+  `#[case]`, or `#[rstest::case]` where appropriate
+- If the function is not test-only code, replace `.expect()` with explicit error
+  handling such as `?` or `map_err`
 
 ______________________________________________________________________
 
@@ -321,7 +360,8 @@ additional_test_attributes = ["actix_rt::test", "my_framework::test"]
 ```
 
 Use `additional_test_attributes` for frameworks not covered by default test
-markers such as `#[test]`, `#[tokio::test]`, and `#[rstest]`.
+markers such as `#[test]`, `#[tokio::test]`, `#[async_std::test]`,
+`#[gpui::test]`, and `#[rstest]`.
 
 **How to fix:** Keep test docs focused on intent and assertions, and move
 example/tutorial snippets into user-facing documentation.

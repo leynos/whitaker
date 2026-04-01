@@ -10,6 +10,8 @@
 //!   support directories) into isolated workspaces for dylint UI harnesses.
 //! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and
 //!   behaviour tests.
+//! - [`env_test_guard`]: Serialises tests that temporarily mutate process-wide
+//!   environment variables.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint
 //!   UI tests with consistent panic handling.
 //! - [`LocaleOverride`]: Temporarily mutates `DYLINT_LOCALE` so locale-sensitive
@@ -26,6 +28,19 @@ pub use ui::{
 };
 
 use std::ffi::OsString;
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+/// Serialises tests that mutate process-wide environment variables.
+///
+/// Use this guard around helpers such as `temp_env::with_var` or
+/// `temp_env::with_vars_unset` when the test would otherwise race with other
+/// cases changing the same global process state.
+pub fn env_test_guard() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|error| panic!("expected environment test lock: {error}"))
+}
 
 /// Guard that overrides `DYLINT_LOCALE` for the lifetime of the instance.
 ///

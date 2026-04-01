@@ -5,6 +5,7 @@
 //! library discovery.
 
 mod install_flow;
+mod staged_suite;
 
 use crate::install_flow::{
     MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
@@ -98,6 +99,21 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
             dirs: &dirs,
             staging_path: &staging_path,
             install_mode: InstallMode::Download,
+            install_started,
+        };
+        return finish_install_and_record_metrics(&finish_context, stderr);
+    }
+
+    if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
+        &requested_crates,
+        &toolchain,
+        &target_dir,
+    )? {
+        let finish_context = FinishInstallContext {
+            args,
+            dirs: &dirs,
+            staging_path: &staging_path,
+            install_mode: InstallMode::Build,
             install_started,
         };
         return finish_install_and_record_metrics(&finish_context, stderr);

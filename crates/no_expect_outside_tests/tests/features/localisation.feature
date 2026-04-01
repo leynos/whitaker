@@ -4,7 +4,7 @@ Feature: Localised diagnostics for expect usage
     And the receiver type is "Result<T, E>"
     And the function context is "handler"
     When I localise the expect diagnostic
-    Then the diagnostic mentions "expect on `Result<T, E>`"
+    Then the diagnostic mentions "calling expect on `Result<T, E>`"
     And the note references "function `handler`"
     And the help references "`Result<T, E>`"
     And the help references "`Err` variant"
@@ -22,8 +22,8 @@ Feature: Localised diagnostics for expect usage
     And the receiver type is "Result<i32, i32>"
     And the call occurs outside any function
     When I localise the expect diagnostic
-    Then the diagnostic mentions "expect on `Result<i32, i32>`"
-    And the fallback help mentions "Result<i32, i32>"
+    Then the diagnostic mentions "calling expect on `Result<i32, i32>`"
+    And the fallback help mentions "`Result<i32, i32>`"
     And the fallback help mentions "`Err` variant"
 
   Scenario: Receiver type is empty

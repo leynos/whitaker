@@ -9,6 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use tempfile::TempDir;
+use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
 #[derive(Default)]
@@ -17,6 +18,7 @@ struct WorkflowWorld {
     output: RefCell<Option<Output>>,
     skip_assertions: Cell<bool>,
     requires_toolchain: Cell<bool>,
+    use_test_staged_suite: Cell<bool>,
     _temp_dir: RefCell<Option<TempDir>>,
 }
 
@@ -142,14 +144,12 @@ fn given_skip_wrapper_install(world: &WorkflowWorld) {
     };
 
     let target_dir = setup_temp_dir(world);
+    world.use_test_staged_suite.set(true);
 
-    // Use --build-only to keep this behavioural scenario off the network; the
-    // prebuilt download path is covered separately in dedicated prebuilt tests.
+    // The behavioural test sets a dedicated env var so the installer stages a
+    // synthetic suite library instead of recursively building the workspace.
     // Use --skip-deps to avoid slow dependency downloads during test.
     world.args.replace(vec![
-        "--jobs".to_owned(),
-        "1".to_owned(),
-        "--build-only".to_owned(),
         "--target-dir".to_owned(),
         target_dir,
         "--skip-wrapper".to_owned(),
@@ -165,6 +165,9 @@ fn when_installer_cli_run(world: &WorkflowWorld) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
+    if world.use_test_staged_suite.get() {
+        cmd.env(TEST_STAGE_SUITE_ENV, "1");
+    }
 
     let output = cmd.output().expect("failed to run whitaker-installer");
     world.output.replace(Some(output));

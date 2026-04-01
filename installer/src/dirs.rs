@@ -121,6 +121,7 @@ impl BaseDirs for SystemBaseDirs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env_test_guard;
 
     #[test]
     fn system_base_dirs_returns_some_on_supported_platforms() {
@@ -151,6 +152,7 @@ mod tests {
 
     #[test]
     fn bin_dir_defaults_to_local_bin() {
+        let _guard = env_test_guard();
         // Temporarily unset XDG_BIN_HOME to test the fallback
         temp_env::with_var_unset("XDG_BIN_HOME", || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
@@ -169,6 +171,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn bin_dir_respects_xdg_bin_home() {
+        let _guard = env_test_guard();
         temp_env::with_var("XDG_BIN_HOME", Some("/custom/bin"), || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
             let bin_dir = dirs.bin_dir().expect("expected bin_dir to return Some");
@@ -180,6 +183,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn bin_dir_ignores_relative_xdg_bin_home() {
+        let _guard = env_test_guard();
         temp_env::with_var("XDG_BIN_HOME", Some("relative/path"), || {
             let dirs = SystemBaseDirs::new().expect("failed to create SystemBaseDirs");
             let bin_dir = dirs.bin_dir().expect("expected bin_dir to return Some");

@@ -28,6 +28,8 @@
 //! - [`resolution`] - Crate resolution and validation
 //! - [`scanner`] - Lint scanner for discovering installed libraries
 //! - [`stager`] - File staging with platform-specific naming conventions
+//! - [`test_support`] - Hidden test-only hooks shared by installer behavioural
+//!   and integration tests
 //! - [`toolchain`] - Rust toolchain detection and validation
 //! - [`version`] - Semantic crate version wrapper
 //! - [`workspace`] - Workspace detection and path resolution
@@ -53,6 +55,14 @@ pub mod prebuilt_path;
 pub mod resolution;
 pub mod scanner;
 pub mod stager;
+/// Test-only hooks shared by installer behavioural and integration tests.
+///
+/// This module exposes helpers such as environment-variable test switches for
+/// installer-only regression coverage. It is public for test crates, but
+/// hidden from generated documentation because it is not part of the supported
+/// runtime API.
+#[doc(hidden)]
+pub mod test_support;
 pub mod toolchain;
 pub mod version;
 pub mod workspace;

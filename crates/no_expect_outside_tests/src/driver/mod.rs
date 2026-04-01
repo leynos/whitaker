@@ -9,6 +9,7 @@
 //! extend the recognised test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::Component;
 
@@ -17,7 +18,7 @@ use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::sym;
+use rustc_span::{Span, Symbol, sym};
 use serde::Deserialize;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
@@ -43,6 +44,7 @@ pub struct NoExpectOutsideTests {
     is_doctest: bool,
     is_test_harness: bool,
     additional_test_attributes: Vec<AttributePath>,
+    harness_marked_test_functions: HashSet<hir::HirId>,
     localizer: Localizer,
 }
 
@@ -52,6 +54,7 @@ impl Default for NoExpectOutsideTests {
             is_doctest: false,
             is_test_harness: false,
             additional_test_attributes: Vec::new(),
+            harness_marked_test_functions: HashSet::new(),
             localizer: Localizer::new(None),
         }
     }
@@ -64,6 +67,11 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .env_var_os("UNSTABLE_RUSTDOC_TEST_PATH".as_ref())
             .is_some();
         self.is_test_harness = cx.tcx.sess.opts.test;
+        self.harness_marked_test_functions = if self.is_test_harness {
+            collect_harness_marked_test_functions(cx)
+        } else {
+            HashSet::new()
+        };
         let config_name = "no_expect_outside_tests";
         let config = match dylint_linting::config::<Config>(config_name) {
             Ok(Some(config)) => config,
@@ -122,7 +130,9 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
         // with #[test] may not be detected via attributes if the test framework
         // processes them differently. Allow expect() in functions that appear to
         // be tests based on the harness context.
-        if self.is_test_harness && is_likely_test_function(cx, expr) {
+        if self.is_test_harness
+            && is_likely_test_function(cx, expr, &self.harness_marked_test_functions)
+        {
             return;
         }
 
@@ -160,18 +170,21 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
 // This is a fallback for when the standard attribute detection doesn't find
 // #[test] (which may happen in integration test crates where the test harness
 // processes attributes differently).
-fn is_likely_test_function<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'tcx>) -> bool {
-    // First, check if any enclosing function has a test attribute
-    let has_test_attr = cx
+fn is_likely_test_function<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &hir::Expr<'tcx>,
+    harness_marked_test_functions: &HashSet<hir::HirId>,
+) -> bool {
+    if cx
         .tcx
         .hir_parent_iter(expr.hir_id)
         .filter_map(|(_, node)| extract_function_item(node))
         .any(|item| {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
             has_test_attribute(attrs)
-        });
-
-    if has_test_attr {
+                || is_harness_marked_test_function(item.hir_id(), harness_marked_test_functions)
+        })
+    {
         return true;
     }
 
@@ -227,17 +240,96 @@ fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
     matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(item)
 }
 
+fn is_harness_marked_test_function(
+    function_hir_id: hir::HirId,
+    harness_marked_test_functions: &HashSet<hir::HirId>,
+) -> bool {
+    harness_marked_test_functions.contains(&function_hir_id)
+}
+
+fn collect_harness_marked_test_functions<'tcx>(cx: &LateContext<'tcx>) -> HashSet<hir::HirId> {
+    let root_items = cx
+        .tcx
+        .hir_crate_items(())
+        .free_items()
+        .map(|id| cx.tcx.hir_item(id))
+        .collect::<Vec<_>>();
+    let mut harness_marked = HashSet::new();
+    collect_harness_marked_test_functions_in_group(cx, root_items.as_slice(), &mut harness_marked);
+    harness_marked
+}
+
+fn collect_harness_marked_test_functions_in_group<'tcx>(
+    cx: &LateContext<'tcx>,
+    items: &[&'tcx hir::Item<'tcx>],
+    harness_marked: &mut HashSet<hir::HirId>,
+) {
+    for item in items
+        .iter()
+        .copied()
+        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
+    {
+        let Some(function_ident) = item.kind.ident() else {
+            continue;
+        };
+
+        let function_hir_id = item.hir_id();
+        let function_name = function_ident.name;
+        let function_span = item.span;
+        if items.iter().copied().any(|sibling| {
+            is_matching_harness_test_descriptor(
+                function_hir_id,
+                function_name,
+                function_span,
+                sibling,
+            )
+        }) {
+            harness_marked.insert(function_hir_id);
+        }
+    }
+
+    for item in items {
+        let hir::ItemKind::Mod(_, module) = item.kind else {
+            continue;
+        };
+
+        let module_items = module
+            .item_ids
+            .iter()
+            .map(|id| cx.tcx.hir_item(*id))
+            .collect::<Vec<_>>();
+        collect_harness_marked_test_functions_in_group(cx, module_items.as_slice(), harness_marked);
+    }
+}
+
+fn is_matching_harness_test_descriptor(
+    function_hir_id: hir::HirId,
+    function_name: Symbol,
+    function_span: Span,
+    sibling: &hir::Item<'_>,
+) -> bool {
+    // `rustc --test` may synthesize a const descriptor that shares the test
+    // function's name and source range. The wrapper function and descriptor can
+    // carry different syntax contexts, so this must compare source bytes
+    // rather than exact `Span` identity.
+    sibling.hir_id() != function_hir_id
+        && matches!(sibling.kind, hir::ItemKind::Const(..))
+        && sibling.kind.ident().is_some_and(|ident| {
+            ident.name == function_name && sibling.span.source_equal(function_span)
+        })
+}
+
 // Check if any attribute is #[test].
 fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
     has_test_like_hir_attributes(attrs, &[])
 }
 
-// Detect test framework attributes.
+// Detect source-level test framework attributes.
 //
-// Test attributes (#[test], #[rstest], #[tokio::test], etc.) are represented as
-// Unparsed HIR attributes. The Parsed variant is reserved for compiler-internal
-// attributes like #[must_use] and #[doc], not for test framework annotations.
-// This function therefore only inspects Unparsed attributes.
+// The `rustc --test` harness may consume the original built-in marker entirely
+// and replace it with a sibling const descriptor. That recovery path is
+// covered by the example-based regression in `lib_ui_tests.rs`; this helper
+// still only inspects source-level HIR attributes.
 #[cfg(test)]
 fn is_test_attribute(attr: &hir::Attribute) -> bool {
     has_test_like_hir_attributes(std::slice::from_ref(attr), &[])

@@ -61,6 +61,75 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Regression infrastructure
+
+Two recent regression families rely on infrastructure that is easy to miss when
+adding coverage or refactoring helpers.
+
+### Async test harness detection
+
+`no_expect_outside_tests` prefers source-level test attributes such as
+`#[test]`, `#[rstest]`, and `#[tokio::test]`. In real `rustc --test`
+compilations, async wrappers can lose that source-level marker and instead be
+represented by a sibling `#[rustc_test_marker = "..."] const ...` descriptor.
+The driver therefore falls back to matching that harness descriptor by symbol
+name plus source range when direct attribute detection fails.
+
+Keep the regression split aligned with that compiler boundary:
+
+- Source-level attribute-shape coverage belongs in `ui/` fixtures.
+- Regressions that need `--test`, example targets, or extra compiler flags
+  belong in `crates/no_expect_outside_tests/src/lib_ui_tests.rs`.
+- Real async framework regressions should use `examples/` targets when the bug
+  depends on the same lowering path external consumers hit.
+
+This separation exists so a proc-macro stub test cannot accidentally mask a
+failure in the real harness-descriptor path.
+
+### Staged-suite installer shortcut
+
+Installer behavioural tests occasionally need the suite staging path without
+recursively rebuilding the workspace from inside `nextest`. The debug-only
+helper in `installer/src/staged_suite.rs` provides that shortcut.
+
+- Behavioural tests opt in with `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1`.
+- The helper only activates for an exact suite-only request
+  (`whitaker_suite` and nothing else).
+- The helper returns `Ok(None)` in release binaries before reading the
+  environment variable, so production installers never stage the placeholder
+  artefact.
+
+Use this hook only for installer orchestration tests. Release validation,
+prebuilt-download coverage, and user-facing installation flows must continue to
+exercise the real build or download paths.
+
+### Test environment synchronization
+
+Installer regression helpers that mutate process-wide environment variables
+must coordinate through `installer/src/test_support.rs`.
+
+- `env_test_guard()` acquires a shared `Mutex` before any test calls
+  `temp_env::with_var` or `temp_env::with_var_unset`.
+- Hold that guard for the full lifetime of the test setup so no parallel case
+  can observe a half-applied environment change.
+- `installer/src/staged_suite.rs` shows the intended pattern: acquire the
+  guard, create the temporary target directory, then run the env-mutating test
+  body.
+
+For example:
+
+```rust
+let _guard = env_test_guard();
+with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
+    // exercise installer behaviour that reads the process environment
+});
+```
+
+Keep the installer dev-dependencies aligned with that pattern when extending
+the regression suite: `temp-env` provides scoped environment overrides,
+`tempfile` provides isolated target directories, and `rstest` powers the
+fixture-based test setup used by the staged-suite coverage.
+
 ## Using whitaker-installer
 
 The `whitaker-installer` command-line interface (CLI) builds, links, and stages
@@ -326,8 +395,8 @@ Whitaker includes tooling for automating release-related tasks.
 ### `scripts/generate_checksums.py`
 
 This script generates SHA-256 checksum files for release archives. It is
-integrated into the rolling-release workflow to produce `.sha256` files for
-all published archives.
+integrated into the rolling-release workflow to produce `.sha256` files for all
+published archives.
 
 #### Usage
 
@@ -386,9 +455,9 @@ The script exposes the following functions for programmatic use:
 #### Exceptions
 
 - **`NoArchivesFoundError`** — Raised when `find_archives()` or
-  `generate_checksums()` cannot locate any archive files matching the configured
-  patterns. This exception indicates either an empty directory or a path
-  mismatch.
+  `generate_checksums()` cannot locate any archive files matching the
+  configured patterns. This exception indicates either an empty directory or a
+  path mismatch.
 
 #### Integration with release workflow
 

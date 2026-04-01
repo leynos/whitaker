@@ -131,8 +131,8 @@ fn has_test_attribute_handles_parsed_attributes() {
 }
 
 // -------------------------------------------------------------------------
-// Coverage notes for is_test_named_module, extract_function_item, and
-// the is_likely_test_function fallback
+// Coverage notes for is_test_named_module, extract_function_item, and the
+// is_likely_test_function fallback
 //
 // These helpers require full HIR context (hir::Node, hir::Item) which cannot
 // be constructed in unit tests without mocking the entire compiler
@@ -143,17 +143,23 @@ fn has_test_attribute_handles_parsed_attributes() {
 //
 // 1. UI tests for attribute detection (is_test_attribute, has_test_attribute):
 //    - pass_expect_in_test.rs, pass_expect_in_rstest.rs, pass_expect_in_tokio_test.rs
-//    - These verify that test attributes are recognised without the fallback
+//    - These verify that test attributes are recognized without the fallback
 //
 // 2. UI tests for cfg(test) module detection:
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
 //    - These verify #[cfg(test)] mod test/tests detection
 //
-// 3. Real-world validation: The lint is used on this repository's own
+// 3. Example-based regression coverage for the `rustc --test` harness path:
+//    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
+//      example target under `--test`, placing `.expect(...)` calls inside
+//      nested closure and async-block bodies so the parent walk and sibling
+//      const descriptor fallback are both exercised.
+//
+// 4. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works
 //    correctly for tests/ directory detection and module-name heuristics.
 //
 // The individual helper functions have straightforward pattern matching:
 // - is_test_named_module: matches!(name, "test" | "tests")
-// - extract_function_item: matches!(item.kind, ItemKind::Fn { .. })
+// - extract_function_item: matches `hir::Node::Item` values whose kind is `Fn`
 // -------------------------------------------------------------------------
