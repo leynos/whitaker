@@ -22,7 +22,7 @@ pub(crate) fn try_test_staged_suite_installation(
         return Ok(None);
     }
 
-    if std::env::var_os(TEST_STAGE_SUITE_ENV).as_deref() != Some(std::ffi::OsStr::new("1"))
+    if std::env::var(TEST_STAGE_SUITE_ENV).ok().as_deref() != Some("1")
         || !is_suite_only_request(requested_crates)
     {
         return Ok(None);
@@ -214,6 +214,10 @@ mod tests {
         staged_suite_setup: StagedSuiteSetup,
     ) {
         let requested_crates = staged_suite_setup.requested_suite_crates();
+        let staging_dir = staged_suite_setup
+            .target_dir
+            .join(staged_suite_setup.toolchain.channel())
+            .join("release");
 
         with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
             let result = try_test_staged_suite_installation(
@@ -223,6 +227,10 @@ mod tests {
             )
             .expect("expected release builds to skip staged-suite installation");
             assert!(result.is_none());
+            assert!(
+                !staging_dir.exists(),
+                "expected release builds to skip creating a staging directory"
+            );
         });
     }
 }

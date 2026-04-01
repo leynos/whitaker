@@ -339,8 +339,9 @@ not in Whitaker's default list and is not listed in
 - Add the missing test marker to `additional_test_attributes` if the function is
   genuinely part of a supported test framework
 - Change the attribute usage to a recognized form such as `#[test]`,
-  `#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
-  `#[rstest::rstest]`, `#[case]`, or `#[rstest::case]` where appropriate
+  `#[::test]`, `#[::std::prelude::v1::test]`, `#[tokio::test]`,
+  `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`,
+  `#[case]`, or `#[rstest::case]` where appropriate
 - If the function is not test-only code, replace `.expect()` with explicit error
   handling such as `?` or `map_err`
 
