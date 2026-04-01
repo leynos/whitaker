@@ -319,6 +319,84 @@ To add a new locale:
 2. Add `.ftl` files with translated messages
 3. Update `common::i18n::available_locales()` to include the new locale
 
+## Release tooling
+
+Whitaker includes tooling for automating release-related tasks.
+
+### `scripts/generate_checksums.py`
+
+This script generates SHA-256 checksum files for release archives. It is
+integrated into the rolling-release workflow to produce `.sha256` files for
+all published archives.
+
+#### Usage
+
+Generate checksums for archives in the default `dist/` directory:
+
+```sh
+python scripts/generate_checksums.py
+```
+
+Generate checksums for archives in a custom directory:
+
+```sh
+python scripts/generate_checksums.py /path/to/archives
+```
+
+#### Public API
+
+The script exposes the following functions for programmatic use:
+
+- **`compute_sha256(path: Path) -> str`** — Computes the SHA-256 hex digest for
+  a file using streaming reads to handle large files without memory pressure.
+
+  ```python
+  from pathlib import Path
+  from scripts.generate_checksums import compute_sha256
+
+  digest = compute_sha256(Path("archive.tgz"))
+  print(f"SHA-256: {digest}")
+  ```
+
+- **`find_archives(directory: Path) -> list[Path]`** — Discovers archive files
+  matching the configured patterns (`*.tgz`, `*.zip`). Returns a sorted list of
+  paths. Raises `NoArchivesFoundError` if no matching archives are found.
+
+  ```python
+  from pathlib import Path
+  from scripts.generate_checksums import find_archives
+
+  archives = find_archives(Path("dist"))
+  for archive in archives:
+      print(f"Found: {archive.name}")
+  ```
+
+- **`generate_checksums(directory: Path) -> None`** — Generates `.sha256` files
+  for all archives in the specified directory. Checksum files are written in
+  the format `HASH  FILENAME\n` for compatibility with standard verification
+  tools.
+
+  ```python
+  from pathlib import Path
+  from scripts.generate_checksums import generate_checksums
+
+  generate_checksums(Path("dist"))  # Creates dist/*.sha256 files
+  ```
+
+#### Exceptions
+
+- **`NoArchivesFoundError`** — Raised when `find_archives()` or
+  `generate_checksums()` cannot locate any archive files matching the configured
+  patterns. This exception indicates either an empty directory or a path
+  mismatch.
+
+#### Integration with release workflow
+
+The script is invoked by the rolling-release workflow after archives are
+packaged. Checksum files are uploaded alongside archives as workflow artefacts,
+allowing users to verify download integrity using standard tools (see the
+[README](../README.md) for platform-specific verification instructions).
+
 ## Publishing
 
 Before publishing, run the full validation suite:

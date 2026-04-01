@@ -63,6 +63,60 @@ Whitaker is under active development. One additional lint
 (`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
 details.
 
+## Verifying Release Checksums
+
+Each Whitaker release includes SHA-256 checksum files alongside the archive
+downloads. You can verify the integrity of downloaded archives using standard
+command-line tools.
+
+### Linux
+
+Using GNU coreutils `sha256sum`:
+
+```sh
+sha256sum -c whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz.sha256
+```
+
+Or compute and compare manually:
+
+```sh
+sha256sum whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz
+cat whitaker-<VERSION>-x86_64-unknown-linux-gnu.tgz.sha256
+```
+
+### macOS
+
+Using `shasum` (included with macOS):
+
+```sh
+shasum -a 256 -c whitaker-<VERSION>-x86_64-apple-darwin.tgz.sha256
+```
+
+Or compute and compare manually:
+
+```sh
+shasum -a 256 whitaker-<VERSION>-x86_64-apple-darwin.tgz
+cat whitaker-<VERSION>-x86_64-apple-darwin.tgz.sha256
+```
+
+### Windows
+
+Using PowerShell (compares against the `.sha256` sidecar file):
+
+```powershell
+$expected = (Get-Content whitaker-<VERSION>-x86_64-pc-windows-msvc.zip.sha256).Split()[0]
+$actual = (Get-FileHash -Algorithm SHA256 -Path whitaker-<VERSION>-x86_64-pc-windows-msvc.zip).Hash
+if ($actual -eq $expected) { Write-Output "OK" } else { Write-Output "FAILED" }
+```
+
+Or using `CertUtil` (Command Prompt) — compare the printed hash to the one
+in the `.sha256` file:
+
+```cmd
+certutil -hashfile whitaker-<VERSION>-x86_64-pc-windows-msvc.zip SHA256
+type whitaker-<VERSION>-x86_64-pc-windows-msvc.zip.sha256
+```
+
 ## Documentation
 
 - [User's Guide](docs/users-guide.md) — Installation, configuration, and
