@@ -51,6 +51,13 @@ fn is_suite_only_request(requested_crates: &[CrateName]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for staged-suite gating, placeholder staging, and write-failure
+    //! handling.
+    //!
+    //! This `mod tests` module uses `env_test_guard`, `rstest` fixtures, and
+    //! temporary environment-variable helpers to exercise the debug-only staged
+    //! suite shortcuts without leaking process-wide state between cases.
+
     use super::*;
     use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
