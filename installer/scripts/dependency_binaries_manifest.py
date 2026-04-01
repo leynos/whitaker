@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-"""Emit dependency-binary manifest entries as tab-separated rows."""
+"""Emit dependency-binary manifest entries as tab-separated rows.
+
+This script reads the installer/dependency-binaries.toml manifest and outputs
+package/binary/version rows as tab-separated values for CI consumption.
+
+The default manifest path is "installer/dependency-binaries.toml". Each output
+line contains three tab-separated columns: package name, binary name, and version.
+
+Example invocation:
+
+    $ python dependency_binaries_manifest.py
+    cargo-dylint\tcargo-dylint\t4.1.0\n
+    $ python dependency_binaries_manifest.py custom-manifest.toml
+    cargo-dylint\tcargo-dylint\t4.1.0\n
+The TSV output is suitable for shell processing with tools like cut, awk, or
+while-read loops.
+"""
 
 from __future__ import annotations
 

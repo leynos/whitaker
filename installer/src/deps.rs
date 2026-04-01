@@ -296,7 +296,7 @@ fn try_repository_install(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InstallMode {
     Binstall,
     CargoInstall,
@@ -308,10 +308,56 @@ fn install_with_cargo(
     stderr: &mut dyn Write,
     context: &InstallContext<'_>,
 ) -> Result<()> {
-    let args = match context.cargo_fallback_mode {
-        InstallMode::Binstall => vec!["binstall", "-y", tool.package],
-        InstallMode::CargoInstall => vec!["install", tool.package],
-    };
+    // Always try binstall first if available; fall back to cargo install on failure
+    if context.cargo_fallback_mode == InstallMode::Binstall {
+        if try_binstall(executor, tool, stderr, context)? {
+            return Ok(());
+        }
+        write_message(
+            stderr,
+            context.quiet,
+            format!(
+                "cargo binstall failed for {}; falling back to cargo install.",
+                tool.package
+            ),
+        );
+    }
+
+    try_cargo_install(executor, tool, stderr, context)
+}
+
+fn try_binstall(
+    executor: &dyn CommandExecutor,
+    tool: &DependencyTool,
+    stderr: &mut dyn Write,
+    context: &InstallContext<'_>,
+) -> Result<bool> {
+    let args = vec!["binstall", "-y", tool.package];
+    let output = executor.run("cargo", &args)?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    if !is_tool_installed(executor, tool) {
+        return Ok(false);
+    }
+
+    write_message(
+        stderr,
+        context.quiet,
+        format!("Installed {} with cargo binstall.", tool.package),
+    );
+    Ok(true)
+}
+
+fn try_cargo_install(
+    executor: &dyn CommandExecutor,
+    tool: &DependencyTool,
+    stderr: &mut dyn Write,
+    context: &InstallContext<'_>,
+) -> Result<()> {
+    let args = vec!["install", tool.package];
     let output = executor.run("cargo", &args)?;
 
     if !output.status.success() {
@@ -322,23 +368,20 @@ fn install_with_cargo(
         });
     }
 
-    let mode_message = match context.cargo_fallback_mode {
-        InstallMode::Binstall => "cargo binstall",
-        InstallMode::CargoInstall => "cargo install",
-    };
     if !is_tool_installed(executor, tool) {
         return Err(InstallerError::DependencyInstall {
             tool: tool.package,
             message: format!(
-                "{mode_message} reported success, but {} is still unavailable",
+                "cargo install reported success, but {} is still unavailable",
                 tool.package
             ),
         });
     }
+
     write_message(
         stderr,
         context.quiet,
-        format!("Installed {} with {mode_message}.", tool.package),
+        format!("Installed {} with cargo install.", tool.package),
     );
     Ok(())
 }

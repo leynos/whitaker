@@ -489,6 +489,7 @@ Required unit-test coverage:
    - repository success, no Cargo call made;
    - repository miss, `cargo binstall` success;
    - repository miss and missing binstall, `cargo install` success;
+   - repository miss, `cargo binstall` failure, `cargo install` success;
    - all paths fail, semantic error returned.
 
 Required behavioural scenarios using `rstest-bdd` 0.5.0:
@@ -499,9 +500,11 @@ Required behavioural scenarios using `rstest-bdd` 0.5.0:
    `cargo binstall`.
 4. Repository asset and `cargo binstall` are unavailable, so installer falls
    back to `cargo install`.
-5. Repository asset exists but fails verification, so Cargo fallback is used.
-6. Unsupported target or unsupported archive format takes the fallback path.
-7. Release-packaging behaviour confirms the provenance/licence sidecar is
+5. Repository asset is unavailable, `cargo binstall` fails, so installer falls
+   back to `cargo install`.
+6. Repository asset exists but fails verification, so Cargo fallback is used.
+7. Unsupported target or unsupported archive format takes the fallback path.
+8. Release-packaging behaviour confirms the provenance/licence sidecar is
    emitted and references both upstream repositories.
 
 Testing note:
@@ -578,7 +581,8 @@ Outcomes:
    describing package names, versions, licences, and upstream repositories.
 3. The installer now attempts repository-hosted dependency binaries first,
    verifies the installed tool command, and falls back to `cargo binstall` or
-   `cargo install` when the repository path is unavailable or invalid.
+   `cargo install` when the repository path is unavailable, verification fails,
+   or when `cargo binstall` is absent or fails.
 4. Coverage includes unit tests for manifest parsing, packaging, and install
    orchestration plus `rstest-bdd` behavioural scenarios for repository
    success, fallback, verification failure, unsupported targets, and provenance

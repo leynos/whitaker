@@ -57,6 +57,17 @@ pub enum DependencyBinaryInstallError {
     /// I/O failure while creating local directories or files.
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+
+    /// Archive checksum verification failed.
+    #[error("checksum verification failed for {archive}: expected {expected}, got {actual}")]
+    Checksum {
+        /// Path to the archive that failed verification.
+        archive: PathBuf,
+        /// Expected checksum from the manifest.
+        expected: String,
+        /// Actual computed checksum.
+        actual: String,
+    },
 }
 
 /// Installs dependency binaries from repository-hosted release assets.

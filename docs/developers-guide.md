@@ -530,8 +530,7 @@ The dependency-install path is split into focused modules under
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now runnable.
 3. Fall back to `cargo binstall` when available.
-4. Fall back again to `cargo install` when `cargo binstall` is absent.
-
+4. Fall back to `cargo install` when `cargo binstall` is absent or fails.
 
 ### CLI tool usage
 

@@ -163,6 +163,7 @@ jobs:
 
   build-dependency-binaries:
     needs: dependency-manifest-changes
+    if: needs.dependency-manifest-changes.outputs.should_build == 'true'
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -252,8 +253,9 @@ jobs:
           retention-days: 1
 
   publish:
-    if: ${{ always() }}
+    if: ${{ always() && needs.dependency-manifest-changes.outputs.should_build == 'true' }}
     needs:
+      - dependency-manifest-changes
       - build-lints
       - build-dependency-binaries
     runs-on: ubuntu-latest
