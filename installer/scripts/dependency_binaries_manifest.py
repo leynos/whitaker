@@ -101,7 +101,7 @@ def _collect_manifest_lines(
 
 @contextlib.contextmanager
 def _open_output(output: str | None) -> Generator:
-    """Yield a binary-writable handle for output or ``sys.stdout.buffer``."""
+    """Yield a binary-writable handle for *output*, or ``sys.stdout.buffer``."""
     if output is not None:
         if output == "":
             print("error: output path cannot be empty", file=sys.stderr)
@@ -113,7 +113,7 @@ def _open_output(output: str | None) -> Generator:
 
 
 def _write_lines(lines: list[bytes], output: str | None) -> None:
-    """Write encoded byte lines to the selected output handle."""
+    """Write encoded lines to the output stream."""
     with _open_output(output) as handle:
         handle.writelines(lines)
 
