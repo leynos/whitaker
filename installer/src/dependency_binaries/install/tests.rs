@@ -4,10 +4,10 @@ use super::downloader::MockDependencyArchiveDownloader;
 use super::extractor::MockDependencyArchiveExtractor;
 use super::installer::{InstallSupport, install_with};
 use super::metadata::expected_member_path;
-use super::*;
+use super::{archive_filename, *};
 use crate::dirs::MockBaseDirs;
 use crate::installer_packaging::TargetTriple;
-use mockall::predicate::always;
+use mockall::predicate::{always, eq};
 use rstest::{fixture, rstest};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,10 +33,11 @@ fn run_install_scenario(
         .expect("dependency should exist");
     let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
     let mut downloader = MockDependencyArchiveDownloader::new();
+    let expected_archive = archive_filename(dependency, &target);
     downloader
         .expect_download()
         .once()
-        .with(always(), always())
+        .with(eq(expected_archive), always())
         .returning(|_, destination| {
             fs::write(destination, b"archive")?;
             Ok(())

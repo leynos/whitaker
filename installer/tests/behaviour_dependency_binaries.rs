@@ -132,7 +132,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let expect_repository_verification = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::Success)
-    );
+    ) && !world.unsupported_target;
     let repository_installer = StubRepositoryInstaller {
         behaviour: world.repository_behaviour.take().unwrap_or(
             RepositoryInstallerBehaviour::Failure("missing repository".to_owned()),

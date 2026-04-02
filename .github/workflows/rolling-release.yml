@@ -291,6 +291,7 @@ jobs:
           gh release download rolling \
             --pattern '*.tgz' \
             --pattern '*.zip' \
+            --pattern '*.sha256' \
             --dir dist
         env:
           GH_TOKEN: ${{ github.token }}
@@ -324,7 +325,7 @@ jobs:
         run: |
           set -euxo pipefail
           shopt -s nullglob
-          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip)
+          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip dist/*.sha256)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "has_assets=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -332,21 +333,33 @@ jobs:
           printf '%s\n' "${assets[@]}" > dist/release-assets.txt
           echo "has_assets=true" >> "$GITHUB_OUTPUT"
 
+      - name: Check whether dependency assets are available
+        id: dependency_assets
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          dep_assets=(dist/*.tgz dist/*.zip)
+          if [[ "${#dep_assets[@]}" -eq 0 ]]; then
+            echo "has_dependency_assets=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_dependency_assets=true" >> "$GITHUB_OUTPUT"
+
       - name: Generate dependency provenance asset
-        if: steps.assets.outputs.has_assets == 'true'
+        if: steps.dependency_assets.outputs.has_dependency_assets == 'true'
         run: |
           set -euxo pipefail
           ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
 
       - name: Delete existing rolling release
-        if: steps.assets.outputs.has_assets == 'true'
+        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result == 'success'
         run: gh release delete rolling --cleanup-tag --yes || true
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create rolling release
-        if: steps.assets.outputs.has_assets == 'true'
+        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result == 'success'
         run: |
           set -euxo pipefail
           SHA=$(git rev-parse --short HEAD)
