@@ -20,9 +20,11 @@ while-read loops.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import pathlib
 import sys
 import tomllib
+from typing import Generator
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,18 +99,37 @@ def _collect_manifest_lines(
     return output_lines
 
 
-def _write_lines(lines: list[bytes], output: str | None) -> None:
-    """Write encoded lines to the output stream."""
+@contextlib.contextmanager
+def _open_output(output: str | None) -> Generator:
+    """Yield a binary-writable handle for *output*, or ``sys.stdout.buffer``.
+
+    Parameters
+    ----------
+    output:
+        Destination file path, or ``None`` to use ``sys.stdout.buffer``.
+    """
     if output is not None:
         if output == "":
             print("error: output path cannot be empty", file=sys.stderr)
             raise SystemExit(1)
-        with pathlib.Path(output).open("wb") as out_handle:
-            for line in lines:
-                out_handle.write(line)
+        with pathlib.Path(output).open("wb") as handle:
+            yield handle
     else:
-        for line in lines:
-            sys.stdout.buffer.write(line)
+        yield sys.stdout.buffer
+
+
+def _write_lines(lines: list[bytes], output: str | None) -> None:
+    """Write encoded lines to the output stream.
+
+    Parameters
+    ----------
+    lines:
+        Encoded byte strings to write, one per dependency entry.
+    output:
+        Destination file path, or ``None`` to write to ``sys.stdout.buffer``.
+    """
+    with _open_output(output) as handle:
+        handle.writelines(lines)
 
 
 def main() -> int:
