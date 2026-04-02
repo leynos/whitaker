@@ -40,7 +40,8 @@ def parse_args() -> argparse.Namespace:
     -------
     argparse.Namespace
         Parsed arguments with the 'manifest' attribute containing the path to
-        the dependency-binaries manifest.
+        the dependency-binaries manifest and 'output' attribute containing the
+        path to the output file (or None for stdout).
 
     Example
     -------
@@ -51,7 +52,8 @@ def parse_args() -> argparse.Namespace:
     Notes
     -----
     The manifest argument is optional and defaults to the standard location
-    within the installer directory.
+    within the installer directory. Use --output to write to a file instead
+    of stdout.
 
     """
     parser = argparse.ArgumentParser(
@@ -62,6 +64,12 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         default="installer/dependency-binaries.toml",
         help="Path to the dependency-binaries manifest.",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help="Output file path (default: stdout).",
     )
     return parser.parse_args()
 
@@ -127,6 +135,7 @@ def main() -> int:
         manifest = tomllib.load(handle)
 
     seen_packages: set[str] = set()
+    output_lines: list[bytes] = []
     for entry in manifest["dependency_binaries"]:
         package = entry["package"]
         if package in seen_packages:
@@ -135,7 +144,16 @@ def main() -> int:
         seen_packages.add(package)
 
         line = f"{entry['package']}\t{entry['binary']}\t{entry['version']}\n".encode()
-        sys.stdout.buffer.write(line)
+        output_lines.append(line)
+
+    if args.output:
+        output_path = pathlib.Path(args.output)
+        with output_path.open("wb") as out_handle:
+            for line in output_lines:
+                out_handle.write(line)
+    else:
+        for line in output_lines:
+            sys.stdout.buffer.write(line)
     return 0
 
 

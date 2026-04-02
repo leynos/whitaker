@@ -14,7 +14,8 @@ use whitaker_installer::deps::{
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
 use whitaker_installer::test_utils::{
-    ExpectedCall, StubDirs, StubExecutor, failure_output, success_output,
+    StubDirs, StubExecutor,
+    dependency_binary_helpers::{ExpectedCallConfig, expected_calls},
 };
 
 enum RepositoryInstallerBehaviour {
@@ -62,14 +63,6 @@ struct DependencyBinaryWorld {
     install_result: Option<std::result::Result<(), whitaker_installer::error::InstallerError>>,
     provenance: Option<String>,
     dependencies: Vec<DependencyBinary>,
-}
-
-struct ExpectedCallConfig<'a> {
-    binstall_available: bool,
-    verify_repository_install: bool,
-    verification_fails: bool,
-    cargo_binstall_failure: Option<&'a str>,
-    cargo_install_failure: Option<&'a str>,
 }
 
 #[fixture]
@@ -241,141 +234,6 @@ fn then_provenance_contains(world: &mut DependencyBinaryWorld, expected: String)
         provenance.contains(&expected),
         "expected provenance to contain {expected:?}, got {provenance:?}"
     );
-}
-
-fn binstall_version_check(binstall_available: bool) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "cargo",
-        args: vec!["binstall", "--version"],
-        result: if binstall_available {
-            Ok(success_output())
-        } else {
-            Ok(failure_output("missing binstall"))
-        },
-    }
-}
-
-fn repository_verification_call(tool: &str, verification_fails: bool) -> ExpectedCall {
-    let result = if verification_fails {
-        Ok(failure_output("still missing"))
-    } else {
-        Ok(success_output())
-    };
-    match tool {
-        "cargo-dylint" => ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result,
-        },
-        "dylint-link" => ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result,
-        },
-        other => panic!("unexpected tool: {other}"),
-    }
-}
-
-fn cargo_fallback_calls(
-    tool: &str,
-    binstall_available: bool,
-    cargo_binstall_failure: Option<&str>,
-    cargo_install_failure: Option<&str>,
-) -> Vec<ExpectedCall> {
-    // Intentional leak in tests to extend lifetime for static string usage;
-    // acceptable here as it will not be freed.
-    let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
-
-    // Determine which cargo command to run and its failure mode
-    let (use_binstall, failure_message) = if binstall_available {
-        (true, cargo_binstall_failure)
-    } else {
-        (false, cargo_install_failure)
-    };
-
-    let install_call = ExpectedCall {
-        cmd: "cargo",
-        args: if use_binstall {
-            vec!["binstall", "-y", tool_static]
-        } else {
-            vec!["install", tool_static]
-        },
-        result: Ok(match failure_message {
-            Some(message) => failure_output(message),
-            None => success_output(),
-        }),
-    };
-    let mut calls = vec![install_call];
-
-    // If the primary install command succeeds, add verification call
-    if failure_message.is_none() {
-        calls.push(match tool {
-            "cargo-dylint" => cargo_dylint_check(),
-            "dylint-link" => dylint_link_check(),
-            other => panic!("unexpected tool: {other}"),
-        });
-    } else if use_binstall && cargo_install_failure.is_none() {
-        // binstall failed but cargo install should succeed
-        calls.push(ExpectedCall {
-            cmd: "cargo",
-            args: vec!["install", tool_static],
-            result: Ok(success_output()),
-        });
-        calls.push(match tool {
-            "cargo-dylint" => cargo_dylint_check(),
-            "dylint-link" => dylint_link_check(),
-            other => panic!("unexpected tool: {other}"),
-        });
-    } else if use_binstall {
-        // binstall failed and cargo install also fails
-        if let Some(message) = cargo_install_failure {
-            calls.push(ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", tool_static],
-                result: Ok(failure_output(message)),
-            });
-        }
-    }
-
-    calls
-}
-
-fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
-    let mut calls = vec![binstall_version_check(config.binstall_available)];
-
-    if config.verify_repository_install {
-        calls.push(repository_verification_call(
-            tool,
-            config.verification_fails,
-        ));
-        if !config.verification_fails {
-            return calls;
-        }
-    }
-
-    calls.extend(cargo_fallback_calls(
-        tool,
-        config.binstall_available,
-        config.cargo_binstall_failure,
-        config.cargo_install_failure,
-    ));
-    calls
-}
-
-fn cargo_dylint_check() -> ExpectedCall {
-    ExpectedCall {
-        cmd: "cargo",
-        args: vec!["dylint", "--version"],
-        result: Ok(success_output()),
-    }
-}
-
-fn dylint_link_check() -> ExpectedCall {
-    ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
-        result: Ok(success_output()),
-    }
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 0)]

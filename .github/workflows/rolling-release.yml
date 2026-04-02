@@ -208,9 +208,10 @@ jobs:
       - name: Build and package dependency binaries
         run: |
           set -euxo pipefail
+          set -euxo pipefail
           mkdir -p dist
           mkdir -p dependency-root
-          python installer/scripts/dependency_binaries_manifest.py > /tmp/dependency-binaries.tsv
+          python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
           else
@@ -236,6 +237,15 @@ jobs:
               --output-dir dist
           done < /tmp/dependency-binaries.tsv
 
+      - name: Generate SHA-256 checksums
+        run: |
+          set -euxo pipefail
+          for file in dist/*.tgz dist/*.zip; do
+            if [[ -f "$file" ]]; then
+              sha256sum "$file" > "${file}.sha256"
+            fi
+          done
+
       - name: Diagnostics (dependency binaries)
         if: failure()
         run: |
@@ -250,6 +260,7 @@ jobs:
           path: |
             dist/*.tgz
             dist/*.zip
+            dist/*.sha256
           retention-days: 1
 
   publish:
@@ -278,9 +289,9 @@ jobs:
           mkdir -p dist
           # Download dependency binaries from previous rolling release
           gh release download rolling \
-            --pattern 'dependency-binaries-*.tgz' \
-            --pattern 'dependency-binaries-*.zip' \
-            --dir dist || true
+            --pattern '*.tgz' \
+            --pattern '*.zip' \
+            --dir dist
         env:
           GH_TOKEN: ${{ github.token }}
 

@@ -3,6 +3,7 @@
 use super::downloader::MockDependencyArchiveDownloader;
 use super::extractor::MockDependencyArchiveExtractor;
 use super::installer::{InstallSupport, install_with};
+use super::metadata::expected_member_path;
 use super::*;
 use crate::dirs::MockBaseDirs;
 use crate::installer_packaging::TargetTriple;
@@ -141,10 +142,15 @@ fn install_with_returns_error_when_binary_missing_after_extract(
     ),
 ) {
     let (_temp_dir, _bin_dir, result) = missing_binary_install_result;
+    let dependency = crate::dependency_binaries::find_dependency_binary("dylint-link")
+        .expect("dependency manifest should load")
+        .expect("dependency should exist");
+    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
+    let expected_path = expected_member_path(dependency, &target);
     let error = result.expect_err("install should fail");
     match error {
         DependencyBinaryInstallError::MissingBinaryInArchive { binary } => {
-            assert_eq!(binary, "dylint-link");
+            assert_eq!(binary, expected_path);
         }
         other => panic!("expected MissingBinaryInArchive, got {:?}", other),
     }
