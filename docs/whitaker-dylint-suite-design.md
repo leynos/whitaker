@@ -1515,7 +1515,7 @@ archive creation logic, validated by unit tests and BDD scenarios in
 ### Dependency binary releases
 
 **Decision:** Publish repository-hosted `cargo-dylint` and `dylint-link`
-binaries from the same GitHub release surfaces Whitaker already uses, and make
+binaries from the same GitHub release surface Whitaker already uses, and make
 the installer prefer those archives before running Cargo installers.
 
 **Rationale:** This keeps the required dependency-tool versions auditable in

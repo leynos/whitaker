@@ -14,7 +14,7 @@ struct PackagingCase<'a> {
     package: &'a str,
     binary_name: &'a str,
     should_create_binary: bool,
-    expect_success: bool,
+    should_expect_success: bool,
 }
 
 #[fixture]
@@ -59,13 +59,13 @@ fn inner_dir_name_uses_dependency_version() {
     package: "dylint-link",
     binary_name: "missing",
     should_create_binary: false,
-    expect_success: false,
+    should_expect_success: false,
 })]
 #[case(PackagingCase {
     package: "cargo-dylint",
     binary_name: "cargo-dylint",
     should_create_binary: true,
-    expect_success: true,
+    should_expect_success: true,
 })]
 fn package_dependency_binary_handles_binary_presence(
     linux_target: TargetTriple,
@@ -87,7 +87,7 @@ fn package_dependency_binary_handles_binary_presence(
         output_dir: temp_dir.path().join("dist"),
     });
 
-    if case.expect_success {
+    if case.should_expect_success {
         let output = result.expect("packaging should succeed");
         let expected_archive_name = format!(
             "{}-{}-v{}.tgz",
@@ -118,16 +118,6 @@ fn provenance_markdown_includes_all_dependency_fields() {
         .expect("dylint-link should exist")
         .clone();
 
-    // Save values before moving into vec
-    let cargo_dylint_package = cargo_dylint.package().to_string();
-    let cargo_dylint_version = cargo_dylint.version().to_string();
-    let cargo_dylint_license = cargo_dylint.license().to_string();
-    let cargo_dylint_repository = cargo_dylint.repository().to_string();
-    let dylint_link_package = dylint_link.package().to_string();
-    let dylint_link_version = dylint_link.version().to_string();
-    let dylint_link_license = dylint_link.license().to_string();
-    let dylint_link_repository = dylint_link.repository().to_string();
-
     let dependencies = vec![cargo_dylint, dylint_link];
 
     let markdown = render_provenance_markdown(&dependencies);
@@ -136,17 +126,13 @@ fn provenance_markdown_includes_all_dependency_fields() {
     assert!(markdown.contains("# Dependency binary licences and provenance"));
     assert!(markdown.contains("https://github.com/trailofbits/dylint"));
 
-    // Check cargo-dylint fields
-    assert!(markdown.contains(&cargo_dylint_package));
-    assert!(markdown.contains(&cargo_dylint_version));
-    assert!(markdown.contains(&cargo_dylint_license));
-    assert!(markdown.contains(&cargo_dylint_repository));
-
-    // Check dylint-link fields
-    assert!(markdown.contains(&dylint_link_package));
-    assert!(markdown.contains(&dylint_link_version));
-    assert!(markdown.contains(&dylint_link_license));
-    assert!(markdown.contains(&dylint_link_repository));
+    // Check each dependency's fields are present in the markdown
+    for dependency in &dependencies {
+        assert!(markdown.contains(dependency.package()));
+        assert!(markdown.contains(dependency.version()));
+        assert!(markdown.contains(dependency.license()));
+        assert!(markdown.contains(dependency.repository()));
+    }
 }
 
 #[test]
