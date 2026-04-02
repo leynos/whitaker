@@ -86,7 +86,10 @@ PY
 import re
 import sys
 
-match = re.match(r"^(\d+\.\d+\.\d+)", sys.argv[1])
+match = re.match(
+    r"^((?:\d+\.\d+\.\d+|(?:nightly|beta|stable)(?:-\d{4}-\d{2}-\d{2})?))(?:-[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*)?$",
+    sys.argv[1],
+)
 if match is not None:
     print(match.group(1))
 PY
