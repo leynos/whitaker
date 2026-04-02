@@ -5,11 +5,11 @@ use crate::test_utils::{ExpectedCall, failure_output, success_output};
 /// Configuration for generating expected calls in dependency binary tests.
 pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
-    pub binstall_available: bool,
+    pub is_binstall_available: bool,
     /// Whether to verify repository installation.
-    pub verify_repository_install: bool,
+    pub should_verify_repository_install: bool,
     /// Whether repository verification should fail.
-    pub verification_fails: bool,
+    pub is_repository_verification_failing: bool,
     /// Error message for cargo binstall failure (None if succeeds).
     pub cargo_binstall_failure: Option<&'a str>,
     /// Error message for cargo install failure (None if succeeds).
@@ -17,11 +17,11 @@ pub struct ExpectedCallConfig<'a> {
 }
 
 /// Creates an expected call for checking cargo-binstall availability.
-pub fn binstall_version_check(binstall_available: bool) -> ExpectedCall {
+pub fn binstall_version_check(is_binstall_available: bool) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
         args: vec!["binstall", "--version"],
-        result: if binstall_available {
+        result: if is_binstall_available {
             Ok(success_output())
         } else {
             Ok(failure_output("missing binstall"))
@@ -60,36 +60,43 @@ fn tool_verification_check(tool: &str) -> ExpectedCall {
     }
 }
 
-/// Builds the sequence of calls that follow the primary install attempt.
-#[allow(clippy::too_many_arguments)]
-fn post_primary_calls(
-    tool: &str,
+/// Configuration for post-primary installation call sequence.
+struct PostPrimaryConfig {
+    /// The tool name.
+    tool: String,
+    /// Static tool name for cargo install args.
     tool_static: &'static str,
+    /// Whether the primary installation succeeded.
     primary_succeeded: bool,
+    /// Whether to use binstall (vs cargo install).
     use_binstall: bool,
-    cargo_install_failure: Option<&str>,
-) -> Vec<ExpectedCall> {
-    if primary_succeeded {
-        return vec![tool_verification_check(tool)];
+    /// Error message for cargo install failure (None if succeeds).
+    cargo_install_failure: Option<String>,
+}
+
+/// Builds the sequence of calls that follow the primary install attempt.
+fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
+    if cfg.primary_succeeded {
+        return vec![tool_verification_check(&cfg.tool)];
     }
-    if !use_binstall {
+    if !cfg.use_binstall {
         return vec![];
     }
     // binstall failed: check if we should sequence a cargo-install attempt
-    if cargo_install_failure.is_none() {
+    if cfg.cargo_install_failure.is_none() {
         // cargo install succeeds after binstall fails
         let cargo_call = ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", tool_static],
+            args: vec!["install", cfg.tool_static],
             result: Ok(success_output()),
         };
-        return vec![cargo_call, tool_verification_check(tool)];
+        return vec![cargo_call, tool_verification_check(&cfg.tool)];
     }
     // binstall failed and cargo install also fails
     let cargo_call = ExpectedCall {
         cmd: "cargo",
-        args: vec!["install", tool_static],
-        result: Ok(failure_output(cargo_install_failure.unwrap())),
+        args: vec!["install", cfg.tool_static],
+        result: Ok(failure_output(cfg.cargo_install_failure.as_ref().unwrap())),
     };
     vec![cargo_call]
 }
@@ -125,33 +132,34 @@ pub fn cargo_fallback_calls(
     };
 
     let mut calls = vec![install_call];
-    calls.extend(post_primary_calls(
-        tool,
+    let post_config = PostPrimaryConfig {
+        tool: tool.to_owned(),
         tool_static,
-        failure_message.is_none(),
+        primary_succeeded: failure_message.is_none(),
         use_binstall,
-        cargo_install_failure,
-    ));
+        cargo_install_failure: cargo_install_failure.map(String::from),
+    };
+    calls.extend(post_primary_calls(&post_config));
     calls
 }
 
 /// Builds the complete list of expected calls for a dependency binary test scenario.
 pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
-    let mut calls = vec![binstall_version_check(config.binstall_available)];
+    let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
-    if config.verify_repository_install {
+    if config.should_verify_repository_install {
         calls.push(repository_verification_call(
             tool,
-            config.verification_fails,
+            config.is_repository_verification_failing,
         ));
-        if !config.verification_fails {
+        if !config.is_repository_verification_failing {
             return calls;
         }
     }
 
     calls.extend(cargo_fallback_calls(
         tool,
-        config.binstall_available,
+        config.is_binstall_available,
         config.cargo_binstall_failure,
         config.cargo_install_failure,
     ));

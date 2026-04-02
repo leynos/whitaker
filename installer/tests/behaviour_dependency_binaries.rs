@@ -146,9 +146,9 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let executor = StubExecutor::new(expected_calls(
         &tool,
         ExpectedCallConfig {
-            binstall_available: world.binstall_available,
-            verify_repository_install: expect_repository_verification,
-            verification_fails: world.repository_verification_fails,
+            is_binstall_available: world.binstall_available,
+            should_verify_repository_install: expect_repository_verification,
+            is_repository_verification_failing: world.repository_verification_fails,
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
             cargo_install_failure: world.cargo_install_failure.as_deref(),
         },
