@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
+use crate::installer_packaging::TargetTriple;
 use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
 

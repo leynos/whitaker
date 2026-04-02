@@ -294,6 +294,37 @@ pub fn find_dependency_binary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
+
+    #[fixture]
+    fn missing_field_manifest() -> &'static str {
+        r#"
+            [[dependency_binaries]]
+            package = "cargo-dylint"
+            binary = "cargo-dylint"
+            version = "4.1.0"
+            license = "MIT OR Apache-2.0"
+        "#
+    }
+
+    #[fixture]
+    fn duplicate_packages_manifest() -> &'static str {
+        r#"
+            [[dependency_binaries]]
+            package = "cargo-dylint"
+            binary = "cargo-dylint"
+            version = "4.1.0"
+            license = "MIT OR Apache-2.0"
+            repository = "https://github.com/trailofbits/dylint"
+
+            [[dependency_binaries]]
+            package = "cargo-dylint"
+            binary = "cargo-dylint-alt"
+            version = "4.2.0"
+            license = "MIT OR Apache-2.0"
+            repository = "https://github.com/trailofbits/dylint"
+        "#
+    }
 
     #[test]
     fn manifest_contains_expected_tools() {
@@ -312,19 +343,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn parse_manifest_rejects_missing_required_field() {
-        let manifest = r#"
-            [[dependency_binaries]]
-            package = "cargo-dylint"
-            binary = "cargo-dylint"
-            version = "4.1.0"
-            license = "MIT OR Apache-2.0"
-        "#;
-
-        let error =
-            parse_manifest(manifest).expect_err("manifest should reject missing repository");
-        assert!(error.to_string().contains("repository"));
+    #[rstest]
+    #[case::missing_field(missing_field_manifest(), &["repository"])]
+    #[case::duplicate_packages(duplicate_packages_manifest(), &["cargo-dylint", "duplicate"])]
+    fn parse_manifest_rejects_invalid_manifests(
+        #[case] manifest_fixture: &str,
+        #[case] expected_substrings: &[&str],
+    ) {
+        let error = parse_manifest(manifest_fixture).expect_err("should reject invalid manifest");
+        let error_string = error.to_string();
+        for substring in expected_substrings {
+            assert!(
+                error_string.contains(substring),
+                "expected error to contain '{substring}'"
+            );
+        }
     }
 
     #[test]
@@ -334,29 +367,5 @@ mod tests {
             .expect("tool should exist");
         assert_eq!(tool.binary(), "cargo-dylint");
         assert_eq!(tool.version(), "4.1.0");
-    }
-
-    #[test]
-    fn parse_manifest_rejects_duplicate_packages() {
-        let manifest = r#"
-            [[dependency_binaries]]
-            package = "cargo-dylint"
-            binary = "cargo-dylint"
-            version = "4.1.0"
-            license = "MIT OR Apache-2.0"
-            repository = "https://github.com/trailofbits/dylint"
-
-            [[dependency_binaries]]
-            package = "cargo-dylint"
-            binary = "cargo-dylint-alt"
-            version = "4.2.0"
-            license = "MIT OR Apache-2.0"
-            repository = "https://github.com/trailofbits/dylint"
-        "#;
-
-        let error = parse_manifest(manifest).expect_err("should reject duplicate packages");
-        let error_string = error.to_string();
-        assert!(error_string.contains("cargo-dylint"));
-        assert!(error_string.contains("duplicate"));
     }
 }

@@ -103,9 +103,16 @@ def main() -> int:
 
     Example
     -------
-    >>> import sys
-    >>> sys.argv = ["script.py", "my-manifest.toml"]
-    >>> main()
+    >>> import sys, tempfile, os
+    >>> manifest_content = b'[[dependency_binaries]]\\npackage = "pkg"\\nbinary = "bin"\\nversion = "1.0.0"\\n'
+    >>> with tempfile.NamedTemporaryFile(delete=False, suffix=".toml") as f:
+    ...     _ = f.write(manifest_content)
+    ...     temp_path = f.name
+    >>> sys.argv = ["script.py", temp_path]
+    >>> try:
+    ...     main()
+    ... finally:
+    ...         os.unlink(temp_path)
     0
 
     Notes
@@ -119,7 +126,14 @@ def main() -> int:
     with manifest_path.open("rb") as handle:
         manifest = tomllib.load(handle)
 
+    seen_packages: set[str] = set()
     for entry in manifest["dependency_binaries"]:
+        package = entry["package"]
+        if package in seen_packages:
+            print(f"error: duplicate package '{package}' in manifest", file=sys.stderr)
+            return 1
+        seen_packages.add(package)
+
         line = f"{entry['package']}\t{entry['binary']}\t{entry['version']}\n".encode()
         sys.stdout.buffer.write(line)
     return 0

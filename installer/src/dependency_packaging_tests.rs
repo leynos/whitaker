@@ -13,7 +13,7 @@ use std::fs;
 struct PackagingCase<'a> {
     package: &'a str,
     binary_name: &'a str,
-    create_binary: bool,
+    should_create_binary: bool,
     expected_archive_name: Option<&'a str>,
 }
 
@@ -50,7 +50,7 @@ fn inner_dir_name_uses_dependency_version() {
 
     assert_eq!(
         inner_dir_name(dependency, &target),
-        "cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0"
+        format!("cargo-dylint-{}-v{}", target, dependency.version())
     );
 }
 
@@ -58,13 +58,13 @@ fn inner_dir_name_uses_dependency_version() {
 #[case(PackagingCase {
     package: "dylint-link",
     binary_name: "missing",
-    create_binary: false,
+    should_create_binary: false,
     expected_archive_name: None,
 })]
 #[case(PackagingCase {
     package: "cargo-dylint",
     binary_name: "cargo-dylint",
-    create_binary: true,
+    should_create_binary: true,
     expected_archive_name: Some("cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"),
 })]
 fn package_dependency_binary_handles_binary_presence(
@@ -76,7 +76,7 @@ fn package_dependency_binary_handles_binary_presence(
         .expect("dependency manifest should load")
         .expect("dependency should exist");
     let binary_path = temp_dir.path().join(case.binary_name);
-    if case.create_binary {
+    if case.should_create_binary {
         fs::write(&binary_path, b"binary").expect("write fake binary");
     }
 
