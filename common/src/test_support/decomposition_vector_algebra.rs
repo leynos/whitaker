@@ -8,7 +8,7 @@ use crate::decomposition_advice::{build_feature_vector, dot_product};
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+/// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
 ///
 /// let left = profile(MethodInput {
 ///     name: "parse_tokens",
@@ -43,7 +43,7 @@ impl MethodVectorAlgebraReport {
     /// This is the dot product of the left and right method vectors.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -73,7 +73,7 @@ impl MethodVectorAlgebraReport {
     /// This is the dot product of the right and left method vectors.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -103,7 +103,7 @@ impl MethodVectorAlgebraReport {
     /// This is the squared L2 norm of the left method vector.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -133,7 +133,7 @@ impl MethodVectorAlgebraReport {
     /// This is the squared L2 norm of the right method vector.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -168,7 +168,7 @@ impl MethodVectorAlgebraReport {
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+/// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
 ///
 /// let left = profile(MethodInput {
 ///     name: "parse_tokens",
