@@ -52,7 +52,7 @@ pub fn env_test_guard() -> MutexGuard<'static, ()> {
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::LocaleOverride;
+/// use whitaker_common::test_support::LocaleOverride;
 /// use serial_test::serial;
 ///
 /// #[test]
@@ -88,7 +88,7 @@ impl LocaleOverride {
     /// # Examples
     ///
     /// ```ignore
-    /// use common::test_support::LocaleOverride;
+    /// use whitaker_common::test_support::LocaleOverride;
     /// use serial_test::serial;
     /// use std::ffi::OsString;
     ///

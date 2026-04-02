@@ -28,7 +28,7 @@ use super::MethodInfo;
 /// # Examples
 ///
 /// ```
-/// use common::lcom4::MethodInfoBuilder;
+/// use whitaker_common::lcom4::MethodInfoBuilder;
 ///
 /// let mut builder = MethodInfoBuilder::new("process");
 /// builder.record_field_access("data", false);
@@ -54,7 +54,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::MethodInfoBuilder;
+    /// use whitaker_common::lcom4::MethodInfoBuilder;
     ///
     /// let builder = MethodInfoBuilder::new("read");
     /// assert!(builder.is_empty());
@@ -78,7 +78,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::MethodInfoBuilder;
+    /// use whitaker_common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("render");
     /// builder.record_field_access("canvas", false);
@@ -104,7 +104,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::MethodInfoBuilder;
+    /// use whitaker_common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("dispatch");
     /// builder.record_method_call("validate", false);
@@ -129,7 +129,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::MethodInfoBuilder;
+    /// use whitaker_common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("noop");
     /// assert!(builder.is_empty());
@@ -147,7 +147,7 @@ impl MethodInfoBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::lcom4::MethodInfoBuilder;
+    /// use whitaker_common::lcom4::MethodInfoBuilder;
     ///
     /// let mut builder = MethodInfoBuilder::new("process");
     /// builder.record_field_access("data", false);
@@ -171,7 +171,7 @@ impl MethodInfoBuilder {
 /// # Examples
 ///
 /// ```
-/// use common::lcom4::{MethodInfoBuilder, collect_method_infos};
+/// use whitaker_common::lcom4::{MethodInfoBuilder, collect_method_infos};
 ///
 /// let mut b1 = MethodInfoBuilder::new("read");
 /// b1.record_field_access("buf", false);

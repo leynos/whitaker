@@ -8,10 +8,6 @@
 //! the file.
 use std::borrow::Cow;
 
-use common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
-};
 use log::debug;
 use newt_hype::base_newtype;
 use rustc_hir as hir;
@@ -22,6 +18,10 @@ use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
 use rustc_span::{BytePos, Span};
 use whitaker::{SharedConfig, module_body_span, module_header_span};
+use whitaker_common::i18n::{
+    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+};
 
 mod inner_attr;
 mod parser;

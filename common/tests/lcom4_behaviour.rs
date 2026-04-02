@@ -1,10 +1,10 @@
 //! Behaviour-driven coverage for LCOM4 cohesion analysis.
 
-use common::lcom4::{MethodInfo, cohesion_components};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
+use whitaker_common::lcom4::{MethodInfo, cohesion_components};
 
 #[derive(Debug, Default)]
 struct LcomWorld {

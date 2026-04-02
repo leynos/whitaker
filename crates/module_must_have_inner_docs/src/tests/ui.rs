@@ -1,9 +1,9 @@
 //! UI regression tests for the `module_must_have_inner_docs` lint across
 //! English and Welsh locales.
 
-use common::test_support::LocaleOverride;
 use rstest::rstest;
 use serial_test::serial;
+use whitaker_common::test_support::LocaleOverride;
 
 /// Runs UI regression tests for the `module_must_have_inner_docs` lint under
 /// different locale configurations, verifying that diagnostics render correctly.

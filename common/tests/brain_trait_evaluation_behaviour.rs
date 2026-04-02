@@ -1,13 +1,13 @@
 //! Behaviour-driven coverage for brain trait threshold evaluation.
 
-use common::brain_trait_metrics::evaluation::{
-    BrainTraitDiagnostic, BrainTraitDisposition, BrainTraitThresholds, BrainTraitThresholdsBuilder,
-    evaluate_brain_trait, format_primary_message,
-};
-use common::brain_trait_metrics::{TraitMetrics, TraitMetricsBuilder};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+use whitaker_common::brain_trait_metrics::evaluation::{
+    BrainTraitDiagnostic, BrainTraitDisposition, BrainTraitThresholds, BrainTraitThresholdsBuilder,
+    evaluate_brain_trait, format_primary_message,
+};
+use whitaker_common::brain_trait_metrics::{TraitMetrics, TraitMetricsBuilder};
 
 #[derive(Debug)]
 struct EvaluationWorld {

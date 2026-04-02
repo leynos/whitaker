@@ -318,6 +318,7 @@ jobs:
         if: env.CARGO_REGISTRY_TOKEN != ''
         run: |
           set -euxo pipefail
+          cargo publish -p whitaker-common
           cargo publish -p whitaker-installer
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

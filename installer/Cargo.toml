@@ -44,7 +44,7 @@ test-support = []
 [dependencies]
 camino = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-common = { workspace = true }
+whitaker-common = { workspace = true }
 directories-next = { workspace = true }
 flate2 = { workspace = true }
 fs2 = "0.4"

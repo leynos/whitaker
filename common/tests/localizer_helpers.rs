@@ -3,18 +3,18 @@
 //! Scenarios validate locale resolution and fallback handling so lints can
 //! depend on deterministic localisation outcomes.
 
-use common::i18n::testing::RecordingEmitter;
-use common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
-};
-use common::test_support::LocaleOverride;
 use logtest::Logger;
 use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::{Mutex, MutexGuard};
+use whitaker_common::i18n::testing::RecordingEmitter;
+use whitaker_common::i18n::{
+    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+};
+use whitaker_common::test_support::LocaleOverride;
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 

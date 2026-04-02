@@ -33,7 +33,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::BrainTypeDisposition;
+/// use whitaker_common::brain_type_metrics::evaluation::BrainTypeDisposition;
 ///
 /// let d = BrainTypeDisposition::Pass;
 /// assert_ne!(d, BrainTypeDisposition::Warn);
@@ -63,7 +63,7 @@ pub enum BrainTypeDisposition {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::BrainTypeThresholdsBuilder;
+/// use whitaker_common::brain_type_metrics::evaluation::BrainTypeThresholdsBuilder;
 ///
 /// let thresholds = BrainTypeThresholdsBuilder::new().wmc_warn(50).build();
 /// assert_eq!(thresholds.wmc_warn(), 50);
@@ -127,7 +127,7 @@ const DEFAULT_BRAIN_METHOD_DENY_COUNT: usize = 2;
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::BrainTypeThresholdsBuilder;
+/// use whitaker_common::brain_type_metrics::evaluation::BrainTypeThresholdsBuilder;
 ///
 /// let thresholds = BrainTypeThresholdsBuilder::new()
 ///     .wmc_warn(50)
@@ -243,17 +243,17 @@ fn is_warn_triggered(metrics: &TypeMetrics, thresholds: &BrainTypeThresholds) ->
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::{
+/// use whitaker_common::brain_type_metrics::evaluation::{
 ///     BrainTypeThresholdsBuilder, evaluate_brain_type,
 /// };
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let thresholds = BrainTypeThresholdsBuilder::new().build();
 /// let metrics = TypeMetricsBuilder::new("Safe", 25, 80).build();
 /// let disposition = evaluate_brain_type(&metrics, &thresholds);
 /// assert_eq!(
 ///     disposition,
-///     common::brain_type_metrics::evaluation::BrainTypeDisposition::Pass,
+///     whitaker_common::brain_type_metrics::evaluation::BrainTypeDisposition::Pass,
 /// );
 /// ```
 #[must_use]

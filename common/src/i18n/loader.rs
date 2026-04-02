@@ -41,7 +41,7 @@ impl Localizer {
     /// Create a localizer for `locale`, falling back to [`crate::i18n::FALLBACK_LOCALE`].
     ///
     /// ```
-    /// use common::i18n::{available_locales, Localizer};
+    /// use whitaker_common::i18n::{available_locales, Localizer};
     ///
     /// let locale = Localizer::new(Some("cy"));
     /// assert!(available_locales().contains(&"cy".to_string()));

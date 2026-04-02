@@ -15,7 +15,7 @@ rustc_lint = { workspace = true }
 rustc_middle = { workspace = true }
 rustc_session = { workspace = true }
 rustc_span = { workspace = true }
-common = { path = "../../common" }
+whitaker-common = { path = "../../common" }
 
 [dev-dependencies]
 whitaker = { path = "../../" }

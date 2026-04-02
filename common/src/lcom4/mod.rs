@@ -28,7 +28,7 @@ use std::collections::{BTreeSet, HashMap};
 ///
 /// ```
 /// use std::collections::BTreeSet;
-/// use common::lcom4::MethodInfo;
+/// use whitaker_common::lcom4::MethodInfo;
 ///
 /// let method = MethodInfo::new(
 ///     "process",
@@ -55,7 +55,7 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
-    /// use common::lcom4::MethodInfo;
+    /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new(
     ///     "process",
@@ -83,7 +83,7 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
-    /// use common::lcom4::MethodInfo;
+    /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new("read", BTreeSet::new(), BTreeSet::new());
     /// assert_eq!(m.name(), "read");
@@ -99,7 +99,7 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
-    /// use common::lcom4::MethodInfo;
+    /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new(
     ///     "read",
@@ -119,7 +119,7 @@ impl MethodInfo {
     ///
     /// ```
     /// use std::collections::BTreeSet;
-    /// use common::lcom4::MethodInfo;
+    /// use whitaker_common::lcom4::MethodInfo;
     ///
     /// let m = MethodInfo::new(
     ///     "process",
@@ -269,7 +269,7 @@ fn union_by_method_calls(methods: &[MethodInfo], uf: &mut UnionFind) {
 ///
 /// ```
 /// use std::collections::BTreeSet;
-/// use common::lcom4::{MethodInfo, cohesion_components};
+/// use whitaker_common::lcom4::{MethodInfo, cohesion_components};
 ///
 /// let methods = vec![
 ///     MethodInfo::new("read", BTreeSet::from(["buf".into()]), BTreeSet::new()),
@@ -281,7 +281,7 @@ fn union_by_method_calls(methods: &[MethodInfo], uf: &mut UnionFind) {
 ///
 /// ```
 /// use std::collections::BTreeSet;
-/// use common::lcom4::{MethodInfo, cohesion_components};
+/// use whitaker_common::lcom4::{MethodInfo, cohesion_components};
 ///
 /// let methods = vec![
 ///     MethodInfo::new("parse", BTreeSet::from(["input".into()]), BTreeSet::new()),

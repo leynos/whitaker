@@ -10,4 +10,4 @@
 # The common crate contains test support utilities that require ambient access
 # for fixture management. The whitaker crate contains the UI test harness which
 # needs ambient access to copy compiled lint libraries during test execution.
-excluded_crates = ["whitaker_installer", "common", "whitaker"]
+excluded_crates = ["whitaker_installer", "whitaker-common", "whitaker"]

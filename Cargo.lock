@@ -162,7 +162,6 @@ name = "bumpy_road_function"
 version = "0.2.2"
 dependencies = [
  "camino",
- "common",
  "dylint_linting",
  "dylint_testing",
  "fluent-templates",
@@ -177,6 +176,7 @@ dependencies = [
  "serde",
  "tempfile",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -357,25 +357,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
-name = "common"
-version = "0.2.2"
-dependencies = [
- "camino",
- "fluent-templates",
- "glob",
- "log",
- "logtest",
- "once_cell",
- "regex",
- "rstest",
- "rstest-bdd",
- "rstest-bdd-macros",
- "tempfile",
- "thiserror 2.0.17",
- "unic-langid",
-]
-
-[[package]]
 name = "compiletest_rs"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -402,7 +383,6 @@ name = "conditional_max_n_branches"
 version = "0.2.2"
 dependencies = [
  "camino",
- "common",
  "dylint_linting",
  "dylint_testing",
  "fluent-templates",
@@ -419,6 +399,7 @@ dependencies = [
  "serial_test",
  "tempfile",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -911,7 +892,6 @@ dependencies = [
 name = "function_attrs_follow_docs"
 version = "0.2.2"
 dependencies = [
- "common",
  "dylint_linting",
  "dylint_testing",
  "log",
@@ -927,6 +907,7 @@ dependencies = [
  "rustc_span",
  "serial_test",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -1669,7 +1650,6 @@ name = "module_max_lines"
 version = "0.2.2"
 dependencies = [
  "camino",
- "common",
  "dylint_linting",
  "dylint_testing",
  "fluent-templates",
@@ -1684,13 +1664,13 @@ dependencies = [
  "rustc_span",
  "tempfile",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
 name = "module_must_have_inner_docs"
 version = "0.2.2"
 dependencies = [
- "common",
  "dylint_linting",
  "dylint_testing",
  "log",
@@ -1705,6 +1685,7 @@ dependencies = [
  "rustc_span",
  "serial_test",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -1723,7 +1704,6 @@ checksum = "5c8b7b69b0eafaa88ec8dc9fe7c3860af0a147517e5207cfbd0ecd21cd7cde18"
 name = "no_expect_outside_tests"
 version = "0.2.2"
 dependencies = [
- "common",
  "dylint_linting",
  "dylint_testing",
  "log",
@@ -1740,6 +1720,7 @@ dependencies = [
  "temp-env",
  "tokio",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -1747,7 +1728,6 @@ name = "no_std_fs_operations"
 version = "0.2.2"
 dependencies = [
  "cargo_metadata",
- "common",
  "dylint_linting",
  "dylint_testing",
  "log",
@@ -1764,6 +1744,7 @@ dependencies = [
  "serial_test",
  "toml 0.9.8",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -1772,7 +1753,6 @@ version = "0.2.2"
 dependencies = [
  "camino",
  "clippy_utils",
- "common",
  "dylint_linting",
  "dylint_testing",
  "log",
@@ -1786,6 +1766,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -2666,7 +2647,6 @@ name = "test_must_not_have_example"
 version = "0.2.2"
 dependencies = [
  "camino",
- "common",
  "dylint_linting",
  "dylint_testing",
  "log",
@@ -2678,6 +2658,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "whitaker",
+ "whitaker-common",
 ]
 
 [[package]]
@@ -3169,7 +3150,6 @@ dependencies = [
  "camino",
  "cargo_metadata",
  "clap",
- "common",
  "dylint_linting",
  "dylint_testing",
  "rstest",
@@ -3182,7 +3162,27 @@ dependencies = [
  "serde",
  "thiserror 2.0.17",
  "toml 0.9.8",
+ "whitaker-common",
  "whitaker-installer",
+]
+
+[[package]]
+name = "whitaker-common"
+version = "0.2.2"
+dependencies = [
+ "camino",
+ "fluent-templates",
+ "glob",
+ "log",
+ "logtest",
+ "once_cell",
+ "regex",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "tempfile",
+ "thiserror 2.0.17",
+ "unic-langid",
 ]
 
 [[package]]
@@ -3191,7 +3191,6 @@ version = "0.2.2"
 dependencies = [
  "camino",
  "clap",
- "common",
  "directories-next",
  "flate2",
  "fs2",
@@ -3211,6 +3210,7 @@ dependencies = [
  "toml 0.9.8",
  "ureq",
  "wait-timeout",
+ "whitaker-common",
  "whitaker-installer",
  "zip",
  "zstd",

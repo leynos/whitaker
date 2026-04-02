@@ -30,7 +30,7 @@ impl Suggestion {
     /// # Examples
     ///
     /// ```
-    /// use common::diagnostics::{Applicability, Suggestion};
+    /// use whitaker_common::diagnostics::{Applicability, Suggestion};
     ///
     /// let suggestion = Suggestion::new("Use expect", "expect(...)", Applicability::MaybeIncorrect);
     /// assert_eq!(suggestion.message(), "Use expect");
@@ -168,8 +168,8 @@ impl DiagnosticBuilder {
 /// # Examples
 ///
 /// ```
-/// use common::diagnostics::{span_lint, Applicability, Suggestion};
-/// use common::span::{SourceLocation, SourceSpan};
+/// use whitaker_common::diagnostics::{span_lint, Applicability, Suggestion};
+/// use whitaker_common::span::{SourceLocation, SourceSpan};
 ///
 /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4)).expect("valid span for example");
 /// let diagnostic = span_lint("demo", "Example", span)

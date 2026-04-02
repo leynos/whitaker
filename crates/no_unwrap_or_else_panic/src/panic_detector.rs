@@ -1,12 +1,12 @@
 //! Detect panics inside `unwrap_or_else` fallback closures.
 
-use common::SimplePath;
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Expr, ExprKind};
 use rustc_lint::LateContext;
 use rustc_middle::ty;
 use rustc_span::sym;
+use whitaker_common::SimplePath;
 
 /// Known panic entry points used by both clippy and non-clippy builds.
 const PANIC_PATHS: &[&[&str]] = &[
@@ -111,7 +111,7 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     let path = SimplePath::from(cx.tcx.def_path_str(def_id).as_str());
     PANIC_PATHS
         .iter()
-        .any(|candidate| common::is_path_to(&path, candidate.iter().copied()))
+        .any(|candidate| whitaker_common::is_path_to(&path, candidate.iter().copied()))
 }
 
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {

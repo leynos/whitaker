@@ -1,9 +1,9 @@
 //! Behaviour-driven coverage for method metadata extraction.
 
-use common::lcom4::{MethodInfo, MethodInfoBuilder};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+use whitaker_common::lcom4::{MethodInfo, MethodInfoBuilder};
 
 #[derive(Debug, Default)]
 struct ExtractionWorld {

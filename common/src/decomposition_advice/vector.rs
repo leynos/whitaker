@@ -174,8 +174,8 @@ pub(crate) fn build_feature_vector(profile: &MethodProfile) -> MethodFeatureVect
 /// For testing and integration purposes, use the public test support wrapper:
 ///
 /// ```
-/// use common::MethodProfileBuilder;
-/// use common::test_support::decomposition::methods_meet_cosine_threshold;
+/// use whitaker_common::MethodProfileBuilder;
+/// use whitaker_common::test_support::decomposition::methods_meet_cosine_threshold;
 ///
 /// let mut left_builder = MethodProfileBuilder::new("parse_tokens");
 /// left_builder.record_accessed_field("grammar");

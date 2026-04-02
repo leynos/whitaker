@@ -10,7 +10,7 @@ documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.m
 version = "0.2.2"
 
 [workspace.dependencies]
-common = { path = "common", version = "0.2.2" }
+whitaker-common = { path = "common", version = "0.2.2" }
 whitaker-installer = { path = "installer", version = "0.2.2" }
 whitaker = { path = ".", version = "0.2.2" }
 camino = "1.2.1"
@@ -76,7 +76,7 @@ clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
-common = { workspace = true }
+whitaker-common = { workspace = true }
 whitaker-installer = { workspace = true }
 
 rustc_ast = { workspace = true, optional = true }
@@ -86,7 +86,7 @@ rustc_span = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]
-common = { workspace = true }
+whitaker-common = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

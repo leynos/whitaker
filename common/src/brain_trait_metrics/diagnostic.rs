@@ -29,10 +29,10 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::{
+/// use whitaker_common::brain_trait_metrics::evaluation::{
 ///     BrainTraitDiagnostic, BrainTraitDisposition,
 /// };
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diag = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -126,10 +126,10 @@ impl BrainTraitDiagnostic {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::{
+/// use whitaker_common::brain_trait_metrics::evaluation::{
 ///     BrainTraitDiagnostic, BrainTraitDisposition, format_primary_message,
 /// };
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let mut builder = TraitMetricsBuilder::new("Parser");
 /// builder.add_required_method("parse");
@@ -165,10 +165,10 @@ pub fn format_primary_message(diagnostic: &BrainTraitDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::{
+/// use whitaker_common::brain_trait_metrics::evaluation::{
 ///     BrainTraitDiagnostic, BrainTraitDisposition, format_note,
 /// };
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diag = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -201,10 +201,10 @@ pub fn format_note(diagnostic: &BrainTraitDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::{
+/// use whitaker_common::brain_trait_metrics::evaluation::{
 ///     BrainTraitDiagnostic, BrainTraitDisposition, format_decomposition_note,
 /// };
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diagnostic = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -231,10 +231,10 @@ pub fn format_decomposition_note(
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::{
+/// use whitaker_common::brain_trait_metrics::evaluation::{
 ///     BrainTraitDiagnostic, BrainTraitDisposition, format_help,
 /// };
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diag = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);

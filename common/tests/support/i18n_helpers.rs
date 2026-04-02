@@ -2,8 +2,8 @@
 //! Provides argument builders and string post-processing utilities
 //! that keep suites aligned and readable.
 
-use common::i18n::{Arguments, FluentValue};
 use std::borrow::Cow;
+use whitaker_common::i18n::{Arguments, FluentValue};
 
 const UNICODE_ISOLATION_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
 

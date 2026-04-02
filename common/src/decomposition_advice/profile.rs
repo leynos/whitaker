@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::SubjectKind;
+/// use whitaker_common::decomposition_advice::SubjectKind;
 ///
 /// assert_eq!(SubjectKind::Type, SubjectKind::Type);
 /// assert_ne!(SubjectKind::Type, SubjectKind::Trait);
@@ -37,7 +37,7 @@ impl std::str::FromStr for SubjectKind {
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::{DecompositionContext, SubjectKind};
+/// use whitaker_common::decomposition_advice::{DecompositionContext, SubjectKind};
 ///
 /// let context = DecompositionContext::new("Parser", SubjectKind::Type);
 /// assert_eq!(context.subject_name(), "Parser");
@@ -81,7 +81,7 @@ impl DecompositionContext {
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::MethodProfileBuilder;
+/// use whitaker_common::decomposition_advice::MethodProfileBuilder;
 ///
 /// let mut builder = MethodProfileBuilder::new("parse_tokens");
 /// builder
@@ -143,7 +143,7 @@ impl MethodProfile {
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::MethodProfileBuilder;
+/// use whitaker_common::decomposition_advice::MethodProfileBuilder;
 ///
 /// let mut builder = MethodProfileBuilder::new("write_cache");
 /// builder

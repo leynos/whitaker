@@ -1,12 +1,12 @@
 //! Behaviour-driven coverage for brain type metric collection.
 
-use common::brain_type_metrics::{
-    ForeignReferenceSet, MethodMetrics, TypeMetricsBuilder, brain_methods, foreign_reach_count,
-    weighted_methods_count,
-};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+use whitaker_common::brain_type_metrics::{
+    ForeignReferenceSet, MethodMetrics, TypeMetricsBuilder, brain_methods, foreign_reach_count,
+    weighted_methods_count,
+};
 
 #[derive(Debug)]
 struct MetricsWorld {

@@ -14,7 +14,7 @@ impl SimplePath {
     /// # Examples
     ///
     /// ```
-    /// use common::path::SimplePath;
+    /// use whitaker_common::path::SimplePath;
     ///
     /// let path = SimplePath::new(["tokio", "test"]);
     /// assert_eq!(path.segments(), &["tokio", "test"]);
@@ -38,7 +38,7 @@ impl SimplePath {
     /// # Examples
     ///
     /// ```
-    /// use common::path::SimplePath;
+    /// use whitaker_common::path::SimplePath;
     ///
     /// let parsed = SimplePath::from("tokio::test");
     /// assert_eq!(parsed.segments(), &["tokio", "test"]);

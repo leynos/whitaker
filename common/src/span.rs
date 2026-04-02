@@ -23,7 +23,7 @@ impl SourceLocation {
     /// # Examples
     ///
     /// ```
-    /// use common::span::SourceLocation;
+    /// use whitaker_common::span::SourceLocation;
     ///
     /// let location = SourceLocation::new(3, 5);
     /// assert_eq!(location.line(), 3);
@@ -65,7 +65,7 @@ impl SourceSpan {
     /// # Examples
     ///
     /// ```
-    /// use common::span::{SourceLocation, SourceSpan};
+    /// use whitaker_common::span::{SourceLocation, SourceSpan};
     ///
     /// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(3, 2)).expect("valid span for example");
     /// assert_eq!(span.start().line(), 1);
@@ -97,7 +97,7 @@ impl SourceSpan {
 /// # Examples
 ///
 /// ```
-/// use common::span::{SourceLocation, SourceSpan, span_to_lines};
+/// use whitaker_common::span::{SourceLocation, SourceSpan, span_to_lines};
 ///
 /// let span = SourceSpan::new(SourceLocation::new(4, 0), SourceLocation::new(6, 5)).expect("valid span for example");
 /// assert_eq!(span_to_lines(span), 4..=6);
@@ -112,7 +112,7 @@ pub fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
 /// # Examples
 ///
 /// ```
-/// use common::span::{SourceLocation, SourceSpan, span_line_count};
+/// use whitaker_common::span::{SourceLocation, SourceSpan, span_line_count};
 ///
 /// let span = SourceSpan::new(SourceLocation::new(2, 0), SourceLocation::new(5, 1)).expect("valid span for example");
 /// assert_eq!(span_line_count(span), 4);

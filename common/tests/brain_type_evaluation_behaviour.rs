@@ -1,13 +1,13 @@
 //! Behaviour-driven coverage for brain type threshold evaluation.
 
-use common::brain_type_metrics::evaluation::{
-    BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
-    evaluate_brain_type, format_primary_message,
-};
-use common::brain_type_metrics::{MethodMetrics, TypeMetrics, TypeMetricsBuilder};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+use whitaker_common::brain_type_metrics::evaluation::{
+    BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
+    evaluate_brain_type, format_primary_message,
+};
+use whitaker_common::brain_type_metrics::{MethodMetrics, TypeMetrics, TypeMetricsBuilder};
 
 #[derive(Debug)]
 struct EvaluationWorld {

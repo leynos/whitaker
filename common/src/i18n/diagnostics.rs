@@ -3,10 +3,10 @@
 //! # Examples
 //!
 //! ```
-//! # use common::i18n::{
+//! # use whitaker_common::i18n::{
 //! #     Arguments, Localizer, MessageKey, resolve_message_set,
 //! # };
-//! # fn demo(localizer: &Localizer) -> Result<(), common::i18n::I18nError> {
+//! # fn demo(localizer: &Localizer) -> Result<(), whitaker_common::i18n::I18nError> {
 //! #     let args = Arguments::default();
 //! let messages = resolve_message_set(
 //!     localizer,
@@ -113,7 +113,7 @@ impl DiagnosticMessageSet {
     /// # Examples
     ///
     /// ```
-    /// # use common::i18n::DiagnosticMessageSet;
+    /// # use whitaker_common::i18n::DiagnosticMessageSet;
     /// let messages = DiagnosticMessageSet::new(
     ///     "primary".into(),
     ///     "note".into(),
@@ -135,7 +135,7 @@ impl DiagnosticMessageSet {
     /// # Examples
     ///
     /// ```
-    /// # use common::i18n::DiagnosticMessageSet;
+    /// # use whitaker_common::i18n::DiagnosticMessageSet;
     /// # let messages = DiagnosticMessageSet::new(
     /// #     "primary".into(),
     /// #     "note".into(),
@@ -153,7 +153,7 @@ impl DiagnosticMessageSet {
     /// # Examples
     ///
     /// ```
-    /// # use common::i18n::DiagnosticMessageSet;
+    /// # use whitaker_common::i18n::DiagnosticMessageSet;
     /// # let messages = DiagnosticMessageSet::new(
     /// #     "primary".into(),
     /// #     "note".into(),
@@ -171,7 +171,7 @@ impl DiagnosticMessageSet {
     /// # Examples
     ///
     /// ```
-    /// # use common::i18n::DiagnosticMessageSet;
+    /// # use whitaker_common::i18n::DiagnosticMessageSet;
     /// # let messages = DiagnosticMessageSet::new(
     /// #     "primary".into(),
     /// #     "note".into(),

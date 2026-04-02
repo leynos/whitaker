@@ -5,7 +5,7 @@
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::TraitItemKind;
+/// use whitaker_common::brain_trait_metrics::TraitItemKind;
 ///
 /// let kind = TraitItemKind::RequiredMethod;
 /// assert!(matches!(kind, TraitItemKind::RequiredMethod));
@@ -29,7 +29,7 @@ pub enum TraitItemKind {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
+/// use whitaker_common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
 ///
 /// let item = TraitItemMetrics::default_method("render", 12);
 /// assert_eq!(item.kind(), TraitItemKind::DefaultMethod);
@@ -48,7 +48,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
+    /// use whitaker_common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
     ///
     /// let item = TraitItemMetrics::required_method("parse");
     /// assert_eq!(item.kind(), TraitItemKind::RequiredMethod);
@@ -68,7 +68,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
+    /// use whitaker_common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
     ///
     /// let item = TraitItemMetrics::default_method("render", 17);
     /// assert_eq!(item.kind(), TraitItemKind::DefaultMethod);
@@ -88,7 +88,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
+    /// use whitaker_common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
     ///
     /// let item = TraitItemMetrics::associated_type("Output");
     /// assert_eq!(item.kind(), TraitItemKind::AssociatedType);
@@ -107,7 +107,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
+    /// use whitaker_common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
     ///
     /// let item = TraitItemMetrics::associated_const("VERSION");
     /// assert_eq!(item.kind(), TraitItemKind::AssociatedConst);
@@ -126,7 +126,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitItemMetrics;
+    /// use whitaker_common::brain_trait_metrics::TraitItemMetrics;
     ///
     /// let item = TraitItemMetrics::required_method("parse");
     /// assert_eq!(item.name(), "parse");
@@ -141,7 +141,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
+    /// use whitaker_common::brain_trait_metrics::{TraitItemKind, TraitItemMetrics};
     ///
     /// let item = TraitItemMetrics::required_method("parse");
     /// assert_eq!(item.kind(), TraitItemKind::RequiredMethod);
@@ -156,7 +156,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitItemMetrics;
+    /// use whitaker_common::brain_trait_metrics::TraitItemMetrics;
     ///
     /// let item = TraitItemMetrics::default_method("render", 9);
     /// assert_eq!(item.default_method_cc(), Some(9));
@@ -171,7 +171,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitItemMetrics;
+    /// use whitaker_common::brain_trait_metrics::TraitItemMetrics;
     ///
     /// let item = TraitItemMetrics::required_method("parse");
     /// assert!(item.is_required_method());
@@ -186,7 +186,7 @@ impl TraitItemMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitItemMetrics;
+    /// use whitaker_common::brain_trait_metrics::TraitItemMetrics;
     ///
     /// let item = TraitItemMetrics::default_method("render", 9);
     /// assert!(item.is_default_method());
@@ -202,7 +202,7 @@ impl TraitItemMetrics {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::{TraitItemMetrics, trait_item_count};
+/// use whitaker_common::brain_trait_metrics::{TraitItemMetrics, trait_item_count};
 ///
 /// let items = vec![
 ///     TraitItemMetrics::required_method("parse"),
@@ -220,7 +220,7 @@ pub fn trait_item_count(items: &[TraitItemMetrics]) -> usize {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::{TraitItemMetrics, required_method_count};
+/// use whitaker_common::brain_trait_metrics::{TraitItemMetrics, required_method_count};
 ///
 /// let items = vec![
 ///     TraitItemMetrics::required_method("parse"),
@@ -241,7 +241,7 @@ pub fn required_method_count(items: &[TraitItemMetrics]) -> usize {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::{TraitItemMetrics, default_method_count};
+/// use whitaker_common::brain_trait_metrics::{TraitItemMetrics, default_method_count};
 ///
 /// let items = vec![
 ///     TraitItemMetrics::required_method("parse"),
@@ -259,7 +259,7 @@ pub fn default_method_count(items: &[TraitItemMetrics]) -> usize {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::{TraitItemMetrics, default_method_cc_sum};
+/// use whitaker_common::brain_trait_metrics::{TraitItemMetrics, default_method_cc_sum};
 ///
 /// let items = vec![
 ///     TraitItemMetrics::default_method("render", 12),

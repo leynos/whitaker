@@ -1,10 +1,10 @@
 //! UI harness for `no_unwrap_or_else_panic` fixtures.
 
 use camino::Utf8Path;
-use common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 use dylint_testing::ui::Test;
 use std::path::Path;
 use std::{fs, io};
+use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 #[test]
 fn ui() {

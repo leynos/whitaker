@@ -4,11 +4,11 @@
 //! continue to precede other outer attributes across common layouts.
 
 use super::{OrderedAttribute, detect_misordered_doc};
-use common::attributes::{Attribute, AttributeKind, AttributePath};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_span::{DUMMY_SP, Span};
 use std::cell::RefCell;
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 
 impl OrderedAttribute for Attribute {
     fn is_outer(&self) -> bool {

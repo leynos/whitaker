@@ -3,11 +3,11 @@
 //! Validates detection of standard test attributes (`#[rstest]`, `#[tokio::test]`)
 //! and custom attributes configured via the additional attribute set.
 
-use common::attributes::{Attribute, AttributeKind, AttributePath};
-use common::context::{ContextEntry, in_test_like_context_with, is_test_fn_with};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+use whitaker_common::context::{ContextEntry, in_test_like_context_with, is_test_fn_with};
 
 #[derive(Clone, Debug, Default)]
 struct FunctionFixture {

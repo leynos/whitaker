@@ -4,10 +4,6 @@
 //! and warns when the count exceeds the configurable `max_lines` threshold.
 //! The lint uses localisation data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
-use common::i18n::{
-    Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
-};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
@@ -15,6 +11,10 @@ use rustc_span::Span;
 use rustc_span::source_map::SourceMap;
 use rustc_span::symbol::Ident;
 use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span, module_header_span};
+use whitaker_common::i18n::{
+    Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+};
 
 const LINT_NAME: &str = "module_max_lines";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("module_max_lines");

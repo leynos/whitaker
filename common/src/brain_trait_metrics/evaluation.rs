@@ -34,7 +34,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::BrainTraitDisposition;
+/// use whitaker_common::brain_trait_metrics::evaluation::BrainTraitDisposition;
 ///
 /// let d = BrainTraitDisposition::Pass;
 /// assert_ne!(d, BrainTraitDisposition::Warn);
@@ -66,7 +66,7 @@ pub enum BrainTraitDisposition {
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::BrainTraitThresholdsBuilder;
+/// use whitaker_common::brain_trait_metrics::evaluation::BrainTraitThresholdsBuilder;
 ///
 /// let thresholds = BrainTraitThresholdsBuilder::new()
 ///     .methods_warn(25)
@@ -118,7 +118,7 @@ const DEFAULT_CC_WARN: usize = 40;
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::BrainTraitThresholdsBuilder;
+/// use whitaker_common::brain_trait_metrics::evaluation::BrainTraitThresholdsBuilder;
 ///
 /// let thresholds = BrainTraitThresholdsBuilder::new()
 ///     .methods_warn(25)
@@ -219,17 +219,17 @@ fn is_warn_triggered(metrics: &TraitMetrics, thresholds: &BrainTraitThresholds) 
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::evaluation::{
+/// use whitaker_common::brain_trait_metrics::evaluation::{
 ///     BrainTraitThresholdsBuilder, evaluate_brain_trait,
 /// };
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let thresholds = BrainTraitThresholdsBuilder::new().build();
 /// let metrics = TraitMetricsBuilder::new("Safe").build();
 /// let disposition = evaluate_brain_trait(&metrics, &thresholds);
 /// assert_eq!(
 ///     disposition,
-///     common::brain_trait_metrics::evaluation::BrainTraitDisposition::Pass,
+///     whitaker_common::brain_trait_metrics::evaluation::BrainTraitDisposition::Pass,
 /// );
 /// ```
 #[must_use]

@@ -5,8 +5,6 @@ use crate::diagnostics::emit_diagnostic;
 use crate::usage::{
     StdFsUsage, UsageCategory, classify_def_id, classify_qpath, classify_res, label_is_std_fs,
 };
-use common::i18n::Localizer;
-use common::i18n::get_localizer_for_lint;
 use log::{info, warn};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
@@ -16,6 +14,8 @@ use rustc_span::{Span, sym};
 use serde::Deserialize;
 use std::collections::HashSet;
 use whitaker::SharedConfig;
+use whitaker_common::i18n::Localizer;
+use whitaker_common::i18n::get_localizer_for_lint;
 
 const LINT_NAME: &str = "no_std_fs_operations";
 

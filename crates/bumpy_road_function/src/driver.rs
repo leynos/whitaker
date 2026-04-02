@@ -6,9 +6,6 @@
 //! the two largest bump intervals with labelled spans.
 
 use crate::analysis::{Settings, detect_bumps, normalise_settings};
-use common::complexity_signal::{rasterize_signal, smooth_moving_average};
-use common::i18n::MessageKey;
-use common::{Localizer, get_localizer_for_lint};
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
@@ -16,6 +13,9 @@ use rustc_span::Ident;
 use rustc_span::Span;
 use rustc_span::symbol::Symbol;
 use whitaker::SharedConfig;
+use whitaker_common::complexity_signal::{rasterize_signal, smooth_moving_average};
+use whitaker_common::i18n::MessageKey;
+use whitaker_common::{Localizer, get_localizer_for_lint};
 
 const LINT_NAME: &str = "bumpy_road_function";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);

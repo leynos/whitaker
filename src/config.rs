@@ -7,8 +7,8 @@
 //! semantics match what Dylint expects: values are deserialised from
 //! `dylint.toml` when present and fall back to sensible defaults otherwise.
 
-use common::i18n::normalise_locale;
 use serde::Deserialize;
+use whitaker_common::i18n::normalise_locale;
 
 /// Shared configuration for the workspace-level crate.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]

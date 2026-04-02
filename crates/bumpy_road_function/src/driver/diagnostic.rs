@@ -7,11 +7,13 @@ use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
 use crate::analysis::{BumpInterval, Settings, top_two_bumps};
-use common::i18n::DiagnosticMessageSet;
-use common::{Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set};
 use fluent_templates::fluent_bundle::FluentValue;
 use rustc_lint::{LateContext, LintContext};
 use rustc_span::{BytePos, Span};
+use whitaker_common::i18n::DiagnosticMessageSet;
+use whitaker_common::{
+    Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set,
+};
 
 use super::{BUMPY_ROAD_FUNCTION, LINT_NAME, MESSAGE_KEY};
 

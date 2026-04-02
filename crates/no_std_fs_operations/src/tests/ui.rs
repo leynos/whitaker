@@ -1,7 +1,7 @@
 //! UI regression tests for the `no_std_fs_operations` lint.
 
-use common::test_support::LocaleOverride;
 use serial_test::serial;
+use whitaker_common::test_support::LocaleOverride;
 
 #[test]
 #[serial]

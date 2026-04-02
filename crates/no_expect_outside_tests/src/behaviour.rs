@@ -2,11 +2,11 @@
 //! world and BDD steps.
 
 use crate::context::{ContextSummary, summarise_context};
-use common::attributes::{Attribute, AttributeKind, AttributePath};
-use common::{ContextEntry, ContextKind};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+use whitaker_common::{ContextEntry, ContextKind};
 
 #[derive(Default)]
 struct ContextWorld {

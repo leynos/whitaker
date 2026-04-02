@@ -1,13 +1,13 @@
 //! Behaviour-driven coverage for decomposition advice analysis.
 
-use common::decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, MethodProfileBuilder, SubjectKind,
-    SuggestedExtractionKind, suggest_decomposition,
-};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use whitaker_common::decomposition_advice::{
+    DecompositionContext, DecompositionSuggestion, MethodProfileBuilder, SubjectKind,
+    SuggestedExtractionKind, suggest_decomposition,
+};
 
 #[derive(Debug, Clone)]
 struct CsvList(Vec<String>);

@@ -1,8 +1,7 @@
 [package]
-name = "common"
+name = "whitaker-common"
 version = "0.2.2"
 edition = "2024"
-publish = false
 description = "Internal common utilities for Whitaker lints"
 license = "MIT OR Apache-2.0"
 

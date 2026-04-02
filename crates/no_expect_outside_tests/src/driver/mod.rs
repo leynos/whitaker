@@ -13,7 +13,6 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::Component;
 
-use common::{AttributePath, Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
@@ -22,6 +21,7 @@ use rustc_span::{Span, Symbol, sym};
 use serde::Deserialize;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
+use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 
 use crate::context::{collect_context, summarise_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};

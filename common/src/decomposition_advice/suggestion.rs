@@ -11,7 +11,7 @@ use super::vector::{FeatureCategory, MethodFeatureVector, build_feature_vector};
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::SuggestedExtractionKind;
+/// use whitaker_common::decomposition_advice::SuggestedExtractionKind;
 ///
 /// assert_ne!(
 ///     SuggestedExtractionKind::HelperStruct,
@@ -56,7 +56,7 @@ impl std::fmt::Display for SuggestedExtractionKind {
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::{
+/// use whitaker_common::decomposition_advice::{
 ///     DecompositionContext, MethodProfileBuilder, SubjectKind, SuggestedExtractionKind,
 ///     suggest_decomposition,
 /// };
@@ -132,7 +132,7 @@ struct AggregatedFeature {
 /// # Examples
 ///
 /// ```
-/// use common::decomposition_advice::{
+/// use whitaker_common::decomposition_advice::{
 ///     DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
 /// };
 ///

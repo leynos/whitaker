@@ -27,7 +27,7 @@ constituent = ["dylint-driver", "dylint_linting/constituent"]
 clippy = ["dylint-driver", "dep:clippy_utils"]
 
 [dependencies]
-common = { workspace = true }
+whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }

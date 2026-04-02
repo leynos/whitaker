@@ -1,14 +1,16 @@
 //! Behaviour-driven coverage for decomposition diagnostic-note rendering.
 
-use common::decomposition_advice::{
-    DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
-    suggest_decomposition,
-};
-use common::test_support::decomposition::{parser_serde_fs_fixture, transport_trait_fixture};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use whitaker_common::decomposition_advice::{
+    DecompositionContext, MethodProfileBuilder, SubjectKind, format_diagnostic_note,
+    suggest_decomposition,
+};
+use whitaker_common::test_support::decomposition::{
+    parser_serde_fs_fixture, transport_trait_fixture,
+};
 
 #[derive(Debug, Clone)]
 struct CsvList(Vec<String>);
@@ -126,7 +128,7 @@ fn with_rendered_note(
     assert_fn(&rendered_note)
 }
 
-fn seed_methods(world: &DiagnosticNoteWorld, methods: Vec<common::MethodProfile>) {
+fn seed_methods(world: &DiagnosticNoteWorld, methods: Vec<whitaker_common::MethodProfile>) {
     for method in methods {
         let method_name = method.name().to_owned();
         let method_id = {

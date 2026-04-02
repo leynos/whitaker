@@ -5,8 +5,8 @@
 //! race-free while the canonical and Welsh harnesses run against the same
 //! fixtures.
 
-use common::test_support::LocaleOverride;
 use serial_test::serial;
+use whitaker_common::test_support::LocaleOverride;
 
 #[test]
 #[serial]

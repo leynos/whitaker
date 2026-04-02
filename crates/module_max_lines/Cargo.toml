@@ -10,7 +10,7 @@ test = false
 [features]
 default = []
 dylint-driver = [
-    "dep:common",
+    "dep:whitaker-common",
     "dep:dylint_linting",
     "dep:fluent-templates",
     "dep:log",
@@ -28,7 +28,7 @@ rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
-common = { workspace = true, optional = true }
+whitaker-common = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 fluent-templates = { workspace = true, optional = true }

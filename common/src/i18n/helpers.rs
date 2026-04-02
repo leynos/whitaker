@@ -20,7 +20,7 @@ use super::{
 /// # Examples
 ///
 /// ```
-/// use common::i18n::get_localizer_for_lint;
+/// use whitaker_common::i18n::get_localizer_for_lint;
 ///
 /// let localizer = get_localizer_for_lint("demo-lint", None);
 /// assert_eq!(localizer.locale(), "en-GB");
@@ -44,7 +44,7 @@ pub fn get_localizer_for_lint(lint_name: &str, configuration_locale: Option<&str
 /// # Examples
 ///
 /// ```
-/// use common::i18n::branch_phrase;
+/// use whitaker_common::i18n::branch_phrase;
 ///
 /// assert_eq!(branch_phrase("en-GB", 2), "2 branches");
 /// assert_eq!(branch_phrase("cy", 3), "tair cangen");
@@ -98,7 +98,7 @@ fn welsh_branch_phrase(branches: usize) -> String {
 /// # Examples
 ///
 /// ```
-/// use common::i18n::{
+/// use whitaker_common::i18n::{
 ///     Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
 ///     noop_reporter, safe_resolve_message_set,
 /// };
@@ -130,8 +130,8 @@ pub fn noop_reporter(_message: String) {}
 /// # Examples
 ///
 /// ```
-/// use common::i18n::testing::RecordingEmitter;
-/// use common::i18n::{
+/// use whitaker_common::i18n::testing::RecordingEmitter;
+/// use whitaker_common::i18n::{
 ///     Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
 ///     safe_resolve_message_set,
 /// };

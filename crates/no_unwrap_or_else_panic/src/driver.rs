@@ -5,13 +5,13 @@ use crate::context::ContextSummary;
 use crate::diagnostics::emit_diagnostic;
 use crate::panic_detector::{closure_panics, receiver_is_option_or_result};
 use crate::policy::{LintPolicy, should_flag};
-use common::i18n::{Localizer, get_localizer_for_lint};
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
 use whitaker::SharedConfig;
+use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 
 dylint_linting::impl_late_lint! {
     pub NO_UNWRAP_OR_ELSE_PANIC,
