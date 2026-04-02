@@ -43,10 +43,11 @@ fn run_install_scenario(
             Ok(())
         });
     let mut extractor = MockDependencyArchiveExtractor::new();
+    let expected_member = expected_member_path(dependency, &target);
     extractor
         .expect_extract_binary()
         .once()
-        .with(always(), always(), always())
+        .with(always(), eq(expected_member.clone()), always())
         .returning(move |_, expected_member_path, destination_dir| {
             if !writes_binary {
                 return Err(DependencyBinaryInstallError::MissingBinaryInArchive {

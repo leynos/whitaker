@@ -24,7 +24,7 @@ import contextlib
 import pathlib
 import sys
 import tomllib
-from typing import Generator
+from collections.abc import Generator
 
 
 def parse_args() -> argparse.Namespace:
@@ -101,13 +101,7 @@ def _collect_manifest_lines(
 
 @contextlib.contextmanager
 def _open_output(output: str | None) -> Generator:
-    """Yield a binary-writable handle for *output*, or ``sys.stdout.buffer``.
-
-    Parameters
-    ----------
-    output:
-        Destination file path, or ``None`` to use ``sys.stdout.buffer``.
-    """
+    """Yield a binary-writable handle for output or ``sys.stdout.buffer``."""
     if output is not None:
         if output == "":
             print("error: output path cannot be empty", file=sys.stderr)
@@ -119,15 +113,7 @@ def _open_output(output: str | None) -> Generator:
 
 
 def _write_lines(lines: list[bytes], output: str | None) -> None:
-    """Write encoded lines to the output stream.
-
-    Parameters
-    ----------
-    lines:
-        Encoded byte strings to write, one per dependency entry.
-    output:
-        Destination file path, or ``None`` to write to ``sys.stdout.buffer``.
-    """
+    """Write encoded byte lines to the selected output handle."""
     with _open_output(output) as handle:
         handle.writelines(lines)
 

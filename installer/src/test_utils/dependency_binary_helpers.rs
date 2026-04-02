@@ -1,6 +1,8 @@
-//! Test helpers for dependency binary installation behaviour tests.
+//! Test helpers for dependency binary installation tests.
 
+use crate::error::Result;
 use crate::test_utils::{ExpectedCall, failure_output, success_output};
+use std::process::Output;
 
 /// Configuration for generating expected calls in dependency binary tests.
 pub struct ExpectedCallConfig<'a> {
@@ -26,6 +28,33 @@ pub fn binstall_version_check(is_binstall_available: bool) -> ExpectedCall {
         } else {
             Ok(failure_output("missing binstall"))
         },
+    }
+}
+
+/// Creates an expected call for checking cargo-binstall with a fixed result.
+pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["binstall", "--version"],
+        result,
+    }
+}
+
+/// Creates an expected call for installing a tool with cargo-binstall.
+pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["binstall", "-y", tool],
+        result,
+    }
+}
+
+/// Creates an expected call for installing a tool with cargo install.
+pub fn cargo_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["install", tool],
+        result,
     }
 }
 
@@ -175,11 +204,29 @@ pub fn cargo_dylint_check() -> ExpectedCall {
     }
 }
 
+/// Creates an expected call for verifying cargo-dylint with a fixed result.
+pub fn cargo_dylint_check_with_result(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["dylint", "--version"],
+        result,
+    }
+}
+
 /// Creates an expected call for verifying dylint-link installation.
 pub fn dylint_link_check() -> ExpectedCall {
     ExpectedCall {
         cmd: "dylint-link",
         args: vec!["--version"],
         result: Ok(success_output()),
+    }
+}
+
+/// Creates an expected call for verifying dylint-link with a fixed result.
+pub fn dylint_link_check_with_result(result: Result<Output>) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "dylint-link",
+        args: vec!["--version"],
+        result,
     }
 }

@@ -3,48 +3,12 @@
 use super::*;
 use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
 use crate::installer_packaging::TargetTriple;
-use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
+use crate::test_utils::dependency_binary_helpers::{
+    binstall_install, binstall_version_check_with_result, cargo_dylint_check_with_result,
+    cargo_install, dylint_link_check_with_result,
+};
+use crate::test_utils::{StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
-
-fn binstall_version_check(result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "cargo",
-        args: vec!["binstall", "--version"],
-        result,
-    }
-}
-
-fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "cargo",
-        args: vec!["binstall", "-y", tool],
-        result,
-    }
-}
-
-fn cargo_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "cargo",
-        args: vec!["install", tool],
-        result,
-    }
-}
-
-fn cargo_dylint_check(result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "cargo",
-        args: vec!["dylint", "--version"],
-        result,
-    }
-}
-
-fn dylint_link_check(result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
-        result,
-    }
-}
 
 fn install_options<'a>(
     repository_installer: &'a dyn DependencyBinaryInstaller,
@@ -77,8 +41,8 @@ fn dylint_tool_status_all_installed_when_both_present() {
 #[test]
 fn check_dylint_tools_reports_installed_tools() {
     let executor = StubExecutor::new(vec![
-        cargo_dylint_check(Ok(success_output())),
-        dylint_link_check(Ok(success_output())),
+        cargo_dylint_check_with_result(Ok(success_output())),
+        dylint_link_check_with_result(Ok(success_output())),
     ]);
 
     let status = check_dylint_tools(&executor);
@@ -100,8 +64,8 @@ fn install_dylint_tools_uses_repository_release_first() {
         .expect_install()
         .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
-        binstall_version_check(Ok(success_output())),
-        cargo_dylint_check(Ok(success_output())),
+        binstall_version_check_with_result(Ok(success_output())),
+        cargo_dylint_check_with_result(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
@@ -131,9 +95,9 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
         })
     });
     let executor = StubExecutor::new(vec![
-        binstall_version_check(Ok(success_output())),
+        binstall_version_check_with_result(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(Ok(success_output())),
+        cargo_dylint_check_with_result(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
@@ -161,9 +125,9 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
         .expect_install()
         .returning(|_, _, _| Err(DependencyBinaryInstallError::MissingBinDir));
     let executor = StubExecutor::new(vec![
-        binstall_version_check(Ok(failure_output("missing binstall"))),
+        binstall_version_check_with_result(Ok(failure_output("missing binstall"))),
         cargo_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(Ok(success_output())),
+        cargo_dylint_check_with_result(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
@@ -190,10 +154,10 @@ fn install_dylint_tools_falls_back_when_repository_verification_fails() {
         .expect_install()
         .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
-        binstall_version_check(Ok(success_output())),
-        cargo_dylint_check(Ok(failure_output("still missing"))),
+        binstall_version_check_with_result(Ok(success_output())),
+        cargo_dylint_check_with_result(Ok(failure_output("still missing"))),
         binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check(Ok(success_output())),
+        cargo_dylint_check_with_result(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
@@ -220,7 +184,7 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
         .expect_install()
         .returning(|_, _, _| Err(DependencyBinaryInstallError::MissingBinDir));
     let executor = StubExecutor::new(vec![
-        binstall_version_check(Ok(success_output())),
+        binstall_version_check_with_result(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(failure_output("binstall failed"))),
         cargo_install("cargo-dylint", Ok(failure_output("cargo install failed"))),
     ]);

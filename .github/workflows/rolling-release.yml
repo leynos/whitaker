@@ -208,7 +208,6 @@ jobs:
       - name: Build and package dependency binaries
         run: |
           set -euxo pipefail
-          set -euxo pipefail
           mkdir -p dist
           mkdir -p dependency-root
           python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
@@ -353,13 +352,13 @@ jobs:
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
 
       - name: Delete existing rolling release
-        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result == 'success'
+        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result != 'failure'
         run: gh release delete rolling --cleanup-tag --yes || true
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create rolling release
-        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result == 'success'
+        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result != 'failure'
         run: |
           set -euxo pipefail
           SHA=$(git rev-parse --short HEAD)

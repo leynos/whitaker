@@ -54,11 +54,11 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
 struct DependencyBinaryWorld {
     missing_tool: Option<String>,
     repository_behaviour: Option<RepositoryInstallerBehaviour>,
-    repository_verification_fails: bool,
-    binstall_available: bool,
+    should_repository_verification_fail: bool,
+    is_binstall_available: bool,
     cargo_binstall_failure: Option<String>,
     cargo_install_failure: Option<String>,
-    unsupported_target: bool,
+    is_unsupported_target: bool,
     stderr: Vec<u8>,
     install_result: Option<std::result::Result<(), whitaker_installer::error::InstallerError>>,
     provenance: Option<String>,
@@ -88,17 +88,17 @@ fn given_repository_failure(world: &mut DependencyBinaryWorld, message: String) 
 #[given("the repository installer succeeds but verification fails")]
 fn given_repository_verification_failure(world: &mut DependencyBinaryWorld) {
     world.repository_behaviour = Some(RepositoryInstallerBehaviour::Success);
-    world.repository_verification_fails = true;
+    world.should_repository_verification_fail = true;
 }
 
 #[given("cargo binstall is available")]
 fn given_binstall_available(world: &mut DependencyBinaryWorld) {
-    world.binstall_available = true;
+    world.is_binstall_available = true;
 }
 
 #[given("cargo binstall is unavailable")]
 fn given_binstall_unavailable(world: &mut DependencyBinaryWorld) {
-    world.binstall_available = false;
+    world.is_binstall_available = false;
 }
 
 #[given("cargo binstall fails with \"{message}\"")]
@@ -113,7 +113,7 @@ fn given_cargo_install_failure(world: &mut DependencyBinaryWorld, message: Strin
 
 #[given("the target is unsupported")]
 fn given_unsupported_target(world: &mut DependencyBinaryWorld) {
-    world.unsupported_target = true;
+    world.is_unsupported_target = true;
 }
 
 #[given("the dependency manifest is loaded")]
@@ -132,7 +132,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let expect_repository_verification = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::Success)
-    ) && !world.unsupported_target;
+    ) && !world.is_unsupported_target;
     let repository_installer = StubRepositoryInstaller {
         behaviour: world.repository_behaviour.take().unwrap_or(
             RepositoryInstallerBehaviour::Failure("missing repository".to_owned()),
@@ -146,15 +146,15 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let executor = StubExecutor::new(expected_calls(
         &tool,
         ExpectedCallConfig {
-            is_binstall_available: world.binstall_available,
+            is_binstall_available: world.is_binstall_available,
             should_verify_repository_install: expect_repository_verification,
-            is_repository_verification_failing: world.repository_verification_fails,
+            is_repository_verification_failing: world.should_repository_verification_fail,
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
             cargo_install_failure: world.cargo_install_failure.as_deref(),
         },
     ));
 
-    let target = if world.unsupported_target {
+    let target = if world.is_unsupported_target {
         None
     } else {
         Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"))
