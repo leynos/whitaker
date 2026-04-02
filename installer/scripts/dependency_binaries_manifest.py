@@ -138,7 +138,6 @@ def main() -> int:
         case list():
             _write_lines(result, args.output)
             return 0
-    return 1
 
 
 if __name__ == "__main__":
