@@ -27,9 +27,10 @@ Feature: Dependency binary installation
     Given the missing tool is "cargo-dylint"
     And the repository installer fails with "not found"
     And cargo binstall is available
-    And the cargo fallback fails with "binstall failed"
+    And cargo binstall fails with "binstall failed"
+    And cargo install fails with "cargo install failed"
     When dependency installation runs
-    Then the install fails for "cargo-dylint" with message containing "binstall failed"
+    Then the install fails for "cargo-dylint" with message containing "cargo install failed"
 
   Scenario: Repository asset and cargo binstall are unavailable and cargo install succeeds
     Given the missing tool is "cargo-dylint"
@@ -43,7 +44,7 @@ Feature: Dependency binary installation
     Given the missing tool is "cargo-dylint"
     And the repository installer fails with "not found"
     And cargo binstall is unavailable
-    And the cargo fallback fails with "cargo install failed"
+    And cargo install fails with "cargo install failed"
     When dependency installation runs
     Then the install fails for "cargo-dylint" with message containing "cargo install failed"
 

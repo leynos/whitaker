@@ -340,6 +340,49 @@ pub mod dependency_binary_helpers {
         }
     }
 
+    /// Returns the expected verification call for a given tool.
+    fn tool_verification_check(tool: &str) -> ExpectedCall {
+        match tool {
+            "cargo-dylint" => cargo_dylint_check(),
+            "dylint-link" => dylint_link_check(),
+            other => panic!("unexpected tool: {other}"),
+        }
+    }
+
+    /// Builds the sequence of calls that follow the primary install attempt.
+    #[allow(clippy::too_many_arguments)]
+    fn post_primary_calls(
+        tool: &str,
+        tool_static: &'static str,
+        primary_succeeded: bool,
+        use_binstall: bool,
+        cargo_install_failure: Option<&str>,
+    ) -> Vec<ExpectedCall> {
+        if primary_succeeded {
+            return vec![tool_verification_check(tool)];
+        }
+        if !use_binstall {
+            return vec![];
+        }
+        // binstall failed: check if we should sequence a cargo-install attempt
+        if cargo_install_failure.is_none() {
+            // cargo install succeeds after binstall fails
+            let cargo_call = ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", tool_static],
+                result: Ok(success_output()),
+            };
+            return vec![cargo_call, tool_verification_check(tool)];
+        }
+        // binstall failed and cargo install also fails
+        let cargo_call = ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", tool_static],
+            result: Ok(failure_output(cargo_install_failure.unwrap())),
+        };
+        vec![cargo_call]
+    }
+
     /// Creates expected calls for cargo fallback installation (binstall or install).
     pub fn cargo_fallback_calls(
         tool: &str,
@@ -351,7 +394,6 @@ pub mod dependency_binary_helpers {
         // acceptable here as it will not be freed.
         let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
 
-        // Determine which cargo command to run and its failure mode
         let (use_binstall, failure_message) = if binstall_available {
             (true, cargo_binstall_failure)
         } else {
@@ -370,38 +412,15 @@ pub mod dependency_binary_helpers {
                 None => success_output(),
             }),
         };
+
         let mut calls = vec![install_call];
-
-        // If the primary install command succeeds, add verification call
-        if failure_message.is_none() {
-            calls.push(match tool {
-                "cargo-dylint" => cargo_dylint_check(),
-                "dylint-link" => dylint_link_check(),
-                other => panic!("unexpected tool: {other}"),
-            });
-        } else if use_binstall && cargo_install_failure.is_none() {
-            // binstall failed but cargo install should succeed
-            calls.push(ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", tool_static],
-                result: Ok(success_output()),
-            });
-            calls.push(match tool {
-                "cargo-dylint" => cargo_dylint_check(),
-                "dylint-link" => dylint_link_check(),
-                other => panic!("unexpected tool: {other}"),
-            });
-        } else if use_binstall {
-            // binstall failed and cargo install also fails
-            if let Some(message) = cargo_install_failure {
-                calls.push(ExpectedCall {
-                    cmd: "cargo",
-                    args: vec!["install", tool_static],
-                    result: Ok(failure_output(message)),
-                });
-            }
-        }
-
+        calls.extend(post_primary_calls(
+            tool,
+            tool_static,
+            failure_message.is_none(),
+            use_binstall,
+            cargo_install_failure,
+        ));
         calls
     }
 
