@@ -74,50 +74,56 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def collect_output_lines(
-    entries: list[dict],
-) -> tuple[list[bytes], int]:
-    """Validate entries for duplicate packages and serialise to TSV bytes.
-
-    Parameters
-    ----------
-    entries:
-        The list of dependency-binary dicts parsed from the TOML manifest.
+def _collect_manifest_lines(
+    manifest_path: pathlib.Path,
+) -> list[bytes] | int:
+    """Read manifest TOML and return encoded TSV lines, or 1 on duplicate.
 
     Returns
     -------
-    tuple[list[bytes], int]
-        A pair of (lines, exit_code).  On duplicate-package detection,
-        lines is empty and exit_code is 1; otherwise lines contains one
-        encoded TSV row per entry and exit_code is 0.
+    list[bytes]
+        One encoded ``package\\tbinary\\tversion\\n`` line per entry.
+    int
+        Exit code 1 when a duplicate package name is detected; the error
+        message has already been written to stderr.
 
+    Raises
+    ------
+    FileNotFoundError, OSError
+        If the manifest file cannot be opened.
+    tomllib.TOMLDecodeError
+        If the manifest contains invalid TOML syntax.
+    KeyError
+        If required fields are absent.
     """
+    with manifest_path.open("rb") as handle:
+        manifest = tomllib.load(handle)
+
     seen_packages: set[str] = set()
     output_lines: list[bytes] = []
-    for entry in entries:
+    for entry in manifest["dependency_binaries"]:
         package = entry["package"]
         if package in seen_packages:
             print(
                 f"error: duplicate package '{package}' in manifest",
                 file=sys.stderr,
             )
-            return [], 1
+            return 1
         seen_packages.add(package)
         line = f"{entry['package']}\t{entry['binary']}\t{entry['version']}\n".encode()
         output_lines.append(line)
-    return output_lines, 0
+    return output_lines
 
 
-def write_output_lines(lines: list[bytes], output: str | None) -> None:
-    """Write serialised TSV lines to a file or to stdout.
+def _write_lines(lines: list[bytes], output: str | None) -> None:
+    """Write encoded lines to a file or to stdout.
 
     Parameters
     ----------
     lines:
-        Encoded TSV rows to write.
+        Encoded byte strings to write, one per dependency entry.
     output:
         Destination file path, or ``None`` to write to ``sys.stdout.buffer``.
-
     """
     if output:
         with pathlib.Path(output).open("wb") as out_handle:
@@ -131,68 +137,20 @@ def write_output_lines(lines: list[bytes], output: str | None) -> None:
 def main() -> int:
     """Emit dependency-binary manifest entries as tab-separated rows.
 
-    Parses CLI arguments, reads the TOML manifest at the specified path,
-    and writes package/binary/version lines to stdout as tab-separated
-    values (one line per dependency binary).
-
-    Parameters
-    ----------
-    None
-        Arguments are obtained via parse_args() from sys.argv.
+    Parses CLI arguments, reads the TOML manifest, validates uniqueness of
+    package names, and writes ``package\\tbinary\\tversion`` lines to the
+    specified output destination.
 
     Returns
     -------
     int
-        Exit code 0 on success.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the specified manifest file does not exist.
-    OSError
-        If the manifest file cannot be read.
-    tomllib.TOMLDecodeError
-        If the manifest file contains invalid TOML syntax.
-    KeyError
-        If the manifest is missing the top-level 'dependency_binaries' key
-        or when individual entries are missing required keys (package,
-        binary, version).
-
-    Side Effects
-    ------------
-    Writes tab-separated rows to sys.stdout.buffer (one per dependency
-    binary, with columns: package, binary, version).
-
-    Example
-    -------
-    >>> import sys, tempfile, os
-    >>> manifest_content = b'[[dependency_binaries]]\\npackage = "pkg"\\nbinary = "bin"\\nversion = "1.0.0"\\n'
-    >>> with tempfile.NamedTemporaryFile(delete=False, suffix=".toml") as f:
-    ...     _ = f.write(manifest_content)
-    ...     temp_path = f.name
-    >>> sys.argv = ["script.py", temp_path]
-    >>> try:
-    ...     main()
-    ... finally:
-    ...         os.unlink(temp_path)
-    0
-
-    Notes
-    -----
-    The output format is suitable for shell processing with tools like
-    cut, awk, or while-read loops.
-
+        0 on success, 1 if the manifest contains a duplicate package name.
     """
     args = parse_args()
-    manifest_path = pathlib.Path(args.manifest)
-    with manifest_path.open("rb") as handle:
-        manifest = tomllib.load(handle)
-
-    lines, exit_code = collect_output_lines(manifest["dependency_binaries"])
-    if exit_code != 0:
-        return exit_code
-
-    write_output_lines(lines, args.output)
+    result = _collect_manifest_lines(pathlib.Path(args.manifest))
+    if isinstance(result, int):
+        return result
+    _write_lines(result, args.output)
     return 0
 
 
