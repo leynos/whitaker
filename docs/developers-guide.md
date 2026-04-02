@@ -67,6 +67,35 @@ Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
 for the installer's supported targets. The installer prefers these repository
 assets before falling back to `cargo binstall` and then `cargo install`.
 
+### TOML manifest schema
+
+The committed manifest at `installer/dependency-binaries.toml` declares each
+required dependency binary as a TOML array-of-tables entry. Every entry must
+contain the following fields:
+
+| Field        | Type   | Description                                        |
+| ------------ | ------ | -------------------------------------------------- |
+| `package`    | string | Cargo package name (must be unique across entries) |
+| `binary`     | string | Executable basename without platform suffix        |
+| `version`    | string | Required upstream version                          |
+| `license`    | string | SPDX licence expression for provenance disclosure  |
+| `repository` | string | Upstream source repository URL                     |
+
+Example entry:
+
+```toml
+[[dependency_binaries]]
+package = "cargo-dylint"
+binary = "cargo-dylint"
+version = "4.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/trailofbits/dylint"
+```
+
+The Rust domain model (`DependencyBinary`) enforces all fields as mandatory
+during deserialization. The manifest parser also rejects duplicate `package`
+values to prevent ambiguous resolution.
+
 ### Manifest and public APIs
 
 The committed manifest lives at `installer/dependency-binaries.toml`. It is
@@ -135,6 +164,79 @@ The release workflows consume both artefact types:
 - deterministic dependency archives named from the manifest and target triple
 - `dependency-binaries-licences.md` for provenance and third-party licence
   disclosure
+
+### CI manifest script
+
+`installer/scripts/dependency_binaries_manifest.py` is a thin CI helper that
+reads `installer/dependency-binaries.toml` and emits tab-separated rows for
+shell consumption. Each output line contains three columns: package name,
+binary name, and version.
+
+Usage:
+
+```sh
+python3 installer/scripts/dependency_binaries_manifest.py
+python3 installer/scripts/dependency_binaries_manifest.py custom.toml
+python3 installer/scripts/dependency_binaries_manifest.py -o matrix.tsv
+```
+
+The script validates manifest uniqueness (rejecting duplicate `package`
+entries) and exits with code 1 on duplicates. It is invoked by the release and
+rolling-release workflows to build the per-target build matrix.
+
+Unit tests for this script live at
+`tests/workflows/test_dependency_binaries_manifest.py` and cover argument
+parsing, TOML loading, duplicate detection, TSV encoding, file output, and
+error paths. Run them with:
+
+```sh
+python3 -m pytest tests/workflows/test_dependency_binaries_manifest.py -v
+```
+
+### Dependency binary BDD tests
+
+Dependency binary installation behaviour is specified in Gherkin feature files
+and driven by rstest-bdd. The test architecture follows the same pattern used
+across the project's behavioural tests.
+
+#### File layout
+
+- Feature file:
+  `installer/tests/features/dependency_binaries.feature`
+- Step definitions and scenario bindings:
+  `installer/tests/behaviour_dependency_binaries.rs`
+- Test helpers:
+  `installer/src/test_utils/dependency_binary_helpers.rs`
+- Shared test utilities:
+  `installer/src/test_utils.rs`
+
+#### Extending the BDD suite
+
+To add a new scenario:
+
+1. Append the scenario to the `.feature` file using existing Given/When/Then
+   step vocabulary.
+2. If the scenario requires new steps, add step functions annotated with
+   `#[given(...)]`, `#[when(...)]`, or `#[then(...)]` in the behaviour test
+   file.
+3. Add a `#[scenario(path = "...", index = N)]` binding function at the
+   bottom of the behaviour test file, where `N` is the zero-based scenario
+   index.
+4. Update `dependency_binary_helpers.rs` if the scenario introduces new
+   expected command sequences.
+
+#### Test infrastructure helpers
+
+- **`StubExecutor`** records expected command invocations in sequence and
+  returns predefined `Output` values. Call `assert_finished()` after the test
+  body to verify all expected commands were consumed.
+- **`ExpectedCallConfig`** drives `expected_calls()` to generate the full
+  expected command sequence for a given tool and fallback configuration.
+- **`StubDirs`** provides a minimal `BaseDirs` implementation that returns
+  a configurable bin directory.
+- **`StubRepositoryInstaller`** (in the behaviour test) implements
+  `DependencyBinaryInstaller` with configurable success or failure behaviour
+  for scenario isolation.
 
 ## Regression infrastructure
 
