@@ -74,6 +74,60 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def collect_output_lines(
+    entries: list[dict],
+) -> tuple[list[bytes], int]:
+    """Validate entries for duplicate packages and serialise to TSV bytes.
+
+    Parameters
+    ----------
+    entries:
+        The list of dependency-binary dicts parsed from the TOML manifest.
+
+    Returns
+    -------
+    tuple[list[bytes], int]
+        A pair of (lines, exit_code).  On duplicate-package detection,
+        lines is empty and exit_code is 1; otherwise lines contains one
+        encoded TSV row per entry and exit_code is 0.
+
+    """
+    seen_packages: set[str] = set()
+    output_lines: list[bytes] = []
+    for entry in entries:
+        package = entry["package"]
+        if package in seen_packages:
+            print(
+                f"error: duplicate package '{package}' in manifest",
+                file=sys.stderr,
+            )
+            return [], 1
+        seen_packages.add(package)
+        line = f"{entry['package']}\t{entry['binary']}\t{entry['version']}\n".encode()
+        output_lines.append(line)
+    return output_lines, 0
+
+
+def write_output_lines(lines: list[bytes], output: str | None) -> None:
+    """Write serialised TSV lines to a file or to stdout.
+
+    Parameters
+    ----------
+    lines:
+        Encoded TSV rows to write.
+    output:
+        Destination file path, or ``None`` to write to ``sys.stdout.buffer``.
+
+    """
+    if output:
+        with pathlib.Path(output).open("wb") as out_handle:
+            for line in lines:
+                out_handle.write(line)
+    else:
+        for line in lines:
+            sys.stdout.buffer.write(line)
+
+
 def main() -> int:
     """Emit dependency-binary manifest entries as tab-separated rows.
 
@@ -134,26 +188,11 @@ def main() -> int:
     with manifest_path.open("rb") as handle:
         manifest = tomllib.load(handle)
 
-    seen_packages: set[str] = set()
-    output_lines: list[bytes] = []
-    for entry in manifest["dependency_binaries"]:
-        package = entry["package"]
-        if package in seen_packages:
-            print(f"error: duplicate package '{package}' in manifest", file=sys.stderr)
-            return 1
-        seen_packages.add(package)
+    lines, exit_code = collect_output_lines(manifest["dependency_binaries"])
+    if exit_code != 0:
+        return exit_code
 
-        line = f"{entry['package']}\t{entry['binary']}\t{entry['version']}\n".encode()
-        output_lines.append(line)
-
-    if args.output:
-        output_path = pathlib.Path(args.output)
-        with output_path.open("wb") as out_handle:
-            for line in output_lines:
-                out_handle.write(line)
-    else:
-        for line in output_lines:
-            sys.stdout.buffer.write(line)
+    write_output_lines(lines, args.output)
     return 0
 
 
