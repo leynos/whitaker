@@ -166,7 +166,7 @@ fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> b
 }
 
 fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
-    command_succeeds(executor, "cargo", &["bininstall", "--version"])
+    command_succeeds(executor, "cargo", &["binstall", "--version"])
 }
 
 #[cfg(test)]

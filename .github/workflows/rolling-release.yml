@@ -253,7 +253,7 @@ jobs:
           retention-days: 1
 
   publish:
-    if: ${{ always() && needs.dependency-manifest-changes.outputs.should_build == 'true' }}
+    if: always()
     needs:
       - dependency-manifest-changes
       - build-lints
@@ -270,6 +270,19 @@ jobs:
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+
+      - name: Restore dependency archives from previous release
+        if: needs.dependency-manifest-changes.outputs.should_build == 'false'
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          # Download dependency binaries from previous rolling release
+          gh release download rolling \
+            --pattern 'dependency-binaries-*.tgz' \
+            --pattern 'dependency-binaries-*.zip' \
+            --dir dist || true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Download all artefacts
         continue-on-error: true

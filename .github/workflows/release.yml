@@ -200,6 +200,11 @@ jobs:
               --output-dir dist
           done < /tmp/dependency-binaries.tsv
 
+      - name: Generate SHA-256 checksums
+        run: |
+          set -euxo pipefail
+          python scripts/generate_checksums.py dist/
+
       - name: Diagnostics (dependency binaries)
         if: failure()
         run: |
@@ -214,6 +219,7 @@ jobs:
           path: |
             dist/*.tgz
             dist/*.zip
+            dist/*.sha256
           retention-days: 5
 
   publish:

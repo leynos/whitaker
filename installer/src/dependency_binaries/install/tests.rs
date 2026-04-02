@@ -142,10 +142,12 @@ fn install_with_returns_error_when_binary_missing_after_extract(
 ) {
     let (_temp_dir, _bin_dir, result) = missing_binary_install_result;
     let error = result.expect_err("install should fail");
-    assert!(matches!(
-        error,
-        DependencyBinaryInstallError::MissingBinaryInArchive { .. }
-    ));
+    match error {
+        DependencyBinaryInstallError::MissingBinaryInArchive { binary } => {
+            assert_eq!(binary, "dylint-link");
+        }
+        other => panic!("expected MissingBinaryInArchive, got {:?}", other),
+    }
 }
 
 #[test]

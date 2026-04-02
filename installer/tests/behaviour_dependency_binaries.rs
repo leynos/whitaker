@@ -55,7 +55,8 @@ struct DependencyBinaryWorld {
     repository_behaviour: Option<RepositoryInstallerBehaviour>,
     repository_verification_fails: bool,
     binstall_available: bool,
-    cargo_fallback_failure: Option<String>,
+    cargo_binstall_failure: Option<String>,
+    cargo_install_failure: Option<String>,
     unsupported_target: bool,
     stderr: Vec<u8>,
     install_result: Option<std::result::Result<(), whitaker_installer::error::InstallerError>>,
@@ -67,7 +68,8 @@ struct ExpectedCallConfig<'a> {
     binstall_available: bool,
     verify_repository_install: bool,
     verification_fails: bool,
-    cargo_fallback_failure: Option<&'a str>,
+    cargo_binstall_failure: Option<&'a str>,
+    cargo_install_failure: Option<&'a str>,
 }
 
 #[fixture]
@@ -106,9 +108,14 @@ fn given_binstall_unavailable(world: &mut DependencyBinaryWorld) {
     world.binstall_available = false;
 }
 
-#[given("the cargo fallback fails with \"{message}\"")]
-fn given_cargo_fallback_failure(world: &mut DependencyBinaryWorld, message: String) {
-    world.cargo_fallback_failure = Some(message);
+#[given("cargo binstall fails with \"{message}\"")]
+fn given_cargo_binstall_failure(world: &mut DependencyBinaryWorld, message: String) {
+    world.cargo_binstall_failure = Some(message);
+}
+
+#[given("cargo install fails with \"{message}\"")]
+fn given_cargo_install_failure(world: &mut DependencyBinaryWorld, message: String) {
+    world.cargo_install_failure = Some(message);
 }
 
 #[given("the target is unsupported")]
@@ -149,7 +156,8 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             binstall_available: world.binstall_available,
             verify_repository_install: expect_repository_verification,
             verification_fails: world.repository_verification_fails,
-            cargo_fallback_failure: world.cargo_fallback_failure.as_deref(),
+            cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
+            cargo_install_failure: world.cargo_install_failure.as_deref(),
         },
     ));
 
@@ -271,31 +279,64 @@ fn repository_verification_call(tool: &str, verification_fails: bool) -> Expecte
 fn cargo_fallback_calls(
     tool: &str,
     binstall_available: bool,
-    cargo_fallback_failure: Option<&str>,
+    cargo_binstall_failure: Option<&str>,
+    cargo_install_failure: Option<&str>,
 ) -> Vec<ExpectedCall> {
     // Intentional leak in tests to extend lifetime for static string usage;
     // acceptable here as it will not be freed.
     let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
+
+    // Determine which cargo command to run and its failure mode
+    let (use_binstall, failure_message) = if binstall_available {
+        (true, cargo_binstall_failure)
+    } else {
+        (false, cargo_install_failure)
+    };
+
     let install_call = ExpectedCall {
         cmd: "cargo",
-        args: if binstall_available {
+        args: if use_binstall {
             vec!["binstall", "-y", tool_static]
         } else {
             vec!["install", tool_static]
         },
-        result: Ok(match cargo_fallback_failure {
+        result: Ok(match failure_message {
             Some(message) => failure_output(message),
             None => success_output(),
         }),
     };
     let mut calls = vec![install_call];
-    if cargo_fallback_failure.is_none() {
+
+    // If the primary install command succeeds, add verification call
+    if failure_message.is_none() {
         calls.push(match tool {
             "cargo-dylint" => cargo_dylint_check(),
             "dylint-link" => dylint_link_check(),
             other => panic!("unexpected tool: {other}"),
         });
+    } else if use_binstall && cargo_install_failure.is_none() {
+        // binstall failed but cargo install should succeed
+        calls.push(ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", tool_static],
+            result: Ok(success_output()),
+        });
+        calls.push(match tool {
+            "cargo-dylint" => cargo_dylint_check(),
+            "dylint-link" => dylint_link_check(),
+            other => panic!("unexpected tool: {other}"),
+        });
+    } else if use_binstall {
+        // binstall failed and cargo install also fails
+        if let Some(message) = cargo_install_failure {
+            calls.push(ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", tool_static],
+                result: Ok(failure_output(message)),
+            });
+        }
     }
+
     calls
 }
 
@@ -315,7 +356,8 @@ fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCal
     calls.extend(cargo_fallback_calls(
         tool,
         config.binstall_available,
-        config.cargo_fallback_failure,
+        config.cargo_binstall_failure,
+        config.cargo_install_failure,
     ));
     calls
 }
