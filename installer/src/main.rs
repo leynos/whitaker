@@ -18,7 +18,7 @@ use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{
-    CommandExecutor, SystemCommandExecutor, check_dylint_tools, install_dylint_tools,
+    CommandExecutor, SystemCommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
 };
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};

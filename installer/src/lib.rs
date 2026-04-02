@@ -70,7 +70,9 @@ pub mod version;
 pub mod workspace;
 pub mod wrapper;
 
+#[cfg(test)]
 mod dependency_packaging_tests;
+#[cfg(test)]
 mod install_metrics_tests;
 
 /// Test utilities for stubbing command execution in integration tests.
