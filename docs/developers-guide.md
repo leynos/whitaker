@@ -61,6 +61,81 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Dependency binary packaging
+
+Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
+for the installer's supported targets. The installer prefers these repository
+assets before falling back to `cargo binstall` and then `cargo install`.
+
+### Manifest and public APIs
+
+The committed manifest lives at `installer/dependency-binaries.toml`. It is
+loaded through `whitaker_installer::dependency_binaries`, which exposes:
+
+- `DependencyBinary` for typed manifest entries
+- `required_dependency_binaries()` for the full manifest set
+- `find_dependency_binary()` for package lookup
+- archive and binary naming helpers shared by packaging and installation
+- repository-install traits for archive download and extraction
+
+The packaging surface lives in `whitaker_installer::dependency_packaging`:
+
+- `DependencyPackageParams` for one packaging request
+- `package_dependency_binary()` for one deterministic `.tgz` or `.zip`
+  archive
+- `render_provenance_markdown()` and `write_provenance_markdown()` for the
+  shared provenance and licence sidecar
+
+### Control flow
+
+The dependency-install path is split into focused modules under
+`installer/src/dependency_binaries/install/`:
+
+- `metadata.rs` computes target-specific archive names, binary names, and the
+  exact archive member path
+- `downloader.rs` resolves rolling-release asset URLs and downloads archives
+- `extractor.rs` extracts the exact packaged member into a temporary file and
+  atomically renames it into the local bin directory
+- `installer.rs` orchestrates directory discovery, download, extraction, and
+  executable permission fixes
+
+`installer/src/deps.rs` drives the high-level fallback order:
+
+1. Attempt the repository-hosted dependency archive for the current target.
+2. Verify the installed tool is now runnable.
+3. Fall back to `cargo binstall` when available.
+4. Fall back to `cargo install` when `cargo binstall` is absent or fails.
+
+### CLI tool usage
+
+Release automation uses the `whitaker-package-dependency-binary` helper in
+`installer/src/bin/package_dependency_binary.rs`.
+
+Package one executable:
+
+```sh
+cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+  package \
+  --package cargo-dylint \
+  --target x86_64-unknown-linux-gnu \
+  --binary-path /tmp/cargo-dylint \
+  --output-dir /tmp/dist
+```
+
+Generate the shared provenance document:
+
+```sh
+cargo run -p whitaker-installer --bin whitaker-package-dependency-binary -- \
+  provenance \
+  --output-dir /tmp/dist
+```
+
+The release workflows consume both artefact types:
+
+- deterministic dependency archives named from the manifest and target triple
+- `dependency-binaries-licences.md` for provenance and third-party licence
+  disclosure
+
 ## Regression infrastructure
 
 Two recent regression families rely on infrastructure that is easy to miss when

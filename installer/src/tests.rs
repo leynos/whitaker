@@ -136,7 +136,17 @@ fn ensure_dylint_tools_installs_missing_tools(
         },
         ExpectedCall {
             cmd: "cargo",
+            args: vec!["dylint", "--version"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "cargo",
             args: vec!["binstall", "-y", "dylint-link"],
+            result: Ok(success_output()),
+        },
+        ExpectedCall {
+            cmd: "dylint-link",
+            args: vec!["--version"],
             result: Ok(success_output()),
         },
     ]);
@@ -187,6 +197,11 @@ fn ensure_dylint_tools_propagates_install_failures() {
             args: vec!["binstall", "-y", "cargo-dylint"],
             result: Ok(failure_output("install failed")),
         },
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", "cargo-dylint"],
+            result: Ok(failure_output("cargo install failed")),
+        },
     ]);
 
     let mut stderr = Vec::new();
@@ -196,7 +211,7 @@ fn ensure_dylint_tools_propagates_install_failures() {
     assert!(matches!(
         err,
         InstallerError::DependencyInstall { tool, message }
-            if tool == "cargo-dylint" && message == "install failed"
+            if tool == "cargo-dylint" && message == "cargo install failed"
     ));
     executor.assert_finished();
 }

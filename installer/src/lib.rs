@@ -40,6 +40,8 @@ pub mod binstall_metadata;
 pub mod builder;
 pub mod cli;
 pub mod crate_name;
+
+pub mod dependency_binaries;
 pub mod deps;
 pub mod dirs;
 pub mod error;
@@ -69,6 +71,8 @@ pub mod workspace;
 pub mod wrapper;
 
 #[cfg(test)]
+mod dependency_packaging_tests;
+#[cfg(test)]
 mod install_metrics_tests;
 
 /// Test utilities for stubbing command execution in integration tests.
@@ -77,3 +81,5 @@ mod install_metrics_tests;
 /// but hidden from generated documentation as it is not part of the public API.
 #[doc(hidden)]
 pub mod test_utils;
+
+pub mod dependency_packaging;

@@ -23,6 +23,35 @@ env:
     whitaker_suite
 
 jobs:
+  dependency-manifest-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check whether dependency manifest changed
+        id: check
+        run: |
+          set -euxo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --quiet "$BEFORE" "${{ github.sha }}" -- installer/dependency-binaries.toml; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-lints:
     runs-on: ${{ matrix.os }}
     defaults:
@@ -132,9 +161,117 @@ jobs:
             dist/manifest-*.json
           retention-days: 1
 
+  build-dependency-binaries:
+    needs: dependency-manifest-changes
+    if: needs.dependency-manifest-changes.outputs.should_build == 'true'
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
+
+      - name: Install cross-compilation tools (aarch64-linux)
+        if: matrix.cross
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
+      - name: Add target
+        run: rustup target add "${{ matrix.target }}"
+
+      - name: Build dependency packaging tool
+        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+
+      - name: Build and package dependency binaries
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          mkdir -p dependency-root
+          python installer/scripts/dependency_binaries_manifest.py --output /tmp/dependency-binaries.tsv
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            PACKAGER="./target/release/whitaker-package-dependency-binary.exe"
+          else
+            PACKAGER="./target/release/whitaker-package-dependency-binary"
+          fi
+          while IFS=$'\t' read -r package binary version; do
+            cargo install \
+              --locked \
+              --force \
+              --root dependency-root \
+              --target "${{ matrix.target }}" \
+              --version "$version" \
+              "$package"
+            if [[ "${{ matrix.target }}" == *windows* ]]; then
+              executable="dependency-root/bin/${binary}.exe"
+            else
+              executable="dependency-root/bin/${binary}"
+            fi
+            "$PACKAGER" package \
+              --package "$package" \
+              --target "${{ matrix.target }}" \
+              --binary-path "$executable" \
+              --output-dir dist
+          done < /tmp/dependency-binaries.tsv
+
+      - name: Generate SHA-256 checksums
+        run: |
+          set -euxo pipefail
+          for file in dist/*.tgz dist/*.zip; do
+            if [[ -f "$file" ]]; then
+              if command -v sha256sum >/dev/null 2>&1; then
+                sha256sum "$file" > "${file}.sha256"
+              else
+                shasum -a 256 "$file" > "${file}.sha256"
+              fi
+            fi
+          done
+
+      - name: Diagnostics (dependency binaries)
+        if: failure()
+        run: |
+          set -euxo pipefail
+          ls -lah dependency-root/bin || true
+          ls -lah dist || true
+
+      - name: Upload dependency artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-binaries-${{ matrix.target }}
+          path: |
+            dist/*.tgz
+            dist/*.zip
+            dist/*.sha256
+          retention-days: 1
+
   publish:
-    if: ${{ always() }}
-    needs: build-lints
+    if: always()
+    needs:
+      - dependency-manifest-changes
+      - build-lints
+      - build-dependency-binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -142,11 +279,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
+
+      - name: Build dependency packaging tool
+        run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
+
+      - name: Restore dependency archives from previous release
+        if: needs.dependency-manifest-changes.outputs.should_build == 'false'
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          # Download dependency binaries from previous rolling release
+          gh release download rolling \
+            --pattern '*.tgz' \
+            --pattern '*.zip' \
+            --pattern '*.sha256' \
+            --dir dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Download all artefacts
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           pattern: lints-*
+          merge-multiple: true
+          path: dist
+
+      - name: Download dependency artefacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dependency-binaries-*
           merge-multiple: true
           path: dist
 
@@ -163,7 +328,7 @@ jobs:
         run: |
           set -euxo pipefail
           shopt -s nullglob
-          assets=(dist/*.tar.zst dist/manifest-*.json)
+          assets=(dist/*.tar.zst dist/manifest-*.json dist/*.tgz dist/*.zip dist/*.sha256)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "has_assets=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -171,14 +336,33 @@ jobs:
           printf '%s\n' "${assets[@]}" > dist/release-assets.txt
           echo "has_assets=true" >> "$GITHUB_OUTPUT"
 
+      - name: Check whether dependency assets are available
+        id: dependency_assets
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          dep_assets=(dist/*.tgz dist/*.zip)
+          if [[ "${#dep_assets[@]}" -eq 0 ]]; then
+            echo "has_dependency_assets=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_dependency_assets=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate dependency provenance asset
+        if: steps.dependency_assets.outputs.has_dependency_assets == 'true'
+        run: |
+          set -euxo pipefail
+          ./target/release/whitaker-package-dependency-binary provenance --output-dir dist
+          printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
+
       - name: Delete existing rolling release
-        if: steps.assets.outputs.has_assets == 'true'
+        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result != 'failure'
         run: gh release delete rolling --cleanup-tag --yes || true
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create rolling release
-        if: steps.assets.outputs.has_assets == 'true'
+        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result != 'failure'
         run: |
           set -euxo pipefail
           SHA=$(git rev-parse --short HEAD)
@@ -196,5 +380,5 @@ jobs:
       - name: Skip release publish when no assets were built
         if: steps.assets.outputs.has_assets != 'true'
         run: |
-          echo "No rolling-release assets were produced by build-lints."
+          echo "No rolling-release assets were produced by the build jobs."
           echo "Skipping release publication."

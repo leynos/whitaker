@@ -1512,6 +1512,44 @@ archive creation logic, validated by unit tests and BDD scenarios in
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 
+### Dependency binary releases
+
+**Decision:** Publish repository-hosted `cargo-dylint` and `dylint-link`
+binaries from the same GitHub release surface Whitaker already uses, and make
+the installer prefer those archives before running Cargo installers.
+
+**Rationale:** This keeps the required dependency-tool versions auditable in
+the repository, reduces dependence on the end user's Cargo network path, and
+lets Whitaker ship exact upstream binaries for the same five supported targets
+used by the installer itself.
+
+**Implementation decisions (4.3.2):**
+
+- Commit the required upstream package metadata to
+  `installer/dependency-binaries.toml`. This file is the single source of truth
+  for package name, executable name, version, licence, and repository URL.
+- Package dependency binaries with deterministic archive names:
+  `cargo-dylint-<target>-v<version>.tgz` / `.zip` and
+  `dylint-link-<target>-v<version>.tgz` / `.zip`.
+- Generate one shared provenance asset,
+  `dependency-binaries-licences.md`, from the committed manifest and upload it
+  alongside the archives.
+- Extend `.github/workflows/rolling-release.yml` so dependency binaries are
+  rebuilt only when `installer/dependency-binaries.toml` changes on `main`, or
+  when the workflow is run manually.
+- Extend `.github/workflows/release.yml` so tagged releases publish the same
+  dependency-binary archives and provenance document next to the
+  `whitaker-installer` archives.
+- Teach `installer/src/deps.rs` to install missing tools in this order:
+  repository archive, `cargo binstall`, then `cargo install`. Repository-path
+  failures stay non-fatal and degrade cleanly into the Cargo fallback path.
+
+**Installer-side behaviour:** The installer now resolves the current host
+target from the supported target matrix, downloads repository assets into the
+user's local bin directory, ensures Unix executables are marked runnable, and
+then re-runs the same version check used for discovery. If verification fails,
+the installer logs the fallback and continues with Cargo-based installation.
+
 ### Prebuilt Dylint lint library distribution
 
 **Decision:** Distribute prebuilt lint libraries as rolling release assets
