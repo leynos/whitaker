@@ -1512,7 +1512,6 @@ archive creation logic, validated by unit tests and BDD scenarios in
 [^1]: <https://github.com/leynos/whitaker/pull/93>
 [^2]: <https://github.com/leynos/whitaker/pull/93#discussion_r1234567890>
 
-
 ### Dependency binary releases
 
 **Decision:** Publish repository-hosted `cargo-dylint` and `dylint-link`

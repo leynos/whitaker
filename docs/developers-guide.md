@@ -61,13 +61,6 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
-
-## Dependency binary packaging
-
-Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
-for the installer's supported targets. The installer prefers these repository
-assets before falling back to `cargo binstall` and then `cargo install`.
-
 ## Dependency binary packaging
 
 Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
@@ -510,7 +503,6 @@ The packaging surface lives in `whitaker_installer::dependency_packaging`:
   archive
 - `render_provenance_markdown()` and `write_provenance_markdown()` for the
   shared provenance and licence sidecar
-
 
 ### Control flow
 
