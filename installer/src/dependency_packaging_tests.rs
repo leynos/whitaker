@@ -14,7 +14,7 @@ struct PackagingCase<'a> {
     package: &'a str,
     binary_name: &'a str,
     should_create_binary: bool,
-    expected_archive_name: Option<&'a str>,
+    expect_success: bool,
 }
 
 #[fixture]
@@ -59,13 +59,13 @@ fn inner_dir_name_uses_dependency_version() {
     package: "dylint-link",
     binary_name: "missing",
     should_create_binary: false,
-    expected_archive_name: None,
+    expect_success: false,
 })]
 #[case(PackagingCase {
     package: "cargo-dylint",
     binary_name: "cargo-dylint",
     should_create_binary: true,
-    expected_archive_name: Some("cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"),
+    expect_success: true,
 })]
 fn package_dependency_binary_handles_binary_presence(
     linux_target: TargetTriple,
@@ -87,20 +87,23 @@ fn package_dependency_binary_handles_binary_presence(
         output_dir: temp_dir.path().join("dist"),
     });
 
-    match case.expected_archive_name {
-        Some(expected_archive_name) => {
-            let output = result.expect("packaging should succeed");
-            assert_eq!(output.archive_name, expected_archive_name);
-            assert!(output.archive_path.is_file());
-            assert!(output.archive_path.is_absolute());
-        }
-        None => {
-            let error = result.expect_err("missing binary should fail");
-            assert!(matches!(
-                error,
-                DependencyPackagingError::BinaryNotFound(path) if path == binary_path
-            ));
-        }
+    if case.expect_success {
+        let output = result.expect("packaging should succeed");
+        let expected_archive_name = format!(
+            "{}-{}-v{}.tgz",
+            dependency.package(),
+            linux_target,
+            dependency.version()
+        );
+        assert_eq!(output.archive_name, expected_archive_name);
+        assert!(output.archive_path.is_file());
+        assert!(output.archive_path.is_absolute());
+    } else {
+        let error = result.expect_err("missing binary should fail");
+        assert!(matches!(
+            error,
+            DependencyPackagingError::BinaryNotFound(path) if path == binary_path
+        ));
     }
 }
 
