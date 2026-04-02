@@ -222,6 +222,7 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
     let executor = StubExecutor::new(vec![
         binstall_version_check(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(failure_output("binstall failed"))),
+        cargo_install("cargo-dylint", Ok(failure_output("cargo install failed"))),
     ]);
     let mut stderr = Vec::new();
 
@@ -239,7 +240,7 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
     match error {
         InstallerError::DependencyInstall { tool, message } => {
             assert_eq!(tool, "cargo-dylint");
-            assert_eq!(message, "binstall failed");
+            assert_eq!(message, "cargo install failed");
         }
         other => panic!("unexpected error: {other}"),
     }
