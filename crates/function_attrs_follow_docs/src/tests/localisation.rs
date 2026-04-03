@@ -7,11 +7,11 @@ use super::{
     FunctionAttrsMessages, FunctionKind, Localizer, MESSAGE_KEY, attribute_fallback,
     localised_messages,
 };
-use common::i18n::I18nError;
-use common::i18n::testing::FailingLookup;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, Ref, RefCell};
+use whitaker_common::i18n::I18nError;
+use whitaker_common::i18n::testing::FailingLookup;
 
 #[derive(Default)]
 struct LocalisationWorld {

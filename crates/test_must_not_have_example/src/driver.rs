@@ -1,11 +1,6 @@
 //! Lint crate enforcing example-free documentation for test functions.
 
 use crate::heuristics::{DocExampleViolation, detect_example_violation};
-use common::AttributePath;
-use common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
-};
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::Node;
@@ -15,6 +10,11 @@ use serde::Deserialize;
 use std::borrow::Cow;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
+use whitaker_common::AttributePath;
+use whitaker_common::i18n::{
+    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+};
 
 const LINT_NAME: &str = "test_must_not_have_example";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("test_must_not_have_example");

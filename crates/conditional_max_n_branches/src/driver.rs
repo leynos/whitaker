@@ -7,11 +7,6 @@
 
 use std::borrow::Cow;
 
-use common::i18n::{DiagnosticMessageSet, MessageKey};
-use common::{
-    Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
-};
 use fluent_templates::fluent_bundle::FluentValue;
 use log::debug;
 use rustc_hir as hir;
@@ -20,6 +15,11 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{DesugaringKind, Span};
 use serde::Deserialize;
 use whitaker::SharedConfig;
+use whitaker_common::i18n::{DiagnosticMessageSet, MessageKey};
+use whitaker_common::{
+    Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,
+    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+};
 
 const LINT_NAME: &str = "conditional_max_n_branches";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);

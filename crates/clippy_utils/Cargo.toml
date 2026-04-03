@@ -1,6 +1,6 @@
 [package]
 name = "clippy_utils"
-version = "0.2.1"
+version = "0.2.2"
 description = "Minimal clippy utilities shim for Whitaker lints"
 license = "MIT OR Apache-2.0"
 edition = "2024"

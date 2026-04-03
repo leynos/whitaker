@@ -4,8 +4,8 @@
 //! detect test-like scopes, doctest guards, and `main` functions.
 
 #[cfg(feature = "dylint-driver")]
-use common::PARSED_ATTRIBUTE_PLACEHOLDER;
-use common::{Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind};
+use whitaker_common::PARSED_ATTRIBUTE_PLACEHOLDER;
+use whitaker_common::{Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind};
 
 /// Summary of the surrounding context for a HIR node.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -52,8 +52,8 @@ pub(crate) fn summarise_context<'tcx>(
         }
     }
 
-    let is_test = has_cfg_test || common::in_test_like_context(entries.as_slice());
-    let in_main = common::is_in_main_fn(entries.as_slice());
+    let is_test = has_cfg_test || whitaker_common::in_test_like_context(entries.as_slice());
+    let in_main = whitaker_common::is_in_main_fn(entries.as_slice());
 
     ContextSummary { is_test, in_main }
 }

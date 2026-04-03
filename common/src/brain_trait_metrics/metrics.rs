@@ -7,7 +7,7 @@ use super::{TraitItemKind, TraitItemMetrics};
 /// # Examples
 ///
 /// ```
-/// use common::brain_trait_metrics::TraitMetricsBuilder;
+/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let mut builder = TraitMetricsBuilder::new("Parser");
 /// builder.add_required_method("parse");
@@ -34,7 +34,7 @@ impl TraitMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let metrics = TraitMetricsBuilder::new("Parser").build();
     /// assert_eq!(metrics.trait_name(), "Parser");
@@ -49,7 +49,7 @@ impl TraitMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_required_method("parse");
@@ -65,7 +65,7 @@ impl TraitMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_required_method("parse");
@@ -81,7 +81,7 @@ impl TraitMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_default_method("render", 3, false);
@@ -97,7 +97,7 @@ impl TraitMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_default_method("render", 4, false);
@@ -114,7 +114,7 @@ impl TraitMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_required_method("parse");
@@ -140,7 +140,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let metrics = TraitMetricsBuilder::new("Parser").build();
     /// assert_eq!(metrics.trait_name(), "Parser");
@@ -158,7 +158,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::{TraitItemMetrics, TraitMetricsBuilder};
+    /// use whitaker_common::brain_trait_metrics::{TraitItemMetrics, TraitMetricsBuilder};
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_item(TraitItemMetrics::required_method("parse"));
@@ -173,7 +173,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_required_method("parse");
@@ -191,7 +191,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_default_method("generated_helper", 30, true);
@@ -220,7 +220,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_associated_type("Output");
@@ -235,7 +235,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_associated_const("VERSION");
@@ -250,7 +250,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// assert!(TraitMetricsBuilder::new("Parser").is_empty());
     /// ```
@@ -264,7 +264,7 @@ impl TraitMetricsBuilder {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_trait_metrics::TraitMetricsBuilder;
+    /// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
     ///
     /// let mut builder = TraitMetricsBuilder::new("Parser");
     /// builder.add_required_method("parse");

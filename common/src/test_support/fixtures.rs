@@ -19,7 +19,7 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 /// # Examples
 ///
 /// ```
-/// use common::test_support::fixtures::copy_fixture;
+/// use whitaker_common::test_support::fixtures::copy_fixture;
 /// use std::fs;
 /// use std::path::PathBuf;
 /// use tempfile::tempdir;
@@ -71,7 +71,7 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 /// # Examples
 ///
 /// ```
-/// use common::test_support::fixtures::copy_directory;
+/// use whitaker_common::test_support::fixtures::copy_directory;
 /// use std::fs;
 /// use tempfile::tempdir;
 ///

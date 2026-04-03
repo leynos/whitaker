@@ -4,12 +4,12 @@
 //! missing message handling to ensure lint crates can rely on predictable
 //! diagnostics across locales.
 
-use common::i18n::{Arguments, FluentValue, I18nError, Localizer, branch_phrase};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use whitaker_common::i18n::{Arguments, FluentValue, I18nError, Localizer, branch_phrase};
 
 #[path = "support/i18n_helpers.rs"]
 mod i18n_helpers;

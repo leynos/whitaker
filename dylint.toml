@@ -8,6 +8,8 @@
 #
 # The installer is the CLI entry point where ambient filesystem access begins.
 # The common crate contains test support utilities that require ambient access
-# for fixture management. The whitaker crate contains the UI test harness which
-# needs ambient access to copy compiled lint libraries during test execution.
-excluded_crates = ["whitaker_installer", "common", "whitaker"]
+# for fixture management. Use the Rust crate identifier here: `tcx.crate_name()`
+# reports `whitaker_common`, not the hyphenated Cargo package name. The
+# whitaker crate contains the UI test harness which needs ambient access to
+# copy compiled lint libraries during test execution.
+excluded_crates = ["whitaker_installer", "whitaker_common", "whitaker"]

@@ -20,7 +20,7 @@ pub use self::vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra}
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::{MethodInput, profile};
+/// use whitaker_common::test_support::decomposition::{MethodInput, profile};
 ///
 /// let profile = profile(MethodInput {
 ///     name: "parse_tokens",
@@ -45,7 +45,7 @@ pub struct MethodInput<'a> {
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::{MethodInput, profile};
+/// use whitaker_common::test_support::decomposition::{MethodInput, profile};
 ///
 /// let profile = profile(MethodInput {
 ///     name: "save_to_disk",
@@ -80,7 +80,7 @@ pub fn profile(input: MethodInput<'_>) -> MethodProfile {
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::parser_serde_fs_fixture;
+/// use whitaker_common::test_support::decomposition::parser_serde_fs_fixture;
 ///
 /// let methods = parser_serde_fs_fixture();
 /// assert_eq!(methods.len(), 6);
@@ -138,7 +138,7 @@ pub fn parser_serde_fs_fixture() -> Vec<MethodProfile> {
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::transport_trait_fixture;
+/// use whitaker_common::test_support::decomposition::transport_trait_fixture;
 ///
 /// let methods = transport_trait_fixture();
 /// assert_eq!(methods.len(), 4);
@@ -182,8 +182,8 @@ pub fn transport_trait_fixture() -> Vec<MethodProfile> {
 /// # Examples
 ///
 /// ```ignore
-/// use common::decomposition_advice::SubjectKind;
-/// use common::test_support::decomposition::{
+/// use whitaker_common::decomposition_advice::SubjectKind;
+/// use whitaker_common::test_support::decomposition::{
 ///     decomposition_suggestions,
 ///     parser_serde_fs_fixture,
 /// };
@@ -212,7 +212,7 @@ pub fn decomposition_suggestions(
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::{MethodInput, methods_meet_cosine_threshold, profile};
+/// use whitaker_common::test_support::decomposition::{MethodInput, methods_meet_cosine_threshold, profile};
 ///
 /// let left = profile(MethodInput {
 ///     name: "parse_tokens",

@@ -1,17 +1,17 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
-use common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    noop_reporter, safe_resolve_message_set,
-};
-#[cfg(test)]
-use common::i18n::{BundleLookup, I18nError, resolve_message_set};
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
 use rustc_middle::ty;
 use rustc_span::sym;
 use std::borrow::Cow;
 use std::fmt;
+use whitaker_common::i18n::{
+    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
+    noop_reporter, safe_resolve_message_set,
+};
+#[cfg(test)]
+use whitaker_common::i18n::{BundleLookup, I18nError, resolve_message_set};
 
 /// A formatted label for the receiver type (e.g., "`Result<T, E>`").
 #[derive(Debug, Clone)]

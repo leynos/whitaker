@@ -1,12 +1,10 @@
 //! Unit tests for context conversion and attribute detection.
 //!
-//! Verifies HIR attribute conversion to `common::Attribute` and `cfg(test)`
+//! Verifies HIR attribute conversion to `whitaker_common::Attribute` and `cfg(test)`
 //! detection for both parsed and unparsed attribute variants.
 
 #[cfg(feature = "dylint-driver")]
 use super::{convert_attribute, is_cfg_test_attribute, meta_contains_test_cfg};
-#[cfg(feature = "dylint-driver")]
-use common::{AttributeKind, PARSED_ATTRIBUTE_PLACEHOLDER};
 #[cfg(feature = "dylint-driver")]
 use rstest::rstest;
 #[cfg(feature = "dylint-driver")]
@@ -19,6 +17,8 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_span::symbol::Ident;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
+#[cfg(feature = "dylint-driver")]
+use whitaker_common::{AttributeKind, PARSED_ATTRIBUTE_PLACEHOLDER};
 
 /// Type-safe wrapper for AST path segments.
 #[cfg(feature = "dylint-driver")]

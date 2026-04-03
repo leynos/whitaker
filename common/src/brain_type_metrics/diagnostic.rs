@@ -31,10 +31,10 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::{
+/// use whitaker_common::brain_type_metrics::evaluation::{
 ///     BrainTypeDiagnostic, BrainTypeDisposition,
 /// };
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -116,10 +116,10 @@ impl BrainTypeDiagnostic {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::{
+/// use whitaker_common::brain_type_metrics::evaluation::{
 ///     BrainTypeDiagnostic, BrainTypeDisposition, format_primary_message,
 /// };
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let mut builder = TypeMetricsBuilder::new("Foo", 25, 80);
 /// builder.add_method("parse", 31, 140);
@@ -217,10 +217,10 @@ fn foreign_reach_suffix(diagnostic: &BrainTypeDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::{
+/// use whitaker_common::brain_type_metrics::evaluation::{
 ///     BrainTypeDiagnostic, BrainTypeDisposition, format_note,
 /// };
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -256,10 +256,10 @@ pub fn format_note(diagnostic: &BrainTypeDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::{
+/// use whitaker_common::brain_type_metrics::evaluation::{
 ///     BrainTypeDiagnostic, BrainTypeDisposition, format_decomposition_note,
 /// };
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diagnostic = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);
@@ -286,10 +286,10 @@ pub fn format_decomposition_note(
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::evaluation::{
+/// use whitaker_common::brain_type_metrics::evaluation::{
 ///     BrainTypeDiagnostic, BrainTypeDisposition, format_help,
 /// };
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let metrics = TypeMetricsBuilder::new("Foo", 25, 80).build();
 /// let diag = BrainTypeDiagnostic::new(&metrics, BrainTypeDisposition::Pass);

@@ -24,7 +24,7 @@ use std::collections::BTreeSet;
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::ForeignReferenceSet;
+/// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
 ///
 /// let mut refs = ForeignReferenceSet::new();
 /// refs.record_reference("std::collections", false);
@@ -44,7 +44,7 @@ impl ForeignReferenceSet {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::ForeignReferenceSet;
+    /// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
     ///
     /// let refs = ForeignReferenceSet::new();
     /// assert!(refs.is_empty());
@@ -64,7 +64,7 @@ impl ForeignReferenceSet {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::ForeignReferenceSet;
+    /// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
     ///
     /// let mut refs = ForeignReferenceSet::new();
     /// refs.record_reference("std::fmt", true);  // macro — filtered
@@ -83,7 +83,7 @@ impl ForeignReferenceSet {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::ForeignReferenceSet;
+    /// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
     ///
     /// let mut refs = ForeignReferenceSet::new();
     /// refs.record_reference("tokio::fs", false);
@@ -99,7 +99,7 @@ impl ForeignReferenceSet {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::ForeignReferenceSet;
+    /// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
     ///
     /// let refs = ForeignReferenceSet::new();
     /// assert!(refs.is_empty());
@@ -114,7 +114,7 @@ impl ForeignReferenceSet {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::ForeignReferenceSet;
+    /// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
     ///
     /// let mut refs = ForeignReferenceSet::new();
     /// refs.record_reference("std::io", false);
@@ -136,7 +136,7 @@ impl ForeignReferenceSet {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::foreign_reach_count;
+/// use whitaker_common::brain_type_metrics::foreign_reach_count;
 ///
 /// let refs = vec![
 ///     ("std::io".into(), false),

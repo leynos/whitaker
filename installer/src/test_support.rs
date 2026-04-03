@@ -4,7 +4,7 @@
 //! modules that simulate staged output without invoking a nested workspace
 //! build.
 
-pub use common::test_support::env_test_guard;
+pub use whitaker_common::test_support::env_test_guard;
 
 /// Environment variable used by behavioural tests to request synthetic suite
 /// staging in debug binaries.

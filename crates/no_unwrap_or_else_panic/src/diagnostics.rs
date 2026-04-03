@@ -1,13 +1,13 @@
 //! Diagnostic emission for the lint, including localisation fallbacks.
 
 use crate::{LINT_NAME, NO_UNWRAP_OR_ELSE_PANIC};
-use common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    noop_reporter, safe_resolve_message_set,
-};
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LintContext};
 use std::borrow::Cow;
+use whitaker_common::i18n::{
+    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
+    noop_reporter, safe_resolve_message_set,
+};
 
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 

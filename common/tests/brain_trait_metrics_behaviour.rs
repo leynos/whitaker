@@ -1,9 +1,9 @@
 //! Behaviour-driven coverage for brain trait metric collection.
 
-use common::brain_trait_metrics::{TraitMetrics, TraitMetricsBuilder};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+use whitaker_common::brain_trait_metrics::{TraitMetrics, TraitMetricsBuilder};
 
 #[derive(Clone, Debug)]
 enum PendingTraitItem {

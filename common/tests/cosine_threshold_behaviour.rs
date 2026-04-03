@@ -1,12 +1,12 @@
 //! Behaviour-driven coverage for the decomposition cosine threshold.
 
-use common::MethodProfileBuilder;
-use common::test_support::decomposition::methods_meet_cosine_threshold;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::str::FromStr;
+use whitaker_common::MethodProfileBuilder;
+use whitaker_common::test_support::decomposition::methods_meet_cosine_threshold;
 
 #[derive(Clone, Copy, Debug)]
 enum MethodSide {

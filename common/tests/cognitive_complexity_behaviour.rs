@@ -1,9 +1,9 @@
 //! Behaviour-driven coverage for cognitive complexity computation.
 
-use common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+use whitaker_common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
 
 #[derive(Debug)]
 struct CcWorld {

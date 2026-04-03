@@ -1,11 +1,11 @@
 //! Helpers for working with HIR constructs shared across Whitaker lints.
 
-use common::{Attribute, AttributeKind, AttributePath};
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
+use whitaker_common::{Attribute, AttributeKind, AttributePath};
 
 /// Returns the body span for an inline or file-backed module.
 ///

@@ -6,12 +6,12 @@
 use std::ops::RangeInclusive;
 
 use crate::analysis::Settings;
-use common::complexity_signal::LineSegment;
 use rustc_hir as hir;
 use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::LateContext;
 use rustc_span::source_map::SourceMap;
 use rustc_span::{DesugaringKind, Span};
+use whitaker_common::complexity_signal::LineSegment;
 
 pub(super) struct SegmentBuilder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,

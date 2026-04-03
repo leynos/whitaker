@@ -19,8 +19,8 @@ pub enum Expr {
 /// # Examples
 ///
 /// ```
-/// use common::expr::{Expr, def_id_of_expr_callee};
-/// use common::path::SimplePath;
+/// use whitaker_common::expr::{Expr, def_id_of_expr_callee};
+/// use whitaker_common::path::SimplePath;
 ///
 /// let expr = Expr::Call { callee: SimplePath::from("std::mem::drop") };
 /// assert_eq!(
@@ -41,8 +41,8 @@ pub fn def_id_of_expr_callee(expr: &Expr) -> Option<&SimplePath> {
 /// # Examples
 ///
 /// ```
-/// use common::expr::is_path_to;
-/// use common::path::SimplePath;
+/// use whitaker_common::expr::is_path_to;
+/// use whitaker_common::path::SimplePath;
 ///
 /// let path = SimplePath::from("core::option::Option");
 /// assert!(is_path_to(&path, ["core", "option", "Option"]));
@@ -61,8 +61,8 @@ where
 /// # Examples
 ///
 /// ```
-/// use common::expr::recv_is_option_or_result;
-/// use common::path::SimplePath;
+/// use whitaker_common::expr::recv_is_option_or_result;
+/// use whitaker_common::path::SimplePath;
 ///
 /// assert!(recv_is_option_or_result(&SimplePath::from("std::option::Option")));
 /// assert!(recv_is_option_or_result(&SimplePath::from("Result")));

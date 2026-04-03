@@ -27,7 +27,7 @@ impl LineSegment {
     /// # Examples
     ///
     /// ```
-    /// use common::complexity_signal::LineSegment;
+    /// use whitaker_common::complexity_signal::LineSegment;
     ///
     /// let segment = LineSegment::new(3, 5, 1.25).expect("segment should be valid");
     /// assert_eq!(segment.start_line(), 3);
@@ -194,7 +194,7 @@ fn accumulate_signal_from_diff(diff: &[f64], len: usize) -> Vec<f64> {
 /// # Examples
 ///
 /// ```
-/// use common::complexity_signal::{LineSegment, rasterize_signal};
+/// use whitaker_common::complexity_signal::{LineSegment, rasterize_signal};
 ///
 /// let segments = [
 ///     LineSegment::new(10, 12, 1.0).expect("segment should be valid"),
@@ -259,7 +259,7 @@ pub enum SmoothingError {
 /// # Examples
 ///
 /// ```
-/// use common::complexity_signal::smooth_moving_average;
+/// use whitaker_common::complexity_signal::smooth_moving_average;
 ///
 /// let signal = vec![0.0, 0.0, 3.0, 0.0, 0.0];
 /// let smoothed = smooth_moving_average(&signal, 3).expect("window should be valid");

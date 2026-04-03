@@ -1,11 +1,11 @@
 //! Behaviour-driven coverage for per-line complexity signal building and smoothing.
 
-use common::complexity_signal::{
-    LineSegment, SignalBuildError, SmoothingError, rasterize_signal, smooth_moving_average,
-};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, RefCell};
+use whitaker_common::complexity_signal::{
+    LineSegment, SignalBuildError, SmoothingError, rasterize_signal, smooth_moving_average,
+};
 
 #[derive(Debug, Default)]
 struct SignalWorld {

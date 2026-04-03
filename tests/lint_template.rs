@@ -175,7 +175,7 @@ fn then_manifest_reuses_shared_dependencies(world: &TemplateWorld) {
     }
 
     let common = dependencies
-        .get("common")
+        .get("whitaker-common")
         .and_then(Value::as_table)
         .and_then(|table| table.get("path"))
         .and_then(Value::as_str)

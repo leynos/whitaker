@@ -8,11 +8,11 @@ use std::str::FromStr;
 
 mod support;
 
-use common::i18n::normalise_locale;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
 use whitaker::SharedConfig;
+use whitaker_common::i18n::normalise_locale;
 
 #[fixture]
 fn config_source() -> RefCell<Option<String>> {

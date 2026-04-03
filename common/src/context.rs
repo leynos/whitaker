@@ -31,8 +31,8 @@ impl ContextEntry {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
-    /// use common::context::{ContextEntry, ContextKind};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::context::{ContextEntry, ContextKind};
     ///
     /// let entry = ContextEntry::new(
     ///     "demo",
@@ -55,8 +55,8 @@ impl ContextEntry {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
-    /// use common::context::ContextEntry;
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::context::ContextEntry;
     ///
     /// let entry = ContextEntry::function(
     ///     "demo",
@@ -112,8 +112,8 @@ impl ContextKind {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::context::is_test_fn;
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::context::is_test_fn;
 ///
 /// let attrs = vec![Attribute::new(AttributePath::from("rstest"), AttributeKind::Outer)];
 /// assert!(is_test_fn(&attrs));
@@ -129,8 +129,8 @@ pub fn is_test_fn(attrs: &[Attribute]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::context::is_test_fn_with;
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::context::is_test_fn_with;
 ///
 /// let attrs = vec![Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer)];
 /// let additional = vec![AttributePath::from("custom::test")];
@@ -146,8 +146,8 @@ pub fn is_test_fn_with(attrs: &[Attribute], additional: &[AttributePath]) -> boo
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::context::{in_test_like_context, ContextEntry};
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::context::{in_test_like_context, ContextEntry};
 ///
 /// let mut entry = ContextEntry::function("demo", Vec::new());
 /// entry.push_attribute(Attribute::new(AttributePath::from("test"), AttributeKind::Outer));
@@ -164,8 +164,8 @@ pub fn in_test_like_context(stack: &[ContextEntry]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::context::{in_test_like_context_with, ContextEntry};
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::context::{in_test_like_context_with, ContextEntry};
 ///
 /// let mut entry = ContextEntry::function("demo", Vec::new());
 /// entry.push_attribute(Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer));
@@ -187,7 +187,7 @@ pub fn in_test_like_context_with(stack: &[ContextEntry], additional: &[Attribute
 /// # Examples
 ///
 /// ```
-/// use common::context::{is_in_main_fn, ContextEntry};
+/// use whitaker_common::context::{is_in_main_fn, ContextEntry};
 ///
 /// let stack = vec![ContextEntry::function("main", Vec::new())];
 /// assert!(is_in_main_fn(&stack));

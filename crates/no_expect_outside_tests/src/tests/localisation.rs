@@ -10,11 +10,11 @@ use super::{
     context_label, fallback_messages, localised_messages,
 };
 use crate::context::ContextSummary;
-use common::i18n::BundleLookup;
-use common::i18n::testing::FailingLookup;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::{Cell, Ref, RefCell};
+use whitaker_common::i18n::BundleLookup;
+use whitaker_common::i18n::testing::FailingLookup;
 
 fn unquote(value: &str) -> &str {
     value

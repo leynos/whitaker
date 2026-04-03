@@ -1,6 +1,6 @@
 [package]
 name = "no_unwrap_or_else_panic"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 publish = false
 description = "Dylint lint that flags unwrap_or_else closures which panic"
@@ -27,7 +27,7 @@ constituent = ["dylint-driver", "dylint_linting/constituent"]
 clippy = ["dylint-driver", "dep:clippy_utils"]
 
 [dependencies]
-common = { workspace = true }
+whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }

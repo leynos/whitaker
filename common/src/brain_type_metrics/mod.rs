@@ -39,7 +39,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::MethodMetrics;
+/// use whitaker_common::brain_type_metrics::MethodMetrics;
 ///
 /// let m = MethodMetrics::new("parse", 31, 140);
 /// assert_eq!(m.name(), "parse");
@@ -59,7 +59,7 @@ impl MethodMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::MethodMetrics;
+    /// use whitaker_common::brain_type_metrics::MethodMetrics;
     ///
     /// let m = MethodMetrics::new("validate", 10, 45);
     /// assert_eq!(m.name(), "validate");
@@ -99,7 +99,7 @@ impl MethodMetrics {
     /// # Examples
     ///
     /// ```
-    /// use common::brain_type_metrics::MethodMetrics;
+    /// use whitaker_common::brain_type_metrics::MethodMetrics;
     ///
     /// let m = MethodMetrics::new("parse", 30, 100);
     /// assert!(m.is_brain_method(25, 80));
@@ -123,7 +123,7 @@ impl MethodMetrics {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::{MethodMetrics, weighted_methods_count};
+/// use whitaker_common::brain_type_metrics::{MethodMetrics, weighted_methods_count};
 ///
 /// let methods = vec![
 ///     MethodMetrics::new("a", 10, 50),
@@ -149,7 +149,7 @@ pub fn weighted_methods_count(methods: &[MethodMetrics]) -> usize {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::{MethodMetrics, brain_methods};
+/// use whitaker_common::brain_type_metrics::{MethodMetrics, brain_methods};
 ///
 /// let methods = vec![
 ///     MethodMetrics::new("parse", 30, 100),
@@ -185,7 +185,7 @@ pub fn brain_methods(
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let mut builder = TypeMetricsBuilder::new("Foo", 25, 80);
 /// builder.add_method("parse", 31, 140);
@@ -273,7 +273,7 @@ impl TypeMetrics {
 /// # Examples
 ///
 /// ```
-/// use common::brain_type_metrics::TypeMetricsBuilder;
+/// use whitaker_common::brain_type_metrics::TypeMetricsBuilder;
 ///
 /// let mut builder = TypeMetricsBuilder::new("Foo", 25, 80);
 /// builder.add_method("parse", 31, 140);

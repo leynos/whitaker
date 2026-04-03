@@ -1,11 +1,11 @@
 //! Classifies `std::fs` usages encountered by the lint into diagnostic inputs.
 
-use common::SimplePath;
 use rustc_hir as hir;
 use rustc_hir::def::Res;
 use rustc_hir::def_id::DefId;
 use rustc_lint::LateContext;
 use rustc_span::sym;
+use whitaker_common::SimplePath;
 
 /// Category describing how the `std::fs` item is being used.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

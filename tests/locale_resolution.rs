@@ -5,10 +5,10 @@ use std::str::FromStr;
 
 mod support;
 
-use common::i18n::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
+use whitaker_common::i18n::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
 
 #[derive(Default)]
 struct LocaleWorld {

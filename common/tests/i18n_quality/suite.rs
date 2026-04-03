@@ -4,7 +4,7 @@
 //! text remains complete, and exercise language-specific plural forms so we can
 //! catch regressions before they reach users.
 
-use common::i18n::{FluentValue, Localizer, branch_phrase};
+use whitaker_common::i18n::{FluentValue, Localizer, branch_phrase};
 use fluent_templates::fluent_bundle::FluentResource;
 use once_cell::sync::Lazy;
 use regex::Regex;

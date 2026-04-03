@@ -1,6 +1,6 @@
 [package]
 name = "bumpy_road_function"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 publish = false
 description = "Lint that flags multiple clusters of complex conditional logic"
@@ -16,7 +16,7 @@ test = false
 [features]
 default = []
 dylint-driver = [
-    "dep:common",
+    "dep:whitaker-common",
     "dep:dylint_linting",
     "dep:fluent-templates",
     "dep:log",
@@ -30,7 +30,7 @@ dylint-driver = [
 constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
-common = { workspace = true, optional = true }
+whitaker-common = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 fluent-templates = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
@@ -47,6 +47,6 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 whitaker = { workspace = true }
-common = { workspace = true }
+whitaker-common = { workspace = true }
 camino = { workspace = true }
 tempfile = { workspace = true }

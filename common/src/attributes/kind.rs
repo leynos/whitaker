@@ -15,7 +15,7 @@ impl AttributeKind {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::AttributeKind;
+    /// use whitaker_common::attributes::AttributeKind;
     ///
     /// assert!(AttributeKind::Inner.is_inner());
     /// assert!(!AttributeKind::Outer.is_inner());
@@ -30,7 +30,7 @@ impl AttributeKind {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::AttributeKind;
+    /// use whitaker_common::attributes::AttributeKind;
     ///
     /// assert!(AttributeKind::Outer.is_outer());
     /// assert!(!AttributeKind::Inner.is_outer());

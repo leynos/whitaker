@@ -4,12 +4,6 @@
 //! free functions, inherent methods, and trait methods. Keeping doc comments at
 //! the front mirrors idiomatic Rust style and prevents them from being obscured
 //! by implementation details such as `#[inline]` or `#[allow]` attributes.
-use common::i18n::{
-    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
-    MessageResolution, get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
-};
-#[cfg(test)]
-use common::i18n::{I18nError, resolve_message_set};
 use rustc_ast::AttrStyle;
 use rustc_ast::attr::AttributeExt;
 use rustc_hir as hir;
@@ -18,6 +12,12 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
 use whitaker::SharedConfig;
+use whitaker_common::i18n::{
+    Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
+    MessageResolution, get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+};
+#[cfg(test)]
+use whitaker_common::i18n::{I18nError, resolve_message_set};
 
 /// Lint pass that validates the ordering of doc comments on functions and methods.
 pub struct FunctionAttrsFollowDocs {

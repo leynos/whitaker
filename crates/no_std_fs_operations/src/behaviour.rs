@@ -1,11 +1,11 @@
 //! Behaviour-driven localization tests for the `no_std_fs_operations` lint.
 
 use crate::diagnostics::{StdFsMessages, localised_messages};
-use common::i18n::testing::FailingLookup;
-use common::i18n::{I18nError, Localizer};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+use whitaker_common::i18n::testing::FailingLookup;
+use whitaker_common::i18n::{I18nError, Localizer};
 
 #[derive(Default)]
 struct LocalisationWorld {

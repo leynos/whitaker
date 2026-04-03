@@ -2,15 +2,15 @@
 
 use crate::NO_STD_FS_OPERATIONS;
 use crate::usage::StdFsUsage;
-use common::i18n::{
+use rustc_lint::{LateContext, LintContext};
+use rustc_span::Span;
+use std::borrow::Cow;
+use whitaker_common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     noop_reporter, safe_resolve_message_set,
 };
 #[cfg(test)]
-use common::i18n::{BundleLookup, I18nError, resolve_message_set};
-use rustc_lint::{LateContext, LintContext};
-use rustc_span::Span;
-use std::borrow::Cow;
+use whitaker_common::i18n::{BundleLookup, I18nError, resolve_message_set};
 
 /// Emit a diagnostic for a detected `std::fs` usage.
 pub(crate) fn emit_diagnostic(

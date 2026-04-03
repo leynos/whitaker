@@ -2,9 +2,9 @@
 //! configured test attributes.
 
 use crate::context::summarise_context;
-use common::attributes::{Attribute, AttributeKind, AttributePath};
-use common::{ContextEntry, ContextKind};
 use rstest::rstest;
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+use whitaker_common::{ContextEntry, ContextKind};
 
 fn function_entry(name: &str, attrs: Vec<Attribute>) -> ContextEntry {
     ContextEntry::new(name, ContextKind::Function, attrs)

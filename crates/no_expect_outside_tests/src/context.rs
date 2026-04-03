@@ -2,10 +2,6 @@
 //! guards (for example, `cfg(test)`), supporting the lint's context
 //! summarisation.
 
-use common::{
-    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
-    PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
-};
 use rustc_ast::AttrStyle;
 use rustc_ast::ast::{MetaItem, MetaItemInner};
 use rustc_hir as hir;
@@ -13,6 +9,10 @@ use rustc_hir::Node;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
+use whitaker_common::{
+    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
+    PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
+};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContextSummary {

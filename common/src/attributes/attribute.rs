@@ -16,7 +16,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::new(AttributePath::from("test"), AttributeKind::Outer);
     /// assert!(attribute.is_outer());
@@ -35,7 +35,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::with_arguments(
     ///     AttributePath::from("allow"),
@@ -62,7 +62,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::with_str_arguments(
     ///     AttributePath::from("allow"),
@@ -81,7 +81,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::new(AttributePath::from("doc"), AttributeKind::Outer);
     /// assert!(attribute.path().is_doc());
@@ -96,7 +96,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::new(AttributePath::from("doc"), AttributeKind::Inner);
     /// assert!(attribute.kind().is_inner());
@@ -111,7 +111,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::with_str_arguments(
     ///     AttributePath::from("allow"),
@@ -130,7 +130,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::new(AttributePath::from("doc"), AttributeKind::Outer);
     /// assert!(attribute.is_doc());
@@ -151,7 +151,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let rstest = Attribute::new(AttributePath::from("rstest"), AttributeKind::Outer);
     /// assert!(rstest.is_test_like());
@@ -176,7 +176,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attr = Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer);
     /// let additional = vec![AttributePath::from("custom::test")];
@@ -199,7 +199,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::new(AttributePath::from("doc"), AttributeKind::Inner);
     /// assert!(attribute.is_inner());
@@ -214,7 +214,7 @@ impl Attribute {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
     ///
     /// let attribute = Attribute::new(AttributePath::from("doc"), AttributeKind::Outer);
     /// assert!(attribute.is_outer());

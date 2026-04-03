@@ -68,6 +68,16 @@ fn config_rejects_invalid_toml(#[case] toml: &str) {
 #[case::case_sensitive_match(&["MyCrate"], "MyCrate", true)]
 #[case::case_sensitive_lowercase(&["MyCrate"], "mycrate", false)]
 #[case::case_sensitive_uppercase(&["MyCrate"], "MYCRATE", false)]
+#[case::hyphenated_package_name_does_not_match_crate_identifier(
+    &["whitaker-common"],
+    "whitaker_common",
+    false
+)]
+#[case::underscored_crate_identifier_matches_runtime_name(
+    &["whitaker_common"],
+    "whitaker_common",
+    true
+)]
 fn is_excluded_matches_correctly(
     #[case] excluded: &[&str],
     #[case] query: &str,

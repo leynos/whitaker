@@ -1,9 +1,9 @@
 //! Additional UI-style regressions that need compiler flags or example-target
 //! support beyond the basic `ui/` source fixtures.
 
-use common::test_support::{env_test_guard, run_test_runner};
 use dylint_testing::ui::Test;
 use temp_env::with_vars_unset;
+use whitaker_common::test_support::{env_test_guard, run_test_runner};
 
 #[test]
 fn tokio_example_compiles_under_test_harness() {

@@ -1,6 +1,6 @@
 [package]
 name = "whitaker-installer"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "Installer CLI for Whitaker Dylint lint libraries"
 readme = "README.md"
@@ -44,7 +44,7 @@ test-support = []
 [dependencies]
 camino = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-common = { workspace = true }
+whitaker-common = { workspace = true }
 directories-next = { workspace = true }
 flate2 = { workspace = true }
 fs2 = "0.4"
