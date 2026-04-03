@@ -1,6 +1,6 @@
 //! Unit coverage for token-pass acceptance and Run 0 emission.
 
-use whitaker_sarif::{WHITAKER_FRAGMENT_KEY, WHK001_ID, WHK002_ID, WhitakerProperties};
+use whitaker_sarif::{Region, WHITAKER_FRAGMENT_KEY, WHK001_ID, WHK002_ID, WhitakerProperties};
 
 use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
 
@@ -157,12 +157,17 @@ fn single_line_region_uses_one_based_columns() {
     let region = region_for_range("alpha", "fn a() {}\n", 0..8)
         .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
 
-    assert_eq!(region.start_line, 1);
-    assert_eq!(region.start_column, Some(1));
-    assert_eq!(region.end_line, Some(1));
-    assert_eq!(region.end_column, Some(8));
-    assert_eq!(region.byte_offset, Some(0));
-    assert_eq!(region.byte_length, Some(8));
+    assert_eq!(
+        region,
+        Region {
+            start_line: 1,
+            start_column: Some(1),
+            end_line: Some(1),
+            end_column: Some(8),
+            byte_offset: Some(0),
+            byte_length: Some(8),
+        }
+    );
 }
 
 #[test]
@@ -171,10 +176,17 @@ fn multi_line_region_tracks_trailing_newline() {
     let region = region_for_range("alpha", source, 13..27)
         .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
 
-    assert_eq!(region.start_line, 2);
-    assert_eq!(region.start_column, Some(1));
-    assert_eq!(region.end_line, Some(3));
-    assert_eq!(region.end_column, Some(1));
+    assert_eq!(
+        region,
+        Region {
+            start_line: 2,
+            start_column: Some(1),
+            end_line: Some(3),
+            end_column: Some(1),
+            byte_offset: Some(13),
+            byte_length: Some(14),
+        }
+    );
 }
 
 #[test]
