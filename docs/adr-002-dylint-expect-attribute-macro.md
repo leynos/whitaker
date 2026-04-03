@@ -10,7 +10,7 @@ Proposed.
 
 ## Context and problem statement
 
-Whitaker enforce project-specific Rust conventions using Dylint lint libraries.
+Whitaker enforces project-specific Rust conventions using Dylint lint libraries.
 These lints run outwith normal `cargo check` and `cargo test` workflows.
 
 Occasionally, a lint must be suppressed for a narrow scope (for example, a
@@ -25,10 +25,9 @@ noise in normal builds because:
 
 - `rustc` does not know Dylint-defined lint names during ordinary compilation,
   so it can emit `unknown_lints` diagnostics.
-- The recommended Dylint gating mechanism uses `cfg_attr(dylint_lib = "…",
-  …)`, but toolchains can emit `unexpected_cfgs
-  ` diagnostics for unknown cfg keys/values when `check-cfg
-  ` validation is enabled.
+- The recommended Dylint gating mechanism uses `cfg_attr(dylint_lib = "…", …)`,
+  but toolchains can emit `unexpected_cfgs` diagnostics for unknown cfg keys/values
+  when `check-cfg` validation is enabled.
 
 The project needs an ergonomic, consistent, and low-friction mechanism for
 annotating items with conditional Dylint `expect` semantics that:
@@ -67,7 +66,8 @@ annotating items with conditional Dylint `expect` semantics that:
 - Maintain a clear separation between proc-macro code and lint implementation
   code.
 - Document limitations for “pre-expansion” lints where conditional gating can
-  misbehave.
+  misbehave (for example, a `#[derive(...)]` macro can emit diagnostics before
+  `cfg_attr` is applied).
 
 ## Options considered
 
@@ -141,7 +141,7 @@ Whitaker will add a small support layer that provides an attribute macro
   - `lib = "..."` (string literal),
   - `lints(path, ...)` (one or more lint paths), and
   - optional `reason = "..."`.
-- Expand the attribute into:
+- Expand the attribute to include the following:
   - `#[allow(clippy::allow_attributes)]`,
   - `#[allow(unknown_lints)]`,
   - `#[allow(unexpected_cfgs)]`, and
@@ -192,8 +192,10 @@ time.
 - Proc-macro dependencies (`syn`, `quote`) increase compile-time for crates that
   depend on the macro. The impact should remain modest given the small surface
   area.
-- Pre-expansion lints can bypass `cfg_attr` gating. The macro cannot correct
-  toolchain ordering constraints.
+- Pre-expansion lints can bypass `cfg_attr` gating. For example, a
+  `#[derive(...)]` macro can raise lint diagnostics on generated code before
+  `dylint_expect` expansion is applied.
+  The macro cannot correct toolchain ordering constraints.
 - The `lib` value must match the identifier Dylint injects via `dylint_lib`.
   Mismatches silently disable the `expect` and can lead to missed enforcement.
 
@@ -209,8 +211,8 @@ time.
 
 ## Architectural rationale
 
-Whitaker aim to enforce policy through tooling while keeping the codebase
-pleasant to maintain. A small, explicit support layer localize Dylint-specific
+Whitaker aims to enforce policy through tooling while keeping the codebase
+pleasant to maintain. A small, explicit support layer localizes Dylint-specific
 compilation quirks behind a stable, reviewable interface.
 
 The attribute macro approach keeps suppressions close to the code they justify,
