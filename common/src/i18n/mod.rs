@@ -13,6 +13,7 @@
 //! See [`resolve_message_set`] for fetching a lint’s primary/note/help trio.
 
 use fluent_templates::static_loader;
+use std::path::PathBuf;
 use unic_langid::langid;
 
 /// Re-export the Fluent value type for constructing diagnostic arguments.
@@ -32,6 +33,11 @@ static_loader! {
 
 pub const FALLBACK_LOCALE: &str = FALLBACK_LITERAL;
 pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
+
+/// Return the crate-local Fluent resource root used by packaging and tests.
+pub fn locales_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
+}
 
 mod diagnostics;
 mod helpers;

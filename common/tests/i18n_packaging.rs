@@ -1,26 +1,94 @@
-//! Regression coverage for crate-relative localisation packaging.
+//! Regression coverage for crate-relative localization packaging.
 //!
 //! The `whitaker-common` crate is published independently, so its Fluent
-//! bundles must live under the crate root rather than elsewhere in the
-//! workspace. This keeps `cargo package` verification aligned with local test
-//! runs.
+//! bundles must be present in the packaged tarball rather than only in the
+//! checkout.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-/// Assert that published `whitaker-common` tarballs ship their bundled Fluent
-/// resources under the crate root.
+use tempfile::{Builder, TempDir};
+
 #[test]
-fn fluent_bundles_live_under_the_common_crate_root() {
-    let locales_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales");
+fn fluent_bundles_are_included_in_the_package_tarball() {
+    let target_dir = package_target_dir();
+    let crate_path = package_crate_path(target_dir.path());
+    let tar_listing = package_tar_listing(&crate_path);
+    let expected_entry = format!(
+        "{name}-{version}/locales/en-GB/common.ftl",
+        name = env!("CARGO_PKG_NAME"),
+        version = env!("CARGO_PKG_VERSION"),
+    );
 
     assert!(
-        locales_root.is_dir(),
-        "expected crate-local locales directory at {}",
-        locales_root.display()
+        tar_listing.lines().any(|line| line == expected_entry),
+        "expected packaged tarball to include the fallback Fluent bundle, but it did not"
     );
+}
+
+fn package_target_dir() -> TempDir {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let target_root = manifest_dir.join("target");
+    fs::create_dir_all(&target_root)
+        .unwrap_or_else(|error| panic!("target directory should be creatable: {error}"));
+
+    Builder::new()
+        .prefix("whitaker-common-package-")
+        .tempdir_in(&target_root)
+        .unwrap_or_else(|error| panic!("temporary package directory should be creatable: {error}"))
+}
+
+fn package_crate_path(target_dir: &Path) -> PathBuf {
+    let status = Command::new("cargo")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("CARGO_TARGET_DIR", target_dir)
+        .args([
+            "package",
+            "-p",
+            "whitaker-common",
+            "--allow-dirty",
+            "--no-verify",
+        ])
+        .status()
+        .unwrap_or_else(|error| panic!("cargo package should run: {error}"));
+
+    assert!(status.success(), "cargo package should succeed");
+
+    let package_dir = target_dir.join("package");
+    fs::read_dir(&package_dir)
+        .unwrap_or_else(|error| panic!("package directory should be readable: {error}"))
+        .map(|entry| {
+            entry
+                .unwrap_or_else(|error| {
+                    panic!("package directory entry should be readable: {error}")
+                })
+                .path()
+        })
+        .find(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "crate")
+        })
+        .unwrap_or_else(|| panic!("cargo package should produce a .crate tarball"))
+}
+
+fn package_tar_listing(crate_path: &Path) -> String {
+    let output = Command::new("tar")
+        .args([
+            "-tf",
+            crate_path
+                .to_str()
+                .unwrap_or_else(|| panic!("crate path should be valid UTF-8")),
+        ])
+        .output()
+        .unwrap_or_else(|error| panic!("tar should list package contents: {error}"));
+
     assert!(
-        locales_root.join("en-GB/common.ftl").is_file(),
-        "expected fallback common bundle under {}",
-        locales_root.display()
+        output.status.success(),
+        "tar should succeed when listing the packaged crate: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
+
+    String::from_utf8(output.stdout)
+        .unwrap_or_else(|error| panic!("tar listing should be valid UTF-8: {error}"))
 }
