@@ -46,6 +46,21 @@ fn with_results(world: &Run0World, assert_fn: impl FnOnce(&[SarifResult])) {
     }
 }
 
+fn with_whitaker_properties(world: &Run0World, assert_fn: impl FnOnce(&WhitakerProperties)) {
+    with_results(world, |results| {
+        let [result] = results else {
+            panic!("exactly one result must exist before checking Whitaker properties");
+        };
+        let properties = result
+            .properties
+            .as_ref()
+            .unwrap_or_else(|| panic!("Whitaker properties must be present"));
+        let extracted = WhitakerProperties::try_from(properties)
+            .unwrap_or_else(|error| panic!("unexpected property extraction error: {error}"));
+        assert_fn(&extracted);
+    });
+}
+
 fn fragment_fixture(name: &str) -> Result<TokenFragment, String> {
     match name {
         "alpha_t1" => Ok(TokenFragment::new(
@@ -189,53 +204,17 @@ fn then_result_has_locations(world: &Run0World, primary_count: usize, related_co
 
 #[then("the Whitaker profile is {profile}")]
 fn then_whitaker_profile_is(world: &Run0World, profile: String) {
-    with_results(world, |results| {
-        let [result] = results else {
-            panic!("exactly one result must exist before checking Whitaker properties");
-        };
-        let properties = match result.properties.as_ref() {
-            Some(properties) => properties,
-            None => panic!("Whitaker properties must be present"),
-        };
-        match WhitakerProperties::try_from(properties) {
-            Ok(extracted) => assert_eq!(extracted.profile, profile),
-            Err(error) => panic!("unexpected property extraction error: {error}"),
-        }
-    });
+    with_whitaker_properties(world, |props| assert_eq!(props.profile, profile));
 }
 
 #[then("the Whitaker k is {k}")]
 fn then_whitaker_k_is(world: &Run0World, k: usize) {
-    with_results(world, |results| {
-        let [result] = results else {
-            panic!("exactly one result must exist before checking Whitaker properties");
-        };
-        let properties = match result.properties.as_ref() {
-            Some(properties) => properties,
-            None => panic!("Whitaker properties must be present"),
-        };
-        match WhitakerProperties::try_from(properties) {
-            Ok(extracted) => assert_eq!(extracted.k, k),
-            Err(error) => panic!("unexpected property extraction error: {error}"),
-        }
-    });
+    with_whitaker_properties(world, |props| assert_eq!(props.k, k));
 }
 
 #[then("the Whitaker window is {window}")]
 fn then_whitaker_window_is(world: &Run0World, window: usize) {
-    with_results(world, |results| {
-        let [result] = results else {
-            panic!("exactly one result must exist before checking Whitaker properties");
-        };
-        let properties = match result.properties.as_ref() {
-            Some(properties) => properties,
-            None => panic!("Whitaker properties must be present"),
-        };
-        match WhitakerProperties::try_from(properties) {
-            Ok(extracted) => assert_eq!(extracted.window, window),
-            Err(error) => panic!("unexpected property extraction error: {error}"),
-        }
-    });
+    with_whitaker_properties(world, |props| assert_eq!(props.window, window));
 }
 
 #[then("no results are emitted")]

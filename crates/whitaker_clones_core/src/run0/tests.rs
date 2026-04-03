@@ -48,27 +48,35 @@ fn config() -> TokenPassConfig {
     TokenPassConfig::new("whitaker_clones_cli@token", "0.2.1")
 }
 
+fn build_pair_and_accept(
+    left: FragmentInput<'_>,
+    right: FragmentInput<'_>,
+    cfg: &TokenPassConfig,
+) -> Result<Vec<AcceptedPair>, Run0Error> {
+    let fragments = vec![fragment(left), fragment(right)];
+    accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], cfg)
+}
+
 #[test]
 fn boundary_threshold_accepts_type1_pair() {
-    let fragments = vec![
-        fragment(FragmentInput {
+    let accepted = build_pair_and_accept(
+        FragmentInput {
             id: "alpha",
             profile: NormProfile::T1,
             file_uri: "src/a.rs",
             source_text: "fn a() {}\n",
             hashes: &[(1, 0..8), (2, 0..8)],
-        }),
-        fragment(FragmentInput {
+        },
+        FragmentInput {
             id: "beta",
             profile: NormProfile::T1,
             file_uri: "src/b.rs",
             source_text: "fn b() {}\n",
             hashes: &[(1, 0..8), (2, 0..8)],
-        }),
-    ];
-
-    let accepted = accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], &config())
-        .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
+        },
+        &config(),
+    )
+    .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
 
     assert_eq!(accepted.len(), 1);
     assert_eq!(accepted[0].profile(), NormProfile::T1);
@@ -77,29 +85,28 @@ fn boundary_threshold_accepts_type1_pair() {
 
 #[test]
 fn boundary_threshold_accepts_type2_pair() {
-    let fragments = vec![
-        fragment(FragmentInput {
+    let config = config().with_type2_threshold(
+        SimilarityThreshold::new("type2", 1, 3)
+            .unwrap_or_else(|error| panic!("unexpected threshold error: {error}")),
+    );
+    let accepted = build_pair_and_accept(
+        FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
-        }),
-        fragment(FragmentInput {
+        },
+        FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
             source_text: "fn b(y: i32) {}\n",
             hashes: &[(1, 0..15), (3, 0..15)],
-        }),
-    ];
-
-    let config = config().with_type2_threshold(
-        SimilarityThreshold::new("type2", 1, 3)
-            .unwrap_or_else(|error| panic!("unexpected threshold error: {error}")),
-    );
-    let accepted = accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], &config)
-        .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
+        },
+        &config,
+    )
+    .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
 
     assert_eq!(accepted.len(), 1);
     assert_eq!(accepted[0].profile(), NormProfile::T2);
@@ -108,25 +115,24 @@ fn boundary_threshold_accepts_type2_pair() {
 
 #[test]
 fn just_below_threshold_is_rejected() {
-    let fragments = vec![
-        fragment(FragmentInput {
+    let accepted = build_pair_and_accept(
+        FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
-        }),
-        fragment(FragmentInput {
+        },
+        FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
             source_text: "fn b(y: i32) {}\n",
             hashes: &[(1, 0..15), (3, 0..15)],
-        }),
-    ];
-
-    let accepted = accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], &config())
-        .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
+        },
+        &config(),
+    )
+    .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
 
     assert!(accepted.is_empty());
 }
@@ -297,8 +303,7 @@ fn invalid_range_produces_typed_error() {
     }
 }
 
-#[test]
-fn emitted_result_contains_fingerprints_and_properties() {
+fn make_t2_emission_run() -> whitaker_sarif::Run {
     let fragments = vec![
         fragment(FragmentInput {
             id: "alpha",
@@ -321,8 +326,38 @@ fn emitted_result_contains_fingerprints_and_properties() {
         SimilarityRatio::new(2, 2),
     )];
 
-    let run = emit_run0(&fragments, &accepted, &config())
-        .unwrap_or_else(|error| panic!("unexpected emit error: {error}"));
+    emit_run0(&fragments, &accepted, &config())
+        .unwrap_or_else(|error| panic!("unexpected emit error: {error}"))
+}
+
+#[test]
+fn emitted_t2_result_has_correct_rule_id() {
+    let run = make_t2_emission_run();
+    let [result] = run.results.as_slice() else {
+        panic!("expected one result");
+    };
+
+    assert_eq!(result.rule_id, WHK002_ID);
+}
+
+#[test]
+fn emitted_t2_result_contains_required_fingerprint_keys() {
+    let run = make_t2_emission_run();
+    let [result] = run.results.as_slice() else {
+        panic!("expected one result");
+    };
+
+    assert!(
+        result
+            .partial_fingerprints
+            .contains_key(WHITAKER_FRAGMENT_KEY)
+    );
+    assert!(result.partial_fingerprints.contains_key("tokenHash"));
+}
+
+#[test]
+fn emitted_t2_result_properties_match_config() {
+    let run = make_t2_emission_run();
     let [result] = run.results.as_slice() else {
         panic!("expected one result");
     };
@@ -333,15 +368,13 @@ fn emitted_result_contains_fingerprints_and_properties() {
     let extracted = WhitakerProperties::try_from(properties)
         .unwrap_or_else(|error| panic!("unexpected property extraction error: {error}"));
 
-    assert_eq!(result.rule_id, WHK002_ID);
-    assert!(
-        result
-            .partial_fingerprints
-            .contains_key(WHITAKER_FRAGMENT_KEY)
+    assert_eq!(
+        (
+            extracted.profile.as_str(),
+            extracted.k,
+            extracted.window,
+            extracted.class_size,
+        ),
+        ("T2", 25, 16, 2),
     );
-    assert!(result.partial_fingerprints.contains_key("tokenHash"));
-    assert_eq!(extracted.profile, "T2");
-    assert_eq!(extracted.k, 25);
-    assert_eq!(extracted.window, 16);
-    assert_eq!(extracted.class_size, 2);
 }

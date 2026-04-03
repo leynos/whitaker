@@ -101,8 +101,13 @@ impl SimilarityThreshold {
         self.denominator
     }
 
+    /// Returns `true` if the threshold represents a ratio within `(0, 1]`.
+    fn is_valid(self) -> bool {
+        self.numerator != 0 && self.denominator != 0 && self.numerator <= self.denominator
+    }
+
     pub(crate) fn validate(self) -> Run0Result<()> {
-        if self.numerator == 0 || self.denominator == 0 || self.numerator > self.denominator {
+        if !self.is_valid() {
             return Err(Run0Error::InvalidThreshold {
                 name: self.name.to_owned(),
             });
