@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus kani
 
 APP ?= whitaker
 CARGO ?= cargo
@@ -111,6 +111,9 @@ typecheck:
 
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh
+
+kani: ## Run the pinned Kani bounded model checker
+	./scripts/run-kani.sh
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \

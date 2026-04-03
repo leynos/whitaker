@@ -1,5 +1,6 @@
 //! Unit tests covering decomposition feature extraction and clustering.
 
+mod adjacency;
 mod cosine_threshold;
 mod test_fixtures;
 mod vector_algebra;
