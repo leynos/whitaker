@@ -490,6 +490,12 @@ tip.
 Whitaker supports multiple locales for diagnostic messages. Fluent resources
 are bundled under `common/locales/`.
 
+This layout is an architectural boundary rather than a convenience. The
+`whitaker-common` crate is published independently, so `cargo package` only
+ships files that live under `common/`. Keeping the Fluent bundles crate-local
+ensures the published tarball contains the translations required by
+`common::i18n` during package verification and downstream consumption.
+
 ### Available locales
 
 - `en-GB` (default) - English

@@ -7,6 +7,8 @@
 
 use std::path::PathBuf;
 
+/// Assert that published `whitaker-common` tarballs ship their bundled Fluent
+/// resources under the crate root.
 #[test]
 fn fluent_bundles_live_under_the_common_crate_root() {
     let locales_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales");

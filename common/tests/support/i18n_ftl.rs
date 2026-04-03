@@ -117,6 +117,7 @@ impl fmt::Display for AttributeName {
     }
 }
 
+/// Return the crate-local Fluent resource root used by packaging and tests.
 fn locales_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
 }
