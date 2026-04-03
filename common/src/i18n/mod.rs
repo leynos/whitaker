@@ -1,9 +1,10 @@
 //! Localisation loader and helpers for Whitaker diagnostics.
 //!
-//! The loader embeds Fluent resources under `locales/` so lint crates can
-//! resolve translated strings without touching the filesystem at runtime. The
-//! API exposes a thin wrapper around `fluent-templates` that tracks whether the
-//! fallback bundle was used and surfaces missing message errors eagerly.
+//! The loader embeds Fluent resources under the crate-local `locales/`
+//! directory so lint crates can resolve translated strings without touching
+//! the filesystem at runtime. The API exposes a thin wrapper around
+//! `fluent-templates` that tracks whether the fallback bundle was used and
+//! surfaces missing message errors eagerly.
 //!
 //! Locale resolution is handled by [`resolve_localizer`], which evaluates
 //! explicit overrides, environment variables, and configuration settings in
@@ -24,7 +25,7 @@ const FALLBACK_LITERAL: &str = "en-GB";
 
 static_loader! {
     pub(crate) static LOADER = {
-        locales: "../locales",
+        locales: "locales",
         fallback_language: "en-GB",
     };
 }

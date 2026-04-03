@@ -118,7 +118,7 @@ impl fmt::Display for AttributeName {
 }
 
 fn locales_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
 }
 
 struct ParseCursor<'state> {

@@ -488,7 +488,7 @@ tip.
 ## Localized Diagnostics
 
 Whitaker supports multiple locales for diagnostic messages. Fluent resources
-are bundled under `locales/`.
+are bundled under `common/locales/`.
 
 ### Available locales
 
@@ -563,7 +563,8 @@ falls back to deterministic English text.
 
 To add a new locale:
 
-1. Create a new directory under `locales/` (e.g., `locales/fr/`)
+1. Create a new directory under `common/locales/` (e.g.,
+   `common/locales/fr/`)
 2. Add `.ftl` files with translated messages
 3. Update `common::i18n::available_locales()` to include the new locale
 
