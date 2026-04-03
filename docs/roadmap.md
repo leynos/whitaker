@@ -311,7 +311,7 @@
 
 ### 8.1. Shared foundations
 
-- [ ] 8.1.1. Add shared `rstest` test and fixture detection helpers in `common`
+- [x] 8.1.1. Add shared `rstest` test and fixture detection helpers in `common`
   for attribute-based detection and optional expansion-trace fallback. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction and §Integration constraints. Requires
