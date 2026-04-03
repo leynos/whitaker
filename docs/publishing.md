@@ -31,7 +31,8 @@ make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 ```
 
 This target builds the workspace, runs tests with the pinned toolchain, and
-packages the installer crate for inspection.
+packages the crates named in `PUBLISH_PACKAGES` for inspection, which here
+means both `whitaker-common` and `whitaker-installer`.
 
 ## Dry run
 
@@ -43,8 +44,9 @@ cargo publish -p whitaker-installer --dry-run
 ```
 
 Review the package contents in the output. If files need to be excluded or
-included, adjust `installer/Cargo.toml` with `include` or `exclude` settings
-and repeat the dry run.
+included, adjust `common/Cargo.toml` for `whitaker-common` and
+`installer/Cargo.toml` for `whitaker-installer` with `include` or `exclude`
+settings, then repeat the relevant dry run.
 
 ## Publish
 
