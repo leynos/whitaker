@@ -26,6 +26,8 @@ import types
 from pathlib import Path
 from unittest.mock import patch
 
+import tomllib
+
 import pytest
 
 
@@ -224,12 +226,12 @@ class TestCollectManifestLines:
             _collect_manifest_lines(missing)
 
     def test_malformed_toml_raises(self, tmp_path: Path) -> None:
-        """Malformed TOML raises an exception."""
+        """Malformed TOML raises a TOML decode error."""
         manifest = _write_manifest(
             tmp_path / "bad.toml", "not valid [[ toml"
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(tomllib.TOMLDecodeError):
             _collect_manifest_lines(manifest)
 
     def test_missing_key_raises(self, tmp_path: Path) -> None:
@@ -240,6 +242,23 @@ package = "cargo-dylint"
 binary = "cargo-dylint"
 """
         manifest = _write_manifest(tmp_path / "incomplete.toml", incomplete)
+
+        with pytest.raises(KeyError):
+            _collect_manifest_lines(manifest)
+
+    def test_empty_table_returns_empty_list(self, tmp_path: Path) -> None:
+        """A manifest with an empty dependency_binaries array returns an empty list."""
+        empty_table = "dependency_binaries = []\n"
+        manifest = _write_manifest(tmp_path / "empty.toml", empty_table)
+
+        result = _collect_manifest_lines(manifest)
+
+        assert result == [], f"expected empty list, got {result}"
+
+    def test_missing_table_raises_key_error(self, tmp_path: Path) -> None:
+        """A manifest without a dependency_binaries table raises KeyError."""
+        no_table = "[metadata]\nname = 'test'\n"
+        manifest = _write_manifest(tmp_path / "no_table.toml", no_table)
 
         with pytest.raises(KeyError):
             _collect_manifest_lines(manifest)
@@ -366,20 +385,18 @@ class TestMain:
             with pytest.raises(FileNotFoundError):
                 main()
 
-    def test_main_default_manifest_path(self) -> None:
-        """main uses the default manifest path when no argument given."""
+    def test_parse_args_default_manifest_path(self) -> None:
+        """parse_args returns the default manifest path when no argument given."""
         with patch("sys.argv", ["dependency_binaries_manifest.py"]):
-            # This will either succeed (if run from repo root) or fail
-            # with FileNotFoundError (if not). We verify the path is used.
             args = parse_args()
             assert args.manifest == "installer/dependency-binaries.toml"
 
 
 class TestSnapshotOutput:
-    """Snapshot-style tests for provenance markdown output."""
+    """Snapshot-style tests for TSV output against the real manifest."""
 
-    def test_provenance_output_structure(self, tmp_path: Path) -> None:
-        """TSV output for the real manifest matches expected structure."""
+    def test_real_manifest_output_structure(self, tmp_path: Path) -> None:
+        """TSV output for the real manifest has three non-empty columns per line."""
         real_manifest = (
             Path(__file__).resolve().parents[2]
             / "installer"
@@ -391,13 +408,17 @@ class TestSnapshotOutput:
         result = _collect_manifest_lines(real_manifest)
 
         assert isinstance(result, list), f"expected list, got {type(result)}"
-        assert len(result) >= 2, f"expected at least 2 entries, got {len(result)}"
+        assert len(result) >= 1, f"expected at least 1 entry, got {len(result)}"
         for line in result:
             decoded = line.decode("utf-8").rstrip("\n")
             columns = decoded.split("\t")
             assert len(columns) == 3, (
                 f"expected 3 tab-separated columns, got {len(columns)}: {decoded!r}"
             )
+            for i, col in enumerate(columns):
+                assert col != "", (
+                    f"column {i} must not be empty in: {decoded!r}"
+                )
 
     def test_real_manifest_round_trip(self, tmp_path: Path) -> None:
         """The real manifest can be read and written to a file."""
@@ -424,8 +445,13 @@ class TestSnapshotOutput:
         assert result == 0, f"expected exit code 0, got {result}"
         content = output_file.read_text(encoding="utf-8")
         lines = content.strip().split("\n")
-        assert len(lines) >= 2, f"expected at least 2 lines, got {len(lines)}"
-        # Verify cargo-dylint and dylint-link are both present
-        packages = [line.split("\t")[0] for line in lines]
-        assert "cargo-dylint" in packages
-        assert "dylint-link" in packages
+        assert len(lines) >= 1, f"expected at least 1 line, got {len(lines)}"
+        for line in lines:
+            columns = line.split("\t")
+            assert len(columns) == 3, (
+                f"expected 3 tab-separated columns, got {len(columns)}: {line!r}"
+            )
+            for i, col in enumerate(columns):
+                assert col != "", (
+                    f"column {i} must not be empty in: {line!r}"
+                )

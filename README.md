@@ -109,8 +109,8 @@ $actual = (Get-FileHash -Algorithm SHA256 -Path whitaker-<VERSION>-x86_64-pc-win
 if ($actual -eq $expected) { Write-Output "OK" } else { Write-Output "FAILED" }
 ```
 
-Or using `CertUtil` (Command Prompt) — compare the printed hash to the one
-in the `.sha256` file:
+Or using `CertUtil` (Command Prompt) — compare the printed hash to the one in
+the `.sha256` file:
 
 ```cmd
 certutil -hashfile whitaker-<VERSION>-x86_64-pc-windows-msvc.zip SHA256

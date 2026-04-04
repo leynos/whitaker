@@ -67,19 +67,19 @@ Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
 for the installer's supported targets. The installer prefers these repository
 assets before falling back to `cargo binstall` and then `cargo install`.
 
-### TOML manifest schema
+### TOML (Tom's Obvious, Minimal Language) manifest schema
 
 The committed manifest at `installer/dependency-binaries.toml` declares each
 required dependency binary as a TOML array-of-tables entry. Every entry must
 contain the following fields:
 
-| Field        | Type   | Description                                        |
-| ------------ | ------ | -------------------------------------------------- |
-| `package`    | string | Cargo package name (must be unique across entries) |
-| `binary`     | string | Executable basename without platform suffix        |
-| `version`    | string | Required upstream version                          |
-| `license`    | string | SPDX licence expression for provenance disclosure  |
-| `repository` | string | Upstream source repository URL                     |
+| Field        | Type   | Description                                                                        |
+| ------------ | ------ | ---------------------------------------------------------------------------------- |
+| `package`    | string | Cargo package name (must be unique across entries)                                 |
+| `binary`     | string | Executable basename without platform suffix                                        |
+| `version`    | string | Required upstream version                                                          |
+| `license`    | string | SPDX (Software Package Data Exchange) licence expression for provenance disclosure |
+| `repository` | string | Upstream source repository URL                                                     |
 
 Example entry:
 
@@ -165,7 +165,7 @@ The release workflows consume both artefact types:
 - `dependency-binaries-licences.md` for provenance and third-party licence
   disclosure
 
-### CI manifest script
+### Continuous Integration (CI) manifest script
 
 `installer/scripts/dependency_binaries_manifest.py` is a thin CI helper that
 reads `installer/dependency-binaries.toml` and emits tab-separated rows for
@@ -193,7 +193,7 @@ error paths. Run them with:
 python3 -m pytest tests/workflows/test_dependency_binaries_manifest.py -v
 ```
 
-### Dependency binary BDD tests
+### Dependency binary Behaviour-Driven Development (BDD) tests
 
 Dependency binary installation behaviour is specified in Gherkin feature files
 and driven by rstest-bdd. The test architecture follows the same pattern used
