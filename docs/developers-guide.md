@@ -73,6 +73,8 @@ The committed manifest at `installer/dependency-binaries.toml` declares each
 required dependency binary as a TOML array-of-tables entry. Every entry must
 contain the following fields:
 
+Table: Manifest schema for crate entries
+
 | Field        | Type   | Description                                                                        |
 | ------------ | ------ | ---------------------------------------------------------------------------------- |
 | `package`    | string | Cargo package name (must be unique across entries)                                 |
