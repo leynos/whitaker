@@ -57,6 +57,22 @@ fn build_pair_and_accept(
     accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], cfg)
 }
 
+fn assert_single_accepted(
+    accepted: &[AcceptedPair],
+    expected_profile: NormProfile,
+    expected_score: SimilarityRatio,
+) {
+    assert_eq!(accepted.len(), 1);
+    assert_eq!(accepted[0].profile(), expected_profile);
+    assert_eq!(accepted[0].score(), expected_score);
+}
+
+fn assert_region(id: &str, source: &str, range: std::ops::Range<usize>, expected: Region) {
+    let region = region_for_range(id, source, range)
+        .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
+    assert_eq!(region, expected);
+}
+
 #[test]
 fn boundary_threshold_accepts_type1_pair() {
     let accepted = build_pair_and_accept(
@@ -78,9 +94,7 @@ fn boundary_threshold_accepts_type1_pair() {
     )
     .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
 
-    assert_eq!(accepted.len(), 1);
-    assert_eq!(accepted[0].profile(), NormProfile::T1);
-    assert_eq!(accepted[0].score(), SimilarityRatio::new(2, 2));
+    assert_single_accepted(&accepted, NormProfile::T1, SimilarityRatio::new(2, 2));
 }
 
 #[test]
@@ -108,9 +122,7 @@ fn boundary_threshold_accepts_type2_pair() {
     )
     .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
 
-    assert_eq!(accepted.len(), 1);
-    assert_eq!(accepted[0].profile(), NormProfile::T2);
-    assert_eq!(accepted[0].score(), SimilarityRatio::new(1, 3));
+    assert_single_accepted(&accepted, NormProfile::T2, SimilarityRatio::new(1, 3));
 }
 
 #[test]
@@ -154,11 +166,10 @@ fn duplicate_hashes_do_not_inflate_jaccard_score() {
 
 #[test]
 fn single_line_region_uses_one_based_columns() {
-    let region = region_for_range("alpha", "fn a() {}\n", 0..8)
-        .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
-
-    assert_eq!(
-        region,
+    assert_region(
+        "alpha",
+        "fn a() {}\n",
+        0..8,
         Region {
             start_line: 1,
             start_column: Some(1),
@@ -166,18 +177,16 @@ fn single_line_region_uses_one_based_columns() {
             end_column: Some(8),
             byte_offset: Some(0),
             byte_length: Some(8),
-        }
+        },
     );
 }
 
 #[test]
 fn multi_line_region_tracks_trailing_newline() {
-    let source = "fn alpha() {\n    value();\n}\n";
-    let region = region_for_range("alpha", source, 13..27)
-        .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
-
-    assert_eq!(
-        region,
+    assert_region(
+        "alpha",
+        "fn alpha() {\n    value();\n}\n",
+        13..27,
         Region {
             start_line: 2,
             start_column: Some(1),
@@ -185,7 +194,7 @@ fn multi_line_region_tracks_trailing_newline() {
             end_column: Some(1),
             byte_offset: Some(13),
             byte_length: Some(14),
-        }
+        },
     );
 }
 
