@@ -188,7 +188,7 @@ impl Drop for VcpkgRootGuard {
     fn drop(&mut self) {
         match &self.previous {
             Some(value) => {
-                // SAFETY: The mutex guard keeps environment mutation serialised
+                // SAFETY: The mutex guard keeps environment mutation serialized
                 // within the current test process, so restoring the previous
                 // value cannot race with another concurrent writer.
                 unsafe {
@@ -221,7 +221,7 @@ fn windows_vcpkg_root_guard() -> Option<VcpkgRootGuard> {
         return None;
     }
 
-    // SAFETY: The mutex guard serialises environment access for the lifetime
+    // SAFETY: The mutex guard serializes environment access for the lifetime
     // of the returned guard, so setting the process environment is race-free.
     unsafe {
         env::set_var("VCPKG_ROOT", candidate);
