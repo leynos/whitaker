@@ -175,7 +175,7 @@ Utilities shared by lints:
 - When lookups fail, log the missing message and fall back to deterministic
   English strings, so the lint still emits actionable output without treating
   localization gaps as compiler bugs.
-- Embed `.ftl` resources under `locales/<lang>/<crate>.ftl` using
+- Embed `.ftl` resources under `common/locales/<lang>/<crate>.ftl` using
   `fluent_templates::static_loader!`. The loader resides in `common::i18n` and
   exposes a `FluentBundle` facade that lint crates invoke through helper
   functions (`message`, `note`, `help`). Embedding avoids runtime I/O and keeps
@@ -448,7 +448,8 @@ appears at all (including a lone inner attribute), it falls back to
 `MissingDocs` so the diagnostic targets the module start. A doc-less `cfg_attr`
 wrapper also maps to `MissingDocs`. The shared span helpers from
 `whitaker::hir` supply consistent ranges for inline and file modules. Localized
-strings pull from `locales/*/module_must_have_inner_docs.ftl`, passing the
+strings pull from `common/locales/*/module_must_have_inner_docs.ftl`, passing
+the
 module name via the Fluent argument map, and fall back to a deterministic
 English message whenever localization fails.
 

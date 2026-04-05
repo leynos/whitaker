@@ -1,13 +1,14 @@
-//! Fluent Translation List (FTL) parsing and locale discovery for localisation
+//! Fluent Translation List (FTL) parsing and locale discovery for localization
 //! test suites.
 //!
 //! This module exposes lightweight newtypes and parsing utilities reused across
-//! the localisation quality and behaviour assertions. It understands message
+//! the localization quality and behaviour assertions. It understands message
 //! declarations, attribute lines, and multi-line continuations so tests can
 //! inspect Fluent resources without depending on the runtime loader.
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use whitaker_common::i18n::locales_root;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs;
@@ -115,10 +116,6 @@ impl fmt::Display for AttributeName {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
     }
-}
-
-fn locales_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales")
 }
 
 struct ParseCursor<'state> {
