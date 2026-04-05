@@ -13,6 +13,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
+#[cfg(windows)]
+use std::{env, ffi::OsString, path::Path};
+#[cfg(windows)]
+use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -143,6 +147,7 @@ pub fn run_with_runner(
     runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
 ) -> Result<(), HarnessError> {
     let directory: Utf8PathBuf = ui_directory.into();
+    let _vcpkg_root_guard = windows_vcpkg_root_guard();
 
     if directory.as_str().trim().is_empty() {
         return Err(HarnessError::EmptyDirectory);
@@ -170,6 +175,63 @@ pub fn run_with_runner(
             message,
         }),
     }
+}
+
+#[cfg(windows)]
+struct VcpkgRootGuard {
+    _env_guard: std::sync::MutexGuard<'static, ()>,
+    previous: Option<OsString>,
+}
+
+#[cfg(windows)]
+impl Drop for VcpkgRootGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => {
+                // SAFETY: The mutex guard keeps environment mutation serialised
+                // within the current test process, so restoring the previous
+                // value cannot race with another concurrent writer.
+                unsafe {
+                    env::set_var("VCPKG_ROOT", value);
+                }
+            }
+            None => {
+                // SAFETY: The same mutex guard guarantees this removal is not
+                // racing with another environment mutation in the process.
+                unsafe {
+                    env::remove_var("VCPKG_ROOT");
+                }
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn windows_vcpkg_root_guard() -> Option<VcpkgRootGuard> {
+    let candidate = Path::new(r"C:\vcpkg");
+
+    if env::var_os("VCPKG_ROOT").is_some() || !candidate.is_dir() {
+        return None;
+    }
+
+    let env_guard = env_test_guard();
+    let previous = env::var_os("VCPKG_ROOT");
+
+    // SAFETY: The mutex guard serialises environment access for the lifetime
+    // of the returned guard, so setting the process environment is race-free.
+    unsafe {
+        env::set_var("VCPKG_ROOT", candidate);
+    }
+
+    Some(VcpkgRootGuard {
+        _env_guard: env_guard,
+        previous,
+    })
+}
+
+#[cfg(not(windows))]
+const fn windows_vcpkg_root_guard() -> Option<()> {
+    None
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {
