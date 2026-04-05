@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import types
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,7 @@ def load_script_module(script_name: str) -> types.ModuleType:
         / "scripts"
         / script_name
     )
-    module_name = script_name.replace(".py", "")
+    module_name = Path(script_name).stem
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Failed to load module spec from {script_path}")
@@ -48,7 +49,7 @@ def load_script_module(script_name: str) -> types.ModuleType:
 
 
 @pytest.fixture
-def write_manifest():
+def write_manifest() -> Callable[[Path, str], Path]:
     """Fixture that returns a helper to write TOML manifests to disk.
 
     Returns

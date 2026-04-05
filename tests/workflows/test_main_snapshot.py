@@ -6,6 +6,7 @@ against the real installer manifest file.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -24,18 +25,7 @@ _collect_manifest_lines = _manifest_module._collect_manifest_lines
 
 
 def _assert_three_non_empty_tsv_columns(result: list[bytes]) -> None:
-    """Validate that each line in result has exactly three non-empty tab-separated columns.
-
-    Parameters
-    ----------
-    result : list[bytes]
-        List of TSV lines as bytes.
-
-    Raises
-    ------
-    AssertionError
-        If any line does not have exactly 3 columns or if any column is empty.
-    """
+    """Validate each line has exactly three non-empty tab-separated columns."""
     for line in result:
         decoded = line.decode("utf-8").rstrip("\n")
         columns = decoded.split("\t")
@@ -60,7 +50,7 @@ class TestMain:
     def test_main_exit_code(
         self,
         tmp_path: Path,
-        write_manifest,
+        write_manifest: Callable[[Path, str], Path],
         manifest_content: str,
         expected_code: int,
     ) -> None:
@@ -78,7 +68,7 @@ class TestMain:
         )
 
     def test_main_writes_to_output_file(
-        self, tmp_path: Path, write_manifest
+        self, tmp_path: Path, write_manifest: Callable[[Path, str], Path]
     ) -> None:
         """main writes TSV output to the specified file."""
         manifest = write_manifest(tmp_path / "manifest.toml", VALID_MANIFEST)
