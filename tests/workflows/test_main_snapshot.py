@@ -174,5 +174,5 @@ class TestSnapshotOutput:
         assert len(lines) >= 1, f"expected at least 1 line, got {len(lines)}"
 
         # Convert lines to bytes for consistency with the helper
-        result_bytes = [line.encode("utf-8") for line in lines]
+        result_bytes = [(line + "\n").encode("utf-8") for line in lines]
         _assert_three_non_empty_tsv_columns(result_bytes)
