@@ -135,9 +135,6 @@ class TestSnapshotOutput:
 
     def test_real_manifest_output_structure(self, real_manifest: Path) -> None:
         """TSV output for the real manifest has three non-empty columns per line."""
-        if not real_manifest.exists():
-            pytest.skip("real manifest not available")
-
         result = _collect_manifest_lines(real_manifest)
 
         match result:
@@ -153,8 +150,6 @@ class TestSnapshotOutput:
         self, tmp_path: Path, real_manifest: Path
     ) -> None:
         """The real manifest can be read and written to a file."""
-        if not real_manifest.exists():
-            pytest.skip("real manifest not available")
         output_file = tmp_path / "output.tsv"
 
         with patch(

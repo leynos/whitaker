@@ -69,16 +69,22 @@ def write_manifest() -> Callable[[Path, str], Path]:
 def real_manifest() -> Path:
     """Return the path to the real dependency-binaries.toml manifest.
 
+    Skips the calling test when the manifest file is not present on
+    disk (e.g. in CI environments where the installer tree is absent).
+
     Returns
     -------
     Path
         Absolute path to installer/dependency-binaries.toml in the project root.
     """
-    return (
+    path = (
         Path(__file__).resolve().parents[2]
         / "installer"
         / "dependency-binaries.toml"
     )
+    if not path.exists():
+        pytest.skip("real manifest not available")
+    return path
 
 
 @pytest.fixture
