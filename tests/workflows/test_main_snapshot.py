@@ -144,7 +144,7 @@ class TestSnapshotOutput:
             case list():
                 pass
             case _:
-                raise AssertionError(f"expected list, got {type(result)}")
+                pytest.fail(f"expected list, got {type(result)}")
 
         assert len(result) >= 1, f"expected at least 1 entry, got {len(result)}"
         _assert_three_non_empty_tsv_columns(result)
