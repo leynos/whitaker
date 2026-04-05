@@ -45,8 +45,6 @@ pub fn accept_candidate_pairs(
                 right_fragment: right.id().as_str().to_owned(),
             });
         }
-        ensure_non_empty(left)?;
-        ensure_non_empty(right)?;
 
         let Some(score) =
             jaccard_similarity(left.retained_fingerprints(), right.retained_fingerprints())

@@ -28,7 +28,7 @@ impl Default for Run0World {
             candidates: RefCell::new(Vec::new()),
             run: RefCell::new(None),
             error: RefCell::new(None),
-            config: TokenPassConfig::new("whitaker_clones_cli@token", "0.2.1"),
+            config: TokenPassConfig::new("whitaker_clones_cli@token", env!("CARGO_PKG_VERSION")),
         }
     }
 }

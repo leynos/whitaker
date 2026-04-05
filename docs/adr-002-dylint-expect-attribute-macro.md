@@ -10,8 +10,9 @@ Proposed.
 
 ## Context and problem statement
 
-Whitaker enforces project-specific Rust conventions using Dylint lint libraries.
-These lints run outwith normal `cargo check` and `cargo test` workflows.
+Whitaker enforces project-specific Rust conventions using Dylint lint
+libraries. These lints run outwith normal `cargo check` and `cargo test`
+workflows.
 
 Occasionally, a lint must be suppressed for a narrow scope (for example, a
 legacy call-site that cannot be refactored immediately, or an intentional
@@ -26,8 +27,8 @@ noise in normal builds because:
 - `rustc` does not know Dylint-defined lint names during ordinary compilation,
   so it can emit `unknown_lints` diagnostics.
 - The recommended Dylint gating mechanism uses `cfg_attr(dylint_lib = "…", …)`,
-  but toolchains can emit `unexpected_cfgs` diagnostics for unknown cfg keys/values
-  when `check-cfg` validation is enabled.
+  but toolchains can emit `unexpected_cfgs` diagnostics for unknown cfg
+  keys/values when `check-cfg` validation is enabled.
 
 The project needs an ergonomic, consistent, and low-friction mechanism for
 annotating items with conditional Dylint `expect` semantics that:
@@ -194,8 +195,8 @@ time.
   area.
 - Pre-expansion lints can bypass `cfg_attr` gating. For example, a
   `#[derive(...)]` macro can raise lint diagnostics on generated code before
-  `dylint_expect` expansion is applied.
-  The macro cannot correct toolchain ordering constraints.
+  `dylint_expect` expansion is applied. The macro cannot correct toolchain
+  ordering constraints.
 - The `lib` value must match the identifier Dylint injects via `dylint_lib`.
   Mismatches silently disable the `expect` and can lead to missed enforcement.
 

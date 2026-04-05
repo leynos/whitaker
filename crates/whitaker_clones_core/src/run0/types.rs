@@ -2,7 +2,7 @@
 
 use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
 
-use super::score::SimilarityThreshold;
+use super::score::{SimilarityRatio, SimilarityThreshold};
 
 const DEFAULT_SHINGLE_SIZE: usize = 25;
 const DEFAULT_WINNOW_WINDOW: usize = 16;
@@ -218,17 +218,13 @@ impl TokenPassConfig {
 pub struct AcceptedPair {
     pair: CandidatePair,
     profile: NormProfile,
-    score: super::score::SimilarityRatio,
+    score: SimilarityRatio,
 }
 
 impl AcceptedPair {
     /// Creates an accepted pair with its resolved rule profile and score.
     #[must_use]
-    pub const fn new(
-        pair: CandidatePair,
-        profile: NormProfile,
-        score: super::score::SimilarityRatio,
-    ) -> Self {
+    pub const fn new(pair: CandidatePair, profile: NormProfile, score: SimilarityRatio) -> Self {
         Self {
             pair,
             profile,
@@ -250,7 +246,7 @@ impl AcceptedPair {
 
     /// Returns the accepted Jaccard score.
     #[must_use]
-    pub const fn score(&self) -> super::score::SimilarityRatio {
+    pub const fn score(&self) -> SimilarityRatio {
         self.score
     }
 }

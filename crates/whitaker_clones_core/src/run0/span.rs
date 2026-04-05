@@ -61,8 +61,8 @@ fn line_and_column(source_text: &str, starts: &[usize], offset: usize) -> (usize
         .partition_point(|start| *start <= offset)
         .saturating_sub(1);
     let line_start = starts[line_index];
-    let line_text = &source_text[line_start..];
-    let byte_offset = offset.saturating_sub(line_start);
-    let char_count = line_text[..byte_offset].chars().count();
-    (line_index.saturating_add(1), char_count.saturating_add(1))
+    let clamped_offset = offset.min(source_text.len());
+    let line_slice = &source_text[line_start..clamped_offset];
+    let utf16_count = line_slice.encode_utf16().count();
+    (line_index.saturating_add(1), utf16_count.saturating_add(1))
 }

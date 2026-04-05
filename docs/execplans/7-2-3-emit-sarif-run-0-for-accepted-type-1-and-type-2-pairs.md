@@ -520,8 +520,11 @@ During implementation, use targeted commands for quick feedback before the full
 workspace gates:
 
 ```bash
-set -o pipefail && cargo test -p whitaker_clones_core 2>&1 | tee /tmp/7-2-3-core-test.log
-set -o pipefail && cargo clippy -p whitaker_clones_core --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/7-2-3-core-lint.log
+set -o pipefail && \
+  cargo test -p whitaker_clones_core 2>&1 | tee /tmp/7-2-3-core-test.log
+set -o pipefail && \
+  cargo clippy -p whitaker_clones_core --all-targets --all-features -- \
+  -D warnings 2>&1 | tee /tmp/7-2-3-core-lint.log
 ```
 
 Expected end-state signals:

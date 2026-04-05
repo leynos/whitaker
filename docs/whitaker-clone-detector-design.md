@@ -475,9 +475,9 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    rather than being silently coerced.
 
 3. **Stable fingerprint shape.** `partialFingerprints["whitakerFragment"]` is
-   a SHA-256 hex digest over `left_fragment_id`, `right_fragment_id`, and the
+   an SHA-256 hex digest over `left_fragment_id`, `right_fragment_id`, and the
    emitted profile, separated by NUL bytes. `partialFingerprints["tokenHash"]`
-   is a SHA-256 hex digest over the sorted, deduplicated retained token hashes
+   is an SHA-256 hex digest over the sorted, deduplicated retained token hashes
    from both accepted fragments encoded with big-endian bytes. This replaces
    the earlier aspirational Blake3 sketch while staying deterministic and
    within existing workspace dependencies.
@@ -503,9 +503,14 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    using a line-start index over the original source text.
 
 7. **Explicit empty-input behaviour.** Sketching an empty retained-fingerprint
-   list returns `IndexError::EmptyFingerprintSet`. Candidate generation stops
-   at that error so later pipeline stages can decide whether to skip the
-   fragment or surface the failure.
+   list returns `IndexError::EmptyFingerprintSet` at the index/minhash layer.
+   The Run 0 layer (`run0/emit.rs`) does not propagate this error directly;
+   instead, it surfaces `Run0Error::EmptyFingerprintSet` when
+   `jaccard_similarity` returns `None` for empty fingerprint sets. Callers
+   should match on `Run0Error::EmptyFingerprintSet` for Run 0 operations or
+   translate it to `IndexError::EmptyFingerprintSet` if normalizing errors
+   across layers. Candidate generation stops at that error so later pipeline
+   stages can decide whether to skip the fragment or surface the failure.
 
 8. **Canonical, deduplicated candidate pairs.** `LshIndex` buckets fragments by
    `(band_index, band_values)` and stores members in ordered sets. Candidate

@@ -13,3 +13,5 @@ pub use types::{AcceptedPair, TokenFragment, TokenPassConfig};
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_emit;
