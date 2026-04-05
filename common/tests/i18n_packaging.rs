@@ -12,6 +12,7 @@ use whitaker_common::i18n::packaged_fallback_locale_path;
 use tempfile::{Builder, TempDir};
 
 #[test]
+#[cfg(unix)]
 fn fluent_bundles_are_included_in_the_package_tarball() {
     let target_dir = package_target_dir();
     let crate_path = package_crate_path(target_dir.path());
