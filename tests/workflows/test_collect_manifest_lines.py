@@ -94,7 +94,7 @@ class TestCollectManifestLines:
         """A non-existent manifest file raises FileNotFoundError."""
         missing = tmp_path / "does_not_exist.toml"
 
-        with pytest.raises(FileNotFoundError, match=""):
+        with pytest.raises(FileNotFoundError, match="does_not_exist\\.toml"):
             _collect_manifest_lines(missing)
 
     def test_malformed_toml_raises(
@@ -105,7 +105,7 @@ class TestCollectManifestLines:
             tmp_path / "bad.toml", "not valid [[ toml"
         )
 
-        with pytest.raises(tomllib.TOMLDecodeError, match=""):
+        with pytest.raises(tomllib.TOMLDecodeError, match=r"(Invalid|Expected)"):
             _collect_manifest_lines(manifest)
 
     def test_missing_key_raises(
@@ -119,7 +119,7 @@ binary = "cargo-dylint"
 """
         manifest = write_manifest(tmp_path / "incomplete.toml", incomplete)
 
-        with pytest.raises(KeyError, match=""):
+        with pytest.raises(KeyError, match="version"):
             _collect_manifest_lines(manifest)
 
     def test_empty_table_returns_empty_list(
@@ -140,7 +140,7 @@ binary = "cargo-dylint"
         no_table = "[metadata]\nname = 'test'\n"
         manifest = write_manifest(tmp_path / "no_table.toml", no_table)
 
-        with pytest.raises(KeyError, match=""):
+        with pytest.raises(KeyError, match="dependency_binaries"):
             _collect_manifest_lines(manifest)
 
     def test_multiple_entries_preserve_order(

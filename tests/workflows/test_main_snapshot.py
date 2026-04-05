@@ -103,7 +103,7 @@ class TestMain:
         with patch(
             "sys.argv",
             ["dependency_binaries_manifest.py", str(missing)],
-        ), pytest.raises(FileNotFoundError, match=""):
+        ), pytest.raises(FileNotFoundError, match="does_not_exist\\.toml"):
             main()
 
     def test_main_uses_default_manifest_path(self) -> None:

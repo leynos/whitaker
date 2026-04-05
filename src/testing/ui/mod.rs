@@ -210,12 +210,16 @@ impl Drop for VcpkgRootGuard {
 fn windows_vcpkg_root_guard() -> Option<VcpkgRootGuard> {
     let candidate = Path::new(r"C:\vcpkg");
 
-    if env::var_os("VCPKG_ROOT").is_some() || !candidate.is_dir() {
+    if !candidate.is_dir() {
         return None;
     }
 
     let env_guard = env_test_guard();
     let previous = env::var_os("VCPKG_ROOT");
+
+    if previous.is_some() {
+        return None;
+    }
 
     // SAFETY: The mutex guard serialises environment access for the lifetime
     // of the returned guard, so setting the process environment is race-free.
