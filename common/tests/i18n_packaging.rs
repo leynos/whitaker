@@ -7,6 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use whitaker_common::i18n::packaged_fallback_locale_path;
 
 use tempfile::{Builder, TempDir};
 
@@ -15,11 +16,9 @@ fn fluent_bundles_are_included_in_the_package_tarball() {
     let target_dir = package_target_dir();
     let crate_path = package_crate_path(target_dir.path());
     let tar_listing = package_tar_listing(&crate_path);
-    let expected_entry = format!(
-        "{name}-{version}/locales/en-GB/common.ftl",
-        name = env!("CARGO_PKG_NAME"),
-        version = env!("CARGO_PKG_VERSION"),
-    );
+    let expected_entry = packaged_fallback_locale_path()
+        .to_string_lossy()
+        .into_owned();
 
     assert!(
         tar_listing.lines().any(|line| line == expected_entry),

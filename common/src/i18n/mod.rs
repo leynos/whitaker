@@ -23,6 +23,10 @@ pub use fluent_templates::fluent_bundle::FluentValue;
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
 
 const FALLBACK_LITERAL: &str = "en-GB";
+/// Directory name used for Fluent locale resources.
+pub const LOCALES_DIR_NAME: &str = "locales";
+/// Default Fluent bundle filename for diagnostics resources.
+pub const LOCALES_FTL_FILE: &str = "common.ftl";
 
 static_loader! {
     pub(crate) static LOADER = {
@@ -36,7 +40,24 @@ pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 
 /// Return the crate-local Fluent resource root used by packaging and tests.
 pub fn locales_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(LOCALES_DIR_NAME)
+}
+
+/// Return the relative path inside the package tarball for a locale bundle.
+pub fn packaged_locale_path(locale: &str, file: &str) -> PathBuf {
+    PathBuf::from(format!(
+        "{}-{}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    ))
+    .join(LOCALES_DIR_NAME)
+    .join(locale)
+    .join(file)
+}
+
+/// Return the default packaged locale path for Whitaker diagnostics.
+pub fn packaged_fallback_locale_path() -> PathBuf {
+    packaged_locale_path(FALLBACK_LOCALE, LOCALES_FTL_FILE)
 }
 
 mod diagnostics;
