@@ -18,7 +18,7 @@ fn fluent_bundles_are_included_in_the_package_tarball() {
     let tar_listing = package_tar_listing(&crate_path);
     let expected_entry = packaged_fallback_locale_path()
         .to_string_lossy()
-        .into_owned();
+        .replace('\\', "/");
 
     assert!(
         tar_listing.lines().any(|line| line == expected_entry),
