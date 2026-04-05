@@ -73,12 +73,8 @@ fn package_crate_path(target_dir: &Path) -> PathBuf {
 
 fn package_tar_listing(crate_path: &Path) -> String {
     let output = Command::new("tar")
-        .args([
-            "-tf",
-            crate_path
-                .to_str()
-                .unwrap_or_else(|| panic!("crate path should be valid UTF-8")),
-        ])
+        .arg("-tf")
+        .arg(crate_path)
         .output()
         .unwrap_or_else(|error| panic!("tar should list package contents: {error}"));
 
