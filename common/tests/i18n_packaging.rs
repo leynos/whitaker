@@ -76,6 +76,7 @@ fn package_crate_path(target_dir: &Path) -> PathBuf {
         .unwrap_or_else(|| panic!("cargo package should produce {expected_name}"))
 }
 
+#[cfg(unix)]
 fn package_tar_listing(crate_path: &Path) -> String {
     let output = Command::new("tar")
         .arg("-tf")
