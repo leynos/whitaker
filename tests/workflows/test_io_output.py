@@ -42,8 +42,12 @@ class TestOpenOutput:
 
     def test_empty_path_exits(self) -> None:
         """An empty output path raises SystemExit."""
-        with pytest.raises(SystemExit, match=""), _open_output(""):
+        with pytest.raises(SystemExit) as excinfo, _open_output(""):
             pass  # pragma: no cover
+
+        assert excinfo.value.code == 1, (
+            f"expected exit code 1, got {excinfo.value.code}"
+        )
 
 
 class TestWriteLines:

@@ -65,6 +65,22 @@ def write_manifest():
 
 
 @pytest.fixture
+def real_manifest() -> Path:
+    """Return the path to the real dependency-binaries.toml manifest.
+
+    Returns
+    -------
+    Path
+        Absolute path to installer/dependency-binaries.toml in the project root.
+    """
+    return (
+        Path(__file__).resolve().parents[2]
+        / "installer"
+        / "dependency-binaries.toml"
+    )
+
+
+@pytest.fixture
 def workflow_text() -> str:
     """Return rolling-release workflow YAML as text."""
     return WORKFLOW_PATH.read_text(encoding="utf-8")

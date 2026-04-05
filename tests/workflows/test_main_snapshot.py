@@ -23,6 +23,29 @@ main = _manifest_module.main
 _collect_manifest_lines = _manifest_module._collect_manifest_lines
 
 
+def _assert_three_non_empty_tsv_columns(result: list[bytes]) -> None:
+    """Validate that each line in result has exactly three non-empty tab-separated columns.
+
+    Parameters
+    ----------
+    result : list[bytes]
+        List of TSV lines as bytes.
+
+    Raises
+    ------
+    AssertionError
+        If any line does not have exactly 3 columns or if any column is empty.
+    """
+    for line in result:
+        decoded = line.decode("utf-8").rstrip("\n")
+        columns = decoded.split("\t")
+        assert len(columns) == 3, (
+            f"expected 3 tab-separated columns, got {len(columns)}: {decoded!r}"
+        )
+        for i, col in enumerate(columns):
+            assert col != "", f"column {i} must not be empty in: {decoded!r}"
+
+
 class TestMain:
     """Tests for main() function."""
 
@@ -111,48 +134,35 @@ class TestMain:
             f"expected 1 argument to _collect_manifest_lines, got {len(call_args)}"
         )
         manifest_path = call_args[0]
-        assert str(manifest_path) == "installer/dependency-binaries.toml", (
-            f"expected default manifest path, got {manifest_path}"
+        expected_path = Path("installer/dependency-binaries.toml")
+        assert manifest_path == expected_path, (
+            f"expected default manifest path {expected_path}, got {manifest_path}"
         )
 
 
 class TestSnapshotOutput:
     """Snapshot-style tests for TSV output against the real manifest."""
 
-    def test_real_manifest_output_structure(self) -> None:
+    def test_real_manifest_output_structure(self, real_manifest: Path) -> None:
         """TSV output for the real manifest has three non-empty columns per line."""
-        real_manifest = (
-            Path(__file__).resolve().parents[2]
-            / "installer"
-            / "dependency-binaries.toml"
-        )
         if not real_manifest.exists():
             pytest.skip("real manifest not available")
 
         result = _collect_manifest_lines(real_manifest)
 
-        assert isinstance(result, list), f"expected list, got {type(result)}"
-        assert len(result) >= 1, (
-            f"expected at least 1 entry, got {len(result)}"
-        )
-        for line in result:
-            decoded = line.decode("utf-8").rstrip("\n")
-            columns = decoded.split("\t")
-            assert len(columns) == 3, (
-                f"expected 3 tab-separated columns, got {len(columns)}: {decoded!r}"
-            )
-            for i, col in enumerate(columns):
-                assert col != "", (
-                    f"column {i} must not be empty in: {decoded!r}"
-                )
+        match result:
+            case list():
+                pass
+            case _:
+                raise AssertionError(f"expected list, got {type(result)}")
 
-    def test_real_manifest_round_trip(self, tmp_path: Path) -> None:
+        assert len(result) >= 1, f"expected at least 1 entry, got {len(result)}"
+        _assert_three_non_empty_tsv_columns(result)
+
+    def test_real_manifest_round_trip(
+        self, tmp_path: Path, real_manifest: Path
+    ) -> None:
         """The real manifest can be read and written to a file."""
-        real_manifest = (
-            Path(__file__).resolve().parents[2]
-            / "installer"
-            / "dependency-binaries.toml"
-        )
         if not real_manifest.exists():
             pytest.skip("real manifest not available")
         output_file = tmp_path / "output.tsv"
@@ -172,12 +182,7 @@ class TestSnapshotOutput:
         content = output_file.read_text(encoding="utf-8")
         lines = content.strip().split("\n")
         assert len(lines) >= 1, f"expected at least 1 line, got {len(lines)}"
-        for line in lines:
-            columns = line.split("\t")
-            assert len(columns) == 3, (
-                f"expected 3 tab-separated columns, got {len(columns)}: {line!r}"
-            )
-            for i, col in enumerate(columns):
-                assert col != "", (
-                    f"column {i} must not be empty in: {line!r}"
-                )
+
+        # Convert lines to bytes for consistency with the helper
+        result_bytes = [line.encode("utf-8") for line in lines]
+        _assert_three_non_empty_tsv_columns(result_bytes)
