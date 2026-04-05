@@ -157,15 +157,13 @@ fn meets_threshold(score: SimilarityRatio, threshold: SimilarityThreshold) -> bo
 }
 
 fn repeated_division(numerator: usize, denominator: usize) -> Option<(usize, usize)> {
+    debug_assert!(denominator != 0, "denominator must be non-zero");
     if denominator == 0 {
         return None;
     }
 
-    let mut quotient = 0usize;
-    let mut remainder = numerator;
-    while remainder >= denominator {
-        remainder = remainder.saturating_sub(denominator);
-        quotient = quotient.saturating_add(1);
-    }
+    let quotient = numerator / denominator;
+    let remainder = numerator % denominator;
+
     Some((quotient, remainder))
 }

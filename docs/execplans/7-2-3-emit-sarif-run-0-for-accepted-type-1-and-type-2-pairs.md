@@ -1,4 +1,4 @@
-# Emit SARIF Run 0 for accepted Type-1 and Type-2 clone pairs (roadmap 7.2.3)
+# Emit Static Analysis Results Interchange Format (SARIF) Run 0 for accepted Type-1 and Type-2 clone pairs (roadmap 7.2.3)
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -26,7 +26,7 @@ Observable outcome:
 2. Accepted Type-1 pairs produce `WHK001` results and accepted Type-2 pairs
    produce `WHK002` results.
 3. Each emitted result carries deterministic `message`, `locations`,
-   `related_locations`, `partial_fingerprints`, and Whitaker `properties`.
+   `relatedLocations`, `partial_fingerprints`, and Whitaker `properties`.
 4. Unit tests cover happy paths, unhappy paths, threshold boundaries,
    multi-line span conversion, stable ordering, and duplicate suppression.
 5. Behaviour-driven development (BDD) tests using `rstest-bdd` v0.5.0 exercise
@@ -43,7 +43,7 @@ Observable outcome:
 
 - Scope only roadmap item 7.2.3. Do not implement filesystem discovery,
   grouping into clone classes, abstract syntax tree refinement, HTML output, or
-  CLI wiring in this change.
+  command-line interface (CLI) wiring in this change.
 - Keep the implementation in `crates/whitaker_clones_core/`, reusing
   `crates/whitaker_sarif/` for all SARIF modelling and builder logic.
 - Do not bypass `whitaker_sarif` by hand-assembling JSON strings.

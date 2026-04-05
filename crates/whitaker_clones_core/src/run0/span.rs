@@ -11,9 +11,9 @@ pub(crate) fn region_for_range(
 ) -> Run0Result<Region> {
     validate_range(fragment_id, source_text, &range)?;
     let starts = line_starts(source_text);
-    let (start_line, start_column) = line_and_column(&starts, range.start);
+    let (start_line, start_column) = line_and_column(source_text, &starts, range.start);
     let end_position = range.end.saturating_sub(1);
-    let (end_line, end_column) = line_and_column(&starts, end_position);
+    let (end_line, end_column) = line_and_column(source_text, &starts, end_position);
 
     RegionBuilder::new(start_line)
         .with_start_column(start_column)
@@ -56,11 +56,13 @@ fn line_starts(source_text: &str) -> Vec<usize> {
     starts
 }
 
-fn line_and_column(starts: &[usize], offset: usize) -> (usize, usize) {
+fn line_and_column(source_text: &str, starts: &[usize], offset: usize) -> (usize, usize) {
     let line_index = starts
         .partition_point(|start| *start <= offset)
         .saturating_sub(1);
     let line_start = starts[line_index];
-    let column = offset.saturating_sub(line_start).saturating_add(1);
-    (line_index.saturating_add(1), column)
+    let line_text = &source_text[line_start..];
+    let byte_offset = offset.saturating_sub(line_start);
+    let char_count = line_text[..byte_offset].chars().count();
+    (line_index.saturating_add(1), char_count.saturating_add(1))
 }

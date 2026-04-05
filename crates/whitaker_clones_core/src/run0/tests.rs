@@ -165,6 +165,15 @@ fn duplicate_hashes_do_not_inflate_jaccard_score() {
 }
 
 #[test]
+fn jaccard_returns_none_for_empty_fragments() {
+    let non_empty = [fingerprint(1, 0..3)];
+    let empty: [Fingerprint; 0] = [];
+
+    assert!(jaccard_similarity(&empty, &non_empty).is_none());
+    assert!(jaccard_similarity(&non_empty, &empty).is_none());
+}
+
+#[test]
 fn single_line_region_uses_one_based_columns() {
     assert_region(
         "alpha",
@@ -319,6 +328,82 @@ fn invalid_range_produces_typed_error() {
             assert_eq!(start, 9);
             assert_eq!(end, 12);
             assert_eq!(source_len, 10);
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+}
+
+#[test]
+fn invalid_utf8_boundary_produces_typed_error() {
+    // "á" = 2 bytes in UTF-8; index 2 is in the middle of that code point
+    let source = "aáb";
+    let mid = 2; // inside "á" byte sequence
+    let error = region_for_range("alpha", source, 0..mid)
+        .err()
+        .unwrap_or_else(|| panic!("invalid utf-8 boundary must error"));
+
+    match error {
+        Run0Error::InvalidUtf8Boundary { fragment_id } => {
+            assert_eq!(fragment_id, "alpha");
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+}
+
+#[test]
+fn missing_fragment_produces_typed_error() {
+    let fragments = vec![fragment(FragmentInput {
+        id: "alpha",
+        profile: NormProfile::T1,
+        file_uri: "src/a.rs",
+        source_text: "fn a() {}\n",
+        hashes: &[(1, 0..8), (2, 0..8)],
+    })];
+    let candidates = vec![pair("alpha", "beta")];
+
+    let error = accept_candidate_pairs(&fragments, &candidates, &config())
+        .err()
+        .unwrap_or_else(|| panic!("missing fragment must error"));
+
+    match error {
+        Run0Error::MissingFragment { fragment_id } => {
+            assert_eq!(fragment_id, "beta");
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+}
+
+#[test]
+fn mixed_profiles_produces_typed_error() {
+    let fragments = vec![
+        fragment(FragmentInput {
+            id: "alpha",
+            profile: NormProfile::T1,
+            file_uri: "src/a.rs",
+            source_text: "fn a() {}\n",
+            hashes: &[(1, 0..8), (2, 0..8)],
+        }),
+        fragment(FragmentInput {
+            id: "beta",
+            profile: NormProfile::T2,
+            file_uri: "src/b.rs",
+            source_text: "fn b() {}\n",
+            hashes: &[(1, 0..8), (2, 0..8)],
+        }),
+    ];
+    let candidates = vec![pair("alpha", "beta")];
+
+    let error = accept_candidate_pairs(&fragments, &candidates, &config())
+        .err()
+        .unwrap_or_else(|| panic!("mixed profiles must error"));
+
+    match error {
+        Run0Error::MixedProfiles {
+            left_fragment,
+            right_fragment,
+        } => {
+            assert_eq!(left_fragment, "alpha");
+            assert_eq!(right_fragment, "beta");
         }
         other => panic!("unexpected error: {other}"),
     }
