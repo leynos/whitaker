@@ -14,7 +14,7 @@ mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
 #[cfg(windows)]
-use std::{env, ffi::OsString, path::Path};
+use std::{env, path::Path};
 #[cfg(windows)]
 use whitaker_common::test_support::env_test_guard;
 
@@ -180,28 +180,15 @@ pub fn run_with_runner(
 #[cfg(windows)]
 struct VcpkgRootGuard {
     _env_guard: std::sync::MutexGuard<'static, ()>,
-    previous: Option<OsString>,
 }
 
 #[cfg(windows)]
 impl Drop for VcpkgRootGuard {
     fn drop(&mut self) {
-        match &self.previous {
-            Some(value) => {
-                // SAFETY: The mutex guard keeps environment mutation serialized
-                // within the current test process, so restoring the previous
-                // value cannot race with another concurrent writer.
-                unsafe {
-                    env::set_var("VCPKG_ROOT", value);
-                }
-            }
-            None => {
-                // SAFETY: The same mutex guard guarantees this removal is not
-                // racing with another environment mutation in the process.
-                unsafe {
-                    env::remove_var("VCPKG_ROOT");
-                }
-            }
+        // SAFETY: The mutex guard guarantees this removal is not racing with
+        // another environment mutation in the process.
+        unsafe {
+            env::remove_var("VCPKG_ROOT");
         }
     }
 }
@@ -215,9 +202,8 @@ fn windows_vcpkg_root_guard() -> Option<VcpkgRootGuard> {
     }
 
     let env_guard = env_test_guard();
-    let previous = env::var_os("VCPKG_ROOT");
 
-    if previous.is_some() {
+    if env::var_os("VCPKG_ROOT").is_some() {
         return None;
     }
 
@@ -229,7 +215,6 @@ fn windows_vcpkg_root_guard() -> Option<VcpkgRootGuard> {
 
     Some(VcpkgRootGuard {
         _env_guard: env_guard,
-        previous,
     })
 }
 

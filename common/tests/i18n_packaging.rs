@@ -54,6 +54,11 @@ fn package_crate_path(target_dir: &Path) -> PathBuf {
 
     assert!(status.success(), "cargo package should succeed");
 
+    let expected_name = format!(
+        "{}-{}.crate",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
     let package_dir = target_dir.join("package");
     fs::read_dir(&package_dir)
         .unwrap_or_else(|error| panic!("package directory should be readable: {error}"))
@@ -65,10 +70,10 @@ fn package_crate_path(target_dir: &Path) -> PathBuf {
                 .path()
         })
         .find(|path| {
-            path.extension()
-                .is_some_and(|extension| extension == "crate")
+            path.file_name()
+                .is_some_and(|name| name == expected_name.as_str())
         })
-        .unwrap_or_else(|| panic!("cargo package should produce a .crate tarball"))
+        .unwrap_or_else(|| panic!("cargo package should produce {expected_name}"))
 }
 
 fn package_tar_listing(crate_path: &Path) -> String {
