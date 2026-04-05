@@ -90,21 +90,19 @@ class TestMain:
         with patch(
             "sys.argv",
             ["dependency_binaries_manifest.py", str(missing)],
-        ):
-            with pytest.raises(FileNotFoundError, match=""):
-                main()
+        ), pytest.raises(FileNotFoundError, match=""):
+            main()
 
     def test_main_uses_default_manifest_path(self) -> None:
         """main uses default manifest path when no argument given."""
         mock_collect = MagicMock(return_value=[b"test\ttest\t1.0\n"])
 
-        with patch("sys.argv", ["dependency_binaries_manifest.py"]):
-            with patch.object(
-                _manifest_module,
-                "_collect_manifest_lines",
-                mock_collect,
-            ):
-                result = main()
+        with patch("sys.argv", ["dependency_binaries_manifest.py"]), patch.object(
+            _manifest_module,
+            "_collect_manifest_lines",
+            mock_collect,
+        ):
+            result = main()
 
         assert result == 0, f"expected exit code 0, got {result}"
         mock_collect.assert_called_once()
@@ -121,7 +119,7 @@ class TestMain:
 class TestSnapshotOutput:
     """Snapshot-style tests for TSV output against the real manifest."""
 
-    def test_real_manifest_output_structure(self, tmp_path: Path) -> None:
+    def test_real_manifest_output_structure(self) -> None:
         """TSV output for the real manifest has three non-empty columns per line."""
         real_manifest = (
             Path(__file__).resolve().parents[2]

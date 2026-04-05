@@ -42,9 +42,8 @@ class TestOpenOutput:
 
     def test_empty_path_exits(self) -> None:
         """An empty output path raises SystemExit."""
-        with pytest.raises(SystemExit, match=""):
-            with _open_output(""):
-                pass  # pragma: no cover
+        with pytest.raises(SystemExit, match=""), _open_output(""):
+            pass  # pragma: no cover
 
 
 class TestWriteLines:
@@ -68,6 +67,7 @@ class TestWriteLines:
         _write_lines(lines, None)
 
         captured = capsys.readouterr()
-        assert "cargo-dylint" in captured.out, (
-            "stdout should contain the written line content"
+        expected = "cargo-dylint\tcargo-dylint\t4.1.0\n"
+        assert captured.out == expected, (
+            f"expected exact TSV row {expected!r}, got {captured.out!r}"
         )
