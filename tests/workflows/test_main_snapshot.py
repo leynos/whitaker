@@ -26,9 +26,23 @@ _collect_manifest_lines = _manifest_module._collect_manifest_lines
 class TestMain:
     """Tests for main() function."""
 
-    def test_main_success(self, tmp_path: Path, write_manifest) -> None:
-        """main returns 0 on valid manifest input."""
-        manifest = write_manifest(tmp_path / "manifest.toml", VALID_MANIFEST)
+    @pytest.mark.parametrize(
+        ("manifest_content", "expected_code"),
+        [
+            (VALID_MANIFEST, 0),
+            (DUPLICATE_MANIFEST, 1),
+        ],
+        ids=["valid_manifest", "duplicate_manifest"],
+    )
+    def test_main_exit_code(
+        self,
+        tmp_path: Path,
+        write_manifest,
+        manifest_content: str,
+        expected_code: int,
+    ) -> None:
+        """main returns 0 for a valid manifest and 1 for a manifest with duplicate packages."""
+        manifest = write_manifest(tmp_path / "manifest.toml", manifest_content)
 
         with patch(
             "sys.argv",
@@ -36,7 +50,9 @@ class TestMain:
         ):
             result = main()
 
-        assert result == 0, f"expected exit code 0, got {result}"
+        assert result == expected_code, (
+            f"expected exit code {expected_code}, got {result}"
+        )
 
     def test_main_writes_to_output_file(
         self, tmp_path: Path, write_manifest
@@ -66,22 +82,6 @@ class TestMain:
         assert lines[1] == "dylint-link\tdylint-link\t4.1.0", (
             f"second line mismatch: {lines[1]!r}"
         )
-
-    def test_main_duplicate_returns_error(
-        self, tmp_path: Path, write_manifest
-    ) -> None:
-        """main returns 1 when the manifest contains duplicate packages."""
-        manifest = write_manifest(
-            tmp_path / "manifest.toml", DUPLICATE_MANIFEST
-        )
-
-        with patch(
-            "sys.argv",
-            ["dependency_binaries_manifest.py", str(manifest)],
-        ):
-            result = main()
-
-        assert result == 1, f"expected exit code 1, got {result}"
 
     def test_main_missing_file_raises(self, tmp_path: Path) -> None:
         """main raises an exception for a non-existent manifest file."""
