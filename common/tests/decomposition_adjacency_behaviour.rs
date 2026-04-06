@@ -1,6 +1,6 @@
 //! Behaviour-driven coverage for decomposition adjacency construction.
 
-use common::test_support::decomposition::{AdjacencyReport, EdgeInput, adjacency_report};
+use whitaker_common::test_support::decomposition::{AdjacencyReport, EdgeInput, adjacency_report};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
