@@ -12,7 +12,11 @@ pub(crate) fn region_for_range(
     validate_range(fragment_id, source_text, &range)?;
     let starts = line_starts(source_text);
     let (start_line, start_column) = line_and_column(source_text, &starts, range.start);
-    let end_position = range.end.saturating_sub(1);
+    let end_position = source_text[..range.end]
+        .char_indices()
+        .next_back()
+        .map(|(i, _)| i)
+        .unwrap_or(range.start);
     let (end_line, end_column) = line_and_column(source_text, &starts, end_position);
 
     RegionBuilder::new(start_line)

@@ -9,6 +9,17 @@ use super::error::{Run0Error, Run0Result};
 /// Integer-backed Jaccard similarity ratio.
 ///
 /// The score represents `intersection / union` using set semantics.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_clones_core::run0::SimilarityRatio;
+///
+/// let ratio = SimilarityRatio::new(3, 5);
+/// assert_eq!(ratio.intersection(), 3);
+/// assert_eq!(ratio.union(), 5);
+/// assert_eq!(ratio.as_decimal_string(), "0.600000");
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SimilarityRatio {
     intersection: usize,
@@ -60,6 +71,17 @@ impl SimilarityRatio {
 }
 
 /// Integer-backed threshold for a similarity ratio.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_clones_core::run0::SimilarityThreshold;
+///
+/// let threshold = SimilarityThreshold::new("custom", 4, 5)
+///     .expect("valid threshold");
+/// assert_eq!(threshold.numerator(), 4);
+/// assert_eq!(threshold.denominator(), 5);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SimilarityThreshold {
     name: &'static str,
@@ -81,7 +103,11 @@ impl SimilarityThreshold {
 
     /// Creates a threshold without validation for trusted internal defaults.
     #[must_use]
-    pub const fn new_unchecked(name: &'static str, numerator: usize, denominator: usize) -> Self {
+    pub(crate) const fn new_unchecked(
+        name: &'static str,
+        numerator: usize,
+        denominator: usize,
+    ) -> Self {
         Self {
             name,
             numerator,

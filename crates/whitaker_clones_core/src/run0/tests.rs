@@ -6,9 +6,7 @@ use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
 
 use super::{
     AcceptedPair, Run0Error, SimilarityThreshold, TokenFragment, TokenPassConfig,
-    accept_candidate_pairs, emit_run0,
-    score::SimilarityRatio,
-    span::region_for_range,
+    accept_candidate_pairs, emit_run0, score::SimilarityRatio, span::region_for_range,
 };
 
 fn fingerprint(hash: u64, range: std::ops::Range<usize>) -> Fingerprint {

@@ -49,8 +49,13 @@ pub fn accept_candidate_pairs(
         let Some(score) =
             jaccard_similarity(left.retained_fingerprints(), right.retained_fingerprints())
         else {
+            let empty_fragment_id = if left.retained_fingerprints().is_empty() {
+                left.id().as_str().to_owned()
+            } else {
+                right.id().as_str().to_owned()
+            };
             return Err(Run0Error::EmptyFingerprintSet {
-                fragment_id: left.id().as_str().to_owned(),
+                fragment_id: empty_fragment_id,
             });
         };
         let Some(profile) = select_rule_profile(

@@ -43,7 +43,7 @@ fn pair(left: &str, right: &str) -> crate::CandidatePair {
 }
 
 fn config() -> TokenPassConfig {
-    TokenPassConfig::new("whitaker_clones_cli@token", "0.2.1")
+    TokenPassConfig::new("whitaker_clones_cli@token", env!("CARGO_PKG_VERSION"))
 }
 
 #[test]

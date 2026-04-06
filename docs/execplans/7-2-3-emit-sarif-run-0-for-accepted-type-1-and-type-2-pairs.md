@@ -1,8 +1,8 @@
 # Emit Static Analysis Results Interchange Format (SARIF) Run 0 for accepted Type-1 and Type-2 clone pairs (roadmap 7.2.3)
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises and discoveries`, `Decision log`, and
+`Outcomes and retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -85,8 +85,8 @@ Observable outcome:
   fail after 3 targeted fix iterations, stop and escalate with the saved log
   paths.
 - SARIF tolerance: if local documentation is insufficient to resolve a SARIF
-  field-shape question, use the Firecrawl MCP to fetch the relevant SARIF spec
-  details before continuing rather than guessing.
+  field-shape question, use the Firecrawl MCP (Model Context Protocol) to fetch
+  the relevant SARIF spec details before continuing rather than guessing.
 
 ## Risks
 
@@ -138,7 +138,7 @@ Observable outcome:
 - [x] Stage I: Finalize the living sections in this ExecPlan after
   implementation.
 
-## Surprises & Discoveries
+## Surprises and discoveries
 
 - `whitaker_clones_core` already provides the exact 7.2.3 upstream inputs that
   matter: canonical `CandidatePair`, deterministic `FragmentId`, and retained
@@ -166,7 +166,7 @@ Observable outcome:
   `TokenFragment::new` now sets source identity only, while retained
   fingerprints are supplied via `.with_retained_fingerprints(...)`.
 
-## Decision Log
+## Decision log
 
 - Decision: keep 7.2.3 inside `crates/whitaker_clones_core/` and add a
   dependency on `whitaker_sarif` there. Rationale: the design assigns scoring
@@ -258,7 +258,7 @@ self-contained:
 - `docs/whitaker-dylint-suite-design.md` for workspace testing and quality-gate
   expectations.
 
-## Outcomes & Retrospective
+## Outcomes and retrospective
 
 - 7.2.3 now ships as a dedicated `run0/` module inside
   `crates/whitaker_clones_core/`, exposing acceptance and SARIF-emission APIs
