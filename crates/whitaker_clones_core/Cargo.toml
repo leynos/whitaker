@@ -12,6 +12,8 @@ documentation.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 rustc_lexer = { workspace = true }
+sha2 = { workspace = true }
+whitaker_sarif = { workspace = true }
 
 [dev-dependencies]
 rstest = { workspace = true }
