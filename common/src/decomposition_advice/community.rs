@@ -15,6 +15,15 @@ pub(crate) struct SimilarityEdge {
 }
 
 impl SimilarityEdge {
+    // Used by test_support::decomposition::adjacency_report and unit tests.
+    pub(crate) fn new(left: usize, right: usize, weight: u64) -> Self {
+        Self {
+            left,
+            right,
+            weight,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn left(&self) -> usize {
         self.left
@@ -95,7 +104,10 @@ pub(crate) fn detect_communities(vectors: &[MethodFeatureVector]) -> Vec<Vec<usi
     communities
 }
 
-fn build_adjacency(node_count: usize, edges: &[SimilarityEdge]) -> Vec<Vec<(usize, u64)>> {
+pub(crate) fn build_adjacency(
+    node_count: usize,
+    edges: &[SimilarityEdge],
+) -> Vec<Vec<(usize, u64)>> {
     let mut adjacency = vec![Vec::new(); node_count];
 
     for edge in edges {
@@ -186,3 +198,7 @@ fn should_replace_best(
         }
     }
 }
+
+#[cfg(kani)]
+#[path = "community_kani.rs"]
+mod verify;

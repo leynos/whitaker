@@ -520,6 +520,52 @@ further decomposition analysis was omitted.
   but the roadmap theorem is about positive overlap, so the edge case is tested
   directly.
 
+### Implementation decisions (6.4.5)
+
+- **Kani sidecar workflow mirrors the existing Verus pattern**:
+  `scripts/install-kani.sh` pins Kani 0.67.0 and downloads the pre-built
+  tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`.
+  `scripts/run-kani.sh` invokes the pinned `cargo-kani` binary against the
+  `common` crate, filtering to `verify_build_adjacency` harnesses. `make kani`
+  exposes the workflow as a top-level quality gate.
+- **Bounded symbolic model uses fixed-size edge arrays**: each Kani harness
+  generates symbolic `SimilarityEdge` values from a fixed-size array of up to 3
+  edges with an active-length field. The maximum node count is 3 (with
+  `unwind(7)`), giving at most C(3,2) = 3 possible unique undirected edges.
+  These bounds are kept deliberately small because Rust's standard `sort_by`
+  generates deeply nested loops that cause CBMC state-space explosion at higher
+  bounds. This keeps the search space tractable and avoids requiring
+  `kani::Arbitrary` for `Vec`.
+- **Harness inputs constrained to the production edge contract**:
+  `build_similarity_edges` guarantees `left < right < node_count`,
+  `weight > 0`, and no duplicate unordered pairs. The Kani harnesses enforce
+  these same `kani::assume` preconditions so the proof covers exactly the
+  inputs that production code can generate.
+- **Five separate proof harnesses for failure localisation**: the five
+  properties (correct length, edge preservation, in-bounds indices, symmetry,
+  sorted neighbours) each have a dedicated harness. This simplifies root-cause
+  analysis when a single property fails.
+- **`build_adjacency` promoted to `pub(crate)`**: the function was private;
+  promoting it to `pub(crate)` aligns with `build_similarity_edges` and allows
+  unit tests and the `test_support::decomposition` adjacency report helper to
+  call it directly without widening the public crate API.
+- **Behavioural coverage observes adjacency through an `AdjacencyReport`
+  seam**: integration tests use
+  `common::test_support::decomposition::adjacency_report()` which validates
+  declarative edge input, delegates to the shipped `build_adjacency`, and
+  returns an `AdjacencyReport` with convenience predicates (`is_symmetric`,
+  `all_indices_in_bounds`, `is_sorted`, `neighbours_of`). The report is the
+  only public interface; raw adjacency vectors remain crate-internal.
+- **One unhappy-path BDD scenario validates test-support input
+  rejection**: a scenario with `left >= right` is rejected by the
+  `adjacency_report` helper before reaching `build_adjacency`, covering the
+  edge-contract validation without changing production semantics.
+- **`cfg(kani)` registered in `common/Cargo.toml`**: adding
+  `check-cfg = ['cfg(kani)']` under `[lints.rust]` silences the
+  `unexpected_cfgs` warning without requiring a build script.
+- **Stale `rstest-bdd` version comment corrected**: the `common/Cargo.toml`
+  dev-dependency comment now reads `0.5.x` instead of the outdated `0.2.x`.
+
 ## SARIF output
 
 The lints can optionally emit SARIF 2.1.0 (Static Analysis Results Interchange
