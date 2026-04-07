@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode {
+pub enum Mode {
     Debug,
     Release,
 }
