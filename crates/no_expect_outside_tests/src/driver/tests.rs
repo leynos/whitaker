@@ -55,6 +55,8 @@ fn parsed_must_use_attribute() -> hir::Attribute {
 #[case::gpui_test(&["gpui", "test"])]
 #[case::rstest_rstest(&["rstest", "rstest"])]
 #[case::rstest_case(&["rstest", "case"])]
+#[case::rstest_parametrize_bare(&["rstest_parametrize"])]
+#[case::rstest_parametrize_qualified(&["rstest", "rstest_parametrize"])]
 fn is_test_attribute_accepts_test_patterns(#[case] segments: &[&str]) {
     create_default_session_globals_then(|| {
         let attr = hir_attribute_from_segments(segments);
@@ -189,6 +191,9 @@ fn has_test_module_name_matches_test_conventions(#[case] name: &str, #[case] exp
 //    - `pass_expect_in_path_module_harness` compiles a `#[tokio::test]` in
 //      a `#[path]`-loaded module with a non-standard name under `--test`,
 //      exercising the extended `has_test_module_name` fallback.
+//    - `pass_expect_in_rstest_harness` compiles real `#[rstest]` with
+//      `#[case]` under `--test`, proving end-to-end detection via the actual
+//      rstest crate rather than the auxiliary proc-macro stub (issue #189).
 //
 // 5. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works

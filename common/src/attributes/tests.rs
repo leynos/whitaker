@@ -59,6 +59,8 @@ fn path_is_doc(#[case] path: AttributePath, #[case] expected: bool) {
 #[case::rstest_qualified("rstest::rstest", true)]
 #[case::case_imported("case", true)]
 #[case::case_qualified("rstest::case", true)]
+#[case::rstest_parametrize_bare("rstest_parametrize", true)]
+#[case::rstest_parametrize_qualified("rstest::rstest_parametrize", true)]
 #[case::core_prelude_test("core::prelude::v1::test", true)]
 #[case::std_prelude_test("std::prelude::rust_2024::test", true)]
 #[case::other("allow", false)]

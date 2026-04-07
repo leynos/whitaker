@@ -1,13 +1,10 @@
 //! Lint crate forbidding `.expect(..)` outside test and doctest contexts.
 //!
-//! The lint inspects method calls named `expect`, verifies that the receiver
-//! is an `Option` or `Result`, and checks the surrounding traversal context for
-//! test-like attributes or `cfg(test)` guards. Doctest harnesses are skipped via
-//! `Crate::is_doctest`, ensuring documentation examples remain ergonomic. When
-//! no test context is present, the lint emits a denial with a note describing
-//! the enclosing function and the receiver type to guide remediation. Teams can
-//! extend the recognised test attributes through `dylint.toml` when bespoke
-//! macros are in play.
+//! The lint inspects method calls named `expect`, verifies the receiver is an
+//! `Option` or `Result`, and checks the surrounding context for test-like
+//! attributes, `cfg(test)` guards, or harness descriptors. Doctest harnesses
+//! are skipped via `Crate::is_doctest`. Teams can extend the recognised test
+//! attributes through `dylint.toml` when bespoke macros are in play.
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
@@ -314,6 +311,14 @@ fn collect_harness_marked_test_functions_in_group<'tcx>(
         }) {
             harness_marked.insert(function_hir_id);
         }
+
+        // rstest with #[case] generates a companion module sharing the
+        // function's name whose children are the actual test cases (with
+        // harness const descriptors). Recognise the parent function as
+        // test code when such a companion module exists.
+        if has_companion_test_module(cx, function_name, items) {
+            harness_marked.insert(function_hir_id);
+        }
     }
 
     for item in items {
@@ -345,6 +350,34 @@ fn is_matching_harness_test_descriptor(
         && sibling.kind.ident().is_some_and(|ident| {
             ident.name == function_name && sibling.span.source_equal(function_span)
         })
+}
+
+// rstest with #[case] expands into a bare function plus a companion module
+// of the same name containing harness const descriptors. Detect this pattern
+// so the parent function is treated as test-only code.
+fn has_companion_test_module<'tcx>(
+    cx: &LateContext<'tcx>,
+    function_name: Symbol,
+    siblings: &[&'tcx hir::Item<'tcx>],
+) -> bool {
+    siblings.iter().any(|sibling| {
+        let hir::ItemKind::Mod(_, module) = sibling.kind else {
+            return false;
+        };
+        let Some(mod_ident) = sibling.kind.ident() else {
+            return false;
+        };
+        if mod_ident.name != function_name {
+            return false;
+        }
+        // The module must contain at least one harness const descriptor to
+        // avoid false positives on non-test modules that happen to share a
+        // function name.
+        module.item_ids.iter().any(|id| {
+            let child = cx.tcx.hir_item(*id);
+            matches!(child.kind, hir::ItemKind::Const(..))
+        })
+    })
 }
 
 // Check if any attribute is #[test].
