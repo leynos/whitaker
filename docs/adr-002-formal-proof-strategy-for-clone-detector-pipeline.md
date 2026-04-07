@@ -38,9 +38,9 @@ formal methods where proofs are a poor fit.
   cost.
 - Preserve deterministic runtime behaviour without adding proof-tool runtime
   dependencies to the Cargo workspace.
-- Prefer proofs over narrow shipped seams to reduce drift between runtime code
+- Prefer proofs to narrow shipped seams to reduce drift between runtime code
   and proof artefacts.
-- Keep normal Cargo development workflows independent from proof execution.
+- Keep normal Cargo development workflows independent of proof execution.
 - Use bounded model checking where collection state, iteration order, and
   insertion order are part of the behaviour under test.
 
