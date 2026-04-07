@@ -162,18 +162,11 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder {
             return;
         }
 
-        if let ExprKind::Call(callee, _) = expr.kind {
-            eprintln!("[DEBUG] RuntimeArgsFinder: Call callee kind = {:?}", std::mem::discriminant(&callee.kind));
-            if let ExprKind::Path(ref qpath) = callee.kind {
-                eprintln!("[DEBUG]   QPath variant = {:?}", std::mem::discriminant(qpath));
-                if let hir::QPath::TypeRelative(_, seg) = qpath {
-                    eprintln!("[DEBUG]   TypeRelative segment = {:?}", seg.ident.name.as_str());
-                }
-            }
-            if is_fmt_args_runtime_call(callee) {
-                self.found = true;
-                return;
-            }
+        if let ExprKind::Call(callee, _) = expr.kind
+            && is_fmt_args_runtime_call(callee)
+        {
+            self.found = true;
+            return;
         }
 
         rustc_hir::intravisit::walk_expr(self, expr);
