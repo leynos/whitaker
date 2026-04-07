@@ -44,7 +44,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            threshold: 3.0,
+            threshold: 2.5,
             window: 3,
             min_bump_lines: 2,
             weights: Weights::default(),

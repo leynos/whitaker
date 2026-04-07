@@ -17,7 +17,7 @@ LL | |          && input != 1800
 LL | |          && input != 1900
    | |__- Complexity bump 2 spans 4 lines.
    |
-note: Detected 2 complexity bumps above the threshold 3.
+note: Detected 2 complexity bumps above the threshold 2.5.
   --> $DIR/fail_two_clusters_legacy.rs:11:8
    |
 LL | pub fn bumpy(input: i32) -> i32 {
