@@ -33,10 +33,8 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["std", "rt", "begin_panic_fmt"],
 ];
 
-/// Suffixes of `def_path_str` values for `core::fmt::Arguments` constructors
-/// that accept runtime format values. The full def-path uses an `<impl ...>`
-/// wrapper that `SimplePath` cannot parse, so we match by suffix instead.
-const FMT_ARGS_RUNTIME_SUFFIXES: &[&str] = &["::new_v1", "::new_v1_formatted"];
+/// Method names on `core::fmt::Arguments` that accept runtime format values.
+const FMT_ARGS_RUNTIME_METHODS: &[&str] = &["new_v1", "new_v1_formatted"];
 
 /// Summarises whether a closure contains a panic and whether that panic uses
 /// format-string interpolation.
@@ -102,7 +100,7 @@ impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> 
 
         if is_panic_call(self.cx, expr) {
             self.panics = true;
-            self.uses_interpolation = panic_args_use_interpolation(self.cx, expr);
+            self.uses_interpolation = panic_args_use_interpolation(expr);
             return;
         }
 
@@ -148,30 +146,33 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 /// walks the call's argument sub-expressions looking for `Arguments::new_v1`
 /// or `Arguments::new_v1_formatted`, which are only used when format arguments
 /// are present.
-fn panic_args_use_interpolation<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) -> bool {
-    let mut finder = RuntimeArgsFinder { cx, found: false };
+fn panic_args_use_interpolation(expr: &Expr<'_>) -> bool {
+    let mut finder = RuntimeArgsFinder { found: false };
     rustc_hir::intravisit::walk_expr(&mut finder, expr);
     finder.found
 }
 
-struct RuntimeArgsFinder<'a, 'tcx> {
-    cx: &'a LateContext<'tcx>,
+struct RuntimeArgsFinder {
     found: bool,
 }
 
-impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'a, 'tcx> {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if self.found {
             return;
         }
 
         if let ExprKind::Call(callee, _) = expr.kind {
-            if let Some(def_id) = def_id_of_callee(self.cx, callee) {
-                let def_path = self.cx.tcx.def_path_str(def_id);
-                if is_runtime_fmt_args_constructor(&def_path) {
-                    self.found = true;
-                    return;
+            eprintln!("[DEBUG] RuntimeArgsFinder: Call callee kind = {:?}", std::mem::discriminant(&callee.kind));
+            if let ExprKind::Path(ref qpath) = callee.kind {
+                eprintln!("[DEBUG]   QPath variant = {:?}", std::mem::discriminant(qpath));
+                if let hir::QPath::TypeRelative(_, seg) = qpath {
+                    eprintln!("[DEBUG]   TypeRelative segment = {:?}", seg.ident.name.as_str());
                 }
+            }
+            if is_fmt_args_runtime_call(callee) {
+                self.found = true;
+                return;
             }
         }
 
@@ -179,15 +180,20 @@ impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'a, 't
     }
 }
 
-/// Returns `true` when the `def_path_str` identifies a `core::fmt::Arguments`
-/// constructor that takes runtime format values (i.e. `new_v1` or
-/// `new_v1_formatted`). The full def-path passes through `<impl ...>` blocks
-/// that `SimplePath` cannot parse, so we match by suffix.
-fn is_runtime_fmt_args_constructor(def_path: &str) -> bool {
-    def_path.contains("fmt")
-        && FMT_ARGS_RUNTIME_SUFFIXES
-            .iter()
-            .any(|suffix| def_path.ends_with(suffix))
+/// Returns `true` when the callee is a `QPath::TypeRelative` call whose
+/// method segment matches a runtime `Arguments` constructor (`new_v1` or
+/// `new_v1_formatted`).
+///
+/// Compiler-generated `format_arguments::new_v1(...)` expressions use a
+/// type-relative qualified path whose method segment isn't resolvable via
+/// `qpath_res` (it resolves to `Err`). Inspecting the segment identifier
+/// directly is the reliable way to detect these.
+fn is_fmt_args_runtime_call(callee: &Expr<'_>) -> bool {
+    let ExprKind::Path(hir::QPath::TypeRelative(_, segment)) = callee.kind else {
+        return false;
+    };
+    let name = segment.ident.name.as_str();
+    FMT_ARGS_RUNTIME_METHODS.contains(&name)
 }
 
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {

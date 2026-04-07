@@ -5,7 +5,7 @@
 #[test]
 fn flags_plain_panicking_fallbacks_in_tests() {
     let value: Result<(), &str> = Err("boom");
-    let _ = value.unwrap_or_else(|e| panic!("got: {e}"));
+    let _ = value.unwrap_or_else(|_| panic!("static message"));
 }
 
 fn main() {}
