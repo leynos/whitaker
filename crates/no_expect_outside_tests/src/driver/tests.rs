@@ -131,6 +131,29 @@ fn has_test_attribute_handles_parsed_attributes() {
 }
 
 // -------------------------------------------------------------------------
+// Tests for has_test_module_name
+// -------------------------------------------------------------------------
+
+#[rstest]
+#[case::exact_test("test", true)]
+#[case::exact_tests("tests", true)]
+#[case::prefix_test_helpers("test_helpers", true)]
+#[case::prefix_tests_util("tests_util", true)]
+#[case::suffix_service_tests("service_tests", true)]
+#[case::suffix_api_test("api_test", true)]
+#[case::suffix_integration_tests("integration_tests", true)]
+#[case::suffix_unit_test("unit_test", true)]
+#[case::plain_service("my_service", false)]
+#[case::testing("testing", false)]
+#[case::attest("attest", false)]
+#[case::contest("contest", false)]
+#[case::test_embedded_not_suffix("test_like_utils", true)]
+#[case::empty_string("", false)]
+fn has_test_module_name_matches_test_conventions(#[case] name: &str, #[case] expected: bool) {
+    assert_eq!(has_test_module_name(name), expected, "name = {name:?}");
+}
+
+// -------------------------------------------------------------------------
 // Coverage notes for is_test_named_module, extract_function_item, and the
 // is_likely_test_function fallback
 //
@@ -138,6 +161,9 @@ fn has_test_attribute_handles_parsed_attributes() {
 // be constructed in unit tests without mocking the entire compiler
 // infrastructure. The fallback logic (is_likely_test_function) also requires
 // the --test harness flag which isn't set during UI test compilation.
+//
+// `has_test_module_name` is tested directly above since it is a pure
+// string predicate that does not depend on HIR.
 //
 // Behavioural coverage is achieved through:
 //
@@ -149,17 +175,27 @@ fn has_test_attribute_handles_parsed_attributes() {
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
 //    - These verify #[cfg(test)] mod test/tests detection
 //
-// 3. Example-based regression coverage for the `rustc --test` harness path:
+// 3. UI tests for `#[path]`-loaded modules with non-standard names:
+//    - pass_expect_in_path_module_tokio_test.rs verifies attribute detection
+//      inside `#[path]`-loaded modules whose names match `has_test_module_name`
+//    - pass_expect_in_cfg_test_named_module.rs verifies `#[cfg(test)]`
+//      detection for non-standard module names with `#[tokio::test]`
+//
+// 4. Example-based regression coverage for the `rustc --test` harness path:
 //    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
 //      example target under `--test`, placing `.expect(...)` calls inside
 //      nested closure and async-block bodies so the parent walk and sibling
 //      const descriptor fallback are both exercised.
+//    - `pass_expect_in_path_module_harness` compiles a `#[tokio::test]` in
+//      a `#[path]`-loaded module with a non-standard name under `--test`,
+//      exercising the extended `has_test_module_name` fallback.
 //
-// 4. Real-world validation: The lint is used on this repository's own
+// 5. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works
 //    correctly for tests/ directory detection and module-name heuristics.
 //
 // The individual helper functions have straightforward pattern matching:
-// - is_test_named_module: matches!(name, "test" | "tests")
+// - is_test_named_module: delegates to has_test_module_name for name matching
+// - has_test_module_name: matches exact and affixed test module name patterns
 // - extract_function_item: matches `hir::Node::Item` values whose kind is `Fn`
 // -------------------------------------------------------------------------

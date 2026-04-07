@@ -1,0 +1,7 @@
+//! Module loaded via `#[path]` with a non-standard name.
+
+#[tokio::test]
+fn tokio_expect_is_allowed() {
+    let value: Result<&str, ()> = Ok("ok");
+    value.expect("ok");
+}

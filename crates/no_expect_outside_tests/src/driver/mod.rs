@@ -230,7 +230,35 @@ fn is_test_named_module(node: hir::Node<'_>) -> bool {
     let Some(ident) = item.kind.ident() else {
         return false;
     };
-    matches!(ident.name.as_str(), "test" | "tests")
+    has_test_module_name(ident.name.as_str())
+}
+
+/// Recognise common test module naming conventions.
+///
+/// Matches exact names (`test`, `tests`) as well as modules whose name starts
+/// with `test_` or `tests_`, or ends with `_test` or `_tests`. This covers
+/// `#[path]`-loaded modules with non-standard names such as `service_tests`
+/// that the test harness compiles under `--test`.
+///
+/// # Examples
+///
+/// ```text
+/// "test"            → true
+/// "tests"           → true
+/// "test_helpers"    → true
+/// "tests_util"      → true
+/// "service_tests"   → true
+/// "api_test"        → true
+/// "my_service"      → false
+/// "testing"         → false
+/// "attest"          → false
+/// ```
+fn has_test_module_name(name: &str) -> bool {
+    matches!(name, "test" | "tests")
+        || name.starts_with("test_")
+        || name.starts_with("tests_")
+        || name.ends_with("_test")
+        || name.ends_with("_tests")
 }
 
 fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
