@@ -177,6 +177,13 @@ fn unique_hashes(fingerprints: &[Fingerprint]) -> BTreeSet<u64> {
         .collect()
 }
 
+/// Compares a Jaccard score against a threshold using cross-multiplication.
+///
+/// Assumes fingerprint counts (intersection and union) are many orders of
+/// magnitude smaller than `usize::MAX` in practical use. Uses `saturating_mul`
+/// to avoid panics on pathological inputs; clamped results only occur in
+/// extreme/unrealistic cases. Callers should validate counts if they may
+/// approach `usize::MAX`.
 fn meets_threshold(score: SimilarityRatio, threshold: SimilarityThreshold) -> bool {
     score.intersection.saturating_mul(threshold.denominator)
         >= score.union.saturating_mul(threshold.numerator)

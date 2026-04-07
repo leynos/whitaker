@@ -39,7 +39,7 @@ fn fragment(input: FragmentInput<'_>) -> TokenFragment {
 
 fn pair(left: &str, right: &str) -> crate::CandidatePair {
     crate::CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-        .expect("pair `{left}` and `{right}` must be distinct")
+        .unwrap_or_else(|| panic!("pair `{left}` and `{right}` must be distinct"))
 }
 
 fn config() -> TokenPassConfig {

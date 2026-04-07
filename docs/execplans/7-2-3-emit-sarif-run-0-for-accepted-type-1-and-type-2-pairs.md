@@ -23,7 +23,7 @@ Observable outcome:
 1. `whitaker_clones_core` exposes a documented API that accepts token-pass
    fragment data plus candidate pairs and returns a SARIF `Run` for the token
    pass.
-2. Accepted Type-1 pairs produce `WHK001` results and accepted Type-2 pairs
+2. Accepted Type-1 pairs produce `WHK001` results, and accepted Type-2 pairs
    produce `WHK002` results.
 3. Each emitted result carries deterministic `message`, `locations`,
    `relatedLocations`, `partial_fingerprints`, and Whitaker `properties`.
