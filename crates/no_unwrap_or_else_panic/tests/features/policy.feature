@@ -1,6 +1,7 @@
 Feature: Policy evaluation for no_unwrap_or_else_panic
   The lint should fire when a panicking unwrap_or_else fallback appears in
-  production code or tests and stay quiet for safe or doctest contexts.
+  production code or tests and stay quiet for safe, doctest, or
+  test-with-interpolation contexts.
 
   Scenario: Panicking fallback outside tests
     Given a panicking unwrap_or_else fallback outside tests
@@ -30,3 +31,16 @@ Feature: Policy evaluation for no_unwrap_or_else_panic
     And a doctest harness is active
     When the lint policy is evaluated
     Then the lint is skipped
+
+  Scenario: Interpolated panic inside a test is permitted
+    Given a panicking unwrap_or_else fallback
+    And the panic message interpolates a value
+    And code runs inside a test
+    When the lint policy is evaluated
+    Then the lint is skipped
+
+  Scenario: Plain panic inside a test is still flagged
+    Given a panicking unwrap_or_else fallback
+    And code runs inside a test
+    When the lint policy is evaluated
+    Then the lint triggers

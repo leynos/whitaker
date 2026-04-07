@@ -85,12 +85,8 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
         };
 
         let summary = summarise_context(cx, expr.hir_id);
-        if !should_flag(
-            &self.policy,
-            &summary,
-            closure_panics(cx, body_id),
-            self.is_doctest,
-        ) {
+        let panic_info = closure_panics(cx, body_id);
+        if !should_flag(&self.policy, &summary, &panic_info, self.is_doctest) {
             return;
         }
 

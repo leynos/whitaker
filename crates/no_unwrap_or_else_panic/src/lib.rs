@@ -3,7 +3,10 @@
 //! The lint inspects `unwrap_or_else` invocations on `Option` and `Result`
 //! receivers, flagging closures that panic directly or indirectly through
 //! `unwrap` or `expect`. Doctest contexts are exempt, and teams may optionally
-//! allow panicking fallbacks inside `main` via configuration.
+//! allow panicking fallbacks inside `main` via configuration. In test contexts,
+//! closures whose panic message interpolates a runtime value (e.g.
+//! `|e| panic!("got: {e}")`) are also exempt, because the interpolation
+//! materially improves failure diagnostics beyond what `expect` can express.
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 #[cfg(feature = "dylint-driver")]

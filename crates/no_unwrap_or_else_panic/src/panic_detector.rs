@@ -8,7 +8,7 @@ use rustc_middle::ty;
 use rustc_span::sym;
 use whitaker_common::SimplePath;
 
-/// Known panic entry points used by both clippy and non-clippy builds.
+/// All known panic entry points (plain and formatted).
 const PANIC_PATHS: &[&[&str]] = &[
     // core
     &["core", "panicking", "panic"],
@@ -33,14 +33,34 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["std", "rt", "begin_panic_fmt"],
 ];
 
-/// Returns `true` when the closure referenced by `body_id` contains a panic
-/// invocation or an inner `unwrap`/`expect`.
+/// Suffixes of `def_path_str` values for `core::fmt::Arguments` constructors
+/// that accept runtime format values. The full def-path uses an `<impl ...>`
+/// wrapper that `SimplePath` cannot parse, so we match by suffix instead.
+const FMT_ARGS_RUNTIME_SUFFIXES: &[&str] = &["::new_v1", "::new_v1_formatted"];
+
+/// Summarises whether a closure contains a panic and whether that panic uses
+/// format-string interpolation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PanicInfo {
+    pub(crate) panics: bool,
+    pub(crate) uses_interpolation: bool,
+}
+
+/// Analyses the closure referenced by `body_id` and returns a [`PanicInfo`]
+/// describing whether it panics and whether the panic interpolates values.
 #[must_use]
-pub(crate) fn closure_panics<'tcx>(cx: &LateContext<'tcx>, body_id: hir::BodyId) -> bool {
-    let mut detector = PanicDetector { cx, panics: false };
+pub(crate) fn closure_panics<'tcx>(cx: &LateContext<'tcx>, body_id: hir::BodyId) -> PanicInfo {
+    let mut detector = PanicDetector {
+        cx,
+        panics: false,
+        uses_interpolation: false,
+    };
     let body = cx.tcx.hir_body(body_id);
     rustc_hir::intravisit::Visitor::visit_body(&mut detector, body);
-    detector.panics
+    PanicInfo {
+        panics: detector.panics,
+        uses_interpolation: detector.uses_interpolation,
+    }
 }
 
 /// Returns `true` when the receiver resolves to `Option` or `Result`.
@@ -71,6 +91,7 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> boo
 struct PanicDetector<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     panics: bool,
+    uses_interpolation: bool,
 }
 
 impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> {
@@ -79,7 +100,13 @@ impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> 
             return;
         }
 
-        if is_panic_call(self.cx, expr) || is_unwrap_or_expect(self.cx, expr) {
+        if is_panic_call(self.cx, expr) {
+            self.panics = true;
+            self.uses_interpolation = panic_args_use_interpolation(self.cx, expr);
+            return;
+        }
+
+        if is_unwrap_or_expect(self.cx, expr) {
             self.panics = true;
             return;
         }
@@ -97,8 +124,7 @@ fn is_unwrap_or_expect<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) -> 
         && receiver_is_option_or_result(cx, receiver)
 }
 
-/// Returns `true` when `expr` calls a known panic entry point. Uses def-path
-/// string matching because internal panic helpers lack stable diagnostic items.
+/// Returns `true` when `expr` calls a known panic entry point.
 fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     let ExprKind::Call(callee, _) = expr.kind else {
         return false;
@@ -112,6 +138,56 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
     PANIC_PATHS
         .iter()
         .any(|candidate| whitaker_common::is_path_to(&path, candidate.iter().copied()))
+}
+
+/// Checks whether a panic call's `format_args!` construction uses runtime
+/// values, indicating the panic message interpolates at least one expression.
+///
+/// In Rust 2021+, even `panic!("static")` routes through `panic_fmt`, so the
+/// def-path alone cannot distinguish interpolation. Instead, this function
+/// walks the call's argument sub-expressions looking for `Arguments::new_v1`
+/// or `Arguments::new_v1_formatted`, which are only used when format arguments
+/// are present.
+fn panic_args_use_interpolation<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) -> bool {
+    let mut finder = RuntimeArgsFinder { cx, found: false };
+    rustc_hir::intravisit::walk_expr(&mut finder, expr);
+    finder.found
+}
+
+struct RuntimeArgsFinder<'a, 'tcx> {
+    cx: &'a LateContext<'tcx>,
+    found: bool,
+}
+
+impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'a, 'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
+        if self.found {
+            return;
+        }
+
+        if let ExprKind::Call(callee, _) = expr.kind {
+            if let Some(def_id) = def_id_of_callee(self.cx, callee) {
+                let def_path = self.cx.tcx.def_path_str(def_id);
+                if is_runtime_fmt_args_constructor(&def_path) {
+                    self.found = true;
+                    return;
+                }
+            }
+        }
+
+        rustc_hir::intravisit::walk_expr(self, expr);
+    }
+}
+
+/// Returns `true` when the `def_path_str` identifies a `core::fmt::Arguments`
+/// constructor that takes runtime format values (i.e. `new_v1` or
+/// `new_v1_formatted`). The full def-path passes through `<impl ...>` blocks
+/// that `SimplePath` cannot parse, so we match by suffix.
+fn is_runtime_fmt_args_constructor(def_path: &str) -> bool {
+    def_path.contains("fmt")
+        && FMT_ARGS_RUNTIME_SUFFIXES
+            .iter()
+            .any(|suffix| def_path.ends_with(suffix))
 }
 
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {
