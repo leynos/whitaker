@@ -5,7 +5,7 @@ LL |    pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>
    |  _________^^^^^^^^^^^^^______________________________________________________________-
    | | ___________________________________________________________________________________|
    | ||
-LL | ||     let path = PathBuf::from("$TEST_BUILD_DIR/key");
+LL | ||     let path = PathBuf::from("key");
 LL | ||
 LL | ||     match std::fs::read(&path) {
 ...  ||

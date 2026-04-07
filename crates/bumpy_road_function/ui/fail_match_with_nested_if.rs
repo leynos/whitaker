@@ -29,7 +29,7 @@ const MIN_LEN: usize = 64;
 /// key_from_file(Mode::Debug, true);
 /// ```
 pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
-    let path = PathBuf::from("/tmp/key");
+    let path = PathBuf::from("key");
 
     match std::fs::read(&path) {
         Ok(mut bytes) => {
