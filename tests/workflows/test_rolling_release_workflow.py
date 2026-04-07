@@ -204,6 +204,43 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
     )
 
 
+def test_restore_step_guards_against_missing_dependency_assets(
+    workflow_text: str,
+) -> None:
+    """Ensure restore step checks for dependency assets before downloading.
+
+    The rolling release may contain only lint archives (no .tgz/.zip/.sha256
+    dependency binary assets) during bootstrapping or when dependency binaries
+    have not yet been published. The restore step must probe the release
+    assets and skip gracefully rather than failing on a no-match download.
+    """
+    workflow_mapping = _load_workflow_mapping(workflow_text)
+    jobs = _get_job_dict(workflow_mapping, "jobs")
+    publish_job = _get_job_dict(jobs, "publish")
+    restore_step = _find_step_by_name(
+        publish_job.get("steps"),
+        "Restore dependency archives from previous release",
+    )
+    assert restore_step is not None, (
+        "publish job must have a 'Restore dependency archives from previous "
+        "release' step"
+    )
+    run_script = restore_step.get("run", "")
+    assert isinstance(run_script, str), "restore step must have a run script"
+
+    assert "gh release view rolling" in run_script, (
+        "restore step must probe the rolling release assets before downloading"
+    )
+    assert "gh release download rolling" in run_script, (
+        "restore step must still download assets when they are present"
+    )
+    # The guard must exit 0 when no dependency assets are found rather than
+    # letting gh release download fail on a no-match pattern.
+    assert "exit 0" in run_script, (
+        "restore step must exit cleanly when no dependency assets are found"
+    )
+
+
 @pytest.mark.skipif(
     os.getenv("ACT_WORKFLOW_TESTS") != "1",
     reason="set ACT_WORKFLOW_TESTS=1 to run act workflow smoke tests",
