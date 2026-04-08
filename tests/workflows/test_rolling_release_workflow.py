@@ -22,6 +22,7 @@ Run the `act` smoke test:
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from collections.abc import Mapping
 from pathlib import Path
@@ -207,12 +208,13 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
 def test_restore_step_guards_against_missing_dependency_assets(
     workflow_text: str,
 ) -> None:
-    """Ensure restore step checks for dependency assets before downloading.
+    """Ensure restore step checks for archive assets before downloading.
 
-    The rolling release may contain only lint archives (no .tgz/.zip/.sha256
-    dependency binary assets) during bootstrapping or when dependency binaries
-    have not yet been published. The restore step must probe the release
-    assets and skip gracefully rather than failing on a no-match download.
+    The rolling release may contain only lint archives (no .tgz/.zip
+    dependency binary assets) during bootstrapping or when dependency
+    binaries have not yet been published. The restore step must probe the
+    release assets, check specifically for archive file extensions, and
+    skip gracefully rather than failing on a no-match download.
     """
     workflow_mapping = _load_workflow_mapping(workflow_text)
     jobs = _get_job_dict(workflow_mapping, "jobs")
@@ -234,10 +236,30 @@ def test_restore_step_guards_against_missing_dependency_assets(
     assert "gh release download rolling" in run_script, (
         "restore step must still download assets when they are present"
     )
+
+    # The guard must use an archive-specific predicate (.tgz/.zip) so that
+    # checksum-only releases do not falsely trigger a download attempt.
+    assert re.search(r"\*\.tgz", run_script), (
+        "restore step guard must check for .tgz archive extensions"
+    )
+    assert re.search(r"\*\.zip", run_script), (
+        "restore step guard must check for .zip archive extensions"
+    )
+
     # The guard must exit 0 when no dependency assets are found rather than
     # letting gh release download fail on a no-match pattern.
     assert "exit 0" in run_script, (
         "restore step must exit cleanly when no dependency assets are found"
+    )
+
+    # Only release-not-found errors are benign; auth/network/API failures
+    # must propagate so incomplete releases are not silently published.
+    assert "release not found" in run_script.lower(), (
+        "restore step must specifically match the 'release not found' error "
+        "rather than swallowing all gh failures"
+    )
+    assert "exit 1" in run_script, (
+        "restore step must fail on unexpected gh errors (auth, network, API)"
     )
 
 

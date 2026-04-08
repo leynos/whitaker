@@ -294,14 +294,23 @@ jobs:
           # assets before attempting to download. The release may contain
           # only lint archives when dependency binaries have not yet been
           # published, e.g. during bootstrapping.
-          asset_names=$(gh release view rolling --json assets --jq '.assets[].name' 2>/dev/null) || {
-            echo "Rolling release does not exist yet; skipping restore."
-            exit 0
-          }
+          gh_err=$(mktemp)
+          if ! asset_names=$(gh release view rolling --json assets --jq '.assets[].name' 2>"$gh_err"); then
+            if grep -qi "release not found" "$gh_err"; then
+              echo "Rolling release does not exist yet; skipping restore."
+              rm -f "$gh_err"
+              exit 0
+            fi
+            echo "::error::gh release view failed:" >&2
+            cat "$gh_err" >&2
+            rm -f "$gh_err"
+            exit 1
+          fi
+          rm -f "$gh_err"
           has_dep_assets=false
           for name in $asset_names; do
             case "$name" in
-              *.tgz|*.zip|*.sha256) has_dep_assets=true; break ;;
+              *.tgz|*.zip) has_dep_assets=true; break ;;
             esac
           done
           if [[ "$has_dep_assets" == "false" ]]; then
