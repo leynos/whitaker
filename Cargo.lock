@@ -3297,7 +3297,9 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustc_lexer",
+ "sha2",
  "thiserror 2.0.18",
+ "whitaker_sarif",
 ]
 
 [[package]]

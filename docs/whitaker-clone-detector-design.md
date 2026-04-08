@@ -459,12 +459,60 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    reported as typed `IndexError` values rather than silently rounded or
    clamped.
 
-4. **Explicit empty-input behaviour.** Sketching an empty retained-fingerprint
-   list returns `IndexError::EmptyFingerprintSet`. Candidate generation stops
-   at that error so later pipeline stages can decide whether to skip the
-   fragment or surface the failure.
+## Implementation decisions (7.2.3)
 
-5. **Canonical, deduplicated candidate pairs.** `LshIndex` buckets fragments by
+1. **Dedicated `run0/` module subtree.** Roadmap item 7.2.3 ships as a new
+   `run0/` module subtree inside `crates/whitaker_clones_core/`. The public
+   surface exports `TokenFragment`, `TokenPassConfig`, `SimilarityThreshold`,
+   `SimilarityRatio`, `AcceptedPair`, `accept_candidate_pairs`, and
+   `emit_run0`, keeping token-pass acceptance and SARIF emission together
+   without widening the `whitaker_sarif` crate's remit.
+
+2. **Profile-specific acceptance.** `TokenFragment` now records the
+   normalization profile that produced it. `accept_candidate_pairs` only emits
+   `T1` for `NormProfile::T1` fragments and `T2` for `NormProfile::T2`
+   fragments; mixed-profile candidate pairs fail with a typed `Run0Error`
+   rather than being silently coerced.
+
+3. **Stable fingerprint shape.** `partialFingerprints["whitakerFragment"]` is
+   an SHA-256 hex digest over `left_fragment_id`, `right_fragment_id`, and the
+   emitted profile, separated by NUL bytes. `partialFingerprints["tokenHash"]`
+   is an SHA-256 hex digest over the sorted, deduplicated retained token hashes
+   from both accepted fragments encoded with big-endian bytes. This replaces
+   the earlier aspirational Blake3 sketch while staying deterministic and
+   within existing workspace dependencies.
+
+4. **Integer-only threshold and score handling.** Jaccard similarity is
+   computed with set semantics over unique retained token hashes and compared
+   against validated rational thresholds using integer cross-multiplication.
+   Human-facing score text uses a six-decimal repeated-subtraction formatter,
+   and Whitaker's numeric `jaccard` field is populated by parsing that stable
+   decimal string back into `f64` in one quarantined helper.
+
+5. **Primary-versus-related location contract.** Each accepted pair emits one
+   SARIF result whose primary location is the canonical left fragment from
+   `CandidatePair`, while the peer fragment is stored in one `relatedLocation`.
+   The emitted result list is sorted deterministically and then passed through
+   `whitaker_sarif::deduplicate_results()` so repeated or reversed accepted
+   pairs collapse to one stable result.
+
+6. **Byte-range mapping rules.** SARIF regions are derived from each
+   fragment's first retained fingerprint range. The mapper validates in-bounds,
+   non-empty, UTF-8-aligned half-open byte ranges, records `byteOffset` and
+   `byteLength`, and converts the range to 1-based line-column coordinates
+   using a line-start index over the original source text.
+
+7. **Explicit empty-input behaviour.** Sketching an empty retained-fingerprint
+   list returns `IndexError::EmptyFingerprintSet` at the index/minhash layer.
+   The Run 0 layer (`run0/emit.rs`) does not propagate this error directly;
+   instead, it surfaces `Run0Error::EmptyFingerprintSet` when
+   `jaccard_similarity` returns `None` for empty fingerprint sets. Callers
+   should match on `Run0Error::EmptyFingerprintSet` for Run 0 operations or
+   translate it to `IndexError::EmptyFingerprintSet` if normalizing errors
+   across layers. Candidate generation stops at that error so later pipeline
+   stages can decide whether to skip the fragment or surface the failure.
+
+8. **Canonical, deduplicated candidate pairs.** `LshIndex` buckets fragments by
    `(band_index, band_values)` and stores members in ordered sets. Candidate
    pairs are emitted in lexical `FragmentId` order, self-pairs are suppressed,
    and repeated collisions across multiple bands still produce one stable
