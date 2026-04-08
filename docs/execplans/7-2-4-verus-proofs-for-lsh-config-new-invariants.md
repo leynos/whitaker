@@ -65,6 +65,9 @@ Observable outcome:
 - Build on the existing clone-detector crate
   `crates/whitaker_clones_core/`. Do not move `LshConfig` into a separate crate
   or introduce CLI, filesystem, or `rustc_private` concerns here.
+- If Kani harnesses use `#[cfg(kani)]`, register that cfg in the relevant
+  crate's `unexpected_cfgs` allowlist instead of accepting noisy warnings or
+  adding broad lint suppressions.
 - Keep each Rust source file below 400 lines. Add focused sibling modules if
   proof harness code or test helpers would otherwise bloat one file.
 - Every new Rust module must begin with a `//!` module-level comment.
@@ -134,6 +137,11 @@ Observable outcome:
   128 are accepted. Mitigation: add a targeted large-value unit test and keep
   the proof claim phrased in terms of acceptance semantics, not machine-width
   overflow internals.
+- State-explosion risk: even tiny Kani harnesses can become impractical if they
+  explore unconstrained symbolic inputs or use overly generous unwind bounds.
+  Mitigation: follow Chutoro's pattern of a deterministic smoke harness, small
+  explicit `#[kani::unwind(N)]` bounds, and `kani::assume` guards that mirror
+  production preconditions.
 
 ## Progress
 
@@ -179,6 +187,12 @@ Observable outcome:
 - The workspace root pins `rstest-bdd = "0.5.0"`, matching the user's
   requirement, so the plan must keep that exact version in view even though
   some repository comments elsewhere still mention older text.
+- Chutoro's Kani setup is directly relevant here. The useful patterns are:
+  keep harnesses adjacent to the internal modules they inspect, allow
+  `cfg(kani)` explicitly in crate lint configuration, separate a practical
+  local Kani target from heavier exhaustive runs, and use documented
+  `kani::assume` guards plus explicit unwind limits to keep solver work
+  tractable.
 
 ## Decision Log
 
@@ -200,6 +214,11 @@ Observable outcome:
   `MinHasher` and `LshIndex` bounded proofs for roadmap items 7.2.7 and 7.2.8.
   Rationale: 7.2.4 asks for clone-detector Kani checks, and a zero-harness
   workflow would be difficult to validate. Date/Author: 2026-04-08 / Codex.
+- Decision: borrow Chutoro's two-tier Kani shape conceptually, but keep the
+  Whitaker scope smaller for this roadmap slice. Rationale: the first Whitaker
+  Kani target should be a practical local smoke gate with small bounds; any
+  heavier `kani-full` style target should remain a future extension once 7.2.7
+  and 7.2.8 add broader bounded checks. Date/Author: 2026-04-08 / Codex.
 
 ## Context and orientation
 
@@ -277,6 +296,28 @@ turn self-contained:
 - `docs/whitaker-dylint-suite-design.md` for repository-wide lint and
   `unexpected_cfgs` considerations when introducing specialised build modes.
 
+### Relevant learnings from `leynos/chutoro`
+
+Chutoro uses Kani in a way that is directly applicable to this roadmap item.
+The most relevant implementation lessons are:
+
+1. Put Kani harnesses next to the internal modules they exercise so they can
+   use `pub(crate)` seams instead of widening the public API.
+2. Keep harnesses behind `#[cfg(kani)]`, and explicitly allow that cfg in the
+   crate's `unexpected_cfgs` check list.
+3. Keep the everyday Kani target small and practical. Chutoro's `make kani`
+   runs only smoke-sized harnesses, while heavier exhaustive runs are reserved
+   for `make kani-full`.
+4. Add module-level harness documentation with direct `cargo kani` and `make`
+   commands so the proof entry points remain discoverable.
+5. Use explicit `#[kani::unwind(N)]` bounds and `kani::assume` guards that
+   mirror production preconditions. This is how Chutoro keeps symbolic state
+   bounded without silently changing the runtime contract under test.
+
+Whitaker should adopt lessons 1, 2, 4, and 5 directly in 7.2.4. Lesson 3 should
+shape the interface design so the first target is practical locally, without
+forcing 7.2.4 to absorb future heavyweight harnesses now.
+
 ## Proposed implementation shape
 
 The change should stay narrowly focused and add exactly four kinds of artefact.
@@ -298,8 +339,14 @@ First, extend proof tooling at the repository root:
   1. `make verus` runs all Verus proof files, including the new clone-detector
      proof.
   2. `make verus-clone-detector` runs only the clone-detector Verus proof set.
-  3. `make kani` runs all Kani sidecar harness sets currently registered.
-  4. `make kani-clone-detector` runs only the clone-detector Kani harness set.
+  3. `make kani-clone-detector` runs only the practical clone-detector Kani
+     smoke harness set with intentionally small bounds.
+  4. `make kani` runs all practical Kani sidecar harness sets currently
+     registered. In this roadmap slice, that will effectively mean the
+     clone-detector set.
+  5. The script and target layout must leave room for a future heavier
+     `kani-full` style target once 7.2.7 and 7.2.8 introduce broader bounded
+     checks.
 
 Second, add the first clone-detector Verus proof file:
 
@@ -317,6 +364,9 @@ Third, add the minimal Kani harness needed to make the new workflow concrete:
   Kani, with one proof harness that symbolically chooses bounded `bands` and
   `rows`, calls the real `LshConfig::new`, and asserts the returned
   `IndexError` or accepted config matches the documented runtime contract.
+- Mirror Chutoro's local style by giving this module a `//!` comment that
+  documents the direct `cargo kani` invocation and the `make` target that wraps
+  it.
 
 This harness is deliberately narrow. It is a tooling smoke check and a future
 anchor point, not a substitute for roadmap items 7.2.7 and 7.2.8.
@@ -345,8 +395,12 @@ Start with the proof workflow plumbing because 7.2.5 depends on it.
    flow as the basis for the script. If pinning a compatible Kani release is
    not possible against the current Rust toolchain, stop here and escalate.
 3. Add `scripts/run-kani.sh` to call the installed Kani tool with an explicit
-   manifest path and explicit harness list for the clone-detector crate.
-4. Update `Makefile` with the new proof targets. Keep the target names obvious
+   manifest path, explicit harness list, and explicit unwind defaults for the
+   practical clone-detector harnesses.
+4. If the harness module uses `#[cfg(kani)]`, update
+   `crates/whitaker_clones_core/Cargo.toml` with an `unexpected_cfgs` allowlist
+   entry for `cfg(kani)`, following Chutoro's pattern.
+5. Update `Makefile` with the new proof targets. Keep the target names obvious
    and parallel so a novice can discover them from `make help`.
 
 ### Stage C: add failing unit tests first
@@ -416,9 +470,19 @@ Recommended shape:
 
 1. Add `crates/whitaker_clones_core/src/index/kani.rs`.
 2. Compile it only when Kani runs.
-3. Symbolically choose small `bands` and `rows` values.
-4. Call the real `LshConfig::new` runtime constructor.
-5. Assert that:
+3. Give it a module-level `//!` comment with the direct `cargo kani` command
+   and the corresponding `make` target, mirroring Chutoro's discoverability
+   pattern.
+4. Add one deterministic smoke harness first, then one symbolic harness only
+   if the deterministic harness alone is too weak to prove the workflow is
+   wired correctly.
+5. Use an explicit small unwind bound, such as `#[kani::unwind(4)]`, unless a
+   tighter value is enough.
+6. Symbolically choose small `bands` and `rows` values and constrain them with
+   `kani::assume` only where those assumptions match real production
+   preconditions or bound the search space transparently.
+7. Call the real `LshConfig::new` runtime constructor.
+8. Assert that:
    - `Ok(config)` implies both values are non-zero and their product equals
      `MINHASH_SIZE`.
    - `Err(IndexError::ZeroBands)` implies `bands == 0`.
