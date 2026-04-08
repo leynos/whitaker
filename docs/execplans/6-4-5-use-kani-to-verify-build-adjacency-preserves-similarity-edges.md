@@ -373,7 +373,8 @@ adjacency_report(node_count, edges) -> Result<AdjacencyReport, String>
 
 The helper should:
 
-1. Accept declarative edge input suitable for BDD scenarios.
+1. Accept declarative edge input suitable for behaviour-driven development (BDD)
+   scenarios.
 2. Validate that the declared endpoints are within bounds and reject malformed
    input before calling the private runtime helper.
 3. Return an easily asserted report, such as normalized per-node neighbour

@@ -19,6 +19,16 @@ const MAX_NODES: usize = 3;
 /// possible unique undirected edges (left < right) is C(3,2) = 3.
 const MAX_EDGES: usize = 3;
 
+/// Generates a symbolic node count constrained to `[0, MAX_NODES]`.
+///
+/// Use this helper to ensure consistent node-count generation and assumptions
+/// across all harnesses.
+fn constrained_node_count() -> usize {
+    let node_count: usize = kani::any();
+    kani::assume(node_count <= MAX_NODES);
+    node_count
+}
+
 /// Materialises a concrete `Vec<SimilarityEdge>` from a symbolic fixed-size
 /// array, constraining each active edge to the production contract established
 /// by `build_similarity_edges`.
@@ -56,9 +66,7 @@ fn constrained_edges(node_count: usize) -> Vec<SimilarityEdge> {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_length() {
-    let node_count: usize = kani::any();
-    kani::assume(node_count <= MAX_NODES);
-
+    let node_count = constrained_node_count();
     let edges = constrained_edges(node_count);
     let adjacency = build_adjacency(node_count, &edges);
 
@@ -69,8 +77,8 @@ fn verify_build_adjacency_length() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_preserves_edges() {
-    let node_count: usize = kani::any();
-    kani::assume(node_count > 0 && node_count <= MAX_NODES);
+    let node_count = constrained_node_count();
+    kani::assume(node_count > 0);
 
     let edges = constrained_edges(node_count);
     let adjacency = build_adjacency(node_count, &edges);
@@ -93,9 +101,7 @@ fn verify_build_adjacency_preserves_edges() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_indices_in_bounds() {
-    let node_count: usize = kani::any();
-    kani::assume(node_count <= MAX_NODES);
-
+    let node_count = constrained_node_count();
     let edges = constrained_edges(node_count);
     let adjacency = build_adjacency(node_count, &edges);
 
@@ -112,8 +118,8 @@ fn verify_build_adjacency_indices_in_bounds() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_symmetry() {
-    let node_count: usize = kani::any();
-    kani::assume(node_count > 0 && node_count <= MAX_NODES);
+    let node_count = constrained_node_count();
+    kani::assume(node_count > 0);
 
     let edges = constrained_edges(node_count);
     let adjacency = build_adjacency(node_count, &edges);
@@ -136,9 +142,7 @@ fn verify_build_adjacency_symmetry() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_sorted_neighbours() {
-    let node_count: usize = kani::any();
-    kani::assume(node_count <= MAX_NODES);
-
+    let node_count = constrained_node_count();
     let edges = constrained_edges(node_count);
     let adjacency = build_adjacency(node_count, &edges);
 

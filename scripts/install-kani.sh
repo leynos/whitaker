@@ -65,9 +65,11 @@ if [ ! -d "${install_dir}/toolchain" ]; then
     printf 'Installing Kani toolchain %s via rustup ...\n' "${toolchain_tag}" >&2
     rustup toolchain install "${toolchain_tag}" \
         --component rustc-dev,rust-src,rustfmt >&2
+    # Extract the path from the last field, handling both default and non-default toolchains.
+    # When a toolchain is the default, rustup inserts "(default)" before the path.
     toolchain_dir=$(rustup toolchain list -v \
         | grep "${toolchain_tag}" \
-        | awk '{print $2}')
+        | awk '{print $NF}')
     ln -sf "${toolchain_dir}" "${install_dir}/toolchain"
 fi
 

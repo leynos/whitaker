@@ -56,17 +56,20 @@ impl AdjacencyReport {
 
     /// Returns the neighbour list for `node`, sorted by neighbour index.
     ///
+    /// Returns `None` if `node` is out of range.
+    ///
     /// ```rust
     /// use common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
     /// let report = adjacency_report(3, &[
     ///     EdgeInput { left: 0, right: 2, weight: 7 },
     /// ]).expect("valid input");
-    /// assert_eq!(report.neighbours_of(0), &[(2, 7)]);
+    /// assert_eq!(report.neighbours_of(0), Some(&[(2, 7)][..]));
+    /// assert_eq!(report.neighbours_of(10), None);
     /// ```
     #[must_use]
-    pub fn neighbours_of(&self, node: usize) -> &[(usize, u64)] {
-        &self.neighbours[node]
+    pub fn neighbours_of(&self, node: usize) -> Option<&[(usize, u64)]> {
+        self.neighbours.get(node).map(Vec::as_slice)
     }
 
     /// Returns `true` if all neighbour indices are within bounds.

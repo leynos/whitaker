@@ -92,7 +92,9 @@ fn then_build_is_rejected(world: &AdjacencyWorld) -> Result<(), String> {
 #[then("node {node} has no neighbours")]
 fn then_node_has_no_neighbours(world: &AdjacencyWorld, node: usize) -> Result<(), String> {
     with_report(world, |report| {
-        let neighbours = report.neighbours_of(node);
+        let neighbours = report
+            .neighbours_of(node)
+            .ok_or_else(|| format!("node {node} is out of bounds"))?;
         if neighbours.is_empty() {
             Ok(())
         } else {
@@ -104,7 +106,9 @@ fn then_node_has_no_neighbours(world: &AdjacencyWorld, node: usize) -> Result<()
 #[then("the neighbours of node {node} are sorted")]
 fn then_neighbours_of_node_are_sorted(world: &AdjacencyWorld, node: usize) -> Result<(), String> {
     with_report(world, |report| {
-        let neighbours = report.neighbours_of(node);
+        let neighbours = report
+            .neighbours_of(node)
+            .ok_or_else(|| format!("node {node} is out of bounds"))?;
         let is_sorted = neighbours.windows(2).all(|pair| pair[0].0 <= pair[1].0);
         if is_sorted {
             Ok(())
