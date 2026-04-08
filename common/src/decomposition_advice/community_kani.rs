@@ -62,13 +62,21 @@ fn constrained_edges(node_count: usize) -> Vec<SimilarityEdge> {
     edges
 }
 
+/// Returns `(node_count, edges, adjacency)` from a fully constrained symbolic
+/// model. Harnesses that need `node_count > 0` must apply that assumption
+/// on the returned value after calling this helper.
+fn symbolic_adjacency() -> (usize, Vec<SimilarityEdge>, Vec<Vec<(usize, u64)>>) {
+    let node_count = constrained_node_count();
+    let edges = constrained_edges(node_count);
+    let adjacency = build_adjacency(node_count, &edges);
+    (node_count, edges, adjacency)
+}
+
 /// Verifies that `build_adjacency` returns exactly `node_count` buckets.
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_length() {
-    let node_count = constrained_node_count();
-    let edges = constrained_edges(node_count);
-    let adjacency = build_adjacency(node_count, &edges);
+    let (node_count, _edges, adjacency) = symbolic_adjacency();
 
     assert!(adjacency.len() == node_count);
 }
@@ -77,11 +85,8 @@ fn verify_build_adjacency_length() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_preserves_edges() {
-    let node_count = constrained_node_count();
+    let (node_count, edges, adjacency) = symbolic_adjacency();
     kani::assume(node_count > 0);
-
-    let edges = constrained_edges(node_count);
-    let adjacency = build_adjacency(node_count, &edges);
 
     for edge in &edges {
         let forward_found = adjacency[edge.left]
@@ -101,9 +106,7 @@ fn verify_build_adjacency_preserves_edges() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_indices_in_bounds() {
-    let node_count = constrained_node_count();
-    let edges = constrained_edges(node_count);
-    let adjacency = build_adjacency(node_count, &edges);
+    let (node_count, _edges, adjacency) = symbolic_adjacency();
 
     for bucket in &adjacency {
         for &(neighbour, _weight) in bucket {
@@ -118,11 +121,8 @@ fn verify_build_adjacency_indices_in_bounds() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_symmetry() {
-    let node_count = constrained_node_count();
+    let (node_count, _edges, adjacency) = symbolic_adjacency();
     kani::assume(node_count > 0);
-
-    let edges = constrained_edges(node_count);
-    let adjacency = build_adjacency(node_count, &edges);
 
     for (node, bucket) in adjacency.iter().enumerate() {
         for &(neighbour, weight) in bucket {
@@ -142,9 +142,7 @@ fn verify_build_adjacency_symmetry() {
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_sorted_neighbours() {
-    let node_count = constrained_node_count();
-    let edges = constrained_edges(node_count);
-    let adjacency = build_adjacency(node_count, &edges);
+    let (_node_count, _edges, adjacency) = symbolic_adjacency();
 
     for bucket in &adjacency {
         for window in bucket.windows(2) {
