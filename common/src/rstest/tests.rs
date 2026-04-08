@@ -32,6 +32,28 @@ fn detects_strict_rstest_tests(#[case] path: &str, #[case] expected: bool) {
 }
 
 #[rstest]
+#[case::rstest("rstest", true)]
+#[case::qualified("rstest::rstest", true)]
+#[case::plain_test("test", false)]
+#[case::tokio("tokio::test", false)]
+#[case::case("case", false)]
+#[case::fixture("rstest::fixture", false)]
+fn detects_strict_rstest_tests_with_multiple_attributes(
+    #[case] path: &str,
+    #[case] expected: bool,
+) {
+    // non-rstest attribute preceding the rstest-related attribute
+    assert_eq!(is_rstest_test(&[outer("allow"), outer(path)]), expected);
+    // non-rstest attribute following the rstest-related attribute
+    assert_eq!(is_rstest_test(&[outer(path), outer("allow")]), expected);
+    // multiple non-rstest attributes surrounding the rstest-related attribute
+    assert_eq!(
+        is_rstest_test(&[outer("allow"), outer(path), outer("warn")]),
+        expected
+    );
+}
+
+#[rstest]
 #[case::fixture("fixture", true)]
 #[case::qualified("rstest::fixture", true)]
 #[case::rstest("rstest", false)]
@@ -69,6 +91,37 @@ fn classifies_provider_parameters(#[case] path: &str) {
     assert_eq!(
         classify_rstest_parameter(&parameter, &RstestDetectionOptions::default()),
         RstestParameterKind::Provider
+    );
+}
+
+#[rstest]
+fn classifies_custom_provider_parameters() {
+    let parameter = provider_parameter("custom::provider");
+    let options = RstestDetectionOptions::new(
+        vec![
+            AttributePath::from("custom::provider"),
+            AttributePath::from("another::custom"),
+        ],
+        false,
+    );
+
+    assert_eq!(
+        classify_rstest_parameter(&parameter, &options),
+        RstestParameterKind::Provider
+    );
+}
+
+#[rstest]
+fn rejects_unknown_custom_provider_parameters() {
+    let parameter = provider_parameter("unknown::provider");
+    let options = RstestDetectionOptions::new(vec![AttributePath::from("custom::provider")], false);
+
+    // Should classify as fixture local since it's not in the custom provider list
+    assert_eq!(
+        classify_rstest_parameter(&parameter, &options),
+        RstestParameterKind::FixtureLocal {
+            name: "value".to_string()
+        }
     );
 }
 
@@ -114,6 +167,53 @@ fn honours_fixture_trace_when_fallback_is_enabled() {
         &[outer("allow")],
         Some(&trace),
         &options,
+    ));
+}
+
+#[rstest]
+fn honours_multi_frame_test_trace() {
+    let trace = ExpansionTrace::new([
+        AttributePath::from("outer_macro"),
+        AttributePath::from("rstest"),
+    ]);
+    let options = RstestDetectionOptions::new(Vec::new(), true);
+
+    assert!(is_rstest_test_with(
+        &[outer("allow")],
+        Some(&trace),
+        &options
+    ));
+}
+
+#[rstest]
+fn honours_multi_frame_fixture_trace() {
+    let trace = ExpansionTrace::new([
+        AttributePath::from("outer_macro"),
+        AttributePath::from("fixture"),
+    ]);
+    let options = RstestDetectionOptions::new(Vec::new(), true);
+
+    assert!(is_rstest_fixture_with(
+        &[outer("allow")],
+        Some(&trace),
+        &options,
+    ));
+}
+
+#[rstest]
+fn honours_deeply_nested_test_trace() {
+    let trace = ExpansionTrace::new([
+        AttributePath::from("macro_a"),
+        AttributePath::from("macro_b"),
+        AttributePath::from("macro_c"),
+        AttributePath::from("rstest::rstest"),
+    ]);
+    let options = RstestDetectionOptions::new(Vec::new(), true);
+
+    assert!(is_rstest_test_with(
+        &[outer("allow")],
+        Some(&trace),
+        &options
     ));
 }
 

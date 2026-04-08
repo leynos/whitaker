@@ -42,6 +42,17 @@ impl DetectionWorld {
             .replace(ExpansionTrace::new([AttributePath::from(path)]));
     }
 
+    fn set_multi_frame_trace(&self, paths: &[&str]) {
+        self.trace.borrow_mut().replace(ExpansionTrace::new(
+            paths.iter().map(|p| AttributePath::from(*p)),
+        ));
+    }
+
+    fn add_custom_provider_attributes(&self, paths: Vec<AttributePath>) {
+        self.options
+            .replace(RstestDetectionOptions::new(paths, false));
+    }
+
     fn enable_trace_fallback(&self) {
         let provider_paths = self.options.borrow().provider_param_attributes().to_vec();
         self.options
@@ -132,6 +143,33 @@ fn given_trace(world: &DetectionWorld) {
 #[given("expansion fallback is enabled")]
 fn given_fallback_enabled(world: &DetectionWorld) {
     world.enable_trace_fallback();
+}
+
+#[given("a function annotated with rstest and allow")]
+fn given_rstest_and_allow(world: &DetectionWorld) {
+    world.push_attribute("rstest");
+    world.push_attribute("allow");
+}
+
+#[given("a parameter annotated with a custom provider attribute")]
+fn given_custom_provider_parameter(world: &DetectionWorld) {
+    world.set_parameter(RstestParameter::new(
+        ParameterBinding::Ident("custom_value".to_string()),
+        vec![Attribute::new(
+            AttributePath::from("custom::provider"),
+            AttributeKind::Outer,
+        )],
+    ));
+}
+
+#[given("custom provider attributes are configured")]
+fn given_custom_provider_config(world: &DetectionWorld) {
+    world.add_custom_provider_attributes(vec![AttributePath::from("custom::provider")]);
+}
+
+#[given("the expansion trace contains outer_macro and rstest")]
+fn given_multi_frame_trace(world: &DetectionWorld) {
+    world.set_multi_frame_trace(&["outer_macro", "rstest"]);
 }
 
 #[when("I check whether the function is an rstest test")]
@@ -234,5 +272,20 @@ fn scenario_ignores_trace_without_fallback(world: DetectionWorld) {
 
 #[scenario(path = "tests/features/rstest_detection.feature", index = 6)]
 fn scenario_uses_trace_with_fallback(world: DetectionWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/rstest_detection.feature", index = 7)]
+fn scenario_detects_rstest_with_multiple_attributes(world: DetectionWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/rstest_detection.feature", index = 8)]
+fn scenario_classifies_custom_provider_parameters(world: DetectionWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/rstest_detection.feature", index = 9)]
+fn scenario_uses_multi_frame_traces(world: DetectionWorld) {
     let _ = world;
 }

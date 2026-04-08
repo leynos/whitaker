@@ -36,3 +36,20 @@ Feature: Strict rstest detection
     And expansion fallback is enabled
     When I check whether the function is an rstest test
     Then the function is recognised as an rstest test
+
+  Scenario: Detect rstest test with multiple attributes
+    Given a function annotated with rstest and allow
+    When I check whether the function is an rstest test
+    Then the function is recognised as an rstest test
+
+  Scenario: Classify custom provider parameters
+    Given a parameter annotated with a custom provider attribute
+    And custom provider attributes are configured
+    When I classify the parameter
+    Then the parameter is classified as provider-driven
+
+  Scenario: Use multi-frame expansion traces
+    Given the expansion trace contains outer_macro and rstest
+    And expansion fallback is enabled
+    When I check whether the function is an rstest test
+    Then the function is recognised as an rstest test
