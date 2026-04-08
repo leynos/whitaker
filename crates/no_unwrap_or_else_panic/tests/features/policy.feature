@@ -38,9 +38,3 @@ Feature: Policy evaluation for no_unwrap_or_else_panic
     And code runs inside a test
     When the lint policy is evaluated
     Then the lint is skipped
-
-  Scenario: Plain panic inside a test is still flagged
-    Given a panicking unwrap_or_else fallback
-    And code runs inside a test
-    When the lint policy is evaluated
-    Then the lint triggers

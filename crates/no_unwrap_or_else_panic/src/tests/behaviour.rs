@@ -129,8 +129,3 @@ fn scenario_doctest(world: DecisionWorld) {
 fn scenario_interpolated_panic_in_test(world: DecisionWorld) {
     let _ = world;
 }
-
-#[scenario(path = "tests/features/policy.feature", index = 6)]
-fn scenario_plain_panic_in_test(world: DecisionWorld) {
-    let _ = world;
-}

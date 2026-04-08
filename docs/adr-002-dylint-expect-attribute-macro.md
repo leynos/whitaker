@@ -27,8 +27,8 @@ noise in normal builds because:
 - `rustc` does not know Dylint-defined lint names during ordinary compilation,
   so it can emit `unknown_lints` diagnostics.
 - The recommended Dylint gating mechanism uses `cfg_attr(dylint_lib = "…", …)`,
-  but toolchains can emit `unexpected_cfgs` diagnostics for unknown cfg
-  keys/values when `check-cfg` validation is enabled.
+  but toolchains can emit `unexpected_cfgs` diagnostics for unknown
+  configuration (`cfg`) keys/values when `check-cfg` validation is enabled.
 
 The project needs an ergonomic, consistent, and low-friction mechanism for
 annotating items with conditional Dylint `expect` semantics that:
