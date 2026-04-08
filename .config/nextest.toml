@@ -26,7 +26,12 @@ serial-toolchain-installs = { max-threads = 1 }
 # can briefly hold a handle on the file, causing the rename to fail with
 # "Access is denied (os error 5)".  Retrying with back-off is the standard
 # mitigation for this class of transient failure.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui)"
+#
+# The final clause `(binary(ui) & test(=ui))` catches crates whose test
+# integration binary is `tests/ui.rs` with a top-level `fn ui()` — the test
+# name reported to nextest is plain `ui`, not `ui::ui`, so the substring
+# match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
