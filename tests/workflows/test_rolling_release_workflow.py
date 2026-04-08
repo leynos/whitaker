@@ -236,6 +236,12 @@ def test_restore_step_guards_against_missing_dependency_assets(
     assert "gh release download rolling" in run_script, (
         "restore step must still download assets when they are present"
     )
+    assert run_script.index("gh release view rolling") < run_script.index(
+        "gh release download rolling"
+    ), (
+        "restore step must probe the rolling release assets before attempting "
+        "to download them"
+    )
 
     # The guard must use an archive-specific predicate (.tgz/.zip) so that
     # checksum-only releases do not falsely trigger a download attempt.
