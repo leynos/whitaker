@@ -243,13 +243,19 @@ def test_restore_step_guards_against_missing_dependency_assets(
         "to download them"
     )
 
-    # The guard must use an archive-specific predicate (.tgz/.zip) so that
-    # checksum-only releases do not falsely trigger a download attempt.
-    assert re.search(r"\*\.tgz", run_script), (
-        "restore step guard must check for .tgz archive extensions"
+    # The guard must use a case-based control flow to filter archives by
+    # extension, ensuring checksum-only releases do not falsely trigger
+    # a download attempt.
+    assert re.search(r"case\s+[\"']?\$", run_script), (
+        "restore step must use a case statement to filter asset names by "
+        "extension pattern"
     )
-    assert re.search(r"\*\.zip", run_script), (
-        "restore step guard must check for .zip archive extensions"
+    assert re.search(
+        r"\*\.tgz\s*\|\s*\*\.zip\s*\)",
+        run_script,
+    ), (
+        "restore step case guard must check for .tgz and .zip archive "
+        "extensions specifically"
     )
 
     # The guard must exit 0 when no dependency assets are found rather than
@@ -260,9 +266,14 @@ def test_restore_step_guards_against_missing_dependency_assets(
 
     # Only release-not-found errors are benign; auth/network/API failures
     # must propagate so incomplete releases are not silently published.
-    assert "release not found" in run_script.lower(), (
-        "restore step must specifically match the 'release not found' error "
-        "rather than swallowing all gh failures"
+    assert re.search(
+        r"grep\s+.*\s+[\"'](release not found|no releases? found|404)",
+        run_script,
+        re.IGNORECASE,
+    ), (
+        "restore step must use grep to specifically match missing-release "
+        "errors (release not found, no releases found, 404) rather than "
+        "swallowing all gh failures"
     )
     assert "exit 1" in run_script, (
         "restore step must fail on unexpected gh errors (auth, network, API)"
