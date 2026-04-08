@@ -2,49 +2,13 @@
 
 use whitaker_sarif::{WHITAKER_FRAGMENT_KEY, WHK002_ID, WhitakerProperties};
 
-use crate::{Fingerprint, FragmentId, NormProfile};
+use crate::{Fingerprint, NormProfile};
 
 use super::{
-    AcceptedPair, SimilarityRatio, TokenFragment, TokenPassConfig, emit_run0,
+    AcceptedPair, SimilarityRatio, emit_run0,
     score::jaccard_similarity,
+    test_helpers::{FragmentInput, config, fingerprint, fragment, pair},
 };
-
-struct FragmentInput<'a> {
-    id: &'a str,
-    profile: NormProfile,
-    file_uri: &'a str,
-    source_text: &'a str,
-    hashes: &'a [(u64, std::ops::Range<usize>)],
-}
-
-fn fingerprint(hash: u64, range: std::ops::Range<usize>) -> Fingerprint {
-    Fingerprint::new(hash, range)
-}
-
-fn fragment(input: FragmentInput<'_>) -> TokenFragment {
-    TokenFragment::new(
-        FragmentId::from(input.id),
-        input.profile,
-        input.file_uri,
-        input.source_text,
-    )
-    .with_retained_fingerprints(
-        input
-            .hashes
-            .iter()
-            .map(|(hash, range)| fingerprint(*hash, range.clone()))
-            .collect(),
-    )
-}
-
-fn pair(left: &str, right: &str) -> crate::CandidatePair {
-    crate::CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-        .unwrap_or_else(|| panic!("pair `{left}` and `{right}` must be distinct"))
-}
-
-fn config() -> TokenPassConfig {
-    TokenPassConfig::new("whitaker_clones_cli@token", env!("CARGO_PKG_VERSION"))
-}
 
 #[test]
 fn duplicate_hashes_do_not_inflate_jaccard_score() {

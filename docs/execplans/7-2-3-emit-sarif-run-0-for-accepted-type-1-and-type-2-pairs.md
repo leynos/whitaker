@@ -26,7 +26,7 @@ Observable outcome:
 2. Accepted Type-1 pairs produce `WHK001` results, and accepted Type-2 pairs
    produce `WHK002` results.
 3. Each emitted result carries deterministic `message`, `locations`,
-   `relatedLocations`, `partial_fingerprints`, and Whitaker `properties`.
+   `relatedLocations`, `partialFingerprints`, and Whitaker `properties`.
 4. Unit tests cover happy paths, unhappy paths, threshold boundaries,
    multi-line span conversion, stable ordering, and duplicate suppression.
 5. Behaviour-driven development (BDD) tests using `rstest-bdd` v0.5.0 exercise
@@ -457,7 +457,7 @@ In `emit.rs`:
    - `rule_id = WHK002_ID` for `NormProfile::T2`
    - a stable, human-readable message:
      `Type-{N} clone: {fileA}:{spanA} <-> {fileB}:{spanB} (sim = {score})`
-7. Populate `partial_fingerprints` with at least:
+7. Populate `partialFingerprints` with at least:
    - `whitakerFragment`: stable pair fingerprint used for deduplication
    - `tokenHash`: stable fingerprint derived from the accepted pair's retained
      token hashes

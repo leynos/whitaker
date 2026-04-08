@@ -2,49 +2,15 @@
 
 use whitaker_sarif::{Region, WHK001_ID, WHK002_ID};
 
-use crate::{CandidatePair, Fingerprint, FragmentId, NormProfile};
+use crate::NormProfile;
 
 use super::{
-    AcceptedPair, Run0Error, SimilarityThreshold, TokenFragment, TokenPassConfig,
-    accept_candidate_pairs, emit_run0, score::SimilarityRatio, span::region_for_range,
+    AcceptedPair, Run0Error, SimilarityThreshold, TokenPassConfig, accept_candidate_pairs,
+    emit_run0,
+    score::SimilarityRatio,
+    span::region_for_range,
+    test_helpers::{FragmentInput, config, fragment, pair},
 };
-
-fn fingerprint(hash: u64, range: std::ops::Range<usize>) -> Fingerprint {
-    Fingerprint::new(hash, range)
-}
-
-struct FragmentInput<'a> {
-    id: &'a str,
-    profile: NormProfile,
-    file_uri: &'a str,
-    source_text: &'a str,
-    hashes: &'a [(u64, std::ops::Range<usize>)],
-}
-
-fn fragment(input: FragmentInput<'_>) -> TokenFragment {
-    TokenFragment::new(
-        FragmentId::from(input.id),
-        input.profile,
-        input.file_uri,
-        input.source_text,
-    )
-    .with_retained_fingerprints(
-        input
-            .hashes
-            .iter()
-            .map(|(hash, range)| fingerprint(*hash, range.clone()))
-            .collect(),
-    )
-}
-
-fn pair(left: &str, right: &str) -> CandidatePair {
-    CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-        .unwrap_or_else(|| panic!("pair `{left}` and `{right}` must be distinct"))
-}
-
-fn config() -> TokenPassConfig {
-    TokenPassConfig::new("whitaker_clones_cli@token", env!("CARGO_PKG_VERSION"))
-}
 
 fn build_pair_and_accept(
     left: FragmentInput<'_>,
