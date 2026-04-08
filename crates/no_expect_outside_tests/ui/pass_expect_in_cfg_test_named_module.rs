@@ -11,7 +11,7 @@ extern crate tokio;
 #[cfg(test)]
 mod check_tests {
     #[tokio::test]
-    fn tokio_expect_in_named_module() {
+    async fn tokio_expect_in_named_module() {
         let option = Some("ok");
         option.expect("cfg(test) module with tokio::test permits expect");
     }

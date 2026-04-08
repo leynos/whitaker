@@ -7,7 +7,7 @@
 //!
 //! `rstest_parametrize` was removed from the `rstest` crate in version 0.5.0
 //! and replaced by the unified `#[rstest]` attribute with `#[case(...)]`.
-//! Whitaker still recognises `rstest_parametrize` in the attribute registry for
+//! Whitaker still recognizes `rstest_parametrize` in the attribute registry for
 //! backwards compatibility with older projects, but this example covers only the
 //! current `#[rstest]` form since rstest 0.26.1 is the declared version.
 //!

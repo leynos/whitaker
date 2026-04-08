@@ -352,9 +352,9 @@ fn is_matching_harness_test_descriptor(
         })
 }
 
-// rstest with #[case] expands into a bare function plus a companion module
-// of the same name containing harness const descriptors. Detect this pattern
-// so the parent function is treated as test-only code.
+/// rstest with #[case] expands into a bare function plus a companion module
+/// of the same name containing harness const descriptors. Detect this pattern
+/// so the parent function is treated as test-only code.
 fn has_companion_test_module<'tcx>(
     cx: &LateContext<'tcx>,
     function_name: Symbol,
@@ -370,12 +370,30 @@ fn has_companion_test_module<'tcx>(
         if mod_ident.name != function_name {
             return false;
         }
-        // The module must contain at least one harness const descriptor to
-        // avoid false positives on non-test modules that happen to share a
-        // function name.
-        module.item_ids.iter().any(|id| {
-            let child = cx.tcx.hir_item(*id);
-            matches!(child.kind, hir::ItemKind::Const(..))
+        // The module must contain test functions with matching harness const
+        // descriptors to distinguish real rstest companion modules from
+        // arbitrary same-named modules.
+        let module_items = module
+            .item_ids
+            .iter()
+            .map(|id| cx.tcx.hir_item(*id))
+            .collect::<Vec<_>>();
+        module_items.iter().any(|child| {
+            if !matches!(child.kind, hir::ItemKind::Fn { .. }) {
+                return false;
+            }
+            let Some(child_ident) = child.kind.ident() else {
+                return false;
+            };
+            // Check if this function has a matching harness const descriptor
+            module_items.iter().any(|sibling| {
+                is_matching_harness_test_descriptor(
+                    child.hir_id(),
+                    child_ident.name,
+                    child.span,
+                    sibling,
+                )
+            })
         })
     })
 }

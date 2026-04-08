@@ -149,7 +149,12 @@ fn has_test_attribute_handles_parsed_attributes() {
 #[case::testing("testing", false)]
 #[case::attest("attest", false)]
 #[case::contest("contest", false)]
-#[case::test_embedded_not_suffix("test_like_utils", true)]
+#[case::test_embedded_not_suffix("test_like_utils", false)]
+#[case::mytest_no_underscore("mytest", false)]
+#[case::mytests_no_underscore("mytests", false)]
+#[case::testx_no_underscore("testx", false)]
+#[case::testsx_no_underscore("testsx", false)]
+#[case::service_tests_helper_extra_tail("service_tests_helper", false)]
 #[case::empty_string("", false)]
 fn has_test_module_name_matches_test_conventions(#[case] name: &str, #[case] expected: bool) {
     assert_eq!(has_test_module_name(name), expected, "name = {name:?}");
