@@ -22,6 +22,7 @@ Run the `act` smoke test:
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from collections.abc import Mapping
 from pathlib import Path
@@ -201,6 +202,81 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
     assert download_step.get("continue-on-error") is True, (
         "download step must continue on error so zero-artefact runs can fall "
         "through to has_assets=false"
+    )
+
+
+def test_restore_step_guards_against_missing_dependency_assets(
+    workflow_text: str,
+) -> None:
+    """Ensure restore step checks for archive assets before downloading.
+
+    The rolling release may contain only lint archives (no .tgz/.zip
+    dependency binary assets) during bootstrapping or when dependency
+    binaries have not yet been published. The restore step must probe the
+    release assets, check specifically for archive file extensions, and
+    skip gracefully rather than failing on a no-match download.
+    """
+    workflow_mapping = _load_workflow_mapping(workflow_text)
+    jobs = _get_job_dict(workflow_mapping, "jobs")
+    publish_job = _get_job_dict(jobs, "publish")
+    restore_step = _find_step_by_name(
+        publish_job.get("steps"),
+        "Restore dependency archives from previous release",
+    )
+    assert restore_step is not None, (
+        "publish job must have a 'Restore dependency archives from previous "
+        "release' step"
+    )
+    run_script = restore_step.get("run", "")
+    assert isinstance(run_script, str), "restore step must have a run script"
+
+    assert "gh release view rolling" in run_script, (
+        "restore step must probe the rolling release assets before downloading"
+    )
+    assert "gh release download rolling" in run_script, (
+        "restore step must still download assets when they are present"
+    )
+    assert run_script.index("gh release view rolling") < run_script.index(
+        "gh release download rolling"
+    ), (
+        "restore step must probe the rolling release assets before attempting "
+        "to download them"
+    )
+
+    # The guard must use a case-based control flow to filter archives by
+    # extension, ensuring checksum-only releases do not falsely trigger
+    # a download attempt.
+    assert re.search(r"case\s+[\"']?\$", run_script), (
+        "restore step must use a case statement to filter asset names by "
+        "extension pattern"
+    )
+    assert re.search(
+        r"\*\.tgz\s*\|\s*\*\.zip\s*\)",
+        run_script,
+    ), (
+        "restore step case guard must check for .tgz and .zip archive "
+        "extensions specifically"
+    )
+
+    # The guard must exit 0 when no dependency assets are found rather than
+    # letting gh release download fail on a no-match pattern.
+    assert "exit 0" in run_script, (
+        "restore step must exit cleanly when no dependency assets are found"
+    )
+
+    # Only release-not-found errors are benign; auth/network/API failures
+    # must propagate so incomplete releases are not silently published.
+    assert re.search(
+        r"grep\s+.*\s+[\"'](release not found|no releases? found|404)",
+        run_script,
+        re.IGNORECASE,
+    ), (
+        "restore step must use grep to specifically match missing-release "
+        "errors (release not found, no releases found, 404) rather than "
+        "swallowing all gh failures"
+    )
+    assert "exit 1" in run_script, (
+        "restore step must fail on unexpected gh errors (auth, network, API)"
     )
 
 
