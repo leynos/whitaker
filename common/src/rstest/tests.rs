@@ -146,75 +146,38 @@ fn ignores_trace_when_fallback_is_disabled() {
     ));
 }
 
-#[rstest]
-fn honours_test_trace_when_fallback_is_enabled() {
-    let trace = ExpansionTrace::new([AttributePath::from("rstest")]);
-    let options = RstestDetectionOptions::new(Vec::new(), true);
-
-    assert!(is_rstest_test_with(
-        &[outer("allow")],
-        Some(&trace),
-        &options
-    ));
-}
+type TraceFallbackDetect =
+    fn(&[Attribute], Option<&ExpansionTrace>, &RstestDetectionOptions) -> bool;
 
 #[rstest]
-fn honours_fixture_trace_when_fallback_is_enabled() {
-    let trace = ExpansionTrace::new([AttributePath::from("fixture")]);
+#[case::single_frame_test(
+    is_rstest_test_with as TraceFallbackDetect,
+    &["rstest"] as &[&str]
+)]
+#[case::multi_frame_test(
+    is_rstest_test_with as TraceFallbackDetect,
+    &["outer_macro", "rstest"]
+)]
+#[case::deeply_nested_test(
+    is_rstest_test_with as TraceFallbackDetect,
+    &["macro_a", "macro_b", "macro_c", "rstest::rstest"]
+)]
+#[case::single_frame_fixture(
+    is_rstest_fixture_with as TraceFallbackDetect,
+    &["fixture"]
+)]
+#[case::multi_frame_fixture(
+    is_rstest_fixture_with as TraceFallbackDetect,
+    &["outer_macro", "fixture"]
+)]
+fn honours_trace_when_fallback_is_enabled(
+    #[case] detect: TraceFallbackDetect,
+    #[case] frame_paths: &[&str],
+) {
+    let trace = ExpansionTrace::new(frame_paths.iter().copied().map(AttributePath::from));
     let options = RstestDetectionOptions::new(Vec::new(), true);
 
-    assert!(is_rstest_fixture_with(
-        &[outer("allow")],
-        Some(&trace),
-        &options,
-    ));
-}
-
-#[rstest]
-fn honours_multi_frame_test_trace() {
-    let trace = ExpansionTrace::new([
-        AttributePath::from("outer_macro"),
-        AttributePath::from("rstest"),
-    ]);
-    let options = RstestDetectionOptions::new(Vec::new(), true);
-
-    assert!(is_rstest_test_with(
-        &[outer("allow")],
-        Some(&trace),
-        &options
-    ));
-}
-
-#[rstest]
-fn honours_multi_frame_fixture_trace() {
-    let trace = ExpansionTrace::new([
-        AttributePath::from("outer_macro"),
-        AttributePath::from("fixture"),
-    ]);
-    let options = RstestDetectionOptions::new(Vec::new(), true);
-
-    assert!(is_rstest_fixture_with(
-        &[outer("allow")],
-        Some(&trace),
-        &options,
-    ));
-}
-
-#[rstest]
-fn honours_deeply_nested_test_trace() {
-    let trace = ExpansionTrace::new([
-        AttributePath::from("macro_a"),
-        AttributePath::from("macro_b"),
-        AttributePath::from("macro_c"),
-        AttributePath::from("rstest::rstest"),
-    ]);
-    let options = RstestDetectionOptions::new(Vec::new(), true);
-
-    assert!(is_rstest_test_with(
-        &[outer("allow")],
-        Some(&trace),
-        &options
-    ));
+    assert!(detect(&[outer("allow")], Some(&trace), &options));
 }
 
 #[rstest]
