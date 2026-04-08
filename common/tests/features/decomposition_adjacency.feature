@@ -10,7 +10,7 @@ Feature: Decomposition adjacency construction
     Then the adjacency is symmetric
     And all neighbour indices are in bounds
 
-  Scenario: Malformed edge input is rejected
+  Scenario: Edges not in canonical order (left < right) are rejected
     Given a graph with 3 nodes
     And an edge from 2 to 1 with weight 5
     When adjacency is built

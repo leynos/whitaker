@@ -541,7 +541,7 @@ further decomposition analysis was omitted.
   `weight > 0`, and no duplicate unordered pairs. The Kani harnesses enforce
   these same `kani::assume` preconditions so the proof covers exactly the
   inputs that production code can generate.
-- **Five separate proof harnesses for failure localisation**: the five
+- **Five separate proof harnesses for failure localization**: the five
   properties (correct length, edge preservation, in-bounds indices, symmetry,
   sorted neighbours) each have a dedicated harness. This simplifies root-cause
   analysis when a single property fails.
