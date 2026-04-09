@@ -64,20 +64,17 @@ pub(crate) fn should_flag(
 }
 
 #[cfg(test)]
-#[allow(clippy::too_many_arguments)]
 mod tests {
     use super::*;
     use rstest::rstest;
 
-    fn summary(is_test: bool, in_main: bool) -> ContextSummary {
-        ContextSummary { is_test, in_main }
-    }
-
-    fn panicking(uses_interpolation: bool) -> PanicInfo {
-        PanicInfo {
-            panics: true,
-            uses_interpolation,
-        }
+    #[derive(Clone, Copy, Debug)]
+    struct PolicyCase {
+        policy: LintPolicy,
+        context: ContextSummary,
+        panic_info: PanicInfo,
+        is_doctest: bool,
+        should_flag: bool,
     }
 
     const SAFE: PanicInfo = PanicInfo {
@@ -85,25 +82,74 @@ mod tests {
         uses_interpolation: false,
     };
 
+    const DEFAULT_POLICY: LintPolicy = LintPolicy::new(false);
+
     #[rstest]
-    #[case::safe_closure(LintPolicy::new(false), summary(false, false), SAFE, false, false)]
-    #[case::panicking_in_production(LintPolicy::new(false), summary(false, false), panicking(false), false, true)]
-    #[case::plain_panic_in_tests(LintPolicy::new(false), summary(true, false), panicking(false), false, true)]
-    #[case::interpolated_panic_in_tests(LintPolicy::new(false), summary(true, false), panicking(true), false, false)]
-    #[case::interpolated_panic_in_production(LintPolicy::new(false), summary(false, false), panicking(true), false, true)]
-    #[case::skips_in_doctests(LintPolicy::new(false), summary(false, false), panicking(false), true, false)]
-    #[case::respects_allow_in_main(LintPolicy::new(true), summary(false, true), panicking(false), false, false)]
-    #[case::flags_main_when_not_allowed(LintPolicy::new(false), summary(false, true), panicking(false), false, true)]
-    fn policy_evaluation(
-        #[case] policy: LintPolicy,
-        #[case] context: ContextSummary,
-        #[case] panic_info: PanicInfo,
-        #[case] is_doctest: bool,
-        #[case] expected: bool,
-    ) {
+    #[case::safe_closure(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: false, in_main: false },
+        panic_info: SAFE,
+        is_doctest: false,
+        should_flag: false,
+    })]
+    #[case::panicking_in_production(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: false, in_main: false },
+        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        is_doctest: false,
+        should_flag: true,
+    })]
+    #[case::plain_panic_in_tests(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: true, in_main: false },
+        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        is_doctest: false,
+        should_flag: true,
+    })]
+    #[case::interpolated_panic_in_tests(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: true, in_main: false },
+        panic_info: PanicInfo { panics: true, uses_interpolation: true },
+        is_doctest: false,
+        should_flag: false,
+    })]
+    #[case::interpolated_panic_in_production(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: false, in_main: false },
+        panic_info: PanicInfo { panics: true, uses_interpolation: true },
+        is_doctest: false,
+        should_flag: true,
+    })]
+    #[case::skips_in_doctests(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: false, in_main: false },
+        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        is_doctest: true,
+        should_flag: false,
+    })]
+    #[case::respects_allow_in_main(PolicyCase {
+        policy: LintPolicy::new(true),
+        context: ContextSummary { is_test: false, in_main: true },
+        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        is_doctest: false,
+        should_flag: false,
+    })]
+    #[case::flags_main_when_not_allowed(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: false, in_main: true },
+        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        is_doctest: false,
+        should_flag: true,
+    })]
+    fn policy_evaluation(#[case] case: PolicyCase) {
         assert_eq!(
-            should_flag(&policy, &context, &panic_info, is_doctest),
-            expected
+            should_flag(
+                &case.policy,
+                &case.context,
+                &case.panic_info,
+                case.is_doctest
+            ),
+            case.should_flag
         );
     }
 }

@@ -88,6 +88,9 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
 /// and source span as each test function. This function scans for those
 /// descriptors to recover test-function identity after the harness has consumed
 /// the original `#[test]` attributes.
+///
+/// Items are grouped by their parent module so that descriptor matching only
+/// considers true siblings, not unrelated items from other modules.
 #[must_use]
 pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
     let root_items: Vec<_> = cx
@@ -95,10 +98,20 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         .hir_crate_items(())
         .free_items()
         .map(|id| cx.tcx.hir_item(id))
+        .filter(|item| is_crate_root_item(cx, item))
         .collect();
     let mut marked = HashSet::new();
     collect_in_item_group(cx, &root_items, &mut marked);
     marked
+}
+
+/// Returns `true` when the item's immediate parent is the crate root rather
+/// than a nested module.
+fn is_crate_root_item(cx: &LateContext<'_>, item: &hir::Item<'_>) -> bool {
+    cx.tcx
+        .hir_parent_iter(item.hir_id())
+        .next()
+        .is_some_and(|(_, node)| matches!(node, hir::Node::Crate(_)))
 }
 
 fn collect_in_item_group<'tcx>(
