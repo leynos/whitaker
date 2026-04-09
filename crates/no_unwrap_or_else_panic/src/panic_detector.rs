@@ -132,12 +132,32 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 ///
 /// In Rust 2021+, even `panic!("static")` routes through `panic_fmt`, so the
 /// def-path alone cannot distinguish interpolation. Instead, this function
-/// walks the call's argument sub-expressions looking for `Arguments::new_v1`
-/// or `Arguments::new_v1_formatted`, which are only used when format arguments
-/// are present.
+/// inspects only the panic message argument (the first argument to the panic
+/// entry point) for `Arguments::new_v1` or `Arguments::new_v1_formatted`,
+/// which are only used when format arguments are present.
+///
+/// The check examines the message argument's call tree for fmt::Arguments
+/// constructors, but only considers calls that are part of the compiler-
+/// generated format_args expansion. This avoids false positives from unrelated
+/// user code like `panic_any(MyType::new_v1())` where `MyType::new_v1()` is
+/// the payload, not a format_args constructor.
 fn panic_args_use_interpolation(expr: &Expr<'_>) -> bool {
+    // Extract the panic message argument (first argument to the panic call).
+    let ExprKind::Call(_, args) = expr.kind else {
+        return false;
+    };
+
+    let Some(message_arg) = args.first() else {
+        return false;
+    };
+
+    // Check if the message argument contains fmt::Arguments runtime constructors.
+    // This walks the expression tree to find nested calls (e.g., inside blocks
+    // from format_args expansion), but only matches calls that represent the
+    // actual format_args construction, not arbitrary user types with similar
+    // method names.
     let mut finder = RuntimeArgsFinder { found: false };
-    rustc_hir::intravisit::walk_expr(&mut finder, expr);
+    rustc_hir::intravisit::walk_expr(&mut finder, message_arg);
     finder.found
 }
 
