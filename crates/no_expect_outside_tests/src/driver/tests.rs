@@ -1,5 +1,6 @@
 //! Unit tests for test attribute detection helpers in the driver module.
 
+use super::test_context::{has_test_module_name, is_test_attribute};
 use super::*;
 use rstest::rstest;
 use rustc_ast::AttrStyle;
@@ -149,7 +150,7 @@ fn has_test_attribute_handles_parsed_attributes() {
 #[case::testing("testing", false)]
 #[case::attest("attest", false)]
 #[case::contest("contest", false)]
-#[case::test_embedded_not_suffix("test_like_utils", false)]
+#[case::test_prefix_multi_segment("test_like_utils", true)]
 #[case::mytest_no_underscore("mytest", false)]
 #[case::mytests_no_underscore("mytests", false)]
 #[case::testx_no_underscore("testx", false)]
