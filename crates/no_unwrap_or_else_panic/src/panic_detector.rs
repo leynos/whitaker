@@ -33,9 +33,6 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["std", "rt", "begin_panic_fmt"],
 ];
 
-/// Method names on `core::fmt::Arguments` that accept runtime format values.
-const FMT_ARGS_RUNTIME_METHODS: &[&str] = &["new_v1", "new_v1_formatted"];
-
 /// Summarises whether a closure contains a panic and whether that panic uses
 /// format-string interpolation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -177,8 +174,7 @@ fn is_fmt_args_runtime_call(callee: &Expr<'_>) -> bool {
     let ExprKind::Path(hir::QPath::TypeRelative(_, segment)) = callee.kind else {
         return false;
     };
-    let name = segment.ident.name.as_str();
-    FMT_ARGS_RUNTIME_METHODS.contains(&name)
+    matches!(segment.ident.name, sym::new_v1 | sym::new_v1_formatted)
 }
 
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {

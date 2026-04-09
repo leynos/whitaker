@@ -6,7 +6,7 @@ use rustc_ast::AttrStyle;
 use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
-use rustc_span::{Span, Symbol};
+use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath};
 
 /// Returns the body span for an inline or file-backed module.
@@ -119,6 +119,23 @@ fn collect_in_item_group<'tcx>(
     items: &[&'tcx hir::Item<'tcx>],
     marked: &mut HashSet<hir::HirId>,
 ) {
+    // First pass: collect harness test descriptors. Descriptors are const items
+    // synthesised by the --test harness with the same name and source-equal span
+    // as their corresponding test functions.
+    let descriptors: Vec<_> = items
+        .iter()
+        .filter_map(|item| {
+            if !matches!(item.kind, hir::ItemKind::Const(..)) {
+                return None;
+            }
+            let ident = item.kind.ident()?;
+            Some((item.hir_id(), ident.name, item.span))
+        })
+        .collect();
+
+    // Second pass: check each function against the descriptor list.
+    // This is O(functions × descriptors) instead of O(items × items), where
+    // typically descriptors.len() << items.len().
     for item in items
         .iter()
         .copied()
@@ -128,8 +145,8 @@ fn collect_in_item_group<'tcx>(
             continue;
         };
 
-        if items.iter().any(|sibling| {
-            is_harness_test_descriptor(item.hir_id(), ident.name, item.span, sibling)
+        if descriptors.iter().any(|&(desc_id, desc_name, desc_span)| {
+            desc_id != item.hir_id() && desc_name == ident.name && desc_span.source_equal(item.span)
         }) {
             marked.insert(item.hir_id());
         }
@@ -154,20 +171,4 @@ fn recurse_into_submodules<'tcx>(
             .collect();
         collect_in_item_group(cx, &module_items, marked);
     }
-}
-
-/// The `--test` harness synthesises a `const` with the same name and source
-/// range as the test function.
-fn is_harness_test_descriptor(
-    fn_hir_id: hir::HirId,
-    fn_name: Symbol,
-    fn_span: Span,
-    sibling: &hir::Item<'_>,
-) -> bool {
-    sibling.hir_id() != fn_hir_id
-        && matches!(sibling.kind, hir::ItemKind::Const(..))
-        && sibling
-            .kind
-            .ident()
-            .is_some_and(|ident| ident.name == fn_name && sibling.span.source_equal(fn_span))
 }
