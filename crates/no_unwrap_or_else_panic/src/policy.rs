@@ -64,6 +64,7 @@ pub(crate) fn should_flag(
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 mod tests {
     use super::*;
     use rstest::rstest;
@@ -85,24 +86,21 @@ mod tests {
     };
 
     #[rstest]
-    #[case::safe_closure(false, false, false, SAFE, false, false)]
-    #[case::panicking_in_production(false, false, false, panicking(false), false, true)]
-    #[case::plain_panic_in_tests(false, true, false, panicking(false), false, true)]
-    #[case::interpolated_panic_in_tests(false, true, false, panicking(true), false, false)]
-    #[case::interpolated_panic_in_production(false, false, false, panicking(true), false, true)]
-    #[case::skips_in_doctests(false, false, false, panicking(false), true, false)]
-    #[case::respects_allow_in_main(true, false, true, panicking(false), false, false)]
-    #[case::flags_main_when_not_allowed(false, false, true, panicking(false), false, true)]
+    #[case::safe_closure(LintPolicy::new(false), summary(false, false), SAFE, false, false)]
+    #[case::panicking_in_production(LintPolicy::new(false), summary(false, false), panicking(false), false, true)]
+    #[case::plain_panic_in_tests(LintPolicy::new(false), summary(true, false), panicking(false), false, true)]
+    #[case::interpolated_panic_in_tests(LintPolicy::new(false), summary(true, false), panicking(true), false, false)]
+    #[case::interpolated_panic_in_production(LintPolicy::new(false), summary(false, false), panicking(true), false, true)]
+    #[case::skips_in_doctests(LintPolicy::new(false), summary(false, false), panicking(false), true, false)]
+    #[case::respects_allow_in_main(LintPolicy::new(true), summary(false, true), panicking(false), false, false)]
+    #[case::flags_main_when_not_allowed(LintPolicy::new(false), summary(false, true), panicking(false), false, true)]
     fn policy_evaluation(
-        #[case] allow_in_main: bool,
-        #[case] is_test: bool,
-        #[case] in_main: bool,
+        #[case] policy: LintPolicy,
+        #[case] context: ContextSummary,
         #[case] panic_info: PanicInfo,
         #[case] is_doctest: bool,
         #[case] expected: bool,
     ) {
-        let policy = LintPolicy::new(allow_in_main);
-        let context = summary(is_test, in_main);
         assert_eq!(
             should_flag(&policy, &context, &panic_info, is_doctest),
             expected

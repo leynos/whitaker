@@ -122,7 +122,14 @@ fn collect_in_item_group<'tcx>(
         }
     }
 
-    // Recurse into submodules.
+    recurse_into_submodules(cx, items, marked);
+}
+
+fn recurse_into_submodules<'tcx>(
+    cx: &LateContext<'tcx>,
+    items: &[&'tcx hir::Item<'tcx>],
+    marked: &mut HashSet<hir::HirId>,
+) {
     for item in items {
         let hir::ItemKind::Mod(_, module) = item.kind else {
             continue;
