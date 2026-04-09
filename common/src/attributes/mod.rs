@@ -15,6 +15,8 @@ pub(super) const TEST_LIKE_PATHS: &[&[&str]] = &[
     &["gpui", "test"],
     &["rstest"],
     &["rstest", "rstest"],
+    &["rstest_parametrize"],
+    &["rstest", "rstest_parametrize"],
     &["case"],
     &["rstest", "case"],
 ];

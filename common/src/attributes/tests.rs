@@ -57,6 +57,8 @@ fn path_is_doc(#[case] path: AttributePath, #[case] expected: bool) {
 #[case::gpui_test("gpui::test", true)]
 #[case::rstest("rstest", true)]
 #[case::rstest_qualified("rstest::rstest", true)]
+#[case::rstest_parametrize("rstest_parametrize", true)]
+#[case::rstest_parametrize_qualified("rstest::rstest_parametrize", true)]
 #[case::case_imported("case", true)]
 #[case::case_qualified("rstest::case", true)]
 #[case::core_prelude_test("core::prelude::v1::test", true)]
