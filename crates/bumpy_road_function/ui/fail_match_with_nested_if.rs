@@ -2,62 +2,67 @@
 //!
 //! This variant uses a match expression with two arms, each containing a nested
 //! conditional block. The two conditional clusters form separated bumps.
-#![expect(dead_code, reason = "UI test fixture; functions are analysed but not invoked")]
 
-use std::path::PathBuf;
+pub mod fixture {
+    use std::path::PathBuf;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Debug,
-    Release,
-}
-
-impl Mode {
-    fn is_debug(self) -> bool {
-        matches!(self, Self::Debug)
+    /// Build configuration mode controlling validation strictness.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    pub enum Mode {
+        /// Run with debug assertions and relaxed key-length checks.
+        Debug,
+        /// Optimized production build with strict validation.
+        Release,
     }
-}
 
-const MIN_LEN: usize = 64;
+    impl Mode {
+        pub(crate) fn is_debug(self) -> bool {
+            matches!(self, Self::Debug)
+        }
+    }
 
-/// Reads key material from disk and applies mode-dependent validation.
-///
-/// The match arms each contain nested conditional blocks, producing two
-/// separated complexity bumps.
-///
-/// ```ignore
-/// key_from_file(Mode::Debug, true);
-/// ```
-pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
-    let path = PathBuf::from("key");
+    const MIN_LEN: usize = 64;
 
-    match std::fs::read(&path) {
-        Ok(mut bytes) => {
-            let length = bytes.len();
-            if mode == Mode::Release && length < MIN_LEN {
+    /// Reads key material from disk and applies mode-dependent validation.
+    ///
+    /// The match arms each contain nested conditional blocks, producing two
+    /// separated complexity bumps.
+    ///
+    /// ```ignore
+    /// key_from_file(Mode::Debug, true);
+    /// ```
+    pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
+        let path = PathBuf::from("key");
+
+        match std::fs::read(&path) {
+            Ok(mut bytes) => {
+                let length = bytes.len();
+                if mode == Mode::Release && length < MIN_LEN {
+                    bytes.fill(0);
+                    return Err(format!(
+                        "key at {} is too short ({length} < {MIN_LEN})",
+                        path.display()
+                    ));
+                }
+                let result = bytes.clone();
                 bytes.fill(0);
-                return Err(format!(
-                    "key at {} is too short ({length} < {MIN_LEN})",
-                    path.display()
-                ));
+                Ok(result)
             }
-            let result = bytes.clone();
-            bytes.fill(0);
-            Ok(result)
-        }
-        Err(error) => {
-            if mode.is_debug() || allow_fallback {
-                Ok(vec![0; MIN_LEN])
-            } else {
-                Err(format!(
-                    "cannot read key from {}: {error}",
-                    path.display()
-                ))
+            Err(error) => {
+                if mode.is_debug() || allow_fallback {
+                    Ok(vec![0; MIN_LEN])
+                } else {
+                    Err(format!(
+                        "cannot read key from {}: {error}",
+                        path.display()
+                    ))
+                }
             }
         }
     }
-}
 
-fn dead_code_fixture_marker() {}
+    #[cfg(any())]
+    fn dead_code_fixture_marker() {}
+}
 
 fn main() {}

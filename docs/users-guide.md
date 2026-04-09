@@ -189,7 +189,7 @@ signal with the configured `window` and only considers peaks spanning at least
 
 ```toml
 [bumpy_road_function]
-threshold = 3.0
+threshold = 2.5
 window = 3
 min_bump_lines = 2
 ```
