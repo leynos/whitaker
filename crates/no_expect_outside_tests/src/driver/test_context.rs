@@ -44,7 +44,7 @@ pub(super) fn is_test_named_module(node: hir::Node<'_>) -> bool {
     let hir::Node::Item(item) = node else {
         return false;
     };
-    let hir::ItemKind::Mod { .. } = item.kind else {
+    let hir::ItemKind::Mod(..) = item.kind else {
         return false;
     };
     let Some(ident) = item.kind.ident() else {
@@ -112,8 +112,11 @@ fn collect_harness_marked_test_functions_in_group<'tcx>(
         // rstest with #[case] generates a companion module sharing the
         // function's name whose children are the actual test cases (with
         // harness const descriptors). Recognize the parent function as
-        // test code when such a companion module exists.
-        if has_companion_test_module(cx, function_name, items) {
+        // test code when it has an rstest attribute AND such a companion
+        // module exists. This avoids false positives from handwritten
+        // functions paired with same-named test modules.
+        let attrs = cx.tcx.hir_attrs(function_hir_id);
+        if has_rstest_attribute(attrs) && has_companion_test_module(cx, function_name, items) {
             harness_marked.insert(function_hir_id);
         }
     }
@@ -198,6 +201,25 @@ fn has_companion_test_module<'tcx>(
 // Check if any attribute is #[test].
 pub(super) fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
     has_test_like_hir_attributes(attrs, &[])
+}
+
+// Check if any attribute is #[rstest] (or variants like #[rstest::rstest]).
+fn has_rstest_attribute(attrs: &[hir::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        let hir::Attribute::Unparsed(_) = attr else {
+            return false;
+        };
+        let path_segments: Vec<String> = attr.path().into_iter().map(|s| s.to_string()).collect();
+        // Match "rstest" or "rstest::rstest"
+        matches!(
+            path_segments
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            ["rstest"] | ["rstest", "rstest"]
+        )
+    })
 }
 
 // Detect source-level test framework attributes.

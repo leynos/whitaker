@@ -1,0 +1,16 @@
+error: Avoid calling expect on `std::option::Option<&str>` outside test-only code.
+  --> $DIR/fail_expect_in_fn_with_test_module.rs:8:5
+   |
+LL |     value.expect("should have value")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The call originates within function `parse` which is not recognised as a test.
+   = help: Handle the `None` variant of `std::option::Option<&str>` or move the code into a test.
+note: the lint level is defined here
+  --> $DIR/fail_expect_in_fn_with_test_module.rs:3:9
+   |
+LL | #![deny(no_expect_outside_tests)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
