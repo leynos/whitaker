@@ -43,11 +43,28 @@ fn parse_hashes(hashes: &str) -> Result<Vec<Fingerprint>, String> {
 }
 
 fn expected_error(name: &str) -> Result<IndexError, String> {
+    if let Some(arguments) = name
+        .strip_prefix("InvalidBandRowProduct(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        let Some((bands, rows)) = arguments.split_once(',') else {
+            return Err(format!(
+                "invalid InvalidBandRowProduct arguments `{arguments}`"
+            ));
+        };
+        let bands = bands
+            .parse::<usize>()
+            .map_err(|error| format!("invalid bands value `{bands}`: {error}"))?;
+        let rows = rows
+            .parse::<usize>()
+            .map_err(|error| format!("invalid rows value `{rows}`: {error}"))?;
+        return Ok(IndexError::invalid_band_row_product(bands, rows));
+    }
+
     match name {
         "ZeroBands" => Ok(IndexError::ZeroBands),
         "ZeroRows" => Ok(IndexError::ZeroRows),
         "EmptyFingerprintSet" => Ok(IndexError::EmptyFingerprintSet),
-        "InvalidBandRowProduct" => Ok(IndexError::invalid_band_row_product(0, 0)),
         other => Err(format!("unknown error name `{other}`")),
     }
 }
@@ -168,5 +185,15 @@ fn scenario_invalid_lsh_settings(world: MinHashLshWorld) {
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 4)]
 fn scenario_empty_fingerprints(world: MinHashLshWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/min_hash_lsh.feature", index = 5)]
+fn scenario_zero_rows(world: MinHashLshWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/min_hash_lsh.feature", index = 6)]
+fn scenario_invalid_non_zero_product(world: MinHashLshWorld) {
     let _ = world;
 }

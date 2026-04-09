@@ -5,14 +5,44 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
 VERUS_INSTALL_DIR=$("${SCRIPT_DIR}/install-verus.sh")
 VERUS_BIN="${VERUS_INSTALL_DIR}/verus"
-PROOF_FILES=(
-    "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs"
-    "${REPO_ROOT}/verus/decomposition_vector_algebra.rs"
-)
+
+proof_files_for_group() {
+    case "$1" in
+        decomposition)
+            printf '%s\n' \
+                "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs" \
+                "${REPO_ROOT}/verus/decomposition_vector_algebra.rs"
+            ;;
+        clone-detector)
+            printf '%s\n' \
+                "${REPO_ROOT}/verus/clone_detector_lsh_config.rs"
+            ;;
+        all)
+            printf '%s\n' \
+                "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs" \
+                "${REPO_ROOT}/verus/decomposition_vector_algebra.rs" \
+                "${REPO_ROOT}/verus/clone_detector_lsh_config.rs"
+            ;;
+        *)
+            printf 'unknown Verus proof group: %s\n' "$1" >&2
+            exit 1
+            ;;
+    esac
+}
+
+PROOF_FILES=($(proof_files_for_group all))
 
 if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
-    PROOF_FILES=("$1")
-    shift
+    case "$1" in
+        all|decomposition|clone-detector)
+            PROOF_FILES=($(proof_files_for_group "$1"))
+            shift
+            ;;
+        *)
+            PROOF_FILES=("$1")
+            shift
+            ;;
+    esac
 fi
 
 for proof_file in "${PROOF_FILES[@]}"; do

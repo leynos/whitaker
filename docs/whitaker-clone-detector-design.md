@@ -518,6 +518,39 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    and repeated collisions across multiple bands still produce one stable
    `CandidatePair`.
 
+## Implementation decisions (7.2.4 and 7.2.5)
+
+1. **Split proof workflow by responsibility.** Clone-detector constructor
+   semantics use Verus, while bounded runtime smoke checks use Kani. Ordinary
+   unit tests and `rstest-bdd` scenarios remain the first regression net for
+   `LshConfig::new`.
+
+2. **Sidecar proof entry points stay outside the default Cargo path.** The
+   repository now exposes `make verus-clone-detector` and
+   `make kani-clone-detector`, backed by `scripts/run-verus.sh`,
+   `scripts/install-kani.sh`, and `scripts/run-kani.sh`. The umbrella
+   `make verus` target runs all Verus proofs, while `make kani` currently runs
+   the practical clone-detector Kani harness set and leaves room for future
+   bounded checks.
+
+3. **`LshConfig::new` contract is proved semantically, not by modelling
+   internals.** The Verus proof file models acceptance directly as `bands > 0`,
+   `rows > 0`, and `bands * rows == MINHASH_SIZE`. This avoids coupling the
+   proof to `NonZeroUsize` representation details while keeping the contract
+   aligned with the runtime constructor.
+
+4. **Kani harnesses stay adjacent to the index code under `cfg(kani)`.**
+   `crates/whitaker_clones_core/src/index/kani.rs` calls the real
+   `LshConfig::new` constructor, uses small bounded symbolic inputs, and
+   asserts the returned configuration or typed `IndexError` matches the same
+   runtime contract documented above. The crate explicitly allows `cfg(kani)`
+   in its `unexpected_cfgs` configuration so normal builds stay quiet.
+
+5. **Overflow remains an invalid-product rejection, not a special public API.**
+   Runtime validation still relies on `checked_mul`; large values such as
+   `usize::MAX` with `rows = 2` return `IndexError::InvalidBandRowProduct`
+   rather than panicking or widening the public API with proof-specific helpers.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates

@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus kani
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus kani verus-clone-detector kani kani-clone-detector
 
 APP ?= whitaker-installer
 CARGO ?= cargo
@@ -121,8 +121,14 @@ typecheck:
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh
 
-kani: ## Run the pinned Kani bounded model checker
+verus-clone-detector: ## Run clone-detector Verus proofs
+	./scripts/run-verus.sh clone-detector
+
+kani: ## Run practical Kani sidecar harnesses
 	./scripts/run-kani.sh
+
+kani-clone-detector: ## Run clone-detector Kani harnesses
+	./scripts/run-kani.sh clone-detector
 
 install-smoke: ## Install whitaker-installer and verify basic functionality
 	set -eu; \

@@ -343,10 +343,10 @@
   fingerprints and spans. See
   [clone detector design](whitaker-clone-detector-design.md) §SARIF emission
   (Run 0). Requires 7.1.1.
-- [ ] 7.2.4. Add sidecar proof workflows and Makefile targets for clone-detector
+- [x] 7.2.4. Add sidecar proof workflows and Makefile targets for clone-detector
   Verus and Kani checks. Requires 7.2.2. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md).
-- [ ] 7.2.5. Use Verus to prove `LshConfig::new` rejects zero `bands` and
+- [x] 7.2.5. Use Verus to prove `LshConfig::new` rejects zero `bands` and
   `rows`, and enforces `bands * rows == MINHASH_SIZE`. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.

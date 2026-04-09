@@ -72,6 +72,7 @@ import re
 import sys
 
 contents = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+contents = re.sub(r"\x1b\[[0-9;]*m", "", contents)
 match = re.search(r"rustup install ([^\s]+)", contents)
 if match is not None:
     print(match.group(1))

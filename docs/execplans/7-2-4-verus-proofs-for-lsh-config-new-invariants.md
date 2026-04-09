@@ -4,10 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT (awaiting approval)
-
-Approval gate: this plan must be approved before implementation begins. Do not
-start Stage B until the user explicitly approves this document.
+Status: IN PROGRESS
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -147,20 +144,22 @@ Observable outcome:
 
 - [x] Stage A: Gather repository context and draft this ExecPlan
   (2026-04-08).
-- [ ] Stage B: Add clone-detector proof sidecar tooling and `Makefile`
-  targets.
-- [ ] Stage C: Add or extend failing unit tests for `LshConfig::new` happy,
-  unhappy, and edge cases.
-- [ ] Stage D: Extend `rstest-bdd` coverage for `LshConfig` configuration
-  outcomes.
-- [ ] Stage E: Add the Verus proof for `LshConfig::new` invariants.
-- [ ] Stage F: Add the minimal Kani smoke harness needed to make the
-  clone-detector Kani target observable.
-- [ ] Stage G: Update the clone-detector design document and mark roadmap
-  items 7.2.4 and 7.2.5 done.
-- [ ] Stage H: Run documentation, proof, lint, and test gates successfully.
-- [ ] Stage I: Finalize the living sections in this ExecPlan after the
-  implementation turn.
+- [x] Stage B: Add clone-detector proof sidecar tooling and `Makefile`
+  targets (2026-04-09).
+- [x] Stage C: Add or extend failing unit tests for `LshConfig::new` happy,
+  unhappy, and edge cases (2026-04-09).
+- [x] Stage D: Extend `rstest-bdd` coverage for `LshConfig` configuration
+  outcomes (2026-04-09).
+- [x] Stage E: Add the Verus proof for `LshConfig::new` invariants
+  (2026-04-09).
+- [x] Stage F: Add the minimal Kani smoke harness needed to make the
+  clone-detector Kani target observable (2026-04-09).
+- [x] Stage G: Update the clone-detector design document and mark roadmap
+  items 7.2.4 and 7.2.5 done (2026-04-09).
+- [x] Stage H: Run documentation, proof, lint, and test gates successfully
+  (2026-04-09).
+- [x] Stage I: Finalize the living sections in this ExecPlan after the
+  implementation turn (2026-04-09).
 
 ## Surprises & Discoveries
 
@@ -193,6 +192,16 @@ Observable outcome:
   local Kani target from heavier exhaustive runs, and use documented
   `kani::assume` guards plus explicit unwind limits to keep solver work
   tractable.
+- `leta` was not stable in this workspace during this turn.
+  `Connection reset by peer` / `EOF while parsing a value` appeared, so the
+  implementation used direct file inspection instead of semantic navigation.
+- `cargo search kani-verifier` resolved `kani-verifier = "0.67.0"` during the
+  implementation turn, and the sidecar installer now pins that release unless
+  the environment overrides it explicitly.
+- The shared Verus installer needed one extra hardening step during validation:
+  Verus printed an ANSI-coloured `rustup install 1.94.0-x86_64-unknown-linux-gnu`
+  hint, so `scripts/install-verus.sh` had to strip ANSI escape codes before
+  extracting the fallback toolchain suggestion.
 
 ## Decision Log
 
@@ -219,6 +228,11 @@ Observable outcome:
   Kani target should be a practical local smoke gate with small bounds; any
   heavier `kani-full` style target should remain a future extension once 7.2.7
   and 7.2.8 add broader bounded checks. Date/Author: 2026-04-08 / Codex.
+- Decision: fix the shared Verus installer while implementing the clone-detector
+  proof workflow. Rationale: `make verus-clone-detector` and `make verus`
+  both depend on the same parser, so the ANSI-coloured toolchain hint had to
+  be normalized centrally rather than papered over in the new target.
+  Date/Author: 2026-04-09 / Codex.
 
 ## Context and orientation
 
@@ -566,8 +580,18 @@ all of the following from a fresh checkout after reading this ExecPlan:
 
 ## Outcomes & Retrospective
 
-This section is intentionally blank during the draft phase. At the end of the
-implementation turn, replace this paragraph with a concise retrospective that
-records what shipped, what changed from the draft, which tolerances were hit,
-which commands proved success, and any follow-on work that should be tracked in
-later roadmap items.
+Implemented the 7.2.4 and 7.2.5 scope as planned: the repository now has
+clone-detector-specific Verus and Kani sidecar targets, a new Verus proof for
+`LshConfig::new`, a bounded Kani harness module adjacent to the index code, and
+expanded unit plus `rstest-bdd` coverage for zero rows, invalid non-zero
+products, and overflow rejection. The only material change from the draft was a
+small shared-tooling fix in `scripts/install-verus.sh` after validation exposed
+ANSI escape codes in Verus's toolchain suggestion output.
+
+No tolerance gates were hit. Validation succeeded with:
+`make fmt`, `make markdownlint`, `make nixie`,
+`make verus-clone-detector`, `make kani-clone-detector`,
+`make check-fmt`, `make lint`, `make test`, `make verus`, and `make kani`.
+Later roadmap items 7.2.6, 7.2.7, and 7.2.8 remain intentionally untouched;
+the new proof sidecars and harness location are the intended base for that
+future work.

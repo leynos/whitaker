@@ -35,3 +35,13 @@ Feature: MinHash and LSH candidate generation
     And fragment empty retains no hashes
     When candidate pairs are generated
     Then the candidate generation error is EmptyFingerprintSet
+
+  Scenario: Zero LSH rows surface a typed error
+    Given LSH bands 4 and rows 0
+    When candidate pairs are generated
+    Then the candidate generation error is ZeroRows
+
+  Scenario: Non-zero invalid LSH products are rejected explicitly
+    Given LSH bands 3 and rows 42
+    When candidate pairs are generated
+    Then the candidate generation error is InvalidBandRowProduct(3,42)
