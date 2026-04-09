@@ -94,22 +94,14 @@ struct PanicDetector<'a, 'tcx> {
 
 impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
-        if self.panics {
-            return;
-        }
-
         if is_panic_call(self.cx, expr) {
             self.panics = true;
-            self.uses_interpolation = panic_args_use_interpolation(expr);
-            return;
-        }
-
-        if is_unwrap_or_expect(self.cx, expr) {
+            self.uses_interpolation |= panic_args_use_interpolation(expr);
+        } else if is_unwrap_or_expect(self.cx, expr) {
             self.panics = true;
-            return;
+        } else {
+            rustc_hir::intravisit::walk_expr(self, expr);
         }
-
-        rustc_hir::intravisit::walk_expr(self, expr);
     }
 }
 

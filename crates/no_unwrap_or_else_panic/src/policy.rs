@@ -20,9 +20,10 @@ impl LintPolicy {
 /// Decide whether the lint should emit based on context and closure behaviour.
 ///
 /// In test contexts, `.unwrap_or_else(|| panic!(...))` is permitted when the
-/// panic message interpolates a runtime value (i.e. uses a `_fmt` or
-/// `_display` entry point). This allows test failures to include the actual
-/// error payload for diagnostics whilst keeping production code strict.
+/// panic message interpolates a runtime value (i.e. constructs runtime-formatted
+/// arguments via `fmt::Arguments::new_v1` or `fmt::Arguments::new_v1_formatted`).
+/// This allows test failures to include the actual error payload for diagnostics
+/// whilst keeping production code strict.
 ///
 /// # Examples
 ///
@@ -65,6 +66,7 @@ pub(crate) fn should_flag(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     fn summary(is_test: bool, in_main: bool) -> ContextSummary {
         ContextSummary { is_test, in_main }
@@ -82,85 +84,28 @@ mod tests {
         uses_interpolation: false,
     };
 
-    #[test]
-    fn skips_when_closure_is_safe() {
-        assert!(!should_flag(
-            &LintPolicy::new(false),
-            &summary(false, false),
-            &SAFE,
-            false
-        ));
-    }
-
-    #[test]
-    fn flags_panicking_closure_in_production() {
-        assert!(should_flag(
-            &LintPolicy::new(false),
-            &summary(false, false),
-            &panicking(false),
-            false
-        ));
-    }
-
-    #[test]
-    fn flags_plain_panic_in_tests() {
-        assert!(should_flag(
-            &LintPolicy::new(false),
-            &summary(true, false),
-            &panicking(false),
-            false
-        ));
-    }
-
-    #[test]
-    fn skips_interpolated_panic_in_tests() {
-        assert!(!should_flag(
-            &LintPolicy::new(false),
-            &summary(true, false),
-            &panicking(true),
-            false
-        ));
-    }
-
-    #[test]
-    fn flags_interpolated_panic_in_production() {
-        assert!(should_flag(
-            &LintPolicy::new(false),
-            &summary(false, false),
-            &panicking(true),
-            false
-        ));
-    }
-
-    #[test]
-    fn skips_in_doctests() {
-        assert!(!should_flag(
-            &LintPolicy::new(false),
-            &summary(false, false),
-            &panicking(false),
-            true
-        ));
-    }
-
-    #[test]
-    fn respects_allow_in_main() {
-        let policy = LintPolicy::new(true);
-        assert!(!should_flag(
-            &policy,
-            &summary(false, true),
-            &panicking(false),
-            false
-        ));
-    }
-
-    #[test]
-    fn flags_main_when_not_allowed() {
-        let policy = LintPolicy::new(false);
-        assert!(should_flag(
-            &policy,
-            &summary(false, true),
-            &panicking(false),
-            false
-        ));
+    #[rstest]
+    #[case::safe_closure(false, false, false, SAFE, false, false)]
+    #[case::panicking_in_production(false, false, false, panicking(false), false, true)]
+    #[case::plain_panic_in_tests(false, true, false, panicking(false), false, true)]
+    #[case::interpolated_panic_in_tests(false, true, false, panicking(true), false, false)]
+    #[case::interpolated_panic_in_production(false, false, false, panicking(true), false, true)]
+    #[case::skips_in_doctests(false, false, false, panicking(false), true, false)]
+    #[case::respects_allow_in_main(true, false, true, panicking(false), false, false)]
+    #[case::flags_main_when_not_allowed(false, false, true, panicking(false), false, true)]
+    fn policy_evaluation(
+        #[case] allow_in_main: bool,
+        #[case] is_test: bool,
+        #[case] in_main: bool,
+        #[case] panic_info: PanicInfo,
+        #[case] is_doctest: bool,
+        #[case] expected: bool,
+    ) {
+        let policy = LintPolicy::new(allow_in_main);
+        let context = summary(is_test, in_main);
+        assert_eq!(
+            should_flag(&policy, &context, &panic_info, is_doctest),
+            expected
+        );
     }
 }

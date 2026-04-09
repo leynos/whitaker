@@ -17,7 +17,7 @@ use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::{Span, Symbol, sym};
+use rustc_span::sym;
 use serde::Deserialize;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
@@ -68,7 +68,7 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
             .is_some();
         self.is_test_harness = cx.tcx.sess.opts.test;
         self.harness_marked_test_functions = if self.is_test_harness {
-            collect_harness_marked_test_functions(cx)
+            whitaker::hir::collect_harness_test_functions(cx)
         } else {
             HashSet::new()
         };
@@ -247,18 +247,6 @@ fn is_harness_marked_test_function(
     harness_marked_test_functions.contains(&function_hir_id)
 }
 
-fn collect_harness_marked_test_functions<'tcx>(cx: &LateContext<'tcx>) -> HashSet<hir::HirId> {
-    let root_items = cx
-        .tcx
-        .hir_crate_items(())
-        .free_items()
-        .map(|id| cx.tcx.hir_item(id))
-        .collect::<Vec<_>>();
-    let mut harness_marked = HashSet::new();
-    collect_harness_marked_test_functions_in_group(cx, root_items.as_slice(), &mut harness_marked);
-    harness_marked
-}
-
 fn collect_harness_marked_test_functions_in_group<'tcx>(
     cx: &LateContext<'tcx>,
     items: &[&'tcx hir::Item<'tcx>],
@@ -300,23 +288,6 @@ fn collect_harness_marked_test_functions_in_group<'tcx>(
             .collect::<Vec<_>>();
         collect_harness_marked_test_functions_in_group(cx, module_items.as_slice(), harness_marked);
     }
-}
-
-fn is_matching_harness_test_descriptor(
-    function_hir_id: hir::HirId,
-    function_name: Symbol,
-    function_span: Span,
-    sibling: &hir::Item<'_>,
-) -> bool {
-    // `rustc --test` may synthesize a const descriptor that shares the test
-    // function's name and source range. The wrapper function and descriptor can
-    // carry different syntax contexts, so this must compare source bytes
-    // rather than exact `Span` identity.
-    sibling.hir_id() != function_hir_id
-        && matches!(sibling.kind, hir::ItemKind::Const(..))
-        && sibling.kind.ident().is_some_and(|ident| {
-            ident.name == function_name && sibling.span.source_equal(function_span)
-        })
 }
 
 fn has_companion_test_module<'tcx>(
