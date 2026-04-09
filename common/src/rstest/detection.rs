@@ -30,8 +30,8 @@ impl ExpansionTrace {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::AttributePath;
-    /// use common::rstest::ExpansionTrace;
+    /// use whitaker_common::attributes::AttributePath;
+    /// use whitaker_common::rstest::ExpansionTrace;
     ///
     /// let trace = ExpansionTrace::new([AttributePath::from("rstest")]);
     /// assert_eq!(trace.frames(), &[AttributePath::from("rstest")]);
@@ -66,8 +66,8 @@ impl RstestDetectionOptions {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::AttributePath;
-    /// use common::rstest::RstestDetectionOptions;
+    /// use whitaker_common::attributes::AttributePath;
+    /// use whitaker_common::rstest::RstestDetectionOptions;
     ///
     /// let options = RstestDetectionOptions::new(
     ///     vec![AttributePath::from("case"), AttributePath::from("rstest::case")],
@@ -117,8 +117,8 @@ impl Default for RstestDetectionOptions {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::rstest::is_rstest_test;
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::rstest::is_rstest_test;
 ///
 /// let attrs = vec![Attribute::new(AttributePath::from("rstest"), AttributeKind::Outer)];
 /// assert!(is_rstest_test(&attrs));
@@ -134,8 +134,8 @@ pub fn is_rstest_test(attrs: &[Attribute]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::rstest::{ExpansionTrace, RstestDetectionOptions, is_rstest_test_with};
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::rstest::{ExpansionTrace, RstestDetectionOptions, is_rstest_test_with};
 ///
 /// let attrs = vec![Attribute::new(AttributePath::from("allow"), AttributeKind::Outer)];
 /// let trace = ExpansionTrace::new([AttributePath::from("rstest")]);
@@ -157,8 +157,8 @@ pub fn is_rstest_test_with(
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::rstest::is_rstest_fixture;
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::rstest::is_rstest_fixture;
 ///
 /// let attrs = vec![Attribute::new(AttributePath::from("fixture"), AttributeKind::Outer)];
 /// assert!(is_rstest_fixture(&attrs));
@@ -174,8 +174,8 @@ pub fn is_rstest_fixture(attrs: &[Attribute]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::rstest::{ExpansionTrace, RstestDetectionOptions, is_rstest_fixture_with};
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::rstest::{ExpansionTrace, RstestDetectionOptions, is_rstest_fixture_with};
 ///
 /// let attrs = vec![Attribute::new(AttributePath::from("allow"), AttributeKind::Outer)];
 /// let trace = ExpansionTrace::new([AttributePath::from("rstest::fixture")]);

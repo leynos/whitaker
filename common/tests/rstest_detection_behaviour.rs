@@ -1,14 +1,14 @@
 //! Behaviour-driven tests for strict `rstest` detection helpers.
 
-use common::attributes::{Attribute, AttributeKind, AttributePath};
-use common::rstest::{
-    ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
-    classify_rstest_parameter, fixture_local_names, is_rstest_fixture_with, is_rstest_test_with,
-};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+use whitaker_common::rstest::{
+    ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
+    classify_rstest_parameter, fixture_local_names, is_rstest_fixture_with, is_rstest_test_with,
+};
 
 #[derive(Clone, Debug, Default)]
 struct DetectionWorld {

@@ -27,8 +27,8 @@ impl RstestParameter {
     /// # Examples
     ///
     /// ```
-    /// use common::attributes::{Attribute, AttributeKind, AttributePath};
-    /// use common::rstest::{ParameterBinding, RstestParameter};
+    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+    /// use whitaker_common::rstest::{ParameterBinding, RstestParameter};
     ///
     /// let parameter = RstestParameter::new(
     ///     ParameterBinding::Ident("db".to_string()),
@@ -49,7 +49,7 @@ impl RstestParameter {
     /// # Examples
     ///
     /// ```
-    /// use common::rstest::RstestParameter;
+    /// use whitaker_common::rstest::RstestParameter;
     ///
     /// let parameter = RstestParameter::ident("db");
     /// assert_eq!(parameter.binding_name(), Some("db"));
@@ -64,7 +64,7 @@ impl RstestParameter {
     /// # Examples
     ///
     /// ```
-    /// use common::rstest::RstestParameter;
+    /// use whitaker_common::rstest::RstestParameter;
     ///
     /// let parameter = RstestParameter::unsupported();
     /// assert_eq!(parameter.binding_name(), None);
@@ -112,13 +112,13 @@ pub enum RstestParameterKind {
 /// # Examples
 ///
 /// ```
-/// use common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use common::rstest::{
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::rstest::{
 ///     RstestDetectionOptions, RstestParameter, RstestParameterKind, classify_rstest_parameter,
 /// };
 ///
 /// let parameter = RstestParameter::new(
-///     common::rstest::ParameterBinding::Ident("db".to_string()),
+///     whitaker_common::rstest::ParameterBinding::Ident("db".to_string()),
 ///     vec![Attribute::new(AttributePath::from("case"), AttributeKind::Outer)],
 /// );
 /// let kind = classify_rstest_parameter(&parameter, &RstestDetectionOptions::default());
@@ -146,7 +146,7 @@ pub fn classify_rstest_parameter(
 /// # Examples
 ///
 /// ```
-/// use common::rstest::{RstestDetectionOptions, RstestParameter, fixture_local_names};
+/// use whitaker_common::rstest::{RstestDetectionOptions, RstestParameter, fixture_local_names};
 ///
 /// let parameters = vec![RstestParameter::ident("db"), RstestParameter::ident("clock")];
 /// let names = fixture_local_names(&parameters, &RstestDetectionOptions::default());
