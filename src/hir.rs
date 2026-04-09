@@ -1,6 +1,6 @@
 //! Helpers for working with HIR constructs shared across Whitaker lints.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
@@ -119,23 +119,28 @@ fn collect_in_item_group<'tcx>(
     items: &[&'tcx hir::Item<'tcx>],
     marked: &mut HashSet<hir::HirId>,
 ) {
-    // First pass: collect harness test descriptors. Descriptors are const items
-    // synthesised by the --test harness with the same name and source-equal span
-    // as their corresponding test functions.
-    let descriptors: Vec<_> = items
-        .iter()
-        .filter_map(|item| {
-            if !matches!(item.kind, hir::ItemKind::Const(..)) {
-                return None;
-            }
-            let ident = item.kind.ident()?;
-            Some((item.hir_id(), ident.name, item.span))
-        })
-        .collect();
+    // First pass: build a lookup of harness test descriptors by name.
+    // Descriptors are const items synthesised by the --test harness with the
+    // same name and source-equal span as their corresponding test functions.
+    let mut descriptors_by_name: HashMap<rustc_span::Symbol, Vec<(hir::HirId, Span)>> =
+        HashMap::new();
+    for item in items.iter().copied() {
+        if !matches!(item.kind, hir::ItemKind::Const(..)) {
+            continue;
+        }
+        let Some(ident) = item.kind.ident() else {
+            continue;
+        };
+        descriptors_by_name
+            .entry(ident.name)
+            .or_default()
+            .push((item.hir_id(), item.span));
+    }
 
-    // Second pass: check each function against the descriptor list.
-    // This is O(functions × descriptors) instead of O(items × items), where
-    // typically descriptors.len() << items.len().
+    // Second pass: check each function against the descriptor lookup.
+    // This is O(functions + descriptors × name_collisions) which in practice
+    // is much faster than O(functions × all_descriptors) since most names are
+    // unique.
     for item in items
         .iter()
         .copied()
@@ -145,10 +150,15 @@ fn collect_in_item_group<'tcx>(
             continue;
         };
 
-        if descriptors.iter().any(|&(desc_id, desc_name, desc_span)| {
-            desc_id != item.hir_id() && desc_name == ident.name && desc_span.source_equal(item.span)
-        }) {
-            marked.insert(item.hir_id());
+        let Some(candidates) = descriptors_by_name.get(&ident.name) else {
+            continue;
+        };
+
+        for &(desc_id, desc_span) in candidates {
+            if desc_id != item.hir_id() && desc_span.source_equal(item.span) {
+                marked.insert(item.hir_id());
+                break;
+            }
         }
     }
 
