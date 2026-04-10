@@ -1,10 +1,11 @@
-//! UI test: panicking `unwrap_or_else` should be denied inside #[test].
+//! UI test: plain (non-interpolating) panicking `unwrap_or_else` is denied
+//! inside `#[test]` because the closure does not interpolate a runtime value.
 #![deny(no_unwrap_or_else_panic)]
 
 #[test]
-fn flags_panicking_fallbacks_in_tests() {
+fn flags_plain_panicking_fallbacks_in_tests() {
     let value: Result<(), &str> = Err("boom");
-    let _ = value.unwrap_or_else(|err| panic!("err: {err}"));
+    let _ = value.unwrap_or_else(|_| panic!("static message"));
 }
 
 fn main() {}

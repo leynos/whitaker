@@ -1,0 +1,20 @@
+error: Replace unwrap_or_else on `std::result::Result<i32, &str>` with a non-panicking fallback.
+  --> $DIR/bad_production_with_interpolation.rs:6:5
+   |
+LL |     value.unwrap_or_else(|e| panic!("failed: {e}"))
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: The closure supplied to unwrap_or_else triggers a panic.
+  --> $DIR/bad_production_with_interpolation.rs:6:5
+   |
+LL |     value.unwrap_or_else(|e| panic!("failed: {e}"))
+   |     ^^^^^
+   = help: Propagate the error or use expect with a descriptive message instead of panicking.
+note: the lint level is defined here
+  --> $DIR/bad_production_with_interpolation.rs:2:9
+   |
+LL | #![deny(no_unwrap_or_else_panic)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+

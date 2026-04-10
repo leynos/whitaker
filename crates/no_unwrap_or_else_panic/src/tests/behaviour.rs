@@ -1,6 +1,7 @@
 //! Behaviour-driven coverage for lint decision logic.
 
 use crate::context::ContextSummary;
+use crate::panic_detector::PanicInfo;
 use crate::policy::{LintPolicy, should_flag};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -10,7 +11,7 @@ use std::cell::Cell;
 struct DecisionWorld {
     summary: Cell<ContextSummary>,
     allow_in_main: Cell<bool>,
-    closure_panics: Cell<bool>,
+    panic_info: Cell<PanicInfo>,
     is_doctest: Cell<bool>,
     should_flag: Cell<Option<bool>>,
 }
@@ -21,7 +22,7 @@ impl DecisionWorld {
         should_flag(
             &policy,
             &self.summary.get(),
-            self.closure_panics.get(),
+            &self.panic_info.get(),
             self.is_doctest.get(),
         )
     }
@@ -37,12 +38,31 @@ fn given_panicking(world: &DecisionWorld) {
     let mut summary = world.summary.get();
     summary.is_test = false;
     world.summary.set(summary);
-    world.closure_panics.set(true);
+    world.panic_info.set(PanicInfo {
+        panics: true,
+        has_plain_panic: true,
+        has_interpolated_panic: false,
+    });
 }
 
 #[given("a panicking unwrap_or_else fallback")]
 fn given_panicking_alias(world: &DecisionWorld) {
     given_panicking(world);
+}
+
+#[given("the panic message interpolates a value")]
+fn given_interpolating(world: &DecisionWorld) {
+    let mut info = world.panic_info.get();
+    info.has_plain_panic = false;
+    info.has_interpolated_panic = true;
+    world.panic_info.set(info);
+}
+
+#[given("the panic message also interpolates a value")]
+fn given_also_interpolating(world: &DecisionWorld) {
+    let mut info = world.panic_info.get();
+    info.has_interpolated_panic = true;
+    world.panic_info.set(info);
 }
 
 #[given("code runs inside a test")]
@@ -66,7 +86,7 @@ fn given_allow_main(world: &DecisionWorld) {
 
 #[given("the fallback is safe")]
 fn given_safe_fallback(world: &DecisionWorld) {
-    world.closure_panics.set(false);
+    world.panic_info.set(PanicInfo::default());
 }
 
 #[given("a doctest harness is active")]
@@ -111,5 +131,10 @@ fn scenario_safe_fallback(world: DecisionWorld) {
 
 #[scenario(path = "tests/features/policy.feature", index = 4)]
 fn scenario_doctest(world: DecisionWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/policy.feature", index = 5)]
+fn scenario_interpolated_panic_in_test(world: DecisionWorld) {
     let _ = world;
 }
