@@ -82,28 +82,34 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     }
 }
 
-fn descriptor_entry<'tcx>(
+/// Extracts `(hir_id, name, parent, span)` from `item` when `kind_matches` returns `true`.
+fn item_components<'tcx>(
     cx: &LateContext<'tcx>,
     item: &hir::Item<'tcx>,
-) -> Option<((rustc_span::Symbol, hir::HirId), (hir::HirId, Span))> {
-    if !matches!(item.kind, hir::ItemKind::Const(..)) {
+    kind_matches: impl Fn(&hir::ItemKind<'tcx>) -> bool,
+) -> Option<(hir::HirId, rustc_span::Symbol, hir::HirId, Span)> {
+    if !kind_matches(&item.kind) {
         return None;
     }
     let ident = item.kind.ident()?;
     let parent: hir::HirId = cx.tcx.hir_get_parent_item(item.hir_id()).into();
-    Some(((ident.name, parent), (item.hir_id(), item.span)))
+    Some((item.hir_id(), ident.name, parent, item.span))
+}
+
+fn descriptor_entry<'tcx>(
+    cx: &LateContext<'tcx>,
+    item: &hir::Item<'tcx>,
+) -> Option<((rustc_span::Symbol, hir::HirId), (hir::HirId, Span))> {
+    let (hir_id, name, parent, span) =
+        item_components(cx, item, |k| matches!(k, hir::ItemKind::Const(..)))?;
+    Some(((name, parent), (hir_id, span)))
 }
 
 fn fn_candidate<'tcx>(
     cx: &LateContext<'tcx>,
     item: &hir::Item<'tcx>,
 ) -> Option<(hir::HirId, rustc_span::Symbol, hir::HirId, Span)> {
-    if !matches!(item.kind, hir::ItemKind::Fn { .. }) {
-        return None;
-    }
-    let ident = item.kind.ident()?;
-    let parent: hir::HirId = cx.tcx.hir_get_parent_item(item.hir_id()).into();
-    Some((item.hir_id(), ident.name, parent, item.span))
+    item_components(cx, item, |k| matches!(k, hir::ItemKind::Fn { .. }))
 }
 
 /// Collects all functions that the `rustc --test` harness identifies as tests.
