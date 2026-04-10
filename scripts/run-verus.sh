@@ -30,12 +30,12 @@ proof_files_for_group() {
     esac
 }
 
-PROOF_FILES=($(proof_files_for_group all))
+mapfile -t PROOF_FILES < <(proof_files_for_group all)
 
 if [ $# -gt 0 ] && [ "${1:0:1}" != "-" ]; then
     case "$1" in
         all|decomposition|clone-detector)
-            PROOF_FILES=($(proof_files_for_group "$1"))
+            mapfile -t PROOF_FILES < <(proof_files_for_group "$1")
             shift
             ;;
         *)

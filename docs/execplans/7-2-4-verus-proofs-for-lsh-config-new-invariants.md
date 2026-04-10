@@ -19,10 +19,10 @@ clone-detector constructor invariant: `LshConfig::new` must reject zero
 This work matters because roadmap item 7.2.2 already made `LshConfig` a hard
 runtime boundary for MinHash and locality-sensitive hashing (LSH). If that
 boundary drifts, every later proof and every later token-pass candidate check
-inherits the bug. ADR 002 explicitly assigns this constructor to Verus and
-reserves Kani for bounded behavioural checks over the same clone-detector
-crate, so 7.2.4 and 7.2.5 establish the proof split that later items 7.2.6,
-7.2.7, and 7.2.8 build on.
+inherits the bug. Architecture Decision Record (ADR) 002 explicitly assigns
+this constructor to Verus and reserves Kani for bounded behavioural checks over
+the same clone-detector crate, so 7.2.4 and 7.2.5 establish the proof split
+that later items 7.2.6, 7.2.7, and 7.2.8 build on.
 
 Observable outcome:
 
@@ -179,10 +179,10 @@ Observable outcome:
   `crates/whitaker_clones_core/tests/features/min_hash_lsh.feature` already
   exercises zero bands. The implementation should extend these tests rather
   than replace them.
-- `Makefile` currently exposes only a global `verus` target. If we want fast
-  clone-detector-only iteration without regressing the existing proof workflow,
-  the cleanest approach is to add clone-detector-specific targets alongside the
-  current umbrella target.
+- `Makefile` currently exposes only a global `verus` target. If fast
+  clone-detector-only iteration is desired without regressing the existing
+  proof workflow, the cleanest approach is to add clone-detector-specific
+  targets alongside the current umbrella target.
 - The workspace root pins `rstest-bdd = "0.5.0"`, matching the user's
   requirement, so the plan must keep that exact version in view even though
   some repository comments elsewhere still mention older text.
@@ -199,9 +199,10 @@ Observable outcome:
   implementation turn, and the sidecar installer now pins that release unless
   the environment overrides it explicitly.
 - The shared Verus installer needed one extra hardening step during validation:
-  Verus printed an ANSI-coloured `rustup install 1.94.0-x86_64-unknown-linux-gnu`
-  hint, so `scripts/install-verus.sh` had to strip ANSI escape codes before
-  extracting the fallback toolchain suggestion.
+  Verus printed an ANSI-coloured
+  `rustup install 1.94.0-x86_64-unknown-linux-gnu` hint, so
+  `scripts/install-verus.sh` had to strip ANSI escape codes before extracting
+  the fallback toolchain suggestion.
 
 ## Decision Log
 
@@ -229,10 +230,10 @@ Observable outcome:
   heavier `kani-full` style target should remain a future extension once 7.2.7
   and 7.2.8 add broader bounded checks. Date/Author: 2026-04-08 / Codex.
 - Decision: fix the shared Verus installer while implementing the clone-detector
-  proof workflow. Rationale: `make verus-clone-detector` and `make verus`
-  both depend on the same parser, so the ANSI-coloured toolchain hint had to
-  be normalized centrally rather than papered over in the new target.
-  Date/Author: 2026-04-09 / Codex.
+  proof workflow. Rationale: `make verus-clone-detector` and `make verus` both
+  depend on the same parser, so the ANSI-coloured toolchain hint had to be
+  normalized centrally rather than papered over in the new target. Date/Author:
+  2026-04-09 / Codex.
 
 ## Context and orientation
 
@@ -308,7 +309,7 @@ turn self-contained:
 - `docs/complexity-antipatterns-and-refactoring-strategies.md` for keeping
   helpers small and cohesive.
 - `docs/whitaker-dylint-suite-design.md` for repository-wide lint and
-  `unexpected_cfgs` considerations when introducing specialised build modes.
+  `unexpected_cfgs` considerations when introducing specialized build modes.
 
 ### Relevant learnings from `leynos/chutoro`
 
@@ -318,7 +319,7 @@ The most relevant implementation lessons are:
 1. Put Kani harnesses next to the internal modules they exercise so they can
    use `pub(crate)` seams instead of widening the public API.
 2. Keep harnesses behind `#[cfg(kani)]`, and explicitly allow that cfg in the
-   crate's `unexpected_cfgs` check list.
+   crate's `unexpected_cfgs` checklist.
 3. Keep the everyday Kani target small and practical. Chutoro's `make kani`
    runs only smoke-sized harnesses, while heavier exhaustive runs are reserved
    for `make kani-full`.
@@ -588,10 +589,9 @@ products, and overflow rejection. The only material change from the draft was a
 small shared-tooling fix in `scripts/install-verus.sh` after validation exposed
 ANSI escape codes in Verus's toolchain suggestion output.
 
-No tolerance gates were hit. Validation succeeded with:
-`make fmt`, `make markdownlint`, `make nixie`,
-`make verus-clone-detector`, `make kani-clone-detector`,
-`make check-fmt`, `make lint`, `make test`, `make verus`, and `make kani`.
-Later roadmap items 7.2.6, 7.2.7, and 7.2.8 remain intentionally untouched;
-the new proof sidecars and harness location are the intended base for that
-future work.
+No tolerance gates were hit. Validation succeeded with: `make fmt`,
+`make markdownlint`, `make nixie`, `make verus-clone-detector`,
+`make kani-clone-detector`, `make check-fmt`, `make lint`, `make test`,
+`make verus`, and `make kani`. Later roadmap items 7.2.6, 7.2.7, and 7.2.8
+remain intentionally untouched; the new proof sidecars and harness location are
+the intended base for that future work.
