@@ -178,10 +178,7 @@ fn panic_args_use_interpolation<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>)
     // from format_args expansion), but only matches calls that represent the
     // actual format_args construction, not arbitrary user types with similar
     // method names.
-    let mut finder = RuntimeArgsFinder {
-        cx,
-        found: false,
-    };
+    let mut finder = RuntimeArgsFinder { cx, found: false };
     rustc_hir::intravisit::walk_expr(&mut finder, message_arg);
     finder.found
 }
