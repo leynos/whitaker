@@ -526,8 +526,9 @@ further decomposition analysis was omitted.
   `scripts/install-kani.sh` pins Kani 0.67.0 and downloads the pre-built
   tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`.
   `scripts/run-kani.sh` invokes the pinned `cargo-kani` binary against the
-  `common` crate, filtering to `verify_build_adjacency` harnesses. `make kani`
-  exposes the workflow as a top-level quality gate.
+  `common` crate, running all harnesses by default; passing a harness name as
+  an argument filters to that specific harness. `make kani` exposes the
+  workflow as a top-level quality gate.
 - **Bounded symbolic model uses fixed-size edge arrays**: each Kani harness
   generates symbolic `SimilarityEdge` values from a fixed-size array of up to 3
   edges with an active-length field. The maximum node count is 3 (with
