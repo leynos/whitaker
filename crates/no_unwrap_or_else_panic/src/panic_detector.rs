@@ -110,7 +110,7 @@ impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> 
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if is_panic_call(self.cx, expr) {
             self.panics = true;
-            if panic_args_use_interpolation(expr) {
+            if panic_args_use_interpolation(self.cx, expr) {
                 self.has_interpolated_panic = true;
             } else {
                 self.has_plain_panic = true;
@@ -163,7 +163,7 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 /// generated format_args expansion. This avoids false positives from unrelated
 /// user code like `panic_any(MyType::new_v1())` where `MyType::new_v1()` is
 /// the payload, not a format_args constructor.
-fn panic_args_use_interpolation(expr: &Expr<'_>) -> bool {
+fn panic_args_use_interpolation<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) -> bool {
     // Extract the panic message argument (first argument to the panic call).
     let ExprKind::Call(_, args) = expr.kind else {
         return false;
@@ -178,23 +178,27 @@ fn panic_args_use_interpolation(expr: &Expr<'_>) -> bool {
     // from format_args expansion), but only matches calls that represent the
     // actual format_args construction, not arbitrary user types with similar
     // method names.
-    let mut finder = RuntimeArgsFinder { found: false };
+    let mut finder = RuntimeArgsFinder {
+        cx,
+        found: false,
+    };
     rustc_hir::intravisit::walk_expr(&mut finder, message_arg);
     finder.found
 }
 
-struct RuntimeArgsFinder {
+struct RuntimeArgsFinder<'a, 'tcx> {
+    cx: &'a LateContext<'tcx>,
     found: bool,
 }
 
-impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder {
+impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'a, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if self.found {
             return;
         }
 
         if let ExprKind::Call(callee, _) = expr.kind
-            && is_fmt_args_runtime_call(callee)
+            && is_fmt_args_runtime_call(self.cx, callee)
         {
             self.found = true;
             return;
@@ -206,17 +210,29 @@ impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder {
 
 /// Returns `true` when the callee is a `QPath::TypeRelative` call whose
 /// method segment matches a runtime `Arguments` constructor (`new_v1` or
-/// `new_v1_formatted`).
+/// `new_v1_formatted`) and the receiver type is `core::fmt::Arguments`.
 ///
 /// Compiler-generated `format_arguments::new_v1(...)` expressions use a
 /// type-relative qualified path whose method segment isn't resolvable via
-/// `qpath_res` (it resolves to `Err`). Inspecting the segment identifier
-/// directly is the reliable way to detect these.
-fn is_fmt_args_runtime_call(callee: &Expr<'_>) -> bool {
-    let ExprKind::Path(hir::QPath::TypeRelative(_, segment)) = callee.kind else {
+/// `qpath_res` (it resolves to `Err`). This function inspects both the
+/// segment identifier and the receiver type to avoid false positives from
+/// unrelated user types with `new_v1` methods (e.g., `MyType::new_v1()`).
+fn is_fmt_args_runtime_call<'tcx>(cx: &LateContext<'tcx>, callee: &Expr<'tcx>) -> bool {
+    let ExprKind::Path(hir::QPath::TypeRelative(ty, segment)) = callee.kind else {
         return false;
     };
-    matches!(segment.ident.name, sym::new_v1 | sym::new_v1_formatted)
+
+    if !matches!(segment.ident.name, sym::new_v1 | sym::new_v1_formatted) {
+        return false;
+    }
+
+    // Verify the receiver type is core::fmt::Arguments to avoid false positives
+    // from user types with similar method names.
+    let receiver_ty = cx.typeck_results().node_type(ty.hir_id);
+    receiver_ty.ty_adt_def().is_some_and(|adt| {
+        let path = cx.tcx.def_path_str(adt.did());
+        path == "core::fmt::Arguments" || path == "std::fmt::Arguments"
+    })
 }
 
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {
