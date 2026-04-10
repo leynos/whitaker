@@ -46,6 +46,15 @@ pub(crate) struct PanicInfo {
     pub(crate) has_interpolated_panic: bool,
 }
 
+impl PanicInfo {
+    /// Returns `true` when the closure has at least one interpolated panic
+    /// and no plain (non-interpolating) panic.
+    #[must_use]
+    pub(crate) fn is_interpolated_only(&self) -> bool {
+        self.has_interpolated_panic && !self.has_plain_panic
+    }
+}
+
 /// Analyses the closure referenced by `body_id` and returns a [`PanicInfo`]
 /// describing whether it panics and distinguishing plain vs interpolated panics.
 #[must_use]

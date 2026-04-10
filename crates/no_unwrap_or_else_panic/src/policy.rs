@@ -56,7 +56,7 @@ pub(crate) fn should_flag(
         return false;
     }
 
-    if summary.is_test && panic_info.has_interpolated_panic && !panic_info.has_plain_panic {
+    if summary.is_test && panic_info.is_interpolated_only() {
         return false;
     }
 
