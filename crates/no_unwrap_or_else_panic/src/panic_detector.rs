@@ -118,9 +118,9 @@ impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> 
         } else if is_unwrap_or_expect(self.cx, expr) {
             self.panics = true;
             self.has_plain_panic = true;
-        } else {
-            rustc_hir::intravisit::walk_expr(self, expr);
         }
+
+        rustc_hir::intravisit::walk_expr(self, expr);
     }
 }
 
