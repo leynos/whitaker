@@ -213,6 +213,58 @@ def workspace_package_names() -> set[str]:
     return {package["name"] for package in metadata["packages"]}
 
 
+def package_binary_target_names(package_name: str) -> set[str]:
+    """Return explicit Cargo binary target names for a workspace package.
+
+    Parameters
+    ----------
+    package_name : str
+        Cargo package name to inspect in workspace metadata.
+
+    Returns
+    -------
+    set[str]
+        Binary target names declared for the package.
+
+    Raises
+    ------
+    AssertionError
+        Raised when Cargo metadata fails or the package is missing.
+
+    Examples
+    --------
+    >>> "whitaker-installer" in package_binary_target_names("whitaker-installer")
+    True
+    """
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
+        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=CARGO_METADATA_TIMEOUT_SECONDS,
+    )
+    assert completed.returncode == 0, (
+        "cargo metadata failed while resolving package binary targets:\n"
+        f"{completed.stderr}"
+    )
+    metadata = json.loads(completed.stdout)
+    package = next(
+        (
+            package
+            for package in metadata["packages"]
+            if package["name"] == package_name
+        ),
+        None,
+    )
+    assert package is not None, f"workspace package '{package_name}' is missing"
+    return {
+        target["name"]
+        for target in package["targets"]
+        if "bin" in target["kind"]
+    }
+
+
 def run_act_build_lints(*, artefact_dir: Path) -> tuple[int, str]:
     """Run the workflow `build-lints` job through `act`.
 

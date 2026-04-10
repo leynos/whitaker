@@ -35,6 +35,7 @@ from tests.workflows.workflow_test_helpers import (
     install_components_script,
     lint_crates_from_resolution_constants,
     lint_crates_from_workflow,
+    package_binary_target_names,
     run_act_build_lints,
     workflow_runtime_is_ready,
     workspace_package_names,
@@ -62,6 +63,28 @@ def test_workflow_lint_crates_match_installer_constants() -> None:
         "rolling-release workflow LINT_CRATES drifted from installer constants:\n"
         f"workflow={workflow_crates}\n"
         f"installer={canonical_crates}"
+    )
+
+
+def test_installer_packaging_bins_match_release_workflow_contract() -> None:
+    """Ensure workflow-invoked packaging helpers are real Cargo bin targets."""
+    binary_targets = package_binary_target_names("whitaker-installer")
+
+    assert "whitaker-package-lints" in binary_targets, (
+        "rolling-release workflow builds --bin whitaker-package-lints, but the "
+        "installer package does not declare that binary target"
+    )
+    assert "whitaker-package-installer" in binary_targets, (
+        "release workflow builds --bin whitaker-package-installer, but the "
+        "installer package does not declare that binary target"
+    )
+    assert "package_lints" not in binary_targets, (
+        "installer packaging bins must use the workflow-facing target name, "
+        "not the source filename-derived fallback"
+    )
+    assert "package_installer_bin" not in binary_targets, (
+        "installer packaging bins must use the workflow-facing target name, "
+        "not the source filename-derived fallback"
     )
 
 
