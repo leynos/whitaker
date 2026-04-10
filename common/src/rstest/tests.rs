@@ -206,14 +206,22 @@ fn source_span(line: usize, start: usize, end: usize) -> SourceSpan {
     .expect("test spans should always be valid")
 }
 
+fn assert_span_recovery(
+    frame_specs: impl IntoIterator<Item = (SourceSpan, bool)>,
+    expected: UserEditableSpan<SourceSpan>,
+) {
+    let frames: Vec<SpanRecoveryFrame<SourceSpan>> = frame_specs
+        .into_iter()
+        .map(|(span, is_macro)| SpanRecoveryFrame::new(span, is_macro))
+        .collect();
+    assert_eq!(recover_user_editable_span(&frames), expected);
+}
+
 #[rstest]
 fn keeps_direct_user_editable_span() {
     let span = source_span(1, 1, 8);
 
-    assert_eq!(
-        recover_user_editable_span(&[SpanRecoveryFrame::new(span, false)]),
-        UserEditableSpan::Direct(span)
-    );
+    assert_span_recovery([(span, false)], UserEditableSpan::Direct(span));
 }
 
 #[rstest]
@@ -221,11 +229,8 @@ fn recovers_macro_frame_to_first_user_span() {
     let macro_span = source_span(2, 1, 8);
     let user_span = source_span(10, 1, 12);
 
-    assert_eq!(
-        recover_user_editable_span(&[
-            SpanRecoveryFrame::new(macro_span, true),
-            SpanRecoveryFrame::new(user_span, false),
-        ]),
+    assert_span_recovery(
+        [(macro_span, true), (user_span, false)],
         UserEditableSpan::Recovered(user_span)
     );
 }
@@ -237,25 +242,20 @@ fn recovers_first_user_span_from_nested_macro_chain() {
     let user_span = source_span(14, 1, 6);
     let later_user_span = source_span(20, 1, 9);
 
-    assert_eq!(
-        recover_user_editable_span(&[
-            SpanRecoveryFrame::new(outer_macro, true),
-            SpanRecoveryFrame::new(inner_macro, true),
-            SpanRecoveryFrame::new(user_span, false),
-            SpanRecoveryFrame::new(later_user_span, false),
-        ]),
+    assert_span_recovery(
+        [
+            (outer_macro, true),
+            (inner_macro, true),
+            (user_span, false),
+            (later_user_span, false),
+        ],
         UserEditableSpan::Recovered(user_span)
     );
 }
 
 #[rstest]
 fn treats_empty_frame_list_as_macro_only() {
-    let frames: Vec<SpanRecoveryFrame<SourceSpan>> = Vec::new();
-
-    assert_eq!(
-        recover_user_editable_span(&frames),
-        UserEditableSpan::MacroOnly
-    );
+    assert_span_recovery([], UserEditableSpan::MacroOnly);
 }
 
 #[rstest]
@@ -263,11 +263,5 @@ fn treats_all_expansion_frames_as_macro_only() {
     let first = source_span(4, 1, 4);
     let second = source_span(5, 1, 6);
 
-    assert_eq!(
-        recover_user_editable_span(&[
-            SpanRecoveryFrame::new(first, true),
-            SpanRecoveryFrame::new(second, true),
-        ]),
-        UserEditableSpan::MacroOnly
-    );
+    assert_span_recovery([(first, true), (second, true)], UserEditableSpan::MacroOnly);
 }
