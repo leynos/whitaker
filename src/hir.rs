@@ -82,32 +82,28 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     }
 }
 
-/// Extracts the harness-descriptor key and value from a `const` item, if it is one.
-fn const_descriptor<'tcx>(
+fn descriptor_entry<'tcx>(
     cx: &LateContext<'tcx>,
-    item: &'tcx hir::Item<'tcx>,
+    item: &hir::Item<'tcx>,
 ) -> Option<((rustc_span::Symbol, hir::HirId), (hir::HirId, Span))> {
-    matches!(item.kind, hir::ItemKind::Const(..)).then_some(())?;
+    if !matches!(item.kind, hir::ItemKind::Const(..)) {
+        return None;
+    }
     let ident = item.kind.ident()?;
-    let parent = cx.tcx.hir_get_parent_item(item.hir_id()).into();
+    let parent: hir::HirId = cx.tcx.hir_get_parent_item(item.hir_id()).into();
     Some(((ident.name, parent), (item.hir_id(), item.span)))
 }
 
-/// Returns the `HirId` of `item` if it is a function matched by a harness descriptor.
-fn harness_matched_fn<'tcx>(
+fn fn_candidate<'tcx>(
     cx: &LateContext<'tcx>,
-    item: &'tcx hir::Item<'tcx>,
-    descriptors: &HashMap<(rustc_span::Symbol, hir::HirId), Vec<(hir::HirId, Span)>>,
-) -> Option<hir::HirId> {
-    matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(())?;
+    item: &hir::Item<'tcx>,
+) -> Option<(hir::HirId, rustc_span::Symbol, hir::HirId, Span)> {
+    if !matches!(item.kind, hir::ItemKind::Fn { .. }) {
+        return None;
+    }
     let ident = item.kind.ident()?;
-    let fn_hir_id = item.hir_id();
-    let parent = cx.tcx.hir_get_parent_item(fn_hir_id).into();
-    let candidates = descriptors.get(&(ident.name, parent))?;
-    candidates
-        .iter()
-        .any(|&(desc_id, desc_span)| desc_id != fn_hir_id && desc_span.source_equal(item.span))
-        .then_some(fn_hir_id)
+    let parent: hir::HirId = cx.tcx.hir_get_parent_item(item.hir_id()).into();
+    Some((item.hir_id(), ident.name, parent, item.span))
 }
 
 /// Collects all functions that the `rustc --test` harness identifies as tests.
@@ -118,19 +114,27 @@ fn harness_matched_fn<'tcx>(
 /// checking parent equality to ensure true siblings.
 #[must_use]
 pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
-    let all_items = cx.tcx.hir_crate_items(());
-
     let mut descriptors: HashMap<(rustc_span::Symbol, hir::HirId), Vec<(hir::HirId, Span)>> =
         HashMap::new();
 
-    for item_id in all_items.free_items() {
-        if let Some((key, value)) = const_descriptor(cx, cx.tcx.hir_item(item_id)) {
-            descriptors.entry(key).or_default().push(value);
+    for item_id in cx.tcx.hir_crate_items(()).free_items() {
+        let item = cx.tcx.hir_item(item_id);
+        if let Some((key, val)) = descriptor_entry(cx, item) {
+            descriptors.entry(key).or_default().push(val);
         }
     }
 
-    all_items
+    cx.tcx
+        .hir_crate_items(())
         .free_items()
-        .filter_map(|item_id| harness_matched_fn(cx, cx.tcx.hir_item(item_id), &descriptors))
+        .filter_map(|item_id| {
+            let item = cx.tcx.hir_item(item_id);
+            let (fn_id, name, parent, span) = fn_candidate(cx, item)?;
+            let candidates = descriptors.get(&(name, parent))?;
+            candidates
+                .iter()
+                .any(|&(desc_id, desc_span)| desc_id != fn_id && desc_span.source_equal(span))
+                .then_some(fn_id)
+        })
         .collect()
 }
