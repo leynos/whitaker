@@ -188,6 +188,11 @@ fn when_classify_parameter(world: &DetectionWorld) -> Result<(), String> {
     world.evaluate_parameter()
 }
 
+#[when("I evaluate fixture-local names")]
+fn when_fixture_names_evaluated(world: &DetectionWorld) {
+    world.evaluate_fixture_names();
+}
+
 #[then("the function is recognised as an rstest test")]
 fn then_test_positive(world: &DetectionWorld) {
     assert_eq!(*world.test_result.borrow(), Some(true));
@@ -231,62 +236,32 @@ fn then_unsupported(world: &DetectionWorld) {
 
 #[then("the fixture-local names contain db")]
 fn then_fixture_names(world: &DetectionWorld) {
-    if world.fixture_names.borrow().is_none() {
-        world.evaluate_fixture_names();
-    }
-
     assert_eq!(
         *world.fixture_names.borrow(),
         Some(BTreeSet::from(["db".to_string()]))
     );
 }
 
-#[scenario(path = "tests/features/rstest_detection.feature", index = 0)]
-fn scenario_detects_rstest_test(world: DetectionWorld) {
-    let _ = world;
+macro_rules! declare_scenarios {
+    ($(($index:literal, $name:ident)),+ $(,)?) => {
+        $(
+            #[scenario(path = "tests/features/rstest_detection.feature", index = $index)]
+            fn $name(world: DetectionWorld) {
+                let _ = world;
+            }
+        )+
+    };
 }
 
-#[scenario(path = "tests/features/rstest_detection.feature", index = 1)]
-fn scenario_detects_rstest_fixture(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 2)]
-fn scenario_classifies_fixture_local_parameter(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 3)]
-fn scenario_classifies_provider_parameter(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 4)]
-fn scenario_ignores_unsupported_parameter(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 5)]
-fn scenario_ignores_trace_without_fallback(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 6)]
-fn scenario_uses_trace_with_fallback(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 7)]
-fn scenario_detects_rstest_with_multiple_attributes(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 8)]
-fn scenario_classifies_custom_provider_parameters(world: DetectionWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/rstest_detection.feature", index = 9)]
-fn scenario_uses_multi_frame_traces(world: DetectionWorld) {
-    let _ = world;
-}
+declare_scenarios!(
+    (0, scenario_detects_rstest_test),
+    (1, scenario_detects_rstest_fixture),
+    (2, scenario_classifies_fixture_local_parameter),
+    (3, scenario_classifies_provider_parameter),
+    (4, scenario_ignores_unsupported_parameter),
+    (5, scenario_ignores_trace_without_fallback),
+    (6, scenario_uses_trace_with_fallback),
+    (7, scenario_detects_rstest_with_multiple_attributes),
+    (8, scenario_classifies_custom_provider_parameters),
+    (9, scenario_uses_multi_frame_traces),
+);

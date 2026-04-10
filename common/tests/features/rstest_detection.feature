@@ -13,6 +13,7 @@ Feature: Strict rstest detection
   Scenario: Classify a plain identifier parameter as fixture-local
     Given a parameter named db
     When I classify the parameter
+    And I evaluate fixture-local names
     Then the parameter is classified as fixture-local
     And the fixture-local names contain db
 
