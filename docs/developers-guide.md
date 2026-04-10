@@ -61,7 +61,7 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
-## Kani Bounded Model Checking
+## Kani bounded model checking
 
 Whitaker uses the [Kani model checker](https://model-checking.github.io/kani/)
 to verify critical algorithms with bounded symbolic verification. Kani proofs
@@ -152,7 +152,7 @@ Key principles:
 ### Test-support APIs for adjacency testing
 
 The `common::test_support::decomposition` module provides declarative helpers
-for integration and behavior-driven tests:
+for integration and behaviour-driven tests:
 
 - **`adjacency_report(node_count, edges)`**: Validates edge input (canonical
   order, in-bounds, positive weights), builds adjacency lists via
@@ -175,7 +175,7 @@ The test-support API validates input and delegates to the shipped
 providing a clean testing interface.
 
 See
-[`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](../execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
+[`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
 for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
