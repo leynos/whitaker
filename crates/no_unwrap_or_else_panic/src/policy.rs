@@ -34,7 +34,11 @@ impl LintPolicy {
 ///
 /// let policy = LintPolicy::new(false);
 /// let summary = ContextSummary { is_test: false, in_main: false };
-/// let info = PanicInfo { panics: true, uses_interpolation: false };
+/// let info = PanicInfo {
+///     panics: true,
+///     has_plain_panic: true,
+///     has_interpolated_panic: false,
+/// };
 /// assert!(should_flag(&policy, &summary, &info, false));
 /// ```
 #[must_use]
@@ -52,7 +56,7 @@ pub(crate) fn should_flag(
         return false;
     }
 
-    if summary.is_test && panic_info.uses_interpolation {
+    if summary.is_test && panic_info.has_interpolated_panic && !panic_info.has_plain_panic {
         return false;
     }
 
@@ -79,7 +83,8 @@ mod tests {
 
     const SAFE: PanicInfo = PanicInfo {
         panics: false,
-        uses_interpolation: false,
+        has_plain_panic: false,
+        has_interpolated_panic: false,
     };
 
     const DEFAULT_POLICY: LintPolicy = LintPolicy::new(false);
@@ -95,49 +100,49 @@ mod tests {
     #[case::panicking_in_production(PolicyCase {
         policy: DEFAULT_POLICY,
         context: ContextSummary { is_test: false, in_main: false },
-        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        panic_info: PanicInfo { panics: true, has_plain_panic: true, has_interpolated_panic: false },
         is_doctest: false,
         should_flag: true,
     })]
     #[case::plain_panic_in_tests(PolicyCase {
         policy: DEFAULT_POLICY,
         context: ContextSummary { is_test: true, in_main: false },
-        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        panic_info: PanicInfo { panics: true, has_plain_panic: true, has_interpolated_panic: false },
         is_doctest: false,
         should_flag: true,
     })]
     #[case::interpolated_panic_in_tests(PolicyCase {
         policy: DEFAULT_POLICY,
         context: ContextSummary { is_test: true, in_main: false },
-        panic_info: PanicInfo { panics: true, uses_interpolation: true },
+        panic_info: PanicInfo { panics: true, has_plain_panic: false, has_interpolated_panic: true },
         is_doctest: false,
         should_flag: false,
     })]
     #[case::interpolated_panic_in_production(PolicyCase {
         policy: DEFAULT_POLICY,
         context: ContextSummary { is_test: false, in_main: false },
-        panic_info: PanicInfo { panics: true, uses_interpolation: true },
+        panic_info: PanicInfo { panics: true, has_plain_panic: false, has_interpolated_panic: true },
         is_doctest: false,
         should_flag: true,
     })]
     #[case::skips_in_doctests(PolicyCase {
         policy: DEFAULT_POLICY,
         context: ContextSummary { is_test: false, in_main: false },
-        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        panic_info: PanicInfo { panics: true, has_plain_panic: true, has_interpolated_panic: false },
         is_doctest: true,
         should_flag: false,
     })]
     #[case::respects_allow_in_main(PolicyCase {
         policy: LintPolicy::new(true),
         context: ContextSummary { is_test: false, in_main: true },
-        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        panic_info: PanicInfo { panics: true, has_plain_panic: true, has_interpolated_panic: false },
         is_doctest: false,
         should_flag: false,
     })]
     #[case::flags_main_when_not_allowed(PolicyCase {
         policy: DEFAULT_POLICY,
         context: ContextSummary { is_test: false, in_main: true },
-        panic_info: PanicInfo { panics: true, uses_interpolation: false },
+        panic_info: PanicInfo { panics: true, has_plain_panic: true, has_interpolated_panic: false },
         is_doctest: false,
         should_flag: true,
     })]

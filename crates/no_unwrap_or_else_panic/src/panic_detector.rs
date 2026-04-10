@@ -33,28 +33,35 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["std", "rt", "begin_panic_fmt"],
 ];
 
-/// Summarises whether a closure contains a panic and whether that panic uses
-/// format-string interpolation.
+/// Summarises whether a closure contains panics and distinguishes between
+/// plain (non-interpolated) and interpolated panic sites.
+///
+/// A closure may contain multiple panic paths; tracking both kinds prevents
+/// incorrectly suppressing the lint when a test contains both interpolated
+/// diagnostic panics and plain unconditional panics.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct PanicInfo {
     pub(crate) panics: bool,
-    pub(crate) uses_interpolation: bool,
+    pub(crate) has_plain_panic: bool,
+    pub(crate) has_interpolated_panic: bool,
 }
 
 /// Analyses the closure referenced by `body_id` and returns a [`PanicInfo`]
-/// describing whether it panics and whether the panic interpolates values.
+/// describing whether it panics and distinguishing plain vs interpolated panics.
 #[must_use]
 pub(crate) fn closure_panics<'tcx>(cx: &LateContext<'tcx>, body_id: hir::BodyId) -> PanicInfo {
     let mut detector = PanicDetector {
         cx,
         panics: false,
-        uses_interpolation: false,
+        has_plain_panic: false,
+        has_interpolated_panic: false,
     };
     let body = cx.tcx.hir_body(body_id);
     rustc_hir::intravisit::Visitor::visit_body(&mut detector, body);
     PanicInfo {
         panics: detector.panics,
-        uses_interpolation: detector.uses_interpolation,
+        has_plain_panic: detector.has_plain_panic,
+        has_interpolated_panic: detector.has_interpolated_panic,
     }
 }
 
@@ -86,16 +93,22 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> boo
 struct PanicDetector<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     panics: bool,
-    uses_interpolation: bool,
+    has_plain_panic: bool,
+    has_interpolated_panic: bool,
 }
 
 impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if is_panic_call(self.cx, expr) {
             self.panics = true;
-            self.uses_interpolation |= panic_args_use_interpolation(expr);
+            if panic_args_use_interpolation(expr) {
+                self.has_interpolated_panic = true;
+            } else {
+                self.has_plain_panic = true;
+            }
         } else if is_unwrap_or_expect(self.cx, expr) {
             self.panics = true;
+            self.has_plain_panic = true;
         } else {
             rustc_hir::intravisit::walk_expr(self, expr);
         }

@@ -84,7 +84,7 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
 
 /// Collects all functions that the `rustc --test` harness identifies as tests.
 ///
-/// The test harness synthesises a sibling `const` descriptor with the same name
+/// The test harness synthesizes a sibling `const` descriptor with the same name
 /// and source span as each test function. This function scans for those
 /// descriptors to recover test-function identity after the harness has consumed
 /// the original `#[test]` attributes.
@@ -93,25 +93,23 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
 /// considers true siblings, not unrelated items from other modules.
 #[must_use]
 pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
-    let root_items: Vec<_> = cx
-        .tcx
-        .hir_crate_items(())
-        .free_items()
-        .map(|id| cx.tcx.hir_item(id))
-        .filter(|item| is_crate_root_item(cx, item))
+    // Start traversal from the crate root module rather than scanning all items.
+    // The crate owner nodes contain the root module, whose item_ids give us
+    // direct children without needing to filter free_items().
+    let root_module = cx.tcx.hir_owner_nodes(hir::CRATE_OWNER_ID).node();
+    let hir::OwnerNode::Crate(crate_mod) = root_module else {
+        return HashSet::new();
+    };
+
+    let root_items: Vec<_> = crate_mod
+        .item_ids
+        .iter()
+        .map(|id| cx.tcx.hir_item(*id))
         .collect();
+
     let mut marked = HashSet::new();
     collect_in_item_group(cx, &root_items, &mut marked);
     marked
-}
-
-/// Returns `true` when the item's immediate parent is the crate root rather
-/// than a nested module.
-fn is_crate_root_item(cx: &LateContext<'_>, item: &hir::Item<'_>) -> bool {
-    cx.tcx
-        .hir_parent_iter(item.hir_id())
-        .next()
-        .is_some_and(|(_, node)| matches!(node, hir::Node::Crate(_)))
 }
 
 fn collect_in_item_group<'tcx>(
@@ -120,7 +118,7 @@ fn collect_in_item_group<'tcx>(
     marked: &mut HashSet<hir::HirId>,
 ) {
     // First pass: build a lookup of harness test descriptors by name.
-    // Descriptors are const items synthesised by the --test harness with the
+    // Descriptors are const items synthesized by the --test harness with the
     // same name and source-equal span as their corresponding test functions.
     let mut descriptors_by_name: HashMap<rustc_span::Symbol, Vec<(hir::HirId, Span)>> =
         HashMap::new();

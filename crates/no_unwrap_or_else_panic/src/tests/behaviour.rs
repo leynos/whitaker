@@ -40,7 +40,8 @@ fn given_panicking(world: &DecisionWorld) {
     world.summary.set(summary);
     world.panic_info.set(PanicInfo {
         panics: true,
-        uses_interpolation: false,
+        has_plain_panic: true,
+        has_interpolated_panic: false,
     });
 }
 
@@ -52,7 +53,8 @@ fn given_panicking_alias(world: &DecisionWorld) {
 #[given("the panic message interpolates a value")]
 fn given_interpolating(world: &DecisionWorld) {
     let mut info = world.panic_info.get();
-    info.uses_interpolation = true;
+    info.has_plain_panic = false;
+    info.has_interpolated_panic = true;
     world.panic_info.set(info);
 }
 
