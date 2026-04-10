@@ -207,7 +207,8 @@ impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'a, 't
 
 /// Returns `true` when the callee is a `QPath::TypeRelative` call whose
 /// method segment matches a runtime `Arguments` constructor (`new_v1` or
-/// `new_v1_formatted`) and the receiver type is `core::fmt::Arguments`.
+/// `new_v1_formatted`) and the receiver type is `core::fmt::Arguments`
+/// (verified via the `format_arguments` lang item).
 ///
 /// Compiler-generated `format_arguments::new_v1(...)` expressions use a
 /// type-relative qualified path whose method segment isn't resolvable via
@@ -226,10 +227,12 @@ fn is_fmt_args_runtime_call<'tcx>(cx: &LateContext<'tcx>, callee: &Expr<'tcx>) -
     // Verify the receiver type is core::fmt::Arguments to avoid false positives
     // from user types with similar method names.
     let receiver_ty = cx.typeck_results().node_type(ty.hir_id);
-    receiver_ty.ty_adt_def().is_some_and(|adt| {
-        let path = cx.tcx.def_path_str(adt.did());
-        path == "core::fmt::Arguments" || path == "std::fmt::Arguments"
-    })
+    let Some(fmt_args_did) = cx.tcx.lang_items().format_arguments() else {
+        return false;
+    };
+    receiver_ty
+        .ty_adt_def()
+        .is_some_and(|adt| adt.did() == fmt_args_did)
 }
 
 fn def_id_of_callee(cx: &LateContext<'_>, callee: &Expr<'_>) -> Option<DefId> {
