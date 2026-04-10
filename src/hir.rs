@@ -144,3 +144,109 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         })
         .collect()
 }
+
+/// Collects functions whose rstest companion module contains a harness
+/// descriptor.
+///
+/// The shared [`collect_harness_test_functions`] catches direct const-descriptor
+/// siblings. This helper additionally finds functions with a same-named sibling
+/// *module* that itself contains a harness descriptor (the pattern rstest case
+/// expansions produce). Companions are matched only within the same module scope.
+#[must_use]
+pub fn collect_rstest_companion_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
+    let mut marked = HashSet::new();
+    let root_mod = cx.tcx.hir_root_module();
+    let root_items: Vec<_> = root_mod
+        .item_ids
+        .iter()
+        .map(|id| cx.tcx.hir_item(*id))
+        .collect();
+    collect_companion_in_group(cx, &root_items, &mut marked);
+    marked
+}
+
+fn collect_companion_in_group<'tcx>(
+    cx: &LateContext<'tcx>,
+    items: &[&'tcx hir::Item<'tcx>],
+    marked: &mut HashSet<hir::HirId>,
+) {
+    for item in items
+        .iter()
+        .copied()
+        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
+    {
+        let Some(ident) = item.kind.ident() else {
+            continue;
+        };
+
+        if items
+            .iter()
+            .copied()
+            .any(|sibling| has_companion_test_module(cx, item.hir_id(), ident.name, sibling))
+        {
+            marked.insert(item.hir_id());
+        }
+    }
+
+    for item in items {
+        let hir::ItemKind::Mod(_, module) = item.kind else {
+            continue;
+        };
+
+        let module_items: Vec<_> = module
+            .item_ids
+            .iter()
+            .map(|id| cx.tcx.hir_item(*id))
+            .collect();
+        collect_companion_in_group(cx, &module_items, marked);
+    }
+}
+
+fn has_companion_test_module<'tcx>(
+    cx: &LateContext<'tcx>,
+    function_hir_id: hir::HirId,
+    function_name: rustc_span::Symbol,
+    sibling: &'tcx hir::Item<'tcx>,
+) -> bool {
+    sibling.hir_id() != function_hir_id
+        && sibling
+            .kind
+            .ident()
+            .is_some_and(|ident| ident.name == function_name)
+        && matches!(sibling.kind, hir::ItemKind::Mod(..))
+        && module_has_harness_descriptor(cx, sibling)
+}
+
+fn module_has_harness_descriptor<'tcx>(
+    cx: &LateContext<'tcx>,
+    module_item: &'tcx hir::Item<'tcx>,
+) -> bool {
+    let hir::ItemKind::Mod(_, module) = module_item.kind else {
+        return false;
+    };
+
+    let items: Vec<_> = module
+        .item_ids
+        .iter()
+        .map(|item_id| cx.tcx.hir_item(*item_id))
+        .collect();
+
+    items
+        .iter()
+        .copied()
+        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
+        .any(|fn_item| {
+            let Some((fn_id, fn_name, _, fn_span)) =
+                item_components(cx, fn_item, |k| matches!(k, hir::ItemKind::Fn { .. }))
+            else {
+                return false;
+            };
+            items.iter().copied().any(|sibling| {
+                item_components(cx, sibling, |k| matches!(k, hir::ItemKind::Const(..))).is_some_and(
+                    |(s_id, s_name, _, s_span)| {
+                        s_id != fn_id && s_name == fn_name && s_span.source_equal(fn_span)
+                    },
+                )
+            })
+        })
+}
