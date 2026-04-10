@@ -306,10 +306,10 @@ Detect test attributes correctly so `no_expect_outside_tests` can allow
 
 Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
 `#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
-`#[rstest::rstest]`, `#[case]`, and `#[rstest::case]` by default. The
-`additional_test_attributes` setting extends that matching list with
-project-specific markers, so the lint treats those annotated functions as tests
-too.
+`#[rstest::rstest]`, `#[rstest_parametrize]`, `#[rstest::rstest_parametrize]`,
+`#[case]`, and `#[rstest::case]` by default. The `additional_test_attributes`
+setting extends that matching list with project-specific markers, so the lint
+treats those annotated functions as tests too.
 
 #### Configuration
 
@@ -326,8 +326,8 @@ for example `my_framework::test` or `wasm_bindgen_test`.
 
 - Default markers such as `#[test]`, `#[::test]`,
   `#[::std::prelude::v1::test]`, `#[tokio::test]`, `#[async_std::test]`,
-  `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`, `#[case]`, and
-  `#[rstest::case]`
+  `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`, `#[rstest_parametrize]`,
+  `#[rstest::rstest_parametrize]`, `#[case]`, and `#[rstest::case]`
 - Project-specific markers listed in `additional_test_attributes`, such as
   `#[wasm_bindgen_test]`
 
@@ -344,7 +344,8 @@ not in Whitaker's default list and is not listed in
 - Change the attribute usage to a recognized form such as `#[test]`,
   `#[::test]`, `#[::std::prelude::v1::test]`, `#[tokio::test]`,
   `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`,
-  `#[case]`, or `#[rstest::case]` where appropriate
+  `#[rstest_parametrize]`, `#[rstest::rstest_parametrize]`, `#[case]`, or
+  `#[rstest::case]` where appropriate
 - If the function is not test-only code, replace `.expect()` with explicit error
   handling such as `?` or `map_err`
 

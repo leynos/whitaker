@@ -282,7 +282,7 @@ fn collect_harness_marked_test_functions_in_group<'tcx>(
                 function_name,
                 function_span,
                 sibling,
-            )
+            ) || has_companion_test_module(cx, function_hir_id, function_name, sibling)
         }) {
             harness_marked.insert(function_hir_id);
         }
@@ -316,6 +316,58 @@ fn is_matching_harness_test_descriptor(
         && matches!(sibling.kind, hir::ItemKind::Const(..))
         && sibling.kind.ident().is_some_and(|ident| {
             ident.name == function_name && sibling.span.source_equal(function_span)
+        })
+}
+
+fn has_companion_test_module<'tcx>(
+    cx: &LateContext<'tcx>,
+    function_hir_id: hir::HirId,
+    function_name: Symbol,
+    sibling: &'tcx hir::Item<'tcx>,
+) -> bool {
+    sibling.hir_id() != function_hir_id
+        && sibling
+            .kind
+            .ident()
+            .is_some_and(|ident| ident.name == function_name)
+        && matches!(sibling.kind, hir::ItemKind::Mod(..))
+        && module_has_harness_descriptor(cx, sibling)
+}
+
+fn module_has_harness_descriptor<'tcx>(
+    cx: &LateContext<'tcx>,
+    module_item: &'tcx hir::Item<'tcx>,
+) -> bool {
+    let hir::ItemKind::Mod(_, module) = module_item.kind else {
+        return false;
+    };
+
+    let items = module
+        .item_ids
+        .iter()
+        .map(|item_id| cx.tcx.hir_item(*item_id))
+        .collect::<Vec<_>>();
+
+    items
+        .iter()
+        .copied()
+        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
+        .any(|item| {
+            let Some(function_ident) = item.kind.ident() else {
+                return false;
+            };
+
+            let function_hir_id = item.hir_id();
+            let function_name = function_ident.name;
+            let function_span = item.span;
+            items.iter().copied().any(|sibling| {
+                is_matching_harness_test_descriptor(
+                    function_hir_id,
+                    function_name,
+                    function_span,
+                    sibling,
+                )
+            })
         })
 }
 
