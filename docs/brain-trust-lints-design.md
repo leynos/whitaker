@@ -540,7 +540,7 @@ further decomposition analysis was omitted.
 - **Harness inputs constrained to the production edge contract**:
   `build_similarity_edges` guarantees `left < right < node_count`,
   `weight > 0`, and no duplicate unordered pairs. The Kani harnesses enforce
-  these same `kani::assume` preconditions so the proof covers exactly the
+  these same `kani::assume` preconditions, so the proof covers exactly the
   inputs that production code can generate.
 - **Five separate proof harnesses for failure localization**: the five
   properties (correct length, edge preservation, in-bounds indices, symmetry,
