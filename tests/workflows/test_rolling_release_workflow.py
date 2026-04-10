@@ -70,6 +70,10 @@ def test_installer_packaging_bins_match_release_workflow_contract() -> None:
     """Ensure workflow-invoked packaging helpers are real Cargo bin targets."""
     binary_targets = package_binary_target_names("whitaker-installer")
 
+    assert "whitaker-installer" in binary_targets, (
+        "installer package must expose primary whitaker-installer binary target "
+        "to satisfy release workflow contract"
+    )
     assert "whitaker-package-lints" in binary_targets, (
         "rolling-release workflow builds --bin whitaker-package-lints, but the "
         "installer package does not declare that binary target"

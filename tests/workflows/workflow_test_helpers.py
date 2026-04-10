@@ -43,6 +43,50 @@ ACT_LIST_TIMEOUT_SECONDS = 60
 ACT_RUN_TIMEOUT_SECONDS = 900
 
 
+def _cargo_metadata() -> dict[str, object]:
+    """Return parsed workspace metadata from `cargo metadata --no-deps`.
+
+    Returns
+    -------
+    dict[str, object]
+        Parsed metadata mapping emitted by Cargo.
+    """
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
+        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=CARGO_METADATA_TIMEOUT_SECONDS,
+    )
+    assert completed.returncode == 0, (
+        "cargo metadata failed while resolving workspace metadata:\n"
+        f"{completed.stderr}"
+    )
+
+    metadata = json.loads(completed.stdout)
+    assert isinstance(metadata, dict), "cargo metadata must return a JSON object"
+    return metadata
+
+
+def _workspace_package_metadata(package_name: str) -> dict[str, object]:
+    """Return Cargo metadata for a named workspace package."""
+    metadata = _cargo_metadata()
+    packages = metadata.get("packages")
+    assert isinstance(packages, list), "cargo metadata must include a packages list"
+
+    package = next(
+        (
+            package
+            for package in packages
+            if isinstance(package, dict) and package.get("name") == package_name
+        ),
+        None,
+    )
+    assert package is not None, f"workspace package '{package_name}' is missing"
+    return package
+
+
 def _find_lint_crates_value(parsed: dict[str, object]) -> str | list[str] | None:
     """Return the raw `LINT_CRATES` value from workflow or build-lints env."""
     workflow_env = None
@@ -197,20 +241,14 @@ def workspace_package_names() -> set[str]:
     set[str]
         Package names reported by `cargo metadata --no-deps`.
     """
-    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
-        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=CARGO_METADATA_TIMEOUT_SECONDS,
-    )
-    assert completed.returncode == 0, (
-        "cargo metadata failed while resolving workspace packages:\n"
-        f"{completed.stderr}"
-    )
-    metadata = json.loads(completed.stdout)
-    return {package["name"] for package in metadata["packages"]}
+    metadata = _cargo_metadata()
+    packages = metadata.get("packages")
+    assert isinstance(packages, list), "cargo metadata must include a packages list"
+    return {
+        package["name"]
+        for package in packages
+        if isinstance(package, dict) and isinstance(package.get("name"), str)
+    }
 
 
 def package_binary_target_names(package_name: str) -> set[str]:
@@ -236,32 +274,17 @@ def package_binary_target_names(package_name: str) -> set[str]:
     >>> "whitaker-installer" in package_binary_target_names("whitaker-installer")
     True
     """
-    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
-        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=CARGO_METADATA_TIMEOUT_SECONDS,
+    package = _workspace_package_metadata(package_name)
+    targets = package.get("targets")
+    assert isinstance(targets, list), (
+        f"workspace package '{package_name}' must include a targets list"
     )
-    assert completed.returncode == 0, (
-        "cargo metadata failed while resolving package binary targets:\n"
-        f"{completed.stderr}"
-    )
-    metadata = json.loads(completed.stdout)
-    package = next(
-        (
-            package
-            for package in metadata["packages"]
-            if package["name"] == package_name
-        ),
-        None,
-    )
-    assert package is not None, f"workspace package '{package_name}' is missing"
     return {
         target["name"]
-        for target in package["targets"]
-        if "bin" in target["kind"]
+        for target in targets
+        if isinstance(target, dict)
+        and isinstance(target.get("name"), str)
+        and target.get("kind") == ["bin"]
     }
 
 
