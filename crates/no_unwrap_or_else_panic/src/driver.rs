@@ -112,7 +112,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
     }
 }
 
-/// Summarises the lint context for an expression, merging attribute-based and
+/// Summarizes the lint context for an expression, merging attribute-based and
 /// harness-based test detection into a single immutable result.
 fn summarise_context_with_harness<'tcx>(
     cx: &LateContext<'tcx>,

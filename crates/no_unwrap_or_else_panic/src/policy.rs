@@ -146,6 +146,13 @@ mod tests {
         is_doctest: false,
         should_flag: true,
     })]
+    #[case::mixed_plain_and_interpolated_in_tests(PolicyCase {
+        policy: DEFAULT_POLICY,
+        context: ContextSummary { is_test: true, in_main: false },
+        panic_info: PanicInfo { panics: true, has_plain_panic: true, has_interpolated_panic: true },
+        is_doctest: false,
+        should_flag: true,
+    })]
     fn policy_evaluation(#[case] case: PolicyCase) {
         assert_eq!(
             should_flag(

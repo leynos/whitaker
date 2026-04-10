@@ -58,6 +58,13 @@ fn given_interpolating(world: &DecisionWorld) {
     world.panic_info.set(info);
 }
 
+#[given("the panic message also interpolates a value")]
+fn given_also_interpolating(world: &DecisionWorld) {
+    let mut info = world.panic_info.get();
+    info.has_interpolated_panic = true;
+    world.panic_info.set(info);
+}
+
 #[given("code runs inside a test")]
 fn given_test_context(world: &DecisionWorld) {
     let mut summary = world.summary.get();
