@@ -49,8 +49,9 @@ impl DetectionWorld {
     }
 
     fn add_custom_provider_attributes(&self, paths: Vec<AttributePath>) {
+        let use_trace_fallback = self.options.borrow().use_expansion_trace_fallback();
         self.options
-            .replace(RstestDetectionOptions::new(paths, false));
+            .replace(RstestDetectionOptions::new(paths, use_trace_fallback));
     }
 
     fn enable_trace_fallback(&self) {
