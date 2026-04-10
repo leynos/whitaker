@@ -4,6 +4,9 @@
 //! conditional block. The two conditional clusters form separated bumps.
 
 pub mod fixture {
+    //! Test fixture providing types and functions that exercise the bumpy road
+    //! lint for the fail_match_with_nested_if UI test.
+
     use std::path::PathBuf;
 
     /// Build configuration mode controlling validation strictness.

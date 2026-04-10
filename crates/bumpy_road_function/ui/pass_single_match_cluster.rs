@@ -4,6 +4,9 @@
 //! concentrated in a single arm, forming only one contiguous cluster.
 
 mod fixture {
+    //! Test fixture providing conditional logic helpers for the
+    //! pass_single_match_cluster UI test.
+
     /// Returns `true` when `n` falls in the small eligible range,
     /// i.e. positive, below ten, and neither five nor seven.
     fn is_small_eligible(n: i32) -> bool {

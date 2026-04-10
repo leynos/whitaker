@@ -15,6 +15,7 @@
 use std::fs;
 use std::path::Path;
 
+use rstest::{fixture, rstest};
 use toml::Value;
 
 /// Parses `.config/nextest.toml` into a [`Value`].
@@ -89,11 +90,16 @@ fn crates_with_integration_ui_test() -> Vec<String> {
     crate_names
 }
 
-#[test]
-fn serial_dylint_ui_filter_captures_integration_ui_binaries() {
+/// Fixture providing the `serial-dylint-ui` override from nextest config.
+#[fixture]
+fn serial_dylint_ui_override() -> Value {
     let config = load_nextest_config();
-    let ui_override = find_serial_dylint_ui_override(&config);
-    let filter = extract_filter(ui_override);
+    find_serial_dylint_ui_override(&config).clone()
+}
+
+#[rstest]
+fn serial_dylint_ui_filter_captures_integration_ui_binaries(serial_dylint_ui_override: Value) {
+    let filter = extract_filter(&serial_dylint_ui_override);
     let crates = crates_with_integration_ui_test();
 
     assert!(
@@ -112,15 +118,12 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries() {
     );
 }
 
-#[test]
-fn serial_dylint_ui_filter_has_retry_configuration() {
-    let config = load_nextest_config();
-    let ui_override = find_serial_dylint_ui_override(&config);
-
+#[rstest]
+fn serial_dylint_ui_filter_has_retry_configuration(serial_dylint_ui_override: Value) {
     // On Windows, dylint_testing::initialize() can transiently fail with
     // "Access is denied (os error 5)" during NamedTempFile::persist().
     // Retries are essential for reliable CI on Windows.
-    let Some(retries) = ui_override.get("retries") else {
+    let Some(retries) = serial_dylint_ui_override.get("retries") else {
         panic!("serial-dylint-ui override must configure retries for Windows CI reliability");
     };
 

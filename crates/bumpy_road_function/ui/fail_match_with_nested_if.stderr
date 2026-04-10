@@ -1,5 +1,5 @@
 warning: Multiple clusters of nested conditional logic in `key_from_file`.
-  --> $DIR/fail_match_with_nested_if.rs:34:12
+  --> $DIR/fail_match_with_nested_if.rs:37:12
    |
 LL |        pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
    |  _____________^^^^^^^^^^^^^______________________________________________________________-
@@ -18,7 +18,7 @@ LL | |                  }
    | |__- Complexity bump 1 spans 7 lines.
    |
 note: Detected 2 complexity bumps above the threshold 2.5.
-  --> $DIR/fail_match_with_nested_if.rs:34:12
+  --> $DIR/fail_match_with_nested_if.rs:37:12
    |
 LL |     pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
    |            ^^^^^^^^^^^^^

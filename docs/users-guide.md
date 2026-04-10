@@ -185,11 +185,16 @@ regions above the configured threshold. Detection smooths the local complexity
 signal with the configured `window` and only considers peaks spanning at least
 `min_bump_lines`.
 
+The default threshold was lowered from 3.0 to 2.5 to detect bumpy road patterns
+in match expressions with nested conditionals. The moving-average smoothing
+(window=3) reduces raw peaks by approximately 15–20%, so a threshold of 3.0 can
+mask genuine two-bump patterns in match arms with nested `if` guards.
+
 #### Configuration <!-- bumpy_road_function -->
 
 ```toml
 [bumpy_road_function]
-threshold = 2.5
+threshold = 2.5  # Raise to 3.0 or higher to reduce false positives
 window = 3
 min_bump_lines = 2
 ```
