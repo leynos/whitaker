@@ -114,6 +114,19 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
     }
 }
 
+fn is_inside_harness_test_function<'tcx>(
+    cx: &LateContext<'tcx>,
+    hir_id: hir::HirId,
+    harness_test_functions: &HashSet<hir::HirId>,
+) -> bool {
+    cx.tcx.hir_parent_iter(hir_id).any(|(_, node)| match node {
+        hir::Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }) => {
+            harness_test_functions.contains(&item.hir_id())
+        }
+        _ => false,
+    })
+}
+
 /// Summarizes the lint context for an expression, merging attribute-based and
 /// harness-based test detection into a single immutable result.
 fn summarise_context_with_harness<'tcx>(
@@ -123,18 +136,9 @@ fn summarise_context_with_harness<'tcx>(
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> ContextSummary {
     let mut summary = crate::context::summarise_context(cx, hir_id);
-
-    // Merge harness-based test detection if not already identified as a test
-    // via attributes.
     if !summary.is_test && is_test_harness {
-        summary.is_test = cx.tcx.hir_parent_iter(hir_id).any(|(_, node)| match node {
-            hir::Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }) => {
-                harness_test_functions.contains(&item.hir_id())
-            }
-            _ => false,
-        });
+        summary.is_test = is_inside_harness_test_function(cx, hir_id, harness_test_functions);
     }
-
     summary
 }
 
