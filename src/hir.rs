@@ -82,6 +82,34 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     }
 }
 
+/// Extracts the harness-descriptor key and value from a `const` item, if it is one.
+fn const_descriptor<'tcx>(
+    cx: &LateContext<'tcx>,
+    item: &'tcx hir::Item<'tcx>,
+) -> Option<((rustc_span::Symbol, hir::HirId), (hir::HirId, Span))> {
+    matches!(item.kind, hir::ItemKind::Const(..)).then_some(())?;
+    let ident = item.kind.ident()?;
+    let parent = cx.tcx.hir_get_parent_item(item.hir_id()).into();
+    Some(((ident.name, parent), (item.hir_id(), item.span)))
+}
+
+/// Returns the `HirId` of `item` if it is a function matched by a harness descriptor.
+fn harness_matched_fn<'tcx>(
+    cx: &LateContext<'tcx>,
+    item: &'tcx hir::Item<'tcx>,
+    descriptors: &HashMap<(rustc_span::Symbol, hir::HirId), Vec<(hir::HirId, Span)>>,
+) -> Option<hir::HirId> {
+    matches!(item.kind, hir::ItemKind::Fn { .. }).then_some(())?;
+    let ident = item.kind.ident()?;
+    let fn_hir_id = item.hir_id();
+    let parent = cx.tcx.hir_get_parent_item(fn_hir_id).into();
+    let candidates = descriptors.get(&(ident.name, parent))?;
+    candidates
+        .iter()
+        .any(|&(desc_id, desc_span)| desc_id != fn_hir_id && desc_span.source_equal(item.span))
+        .then_some(fn_hir_id)
+}
+
 /// Collects all functions that the `rustc --test` harness identifies as tests.
 ///
 /// The test harness synthesizes a sibling `const` descriptor with the same name,
@@ -92,49 +120,17 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
 pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
     let all_items = cx.tcx.hir_crate_items(());
 
-    // First pass: collect all const descriptors with their parent module.
-    // Key by (name, parent_module) to group descriptors by their declaring module.
     let mut descriptors: HashMap<(rustc_span::Symbol, hir::HirId), Vec<(hir::HirId, Span)>> =
         HashMap::new();
 
     for item_id in all_items.free_items() {
-        let item = cx.tcx.hir_item(item_id);
-        if !matches!(item.kind, hir::ItemKind::Const(..)) {
-            continue;
-        }
-        let Some(ident) = item.kind.ident() else {
-            continue;
-        };
-        let parent = cx.tcx.hir_get_parent_item(item.hir_id()).into();
-        descriptors
-            .entry((ident.name, parent))
-            .or_default()
-            .push((item.hir_id(), item.span));
-    }
-
-    // Second pass: find functions with matching descriptors in the same module.
-    let mut marked = HashSet::new();
-    for item_id in all_items.free_items() {
-        let item = cx.tcx.hir_item(item_id);
-        if !matches!(item.kind, hir::ItemKind::Fn { .. }) {
-            continue;
-        }
-        let Some(ident) = item.kind.ident() else {
-            continue;
-        };
-
-        let parent = cx.tcx.hir_get_parent_item(item.hir_id()).into();
-        let Some(candidates) = descriptors.get(&(ident.name, parent)) else {
-            continue;
-        };
-
-        for &(desc_id, desc_span) in candidates {
-            if desc_id != item.hir_id() && desc_span.source_equal(item.span) {
-                marked.insert(item.hir_id());
-                break;
-            }
+        if let Some((key, value)) = const_descriptor(cx, cx.tcx.hir_item(item_id)) {
+            descriptors.entry(key).or_default().push(value);
         }
     }
 
-    marked
+    all_items
+        .free_items()
+        .filter_map(|item_id| harness_matched_fn(cx, cx.tcx.hir_item(item_id), &descriptors))
+        .collect()
 }
