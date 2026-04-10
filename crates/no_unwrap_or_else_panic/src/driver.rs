@@ -63,7 +63,9 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
 
         self.is_test_harness = cx.tcx.sess.opts.test;
         self.harness_test_functions = if self.is_test_harness {
-            whitaker::hir::collect_harness_test_functions(cx)
+            let mut marked = whitaker::hir::collect_harness_test_functions(cx);
+            marked.extend(whitaker::hir::collect_rstest_companion_test_functions(cx));
+            marked
         } else {
             HashSet::new()
         };
