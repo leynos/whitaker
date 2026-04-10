@@ -96,11 +96,12 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
             return;
         };
 
-        let mut summary = summarise_context(cx, expr.hir_id);
-        if !summary.is_test && self.is_test_harness {
-            summary.is_test =
-                is_inside_harness_test_function(cx, expr, &self.harness_test_functions);
-        }
+        let summary = summarise_context_with_harness(
+            cx,
+            expr.hir_id,
+            self.is_test_harness,
+            &self.harness_test_functions,
+        );
 
         let panic_info = closure_panics(cx, body_id);
         if !should_flag(&self.policy, &summary, &panic_info, self.is_doctest) {
@@ -111,8 +112,28 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
     }
 }
 
-fn summarise_context<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> ContextSummary {
-    crate::context::summarise_context(cx, hir_id)
+/// Summarises the lint context for an expression, merging attribute-based and
+/// harness-based test detection into a single immutable result.
+fn summarise_context_with_harness<'tcx>(
+    cx: &LateContext<'tcx>,
+    hir_id: hir::HirId,
+    is_test_harness: bool,
+    harness_test_functions: &HashSet<hir::HirId>,
+) -> ContextSummary {
+    let mut summary = crate::context::summarise_context(cx, hir_id);
+
+    // Merge harness-based test detection if not already identified as a test
+    // via attributes.
+    if !summary.is_test && is_test_harness {
+        summary.is_test = cx.tcx.hir_parent_iter(hir_id).any(|(_, node)| match node {
+            hir::Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }) => {
+                harness_test_functions.contains(&item.hir_id())
+            }
+            _ => false,
+        });
+    }
+
+    summary
 }
 
 fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
@@ -121,24 +142,6 @@ fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
         _ => None,
     }
 }
-
-/// Returns `true` when `expr` is inside a function that the `--test` harness
-/// has marked as a test entry point.
-fn is_inside_harness_test_function<'tcx>(
-    cx: &LateContext<'tcx>,
-    expr: &hir::Expr<'tcx>,
-    harness_test_functions: &HashSet<hir::HirId>,
-) -> bool {
-    cx.tcx
-        .hir_parent_iter(expr.hir_id)
-        .any(|(_, node)| match node {
-            hir::Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }) => {
-                harness_test_functions.contains(&item.hir_id())
-            }
-            _ => false,
-        })
-}
-
 fn load_configuration() -> Config {
     match dylint_linting::config::<Config>(LINT_NAME) {
         Ok(Some(config)) => config,

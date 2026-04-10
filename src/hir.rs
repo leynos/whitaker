@@ -84,71 +84,47 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
 
 /// Collects all functions that the `rustc --test` harness identifies as tests.
 ///
-/// The test harness synthesizes a sibling `const` descriptor with the same name
-/// and source span as each test function. This function scans for those
-/// descriptors to recover test-function identity after the harness has consumed
-/// the original `#[test]` attributes.
-///
-/// Items are grouped by their parent module so that descriptor matching only
-/// considers true siblings, not unrelated items from other modules.
+/// The test harness synthesizes a sibling `const` descriptor with the same name,
+/// source span, and parent module as each test function. This function performs
+/// a single flat scan over all crate items to match descriptors with functions,
+/// checking parent equality to ensure true siblings.
 #[must_use]
 pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
-    // Start traversal from the crate root module rather than scanning all items.
-    // The crate owner nodes contain the root module, whose item_ids give us
-    // direct children without needing to filter free_items().
-    let root_module = cx.tcx.hir_owner_nodes(hir::CRATE_OWNER_ID).node();
-    let hir::OwnerNode::Crate(crate_mod) = root_module else {
-        return HashSet::new();
-    };
+    let all_items = cx.tcx.hir_crate_items(());
 
-    let root_items: Vec<_> = crate_mod
-        .item_ids
-        .iter()
-        .map(|id| cx.tcx.hir_item(*id))
-        .collect();
-
-    let mut marked = HashSet::new();
-    collect_in_item_group(cx, &root_items, &mut marked);
-    marked
-}
-
-fn collect_in_item_group<'tcx>(
-    cx: &LateContext<'tcx>,
-    items: &[&'tcx hir::Item<'tcx>],
-    marked: &mut HashSet<hir::HirId>,
-) {
-    // First pass: build a lookup of harness test descriptors by name.
-    // Descriptors are const items synthesized by the --test harness with the
-    // same name and source-equal span as their corresponding test functions.
-    let mut descriptors_by_name: HashMap<rustc_span::Symbol, Vec<(hir::HirId, Span)>> =
+    // First pass: collect all const descriptors with their parent module.
+    // Key by (name, parent_module) to group descriptors by their declaring module.
+    let mut descriptors: HashMap<(rustc_span::Symbol, hir::HirId), Vec<(hir::HirId, Span)>> =
         HashMap::new();
-    for item in items.iter().copied() {
+
+    for item_id in all_items.free_items() {
+        let item = cx.tcx.hir_item(item_id);
         if !matches!(item.kind, hir::ItemKind::Const(..)) {
             continue;
         }
         let Some(ident) = item.kind.ident() else {
             continue;
         };
-        descriptors_by_name
-            .entry(ident.name)
+        let parent = cx.tcx.hir_get_parent_item(item.hir_id()).into();
+        descriptors
+            .entry((ident.name, parent))
             .or_default()
             .push((item.hir_id(), item.span));
     }
 
-    // Second pass: check each function against the descriptor lookup.
-    // This is O(functions + descriptors × name_collisions) which in practice
-    // is much faster than O(functions × all_descriptors) since most names are
-    // unique.
-    for item in items
-        .iter()
-        .copied()
-        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
-    {
+    // Second pass: find functions with matching descriptors in the same module.
+    let mut marked = HashSet::new();
+    for item_id in all_items.free_items() {
+        let item = cx.tcx.hir_item(item_id);
+        if !matches!(item.kind, hir::ItemKind::Fn { .. }) {
+            continue;
+        }
         let Some(ident) = item.kind.ident() else {
             continue;
         };
 
-        let Some(candidates) = descriptors_by_name.get(&ident.name) else {
+        let parent = cx.tcx.hir_get_parent_item(item.hir_id()).into();
+        let Some(candidates) = descriptors.get(&(ident.name, parent)) else {
             continue;
         };
 
@@ -160,23 +136,5 @@ fn collect_in_item_group<'tcx>(
         }
     }
 
-    recurse_into_submodules(cx, items, marked);
-}
-
-fn recurse_into_submodules<'tcx>(
-    cx: &LateContext<'tcx>,
-    items: &[&'tcx hir::Item<'tcx>],
-    marked: &mut HashSet<hir::HirId>,
-) {
-    for item in items {
-        let hir::ItemKind::Mod(_, module) = item.kind else {
-            continue;
-        };
-        let module_items: Vec<_> = module
-            .item_ids
-            .iter()
-            .map(|id| cx.tcx.hir_item(*id))
-            .collect();
-        collect_in_item_group(cx, &module_items, marked);
-    }
+    marked
 }
