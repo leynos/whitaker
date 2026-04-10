@@ -56,7 +56,8 @@ pub use lcom4::{MethodInfo, MethodInfoBuilder, cohesion_components, collect_meth
 pub use path::SimplePath;
 pub use rstest::{
     ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
-    classify_rstest_parameter, fixture_local_names, is_rstest_fixture, is_rstest_fixture_with,
-    is_rstest_test, is_rstest_test_with,
+    SpanRecoveryFrame, UserEditableSpan, classify_rstest_parameter, fixture_local_names,
+    is_rstest_fixture, is_rstest_fixture_with, is_rstest_test, is_rstest_test_with,
+    recover_user_editable_span,
 };
 pub use span::{SourceLocation, SourceSpan, SpanError, span_line_count, span_to_lines};

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`. The canonical
 plan file is
@@ -117,20 +117,25 @@ Success is observable when:
 - [x] (2026-04-10 00:00Z) Stage A: Inspect the roadmap, the design doc, the
       prior 8.1.1 ExecPlan, the current `common::rstest` module, and existing
       macro-span handling patterns.
-- [ ] Stage B: Add failing unit tests and `rstest-bdd` scenarios that define
+- [x] (2026-04-10 11:39Z) Stage B: Add failing unit tests and `rstest-bdd`
+      scenarios that define
       the 8.1.2 recovery contract.
-- [ ] Stage C: Implement the pure shared recovery policy in
+- [x] (2026-04-10 11:39Z) Stage C: Implement the pure shared recovery policy
+      in
       `whitaker-common`.
-- [ ] Stage D: Implement the `rustc_span::Span` adapter and public re-exports
+- [x] (2026-04-10 11:39Z) Stage D: Implement the `rustc_span::Span` adapter
+      and public re-exports
       in the `whitaker` crate.
-- [ ] Stage E: Replace one crate-local macro-span workaround with the shared
+- [x] (2026-04-10 11:39Z) Stage E: Replace one crate-local macro-span
+      workaround with the shared
       helper and add adopter regression coverage.
-- [ ] Stage F: Record implementation decisions in
+- [x] (2026-04-10 11:40Z) Stage F: Record implementation decisions in
       `docs/lints-for-rstest-fixtures-and-test-hygiene.md`.
-- [ ] Stage G: Mark roadmap item 8.1.2 done.
-- [ ] Stage H: Run `make fmt`, `make markdownlint`, `make nixie`,
-      `make check-fmt`, `make lint`, and `make test`.
-- [ ] Stage I: Finalize the living sections in this document.
+- [x] (2026-04-10 11:48Z) Stage G: Mark roadmap item 8.1.2 done.
+- [x] (2026-04-10 11:48Z) Stage H: Run `make fmt`, `make markdownlint`,
+      `make nixie`, `make check-fmt`, `make lint`, and `make test`.
+- [x] (2026-04-10 11:48Z) Stage I: Finalize the living sections in this
+      document.
 
 ## Surprises & Discoveries
 
@@ -145,6 +150,17 @@ Success is observable when:
 - `crates/function_attrs_follow_docs/src/driver.rs` already uses
   `source_callsite()` locally to normalize macro-expanded attribute positions.
   That is the clearest in-repo precedent for a first shared adopter.
+- The targeted development loop from the plan now passes:
+  `cargo test -p whitaker-common rstest::`,
+  `cargo test -p whitaker-common --test rstest_span_recovery_behaviour`, and
+  `cargo test -p function_attrs_follow_docs --all-features`.
+- The first adopter stayed within the file-size limit after the refactor:
+  `crates/function_attrs_follow_docs/src/driver.rs` is now 389 lines, so the
+  400-line guardrail did not require an additional split.
+- `make lint` initially failed because the new BDD harness used `.expect()`,
+  which violates the workspace-wide Clippy deny settings even in tests. The fix
+  was to switch the helper to the repository-standard `match` plus `panic!`
+  pattern before rerunning the full gate.
 - Several other lints still take the coarse path shown below, so 8.1.2 should
   stay narrow and avoid promising a repository-wide cleanup in one turn.
 
@@ -433,6 +449,26 @@ Success criteria for the full validation step:
 
 ## Outcomes & Retrospective
 
-Not yet implemented. This section must be rewritten during execution with the
-final result, the validation evidence, any scope adjustments, and the lessons
-that future roadmap items 8.2.x, 8.3.x, and 8.4.x should inherit.
+Implemented as planned, without broadening the scope beyond 8.1.2.
+
+- Result:
+  `whitaker-common` now exposes `SpanRecoveryFrame`, `UserEditableSpan`, and
+  `recover_user_editable_span`; `whitaker` exposes `span_recovery_frames` and
+  `recover_user_editable_hir_span`; and `function_attrs_follow_docs` now relies
+  on the shared recovery helper instead of raw `source_callsite()`
+  normalization.
+- Validation:
+  Targeted checks passed for the new common unit tests, the new BDD harness,
+  and the adopter crate. End-of-turn gates all passed: `make fmt`,
+  `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`, and
+  `make test`. The final test summary was
+  `1297 tests run: 1297 passed, 2 skipped`.
+- Scope adjustments:
+  None. The implementation touched the planned code and documentation areas
+  only, and did not spill into future roadmap items 8.2.x, 8.3.x, or 8.4.x.
+- Lessons:
+  Future lint drivers should use the shared helper as an emit-or-skip boundary
+  rather than inventing local `source_callsite()` heuristics. If a diagnostic
+  path needs to distinguish "direct" from "recovered", the pure common enum
+  already carries that information without pulling `rustc_private` into the
+  policy layer.

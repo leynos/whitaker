@@ -381,3 +381,26 @@ standard lints.
 - `common/Cargo.toml` now describes the current `rstest-bdd` 0.5.x workspace
   pin rather than the stale 0.2.x comment. That was documentation hygiene, not
   a behavioural change.
+
+## Implementation decisions (8.1.2)
+
+- Shared user-editable span recovery is now split between a pure
+  `whitaker_common::rstest` policy and a thin `whitaker::hir` adapter. The
+  common layer owns the ordered-frame policy, while the compiler-aware layer
+  converts `rustc_span::Span` call-site chains into those frames.
+- The recovery result is explicit rather than boolean. Callers now receive
+  `UserEditableSpan::{Direct, Recovered, MacroOnly}` so lint drivers can
+  distinguish "emit on the original span", "emit on a recovered invocation
+  site", and "skip because every frame is synthetic glue".
+- The `rustc` adapter walks `source_callsite()` frames until one of four
+  conditions holds: the current span is dummy, the current frame is already
+  user-editable, the next call-site is dummy, or `source_callsite()` stops
+  making progress by returning the same span again.
+- `function_attrs_follow_docs` is the first adopter. It now uses recovered
+  user-editable spans for attribute ordering and item-bound checks, while
+  dropping attributes whose recovery result is `MacroOnly` so compiler- or
+  macro-generated glue does not participate in comparisons.
+- The shared policy is covered twice: unit tests in `common::rstest::tests`
+  exercise the frame-selection algorithm directly, and `rstest-bdd` 0.5.x
+  scenarios in `common/tests/rstest_span_recovery_behaviour.rs` describe the
+  direct, recovered, first-match, and macro-only outcomes in user terms.

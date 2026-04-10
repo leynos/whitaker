@@ -2,10 +2,12 @@
 
 use super::{
     ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
-    classify_rstest_parameter, fixture_local_names, is_rstest_fixture, is_rstest_fixture_with,
-    is_rstest_test, is_rstest_test_with,
+    SpanRecoveryFrame, UserEditableSpan, classify_rstest_parameter, fixture_local_names,
+    is_rstest_fixture, is_rstest_fixture_with, is_rstest_test, is_rstest_test_with,
+    recover_user_editable_span,
 };
 use crate::attributes::{Attribute, AttributeKind, AttributePath};
+use crate::span::{SourceLocation, SourceSpan};
 use rstest::rstest;
 use std::collections::BTreeSet;
 
@@ -193,5 +195,79 @@ fn collects_supported_fixture_local_names_in_order() {
     assert_eq!(
         fixture_local_names(&parameters, &RstestDetectionOptions::default()),
         BTreeSet::from(["clock".to_string(), "db".to_string()])
+    );
+}
+
+fn source_span(line: usize, start: usize, end: usize) -> SourceSpan {
+    SourceSpan::new(
+        SourceLocation::new(line, start),
+        SourceLocation::new(line, end),
+    )
+    .expect("test spans should always be valid")
+}
+
+#[rstest]
+fn keeps_direct_user_editable_span() {
+    let span = source_span(1, 1, 8);
+
+    assert_eq!(
+        recover_user_editable_span(&[SpanRecoveryFrame::new(span, false)]),
+        UserEditableSpan::Direct(span)
+    );
+}
+
+#[rstest]
+fn recovers_macro_frame_to_first_user_span() {
+    let macro_span = source_span(2, 1, 8);
+    let user_span = source_span(10, 1, 12);
+
+    assert_eq!(
+        recover_user_editable_span(&[
+            SpanRecoveryFrame::new(macro_span, true),
+            SpanRecoveryFrame::new(user_span, false),
+        ]),
+        UserEditableSpan::Recovered(user_span)
+    );
+}
+
+#[rstest]
+fn recovers_first_user_span_from_nested_macro_chain() {
+    let outer_macro = source_span(2, 1, 4);
+    let inner_macro = source_span(3, 1, 5);
+    let user_span = source_span(14, 1, 6);
+    let later_user_span = source_span(20, 1, 9);
+
+    assert_eq!(
+        recover_user_editable_span(&[
+            SpanRecoveryFrame::new(outer_macro, true),
+            SpanRecoveryFrame::new(inner_macro, true),
+            SpanRecoveryFrame::new(user_span, false),
+            SpanRecoveryFrame::new(later_user_span, false),
+        ]),
+        UserEditableSpan::Recovered(user_span)
+    );
+}
+
+#[rstest]
+fn treats_empty_frame_list_as_macro_only() {
+    let frames: Vec<SpanRecoveryFrame<SourceSpan>> = Vec::new();
+
+    assert_eq!(
+        recover_user_editable_span(&frames),
+        UserEditableSpan::MacroOnly
+    );
+}
+
+#[rstest]
+fn treats_all_expansion_frames_as_macro_only() {
+    let first = source_span(4, 1, 4);
+    let second = source_span(5, 1, 6);
+
+    assert_eq!(
+        recover_user_editable_span(&[
+            SpanRecoveryFrame::new(first, true),
+            SpanRecoveryFrame::new(second, true),
+        ]),
+        UserEditableSpan::MacroOnly
     );
 }

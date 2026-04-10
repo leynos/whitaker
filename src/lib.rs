@@ -15,7 +15,9 @@ pub mod testing;
 
 pub use config::{ModuleMaxLinesConfig, SharedConfig};
 #[cfg(feature = "dylint-driver")]
-pub use hir::{module_body_span, module_header_span};
+pub use hir::{
+    module_body_span, module_header_span, recover_user_editable_hir_span, span_recovery_frames,
+};
 pub use lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 
 /// Returns a greeting for the library.

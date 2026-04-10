@@ -456,7 +456,7 @@
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction and §Integration constraints. Requires
   1.1.1.
-- [ ] 8.1.2. Add shared user-editable span recovery helpers for macro-heavy
+- [x] 8.1.2. Add shared user-editable span recovery helpers for macro-heavy
   test code paths, and use them to avoid diagnostics on macro-only glue. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Integration constraints and §Lint A: call-site fixture extraction. Requires

@@ -7,7 +7,9 @@ use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
-use whitaker_common::{Attribute, AttributeKind, AttributePath};
+use whitaker_common::{
+    Attribute, AttributeKind, AttributePath, SpanRecoveryFrame, recover_user_editable_span,
+};
 
 /// Returns the body span for an inline or file-backed module.
 ///
@@ -51,6 +53,45 @@ pub fn has_test_like_hir_attributes(
         .iter()
         .filter_map(attribute_from_hir)
         .any(|attribute| attribute.is_test_like_with(additional))
+}
+
+/// Collects ordered span-recovery frames for a `rustc_span::Span`.
+///
+/// The first frame is always the original span when it is not dummy. Later
+/// frames follow the `source_callsite()` chain until the walk stops making
+/// progress or reaches a user-editable span.
+#[must_use]
+pub fn span_recovery_frames(span: Span) -> Vec<SpanRecoveryFrame<Span>> {
+    let mut frames = Vec::new();
+    let mut current = span;
+
+    loop {
+        if current.is_dummy() {
+            break;
+        }
+
+        let from_expansion = current.from_expansion();
+        frames.push(SpanRecoveryFrame::new(current, from_expansion));
+
+        if !from_expansion {
+            break;
+        }
+
+        let next = current.source_callsite();
+        if next.is_dummy() || next == current {
+            break;
+        }
+
+        current = next;
+    }
+
+    frames
+}
+
+/// Recovers the first user-editable HIR span from a macro expansion chain.
+#[must_use]
+pub fn recover_user_editable_hir_span(span: Span) -> Option<Span> {
+    recover_user_editable_span(span_recovery_frames(span).as_slice()).into_option()
 }
 
 fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {

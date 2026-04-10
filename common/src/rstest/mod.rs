@@ -2,6 +2,7 @@
 
 mod detection;
 mod parameter;
+mod span;
 
 pub use detection::{
     ExpansionTrace, RstestDetectionOptions, is_rstest_fixture, is_rstest_fixture_with,
@@ -11,6 +12,7 @@ pub use parameter::{
     ParameterBinding, RstestParameter, RstestParameterKind, classify_rstest_parameter,
     fixture_local_names,
 };
+pub use span::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span};
 
 #[cfg(test)]
 mod tests;
