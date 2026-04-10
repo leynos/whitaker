@@ -1188,10 +1188,17 @@ fn count_branches(expr: &Expr<'_>) -> usize {
 ```
 
 Apply a small moving-average window (`window = 3` by default) to smooth spikes.
-Threshold the smoothed signal at `T = 3.0` to identify contiguous bumps; ignore
+Threshold the smoothed signal at `T = 2.5` to identify contiguous bumps; ignore
 intervals shorter than `min_bump_lines` (default 2). Warn when the function has
 two or more such bumps. Record severity via the area above the threshold and
 highlight the top two intervals in the diagnostic.
+
+> The threshold was lowered from 3.0 to 2.5 to detect legitimate bumpy road
+> patterns in match expressions with nested conditionals. The moving-average
+> smoothing reduces raw peaks by approximately 15–20%, so a threshold of 3.0
+> could mask genuine two-bump patterns in match arms. Users who experience
+> false positives can raise the threshold back to 3.0 or higher via
+> `dylint.toml`.
 
 **Phase 5 implementation decisions.**
 
@@ -1224,7 +1231,7 @@ highlight the top two intervals in the diagnostic.
 
 <!-- markdownlint-disable MD033 MD013 -->
 <pre><code class="language-toml">[bumpy_road_function]
-threshold = 3.0
+threshold = 2.5
 window = 3
 min_bump_lines = 2
 include_closures = false

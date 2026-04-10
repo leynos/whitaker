@@ -309,6 +309,95 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
+### Configuration constant patterns
+
+Lint crates that expose configurable thresholds or defaults should centralize
+the default value as a public constant. This prevents drift between code,
+tests, configuration files, and documentation.
+
+**Pattern:** Define a public constant in the analysis module and reference it
+from `Settings::default()`, configuration parsing tests, and documentation.
+
+**Example** (`bumpy_road_function`):
+
+```rust
+// src/analysis.rs
+pub const DEFAULT_THRESHOLD: f64 = 2.5;
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            threshold: DEFAULT_THRESHOLD,
+            // ... other fields
+        }
+    }
+}
+```
+
+Add a regression test that validates the UI test configuration matches the
+constant:
+
+```rust
+// tests/analysis_behaviour.rs
+#[test]
+fn ui_dylint_toml_threshold_matches_default() {
+    let toml_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("ui/dylint.toml");
+    let contents = fs::read_to_string(&toml_path)
+        .expect("ui/dylint.toml should exist");
+    let parsed: toml::Value = toml::from_str(&contents)
+        .expect("ui/dylint.toml should parse");
+
+    let threshold = parsed
+        .get("bumpy_road_function")
+        .and_then(|t| t.get("threshold"))
+        .and_then(toml::Value::as_float)
+        .expect("bumpy_road_function.threshold should be a float");
+
+    assert_eq!(
+        threshold, DEFAULT_THRESHOLD,
+        "ui/dylint.toml threshold must match DEFAULT_THRESHOLD constant"
+    );
+}
+```
+
+### Nextest filter validation
+
+When adding nextest test-group filters (e.g., for serializing UI tests), add a
+regression test that verifies the filter expression captures all intended test
+binaries.
+
+**Pattern:** Create a test that discovers relevant test files, parses the
+nextest config, and asserts the filter contains the necessary clauses.
+
+**Example** (`tests/nextest_ui_filter.rs`):
+
+```rust
+use rstest::{fixture, rstest};
+
+#[fixture]
+fn serial_dylint_ui_override() -> Value {
+    let config = load_nextest_config();
+    find_serial_dylint_ui_override(&config).clone()
+}
+
+#[rstest]
+fn serial_dylint_ui_filter_captures_integration_ui_binaries(
+    serial_dylint_ui_override: Value
+) {
+    let filter = extract_filter(&serial_dylint_ui_override);
+    let crates = crates_with_integration_ui_test();
+
+    assert!(
+        filter.contains("(binary(ui) & test(=ui))"),
+        "filter must capture integration test binaries: {crates:?}"
+    );
+}
+```
+
+This pattern prevents CI flakes where a new UI test is excluded from
+serialization due to an incomplete filter expression.
+
 ## Using whitaker-installer
 
 The `whitaker-installer` command-line interface (CLI) builds, links, and stages

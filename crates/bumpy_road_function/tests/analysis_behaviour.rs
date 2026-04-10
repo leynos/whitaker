@@ -8,7 +8,7 @@
 extern crate rustc_driver;
 
 use bumpy_road_function::analysis::{
-    Settings, Weights, detect_bumps, normalise_settings, top_two_bumps,
+    DEFAULT_THRESHOLD, Settings, Weights, detect_bumps, normalise_settings, top_two_bumps,
 };
 use rstest::fixture;
 use rstest::rstest;
@@ -224,4 +224,30 @@ fn scenario_negative_threshold(world: World) {
     // `rstest-bdd` binds the fixture through this argument, even though the
     // step functions perform the assertions.
     let _ = world;
+}
+
+/// Guards against threshold drift between the canonical constant and the UI
+/// test configuration. The `ui/dylint.toml` threshold must equal
+/// [`DEFAULT_THRESHOLD`] so fixtures exercise the production default.
+#[rstest]
+fn ui_dylint_toml_threshold_matches_default() {
+    let config_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/dylint.toml");
+    let contents = std::fs::read_to_string(&config_path)
+        .unwrap_or_else(|err| panic!("failed to read {config_path:?}: {err}"));
+    let table: toml::Value =
+        toml::from_str(&contents).expect("ui/dylint.toml should parse as TOML");
+
+    let threshold = table
+        .get("bumpy_road_function")
+        .and_then(|section| section.get("threshold"))
+        .and_then(toml::Value::as_float)
+        .expect("ui/dylint.toml should contain [bumpy_road_function].threshold");
+
+    assert_eq!(
+        threshold, DEFAULT_THRESHOLD,
+        concat!(
+            "ui/dylint.toml threshold must equal DEFAULT_THRESHOLD; ",
+            "update the config file or the constant to keep them in sync"
+        )
+    );
 }

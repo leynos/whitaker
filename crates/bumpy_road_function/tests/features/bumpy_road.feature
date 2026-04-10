@@ -31,5 +31,5 @@ Feature: Detect bumpy road intervals
     Given default settings
     When the threshold is set to -1.0
     And I normalise the settings
-    Then the threshold becomes 3.0
+    Then the threshold becomes 2.5
 

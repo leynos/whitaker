@@ -5,6 +5,14 @@
 //! APIs allows unit and behavioural testing without compiling the compiler
 //! driver.
 
+/// Default smoothed-signal threshold at which a bump is considered active.
+///
+/// This constant is the single source of truth for the default threshold.
+/// [`Settings::default`] references it so the value cannot drift across
+/// locations. Configuration files and `.stderr` expectations should be
+/// validated against this constant in tests.
+pub const DEFAULT_THRESHOLD: f64 = 2.5;
+
 /// Weighting applied to signal segments.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Weights {
@@ -44,7 +52,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            threshold: 3.0,
+            threshold: DEFAULT_THRESHOLD,
             window: 3,
             min_bump_lines: 2,
             weights: Weights::default(),

@@ -1,0 +1,29 @@
+warning: Multiple clusters of nested conditional logic in `key_from_file`.
+  --> $DIR/fail_match_with_nested_if.rs:37:12
+   |
+LL |        pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
+   |  _____________^^^^^^^^^^^^^______________________________________________________________-
+   | | _______________________________________________________________________________________|
+   | ||
+LL | ||         let path = PathBuf::from("key");
+LL | ||
+LL | ||         match std::fs::read(&path) {
+...  ||
+LL | ||                     ));
+LL | ||                 }
+   | ||_- Complexity bump 2 spans 6 lines.
+...  |
+LL | |                      ))
+LL | |                  }
+   | |__- Complexity bump 1 spans 7 lines.
+   |
+note: Detected 2 complexity bumps above the threshold 2.5.
+  --> $DIR/fail_match_with_nested_if.rs:37:12
+   |
+LL |     pub fn key_from_file(mode: Mode, allow_fallback: bool) -> Result<Vec<u8>, String> {
+   |            ^^^^^^^^^^^^^
+   = help: Extract helper functions from the highlighted regions to reduce clustered complexity.
+   = note: `#[warn(bumpy_road_function)]` on by default
+
+warning: 1 warning emitted
+
