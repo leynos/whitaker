@@ -342,11 +342,33 @@ fn module_has_harness_descriptor<'tcx>(
         return false;
     };
 
-    module
+    let items = module
         .item_ids
         .iter()
         .map(|item_id| cx.tcx.hir_item(*item_id))
-        .any(|item| matches!(item.kind, hir::ItemKind::Const(..)))
+        .collect::<Vec<_>>();
+
+    items
+        .iter()
+        .copied()
+        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
+        .any(|item| {
+            let Some(function_ident) = item.kind.ident() else {
+                return false;
+            };
+
+            let function_hir_id = item.hir_id();
+            let function_name = function_ident.name;
+            let function_span = item.span;
+            items.iter().copied().any(|sibling| {
+                is_matching_harness_test_descriptor(
+                    function_hir_id,
+                    function_name,
+                    function_span,
+                    sibling,
+                )
+            })
+        })
 }
 
 // Check if any attribute is #[test].
