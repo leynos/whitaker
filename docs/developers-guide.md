@@ -61,6 +61,123 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Kani Bounded Model Checking
+
+Whitaker uses the [Kani model checker](https://model-checking.github.io/kani/)
+to verify critical algorithms with bounded symbolic verification. Kani proofs
+complement traditional testing by exhaustively checking properties over all
+possible inputs within configured bounds.
+
+### Running Kani verifications
+
+Run all Kani harnesses from the workspace root:
+
+```sh
+make kani
+```
+
+This invokes `scripts/run-kani.sh`, which:
+
+1. Installs or reuses the pinned Kani toolchain via `scripts/install-kani.sh`
+2. Sets up the required environment (library paths, toolchain selection)
+3. Runs all Kani proof harnesses in the `common` crate
+
+To run a specific harness:
+
+```sh
+./scripts/run-kani.sh verify_build_adjacency_preserves_edges
+```
+
+### Kani tooling architecture
+
+The Kani workflow mirrors the existing Verus pattern:
+
+- **`scripts/install-kani.sh`**: Pins Kani 0.67.0 and downloads the pre-built
+  tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`. The script
+  installs the matching nightly Rust toolchain via `rustup` and symlinks it
+  into the Kani directory structure.
+
+- **`scripts/run-kani.sh`**: Invokes the pinned `cargo-kani` binary with the
+  correct environment. Sets `RUSTUP_TOOLCHAIN` to ensure Cargo uses the
+  Kani-pinned toolchain, and configures platform-specific library paths
+  (`DYLD_LIBRARY_PATH` on macOS, `LD_LIBRARY_PATH` on Linux).
+
+- **`make kani`**: Top-level quality gate that runs all harnesses by default.
+
+### Writing Kani harnesses
+
+Kani harnesses live colocated with the code they verify, typically in a
+`#[cfg(kani)]` verification submodule. For example:
+
+```rust
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    #[kani::proof]
+    fn verify_property() {
+        // Generate symbolic inputs
+        let input: u32 = kani::any();
+
+        // Add preconditions
+        kani::assume(input > 0);
+        kani::assume(input < 100);
+
+        // Call function under test
+        let result = function_to_verify(input);
+
+        // Assert postconditions
+        assert!(result.is_valid());
+    }
+}
+```
+
+Key principles:
+
+- **Bounded symbolic inputs**: Use fixed-size arrays or bounded ranges to keep
+  the state space tractable. Rust's standard `sort_by` and nested loops can
+  cause CBMC state-space explosion at higher bounds.
+
+- **Input contracts**: Use `kani::assume` to constrain symbolic inputs to match
+  the preconditions that production code guarantees. Model the actual input
+  contract, not arbitrary malformed inputs.
+
+- **One property per harness**: Separate harnesses simplify root-cause analysis
+  when a property fails. Five focused harnesses are clearer than one combined
+  check.
+
+- **Crate visibility**: Kani harnesses can call `pub(crate)` functions directly,
+  avoiding the need to widen the public API for verification purposes.
+
+### Test-support APIs for adjacency testing
+
+The `common::test_support::decomposition` module provides declarative helpers
+for integration and behavior-driven tests:
+
+- **`adjacency_report(node_count, edges)`**: Validates edge input (canonical
+  order, in-bounds, positive weights), builds adjacency lists via
+  `build_adjacency`, and returns an `AdjacencyReport` with convenience
+  predicates.
+
+- **`AdjacencyReport`**: Wrapper around adjacency vectors with methods for
+  testing properties:
+  - `is_symmetric()`: Checks that all edges appear in both directions
+  - `all_indices_in_bounds()`: Verifies neighbour indices are valid
+  - `is_sorted()`: Confirms neighbours are sorted by index
+  - `neighbours_of(node)`: Returns neighbours of a node (or `None` if
+    out-of-bounds)
+
+- **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight` fields
+  for BDD scenarios.
+
+The test-support API validates input and delegates to the shipped
+`build_adjacency` function, keeping raw adjacency vectors crate-internal while
+providing a clean testing interface.
+
+See
+[`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](../execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
+for the complete design rationale and implementation decisions.
+
 ## Installer release helper binaries
 
 The `whitaker-installer` crate exposes several internal release-helper binaries
