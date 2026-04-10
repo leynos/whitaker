@@ -105,7 +105,7 @@ fn serial_dylint_ui_filter_captures_integration_ui_binaries() {
     // must contain a clause that matches this pattern — historically
     // `test(ui::ui)` missed it because the test name is plain `ui`.
     assert!(
-        filter.contains("binary(ui)") && filter.contains("test(=ui)"),
+        filter.contains("(binary(ui) & test(=ui))"),
         "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` \
          to capture integration test binaries named `ui` with a top-level \
          `fn ui()` (e.g. {crates:?}); found filter: {filter}"
