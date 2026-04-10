@@ -68,6 +68,7 @@ run_decomposition_harnesses() {
 
 if [ $# -eq 0 ]; then
     run_decomposition_harnesses
+    run_clone_detector_harnesses
     exit 0
 fi
 

@@ -106,48 +106,83 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Proof workflows
+
+Whitaker now ships repository-managed proof tooling for the formal verification
+work introduced around decomposition advice and the clone-detector pipeline.
+Run these commands from the workspace root.
+
+### Make targets
+
+Use the Makefile targets for normal proof runs:
+
+```sh
+make verus                 # Run all Verus proof files
+make verus-clone-detector  # Run clone-detector Verus proofs only
+make kani                  # Run all Kani harness groups
+make kani-clone-detector   # Run clone-detector Kani harnesses only
+```
+
+`make verus` currently runs both decomposition-advice proofs and the
+clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
+adjacency harnesses and the clone-detector harness group in one pass.
+
+### Tooling scripts
+
+The proof targets are thin wrappers over repository scripts:
+
+- `scripts/install-verus.sh` downloads the pinned Verus release into
+  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`, makes the binaries
+  executable, and installs the Rust toolchain that Verus requests.
+- `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
+  file in turn.
+- `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
+  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
+  nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
+  Kani directory structure.
+- `scripts/run-kani.sh` sets the Kani-specific environment, runs the
+  decomposition/common harnesses through the existing workflow, and runs the
+  clone-detector harnesses one harness per `cargo-kani` invocation so each
+  proof appears explicitly in the output.
+
+The installer scripts are idempotent. The first proof run may take longer while
+toolchains and verifier binaries are downloaded; later runs reuse the cached
+install.
+
+The installer scripts are idempotent. The first proof run may take longer while
+toolchains and verifier binaries are downloaded; later runs reuse the cached
+installation.
+
+### Examples
+
+Run the narrow clone-detector proof workflow during iteration:
+
+```sh
+make verus-clone-detector
+make kani-clone-detector
+```
+
+Run a Verus group directly through the wrapper:
+
+```sh
+./scripts/run-verus.sh clone-detector
+./scripts/run-verus.sh all --time
+```
+
+Run a specific decomposition Kani harness or the clone-detector group
+directly:
+
+```sh
+./scripts/run-kani.sh verify_build_adjacency_preserves_edges
+./scripts/run-kani.sh clone-detector
+```
+
 ## Kani bounded model checking
 
 Whitaker uses the [Kani model checker](https://model-checking.github.io/kani/)
 to verify critical algorithms with bounded symbolic verification. Kani proofs
 complement traditional testing by exhaustively checking properties over all
 possible inputs within configured bounds.
-
-### Running Kani verifications
-
-Run all Kani harnesses from the workspace root:
-
-```sh
-make kani
-```
-
-This invokes `scripts/run-kani.sh`, which:
-
-1. Installs or reuses the pinned Kani toolchain via `scripts/install-kani.sh`
-2. Sets up the required environment (library paths, toolchain selection)
-3. Runs all Kani proof harnesses in the `common` crate
-
-To run a specific harness:
-
-```sh
-./scripts/run-kani.sh verify_build_adjacency_preserves_edges
-```
-
-### Kani tooling architecture
-
-The Kani workflow mirrors the existing Verus pattern:
-
-- **`scripts/install-kani.sh`**: Pins Kani 0.67.0 and downloads the pre-built
-  tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`. The script
-  installs the matching nightly Rust toolchain via `rustup` and symlinks it
-  into the Kani directory structure.
-
-- **`scripts/run-kani.sh`**: Invokes the pinned `cargo-kani` binary with the
-  correct environment. Sets `RUSTUP_TOOLCHAIN` to ensure Cargo uses the
-  Kani-pinned toolchain, and configures platform-specific library paths
-  (`DYLD_LIBRARY_PATH` on macOS, `LD_LIBRARY_PATH` on Linux).
-
-- **`make kani`**: Top-level quality gate that runs all harnesses by default.
 
 ### Writing Kani harnesses
 
@@ -182,15 +217,11 @@ Key principles:
 - **Bounded symbolic inputs**: Use fixed-size arrays or bounded ranges to keep
   the state space tractable. Rust's standard `sort_by` and nested loops can
   cause CBMC (C Bounded Model Checker) state-space explosion at higher bounds.
-
 - **Input contracts**: Use `kani::assume` to constrain symbolic inputs to match
   the preconditions that production code guarantees. Model the actual input
   contract, not arbitrary malformed inputs.
-
 - **One property per harness**: Separate harnesses simplify root-cause analysis
-  when a property fails. Six focused harnesses are clearer than one combined
-  check.
-
+  when a property fails. Focused harnesses are clearer than one combined check.
 - **Crate visibility**: Kani harnesses can call `pub(crate)` functions directly,
   avoiding the need to widen the public API for verification purposes.
 
@@ -208,8 +239,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 This tells `rustc` that `kani` is an expected configuration name, so normal
 `cargo check` and `cargo clippy` runs do not emit spurious warnings. The entry
-lives in `common/Cargo.toml` because the Kani harnesses currently reside in the
-`common` crate.
+lives in `common/Cargo.toml` for the decomposition harnesses and in
+`crates/whitaker_clones_core/Cargo.toml` for the clone-detector harnesses.
 
 Kani harnesses verify private helpers that are not part of the public API.
 Rather than making these helpers fully public, the following items are promoted
@@ -219,13 +250,11 @@ to `pub(crate)` visibility:
   from `mod community` to `pub(crate) mod community` so that
   `test_support::decomposition` helpers and unit tests can import
   `SimilarityEdge` and `build_adjacency`.
-
 - **`build_adjacency` function**
   (`common/src/decomposition_advice/community.rs`): Promoted from `fn` to
   `pub(crate) fn` so that colocated Kani harnesses and the test-support
   adjacency report can call it directly without widening the crate's public API
   surface.
-
 - **`SimilarityEdge::new(left, right, weight)`**
   (`common/src/decomposition_advice/community.rs`): A `pub(crate)` constructor
   added to allow Kani harnesses and test-support modules to create edge values
@@ -248,14 +277,12 @@ for integration and behaviour-driven tests:
   `build_adjacency`, and returns `Result<AdjacencyReport, AdjacencyError>`.
   Callers can `match` on the result, `.expect(...)` in tests, or propagate the
   error upward when invalid declarative input should fail the caller.
-
 - **`AdjacencyError`**: Typed validation failure for the `Err` branch. The
   shipped variants are `NonCanonicalEdge { index, left, right }` when
   `left >= right`, `EndpointOutOfRange { index, right, node_count }` when an
   endpoint exceeds the graph size, and `ZeroWeight { index }` when a weight is
   non-positive for the production contract. Callers should inspect these
   variants when they need to assert a specific rejection path.
-
 - **`AdjacencyReport`**: Wrapper around adjacency vectors on the `Ok` branch,
   with methods for testing properties:
   - `is_symmetric()`: Checks that all edges appear in both directions
@@ -263,7 +290,6 @@ for integration and behaviour-driven tests:
   - `is_sorted()`: Confirms neighbours are sorted by index
   - `neighbours_of(node)`: Returns neighbours of a node (or `None` if
     out-of-bounds)
-
 - **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight`
   fields, passed to `adjacency_report` and interpreted on the `Ok` branch as
   canonical-order, in-range, positive-weight edge input for behaviour-driven
@@ -275,7 +301,7 @@ providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
- for the complete design rationale and implementation decisions.
+for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
 
@@ -347,14 +373,14 @@ formatting changes in the workflow YAML.
 
 Local workflow tests use the Makefile variables `UV` and `WORKFLOW_TEST_VENV`:
 
-- `UV` selects the `uv` executable used to create and populate the workflow-test
-  virtual environment.
+- `UV` selects the `uv` executable used to create and populate the
+  workflow-test virtual environment.
 - `WORKFLOW_TEST_VENV` selects the virtual-environment path, defaulting to
   `.venv`.
 
 Use `make workflow-test-deps` to create or refresh that environment, and
-`make workflow-test` to run the opt-in `act` plus `pytest` workflow smoke tests
-against it.
+`make workflow-test` to run the opt-in `act` plus `pytest` workflow smoke
+tests against it.
 
 ### Worked example: adding another packaging binary
 
@@ -379,8 +405,8 @@ path = "src/bin/package_example.rs"
 
 If the workflow should invoke that helper, add an assertion to
 `test_installer_packaging_bins_match_release_workflow_contract` before relying
-on it in release automation. That keeps the breakage in unit-style Python tests
-instead of the rolling-release pipeline.
+on it in release automation. That keeps the breakage in unit-style Python
+tests instead of the rolling-release pipeline.
 
 ## Dependency binary packaging
 

@@ -212,7 +212,7 @@ Observable outcome:
   2026-04-08 / Codex.
 - Decision: keep proof workflows opt-in through `Makefile` targets and wrapper
   scripts, not through normal `cargo test` or build hooks. Rationale: ADR 002
-  explicitly requires sidecar proof tooling independent from ordinary Cargo
+  explicitly requires sidecar proof tooling independent of ordinary Cargo
   development. Date/Author: 2026-04-08 / Codex.
 - Decision: extend the existing `min_hash_lsh` unit and BDD coverage instead
   of creating a second test harness just for `LshConfig`. Rationale: the
