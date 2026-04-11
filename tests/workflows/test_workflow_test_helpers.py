@@ -86,7 +86,10 @@ class TestCargoMetadata:
             workflow_test_helpers._cargo_metadata()
 
         parsed = json.loads(stdout)
-        assert type(parsed).__name__ == expected_type_name
+        assert type(parsed).__name__ == expected_type_name, (
+            f"parsed type {type(parsed).__name__} != expected "
+            f"{expected_type_name}"
+        )
 
     def test_returns_parsed_workspace_metadata(self) -> None:
         """The helper returns parsed JSON for successful metadata calls."""
@@ -108,7 +111,9 @@ class TestCargoMetadata:
         ):
             metadata = workflow_test_helpers._cargo_metadata()
 
-        assert metadata == payload
+        assert metadata == payload, (
+            f"metadata {metadata!r} != payload {payload!r}"
+        )
         run_mock.assert_called_once_with(
             ["/usr/bin/cargo", "metadata", "--format-version", "1", "--no-deps"],
             cwd=workflow_test_helpers.REPO_ROOT,
@@ -137,7 +142,7 @@ class TestWorkspacePackageMetadata:
         ids=["non-list-packages", "missing-package"],
     )
     def test_rejects_invalid_metadata(
-        self, return_value: dict, expected_match: str
+        self, return_value: dict[str, object], expected_match: str
     ) -> None:
         """The helper rejects non-list packages and absent package names."""
         with (
@@ -163,4 +168,6 @@ class TestWorkspacePackageMetadata:
                 "whitaker-installer"
             )
 
-        assert metadata == package
+        assert metadata == package, (
+            f"metadata {metadata!r} != package {package!r}"
+        )
