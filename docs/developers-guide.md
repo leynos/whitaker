@@ -61,6 +61,73 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Installer release helper binaries
+
+The `whitaker-installer` crate exposes several internal release-helper binaries
+used by GitHub workflows and packaging scripts. These are part of the build
+contract even though they are not user-facing CLI entry points.
+
+### Why `autobins = false` is required
+
+`installer/Cargo.toml` sets `autobins = false` and declares every binary target
+explicitly. This is required because the release workflows invoke specific bin
+names that do not always match Cargo's filename-derived defaults.
+
+Current explicit targets:
+
+- `whitaker-installer` from `src/main.rs`
+- `whitaker-package-lints` from `src/bin/package_lints.rs`
+- `whitaker-package-installer` from `src/bin/package_installer_bin.rs`
+- `whitaker-package-dependency-binary` from
+  `src/bin/package_dependency_binary.rs`
+
+Without explicit declarations, Cargo would infer fallback names such as
+`package_lints` and `package_installer_bin`. Those names do not match the
+workflow invocations, so release and rolling-release builds would fail even
+though the source files exist.
+
+### Validation coverage and purpose
+
+Workflow validation in `tests/workflows/` protects this contract from drift:
+
+- `test_installer_packaging_bins_match_release_workflow_contract` asserts that
+  the workflow-facing binary names exist in workspace metadata.
+- The same test also asserts that filename-derived fallback target names are
+  absent, proving the crate still relies on explicit target declarations rather
+  than accidental Cargo defaults.
+- `workflow_test_helpers.py` centralizes the `cargo metadata --no-deps` lookup
+  used by these contract tests so packaging changes fail with one clear error
+  path.
+
+When modifying release helpers, keep the workflow YAML, `installer/Cargo.toml`,
+and the metadata-based tests in lock-step.
+
+### Worked example: adding another packaging binary
+
+When adding a new internal helper binary, make all of the following changes in
+one patch:
+
+1. Add the Rust entry point under `installer/src/bin/`.
+2. Add a matching `[[bin]]` stanza in `installer/Cargo.toml`.
+3. Keep `autobins = false` so Cargo does not expose unexpected fallback names.
+4. Update any workflow or script that invokes the helper to use the explicit
+   bin name.
+5. Extend the workflow contract test so the new target is asserted alongside
+   the existing helpers.
+
+Example `Cargo.toml` entry:
+
+```toml
+[[bin]]
+name = "whitaker-package-example"
+path = "src/bin/package_example.rs"
+```
+
+If the workflow should invoke that helper, add an assertion to
+`test_installer_packaging_bins_match_release_workflow_contract` before relying
+on it in release automation. That keeps the breakage in unit-style Python tests
+instead of the rolling-release pipeline.
+
 ## Dependency binary packaging
 
 Whitaker publishes repository-hosted copies of `cargo-dylint` and `dylint-link`
