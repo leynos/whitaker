@@ -48,7 +48,7 @@ def _cargo_metadata() -> dict[str, object]:
     cargo_executable = shutil.which("cargo")
     assert cargo_executable is not None, "cargo executable must be available in PATH"
 
-    completed = subprocess.run(  # noqa: S603  # FIXME: uses trusted test-only tool
+    completed = subprocess.run(  # noqa: S603  # FIXME: https://github.com/leynos/whitaker/issues/101 uses trusted test-only tool
         [cargo_executable, "metadata", "--format-version", "1", "--no-deps"],
         cwd=REPO_ROOT,
         check=False,
@@ -335,7 +335,7 @@ def run_act_build_lints(*, artefact_dir: Path) -> tuple[int, str]:
         "--env",
         f"LINT_CRATES={lint_crates}",
     ]
-    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: https://github.com/leynos/whitaker/issues/101 uses trusted test-only PATH-resolved tool
         command,
         cwd=REPO_ROOT,
         check=False,
@@ -359,7 +359,7 @@ def workflow_runtime_is_ready() -> bool:
     if shutil.which("act") is None:
         return False
 
-    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
+    completed = subprocess.run(  # noqa: S603,S607  # FIXME: https://github.com/leynos/whitaker/issues/101 uses trusted test-only PATH-resolved tool
         [
             "act",
             "workflow_dispatch",

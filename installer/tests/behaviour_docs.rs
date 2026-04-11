@@ -74,7 +74,7 @@ fn given_revision_pinning_metadata(toml_world: &TomlWorld) {
 
 #[given("a workspace metadata example with pre-built path")]
 fn given_prebuilt_path_metadata(toml_world: &TomlWorld) {
-    let block = find_block_containing("path = ");
+    let block = find_block_containing(r#"path = "/home/user/.local/share/whitaker/lints/"#);
     set_toml_content(toml_world, &block);
 }
 
