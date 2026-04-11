@@ -149,6 +149,41 @@ Key principles:
 - **Crate visibility**: Kani harnesses can call `pub(crate)` functions directly,
   avoiding the need to widen the public API for verification purposes.
 
+### `cfg(kani)` configuration and crate visibility
+
+Kani harnesses are gated behind `#[cfg(kani)]`, which is only defined when Kani
+compiles the crate. Under the Rust 2024 edition, any `cfg` name not registered
+with the compiler triggers an `unexpected_cfgs` lint warning. To suppress this,
+register `cfg(kani)` in the crate's `Cargo.toml`:
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+```
+
+This tells `rustc` that `kani` is an expected configuration name, so normal
+`cargo check` and `cargo clippy` runs do not emit spurious warnings. The entry
+lives in `common/Cargo.toml` because the Kani harnesses currently reside in the
+`common` crate.
+
+Kani harnesses verify private helpers that are not part of the public API.
+Rather than making these helpers fully public, the following items are promoted
+to `pub(crate)` visibility:
+
+- **`community` module** (`common/src/decomposition_advice/mod.rs`): Promoted
+  from `mod community` to `pub(crate) mod community` so that
+  `test_support::decomposition` helpers and unit tests can import
+  `SimilarityEdge` and `build_adjacency`.
+
+- **`build_adjacency` function**
+  (`common/src/decomposition_advice/community.rs`):
+  Promoted from `fn` to `pub(crate) fn` so that colocated Kani harnesses and
+  the test-support adjacency report can call it directly without widening the
+  crate's public API surface.
+
+This pattern keeps the runtime API narrow while giving verification and test
+code the access it needs.
+
 ### Test-support APIs for adjacency testing
 
 The `common::test_support::decomposition` module provides declarative helpers
@@ -176,7 +211,7 @@ providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
-for the complete design rationale and implementation decisions.
+ for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
 

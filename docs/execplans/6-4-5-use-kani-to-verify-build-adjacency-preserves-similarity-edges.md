@@ -64,8 +64,8 @@ Observable success after implementation:
 - Use the workspace-pinned `rstest`, `rstest-bdd`, and
   `rstest-bdd-macros` `0.5.0` for new behavioural coverage.
 - Behaviour tests must respect the workspace Clippy `too_many_arguments`
-  threshold of 4. Each BDD step may parse at most 3 values in addition to the
-  fixture.
+  threshold of 4. Each behaviour-driven development (BDD) step may parse at
+  most 3 values in addition to the fixture.
 - Public helpers added to `common::test_support::decomposition` require
   Rustdoc comments with examples following `docs/rust-doctest-dry-guide.md`.
 - Update `docs/brain-trust-lints-design.md` with the implementation decisions
@@ -373,8 +373,7 @@ adjacency_report(node_count, edges) -> Result<AdjacencyReport, String>
 
 The helper should:
 
-1. Accept declarative edge input suitable for behaviour-driven development (BDD)
-   scenarios.
+1. Accept declarative edge input suitable for BDD scenarios.
 2. Validate that the declared endpoints are within bounds and reject malformed
    input before calling the private runtime helper.
 3. Return an easily asserted report, such as normalized per-node neighbour
@@ -474,6 +473,17 @@ The repository now ships:
   rustdoc, check-fmt, markdownlint, and nixie clean.
 - A design-document record of the exact modelling decisions and bounds
   that shipped.
+
+Shell script test exemption: `scripts/install-kani.sh` and
+`scripts/run-kani.sh` do not have dedicated BATS or unit-level shell script
+tests. This mirrors the existing Verus sidecar pattern
+(`scripts/install-verus.sh`, `scripts/run-verus.sh`), which similarly relies on
+the `make kani` / `make verus` integration targets as the validation seam
+rather than isolated shell script unit tests. The scripts contain
+platform-detection logic, cache directory management, and environment variable
+setup, but these are exercised end-to-end whenever `make kani` runs. Adding
+BATS coverage for the sidecar scripts is a possible future improvement tracked
+separately from the 6.4.5 scope.
 
 Remaining adjacent roadmap work after 6.4.5 will still include:
 
