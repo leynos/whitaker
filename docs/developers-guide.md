@@ -143,7 +143,7 @@ Key principles:
   contract, not arbitrary malformed inputs.
 
 - **One property per harness**: Separate harnesses simplify root-cause analysis
-  when a property fails. Five focused harnesses are clearer than one combined
+  when a property fails. Six focused harnesses are clearer than one combined
   check.
 
 - **Crate visibility**: Kani harnesses can call `pub(crate)` functions directly,
@@ -176,10 +176,10 @@ to `pub(crate)` visibility:
   `SimilarityEdge` and `build_adjacency`.
 
 - **`build_adjacency` function**
-  (`common/src/decomposition_advice/community.rs`):
-  Promoted from `fn` to `pub(crate) fn` so that colocated Kani harnesses and
-  the test-support adjacency report can call it directly without widening the
-  crate's public API surface.
+  (`common/src/decomposition_advice/community.rs`): Promoted from `fn` to
+  `pub(crate) fn` so that colocated Kani harnesses and the test-support
+  adjacency report can call it directly without widening the crate's public API
+  surface.
 
 This pattern keeps the runtime API narrow while giving verification and test
 code the access it needs.

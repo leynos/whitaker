@@ -1,10 +1,11 @@
 //! Bounded model-checking harnesses for [`super::build_adjacency`].
 //!
 //! These Kani harnesses verify that `build_adjacency` preserves every valid
-//! similarity edge, never emits out-of-bounds neighbour indices, and always
-//! produces symmetric adjacency lists. The harnesses use symbolic fixed-size
-//! arrays with an active-length field rather than symbolic `Vec` values,
-//! giving Kani a small explicit search space.
+//! similarity edge, never emits out-of-bounds neighbour indices, always
+//! produces symmetric adjacency lists, and emits *only* edges that were
+//! present in the input (no spurious edges). The harnesses use symbolic
+//! fixed-size arrays with an active-length field rather than symbolic `Vec`
+//! values, giving Kani a small explicit search space.
 
 use super::{SimilarityEdge, build_adjacency};
 
@@ -82,6 +83,12 @@ fn verify_build_adjacency_length() {
 }
 
 /// Verifies that every input edge is preserved in both directions.
+///
+/// The `node_count > 0` guard documents intent: when `node_count = 0` the
+/// `right < node_count` constraint inside `constrained_edges` is
+/// unsatisfiable, so `edges` is always empty and the assertion loop never
+/// executes. The proof outcome is unchanged without the guard, but we
+/// retain it for readability.
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_preserves_edges() {
@@ -118,6 +125,9 @@ fn verify_build_adjacency_indices_in_bounds() {
 /// Verifies that adjacency lists are symmetric: for every entry
 /// `(node -> neighbour, weight)`, the mirrored entry
 /// `(neighbour -> node, weight)` also exists.
+///
+/// The `node_count > 0` guard documents intent — see
+/// [`verify_build_adjacency_preserves_edges`] for the rationale.
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_symmetry() {
@@ -137,8 +147,40 @@ fn verify_build_adjacency_symmetry() {
     }
 }
 
+/// Verifies that `build_adjacency` emits only edges present in the input.
+///
+/// Without this exclusion property, a buggy implementation that injected
+/// extra symmetric, in-bounds edges would pass the other five harnesses.
+/// This harness closes that gap by asserting that every adjacency entry
+/// traces back to an input edge.
+#[kani::proof]
+#[kani::unwind(7)]
+fn verify_build_adjacency_no_spurious_edges() {
+    let (node_count, edges, adjacency) = symbolic_adjacency();
+    kani::assume(node_count > 0);
+
+    for (node, bucket) in adjacency.iter().enumerate() {
+        for &(neighbour, weight) in bucket {
+            let in_input = edges.iter().any(|e| {
+                (e.left == node && e.right == neighbour && e.weight == weight)
+                    || (e.right == node && e.left == neighbour && e.weight == weight)
+            });
+            assert!(in_input);
+        }
+    }
+}
+
 /// Verifies that each per-node neighbour list is sorted by neighbour index
 /// after construction.
+///
+/// With `MAX_NODES = 3`, no node can have more than 2 neighbours, so this
+/// harness only exercises 0-, 1-, and 2-element bucket sorts. A sort defect
+/// that manifests only at 3+ elements is invisible at this bound. Raising
+/// `MAX_NODES` to 4 (C(4,2) = 6 edges) would expose such bugs, but Rust's
+/// standard `sort_by` generates deeply nested control-flow paths that cause
+/// CBMC state-space explosion at that scale. The current bound is a
+/// conscious engineering trade-off documented in
+/// `docs/brain-trust-lints-design.md`.
 #[kani::proof]
 #[kani::unwind(7)]
 fn verify_build_adjacency_sorted_neighbours() {

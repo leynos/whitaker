@@ -542,10 +542,27 @@ further decomposition analysis was omitted.
   `weight > 0`, and no duplicate unordered pairs. The Kani harnesses enforce
   these same `kani::assume` preconditions, so the proof covers exactly the
   inputs that production code can generate.
-- **Five separate proof harnesses for failure localization**: the five
+- **Six separate proof harnesses for failure localization**: the six
   properties (correct length, edge preservation, in-bounds indices, symmetry,
-  sorted neighbours) each have a dedicated harness. This simplifies root-cause
-  analysis when a single property fails.
+  no spurious edges, sorted neighbours) each have a dedicated harness. This
+  simplifies root-cause analysis when a single property fails. The sixth
+  harness (`verify_build_adjacency_no_spurious_edges`) closes an exclusion gap:
+  without it, a buggy implementation that injected extra symmetric, in-bounds
+  edges would pass the other five proofs.
+- **Sort-coverage limitation is a conscious bound trade-off**: with
+  `MAX_NODES = 3`, no node can have more than 2 neighbours, so the sorted
+  neighbours harness only exercises 0-, 1-, and 2-element bucket sorts. Raising
+  `MAX_NODES` to 4 (C(4,2) = 6 edges, degree-3 lists) would expose sort defects
+  at 3+ elements, but Rust's standard `sort_by` generates deeply nested
+  control-flow paths that cause CBMC state-space explosion at that scale. The
+  current bound is retained as a conscious engineering trade-off.
+- **`kani::assume(node_count > 0)` documents intent**: the guard in
+  `verify_build_adjacency_preserves_edges` and
+  `verify_build_adjacency_symmetry` is technically redundant — when
+  `node_count = 0`, the `right < node_count` constraint inside
+  `constrained_edges` is unsatisfiable, so `edges` is always empty and the
+  assertion loops never execute. The assumption is retained for readability and
+  is documented in the harness doc-comments.
 - **`build_adjacency` promoted to `pub(crate)`**: the function was private;
   promoting it to `pub(crate)` aligns with `build_similarity_edges` and allows
   unit tests and the `test_support::decomposition` adjacency report helper to

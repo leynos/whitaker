@@ -146,6 +146,11 @@ Observable success after implementation:
   resources due to sort-loop unwinding depth.
 - [x] 2026-04-03: Finalize the living sections in this ExecPlan after
   implementation.
+- [x] 2026-04-11: Address PR review findings — add exclusion-property
+  harness (`verify_build_adjacency_no_spurious_edges`), document sort-coverage
+  limitation on `verify_build_adjacency_sorted_neighbours`, document
+  `kani::assume(node_count > 0)` intent in harness doc-comments, and update
+  design and developer documentation.
 
 ## Surprises & Discoveries
 
@@ -457,12 +462,12 @@ The repository now ships:
 - A pinned `make kani` workflow (`scripts/install-kani.sh`,
   `scripts/run-kani.sh`) that downloads Kani 0.67.0, configures the required
   nightly toolchain, and runs bounded model checking against the `common` crate.
-- Five bounded Kani harnesses (`MAX_NODES=3`, `MAX_EDGES=3`,
+- Six bounded Kani harnesses (`MAX_NODES=3`, `MAX_EDGES=3`,
   `unwind(7)`) verifying that `build_adjacency` preserves valid similarity
   edges, keeps neighbour indices in bounds, produces symmetric adjacency lists,
-  and sorts neighbours. All harnesses compile through Kani's custom compiler
-  (`--only-codegen` passes). Full CBMC verification is intended for dedicated
-  CI runners.
+  emits no spurious edges, and sorts neighbours. All harnesses compile through
+  Kani's custom compiler (`--only-codegen` passes). Full CBMC verification is
+  intended for dedicated CI runners.
 - Five focused unit tests for `build_adjacency` covering empty edges,
   single-edge both-directions, multiple edges sorted, sparse graph isolated
   nodes, and multi-edge symmetry.
