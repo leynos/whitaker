@@ -20,12 +20,17 @@ class TestCargoMetadata:
 
     def test_requires_cargo_on_path(self) -> None:
         """The helper fails fast when `cargo` cannot be resolved."""
-        with patch("tests.workflows.workflow_test_helpers.shutil.which", return_value=None):
-            with pytest.raises(
+        with (
+            patch(
+                "tests.workflows.workflow_test_helpers.shutil.which",
+                return_value=None,
+            ),
+            pytest.raises(
                 AssertionError,
                 match="cargo executable must be available in PATH",
-            ):
-                workflow_test_helpers._cargo_metadata()
+            ),
+        ):
+            workflow_test_helpers._cargo_metadata()
 
     def test_reports_subprocess_failure(self) -> None:
         """The helper surfaces `cargo metadata` stderr on failure."""
@@ -126,28 +131,29 @@ class TestCargoMetadata:
 class TestWorkspacePackageMetadata:
     """Tests for `_workspace_package_metadata()` lookups."""
 
-    def test_requires_packages_list(self) -> None:
-        """The helper rejects metadata without a list-valued packages key."""
+    @pytest.mark.parametrize(
+        ("return_value", "expected_match"),
+        [
+            (
+                {"packages": "not-a-list"},
+                "cargo metadata must include a packages list",
+            ),
+            (
+                {"packages": [{"name": "whitaker-common"}]},
+                "workspace package 'whitaker-installer' is missing",
+            ),
+        ],
+        ids=["non-list-packages", "missing-package"],
+    )
+    def test_rejects_invalid_metadata(
+        self, return_value: dict, expected_match: str
+    ) -> None:
+        """The helper rejects non-list packages and absent package names."""
         with patch(
             "tests.workflows.workflow_test_helpers._cargo_metadata",
-            return_value={"packages": "not-a-list"},
+            return_value=return_value,
         ):
-            with pytest.raises(
-                AssertionError,
-                match="cargo metadata must include a packages list",
-            ):
-                workflow_test_helpers._workspace_package_metadata("whitaker-installer")
-
-    def test_reports_missing_workspace_package(self) -> None:
-        """The helper reports missing packages clearly."""
-        with patch(
-            "tests.workflows.workflow_test_helpers._cargo_metadata",
-            return_value={"packages": [{"name": "whitaker-common"}]},
-        ):
-            with pytest.raises(
-                AssertionError,
-                match="workspace package 'whitaker-installer' is missing",
-            ):
+            with pytest.raises(AssertionError, match=expected_match):
                 workflow_test_helpers._workspace_package_metadata("whitaker-installer")
 
     def test_returns_matching_package_and_ignores_non_dict_entries(self) -> None:
