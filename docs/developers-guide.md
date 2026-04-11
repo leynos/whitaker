@@ -127,6 +127,29 @@ make kani-clone-detector   # Run clone-detector Kani harnesses only
 clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
 adjacency harnesses and the clone-detector harness group in one pass.
 
+### Verus scope and trust boundary
+
+The clone-detector Verus file is intentionally an implementation-shaped model
+of `LshConfig::new` and `validate_product`, not a direct proof of the compiled
+Rust body in `crates/whitaker_clones_core`.
+
+This distinction matters. In the current sidecar setup, Verus can describe the
+contract of an external Rust function with mechanisms such as
+`assume_specification`, `external_fn_specification`, or `external_body`, but
+those routes add trusted assumptions rather than proving the production
+implementation itself. The repository therefore keeps the Verus proof honest:
+it mirrors the real branch order and `checked_mul` overflow behaviour, while
+Kani calls the actual constructor and checks its runtime behaviour directly.
+
+For `LshConfig::new`, the split is:
+
+- Verus proves the constructor model rejects zero bands, rejects zero rows,
+  accepts only exact products of `MINHASH_SIZE`, and rejects overflowing
+  products via the same `checked_mul` semantics as the runtime code.
+- Kani executes the real constructor with one concrete acceptance harness, one
+  bounded symbolic harness over `[0, 128]²`, and one overflow harness that
+  forces the `checked_mul(None)` branch.
+
 ### Tooling scripts
 
 The proof targets are thin wrappers over repository scripts:
@@ -143,11 +166,8 @@ The proof targets are thin wrappers over repository scripts:
 - `scripts/run-kani.sh` sets the Kani-specific environment, runs the
   decomposition/common harnesses through the existing workflow, and runs the
   clone-detector harnesses one harness per `cargo-kani` invocation so each
-  proof appears explicitly in the output.
-
-The installer scripts are idempotent. The first proof run may take longer while
-toolchains and verifier binaries are downloaded; later runs reuse the cached
-install.
+  proof appears explicitly in the output, including the overflow-specific
+  harness for `LshConfig::new`.
 
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
@@ -169,10 +189,11 @@ Run a Verus group directly through the wrapper:
 ./scripts/run-verus.sh all --time
 ```
 
-Run a specific decomposition Kani harness or the clone-detector group
-directly:
+Run all Kani groups, a specific decomposition harness, or the clone-detector
+group directly:
 
 ```sh
+./scripts/run-kani.sh
 ./scripts/run-kani.sh verify_build_adjacency_preserves_edges
 ./scripts/run-kani.sh clone-detector
 ```

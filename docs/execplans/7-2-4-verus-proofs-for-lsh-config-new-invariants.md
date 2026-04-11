@@ -203,6 +203,15 @@ Observable outcome:
   `rustup install 1.94.0-x86_64-unknown-linux-gnu` hint, so
   `scripts/install-verus.sh` had to strip ANSI escape codes before extracting
   the fallback toolchain suggestion.
+- A later proof review found that the first Verus file was too tautological to
+  count as implementation-shaped reasoning, and that the first Kani symbolic
+  harness did not cover the `checked_mul(None)` overflow path. The follow-up
+  change tightened the Verus model to mirror the constructor's real branch
+  order and added a dedicated overflow Kani harness.
+- In this repository shape, Verus cannot directly prove the compiled
+  `crates/whitaker_clones_core` implementation without trusted assumptions for
+  external code. That limitation needs to stay documented in the developer
+  guide rather than implied.
 
 ## Decision Log
 
@@ -234,6 +243,19 @@ Observable outcome:
   depend on the same parser, so the ANSI-coloured toolchain hint had to be
   normalized centrally rather than papered over in the new target. Date/Author:
   2026-04-09 / Codex.
+- Decision: keep the Verus artefact as a faithful branch-by-branch model of
+  `LshConfig::new` rather than adding trusted external-code assumptions.
+  Rationale: `assume_specification`, `external_fn_specification`, or
+  `external_body` would only document or trust the production function, not
+  prove it. The follow-up proof therefore mirrors the real constructor logic,
+  while Kani remains the implementation-executing proof. Date/Author:
+  2026-04-11 / Codex.
+- Decision: extend the Kani harness set with an overflow-specific proof for the
+  `checked_mul(None)` path. Rationale: the bounded `[0, 128]²` harness is still
+  useful for exhaustive local reasoning, but it cannot witness arithmetic
+  overflow by construction. A separate symbolic harness closes that coverage
+  gap without blowing up the state space of the bounded harness. Date/Author:
+  2026-04-11 / Codex.
 
 ## Context and orientation
 

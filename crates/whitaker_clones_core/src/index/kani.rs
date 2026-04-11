@@ -12,6 +12,15 @@
 //! ```bash
 //! make kani-clone-detector
 //! ```
+//!
+//! The harness set deliberately splits bounded semantic coverage from overflow
+//! coverage:
+//!
+//! - `verify_lsh_config_new_smoke` checks one accepted concrete path.
+//! - `verify_lsh_config_new_symbolic` exhausts the constructor across the
+//!   bounded `[0, 128]²` input space.
+//! - `verify_lsh_config_new_overflow_product` drives the `checked_mul(None)`
+//!   branch with non-zero overflowing inputs.
 
 use super::{IndexError, LshConfig, MINHASH_SIZE};
 
@@ -78,6 +87,50 @@ fn verify_lsh_config_new_symbolic() {
             kani::assert(
                 bands.checked_mul(rows) != Some(MINHASH_SIZE),
                 "invalid product errors require a non-matching product",
+            );
+        }
+        Err(IndexError::EmptyFingerprintSet) => {
+            kani::assert(false, "LshConfig::new must not produce fingerprint errors");
+        }
+    }
+}
+
+#[kani::proof]
+#[kani::unwind(4)]
+fn verify_lsh_config_new_overflow_product() {
+    let bands: usize = kani::any();
+    let rows = 2usize;
+    kani::assume(bands > 0);
+    kani::assume(bands > usize::MAX / rows);
+    kani::assert(
+        bands.checked_mul(rows).is_none(),
+        "overflow harness must drive the checked_mul(None) branch",
+    );
+
+    match LshConfig::new(bands, rows) {
+        Ok(_) => {
+            kani::assert(false, "overflowing products must be rejected");
+        }
+        Err(IndexError::ZeroBands) => {
+            kani::assert(false, "overflow harness assumes non-zero bands");
+        }
+        Err(IndexError::ZeroRows) => {
+            kani::assert(false, "overflow harness assumes non-zero rows");
+        }
+        Err(IndexError::InvalidBandRowProduct {
+            bands: actual_bands,
+            rows: actual_rows,
+            expected,
+        }) => {
+            kani::assert(actual_bands == bands, "error should report the input bands");
+            kani::assert(actual_rows == rows, "error should report the input rows");
+            kani::assert(
+                expected == MINHASH_SIZE,
+                "error should report the fixed MinHash size",
+            );
+            kani::assert(
+                bands.checked_mul(rows).is_none(),
+                "overflow harness must keep the overflowing product precondition",
             );
         }
         Err(IndexError::EmptyFingerprintSet) => {
