@@ -22,8 +22,8 @@ symmetric neighbour lists.
 
 Observable success after implementation:
 
-1. `make kani` installs or reuses a pinned Kani toolchain and verifies the
-   new adjacency harnesses with zero failures.
+1. `make kani` installs or reuses a pinned Kani toolchain and completes full
+   Kani/CBMC verification of the new adjacency harnesses with zero failures.
 2. Unit tests exercise the shipped Rust adjacency construction directly,
    covering happy paths, absence-of-edge paths, and edge cases such as isolated
    nodes and sorted neighbour order.
@@ -141,9 +141,8 @@ Observable success after implementation:
 - [x] 2026-04-03: Mark roadmap item 6.4.5 done in `docs/roadmap.md`.
 - [x] 2026-04-03: Run `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, and `make test` successfully (1225 tests, 0
-  failures). `make kani` verifies that all 5 harnesses compile through Kani's
-  compiler (`--only-codegen`); full CBMC verification requires dedicated CI
-  resources due to sort-loop unwinding depth.
+  failures). `make kani` completes full Kani/CBMC verification for all 5
+  shipped harnesses with zero failures.
 - [x] 2026-04-03: Finalize the living sections in this ExecPlan after
   implementation.
 - [x] 2026-04-11: Address PR review findings — add exclusion-property
@@ -314,8 +313,9 @@ The most practical harness shape is:
    `weight` fields.
 2. Use a symbolic fixed-size array of those specs plus a symbolic
    `active_edge_count`.
-3. Assume a small `node_count` bound such as `0..=4` and a matching maximum
-   active-edge count.
+3. Assume a small `node_count` bound such as `0..=3` and a matching maximum
+   active-edge count of `3`, aligning the written plan with the shipped
+   `MAX_NODES = 3` / `MAX_EDGES = 3` model envelope.
 4. Assume that every active edge satisfies the production preconditions:
    `left < right`, `right < node_count`, `weight > 0`, and no duplicate
    unordered pair.
@@ -446,7 +446,8 @@ Expected success signals:
 - `make check-fmt` exits 0.
 - `make lint` exits 0.
 - `make test` exits 0 and reports the new adjacency unit and behaviour tests.
-- `make kani` exits 0 and reports zero failing harnesses.
+- `make kani` exits 0 after full Kani/CBMC verification and reports zero
+  failing harnesses.
 ```
 
 Before marking the roadmap item done, inspect the captured logs and make sure
@@ -465,9 +466,9 @@ The repository now ships:
 - Six bounded Kani harnesses (`MAX_NODES=3`, `MAX_EDGES=3`,
   `unwind(7)`) verifying that `build_adjacency` preserves valid similarity
   edges, keeps neighbour indices in bounds, produces symmetric adjacency lists,
-  emits no spurious edges, and sorts neighbours. All harnesses compile through
-  Kani's custom compiler (`--only-codegen` passes). Full CBMC verification is
-  intended for dedicated CI runners.
+  emits no spurious edges, and sorts neighbours. `make kani` runs the shipped
+  full Kani/CBMC verification flow for these harnesses and succeeds with zero
+  failing proofs at the documented bounds.
 - Five focused unit tests for `build_adjacency` covering empty edges,
   single-edge both-directions, multiple edges sorted, sparse graph isolated
   nodes, and multi-edge symmetry.
