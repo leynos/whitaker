@@ -82,6 +82,11 @@ def test_installer_packaging_bins_match_release_workflow_contract() -> None:
         "release workflow builds --bin whitaker-package-installer, but the "
         "installer package does not declare that binary target"
     )
+    assert "whitaker-package-dependency-binary" in binary_targets, (
+        "release and rolling-release workflows build --bin "
+        "whitaker-package-dependency-binary, but the installer package does "
+        "not declare that binary target"
+    )
     assert "package_lints" not in binary_targets, (
         "installer packaging bins must use the workflow-facing target name, "
         "not the source filename-derived fallback"

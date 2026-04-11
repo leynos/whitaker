@@ -44,15 +44,12 @@ ACT_RUN_TIMEOUT_SECONDS = 900
 
 
 def _cargo_metadata() -> dict[str, object]:
-    """Return parsed workspace metadata from `cargo metadata --no-deps`.
+    """Return parsed workspace metadata from `cargo metadata --no-deps`."""
+    cargo_executable = shutil.which("cargo")
+    assert cargo_executable is not None, "cargo executable must be available in PATH"
 
-    Returns
-    -------
-    dict[str, object]
-        Parsed metadata mapping emitted by Cargo.
-    """
-    completed = subprocess.run(  # noqa: S603,S607  # FIXME: uses trusted test-only PATH-resolved tool
-        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+    completed = subprocess.run(  # noqa: S603  # FIXME: uses trusted test-only tool
+        [cargo_executable, "metadata", "--format-version", "1", "--no-deps"],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,
