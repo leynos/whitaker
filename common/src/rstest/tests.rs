@@ -231,7 +231,7 @@ fn recovers_macro_frame_to_first_user_span() {
 
     assert_span_recovery(
         [(macro_span, true), (user_span, false)],
-        UserEditableSpan::Recovered(user_span)
+        UserEditableSpan::Recovered(user_span),
     );
 }
 
@@ -249,7 +249,7 @@ fn recovers_first_user_span_from_nested_macro_chain() {
             (user_span, false),
             (later_user_span, false),
         ],
-        UserEditableSpan::Recovered(user_span)
+        UserEditableSpan::Recovered(user_span),
     );
 }
 
