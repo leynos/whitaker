@@ -21,10 +21,7 @@ class TestCargoMetadata:
     def test_requires_cargo_on_path(self) -> None:
         """The helper fails fast when `cargo` cannot be resolved."""
         with (
-            patch(
-                "tests.workflows.workflow_test_helpers.shutil.which",
-                return_value=None,
-            ),
+            patch.object(workflow_test_helpers.shutil, "which", return_value=None),
             pytest.raises(
                 AssertionError,
                 match="cargo executable must be available in PATH",
@@ -42,13 +39,11 @@ class TestCargoMetadata:
         )
 
         with (
-            patch(
-                "tests.workflows.workflow_test_helpers.shutil.which",
-                return_value="/usr/bin/cargo",
+            patch.object(
+                workflow_test_helpers.shutil, "which", return_value="/usr/bin/cargo"
             ),
-            patch(
-                "tests.workflows.workflow_test_helpers.subprocess.run",
-                return_value=completed,
+            patch.object(
+                workflow_test_helpers.subprocess, "run", return_value=completed
             ),
             pytest.raises(
                 AssertionError,
@@ -77,13 +72,11 @@ class TestCargoMetadata:
         )
 
         with (
-            patch(
-                "tests.workflows.workflow_test_helpers.shutil.which",
-                return_value="/usr/bin/cargo",
+            patch.object(
+                workflow_test_helpers.shutil, "which", return_value="/usr/bin/cargo"
             ),
-            patch(
-                "tests.workflows.workflow_test_helpers.subprocess.run",
-                return_value=completed,
+            patch.object(
+                workflow_test_helpers.subprocess, "run", return_value=completed
             ),
             pytest.raises(
                 AssertionError,
@@ -106,13 +99,11 @@ class TestCargoMetadata:
         )
 
         with (
-            patch(
-                "tests.workflows.workflow_test_helpers.shutil.which",
-                return_value="/usr/bin/cargo",
+            patch.object(
+                workflow_test_helpers.shutil, "which", return_value="/usr/bin/cargo"
             ),
-            patch(
-                "tests.workflows.workflow_test_helpers.subprocess.run",
-                return_value=completed,
+            patch.object(
+                workflow_test_helpers.subprocess, "run", return_value=completed
             ) as run_mock,
         ):
             metadata = workflow_test_helpers._cargo_metadata()
@@ -149,12 +140,13 @@ class TestWorkspacePackageMetadata:
         self, return_value: dict, expected_match: str
     ) -> None:
         """The helper rejects non-list packages and absent package names."""
-        with patch(
-            "tests.workflows.workflow_test_helpers._cargo_metadata",
-            return_value=return_value,
+        with (
+            patch.object(
+                workflow_test_helpers, "_cargo_metadata", return_value=return_value
+            ),
+            pytest.raises(AssertionError, match=expected_match),
         ):
-            with pytest.raises(AssertionError, match=expected_match):
-                workflow_test_helpers._workspace_package_metadata("whitaker-installer")
+            workflow_test_helpers._workspace_package_metadata("whitaker-installer")
 
     def test_returns_matching_package_and_ignores_non_dict_entries(self) -> None:
         """The helper skips malformed entries and returns the matching package."""
@@ -162,8 +154,9 @@ class TestWorkspacePackageMetadata:
             "name": "whitaker-installer",
             "targets": [{"name": "whitaker-installer", "kind": ["bin"]}],
         }
-        with patch(
-            "tests.workflows.workflow_test_helpers._cargo_metadata",
+        with patch.object(
+            workflow_test_helpers,
+            "_cargo_metadata",
             return_value={"packages": ["invalid", {"name": 42}, package]},
         ):
             metadata = workflow_test_helpers._workspace_package_metadata(
