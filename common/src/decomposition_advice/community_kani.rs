@@ -75,7 +75,7 @@ fn symbolic_adjacency() -> (usize, Vec<SimilarityEdge>, Vec<Vec<(usize, u64)>>) 
 fn verify_build_adjacency_length() {
     let (node_count, _edges, adjacency) = symbolic_adjacency();
 
-    assert!(adjacency.len() == node_count);
+    assert_eq!(adjacency.len(), node_count);
 }
 
 /// Verifies that every input edge is preserved in both directions.
