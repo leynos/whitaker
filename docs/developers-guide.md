@@ -113,6 +113,22 @@ returns only the matched branch body and excludes the closing `fi`, so
 follow-on assertions can stay focused on the branch contents rather than shell
 framing.
 
+#### GitHub-expression helpers
+
+Four helpers in `rolling_release_workflow_test_support.py` analyse `if` guard
+expressions on workflow steps:
+
+| Helper                                         | Signature                                    | Purpose                                                                                                                                                               |
+| ---------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_github_operand_pattern`                      | `(operand: str) -> re.Pattern[str]`          | Builds a regex that matches the operand as a standalone token, preventing partial-name false positives (e.g. a prefix or suffix sharing characters with the operand). |
+| `_github_expression_mentions_operand`          | `(expression: object, operand: str) -> bool` | Returns `True` when the normalised expression contains the operand as a whole token.                                                                                  |
+| `_github_expression_negates_operand`           | `(expression: object, operand: str) -> bool` | Returns `True` when the expression contains `!operand` or `!(operand)`. Double negation (`!!operand`) is not flagged.                                                 |
+| `_github_expression_compares_operand_to_false` | `(expression: object, operand: str) -> bool` | Returns `True` when the expression contains `operand == false` (or `false == operand`) in any quoting style. Strict-equality only; `!=` comparisons are not matched.  |
+
+Use these helpers together in step-guard assertions to verify gating semantics
+rather than exact expression strings, making tests resilient to harmless
+formatting changes in the workflow YAML.
+
 Local workflow tests use the Makefile variables `UV` and `WORKFLOW_TEST_VENV`:
 
 - `UV` selects the `uv` executable used to create and populate the workflow-test

@@ -108,7 +108,7 @@ def _github_expression_negates_operand(expression: object, operand: str) -> bool
     """Return whether a GitHub expression contains `!<operand>`."""
     operand_pattern = _github_operand_pattern(operand).pattern
     return re.search(
-        rf"!\s*(?:\(\s*{operand_pattern}\s*\)|{operand_pattern})",
+        rf"(?<!!)!\s*(?:\(\s*{operand_pattern}\s*\)|{operand_pattern})",
         _github_expression_value(expression),
     ) is not None
 
@@ -122,8 +122,8 @@ def _github_expression_compares_operand_to_false(
     operand_pattern = _github_operand_pattern(operand).pattern
     false_literal_pattern = r"(?:'false'|\"false\"|false)"
     return re.search(
-        rf"(?:{operand_pattern}\s*(?:==|!=)\s*{false_literal_pattern}"
-        rf"|{false_literal_pattern}\s*(?:==|!=)\s*{operand_pattern})",
+        rf"(?:{operand_pattern}\s*==\s*{false_literal_pattern}"
+        rf"|{false_literal_pattern}\s*==\s*{operand_pattern})",
         normalized_expression,
     ) is not None
 
