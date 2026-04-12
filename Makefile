@@ -14,6 +14,8 @@ NIXIE ?= nixie
 WHITAKER_REPO ?= $(CURDIR)
 WHITAKER_REV ?= HEAD
 PUBLISH_PACKAGES ?=
+UV ?= uv
+WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 5.0.0
 DYLINT_LINK_VERSION ?= 5.0.0
@@ -76,13 +78,13 @@ test: ## Run tests with warnings treated as errors
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
-	@command -v python3 >/dev/null || { echo "python3 is required for workflow tests"; exit 1; }
-	@ACT_WORKFLOW_TESTS=1 python3 -m pytest tests/workflows
+	@command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
+	@ACT_WORKFLOW_TESTS=1 $(WORKFLOW_TEST_VENV)/bin/python -m pytest tests/workflows
 
 workflow-test-deps: ## Install Python dependencies for workflow tests
-	@command -v python3 >/dev/null || { echo "python3 is required for workflow tests"; exit 1; }
-	@python3 -m pip --version >/dev/null || { echo "python3 with pip is required for workflow tests"; exit 1; }
-	@python3 -m pip install --disable-pip-version-check -r tests/workflows/requirements.txt
+	@command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
+	@$(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
+	@$(UV) pip install --python $(WORKFLOW_TEST_VENV)/bin/python -r tests/workflows/requirements.txt
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)

@@ -153,17 +153,11 @@ Success is observable by:
   the existing `build-lints` smoke test, but an implementation may choose to
   add an `inputs` object for realism if it helps future workflow coverage.
 
-- This environment's system Python is PEP 668 externally managed, so
-  `make workflow-test-deps` fails when it tries to install `pytest` and
-  `ruamel.yaml` globally with `pip`. Local workflow-contract verification will
-  need an isolated virtual environment or equivalent wrapper before the test
-  command can run.
-
-- This environment also lacks `python3-venv` / `ensurepip`, so the first
-  virtual-environment fallback is unavailable. The practical local workaround
-  was
-  `python3 -m pip install --break-system-packages -r tests/workflows/requirements.txt`
-   before running the focused workflow tests.
+- Follow-up discovery (same implementation thread): `make workflow-test-deps`
+  originally tried to install directly into the system Python, which is brittle
+  under PEP 668 and contrary to the repository's `uv`-based local-validation
+  guidance. The target should create a virtual environment via `uv` and install
+  workflow-test dependencies into that environment instead.
 
 ## Decision Log
 
@@ -286,12 +280,11 @@ Recommended command:
 set -o pipefail; python3 -m pytest tests/workflows/test_rolling_release_workflow.py 2>&1 | tee /tmp/forceable-rebuild-workflow-pytest.log
 ```
 
-In this environment, the intended virtual-environment fallback is not available
-because `python3 -m venv` fails without `ensurepip`. The working fallback was:
+After the follow-up correction, the intended local command is:
 
 ```sh
-python3 -m pip install --break-system-packages -r tests/workflows/requirements.txt
-set -o pipefail; python3 -m pytest tests/workflows/test_rolling_release_workflow.py 2>&1 | tee /tmp/forceable-rebuild-workflow-pytest.log
+make workflow-test-deps
+set -o pipefail; .venv/bin/python -m pytest tests/workflows/test_rolling_release_workflow.py 2>&1 | tee /tmp/forceable-rebuild-workflow-pytest.log
 ```
 
 ### Milestone 2: Make manual dependency-binary rebuilds explicitly forceable
@@ -374,8 +367,8 @@ set -o pipefail; make test 2>&1 | tee /tmp/forceable-rebuild-test.log
 
 Expected success signals:
 
-1. `python3 -m pytest tests/workflows/test_rolling_release_workflow.py` passes
-   with the new contract tests included.
+1. `.venv/bin/python -m pytest tests/workflows/test_rolling_release_workflow.py`
+   passes with the new contract tests included.
 2. `make markdownlint` and `make nixie` pass after the doc update.
 3. `make check-fmt`, `make lint`, and `make test` all complete successfully.
 
@@ -403,18 +396,22 @@ manually versus reuse existing dependency archives, and
 `docs/whitaker-dylint-suite-design.md` no longer implies that every manual run
 rebuilds dependency binaries.
 
+Follow-up correction: the repository's workflow-test dependency setup now uses
+`uv` with a local `.venv` instead of attempting to install into the system
+Python. `Makefile` now creates that environment in `workflow-test-deps`, and
+the local workflow-validation guide documents the same path.
+
 Validation results:
 
 1. Focused workflow contract tests passed:
-   `python3 -m pytest tests/workflows/test_rolling_release_workflow.py` →
-   `9 passed, 1 skipped`.
+   `.venv/bin/python -m pytest tests/workflows/test_rolling_release_workflow.py`
+    → `9 passed, 1 skipped`.
 2. Documentation gates passed:
    `make fmt`, `make markdownlint`, and `make nixie`.
 3. Repository code gates passed:
    `make check-fmt`, `make lint`, and `make test` →
    `1293 tests run: 1293 passed, 2 skipped`.
 
-Lesson learned: the repository's `make workflow-test-deps` target assumes a
-Python environment where global `pip install` is allowed. In containerized
-Debian-style environments with PEP 668 and no `python3-venv`, workflow-contract
-verification needs a documented fallback.
+Lesson learned: workflow-test infrastructure should follow the same `uv` + venv
+discipline as the rest of the repository's local validation paths instead of
+assuming that mutating the system Python is acceptable.
