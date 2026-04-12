@@ -154,8 +154,12 @@ underlying cargo invocation. Exit codes should preserve lint failure semantics
 from the underlying execution path, while install and configuration failures
 should produce distinct operational errors.
 
-The following sequence diagram shows the proposed `whitaker check` flow from
-configuration loading through lazy installation and Dylint execution.
+The following sequence diagram serves as assistive text for the proposed
+`whitaker check` flow. It shows how `WhitakerCLI` asks the
+`Ortho_config_loader` to merge CLI, environment, and TOML configuration, then
+resolves locale, output mode, and rule selection, ensures missing bundles and
+`cargo-dylint` through the `Installer_subsystem`, records failures for
+`doctor`, and finally invokes `Cargo_dylint` to return lint results to the user.
 
 ```mermaid
 sequenceDiagram
@@ -351,9 +355,19 @@ After that compatibility window closes:
 - If legacy variables are still present, Whitaker should emit a startup error
   that names each unsupported variable and its replacement `WHITAKER_*` key.
 
-The following entity-relationship diagram summarizes how configuration,
-selection state, installed bundle manifests, and recorded failures relate to
-one another.
+The following entity-relationship diagram serves as assistive text for the
+configuration and installed-state model. `WhitakerConfig` represents the
+user-visible configuration and has one-to-many relationships with
+`LintSelectionConfig`, which in turn owns one-to-many `LintSelector` records,
+and with `RuleTuningConfig`, which stores per-rule limits and exceptions.
+`BundleManifest` represents installed bundle state, contains one-to-many
+`BundleEntry` records, and links to `FailureEvent`, which captures build or
+dependency failures; `FailureEvent` is also shown as occurring under a
+particular `WhitakerConfig`. The one-to-many cardinalities are the
+`WhitakerConfig` to `LintSelectionConfig`, `LintSelectionConfig` to
+`LintSelector`, `WhitakerConfig` to `RuleTuningConfig`, `BundleManifest` to
+`BundleEntry`, and `BundleManifest` or `WhitakerConfig` to `FailureEvent`
+relationships.
 
 ```mermaid
 erDiagram
@@ -595,7 +609,7 @@ If implemented, this design should deliver:
   `doctor`.
 - One configuration model across CLI flags, environment variables, and TOML.
 - A localized, accessible CLI surface that is usable in interactive shells,
-  CI logs, and agent-driven workflows.
+  Continuous Integration (CI) logs, and agent-driven workflows.
 
 [^1]: [Whitaker user guide](users-guide.md)
 [^2]: [Whitaker Dylint suite design](whitaker-dylint-suite-design.md)
