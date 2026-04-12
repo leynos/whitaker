@@ -1,4 +1,4 @@
-# Whitaker CLI design
+# Whitaker Command Line Interface (CLI) design
 
 ## Context and problem statement
 
@@ -29,7 +29,8 @@ first-class concerns rather than optional polish.
 - Replace the current experimental-rule ambiguity with a stable, explicit rule
   selection model.
 - Standardize configuration across CLI flags, environment variables, and
-  `whitaker.toml` using
+  `whitaker.toml`, the canonical TOML (Tom's Obvious Minimal Language)
+  configuration file, using
   [`ortho_config`](https://github.com/leynos/ortho-config) (`ortho_config`).[^4]
 - Ensure help text, diagnostics, progress reporting, and machine-readable
   output remain localizable and accessible.
@@ -91,9 +92,10 @@ release of the unified binary.
 - Progress rendering should default to line-oriented output. Animated spinners
   should be avoided by default because they degrade screen reader behaviour and
   create noisy logs. A plain progress mode should always be available.
-- Commands that produce operational state summaries should support `--json`.
-  `whitaker ls` must support `--json`, and `whitaker doctor` should support it
-  as well for accessibility tooling, shell automation, and agent workflows.
+- Commands that produce operational state summaries should support `--json`,
+  emitting JSON (JavaScript Object Notation). `whitaker ls` must support
+  `--json`, and `whitaker doctor` should support it as well for accessibility
+  tooling, shell automation, and agent workflows.
 - Narrow terminals should render block-oriented summaries instead of depending
   on fixed-width column layouts.
 
@@ -108,6 +110,10 @@ Common options:
   -q, --quiet
   -v, --verbose...
 ```
+
+`--json` is intentionally not a global option. It should be exposed only on
+subcommands that return operational state summaries, specifically `whitaker ls`
+and `whitaker doctor`.
 
 ## `whitaker check`
 
@@ -245,6 +251,17 @@ Selection precedence should remain simple and predictable:
 5. Apply `ignore`.
 6. Drop experimental rules unless experimental mode is enabled.
 
+Experimental enablement should follow its own explicit precedence:
+
+1. Start from `experimental = false`.
+2. If `whitaker.toml` sets `[lint].experimental`, use that value.
+3. If `WHITAKER_LINT_EXPERIMENTAL` is set, override the TOML value.
+4. If `--experimental` is present, force experimental mode on for that
+   invocation.
+
+The absence of `--experimental` should leave the merged TOML and environment
+value in place. The initial surface does not need a `--no-experimental` flag.
+
 Whitaker should deliberately deviate from Ruff in one place. If the user has
 not supplied an explicit `select`, `--experimental` should extend the implicit
 default selection with experimental rules. If the user has supplied an explicit
@@ -332,9 +349,10 @@ variables, and TOML configuration:
   case-sensitive matching.
 - `progress` accepts `auto`, `plain`, or `off`, using lowercase ASCII and
   case-sensitive matching.
-- CSV selector lists in `WHITAKER_LINT_SELECT`, `WHITAKER_LINT_IGNORE`, and
-  related fields preserve token casing and should apply the same case-sensitive
-  selector rules as `--select`, `--ignore`, and `--extend-select`.
+- CSV (comma-separated values) selector lists in `WHITAKER_LINT_SELECT`,
+  `WHITAKER_LINT_IGNORE`, and related fields preserve token casing and should
+  apply the same case-sensitive selector rules as `--select`, `--ignore`, and
+  `--extend-select`.
 - Invalid literals should fail configuration loading with an error that names
   the offending key and the accepted values.
 
@@ -563,6 +581,12 @@ structured event with:
 
 Failures should be surfaced both at the point of failure and later through
 `whitaker doctor`.
+
+Failure records should live under the Whitaker state directory, for example
+`~/.local/share/whitaker/state/failures/`, with one structured event record and
+one referenced log file per failure. The default retention policy should keep
+the most recent 50 failure events or 30 days of history, whichever is smaller,
+and rotate the oldest entries first.
 
 ```plaintext
 error: failed to build Whitaker core lints from source
