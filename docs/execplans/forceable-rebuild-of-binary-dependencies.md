@@ -396,6 +396,10 @@ manually versus reuse existing dependency archives, and
 `docs/whitaker-dylint-suite-design.md` no longer implies that every manual run
 rebuilds dependency binaries.
 
+Follow-up documentation improvement: `docs/developers-guide.md` now includes a
+Mermaid flow diagram with an accessible caption so maintainers can see the
+manual-dispatch and push-to-main decision path at a glance.
+
 Follow-up correction: the repository's workflow-test dependency setup now uses
 `uv` with a local `.venv` instead of attempting to install into the system
 Python. `Makefile` now creates that environment in `workflow-test-deps`, and

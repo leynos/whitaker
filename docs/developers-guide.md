@@ -249,6 +249,36 @@ is missing the expected `.tgz` or `.zip` dependency archives. Leave it set to
 `false` for a manual republish that should reuse or restore the existing
 dependency archives.
 
+Figure: Rolling-release dependency-binary decision flow. The workflow checks
+whether the event is a manual dispatch or a push to `main`, then decides
+whether to set `should_build` and either rebuild dependency binaries or restore
+the existing rolling-release archives.
+
+```mermaid
+flowchart TD
+    A[Start workflow] --> B{Event type}
+
+    B -->|workflow_dispatch| C{force_dependency_binary_rebuild input}
+    B -->|push on main| D[Compare installer/dependency-binaries.toml between before and sha]
+    B -->|other events| G[Preserve existing behaviour]
+
+    C -->|true| E[Set should_build=true]
+    C -->|false or unset| F[Set should_build=false]
+
+    D -->|manifest changed| E
+    D -->|manifest unchanged| F
+
+    E --> H[Run build_dependency_binaries job]
+    F --> I[Skip build_dependency_binaries job]
+
+    H --> J[Publish job uses freshly built dependency archives]
+    I --> K[Publish job restores dependency archives from existing rolling release]
+
+    J --> L[End]
+    K --> L[End]
+    G --> L
+```
+
 ### Continuous Integration (CI) manifest script
 
 `installer/scripts/dependency_binaries_manifest.py` is a thin CI helper that
