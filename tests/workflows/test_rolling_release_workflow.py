@@ -189,8 +189,8 @@ def _workflow_dispatch_inputs(workflow_mapping: Mapping[str, Any]) -> dict[str, 
     """Return the `workflow_dispatch.inputs` mapping."""
     on_mapping = workflow_mapping.get("on")
     match on_mapping:
-        case {"workflow_dispatch": {"inputs": inputs}} if isinstance(inputs, dict):
-            return cast(dict[str, Any], inputs)
+        case {"workflow_dispatch": {"inputs": dict() as inputs}}:
+            return inputs
         case {"workflow_dispatch": dict()}:
             pytest.fail("workflow_dispatch must declare an inputs mapping")
         case {"workflow_dispatch": _}:
