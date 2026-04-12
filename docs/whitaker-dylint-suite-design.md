@@ -1380,6 +1380,14 @@ ______________________________________________________________________
 This section records design decisions made during Phase 3 consumer guidance and
 workspace metadata documentation work.
 
+> [!NOTE]
+> The installer-first CLI model described in this section is now historical
+> context. New CLI work should follow the
+> [Whitaker CLI design](whitaker-cli-design.md), which proposes a single
+> `whitaker` binary, `whitaker.toml` as the canonical config file, unified
+> `check`/`install`/`ls`/`doctor` commands, and first-class localization and
+> accessibility requirements.
+
 ### CLI documentation placement
 
 **Decision:** Document `whitaker-installer` CLI in the existing

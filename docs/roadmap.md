@@ -59,7 +59,7 @@
 - [x] 2.3.4. Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and
   add UI smoke tests that run under at least one non-English locale.
 
-## 3. Aggregated packaging and installer
+## 3. Aggregated packaging, installer, and unified CLI
 
 ### 3.1. Suite assembly
 
@@ -101,6 +101,94 @@
   §Decision outcome / proposed direction.
 - [x] 3.4.6. Record download-versus-build rates and total installation time.
   See `docs/adr-001-prebuilt-dylint-libraries.md` §Migration plan.
+
+### 3.5. Unified CLI foundation
+
+- [ ] 3.5.1. Add a root `whitaker` binary and move the current installer
+  behaviour behind an internal library boundary. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
+  §Compatibility and migration. Requires 3.2.1.
+- [ ] 3.5.2. Publish `whitaker` release artefacts with `cargo-binstall`
+  metadata that mirror the existing installer packaging flow. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
+  §Compatibility and migration. Requires 3.5.1 and 4.3.1.
+
+### 3.6. Rule selection and configuration model
+
+- [ ] 3.6.1. Assign stable rule codes, family selectors, and `DEFAULT`/`ALL`
+  semantics for the core lint suite. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Rule identifiers and selection
+  model. Requires 3.5.1.
+- [ ] 3.6.2. Implement selector precedence across configuration and CLI flags,
+  including the curated `--experimental` behaviour for implicit and explicit
+  selections. See [Whitaker CLI design](whitaker-cli-design.md) §Rule
+  identifiers and selection model. Requires 3.6.1.
+- [ ] 3.6.3. Adopt `ortho_config` for CLI, environment, and `whitaker.toml`
+  loading, while retaining one-release compatibility with `dylint.toml` and
+  legacy environment keys. See [Whitaker CLI design](whitaker-cli-design.md)
+  §Configuration model. Requires 3.5.1.
+- [ ] 3.6.4. Add shared `--locale`, `--colour`, and `--progress` controls, and
+  ensure the merged config surface remains localizable and accessible. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localization
+  requirements and §Configuration model. Requires 3.6.3 and 2.3.4.
+
+### 3.7. Unified installation and bundle state
+
+- [ ] 3.7.1. Move dependency repair, toolchain provisioning, and bundle
+  installation into `whitaker install`, including `--offline`,
+  `--build-from-source`, and `--toolchain` flows. See
+  [Whitaker CLI design](whitaker-cli-design.md) §`whitaker install`. Requires
+  3.5.1, 3.4.5, and 4.3.2.
+- [ ] 3.7.2. Resolve source builds against the CLI release version or an
+  explicit revision instead of cloning `main`, and record source provenance for
+  installed bundles. See [Whitaker CLI design](whitaker-cli-design.md)
+  §`whitaker install`. Requires 3.7.1.
+- [ ] 3.7.3. Add per-bundle manifest files with schema version, Whitaker
+  version, source SHA, build date, toolchain, target, origin, and bundle-kind
+  metadata. See [Whitaker CLI design](whitaker-cli-design.md) §Bundle manifests
+  and `whitaker ls`. Requires 3.7.1.
+
+### 3.8. Status, diagnostics, and repair commands
+
+- [ ] 3.8.1. Implement `whitaker ls` text output with installed bundle
+  metadata, the effective config path, and per-rule enablement states. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Bundle manifests and
+  `whitaker ls`. Requires 3.6.2 and 3.7.3.
+- [ ] 3.8.2. Add `--json` to `whitaker ls` and `whitaker doctor`, using stable
+  machine-readable fields that remain untranslated across locales. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localization
+  requirements and §`whitaker doctor`. Requires 3.8.1.
+- [ ] 3.8.3. Record structured dependency-install and bundle-build failures
+  with timestamps, phase metadata, stderr tails, advice, and log-path
+  references. See [Whitaker CLI design](whitaker-cli-design.md) §Failure
+  recording. Requires 3.7.1.
+- [ ] 3.8.4. Implement `whitaker doctor` to summarize configuration,
+  toolchains, dependencies, prebuilt availability, bundle-version drift,
+  selected-lint coverage, and recent failures. See
+  [Whitaker CLI design](whitaker-cli-design.md) §`whitaker doctor` and §Failure
+  recording. Requires 3.7.3 and 3.8.3.
+- [ ] 3.8.5. Add behaviour coverage for locale overrides, plain-progress
+  output, and JSON parity between text and machine-readable status commands.
+  See [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and
+  localization requirements. Requires 3.6.4, 3.8.2, and 3.8.4.
+
+### 3.9. Compatibility release and documentation migration
+
+- [ ] 3.9.1. Ship a compatibility release where `whitaker-installer`
+  dispatches to `whitaker install` with a deprecation notice and `whitaker ls`
+  accepts `list` as an alias. See [Whitaker CLI design](whitaker-cli-design.md)
+  §Public CLI surface and §Compatibility and migration. Requires 3.7.1 and
+  3.8.1.
+- [ ] 3.9.2. Update `docs/users-guide.md`, `docs/developers-guide.md`,
+  `docs/publishing.md`, and installer-facing workflow documentation to point to
+  the unified CLI and the new configuration surface. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Configuration model,
+  §Compatibility and migration, and §Expected outcomes. Requires 3.6.3 and
+  3.9.1.
+- [ ] 3.9.3. Remove wrapper script generation, `whitaker-ls`, and
+  installer-first references once the compatibility release window closes. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
+  §Compatibility and migration. Requires 3.9.1 and 3.9.2.
 
 ## 4. Quality gates and automation
 
