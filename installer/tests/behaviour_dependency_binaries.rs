@@ -142,7 +142,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         .missing_tool
         .clone()
         .expect("missing tool should be configured");
-    let repository_missing_asset = matches!(
+    let is_repository_asset_missing = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::NotFound)
     );
@@ -164,7 +164,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         &tool,
         ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
-            repository_missing_asset,
+            is_repository_asset_missing,
             should_verify_repository_install: expect_repository_verification,
             is_repository_verification_failing: world.should_repository_verification_fail,
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),

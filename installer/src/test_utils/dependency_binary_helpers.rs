@@ -9,7 +9,7 @@ pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
     pub is_binstall_available: bool,
     /// Whether the repository failure is a missing asset.
-    pub repository_missing_asset: bool,
+    pub is_repository_asset_missing: bool,
     /// Whether to verify repository installation.
     pub should_verify_repository_install: bool,
     /// Whether repository verification should fail.
@@ -140,11 +140,12 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
         return vec![cargo_call, tool_verification_check(&cfg.tool)];
     }
     // binstall failed and cargo install also fails
-    let cargo_call = cargo_install(
-        cfg.tool_static,
-        Ok(failure_output(cfg.cargo_install_failure.as_ref().unwrap())),
-    );
-    vec![cargo_call]
+    if let Some(message) = cfg.cargo_install_failure.as_deref() {
+        let cargo_call = cargo_install(cfg.tool_static, Ok(failure_output(message)));
+        vec![cargo_call]
+    } else {
+        vec![]
+    }
 }
 
 /// Creates expected calls for cargo fallback installation (binstall or install).
@@ -153,7 +154,7 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
     // acceptable here as it will not be freed.
     let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
 
-    if config.repository_missing_asset {
+    if config.is_repository_asset_missing {
         let version = dependency_version(tool);
         let install_call = cargo_source_install(
             tool_static,

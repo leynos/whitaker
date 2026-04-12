@@ -57,10 +57,10 @@ pub enum DownloadError {
         reason: String,
     },
 
-    /// The requested artefact was not found (HTTP 404).
+    /// The requested artefact was not found (HTTP 404 or 410 Gone).
     #[error("artefact not found: {url}")]
     NotFound {
-        /// The URL that returned 404.
+        /// The URL that returned HTTP 404 or 410.
         url: String,
     },
 
