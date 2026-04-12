@@ -94,6 +94,7 @@ pub(super) fn install_tool(
         else {
             return install_tool_with_cargo(executor, cargo_install_plan, stderr, context);
         };
+        cargo_install_plan = cargo_install_plan.with_version(dependency.version());
 
         match repo.installer.install(dependency, repo.target, repo.dirs) {
             Ok(_) if is_tool_installed(executor, tool) => {
@@ -115,7 +116,7 @@ pub(super) fn install_tool(
                 );
             }
             Err(error) if error.is_not_found() => {
-                cargo_install_plan = cargo_install_plan.with_version(dependency.version());
+                cargo_install_plan = cargo_install_plan.skip_binstall();
                 write_message(
                     stderr,
                     context.quiet,
@@ -158,6 +159,7 @@ pub(super) enum InstallOutcome {
 struct CargoInstallPlan<'a> {
     tool: &'a DependencyTool,
     version: Option<&'a str>,
+    skip_binstall: bool,
 }
 
 impl<'a> CargoInstallPlan<'a> {
@@ -165,12 +167,20 @@ impl<'a> CargoInstallPlan<'a> {
         Self {
             tool,
             version: None,
+            skip_binstall: false,
         }
     }
 
     fn with_version(self, version: &'a str) -> Self {
         Self {
             version: Some(version),
+            ..self
+        }
+    }
+
+    fn skip_binstall(self) -> Self {
+        Self {
+            skip_binstall: true,
             ..self
         }
     }
@@ -183,7 +193,7 @@ fn install_tool_with_cargo(
     context: &InstallContext<'_>,
 ) -> Result<InstallOutcome> {
     // Always try binstall first if available; fall back to cargo install on failure
-    if context.cargo_fallback_mode == InstallMode::Binstall {
+    if context.cargo_fallback_mode == InstallMode::Binstall && !cargo_install_plan.skip_binstall {
         if try_binstall(executor, cargo_install_plan.tool, stderr, context.quiet)? {
             return Ok(InstallOutcome::CargoBinstall);
         }

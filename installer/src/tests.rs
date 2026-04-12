@@ -131,7 +131,7 @@ fn ensure_dylint_tools_installs_missing_tools(
         },
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["binstall", "-y", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
             result: Ok(success_output()),
         },
         ExpectedCall {
@@ -186,11 +186,6 @@ fn ensure_dylint_tools_propagates_install_failures() {
             cmd: "cargo",
             args: vec!["binstall", "--version"],
             result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "-y", "cargo-dylint"],
-            result: Ok(failure_output("binstall failed")),
         },
         ExpectedCall {
             cmd: "cargo",

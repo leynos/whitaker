@@ -8,6 +8,8 @@ use std::process::Output;
 pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
     pub is_binstall_available: bool,
+    /// Whether the repository failure is a missing asset.
+    pub is_repository_not_found: bool,
     /// Whether to verify repository installation.
     pub should_verify_repository_install: bool,
     /// Whether repository verification should fail.
@@ -55,6 +57,26 @@ pub fn cargo_install(tool: &'static str, result: Result<Output>) -> ExpectedCall
         cmd: "cargo",
         args: vec!["install", tool],
         result,
+    }
+}
+
+fn cargo_source_install(
+    tool: &'static str,
+    version: &'static str,
+    result: Result<Output>,
+) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["install", "--locked", "--version", version, tool],
+        result,
+    }
+}
+
+fn dependency_version(tool: &str) -> &'static str {
+    match tool {
+        "cargo-dylint" => "4.1.0",
+        "dylint-link" => "4.1.0",
+        other => panic!("unexpected tool: {other}"),
     }
 }
 
@@ -114,37 +136,44 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
     // binstall failed: check if we should sequence a cargo-install attempt
     if cfg.cargo_install_failure.is_none() {
         // cargo install succeeds after binstall fails
-        let cargo_call = ExpectedCall {
-            cmd: "cargo",
-            args: vec!["install", cfg.tool_static],
-            result: Ok(success_output()),
-        };
+        let cargo_call = cargo_install(cfg.tool_static, Ok(success_output()));
         return vec![cargo_call, tool_verification_check(&cfg.tool)];
     }
     // binstall failed and cargo install also fails
-    let cargo_call = ExpectedCall {
-        cmd: "cargo",
-        args: vec!["install", cfg.tool_static],
-        result: Ok(failure_output(cfg.cargo_install_failure.as_ref().unwrap())),
-    };
+    let cargo_call = cargo_install(
+        cfg.tool_static,
+        Ok(failure_output(cfg.cargo_install_failure.as_ref().unwrap())),
+    );
     vec![cargo_call]
 }
 
 /// Creates expected calls for cargo fallback installation (binstall or install).
-pub fn cargo_fallback_calls(
-    tool: &str,
-    binstall_available: bool,
-    cargo_binstall_failure: Option<&str>,
-    cargo_install_failure: Option<&str>,
-) -> Vec<ExpectedCall> {
+pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
     // Intentional leak in tests to extend lifetime for static string usage;
     // acceptable here as it will not be freed.
     let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
 
-    let (use_binstall, failure_message) = if binstall_available {
-        (true, cargo_binstall_failure)
+    if config.is_repository_not_found {
+        let version = dependency_version(tool);
+        let install_call = cargo_source_install(
+            tool_static,
+            version,
+            Ok(match config.cargo_install_failure {
+                Some(message) => failure_output(message),
+                None => success_output(),
+            }),
+        );
+        return if config.cargo_install_failure.is_none() {
+            vec![install_call, tool_verification_check(tool)]
+        } else {
+            vec![install_call]
+        };
+    }
+
+    let (use_binstall, failure_message) = if config.is_binstall_available {
+        (true, config.cargo_binstall_failure)
     } else {
-        (false, cargo_install_failure)
+        (false, config.cargo_install_failure)
     };
 
     let install_call = ExpectedCall {
@@ -166,7 +195,7 @@ pub fn cargo_fallback_calls(
         tool_static,
         primary_succeeded: failure_message.is_none(),
         use_binstall,
-        cargo_install_failure: cargo_install_failure.map(String::from),
+        cargo_install_failure: config.cargo_install_failure.map(String::from),
     };
     calls.extend(post_primary_calls(&post_config));
     calls
@@ -186,12 +215,7 @@ pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<Expecte
         }
     }
 
-    calls.extend(cargo_fallback_calls(
-        tool,
-        config.is_binstall_available,
-        config.cargo_binstall_failure,
-        config.cargo_install_failure,
-    ));
+    calls.extend(cargo_fallback_calls(tool, &config));
     calls
 }
 

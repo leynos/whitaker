@@ -119,45 +119,29 @@ mod tests {
     //! Tests for downloader error mapping.
 
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn map_ureq_error_maps_missing_asset_statuses_to_not_found() {
-        for status in [404, 410] {
-            let error = map_ureq_error(
-                "https://example.test/archive.tgz",
-                &ureq::Error::StatusCode(status),
-            );
+    #[rstest]
+    #[case(404, true)]
+    #[case(410, true)]
+    #[case(403, false)]
+    #[case(500, false)]
+    fn map_ureq_error_maps_status_codes(#[case] status: u16, #[case] is_not_found: bool) {
+        let error = map_ureq_error(
+            "https://example.test/archive.tgz",
+            &ureq::Error::StatusCode(status),
+        );
 
+        if is_not_found {
             assert!(matches!(
                 error,
                 DependencyBinaryInstallError::NotFound { .. }
             ));
+        } else {
+            assert!(matches!(
+                error,
+                DependencyBinaryInstallError::Download { .. }
+            ));
         }
-    }
-
-    #[test]
-    fn map_ureq_error_maps_non_missing_4xx_to_download_error() {
-        let error = map_ureq_error(
-            "https://example.test/archive.tgz",
-            &ureq::Error::StatusCode(403),
-        );
-
-        assert!(matches!(
-            error,
-            DependencyBinaryInstallError::Download { .. }
-        ));
-    }
-
-    #[test]
-    fn map_ureq_error_maps_other_status_to_download_error() {
-        let error = map_ureq_error(
-            "https://example.test/archive.tgz",
-            &ureq::Error::StatusCode(500),
-        );
-
-        assert!(matches!(
-            error,
-            DependencyBinaryInstallError::Download { .. }
-        ));
     }
 }
