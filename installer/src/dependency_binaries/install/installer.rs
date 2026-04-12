@@ -20,6 +20,13 @@ pub enum DependencyBinaryInstallError {
     #[error("could not determine local bin directory")]
     MissingBinDir,
 
+    /// The release asset does not exist for this dependency binary.
+    #[error("repository asset not found: {url}")]
+    NotFound {
+        /// The release asset URL that returned 404.
+        url: String,
+    },
+
     /// Downloading the archive failed.
     #[error("download failed for {url}: {reason}")]
     Download {
@@ -68,6 +75,14 @@ pub enum DependencyBinaryInstallError {
         /// Actual computed checksum.
         actual: String,
     },
+}
+
+impl DependencyBinaryInstallError {
+    /// Returns `true` when the failure is caused by a missing repository asset.
+    #[must_use]
+    pub(crate) fn is_not_found(&self) -> bool {
+        matches!(self, Self::NotFound { .. })
+    }
 }
 
 /// Installs dependency binaries from repository-hosted release assets.

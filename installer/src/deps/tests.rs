@@ -7,7 +7,7 @@ use crate::test_utils::dependency_binary_helpers::{
     binstall_install, binstall_version_check_with_result, cargo_dylint_check_with_result,
     cargo_install, dylint_link_check_with_result,
 };
-use crate::test_utils::{StubDirs, StubExecutor, failure_output, success_output};
+use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
 
 fn install_options<'a>(
@@ -208,5 +208,82 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
         }
         other => panic!("unexpected error: {other}"),
     }
+    executor.assert_finished();
+}
+
+#[test]
+fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer.expect_install().returning(|_, _, _| {
+        Err(DependencyBinaryInstallError::NotFound {
+            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz".to_owned(),
+        })
+    });
+    let executor = StubExecutor::new(vec![
+        binstall_version_check_with_result(Ok(success_output())),
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+            result: Ok(success_output()),
+        },
+        cargo_dylint_check_with_result(Ok(success_output())),
+    ]);
+    let mut stderr = Vec::new();
+
+    install_dylint_tools_with_options(
+        &executor,
+        &DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: true,
+        },
+        &mut stderr,
+        install_options(&repository_installer, false),
+    )
+    .expect("source build should succeed");
+
+    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
+    assert!(output.contains("Building from source with Cargo."));
+    assert!(output.contains("Installed cargo-dylint from source with cargo install."));
+    executor.assert_finished();
+}
+
+#[test]
+fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_installs_it() {
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .once()
+        .returning(|_, _, _| {
+            Err(DependencyBinaryInstallError::NotFound {
+                url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"
+                    .to_owned(),
+            })
+        });
+    let executor = StubExecutor::new(vec![
+        binstall_version_check_with_result(Ok(success_output())),
+        ExpectedCall {
+            cmd: "cargo",
+            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+            result: Ok(success_output()),
+        },
+        cargo_dylint_check_with_result(Ok(success_output())),
+        dylint_link_check_with_result(Ok(success_output())),
+    ]);
+    let mut stderr = Vec::new();
+
+    install_dylint_tools_with_options(
+        &executor,
+        &DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        },
+        &mut stderr,
+        install_options(&repository_installer, false),
+    )
+    .expect("cargo-dylint source build should satisfy both tools");
+
+    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
+    assert!(output.contains("Installed cargo-dylint from source with cargo install."));
+    assert!(!output.contains("Installed dylint-link"));
     executor.assert_finished();
 }
