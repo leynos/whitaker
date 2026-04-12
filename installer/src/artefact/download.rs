@@ -143,7 +143,7 @@ fn http_agent() -> &'static ureq::Agent {
 /// Map a ureq error to a [`DownloadError`].
 fn map_ureq_error(url: &str, err: &ureq::Error) -> DownloadError {
     match err {
-        ureq::Error::StatusCode(404) => DownloadError::NotFound {
+        ureq::Error::StatusCode(404 | 410) => DownloadError::NotFound {
             url: url.to_owned(),
         },
         other => DownloadError::HttpError {
@@ -155,7 +155,10 @@ fn map_ureq_error(url: &str, err: &ureq::Error) -> DownloadError {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for artefact download URL and error mapping behaviour.
+
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn asset_url_contains_repo_and_tag() {
@@ -171,17 +174,18 @@ mod tests {
         assert!(url.ends_with("manifest-x86_64-unknown-linux-gnu.json"));
     }
 
-    #[test]
-    fn map_ureq_error_maps_404_to_not_found() {
-        let err = ureq::Error::StatusCode(404);
+    #[rstest]
+    #[case(404, true)]
+    #[case(410, true)]
+    #[case(500, false)]
+    fn map_ureq_error_maps_status_codes(#[case] status: u16, #[case] is_not_found: bool) {
+        let err = ureq::Error::StatusCode(status);
         let mapped = map_ureq_error("https://example.test/manifest", &err);
-        assert!(matches!(mapped, DownloadError::NotFound { .. }));
-    }
 
-    #[test]
-    fn map_ureq_error_maps_other_status_to_http_error() {
-        let err = ureq::Error::StatusCode(500);
-        let mapped = map_ureq_error("https://example.test/manifest", &err);
-        assert!(matches!(mapped, DownloadError::HttpError { .. }));
+        if is_not_found {
+            assert!(matches!(mapped, DownloadError::NotFound { .. }));
+        } else {
+            assert!(matches!(mapped, DownloadError::HttpError { .. }));
+        }
     }
 }

@@ -9,7 +9,7 @@ pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
     pub is_binstall_available: bool,
     /// Whether the repository failure is a missing asset.
-    pub is_repository_not_found: bool,
+    pub repository_missing_asset: bool,
     /// Whether to verify repository installation.
     pub should_verify_repository_install: bool,
     /// Whether repository verification should fail.
@@ -153,7 +153,7 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
     // acceptable here as it will not be freed.
     let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
 
-    if config.is_repository_not_found {
+    if config.repository_missing_asset {
         let version = dependency_version(tool);
         let install_call = cargo_source_install(
             tool_static,
