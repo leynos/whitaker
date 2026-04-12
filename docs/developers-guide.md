@@ -191,19 +191,29 @@ for integration and behaviour-driven tests:
 
 - **`adjacency_report(node_count, edges)`**: Validates edge input (canonical
   order, in-bounds, positive weights), builds adjacency lists via
-  `build_adjacency`, and returns an `AdjacencyReport` with convenience
-  predicates.
+  `build_adjacency`, and returns `Result<AdjacencyReport, AdjacencyError>`.
+  Callers can `match` on the result, `.expect(...)` in tests, or propagate the
+  error upward when invalid declarative input should fail the caller.
 
-- **`AdjacencyReport`**: Wrapper around adjacency vectors with methods for
-  testing properties:
+- **`AdjacencyError`**: Typed validation failure for the `Err` branch. The
+  shipped variants are `NonCanonicalEdge { index, left, right }` when
+  `left >= right`, `EndpointOutOfRange { index, right, node_count }` when an
+  endpoint exceeds the graph size, and `ZeroWeight { index }` when a weight is
+  non-positive for the production contract. Callers should inspect these
+  variants when they need to assert a specific rejection path.
+
+- **`AdjacencyReport`**: Wrapper around adjacency vectors on the `Ok` branch,
+  with methods for testing properties:
   - `is_symmetric()`: Checks that all edges appear in both directions
   - `all_indices_in_bounds()`: Verifies neighbour indices are valid
   - `is_sorted()`: Confirms neighbours are sorted by index
   - `neighbours_of(node)`: Returns neighbours of a node (or `None` if
     out-of-bounds)
 
-- **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight` fields
-  for behaviour-driven development (BDD) scenarios.
+- **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight`
+  fields, passed to `adjacency_report` and interpreted on the `Ok` branch as
+  canonical-order, in-range, positive-weight edge input for behaviour-driven
+  development (BDD) scenarios.
 
 The test-support API validates input and delegates to the shipped
 `build_adjacency` function, keeping raw adjacency vectors crate-internal while

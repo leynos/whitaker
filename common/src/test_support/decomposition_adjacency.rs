@@ -8,7 +8,7 @@ use thiserror::Error;
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::EdgeInput;
+/// use whitaker_common::test_support::decomposition::EdgeInput;
 ///
 /// let edge = EdgeInput { left: 0, right: 1, weight: 10 };
 /// assert_eq!(edge.left, 0);
@@ -63,7 +63,7 @@ pub enum AdjacencyError {
 /// # Examples
 ///
 /// ```ignore
-/// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+/// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
 ///
 /// let report = adjacency_report(3, &[
 ///     EdgeInput { left: 0, right: 1, weight: 5 },
@@ -83,7 +83,7 @@ impl AdjacencyReport {
     /// Returns the number of nodes in the adjacency graph.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+    /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
     /// let report = adjacency_report(4, &[]).expect("valid input");
     /// assert_eq!(report.node_count(), 4);
@@ -98,7 +98,7 @@ impl AdjacencyReport {
     /// Returns `None` if `node` is out of range.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+    /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
     /// let report = adjacency_report(3, &[
     ///     EdgeInput { left: 0, right: 2, weight: 7 },
@@ -114,7 +114,7 @@ impl AdjacencyReport {
     /// Returns `true` if all neighbour indices are within bounds.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+    /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
     /// let report = adjacency_report(3, &[
     ///     EdgeInput { left: 0, right: 1, weight: 5 },
@@ -134,7 +134,7 @@ impl AdjacencyReport {
     /// `(node -> neighbour, weight)`, the mirrored entry exists.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+    /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
     /// let report = adjacency_report(3, &[
     ///     EdgeInput { left: 0, right: 2, weight: 7 },
@@ -154,7 +154,7 @@ impl AdjacencyReport {
     /// index.
     ///
     /// ```rust
-    /// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+    /// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
     ///
     /// let report = adjacency_report(4, &[
     ///     EdgeInput { left: 0, right: 1, weight: 5 },
@@ -199,7 +199,7 @@ fn has_mirror(
 /// # Examples
 ///
 /// ```rust
-/// use common::test_support::decomposition::{EdgeInput, adjacency_report};
+/// use whitaker_common::test_support::decomposition::{EdgeInput, adjacency_report};
 ///
 /// let report = adjacency_report(3, &[
 ///     EdgeInput { left: 0, right: 2, weight: 7 },

@@ -575,10 +575,9 @@ further decomposition analysis was omitted.
   `all_indices_in_bounds`, `is_sorted`, `neighbours_of`). The report is the
   only public interface; raw adjacency vectors remain crate-internal.
 - **One unhappy-path behaviour-driven development (BDD) scenario validates
-  test-support input
-  rejection**: a scenario with `left >= right` is rejected by the
-  `adjacency_report` helper before reaching `build_adjacency`, covering the
-  edge-contract validation without changing production semantics.
+  test-support input rejection**: a scenario with `left >= right` is rejected
+  by the `adjacency_report` helper before reaching `build_adjacency`, covering
+  the edge-contract validation without changing production semantics.
 - **`cfg(kani)` registered in `common/Cargo.toml`**: adding
   `check-cfg = ['cfg(kani)']` under `[lints.rust]` silences the
   `unexpected_cfgs` warning without requiring a build script.

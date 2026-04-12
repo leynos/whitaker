@@ -331,7 +331,10 @@ minimum required assertions are:
 3. Every neighbour index in every adjacency bucket is `< node_count`.
 4. For every adjacency entry `(node -> neighbour, weight)`, the mirrored entry
    `(neighbour -> node, weight)` also exists.
-5. Optional but useful: each per-node neighbour list is sorted by neighbour
+5. For every adjacency entry `(node -> neighbour, weight)`, there exists a
+   matching input edge, so `verify_build_adjacency_no_spurious_edges` rules out
+   injected or duplicated spurious edges after adjacency construction.
+6. Optional but useful: each per-node neighbour list is sorted by neighbour
    index after construction, since the runtime intentionally sorts those
    vectors.
 
