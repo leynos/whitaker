@@ -200,7 +200,7 @@ fn install_tool_with_cargo(
 ) -> Result<InstallOutcome> {
     // Always try binstall first if available; fall back to cargo install on failure
     if context.cargo_fallback_mode == InstallMode::Binstall && !cargo_install_plan.skip_binstall {
-        if try_binstall(executor, cargo_install_plan.tool, stderr, context.quiet)? {
+        if try_binstall(executor, cargo_install_plan, stderr, context.quiet)? {
             return Ok(InstallOutcome::CargoBinstall);
         }
         write_message(
@@ -216,27 +216,34 @@ fn install_tool_with_cargo(
     run_cargo_install(executor, cargo_install_plan, stderr, context.quiet)
 }
 
-pub(super) fn try_binstall(
+fn try_binstall(
     executor: &dyn CommandExecutor,
-    tool: &DependencyTool,
+    cargo_install_plan: CargoInstallPlan<'_>,
     stderr: &mut dyn Write,
     quiet: bool,
 ) -> Result<bool> {
-    let args = vec!["binstall", "-y", tool.package];
+    let mut args = vec!["binstall", "-y"];
+    if let Some(version) = cargo_install_plan.version {
+        args.extend(["--version", version]);
+    }
+    args.push(cargo_install_plan.tool.package);
     let output = executor.run("cargo", &args)?;
 
     if !output.status.success() {
         return Ok(false);
     }
 
-    if !is_tool_installed(executor, tool) {
+    if !is_tool_installed(executor, cargo_install_plan.tool) {
         return Ok(false);
     }
 
     write_message(
         stderr,
         quiet,
-        format!("Installed {} with cargo binstall.", tool.package),
+        format!(
+            "Installed {} with cargo binstall.",
+            cargo_install_plan.tool.package
+        ),
     );
     Ok(true)
 }

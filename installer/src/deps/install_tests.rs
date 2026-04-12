@@ -3,48 +3,27 @@
 use super::*;
 use rstest::rstest;
 
-#[test]
-fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs() {
-    let missing_link = DylintToolStatus {
-        cargo_dylint: false,
-        dylint_link: false,
-    };
-    let executor = crate::test_utils::StubExecutor::new(vec![crate::test_utils::ExpectedCall {
+fn dylint_link_probe_executor() -> crate::test_utils::StubExecutor {
+    crate::test_utils::StubExecutor::new(vec![crate::test_utils::ExpectedCall {
         cmd: "dylint-link",
         args: vec!["--version"],
         result: Ok(crate::test_utils::success_output()),
-    }]);
-
-    let mut binstall_status = missing_link;
-    update_status_after_install(
-        &mut binstall_status,
-        &executor,
-        &CARGO_DYLINT_TOOL,
-        InstallOutcome::CargoBinstall,
-    );
-    assert!(binstall_status.cargo_dylint);
-    assert!(binstall_status.dylint_link);
-    executor.assert_finished();
+    }])
 }
 
-#[test]
-fn update_status_after_install_refreshes_link_for_cargo_install_outcome() {
-    let executor = crate::test_utils::StubExecutor::new(vec![crate::test_utils::ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
-        result: Ok(crate::test_utils::success_output()),
-    }]);
+#[rstest]
+#[case(InstallOutcome::CargoBinstall)]
+#[case(InstallOutcome::CargoInstall)]
+fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
+    #[case] outcome: InstallOutcome,
+) {
+    let executor = dylint_link_probe_executor();
     let mut status = DylintToolStatus {
         cargo_dylint: false,
         dylint_link: false,
     };
 
-    update_status_after_install(
-        &mut status,
-        &executor,
-        &CARGO_DYLINT_TOOL,
-        InstallOutcome::CargoInstall,
-    );
+    update_status_after_install(&mut status, &executor, &CARGO_DYLINT_TOOL, outcome);
 
     assert!(status.cargo_dylint);
     assert!(status.dylint_link);

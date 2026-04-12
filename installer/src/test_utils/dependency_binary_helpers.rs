@@ -9,6 +9,8 @@ use std::process::Output;
 pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
     pub is_binstall_available: bool,
+    /// Whether repository metadata is available to pin cargo fallbacks.
+    pub has_repository_context: bool,
     /// Whether the repository failure is a missing asset.
     pub is_repository_asset_missing: bool,
     /// Whether to verify repository installation.
@@ -45,9 +47,10 @@ pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCal
 
 /// Creates an expected call for installing a tool with cargo-binstall.
 pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
+    let version = dependency_version(tool);
     ExpectedCall {
         cmd: "cargo",
-        args: vec!["binstall", "-y", tool],
+        args: vec!["binstall", "-y", "--version", version, tool],
         result,
     }
 }
@@ -180,7 +183,12 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
     let install_call = ExpectedCall {
         cmd: "cargo",
         args: if use_binstall {
-            vec!["binstall", "-y", tool_static]
+            if config.has_repository_context {
+                let version = dependency_version(tool);
+                vec!["binstall", "-y", "--version", version, tool_static]
+            } else {
+                vec!["binstall", "-y", tool_static]
+            }
         } else {
             vec!["install", tool_static]
         },

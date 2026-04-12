@@ -164,6 +164,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         &tool,
         ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
+            has_repository_context: !world.is_unsupported_target,
             is_repository_asset_missing,
             should_verify_repository_install: expect_repository_verification,
             is_repository_verification_failing: world.should_repository_verification_fail,
