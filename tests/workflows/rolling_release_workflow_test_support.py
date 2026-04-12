@@ -1,4 +1,36 @@
-"""Shared helpers for rolling-release workflow contract tests."""
+"""Helpers for rolling-release workflow contract tests.
+
+This module centralizes the small parsing and shell-inspection utilities used
+by the rolling-release workflow contract tests under `tests/workflows/`.
+
+It provides:
+- `_load_workflow_mapping()` to parse workflow YAML into a validated mapping.
+- `_get_job_dict()` to fetch job mappings such as `jobs["publish"]`.
+- `_workflow_dispatch_inputs()` to return `workflow_dispatch.inputs`.
+- `_github_expression_value()` to normalize `${{ ... }}` expressions.
+- `_get_needs_list()` to normalize a job `needs` field to `list[str]`.
+- `_find_step_by_name()` to locate named workflow steps in a step list.
+- `_nesting_delta()`, `_collect_branch_lines()`, and
+  `_workflow_dispatch_branch_body()` to inspect shell-script branch bodies
+  without including the closing `fi`.
+
+Typical usage in tests is to pass raw workflow YAML text or a step `run`
+script, then assert against the validated mapping or extracted branch text.
+Helpers fail with `pytest.fail()` when the workflow structure is missing or
+malformed so tests report a precise contract error.
+
+Example
+-------
+```python
+from tests.workflows.rolling_release_workflow_test_support import (
+    _load_workflow_mapping,
+    _workflow_dispatch_inputs,
+)
+
+workflow_mapping = _load_workflow_mapping(workflow_text)
+inputs = _workflow_dispatch_inputs(workflow_mapping)
+```
+"""
 
 from __future__ import annotations
 
@@ -96,10 +128,7 @@ def _nesting_delta(stripped_line: str) -> int:
 
 
 def _collect_branch_lines(script_tail: str) -> list[str] | None:
-    """Collect branch-body lines up to the closing fi.
-
-    Returns the accumulated lines, or None if the branch is unterminated.
-    """
+    """Collect branch-body lines up to the closing fi and return them or None."""
     branch_lines: list[str] = []
     nesting_depth = 1
     for line in script_tail.splitlines():
