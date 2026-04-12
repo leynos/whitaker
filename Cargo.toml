@@ -7,12 +7,12 @@ license = "ISC"
 repository = "https://github.com/leynos/whitaker"
 homepage = "https://df12.studio/docs.html"
 documentation = "https://github.com/leynos/whitaker/tree/main/docs/users-guide.md"
-version = "0.2.2"
+version = "0.2.3"
 
 [workspace.dependencies]
-whitaker-common = { path = "common", version = "0.2.2" }
-whitaker-installer = { path = "installer", version = "0.2.2" }
-whitaker = { path = ".", version = "0.2.2" }
+whitaker-common = { path = "common", version = "0.2.3" }
+whitaker-installer = { path = "installer", version = "0.2.3" }
+whitaker = { path = ".", version = "0.2.3" }
 camino = "1.2.1"
 cargo_metadata = "0.23.0"
 clap = "4.5.38"
@@ -38,24 +38,24 @@ rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = "0.5.0"
 rustc_lexer = "0.1.0"
-whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.2" }
-whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.2" }
+whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.3" }
+whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.3" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
 mockall = "0.13.1"
-clippy_utils = { path = "crates/clippy_utils", version = "0.2.2" }
-rustc_ast = { path = "crates/rustc_ast", version = "0.2.2" }
-rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.2" }
-rustc_hir = { path = "crates/rustc_hir", version = "0.2.2" }
-rustc_lint = { path = "crates/rustc_lint", version = "0.2.2" }
-rustc_middle = { path = "crates/rustc_middle", version = "0.2.2" }
-rustc_session = { path = "crates/rustc_session", version = "0.2.2" }
-rustc_span = { path = "crates/rustc_span", version = "0.2.2" }
+clippy_utils = { path = "crates/clippy_utils", version = "0.2.3" }
+rustc_ast = { path = "crates/rustc_ast", version = "0.2.3" }
+rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.3" }
+rustc_hir = { path = "crates/rustc_hir", version = "0.2.3" }
+rustc_lint = { path = "crates/rustc_lint", version = "0.2.3" }
+rustc_middle = { path = "crates/rustc_middle", version = "0.2.3" }
+rustc_session = { path = "crates/rustc_session", version = "0.2.3" }
+rustc_span = { path = "crates/rustc_span", version = "0.2.3" }
 
 [package]
 name = "whitaker"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 
 [features]

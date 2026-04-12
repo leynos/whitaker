@@ -1,6 +1,6 @@
 [package]
 name = "whitaker-common"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 description = "Internal common utilities for Whitaker lints"
 license.workspace = true

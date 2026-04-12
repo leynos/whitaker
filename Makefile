@@ -1,6 +1,6 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus
 
-APP ?= whitaker
+APP ?= whitaker-installer
 CARGO ?= cargo
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
@@ -93,7 +93,8 @@ workflow-test-deps: ## Install Python dependencies for workflow tests
 	@$(UV) pip install --python $(WORKFLOW_TEST_VENV)/bin/python -r tests/workflows/requirements.txt
 
 target/%/$(APP): ## Build binary in debug or release mode
-	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
+	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
+	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
 lint: ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
