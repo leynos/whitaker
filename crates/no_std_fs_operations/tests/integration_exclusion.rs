@@ -18,9 +18,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cargo_metadata::{Message, Metadata, MetadataCommand};
+use serial_test::serial;
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
-const DIAGNOSTIC_MARKER: &str = "std::fs operations bypass";
+const DIAGNOSTIC_MARKER: &str = "bypasses the capability-based filesystem policy.";
 
 /// Builds the lint library and returns the path to the release directory.
 fn build_lint_library() -> PathBuf {
@@ -137,11 +138,9 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> (bool, String, S
     let output = Command::new("cargo")
         .arg("dylint")
         .arg("--all")
-        .arg("--")
-        .arg("-D")
-        .arg("warnings")
         .current_dir(fixture_dir)
         .env("DYLINT_LIBRARY_PATH", library_path)
+        .env("DYLINT_RUSTFLAGS", "-D warnings")
         .output()
         .expect("failed to execute cargo dylint");
 
@@ -149,6 +148,11 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> (bool, String, S
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
     (output.status.success(), stdout, stderr)
+}
+
+/// Counts emitted lint diagnostics using a stable message fragment.
+fn diagnostic_count(output: &str) -> usize {
+    output.matches(DIAGNOSTIC_MARKER).count()
 }
 
 /// Returns the path to a named fixture project under `tests/fixtures/`.
@@ -161,15 +165,17 @@ fn fixture_path(name: &str) -> PathBuf {
 
 #[test]
 #[ignore = "requires cargo-dylint and built lint library"]
+#[serial]
 fn excluded_crate_suppresses_diagnostics() {
     let library_path = build_lint_library();
     let fixture_dir = fixture_path("excluded_project");
 
     let (success, _stdout, stderr) = run_cargo_dylint(&fixture_dir, &library_path);
+    let count = diagnostic_count(&stderr);
 
     assert!(
-        !stderr.contains(DIAGNOSTIC_MARKER),
-        "excluded crate should NOT emit '{}' diagnostic, but stderr was:\n{}",
+        count == 0,
+        "excluded crate should emit zero diagnostics matching '{}', but stderr was:\n{}",
         DIAGNOSTIC_MARKER,
         stderr
     );
@@ -184,15 +190,17 @@ fn excluded_crate_suppresses_diagnostics() {
 
 #[test]
 #[ignore = "requires cargo-dylint and built lint library"]
+#[serial]
 fn non_excluded_crate_emits_diagnostics() {
     let library_path = build_lint_library();
     let fixture_dir = fixture_path("non_excluded_project");
 
     let (_success, _stdout, stderr) = run_cargo_dylint(&fixture_dir, &library_path);
+    let count = diagnostic_count(&stderr);
 
     assert!(
-        stderr.contains(DIAGNOSTIC_MARKER),
-        "non-excluded crate should emit '{}' diagnostic, but stderr was:\n{}",
+        count > 0,
+        "non-excluded crate should emit diagnostics matching '{}', but stderr was:\n{}",
         DIAGNOSTIC_MARKER,
         stderr
     );
