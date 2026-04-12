@@ -102,6 +102,28 @@ Workflow validation in `tests/workflows/` protects this contract from drift:
 When modifying release helpers, keep the workflow YAML, `installer/Cargo.toml`,
 and the metadata-based tests in lock-step.
 
+### Workflow test support and local runner configuration
+
+The rolling-release contract tests share YAML and shell-parsing helpers in
+`tests/workflows/rolling_release_workflow_test_support.py`. Keep parsing and
+failure messages centralized there when adding more rolling-release assertions,
+instead of duplicating small YAML walkers or shell-branch extractors across
+multiple test modules. In particular, `_workflow_dispatch_branch_body()`
+returns only the matched branch body and excludes the closing `fi`, so
+follow-on assertions can stay focused on the branch contents rather than shell
+framing.
+
+Local workflow tests use the Makefile variables `UV` and `WORKFLOW_TEST_VENV`:
+
+- `UV` selects the `uv` executable used to create and populate the workflow-test
+  virtual environment.
+- `WORKFLOW_TEST_VENV` selects the virtual-environment path, defaulting to
+  `.venv`.
+
+Use `make workflow-test-deps` to create or refresh that environment, and
+`make workflow-test` to run the opt-in `act` plus `pytest` workflow smoke tests
+against it.
+
 ### Worked example: adding another packaging binary
 
 When adding a new internal helper binary, make all of the following changes in

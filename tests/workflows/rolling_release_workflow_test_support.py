@@ -63,7 +63,7 @@ def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:
             return [needs]
         case list():
             if all(isinstance(item, str) for item in needs):
-                return cast(list[str], needs)
+                return cast("list[str]", needs)
             pytest.fail("publish job needs list must contain only strings")
         case _:
             pytest.fail("publish job needs must be a string or list")
@@ -86,6 +86,30 @@ def _find_step_by_name(steps: object, name: str) -> dict[str, object] | None:
     return None
 
 
+def _nesting_delta(stripped_line: str) -> int:
+    """Return the change in shell if/fi nesting depth for a given stripped line."""
+    if re.match(r"^if\b", stripped_line):
+        return 1
+    if stripped_line == "fi":
+        return -1
+    return 0
+
+
+def _collect_branch_lines(script_tail: str) -> list[str] | None:
+    """Collect branch-body lines up to the closing fi.
+
+    Returns the accumulated lines, or None if the branch is unterminated.
+    """
+    branch_lines: list[str] = []
+    nesting_depth = 1
+    for line in script_tail.splitlines():
+        nesting_depth += _nesting_delta(line.strip())
+        if nesting_depth == 0:
+            return branch_lines
+        branch_lines.append(line)
+    return None
+
+
 def _workflow_dispatch_branch_body(run_script: str) -> str:
     """Extract the outer `workflow_dispatch` branch body from a shell script."""
     dispatch_branch_match = re.search(
@@ -97,17 +121,7 @@ def _workflow_dispatch_branch_body(run_script: str) -> str:
         pytest.fail(
             "change-detection step must branch explicitly on workflow_dispatch"
         )
-
-    branch_lines: list[str] = []
-    nesting_depth = 1
-    for line in run_script[dispatch_branch_match.end() :].splitlines():
-        stripped_line = line.strip()
-        if re.match(r"^if\b", stripped_line):
-            nesting_depth += 1
-        if stripped_line == "fi":
-            nesting_depth -= 1
-            if nesting_depth == 0:
-                return "\n".join(branch_lines)
-        branch_lines.append(line)
-
-    pytest.fail("workflow_dispatch branch must terminate with fi")
+    branch_lines = _collect_branch_lines(run_script[dispatch_branch_match.end() :])
+    if branch_lines is None:
+        pytest.fail("workflow_dispatch branch must terminate with fi")
+    return "\n".join(branch_lines)
