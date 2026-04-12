@@ -181,6 +181,15 @@ to `pub(crate)` visibility:
   adjacency report can call it directly without widening the crate's public API
   surface.
 
+- **`SimilarityEdge::new(left, right, weight)`**
+  (`common/src/decomposition_advice/community.rs`): A `pub(crate)` constructor
+  added to allow Kani harnesses and test-support modules to create edge values
+  without exposing a public constructor on the production type. It is used
+  internally by `adjacency_report` to convert validated `EdgeInput` values into
+  `SimilarityEdge` instances before delegating to `build_adjacency`. External
+  callers should use `adjacency_report` rather than constructing
+  `SimilarityEdge` directly.
+
 This pattern keeps the runtime API narrow while giving verification and test
 code the access it needs.
 

@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+# install-kani.sh — Download and cache a pinned Kani release for this
+# repository.
+#
+# Usage:
+#   scripts/install-kani.sh
+#
+# Outputs the resolved installation directory to stdout.
+#
+# Environment variables (all optional):
+#   KANI_VERSION             — Kani release version to install (default: 0.67.0)
+#   KANI_RELEASE_TAG         — GitHub release tag (default: kani-${KANI_VERSION})
+#   WHITAKER_KANI_CACHE_DIR  — Override the cache root directory
+#
+# The script is idempotent: if the expected kani-driver binary already exists
+# in the cache, the download step is skipped.
 set -euo pipefail
 
 KANI_CACHE_DIR=${WHITAKER_KANI_CACHE_DIR:-"${XDG_CACHE_HOME:-${HOME}/.cache}/whitaker/kani"}

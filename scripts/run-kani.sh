@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+# run-kani.sh — Run the pinned Kani bounded model checker against the common
+# crate.
+#
+# Usage:
+#   scripts/run-kani.sh [HARNESS_FILTER]
+#
+# Arguments:
+#   HARNESS_FILTER  Optional. When provided, passed as --harness <filter> to
+#                   cargo-kani. When omitted, all harnesses are run.
+#
+# Installs Kani via install-kani.sh if not already cached, then configures
+# PATH, RUSTUP_TOOLCHAIN, and the appropriate dynamic-library search path
+# (DYLD_LIBRARY_PATH on macOS, LD_LIBRARY_PATH on Linux) before invoking
+# cargo-kani.
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
