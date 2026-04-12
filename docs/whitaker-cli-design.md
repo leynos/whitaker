@@ -224,6 +224,14 @@ Selectors should support the following forms:
 - An exact rule code such as `PAN001`.
 - A canonical lint name such as `module_max_lines`.
 
+Selector tokens should be case-sensitive:
+
+- `DEFAULT`, `ALL`, and family prefixes must be uppercase ASCII.
+- Exact rule codes must be uppercase ASCII followed by digits.
+- Canonical lint names must use lowercase `snake_case`.
+- Invalid casing should be rejected as a configuration error rather than
+  normalized implicitly.
+
 Selection precedence should remain simple and predictable:
 
 1. Start from `DEFAULT`.
@@ -313,11 +321,35 @@ WHITAKER_OUTPUT_PROGRESS=plain
 WHITAKER_MODULE_MAX_LINES_MAX_LINES=500
 ```
 
+Accepted literal values should remain identical across CLI flags, environment
+variables, and TOML configuration:
+
+- `colour` accepts `auto`, `always`, or `never`, using lowercase ASCII and
+  case-sensitive matching.
+- `progress` accepts `auto`, `plain`, or `off`, using lowercase ASCII and
+  case-sensitive matching.
+- CSV selector lists in `WHITAKER_LINT_SELECT`, `WHITAKER_LINT_IGNORE`, and
+  related fields preserve token casing and should apply the same case-sensitive
+  selector rules as `--select`, `--ignore`, and `--extend-select`.
+- Invalid literals should fail configuration loading with an error that names
+  the offending key and the accepted values.
+
 Compatibility behaviour should remain in place for one release:
 
 - Read `dylint.toml` when `whitaker.toml` is absent.
 - Read legacy environment names such as `DYLINT_LOCALE`.
 - Emit deprecation warnings that name the replacement key or file.
+
+After that compatibility window closes:
+
+- Automatic discovery should stop reading `dylint.toml`.
+- If `dylint.toml` is present but `whitaker.toml` is absent, Whitaker should
+  fail configuration loading with an explicit migration error instead of
+  silently ignoring the file.
+- Legacy `DYLINT_*` variables should no longer participate in configuration
+  merging.
+- If legacy variables are still present, Whitaker should emit a startup error
+  that names each unsupported variable and its replacement `WHITAKER_*` key.
 
 The following entity-relationship diagram summarizes how configuration,
 selection state, installed bundle manifests, and recorded failures relate to
