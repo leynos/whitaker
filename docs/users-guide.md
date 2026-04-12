@@ -30,9 +30,16 @@ whitaker --all
 This:
 
 1. Installs `cargo-dylint` and `dylint-link` if not present
-   The installer first tries Whitaker's repository-hosted dependency archives
-   for supported targets, then falls back to `cargo binstall`, and finally to
-   `cargo install` when needed.
+   The installer first attempts to download pre-built dependency binaries from
+   Whitaker's GitHub Releases page for the current platform. If the release
+   asset is absent (HTTP 404 or 410), the installer skips `cargo binstall` and
+   falls back directly to building from source with `cargo install`, pinned to
+   the version recorded in the dependency manifest. If the release asset is
+   present but the download fails for another reason, the installer falls back
+   to `cargo binstall` when available and then to `cargo install`. When the
+   source-build path is taken, the installer reports that it is falling back to
+   Cargo, and on success it prints
+   `Installed <tool> from source with cargo install.`.
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes

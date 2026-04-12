@@ -204,6 +204,41 @@ The dependency-install path is split into focused modules under
 3. Fall back to `cargo binstall` when available.
 4. Fall back to `cargo install` when `cargo binstall` is absent or fails.
 
+### Dependency fallback details
+
+`installer/src/deps/install.rs` uses the `InstallOutcome` enum to describe how
+each dependency tool was satisfied. `install_tool()` returns
+`RepositoryRelease`, `CargoBinstall`, or `CargoInstall`, and
+`update_status_after_install()` uses that outcome to decide whether it should
+probe for `dylint-link` after installing `cargo-dylint`.
+
+The HTTP download layers in
+`installer/src/dependency_binaries/install/downloader.rs` and
+`installer/src/artefact/download.rs` both map
+`ureq::Error::StatusCode(404 | 410)` to a semantic `NotFound` error variant.
+All other `ureq` failures become `Download` or `HttpError`. Callers inspect
+`error.is_not_found()` to distinguish the missing-asset source-build path from
+the generic Cargo fallback path.
+
+`install_missing_tools()` iterates across `DEPENDENCY_TOOLS`, calls
+`should_install_tool()` to skip any tool already present in `remaining_status`,
+then calls `install_tool()` and feeds the returned `InstallOutcome` into
+`update_status_after_install()`. This keeps `remaining_status` accurate for
+later iterations so a successful `cargo-dylint` install can suppress a
+redundant `dylint-link` install.
+
+When a repository asset is missing, `install_tool()` copies
+`dependency.version()` into `CargoInstallPlan` before falling back, so
+`run_cargo_install()` invokes `cargo install --locked --version <version>`.
+This preserves the version recorded in `installer/dependency-binaries.toml`
+instead of silently using the latest upstream release.
+
+`update_status_after_install()` delegates the local-install probe decision to
+`should_refresh_companions()`. That helper returns `true` only when the install
+outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
+code probes for `dylint-link` after local Cargo installs of `cargo-dylint`
+without re-checking when the pre-built repository artefact was used.
+
 ### CLI tool usage
 
 Release automation uses the `whitaker-package-dependency-binary` helper in

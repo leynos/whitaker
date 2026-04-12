@@ -308,6 +308,10 @@ pub(super) fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: 
         .is_ok_and(|output| output.status.success())
 }
 
+fn should_refresh_companions(outcome: InstallOutcome, status: &DylintToolStatus) -> bool {
+    outcome != InstallOutcome::RepositoryRelease && !status.dylint_link
+}
+
 fn update_status_after_install(
     status: &mut DylintToolStatus,
     executor: &dyn CommandExecutor,
@@ -317,7 +321,7 @@ fn update_status_after_install(
     if tool == &CARGO_DYLINT_TOOL {
         status.cargo_dylint = true;
 
-        if outcome != InstallOutcome::RepositoryRelease && !status.dylint_link {
+        if should_refresh_companions(outcome, status) {
             // Installing cargo-dylint locally can also provide dylint-link.
             status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL);
         }
@@ -358,6 +362,31 @@ mod tests {
     }
 
     #[test]
+    fn update_status_after_install_refreshes_link_for_cargo_install_outcome() {
+        let executor =
+            crate::test_utils::StubExecutor::new(vec![crate::test_utils::ExpectedCall {
+                cmd: "dylint-link",
+                args: vec!["--version"],
+                result: Ok(crate::test_utils::success_output()),
+            }]);
+        let mut status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        };
+
+        update_status_after_install(
+            &mut status,
+            &executor,
+            &CARGO_DYLINT_TOOL,
+            InstallOutcome::CargoInstall,
+        );
+
+        assert!(status.cargo_dylint);
+        assert!(status.dylint_link);
+        executor.assert_finished();
+    }
+
+    #[test]
     fn update_status_after_install_skips_link_probe_for_repository_release() {
         let executor = crate::test_utils::StubExecutor::new(vec![]);
         let mut status = DylintToolStatus {
@@ -375,5 +404,84 @@ mod tests {
         assert!(status.cargo_dylint);
         assert!(!status.dylint_link);
         executor.assert_finished();
+    }
+
+    #[test]
+    fn should_install_tool_returns_true_for_cargo_dylint_when_not_installed() {
+        let status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        };
+
+        assert!(should_install_tool(&status, &CARGO_DYLINT_TOOL));
+    }
+
+    #[test]
+    fn should_install_tool_returns_false_for_cargo_dylint_when_installed() {
+        let status = DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: false,
+        };
+
+        assert!(!should_install_tool(&status, &CARGO_DYLINT_TOOL));
+    }
+
+    #[test]
+    fn should_install_tool_returns_true_for_dylint_link_when_not_installed() {
+        let status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        };
+
+        assert!(should_install_tool(&status, &DYLINT_LINK_TOOL));
+    }
+
+    #[test]
+    fn should_install_tool_returns_false_for_dylint_link_when_installed() {
+        let status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: true,
+        };
+
+        assert!(!should_install_tool(&status, &DYLINT_LINK_TOOL));
+    }
+
+    #[test]
+    fn should_refresh_companions_true_when_non_repo_release_and_link_missing() {
+        let status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        };
+
+        assert!(should_refresh_companions(
+            InstallOutcome::CargoInstall,
+            &status
+        ));
+    }
+
+    #[test]
+    fn should_refresh_companions_false_for_repository_release() {
+        let status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
+        };
+
+        assert!(!should_refresh_companions(
+            InstallOutcome::RepositoryRelease,
+            &status
+        ));
+    }
+
+    #[test]
+    fn should_refresh_companions_false_when_link_already_present() {
+        let status = DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: true,
+        };
+
+        assert!(!should_refresh_companions(
+            InstallOutcome::CargoBinstall,
+            &status
+        ));
     }
 }
