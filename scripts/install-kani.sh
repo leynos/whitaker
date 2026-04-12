@@ -68,7 +68,7 @@ if [ ! -d "${install_dir}/toolchain" ]; then
     # Extract the path from the last field, handling both default and non-default toolchains.
     # When a toolchain is the default, rustup inserts "(default)" before the path.
     toolchain_dir=$(rustup toolchain list -v \
-        | grep "${toolchain_tag}" \
+        | grep "^${toolchain_tag} " \
         | awk '{print $NF}')
     ln -sf "${toolchain_dir}" "${install_dir}/toolchain"
 fi

@@ -53,11 +53,7 @@ fn constrained_edges(node_count: usize) -> Vec<SimilarityEdge> {
         kani::assume(!seen[left][right]);
 
         seen[left][right] = true;
-        edges.push(SimilarityEdge {
-            left,
-            right,
-            weight,
-        });
+        edges.push(SimilarityEdge::new(left, right, weight));
     }
 
     edges

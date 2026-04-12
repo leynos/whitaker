@@ -17,7 +17,8 @@ fi
 # toolchain (cargo, rustc) must be reachable.
 export PATH="${KANI_INSTALL_DIR}/bin:${KANI_INSTALL_DIR}/toolchain/bin:${PATH}"
 # Tell rustup to use the Kani-pinned toolchain.
-export RUSTUP_TOOLCHAIN=$(cat "${KANI_INSTALL_DIR}/rust-toolchain-version")
+TOOLCHAIN=$(cat "${KANI_INSTALL_DIR}/rust-toolchain-version")
+export RUSTUP_TOOLCHAIN="${TOOLCHAIN}"
 # goto-cc invokes the C preprocessor (gcc) via execvp.
 export CC="${CC:-gcc}"
 
