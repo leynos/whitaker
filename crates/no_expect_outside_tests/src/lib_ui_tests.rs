@@ -287,15 +287,28 @@ fn is_dependency_rlib(path: &Path, prefix: &str) -> bool {
     })
 }
 
-#[rstest]
-#[case("pass_expect_in_tokio_test_harness", "Tokio")]
-#[case(
-    "pass_expect_in_tokio_nonstandard_module_harness",
-    "Tokio non-standard module"
-)]
-#[case("pass_expect_in_rstest_harness", "rstest")]
-fn example_compiles_under_test_harness(#[case] example_name: &str, #[case] label: &str) {
-    run_example_under_test_harness(&ExampleHarnessRun::new(example_name, label));
+#[test]
+fn tokio_example_compiles_under_test_harness() {
+    run_example_under_test_harness(&ExampleHarnessRun::new(
+        "pass_expect_in_tokio_test_harness",
+        "Tokio",
+    ));
+}
+
+#[test]
+fn tokio_nonstandard_module_example_compiles_under_test_harness() {
+    run_example_under_test_harness(&ExampleHarnessRun::new(
+        "pass_expect_in_tokio_nonstandard_module_harness",
+        "Tokio non-standard module",
+    ));
+}
+
+#[test]
+fn rstest_example_compiles_under_test_harness() {
+    run_example_under_test_harness(&ExampleHarnessRun::new(
+        "pass_expect_in_rstest_harness",
+        "rstest",
+    ));
 }
 
 #[rstest]
