@@ -7,8 +7,8 @@ use std::io::Write;
 use std::process::Output;
 
 use super::{
-    CommandExecutor, DEPENDENCY_TOOLS, DependencyTool, DylintToolStatus, is_binstall_available,
-    is_tool_installed,
+    CARGO_DYLINT_TOOL, CommandExecutor, DEPENDENCY_TOOLS, DYLINT_LINK_TOOL, DependencyTool,
+    DylintToolStatus, is_binstall_available, is_tool_installed,
 };
 
 pub(super) struct RepositoryInstallContext<'a> {
@@ -68,10 +68,12 @@ pub(super) fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> InstallMode
 }
 
 pub(super) fn should_install_tool(status: &DylintToolStatus, tool: &DependencyTool) -> bool {
-    match tool.package {
-        "cargo-dylint" => !status.cargo_dylint,
-        "dylint-link" => !status.dylint_link,
-        _ => false,
+    if tool == &CARGO_DYLINT_TOOL {
+        !status.cargo_dylint
+    } else if tool == &DYLINT_LINK_TOOL {
+        !status.dylint_link
+    } else {
+        false
     }
 }
 
@@ -287,10 +289,10 @@ pub(super) fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: 
 }
 
 fn mark_tool_installed(status: &mut DylintToolStatus, tool: &DependencyTool) {
-    match tool.package {
-        "cargo-dylint" => status.cargo_dylint = true,
-        "dylint-link" => status.dylint_link = true,
-        _ => {}
+    if tool == &CARGO_DYLINT_TOOL {
+        status.cargo_dylint = true;
+    } else if tool == &DYLINT_LINK_TOOL {
+        status.dylint_link = true;
     }
 }
 
@@ -299,7 +301,7 @@ fn should_refresh_companions(
     tool: &DependencyTool,
     status: &DylintToolStatus,
 ) -> bool {
-    outcome == InstallOutcome::SourceBuild && tool.package == "cargo-dylint" && !status.dylint_link
+    outcome == InstallOutcome::SourceBuild && tool == &CARGO_DYLINT_TOOL && !status.dylint_link
 }
 
 fn refresh_source_build_companions(
@@ -313,7 +315,7 @@ fn refresh_source_build_companions(
     }
 
     // A source build of cargo-dylint can also provide dylint-link.
-    status.dylint_link = is_tool_installed(executor, &DEPENDENCY_TOOLS[1]);
+    status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL);
 }
 
 fn cargo_install_request(tool: &DependencyTool) -> CargoInstallRequest<'_> {
@@ -347,8 +349,6 @@ mod tests {
 
     #[test]
     fn should_refresh_companions_requires_source_built_cargo_dylint_without_link() {
-        let cargo_dylint = &DEPENDENCY_TOOLS[0];
-        let dylint_link = &DEPENDENCY_TOOLS[1];
         let missing_link = DylintToolStatus {
             cargo_dylint: true,
             dylint_link: false,
@@ -360,22 +360,22 @@ mod tests {
 
         assert!(should_refresh_companions(
             InstallOutcome::SourceBuild,
-            cargo_dylint,
+            &CARGO_DYLINT_TOOL,
             &missing_link,
         ));
         assert!(!should_refresh_companions(
             InstallOutcome::Installed,
-            cargo_dylint,
+            &CARGO_DYLINT_TOOL,
             &missing_link,
         ));
         assert!(!should_refresh_companions(
             InstallOutcome::SourceBuild,
-            dylint_link,
+            &DYLINT_LINK_TOOL,
             &missing_link,
         ));
         assert!(!should_refresh_companions(
             InstallOutcome::SourceBuild,
-            cargo_dylint,
+            &CARGO_DYLINT_TOOL,
             &installed_link,
         ));
     }
