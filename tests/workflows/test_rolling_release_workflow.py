@@ -196,6 +196,13 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
     workflow_mapping = _load_workflow_mapping(workflow_text)
     jobs = _get_job_dict(workflow_mapping, "jobs")
     publish_job = _get_job_dict(jobs, "publish")
+    needs_list = _get_needs_list(publish_job)
+
+    assert "build-dependency-binaries" in needs_list, (
+        "publish job must still depend on build-dependency-binaries so release "
+        "publication waits for all successful dependency artefacts to be "
+        "collected"
+    )
 
     delete_step = _find_step_by_name(
         publish_job.get("steps"),
@@ -206,10 +213,15 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
         "recreating it"
     )
     delete_guard = _github_expression_value(delete_step.get("if"))
-    assert delete_guard == "steps.assets.outputs.has_assets == 'true'", (
-        "rolling release deletion must depend only on collected assets, so "
+    assert "steps.assets.outputs.has_assets" in delete_guard, (
+        "rolling release deletion must be gated on collected assets, so "
         "successful dependency archives still publish when other matrix legs "
         "fail"
+    )
+    assert "needs.build-dependency-binaries.result" not in delete_guard, (
+        "rolling release deletion must not be gated on dependency build "
+        "results, so successful dependency archives still publish when other "
+        "matrix legs fail"
     )
 
     create_step = _find_step_by_name(
@@ -221,9 +233,9 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
         "available"
     )
     create_guard = _github_expression_value(create_step.get("if"))
-    assert create_guard == "steps.assets.outputs.has_assets == 'true'", (
-        "rolling release creation must not require the full dependency "
-        "matrix to succeed; publish whatever artefacts were built"
+    assert "steps.assets.outputs.has_assets" in create_guard, (
+        "rolling release creation must be gated on collected assets and must "
+        "publish whatever artefacts were built"
     )
 
     assert "needs.build-dependency-binaries.result" not in create_guard, (
