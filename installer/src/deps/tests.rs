@@ -295,3 +295,50 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
     assert!(!output.contains("Installed dylint-link"));
     executor.assert_finished();
 }
+
+#[test]
+fn install_tool_errors_when_dependency_manifest_entry_is_missing() {
+    let missing_tool = DependencyTool {
+        package: "missing-tool",
+        command: "missing-tool",
+        args: &["--version"],
+    };
+    let executor = StubExecutor::new(vec![]);
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer.expect_install().never();
+    let dirs = StubDirs {
+        bin_dir: Some(PathBuf::from("/tmp/bin")),
+    };
+    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
+    let mut stderr = Vec::new();
+
+    let error = install_tool(
+        &executor,
+        &missing_tool,
+        &mut stderr,
+        &InstallContext {
+            repo: repository_install_context(
+                Some(&dirs),
+                Some(&repository_installer as &dyn DependencyBinaryInstaller),
+                Some(&target),
+            ),
+            cargo_fallback_mode: InstallMode::Binstall,
+            quiet: false,
+        },
+    )
+    .expect_err("missing dependency manifest entry should be an install error");
+
+    match error {
+        InstallerError::DependencyInstall { tool, message } => {
+            assert_eq!(tool, "missing-tool");
+            assert_eq!(
+                message,
+                "dependency manifest is missing an entry for missing-tool"
+            );
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+
+    assert!(stderr.is_empty());
+    executor.assert_finished();
+}

@@ -1,5 +1,6 @@
 //! Test helpers for dependency binary installation tests.
 
+use crate::dependency_binaries::find_dependency_binary;
 use crate::error::Result;
 use crate::test_utils::{ExpectedCall, failure_output, success_output};
 use std::process::Output;
@@ -73,11 +74,10 @@ fn cargo_source_install(
 }
 
 fn dependency_version(tool: &str) -> &'static str {
-    match tool {
-        "cargo-dylint" => "4.1.0",
-        "dylint-link" => "4.1.0",
-        other => panic!("unexpected tool: {other}"),
-    }
+    find_dependency_binary(tool)
+        .expect("dependency manifest should parse")
+        .map(|dependency| dependency.version())
+        .unwrap_or_else(|| panic!("unexpected tool: {tool}"))
 }
 
 /// Creates an expected call for verifying repository installation.

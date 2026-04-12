@@ -92,7 +92,13 @@ pub(super) fn install_tool(
             }
         })?
         else {
-            return install_tool_with_cargo(executor, cargo_install_plan, stderr, context);
+            return Err(InstallerError::DependencyInstall {
+                tool: tool.package,
+                message: format!(
+                    "dependency manifest is missing an entry for {}",
+                    tool.package
+                ),
+            });
         };
         cargo_install_plan = cargo_install_plan.with_version(dependency.version());
 
