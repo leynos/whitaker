@@ -317,11 +317,12 @@ def test_dependency_manifest_change_step_only_forces_manual_rebuild_when_request
         "change-detection step must read the manual "
         "force_dependency_binary_rebuild input"
     )
-    assert re.search(
-        r'github\.event_name\s*}}\s*" == "workflow_dispatch".*'
-        r'github\.event\.inputs\.force_dependency_binary_rebuild\s*}}\s*" == "true"',
-        run_script,
-        re.DOTALL,
+    assert (
+        '[[ "${{ github.event_name }}" == "workflow_dispatch" ]]' in run_script
+    ), "change-detection step must branch explicitly on workflow_dispatch"
+    assert (
+        '[[ "${{ github.event.inputs.force_dependency_binary_rebuild }}" == "true" ]]'
+        in run_script
     ), (
         "workflow_dispatch path must only set should_build=true when the "
         "manual force input is true"

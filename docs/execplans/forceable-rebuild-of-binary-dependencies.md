@@ -405,6 +405,11 @@ Follow-up correction: the repository's workflow-test dependency setup now uses
 Python. `Makefile` now creates that environment in `workflow-test-deps`, and
 the local workflow-validation guide documents the same path.
 
+Code-review follow-up: `workflow-test` now emits a clear error if
+`$(WORKFLOW_TEST_VENV)/bin/python` is missing or non-executable, and the
+workflow contract test now checks the manual-dispatch gate with separate
+assertions instead of one brittle regex over the full shell block.
+
 Validation results:
 
 1. Focused workflow contract tests passed:

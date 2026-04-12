@@ -79,6 +79,12 @@ test: ## Run tests with warnings treated as errors
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
 	@command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
 	@command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
+	@test -x "$(WORKFLOW_TEST_VENV)/bin/python" || { \
+		echo "workflow-test virtualenv is missing or invalid:"; \
+		echo "  expected: $(WORKFLOW_TEST_VENV)/bin/python"; \
+		echo "Run 'make workflow-test-deps' to create or refresh the virtualenv."; \
+		exit 1; \
+	}
 	@ACT_WORKFLOW_TESTS=1 $(WORKFLOW_TEST_VENV)/bin/python -m pytest tests/workflows
 
 workflow-test-deps: ## Install Python dependencies for workflow tests
