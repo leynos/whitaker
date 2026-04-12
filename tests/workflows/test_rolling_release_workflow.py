@@ -285,11 +285,18 @@ def test_manual_dispatch_exposes_force_dependency_binary_rebuild_input(
     )
 
     description = input_mapping.get("description")
-    assert isinstance(description, str) and description.strip(), (
+    assert isinstance(description, str), (
+        "force_dependency_binary_rebuild must document its recovery purpose"
+    )
+    assert description.strip(), (
         "force_dependency_binary_rebuild must document its recovery purpose"
     )
     description_lower = description.lower()
-    assert "dependency" in description_lower and "rebuild" in description_lower, (
+    assert "dependency" in description_lower, (
+        "force_dependency_binary_rebuild description must explain that it "
+        "forces a dependency binary rebuild"
+    )
+    assert "rebuild" in description_lower, (
         "force_dependency_binary_rebuild description must explain that it "
         "forces a dependency binary rebuild"
     )
@@ -327,18 +334,22 @@ def test_dependency_manifest_change_step_only_forces_manual_rebuild_when_request
         "workflow_dispatch path must only set should_build=true when the "
         "manual force input is true"
     )
-    assert (
-        'if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then\n'
-        '            echo "should_build=true" >> "$GITHUB_OUTPUT"'
-        not in run_script
-    ), (
+    assert re.search(
+        r'if\s+\[\[\s+"\$\{\{\s+github\.event_name\s+\}\}"\s+==\s+"workflow_dispatch"\s+\]\]'
+        r'\s*;\s*then\s*echo\s+"should_build=true"\s+>>\s+"\$GITHUB_OUTPUT"',
+        run_script,
+        re.DOTALL,
+    ) is None, (
         "workflow_dispatch must not unconditionally rebuild dependency "
         "binaries on every manual run"
     )
     assert "echo \"should_build=false\" >> \"$GITHUB_OUTPUT\"" in run_script, (
         "manual runs without force input must leave should_build=false"
     )
-    assert "git diff --quiet" in run_script and "installer/dependency-binaries.toml" in run_script, (
+    assert "git diff --quiet" in run_script, (
+        "push-based dependency manifest diff detection must remain in place"
+    )
+    assert "installer/dependency-binaries.toml" in run_script, (
         "push-based dependency manifest diff detection must remain in place"
     )
 
