@@ -154,6 +154,48 @@ underlying cargo invocation. Exit codes should preserve lint failure semantics
 from the underlying execution path, while install and configuration failures
 should produce distinct operational errors.
 
+The following sequence diagram shows the proposed `whitaker check` flow from
+configuration loading through lazy installation and Dylint execution.
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant WhitakerCLI as Whitaker_CLI
+  participant OrthoConfig as Ortho_config_loader
+  participant Env as Environment
+  participant FS as File_system
+  participant Installer as Installer_subsystem
+  participant Dylint as Cargo_dylint
+
+  User->>WhitakerCLI: invoke whitaker check [options] [-- cargo_args]
+  WhitakerCLI->>OrthoConfig: load config from CLI flags
+  OrthoConfig->>Env: read WHITAKER_* and legacy DYLINT_* variables
+  OrthoConfig->>FS: discover whitaker.toml or fallback dylint.toml
+  OrthoConfig-->>WhitakerCLI: merged configuration (CLI > Env > TOML)
+
+  WhitakerCLI->>WhitakerCLI: resolve locale, colour, progress, rule selection
+
+  WhitakerCLI->>FS: check for required bundles and Dylint dependencies
+  alt dependencies or bundles missing
+    WhitakerCLI->>Installer: ensure cargo-dylint, toolchain, and bundles
+    Installer->>FS: install dependencies and write bundle manifest
+    Installer-->>WhitakerCLI: install result (success or failure)
+    alt install failure
+      WhitakerCLI->>FS: record structured failure event for doctor
+      WhitakerCLI-->>User: localized error with log path and advice
+      Note over WhitakerCLI,User: return
+    end
+  end
+
+  WhitakerCLI->>Dylint: invoke cargo dylint with resolved rule set and cargo_args
+  Dylint-->>WhitakerCLI: lint results and exit status
+  WhitakerCLI-->>User: localized diagnostics and exit code preserving lint failures
+```
+
+_Figure 1: Sequence diagram showing how `whitaker check` merges configuration,
+performs lazy dependency repair when required, records install failures for
+`doctor`, and then delegates to `cargo dylint`._
+
 ## Rule identifiers and selection model
 
 Whitaker should borrow Ruff's selection algebra, but not its full vocabulary or
@@ -276,6 +318,85 @@ Compatibility behaviour should remain in place for one release:
 - Read `dylint.toml` when `whitaker.toml` is absent.
 - Read legacy environment names such as `DYLINT_LOCALE`.
 - Emit deprecation warnings that name the replacement key or file.
+
+The following entity-relationship diagram summarizes how configuration,
+selection state, installed bundle manifests, and recorded failures relate to
+one another.
+
+```mermaid
+erDiagram
+  WhitakerConfig {
+    string id
+    string source_path
+    string locale
+    string colour_mode
+    string progress_mode
+    boolean experimental
+  }
+
+  LintSelectionConfig {
+    string id
+    string config_id
+    string baseline
+  }
+
+  LintSelector {
+    string id
+    string selection_config_id
+    string kind
+    string value
+  }
+
+  RuleTuningConfig {
+    string id
+    string rule_name
+    int max_lines
+    int max_branches
+    boolean allow_in_main
+  }
+
+  BundleManifest {
+    string id
+    int schema_version
+    string whitaker_version
+    string source_sha
+    datetime build_date
+    string toolchain
+    string target
+    string origin
+  }
+
+  BundleEntry {
+    string id
+    string manifest_id
+    string name
+    string kind
+  }
+
+  FailureEvent {
+    string id
+    datetime timestamp
+    string phase
+    string toolchain
+    string target
+    string source_revision
+    string stderr_tail_path
+    string advice_key
+  }
+
+  WhitakerConfig ||--o{ LintSelectionConfig : defines
+  LintSelectionConfig ||--o{ LintSelector : includes
+  WhitakerConfig ||--o{ RuleTuningConfig : tunes
+
+  BundleManifest ||--o{ BundleEntry : contains
+
+  BundleManifest ||--o{ FailureEvent : associated_with
+  WhitakerConfig ||--o{ FailureEvent : observed_under
+```
+
+_Figure 2: Entity-relationship diagram showing how Whitaker configuration, lint
+selection, installed bundle manifests, and recorded failure events relate to
+one another._
 
 ## `whitaker install`
 
