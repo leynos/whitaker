@@ -50,44 +50,23 @@ fn update_status_after_install_skips_link_probe_for_repository_release() {
     executor.assert_finished();
 }
 
-#[test]
-fn should_install_tool_returns_true_for_cargo_dylint_when_not_installed() {
+#[rstest]
+#[case(false, false, &CARGO_DYLINT_TOOL, true)]
+#[case(true, false, &CARGO_DYLINT_TOOL, false)]
+#[case(false, false, &DYLINT_LINK_TOOL, true)]
+#[case(false, true, &DYLINT_LINK_TOOL, false)]
+fn should_install_tool_returns_expected(
+    #[case] cargo_dylint: bool,
+    #[case] dylint_link: bool,
+    #[case] tool: &DependencyTool,
+    #[case] expected: bool,
+) {
     let status = DylintToolStatus {
-        cargo_dylint: false,
-        dylint_link: false,
+        cargo_dylint,
+        dylint_link,
     };
 
-    assert!(should_install_tool(&status, &CARGO_DYLINT_TOOL));
-}
-
-#[test]
-fn should_install_tool_returns_false_for_cargo_dylint_when_installed() {
-    let status = DylintToolStatus {
-        cargo_dylint: true,
-        dylint_link: false,
-    };
-
-    assert!(!should_install_tool(&status, &CARGO_DYLINT_TOOL));
-}
-
-#[test]
-fn should_install_tool_returns_true_for_dylint_link_when_not_installed() {
-    let status = DylintToolStatus {
-        cargo_dylint: false,
-        dylint_link: false,
-    };
-
-    assert!(should_install_tool(&status, &DYLINT_LINK_TOOL));
-}
-
-#[test]
-fn should_install_tool_returns_false_for_dylint_link_when_installed() {
-    let status = DylintToolStatus {
-        cargo_dylint: false,
-        dylint_link: true,
-    };
-
-    assert!(!should_install_tool(&status, &DYLINT_LINK_TOOL));
+    assert_eq!(should_install_tool(&status, tool), expected);
 }
 
 #[rstest]
