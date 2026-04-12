@@ -136,7 +136,7 @@ Key principles:
 
 - **Bounded symbolic inputs**: Use fixed-size arrays or bounded ranges to keep
   the state space tractable. Rust's standard `sort_by` and nested loops can
-  cause CBMC state-space explosion at higher bounds.
+  cause CBMC (C Bounded Model Checker) state-space explosion at higher bounds.
 
 - **Input contracts**: Use `kani::assume` to constrain symbolic inputs to match
   the preconditions that production code guarantees. Model the actual input

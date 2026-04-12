@@ -534,9 +534,9 @@ further decomposition analysis was omitted.
   edges with an active-length field. The maximum node count is 3 (with
   `unwind(7)`), giving at most C(3,2) = 3 possible unique undirected edges.
   These bounds are kept deliberately small because Rust's standard `sort_by`
-  generates deeply nested loops that cause CBMC state-space explosion at higher
-  bounds. This keeps the search space tractable and avoids requiring
-  `kani::Arbitrary` for `Vec`.
+  generates deeply nested loops that cause the C Bounded Model Checker (CBMC)
+  state-space explosion at higher bounds. This keeps the search space tractable
+  and avoids requiring `kani::Arbitrary` for `Vec`.
 - **Harness inputs constrained to the production edge contract**:
   `build_similarity_edges` guarantees `left < right < node_count`,
   `weight > 0`, and no duplicate unordered pairs. The Kani harnesses enforce

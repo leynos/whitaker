@@ -184,6 +184,11 @@ fn verify_build_adjacency_sorted_neighbours() {
 
     for bucket in &adjacency {
         for window in bucket.windows(2) {
+            // NOTE: With `MAX_NODES = 3`, `bucket.windows(2)` only observes
+            // 0-, 1-, and 2-element neighbour lists, so
+            // `assert!(window[0].0 <= window[1].0)` cannot expose sort defects
+            // that manifest only on buckets of length 3 or greater. See the
+            // function-level comment above for the rationale and trade-off.
             assert!(window[0].0 <= window[1].0);
         }
     }

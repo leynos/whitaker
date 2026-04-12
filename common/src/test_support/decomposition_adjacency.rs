@@ -131,15 +131,24 @@ impl AdjacencyReport {
     }
 }
 
+#[expect(
+    clippy::unnecessary_map_or,
+    reason = "Keep the explicit non-panicking fallback requested in review."
+)]
 fn has_mirror(
     neighbours: &[Vec<(usize, u64)>],
     neighbour: usize,
     node: usize,
     weight: u64,
 ) -> bool {
-    neighbours[neighbour]
-        .iter()
-        .any(|&(mirror, mirror_weight)| mirror == node && mirror_weight == weight)
+    debug_assert!(
+        neighbour < neighbours.len(),
+        "has_mirror: neighbour index out of bounds - callers (e.g. adjacency_report) must guarantee valid indices"
+    );
+    neighbours.get(neighbour).map_or(false, |list| {
+        list.iter()
+            .any(|&(mirror, mirror_weight)| mirror == node && mirror_weight == weight)
+    })
 }
 
 /// Builds an [`AdjacencyReport`] from declarative edge input.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -eu
+set -euo pipefail
 
 KANI_CACHE_DIR=${WHITAKER_KANI_CACHE_DIR:-"${XDG_CACHE_HOME:-${HOME}/.cache}/whitaker/kani"}
 KANI_VERSION=${KANI_VERSION:-0.67.0}
@@ -46,6 +46,9 @@ if [ ! -x "${kani_driver_bin}" ]; then
     tmp_dir=$(mktemp -d)
     mkdir -p "${install_root}"
     curl -fsSL \
+        --retry 3 \
+        --connect-timeout 20 \
+        --max-time 300 \
         -o "${tmp_dir}/${asset_name}" \
         "https://github.com/model-checking/kani/releases/download/${KANI_RELEASE_TAG}/${asset_name}"
     tar -xzf "${tmp_dir}/${asset_name}" -C "${install_root}"
@@ -70,6 +73,10 @@ if [ ! -d "${install_dir}/toolchain" ]; then
     toolchain_dir=$(rustup toolchain list -v \
         | grep "^${toolchain_tag} " \
         | awk '{print $NF}')
+    if [ -z "${toolchain_dir}" ] || [ ! -d "${toolchain_dir}" ]; then
+        printf 'failed to locate installed Kani toolchain directory for %s\n' "${toolchain_tag}" >&2
+        exit 1
+    fi
     ln -sf "${toolchain_dir}" "${install_dir}/toolchain"
 fi
 

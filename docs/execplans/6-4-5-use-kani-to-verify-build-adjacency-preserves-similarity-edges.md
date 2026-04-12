@@ -388,8 +388,8 @@ Suggested BDD scenarios:
 
 1. Happy path: two or more valid edges produce symmetric neighbour lists for
    every connected node.
-2. Unhappy path: malformed declarative input with an out-of-range endpoint is
-   rejected by the test-support wrapper.
+2. Unhappy path: malformed declarative input with `left >= right` is rejected
+   by the test-support wrapper.
 3. Edge case: a graph with isolated nodes yields empty neighbour lists for
    those nodes.
 4. Edge case: multiple neighbours for one node appear in sorted order.

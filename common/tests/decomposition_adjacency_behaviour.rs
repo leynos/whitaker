@@ -127,7 +127,7 @@ fn scenario_valid_edges_produce_symmetric_neighbour_lists(world: AdjacencyWorld)
 }
 
 #[scenario(path = "tests/features/decomposition_adjacency.feature", index = 1)]
-fn scenario_malformed_edge_input_is_rejected(world: AdjacencyWorld) {
+fn scenario_malformed_edge_input_rejected_canonical_order(world: AdjacencyWorld) {
     let _ = world;
 }
 
