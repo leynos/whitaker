@@ -3,13 +3,15 @@
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
-use whitaker_common::test_support::decomposition::{AdjacencyReport, EdgeInput, adjacency_report};
+use whitaker_common::test_support::decomposition::{
+    AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report,
+};
 
 #[derive(Debug, Default)]
 struct AdjacencyWorld {
     node_count: RefCell<usize>,
     edges: RefCell<Vec<EdgeInput>>,
-    result: RefCell<Option<Result<AdjacencyReport, String>>>,
+    result: RefCell<Option<Result<AdjacencyReport, AdjacencyError>>>,
 }
 
 #[fixture]

@@ -574,7 +574,8 @@ further decomposition analysis was omitted.
   returns an `AdjacencyReport` with convenience predicates (`is_symmetric`,
   `all_indices_in_bounds`, `is_sorted`, `neighbours_of`). The report is the
   only public interface; raw adjacency vectors remain crate-internal.
-- **One unhappy-path BDD scenario validates test-support input
+- **One unhappy-path behaviour-driven development (BDD) scenario validates
+  test-support input
   rejection**: a scenario with `left >= right` is rejected by the
   `adjacency_report` helper before reaching `build_adjacency`, covering the
   edge-contract validation without changing production semantics.

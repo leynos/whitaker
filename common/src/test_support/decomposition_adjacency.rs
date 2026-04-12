@@ -1,6 +1,7 @@
 //! Observable adjacency-construction seams for decomposition advice tests.
 
 use crate::decomposition_advice::community::{SimilarityEdge, build_adjacency};
+use thiserror::Error;
 
 /// Declarative edge input for test scenarios.
 ///
@@ -14,9 +15,47 @@ use crate::decomposition_advice::community::{SimilarityEdge, build_adjacency};
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct EdgeInput {
+    /// Left endpoint node index in canonical order.
+    ///
+    /// Callers must provide `left < right`.
     pub left: usize,
+    /// Right endpoint node index in canonical order.
+    ///
+    /// Callers must provide `left < right`.
     pub right: usize,
+    /// Positive edge weight carried into the adjacency list.
     pub weight: u64,
+}
+
+/// Structured validation errors for declarative adjacency test input.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum AdjacencyError {
+    /// The edge endpoints are not in canonical order.
+    #[error("edge {index}: left ({left}) must be less than right ({right})")]
+    NonCanonicalEdge {
+        /// Edge index within the declarative input slice.
+        index: usize,
+        /// Left endpoint supplied by the caller.
+        left: usize,
+        /// Right endpoint supplied by the caller.
+        right: usize,
+    },
+    /// The right endpoint falls outside the declared node range.
+    #[error("edge {index}: right ({right}) is out of range for node_count {node_count}")]
+    EndpointOutOfRange {
+        /// Edge index within the declarative input slice.
+        index: usize,
+        /// Out-of-range right endpoint.
+        right: usize,
+        /// Declared node count for the report.
+        node_count: usize,
+    },
+    /// The edge weight violates the positive-weight production contract.
+    #[error("edge {index}: weight must be positive")]
+    ZeroWeight {
+        /// Edge index within the declarative input slice.
+        index: usize,
+    },
 }
 
 /// Observable adjacency-construction results for a set of edges.
@@ -170,9 +209,12 @@ fn has_mirror(
 ///
 /// # Errors
 ///
-/// Returns a human-readable message when an edge violates the production
+/// Returns a typed validation error when an edge violates the production
 /// input contract.
-pub fn adjacency_report(node_count: usize, edges: &[EdgeInput]) -> Result<AdjacencyReport, String> {
+pub fn adjacency_report(
+    node_count: usize,
+    edges: &[EdgeInput],
+) -> Result<AdjacencyReport, AdjacencyError> {
     let similarity_edges = validate_edges(node_count, edges)?;
     let neighbours = build_adjacency(node_count, &similarity_edges);
 
@@ -182,27 +224,93 @@ pub fn adjacency_report(node_count: usize, edges: &[EdgeInput]) -> Result<Adjace
     })
 }
 
-fn validate_edges(node_count: usize, edges: &[EdgeInput]) -> Result<Vec<SimilarityEdge>, String> {
+fn validate_edges(
+    node_count: usize,
+    edges: &[EdgeInput],
+) -> Result<Vec<SimilarityEdge>, AdjacencyError> {
     let mut result = Vec::with_capacity(edges.len());
 
     for (index, edge) in edges.iter().enumerate() {
         if edge.left >= edge.right {
-            return Err(format!(
-                "edge {index}: left ({}) must be less than right ({})",
-                edge.left, edge.right,
-            ));
+            return Err(AdjacencyError::NonCanonicalEdge {
+                index,
+                left: edge.left,
+                right: edge.right,
+            });
         }
         if edge.right >= node_count {
-            return Err(format!(
-                "edge {index}: right ({}) is out of range for node_count {node_count}",
-                edge.right,
-            ));
+            return Err(AdjacencyError::EndpointOutOfRange {
+                index,
+                right: edge.right,
+                node_count,
+            });
         }
         if edge.weight == 0 {
-            return Err(format!("edge {index}: weight must be positive"));
+            return Err(AdjacencyError::ZeroWeight { index });
         }
         result.push(SimilarityEdge::new(edge.left, edge.right, edge.weight));
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AdjacencyError, EdgeInput, adjacency_report};
+
+    #[test]
+    fn adjacency_report_rejects_non_canonical_edges_with_structured_error() {
+        let result = adjacency_report(
+            3,
+            &[EdgeInput {
+                left: 1,
+                right: 1,
+                weight: 7,
+            }],
+        );
+
+        assert_eq!(
+            result,
+            Err(AdjacencyError::NonCanonicalEdge {
+                index: 0,
+                left: 1,
+                right: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn adjacency_report_rejects_out_of_range_endpoints_with_structured_error() {
+        let result = adjacency_report(
+            3,
+            &[EdgeInput {
+                left: 1,
+                right: 3,
+                weight: 7,
+            }],
+        );
+
+        assert_eq!(
+            result,
+            Err(AdjacencyError::EndpointOutOfRange {
+                index: 0,
+                right: 3,
+                node_count: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn adjacency_report_rejects_zero_weight_with_structured_error() {
+        let result = adjacency_report(
+            3,
+            &[EdgeInput {
+                left: 0,
+                right: 2,
+                weight: 0,
+            }],
+        );
+
+        assert_eq!(result, Err(AdjacencyError::ZeroWeight { index: 0 }));
+    }
 }

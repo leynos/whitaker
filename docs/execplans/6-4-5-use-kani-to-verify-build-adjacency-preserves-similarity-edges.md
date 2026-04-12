@@ -141,7 +141,7 @@ Observable success after implementation:
 - [x] 2026-04-03: Mark roadmap item 6.4.5 done in `docs/roadmap.md`.
 - [x] 2026-04-03: Run `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, and `make test` successfully (1225 tests, 0
-  failures). `make kani` completes full Kani/CBMC verification for all 5
+  failures). `make kani` completes full Kani/CBMC verification for all 6
   shipped harnesses with zero failures.
 - [x] 2026-04-03: Finalize the living sections in this ExecPlan after
   implementation.
@@ -373,7 +373,7 @@ Do not expose raw adjacency internals publicly. Instead, add one narrow helper
 to `common/src/test_support/decomposition.rs`, for example:
 
 ```text
-adjacency_report(node_count, edges) -> Result<AdjacencyReport, String>
+adjacency_report(node_count, edges) -> Result<AdjacencyReport, AdjacencyError>
 ```
 
 The helper should:

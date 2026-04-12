@@ -52,6 +52,11 @@ if [ ! -x "${kani_driver_bin}" ]; then
         -o "${tmp_dir}/${asset_name}" \
         "https://github.com/model-checking/kani/releases/download/${KANI_RELEASE_TAG}/${asset_name}"
     tar -xzf "${tmp_dir}/${asset_name}" -C "${install_root}"
+    if [ ! -x "${kani_driver_bin}" ]; then
+        printf 'expected executable Kani driver at %s after extracting %s\n' \
+            "${kani_driver_bin}" "${asset_name}" >&2
+        exit 1
+    fi
 fi
 
 # Kani 0.67+ ships kani-driver but expects to be invoked as cargo-kani for

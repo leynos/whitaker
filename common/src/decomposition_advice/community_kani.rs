@@ -156,6 +156,12 @@ fn verify_build_adjacency_no_spurious_edges() {
     kani::assume(node_count > 0);
 
     for (node, bucket) in adjacency.iter().enumerate() {
+        let expected_degree = edges
+            .iter()
+            .filter(|edge| edge.left == node || edge.right == node)
+            .count();
+        assert_eq!(bucket.len(), expected_degree);
+
         for &(neighbour, weight) in bucket {
             let in_input = edges.iter().any(|e| {
                 (e.left == node && e.right == neighbour && e.weight == weight)

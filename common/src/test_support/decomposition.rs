@@ -15,7 +15,7 @@ use crate::decomposition_advice::{
     suggest_decomposition,
 };
 
-pub use self::adjacency::{AdjacencyReport, EdgeInput, adjacency_report};
+pub use self::adjacency::{AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report};
 pub use self::vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra};
 
 /// Input data for building a [`MethodProfile`] in tests.

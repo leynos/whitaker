@@ -203,7 +203,7 @@ for integration and behaviour-driven tests:
     out-of-bounds)
 
 - **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight` fields
-  for BDD scenarios.
+  for behaviour-driven development (BDD) scenarios.
 
 The test-support API validates input and delegates to the shipped
 `build_adjacency` function, keeping raw adjacency vectors crate-internal while
