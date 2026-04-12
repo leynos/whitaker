@@ -79,9 +79,11 @@ def _workflow_dispatch_inputs(workflow_mapping: Mapping[str, Any]) -> dict[str, 
 
 def _github_expression_value(value: object) -> str:
     """Return a GitHub Actions expression with wrapper delimiters removed."""
-    if not isinstance(value, str):
-        pytest.fail("workflow expression value must be a string")
-    stripped = value.strip()
+    match value:
+        case str() as expression:
+            stripped = expression.strip()
+        case _:
+            pytest.fail("workflow expression value must be a string")
     if stripped.startswith("${{") and stripped.endswith("}}"):
         return stripped[3:-2].strip()
     return stripped
