@@ -234,6 +234,21 @@ The release workflows consume both artefact types:
 - `dependency-binaries-licences.md` for provenance and third-party licence
   disclosure
 
+### Rolling-release manual recovery
+
+`.github/workflows/rolling-release.yml` rebuilds dependency binaries
+automatically on pushes to `main` when `installer/dependency-binaries.toml`
+changes.
+
+Manual runs now expose an explicit `force_dependency_binary_rebuild` boolean
+input instead of rebuilding dependency binaries on every `workflow_dispatch`.
+
+Use that input when the rolling release needs to recover from an earlier
+dependency-binary build or publish failure, or when the current rolling release
+is missing the expected `.tgz` or `.zip` dependency archives. Leave it set to
+`false` for a manual republish that should reuse or restore the existing
+dependency archives.
+
 ### Continuous Integration (CI) manifest script
 
 `installer/scripts/dependency_binaries_manifest.py` is a thin CI helper that

@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_dependency_binary_rebuild:
+        description: Force a dependency binary rebuild for rolling-release recovery.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -38,7 +44,11 @@ jobs:
         run: |
           set -euxo pipefail
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            if [[ "${{ github.event.inputs.force_dependency_binary_rebuild }}" == "true" ]]; then
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           BEFORE="${{ github.event.before }}"

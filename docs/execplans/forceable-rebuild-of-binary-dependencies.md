@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -61,8 +61,7 @@ Success is observable by:
 - Keep documentation in en-GB-oxendict spelling and wrap Markdown prose at
   80 columns.
 - Use `apply_patch` for all file edits.
-- Because this is an ExecPlan request, implementation must not begin until the
-  user explicitly approves this plan.
+- Implementation must follow this approved plan unless a tolerance is reached.
 
 ## Tolerances
 
@@ -117,13 +116,23 @@ Success is observable by:
   explicit operator input.
 - [x] (2026-04-12) Drafted this ExecPlan at
   `docs/execplans/forceable-rebuild-of-binary-dependencies.md`.
-- [ ] Obtain explicit user approval for the plan.
-- [ ] Add failing workflow contract tests for the new manual-force contract.
-- [ ] Update `rolling-release.yml` to use an explicit manual input rather than
-  implicit rebuild-on-dispatch behaviour.
-- [ ] Update contributor documentation to explain the new manual recovery path.
-- [ ] Run formatting, Markdown validation, lint, and tests through the required
-  `tee` + `pipefail` gates.
+- [x] (2026-04-12) User approved implementation against this ExecPlan.
+- [x] (2026-04-12) Established the current red baseline by confirming the
+  workflow still lacked `workflow_dispatch.inputs` and still treated every
+  manual dispatch as `should_build=true`.
+- [x] (2026-04-12) Added workflow contract coverage for the new
+  `force_dependency_binary_rebuild` dispatch input and for the tighter
+  change-detection shell contract.
+- [x] (2026-04-12) Updated `rolling-release.yml` to make dependency-binary
+  rebuilds opt-in on manual dispatch via `force_dependency_binary_rebuild`.
+- [x] (2026-04-12) Updated `docs/developers-guide.md` to explain when
+  contributors should use the manual force input versus the existing restore
+  path.
+- [x] (2026-04-12) Updated `docs/whitaker-dylint-suite-design.md` so the
+  design record matches the new manual-force workflow contract.
+- [x] (2026-04-12) Ran formatting, Markdown validation, lint, focused workflow
+  contract tests, and the full Rust test suite through the required `tee` +
+  `pipefail` gates.
 
 ## Surprises & Discoveries
 
@@ -143,6 +152,18 @@ Success is observable by:
   currently contains only `ref`, `repository`, and `sender`. That is enough for
   the existing `build-lints` smoke test, but an implementation may choose to
   add an `inputs` object for realism if it helps future workflow coverage.
+
+- This environment's system Python is PEP 668 externally managed, so
+  `make workflow-test-deps` fails when it tries to install `pytest` and
+  `ruamel.yaml` globally with `pip`. Local workflow-contract verification will
+  need an isolated virtual environment or equivalent wrapper before the test
+  command can run.
+
+- This environment also lacks `python3-venv` / `ensurepip`, so the first
+  virtual-environment fallback is unavailable. The practical local workaround
+  was
+  `python3 -m pip install --break-system-packages -r tests/workflows/requirements.txt`
+   before running the focused workflow tests.
 
 ## Decision Log
 
@@ -170,6 +191,19 @@ Success is observable by:
   names only the rolling-release workflow and the recovery case for previously
   failed dependency-binary builds on rolling. Date/Author: 2026-04-12 / plan
   author.
+
+- Decision: a manual dispatch without the force input should set
+  `should_build=false` immediately instead of falling through to the push diff
+  logic. Rationale: `workflow_dispatch` events do not have a meaningful
+  `${{ github.event.before }}` diff base, and the desired contract is an
+  explicit operator choice between "force rebuild now" and "reuse/restore the
+  current dependency archives". Date/Author: 2026-04-12 / implementation author.
+
+- Decision: do not modify the `act` workflow-dispatch fixture in this patch.
+  Rationale: the current smoke job exercises `build-lints`, which does not read
+  `github.event.inputs.force_dependency_binary_rebuild`, so the fixture can
+  stay minimal and the file budget remains inside the plan tolerance.
+  Date/Author: 2026-04-12 / implementation author.
 
 ## Context and orientation
 
@@ -249,6 +283,14 @@ Acceptance for Milestone 1:
 Recommended command:
 
 ```sh
+set -o pipefail; python3 -m pytest tests/workflows/test_rolling_release_workflow.py 2>&1 | tee /tmp/forceable-rebuild-workflow-pytest.log
+```
+
+In this environment, the intended virtual-environment fallback is not available
+because `python3 -m venv` fails without `ensurepip`. The working fallback was:
+
+```sh
+python3 -m pip install --break-system-packages -r tests/workflows/requirements.txt
 set -o pipefail; python3 -m pytest tests/workflows/test_rolling_release_workflow.py 2>&1 | tee /tmp/forceable-rebuild-workflow-pytest.log
 ```
 
@@ -339,6 +381,40 @@ Expected success signals:
 
 ## Outcomes & Retrospective
 
-This section will be completed during implementation. In the current draft
-state, no workflow or documentation changes have been made yet. The next step
-is explicit user approval of this plan; only then should implementation begin.
+Implemented the planned workflow-interface change without exceeding the file or
+scope tolerances. `.github/workflows/rolling-release.yml` now exposes a boolean
+`workflow_dispatch` input named `force_dependency_binary_rebuild`, and the
+`dependency-manifest-changes` job now sets `should_build=true` only when that
+manual input is `true`. Manual dispatches with the default `false` value now
+skip the dependency-binary rebuild and fall through to the existing restore
+path.
+
+Workflow contract coverage now protects both halves of the change. The Python
+tests assert that the new manual input exists with the expected boolean/default
+contract, and that the change-detection shell step reads
+`github.event.inputs.force_dependency_binary_rebuild` instead of rebuilding on
+every `workflow_dispatch`. While touching that file, the existing `publish.if`
+assertion was also hardened to accept the expression form returned by the
+current `ruamel.yaml` parser.
+
+Contributor-facing documentation now matches the shipped behaviour.
+`docs/developers-guide.md` explains when maintainers should force a rebuild
+manually versus reuse existing dependency archives, and
+`docs/whitaker-dylint-suite-design.md` no longer implies that every manual run
+rebuilds dependency binaries.
+
+Validation results:
+
+1. Focused workflow contract tests passed:
+   `python3 -m pytest tests/workflows/test_rolling_release_workflow.py` →
+   `9 passed, 1 skipped`.
+2. Documentation gates passed:
+   `make fmt`, `make markdownlint`, and `make nixie`.
+3. Repository code gates passed:
+   `make check-fmt`, `make lint`, and `make test` →
+   `1293 tests run: 1293 passed, 2 skipped`.
+
+Lesson learned: the repository's `make workflow-test-deps` target assumes a
+Python environment where global `pip install` is allowed. In containerized
+Debian-style environments with PEP 668 and no `python3-venv`, workflow-contract
+verification needs a documented fallback.
