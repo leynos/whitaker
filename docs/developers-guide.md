@@ -201,8 +201,10 @@ The dependency-install path is split into focused modules under
 
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now runnable.
-3. Fall back to `cargo binstall` when available.
-4. Fall back to `cargo install` when `cargo binstall` is absent or fails.
+3. If the repository download reports `NotFound`, skip `cargo binstall` and
+   fall back directly to `cargo install`.
+4. For other repository failures, fall back to `cargo binstall` when available
+   and then to `cargo install` if `cargo binstall` is absent or fails.
 
 ### Dependency fallback details
 
@@ -227,17 +229,20 @@ then calls `install_tool()` and feeds the returned `InstallOutcome` into
 later iterations so a successful `cargo-dylint` install can suppress a
 redundant `dylint-link` install.
 
-When a repository asset is missing, `install_tool()` copies
-`dependency.version()` into `CargoInstallPlan` before falling back, so
-`run_cargo_install()` invokes `cargo install --locked --version <version>`.
-This preserves the version recorded in `installer/dependency-binaries.toml`
-instead of silently using the latest upstream release.
+After resolving the dependency metadata entry, `install_tool()` copies
+`dependency.version()` into `CargoInstallPlan` before attempting the
+repository-release install. That means every subsequent `run_cargo_install()`
+fallback, including the direct missing-asset path, invokes
+`cargo install --locked --version <version>`. This preserves the version
+recorded in `installer/dependency-binaries.toml` instead of silently using the
+latest upstream release.
 
 `update_status_after_install()` delegates the local-install probe decision to
 `should_refresh_companions()`. That helper returns `true` only when the install
 outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
-code probes for `dylint-link` after local Cargo installs of `cargo-dylint`
-without re-checking when the pre-built repository artefact was used.
+code probes for `dylint-link` only after local `cargo-dylint` installs and does
+not re-check it when the pre-built repository artefact was used or when
+`dylint-link` was already present.
 
 ### CLI tool usage
 
