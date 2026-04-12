@@ -32,6 +32,9 @@ from tests.workflows.rolling_release_workflow_test_support import (
     _find_step_by_name,
     _get_job_dict,
     _get_needs_list,
+    _github_expression_compares_operand_to_false,
+    _github_expression_mentions_operand,
+    _github_expression_negates_operand,
     _github_expression_value,
     _load_workflow_mapping,
 )
@@ -213,12 +216,31 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
         "recreating it"
     )
     delete_guard = _github_expression_value(delete_step.get("if"))
-    assert "steps.assets.outputs.has_assets" in delete_guard, (
+    assert _github_expression_mentions_operand(
+        delete_guard,
+        "steps.assets.outputs.has_assets",
+    ), (
         "rolling release deletion must be gated on collected assets, so "
         "successful dependency archives still publish when other matrix legs "
         "fail"
     )
-    assert "needs.build-dependency-binaries.result" not in delete_guard, (
+    assert not _github_expression_negates_operand(
+        delete_guard,
+        "steps.assets.outputs.has_assets",
+    ), (
+        "rolling release deletion must treat has_assets as a positive guard, "
+        "not a negated condition"
+    )
+    assert not _github_expression_compares_operand_to_false(
+        delete_guard,
+        "steps.assets.outputs.has_assets",
+    ), (
+        "rolling release deletion must not compare has_assets to false"
+    )
+    assert not _github_expression_mentions_operand(
+        delete_guard,
+        "needs.build-dependency-binaries.result",
+    ), (
         "rolling release deletion must not be gated on dependency build "
         "results, so successful dependency archives still publish when other "
         "matrix legs fail"
@@ -233,12 +255,30 @@ def test_publish_release_does_not_require_full_dependency_matrix_success(
         "available"
     )
     create_guard = _github_expression_value(create_step.get("if"))
-    assert "steps.assets.outputs.has_assets" in create_guard, (
+    assert _github_expression_mentions_operand(
+        create_guard,
+        "steps.assets.outputs.has_assets",
+    ), (
         "rolling release creation must be gated on collected assets and must "
         "publish whatever artefacts were built"
     )
-
-    assert "needs.build-dependency-binaries.result" not in create_guard, (
+    assert not _github_expression_negates_operand(
+        create_guard,
+        "steps.assets.outputs.has_assets",
+    ), (
+        "rolling release creation must treat has_assets as a positive guard, "
+        "not a negated condition"
+    )
+    assert not _github_expression_compares_operand_to_false(
+        create_guard,
+        "steps.assets.outputs.has_assets",
+    ), (
+        "rolling release creation must not compare has_assets to false"
+    )
+    assert not _github_expression_mentions_operand(
+        create_guard,
+        "needs.build-dependency-binaries.result",
+    ), (
         "rolling release creation must not be blocked by aggregate dependency "
         "matrix failures"
     )
