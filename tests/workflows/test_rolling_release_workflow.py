@@ -188,6 +188,50 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
         "through to has_assets=false"
     )
 
+
+def test_publish_release_does_not_require_full_dependency_matrix_success(
+    workflow_text: str,
+) -> None:
+    """Ensure publish step releases partial dependency artefacts."""
+    workflow_mapping = _load_workflow_mapping(workflow_text)
+    jobs = _get_job_dict(workflow_mapping, "jobs")
+    publish_job = _get_job_dict(jobs, "publish")
+
+    delete_step = _find_step_by_name(
+        publish_job.get("steps"),
+        "Delete existing rolling release",
+    )
+    assert delete_step is not None, (
+        "publish job must delete any existing rolling release before "
+        "recreating it"
+    )
+    delete_guard = _github_expression_value(delete_step.get("if"))
+    assert delete_guard == "steps.assets.outputs.has_assets == 'true'", (
+        "rolling release deletion must depend only on collected assets, so "
+        "successful dependency archives still publish when other matrix legs "
+        "fail"
+    )
+
+    create_step = _find_step_by_name(
+        publish_job.get("steps"),
+        "Create rolling release",
+    )
+    assert create_step is not None, (
+        "publish job must recreate the rolling release when assets are "
+        "available"
+    )
+    create_guard = _github_expression_value(create_step.get("if"))
+    assert create_guard == "steps.assets.outputs.has_assets == 'true'", (
+        "rolling release creation must not require the full dependency "
+        "matrix to succeed; publish whatever artefacts were built"
+    )
+
+    assert "needs.build-dependency-binaries.result" not in create_guard, (
+        "rolling release creation must not be blocked by aggregate dependency "
+        "matrix failures"
+    )
+
+
 def test_restore_step_guards_against_missing_dependency_assets(
     workflow_text: str,
 ) -> None:
