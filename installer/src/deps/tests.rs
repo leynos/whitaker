@@ -221,6 +221,7 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
     });
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
+        binstall_install("cargo-dylint", Ok(failure_output("binstall failed"))),
         ExpectedCall {
             cmd: "cargo",
             args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
@@ -242,13 +243,16 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
     .expect("source build should succeed");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-    assert!(output.contains("Building from source with Cargo."));
+    assert!(output.contains("Falling back to Cargo."));
+    assert!(
+        output.contains("cargo binstall failed for cargo-dylint; falling back to cargo install.")
+    );
     assert!(output.contains("Installed cargo-dylint from source with cargo install."));
     executor.assert_finished();
 }
 
 #[test]
-fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_installs_it() {
+fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_local_install_installs_it() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer
         .expect_install()
@@ -261,11 +265,7 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         });
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
-            result: Ok(success_output()),
-        },
+        binstall_install("cargo-dylint", Ok(success_output())),
         cargo_dylint_check_with_result(Ok(success_output())),
         dylint_link_check_with_result(Ok(success_output())),
     ]);
@@ -280,10 +280,10 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         &mut stderr,
         install_options(&repository_installer, false),
     )
-    .expect("cargo-dylint source build should satisfy both tools");
+    .expect("cargo-dylint local install should satisfy both tools");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-    assert!(output.contains("Installed cargo-dylint from source with cargo install."));
+    assert!(output.contains("Installed cargo-dylint with cargo binstall."));
     assert!(!output.contains("Installed dylint-link"));
     executor.assert_finished();
 }

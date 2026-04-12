@@ -37,8 +37,7 @@ pub(super) fn install_missing_tools(
         }
 
         let outcome = install_tool(executor, tool, stderr, context)?;
-        mark_tool_installed(&mut remaining_status, tool);
-        refresh_source_build_companions(&mut remaining_status, executor, tool, outcome);
+        update_status_after_install(&mut remaining_status, executor, tool, outcome);
     }
 
     Ok(())
@@ -83,81 +82,63 @@ pub(super) fn install_tool(
     stderr: &mut dyn Write,
     context: &InstallContext<'_>,
 ) -> Result<InstallOutcome> {
-    if let Some(outcome) = try_repository_install(executor, tool, stderr, context)? {
-        return Ok(outcome);
+    let mut cargo_install_plan = CargoInstallPlan::new(tool);
+
+    if let Some(repo) = &context.repo {
+        let Some(dependency) = find_dependency_binary(tool.package).map_err(|error| {
+            InstallerError::DependencyInstall {
+                tool: tool.package,
+                message: error.to_string(),
+            }
+        })?
+        else {
+            return install_tool_with_cargo(executor, cargo_install_plan, stderr, context);
+        };
+
+        match repo.installer.install(dependency, repo.target, repo.dirs) {
+            Ok(_) if is_tool_installed(executor, tool) => {
+                write_message(
+                    stderr,
+                    context.quiet,
+                    format!("Installed {} from repository release.", tool.package),
+                );
+                return Ok(InstallOutcome::RepositoryRelease);
+            }
+            Ok(_) => {
+                write_message(
+                    stderr,
+                    context.quiet,
+                    format!(
+                        "Repository install for {} failed verification; falling back to Cargo.",
+                        tool.package
+                    ),
+                );
+            }
+            Err(error) if error.is_not_found() => {
+                cargo_install_plan = cargo_install_plan.with_version(dependency.version());
+                write_message(
+                    stderr,
+                    context.quiet,
+                    format!(
+                        "Repository install for {} unavailable: {error}. Falling back to Cargo.",
+                        tool.package
+                    ),
+                );
+            }
+            Err(error) => {
+                write_message(
+                    stderr,
+                    context.quiet,
+                    format!(
+                        "Repository install for {} unavailable: {error}. Falling back to Cargo.",
+                        tool.package
+                    ),
+                );
+            }
+        }
     }
 
-    install_with_cargo(executor, tool, stderr, context)
-}
-
-pub(super) fn try_repository_install(
-    executor: &dyn CommandExecutor,
-    tool: &DependencyTool,
-    stderr: &mut dyn Write,
-    context: &InstallContext<'_>,
-) -> Result<Option<InstallOutcome>> {
-    let Some(repo) = &context.repo else {
-        return Ok(None);
-    };
-    let Some(dependency) = find_dependency_binary(tool.package).map_err(|error| {
-        InstallerError::DependencyInstall {
-            tool: tool.package,
-            message: error.to_string(),
-        }
-    })?
-    else {
-        return Ok(None);
-    };
-
-    match repo.installer.install(dependency, repo.target, repo.dirs) {
-        Ok(_) if is_tool_installed(executor, tool) => {
-            write_message(
-                stderr,
-                context.quiet,
-                format!("Installed {} from repository release.", tool.package),
-            );
-            Ok(Some(InstallOutcome::Installed))
-        }
-        Ok(_) => {
-            write_message(
-                stderr,
-                context.quiet,
-                format!(
-                    "Repository install for {} failed verification; falling back to Cargo.",
-                    tool.package
-                ),
-            );
-            Ok(None)
-        }
-        Err(error) if error.is_not_found() => {
-            write_message(
-                stderr,
-                context.quiet,
-                format!(
-                    "Repository install for {} unavailable: {error}. Building from source with Cargo.",
-                    tool.package
-                ),
-            );
-            run_cargo_install(
-                executor,
-                stderr,
-                context,
-                cargo_source_install_request(tool, dependency),
-            )
-            .map(Some)
-        }
-        Err(error) => {
-            write_message(
-                stderr,
-                context.quiet,
-                format!(
-                    "Repository install for {} unavailable: {error}. Falling back to Cargo.",
-                    tool.package
-                ),
-            );
-            Ok(None)
-        }
-    }
+    install_tool_with_cargo(executor, cargo_install_plan, stderr, context)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -168,45 +149,62 @@ pub(super) enum InstallMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum InstallOutcome {
-    Installed,
-    SourceBuild,
+    RepositoryRelease,
+    CargoBinstall,
+    CargoInstall,
 }
 
-struct CargoInstallRequest<'a> {
+#[derive(Clone, Copy)]
+struct CargoInstallPlan<'a> {
     tool: &'a DependencyTool,
-    args: Vec<&'a str>,
-    success_message: String,
+    version: Option<&'a str>,
 }
 
-pub(super) fn install_with_cargo(
+impl<'a> CargoInstallPlan<'a> {
+    fn new(tool: &'a DependencyTool) -> Self {
+        Self {
+            tool,
+            version: None,
+        }
+    }
+
+    fn with_version(self, version: &'a str) -> Self {
+        Self {
+            version: Some(version),
+            ..self
+        }
+    }
+}
+
+fn install_tool_with_cargo(
     executor: &dyn CommandExecutor,
-    tool: &DependencyTool,
+    cargo_install_plan: CargoInstallPlan<'_>,
     stderr: &mut dyn Write,
     context: &InstallContext<'_>,
 ) -> Result<InstallOutcome> {
     // Always try binstall first if available; fall back to cargo install on failure
     if context.cargo_fallback_mode == InstallMode::Binstall {
-        if try_binstall(executor, tool, stderr, context)? {
-            return Ok(InstallOutcome::Installed);
+        if try_binstall(executor, cargo_install_plan.tool, stderr, context.quiet)? {
+            return Ok(InstallOutcome::CargoBinstall);
         }
         write_message(
             stderr,
             context.quiet,
             format!(
                 "cargo binstall failed for {}; falling back to cargo install.",
-                tool.package
+                cargo_install_plan.tool.package
             ),
         );
     }
 
-    try_cargo_install(executor, tool, stderr, context)
+    run_cargo_install(executor, cargo_install_plan, stderr, context.quiet)
 }
 
 pub(super) fn try_binstall(
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
     stderr: &mut dyn Write,
-    context: &InstallContext<'_>,
+    quiet: bool,
 ) -> Result<bool> {
     let args = vec!["binstall", "-y", tool.package];
     let output = executor.run("cargo", &args)?;
@@ -221,48 +219,54 @@ pub(super) fn try_binstall(
 
     write_message(
         stderr,
-        context.quiet,
+        quiet,
         format!("Installed {} with cargo binstall.", tool.package),
     );
     Ok(true)
 }
 
-pub(super) fn try_cargo_install(
-    executor: &dyn CommandExecutor,
-    tool: &DependencyTool,
-    stderr: &mut dyn Write,
-    context: &InstallContext<'_>,
-) -> Result<InstallOutcome> {
-    run_cargo_install(executor, stderr, context, cargo_install_request(tool))
-}
-
 fn run_cargo_install(
     executor: &dyn CommandExecutor,
+    cargo_install_plan: CargoInstallPlan<'_>,
     stderr: &mut dyn Write,
-    context: &InstallContext<'_>,
-    request: CargoInstallRequest<'_>,
+    quiet: bool,
 ) -> Result<InstallOutcome> {
-    let output = executor.run("cargo", &request.args)?;
+    let mut args = vec!["install"];
+    let success_message = if let Some(version) = cargo_install_plan.version {
+        args.extend(["--locked", "--version", version]);
+        format!(
+            "Installed {} from source with cargo install.",
+            cargo_install_plan.tool.package
+        )
+    } else {
+        format!(
+            "Installed {} with cargo install.",
+            cargo_install_plan.tool.package
+        )
+    };
+    args.push(cargo_install_plan.tool.package);
+
+    let output = executor.run("cargo", &args)?;
     if !output.status.success() {
         let message = command_error_message(&output);
         return Err(InstallerError::DependencyInstall {
-            tool: request.tool.package,
+            tool: cargo_install_plan.tool.package,
             message,
         });
     }
 
-    if !is_tool_installed(executor, request.tool) {
+    if !is_tool_installed(executor, cargo_install_plan.tool) {
         return Err(InstallerError::DependencyInstall {
-            tool: request.tool.package,
+            tool: cargo_install_plan.tool.package,
             message: format!(
                 "cargo install reported success, but {} is still unavailable",
-                request.tool.package
+                cargo_install_plan.tool.package
             ),
         });
     }
 
-    write_message(stderr, context.quiet, request.success_message);
-    Ok(InstallOutcome::SourceBuild)
+    write_message(stderr, quiet, success_message);
+    Ok(InstallOutcome::CargoInstall)
 }
 
 pub(super) fn command_error_message(output: &Output) -> String {
@@ -288,95 +292,72 @@ pub(super) fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: 
         .is_ok_and(|output| output.status.success())
 }
 
-fn mark_tool_installed(status: &mut DylintToolStatus, tool: &DependencyTool) {
-    if tool == &CARGO_DYLINT_TOOL {
-        status.cargo_dylint = true;
-    } else if tool == &DYLINT_LINK_TOOL {
-        status.dylint_link = true;
-    }
-}
-
-fn should_refresh_companions(
-    outcome: InstallOutcome,
-    tool: &DependencyTool,
-    status: &DylintToolStatus,
-) -> bool {
-    outcome == InstallOutcome::SourceBuild && tool == &CARGO_DYLINT_TOOL && !status.dylint_link
-}
-
-fn refresh_source_build_companions(
+fn update_status_after_install(
     status: &mut DylintToolStatus,
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
     outcome: InstallOutcome,
 ) {
-    if !should_refresh_companions(outcome, tool, status) {
-        return;
-    }
+    if tool == &CARGO_DYLINT_TOOL {
+        status.cargo_dylint = true;
 
-    // A source build of cargo-dylint can also provide dylint-link.
-    status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL);
-}
-
-fn cargo_install_request(tool: &DependencyTool) -> CargoInstallRequest<'_> {
-    CargoInstallRequest {
-        tool,
-        args: vec!["install", tool.package],
-        success_message: format!("Installed {} with cargo install.", tool.package),
-    }
-}
-
-fn cargo_source_install_request<'a>(
-    tool: &'a DependencyTool,
-    dependency: &'a crate::dependency_binaries::DependencyBinary,
-) -> CargoInstallRequest<'a> {
-    CargoInstallRequest {
-        tool,
-        args: vec![
-            "install",
-            "--locked",
-            "--version",
-            dependency.version(),
-            tool.package,
-        ],
-        success_message: format!("Installed {} from source with cargo install.", tool.package),
+        if outcome != InstallOutcome::RepositoryRelease && !status.dylint_link {
+            // Installing cargo-dylint locally can also provide dylint-link.
+            status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL);
+        }
+    } else if tool == &DYLINT_LINK_TOOL {
+        status.dylint_link = true;
     }
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for dependency-install status refresh behaviour.
+
     use super::*;
 
     #[test]
-    fn should_refresh_companions_requires_source_built_cargo_dylint_without_link() {
+    fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs() {
         let missing_link = DylintToolStatus {
-            cargo_dylint: true,
+            cargo_dylint: false,
             dylint_link: false,
         };
-        let installed_link = DylintToolStatus {
-            cargo_dylint: true,
-            dylint_link: true,
+        let executor =
+            crate::test_utils::StubExecutor::new(vec![crate::test_utils::ExpectedCall {
+                cmd: "dylint-link",
+                args: vec!["--version"],
+                result: Ok(crate::test_utils::success_output()),
+            }]);
+
+        let mut binstall_status = missing_link;
+        update_status_after_install(
+            &mut binstall_status,
+            &executor,
+            &CARGO_DYLINT_TOOL,
+            InstallOutcome::CargoBinstall,
+        );
+        assert!(binstall_status.cargo_dylint);
+        assert!(binstall_status.dylint_link);
+        executor.assert_finished();
+    }
+
+    #[test]
+    fn update_status_after_install_skips_link_probe_for_repository_release() {
+        let executor = crate::test_utils::StubExecutor::new(vec![]);
+        let mut status = DylintToolStatus {
+            cargo_dylint: false,
+            dylint_link: false,
         };
 
-        assert!(should_refresh_companions(
-            InstallOutcome::SourceBuild,
+        update_status_after_install(
+            &mut status,
+            &executor,
             &CARGO_DYLINT_TOOL,
-            &missing_link,
-        ));
-        assert!(!should_refresh_companions(
-            InstallOutcome::Installed,
-            &CARGO_DYLINT_TOOL,
-            &missing_link,
-        ));
-        assert!(!should_refresh_companions(
-            InstallOutcome::SourceBuild,
-            &DYLINT_LINK_TOOL,
-            &missing_link,
-        ));
-        assert!(!should_refresh_companions(
-            InstallOutcome::SourceBuild,
-            &CARGO_DYLINT_TOOL,
-            &installed_link,
-        ));
+            InstallOutcome::RepositoryRelease,
+        );
+
+        assert!(status.cargo_dylint);
+        assert!(!status.dylint_link);
+        executor.assert_finished();
     }
 }

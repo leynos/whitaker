@@ -104,7 +104,7 @@ fn asset_url(filename: &str) -> String {
 /// Map `ureq` failures into semantic dependency-installer errors.
 fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallError {
     match error {
-        ureq::Error::StatusCode(404) => DependencyBinaryInstallError::NotFound {
+        ureq::Error::StatusCode(404 | 410) => DependencyBinaryInstallError::NotFound {
             url: url.to_owned(),
         },
         other => DependencyBinaryInstallError::Download {
@@ -116,18 +116,35 @@ fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallErro
 
 #[cfg(test)]
 mod tests {
+    //! Tests for downloader error mapping.
+
     use super::*;
 
     #[test]
-    fn map_ureq_error_maps_404_to_not_found() {
+    fn map_ureq_error_maps_missing_asset_statuses_to_not_found() {
+        for status in [404, 410] {
+            let error = map_ureq_error(
+                "https://example.test/archive.tgz",
+                &ureq::Error::StatusCode(status),
+            );
+
+            assert!(matches!(
+                error,
+                DependencyBinaryInstallError::NotFound { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn map_ureq_error_maps_non_missing_4xx_to_download_error() {
         let error = map_ureq_error(
             "https://example.test/archive.tgz",
-            &ureq::Error::StatusCode(404),
+            &ureq::Error::StatusCode(403),
         );
 
         assert!(matches!(
             error,
-            DependencyBinaryInstallError::NotFound { .. }
+            DependencyBinaryInstallError::Download { .. }
         ));
     }
 
