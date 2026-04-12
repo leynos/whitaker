@@ -23,7 +23,8 @@ symmetric neighbour lists.
 Observable success after implementation:
 
 1. `make kani` installs or reuses a pinned Kani toolchain and completes full
-   Kani/CBMC verification of the new adjacency harnesses with zero failures.
+   Kani/C Bounded Model Checker (CBMC) verification of the new adjacency
+   harnesses with zero failures.
 2. Unit tests exercise the shipped Rust adjacency construction directly,
    covering happy paths, absence-of-edge paths, and edge cases such as isolated
    nodes and sorted neighbour order.

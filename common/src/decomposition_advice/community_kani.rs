@@ -69,6 +69,23 @@ fn symbolic_adjacency() -> (usize, Vec<SimilarityEdge>, Vec<Vec<(usize, u64)>>) 
     (node_count, edges, adjacency)
 }
 
+/// Returns the number of input edges incident on `node` (as either endpoint).
+fn incident_degree(edges: &[SimilarityEdge], node: usize) -> usize {
+    edges
+        .iter()
+        .filter(|e| e.left == node || e.right == node)
+        .count()
+}
+
+/// Returns `true` when `(node → neighbour, weight)` is backed by an input
+/// edge (considering both orientations).
+fn is_edge_in_input(edges: &[SimilarityEdge], node: usize, neighbour: usize, weight: u64) -> bool {
+    edges.iter().any(|e| {
+        (e.left == node && e.right == neighbour && e.weight == weight)
+            || (e.right == node && e.left == neighbour && e.weight == weight)
+    })
+}
+
 /// Verifies that `build_adjacency` returns exactly `node_count` buckets.
 #[kani::proof]
 #[kani::unwind(7)]
@@ -156,18 +173,9 @@ fn verify_build_adjacency_no_spurious_edges() {
     kani::assume(node_count > 0);
 
     for (node, bucket) in adjacency.iter().enumerate() {
-        let expected_degree = edges
-            .iter()
-            .filter(|edge| edge.left == node || edge.right == node)
-            .count();
-        assert_eq!(bucket.len(), expected_degree);
-
+        assert_eq!(bucket.len(), incident_degree(&edges, node));
         for &(neighbour, weight) in bucket {
-            let in_input = edges.iter().any(|e| {
-                (e.left == node && e.right == neighbour && e.weight == weight)
-                    || (e.right == node && e.left == neighbour && e.weight == weight)
-            });
-            assert!(in_input);
+            assert!(is_edge_in_input(&edges, node, neighbour, weight));
         }
     }
 }
