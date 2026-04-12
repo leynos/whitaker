@@ -1544,7 +1544,8 @@ used by the installer itself.
   alongside the archives.
 - Extend `.github/workflows/rolling-release.yml` so dependency binaries are
   rebuilt only when `installer/dependency-binaries.toml` changes on `main`, or
-  when the workflow is run manually.
+  when the workflow is run manually with
+  `force_dependency_binary_rebuild=true`.
 - Extend `.github/workflows/release.yml` so tagged releases publish the same
   dependency-binary archives and provenance document next to the
   `whitaker-installer` archives.

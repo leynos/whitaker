@@ -24,13 +24,17 @@ from __future__ import annotations
 import os
 import re
 import shlex
-from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
 
 import pytest
-from ruamel.yaml import YAML
 
+from tests.workflows.rolling_release_workflow_test_support import (
+    _find_step_by_name,
+    _get_job_dict,
+    _get_needs_list,
+    _github_expression_value,
+    _load_workflow_mapping,
+)
 from tests.workflows.workflow_test_helpers import (
     install_components_script,
     lint_crates_from_resolution_constants,
@@ -161,59 +165,7 @@ def test_install_components_uses_only_matrix_target_rustc_dev(workflow_text: str
     assert not rust_src_commands, (
         "install step must not install rust-src because it conflicts with "
         "targeted rustc-dev payloads on some runners"
-    )
-
-
-def _load_workflow_mapping(yaml_text: str) -> dict[str, object]:
-    """Load YAML text and return workflow mapping."""
-    parsed = YAML(typ="safe").load(yaml_text)
-    match parsed:
-        case dict() as workflow_mapping:
-            return workflow_mapping
-        case _:
-            pytest.fail("rolling-release workflow must parse to a mapping")
-
-
-def _get_job_dict(jobs: Mapping[str, Any], job_name: str) -> dict[str, Any]:
-    """Return the requested job mapping from the jobs map."""
-    match jobs.get(job_name):
-        case dict() as job_dict:
-            return job_dict
-        case _:
-            if job_name == "jobs":
-                pytest.fail("rolling-release workflow must declare jobs")
-            pytest.fail(f"rolling-release workflow must declare {job_name} job")
-
-
-def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:
-    """Return publish job dependency names as a list."""
-    needs: str | list[str] | None = publish_job.get("needs")
-    match needs:
-        case str():
-            return [needs]
-        case list():
-            if all(isinstance(item, str) for item in needs):
-                return cast(list[str], needs)
-            pytest.fail("publish job needs list must contain only strings")
-        case _:
-            pytest.fail("publish job needs must be a string or list")
-
-
-def _find_step_by_name(steps: object, name: str) -> dict[str, object] | None:
-    """Find a step dict by its name."""
-    match steps:
-        case list():
-            pass
-        case _:
-            pytest.fail("publish job must declare steps")
-
-    for step in steps:
-        match step:
-            case {"name": step_name} if step_name == name:
-                return step
-            case _:
-                continue
-    return None
+)
 
 
 def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
@@ -224,7 +176,7 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
     needs_list = _get_needs_list(publish_job)
 
     assert "build-lints" in needs_list, "publish job must depend on build-lints"
-    assert publish_job.get("if") == "${{ always() }}", (
+    assert _github_expression_value(publish_job.get("if")) == "always()", (
         "publish job must run even when build-lints has failing matrix legs"
     )
 
@@ -235,7 +187,6 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
         "download step must continue on error so zero-artefact runs can fall "
         "through to has_assets=false"
     )
-
 
 def test_restore_step_guards_against_missing_dependency_assets(
     workflow_text: str,

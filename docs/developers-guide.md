@@ -102,6 +102,28 @@ Workflow validation in `tests/workflows/` protects this contract from drift:
 When modifying release helpers, keep the workflow YAML, `installer/Cargo.toml`,
 and the metadata-based tests in lock-step.
 
+### Workflow test support and local runner configuration
+
+The rolling-release contract tests share YAML and shell-parsing helpers in
+`tests/workflows/rolling_release_workflow_test_support.py`. Keep parsing and
+failure messages centralized there when adding more rolling-release assertions,
+instead of duplicating small YAML walkers or shell-branch extractors across
+multiple test modules. In particular, `_workflow_dispatch_branch_body()`
+returns only the matched branch body and excludes the closing `fi`, so
+follow-on assertions can stay focused on the branch contents rather than shell
+framing.
+
+Local workflow tests use the Makefile variables `UV` and `WORKFLOW_TEST_VENV`:
+
+- `UV` selects the `uv` executable used to create and populate the workflow-test
+  virtual environment.
+- `WORKFLOW_TEST_VENV` selects the virtual-environment path, defaulting to
+  `.venv`.
+
+Use `make workflow-test-deps` to create or refresh that environment, and
+`make workflow-test` to run the opt-in `act` plus `pytest` workflow smoke tests
+against it.
+
 ### Worked example: adding another packaging binary
 
 When adding a new internal helper binary, make all of the following changes in
@@ -233,6 +255,51 @@ The release workflows consume both artefact types:
 - deterministic dependency archives named from the manifest and target triple
 - `dependency-binaries-licences.md` for provenance and third-party licence
   disclosure
+
+### Rolling-release manual recovery
+
+`.github/workflows/rolling-release.yml` rebuilds dependency binaries
+automatically on pushes to `main` when `installer/dependency-binaries.toml`
+changes.
+
+Manual runs now expose an explicit `force_dependency_binary_rebuild` boolean
+input instead of rebuilding dependency binaries on every `workflow_dispatch`.
+
+Use that input when the rolling release needs to recover from an earlier
+dependency-binary build or publish failure, or when the current rolling release
+is missing the expected `.tgz` or `.zip` dependency archives. Leave it set to
+`false` for a manual republish that should reuse or restore the existing
+dependency archives.
+
+Figure: Rolling-release dependency-binary decision flow. The workflow checks
+whether the event is a manual dispatch or a push to `main`, then decides
+whether to set `should_build` and either rebuild dependency binaries or restore
+the existing rolling-release archives.
+
+```mermaid
+flowchart TD
+    A[Start workflow] --> B{Event type}
+
+    B -->|workflow_dispatch| C{force_dependency_binary_rebuild input}
+    B -->|push on main| D[Compare installer/dependency-binaries.toml between before and sha]
+    B -->|other events| G[Preserve existing behaviour]
+
+    C -->|true| E[Set should_build=true]
+    C -->|false or unset| F[Set should_build=false]
+
+    D -->|manifest changed| E
+    D -->|manifest unchanged| F
+
+    E --> H[Run build_dependency_binaries job]
+    F --> I[Skip build_dependency_binaries job]
+
+    H --> J[Publish job uses freshly built dependency archives]
+    I --> K[Publish job restores dependency archives from existing rolling release]
+
+    J --> L[End]
+    K --> L[End]
+    G --> L
+```
 
 ### Continuous Integration (CI) manifest script
 

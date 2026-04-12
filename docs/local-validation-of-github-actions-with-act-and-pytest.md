@@ -18,7 +18,9 @@ command interception is intentionally avoided; containers execute in isolation.
 
 - Docker daemon available.
 - `act` installed.
-- Python 3.10+ with `pytest`.
+- Python 3.10+.
+- `uv` installed. In this repository, `make workflow-test-deps` creates a
+  local `.venv` and syncs the workflow-test dependencies with `uv pip`.
 - When developing inside a sandbox (for example, this Codex CLI), ensure the
   container runtime socket is reachable. On Fedora/Podman that normally means:
   1. `systemctl --user status podman.socket` reports `active (listening)`.
@@ -192,6 +194,13 @@ That target first runs the regular test suite as the invoking user, then
 re-runs only the workflow harness when `ACT_WORKFLOW_TESTS=1`. After running
 with sudo, remove the root-owned `.venv` (`sudo rm -rf .venv`) so future
 non-root commands can recreate it.
+
+To prepare the local workflow-test environment without touching the system
+Python, run:
+
+```bash
+make workflow-test-deps
+```
 
 ## Record -> replay -> verify (closing the loop)
 
