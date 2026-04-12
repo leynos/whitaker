@@ -294,16 +294,21 @@ fn mark_tool_installed(status: &mut DylintToolStatus, tool: &DependencyTool) {
     }
 }
 
+fn should_refresh_companions(
+    outcome: InstallOutcome,
+    tool: &DependencyTool,
+    status: &DylintToolStatus,
+) -> bool {
+    outcome == InstallOutcome::SourceBuild && tool.package == "cargo-dylint" && !status.dylint_link
+}
+
 fn refresh_source_build_companions(
     status: &mut DylintToolStatus,
     executor: &dyn CommandExecutor,
     tool: &DependencyTool,
     outcome: InstallOutcome,
 ) {
-    if outcome != InstallOutcome::SourceBuild
-        || tool.package != "cargo-dylint"
-        || status.dylint_link
-    {
+    if !should_refresh_companions(outcome, tool, status) {
         return;
     }
 
@@ -333,5 +338,45 @@ fn cargo_source_install_request<'a>(
             tool.package,
         ],
         success_message: format!("Installed {} from source with cargo install.", tool.package),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_refresh_companions_requires_source_built_cargo_dylint_without_link() {
+        let cargo_dylint = &DEPENDENCY_TOOLS[0];
+        let dylint_link = &DEPENDENCY_TOOLS[1];
+        let missing_link = DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: false,
+        };
+        let installed_link = DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: true,
+        };
+
+        assert!(should_refresh_companions(
+            InstallOutcome::SourceBuild,
+            cargo_dylint,
+            &missing_link,
+        ));
+        assert!(!should_refresh_companions(
+            InstallOutcome::Installed,
+            cargo_dylint,
+            &missing_link,
+        ));
+        assert!(!should_refresh_companions(
+            InstallOutcome::SourceBuild,
+            dylint_link,
+            &missing_link,
+        ));
+        assert!(!should_refresh_companions(
+            InstallOutcome::SourceBuild,
+            cargo_dylint,
+            &installed_link,
+        ));
     }
 }
