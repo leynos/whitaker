@@ -34,6 +34,9 @@ regex = "1.10.4"
 logtest = "2.0.0"
 
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [lints.clippy]
 expect_used = "deny"
 unwrap_used = "deny"

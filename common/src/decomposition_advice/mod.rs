@@ -7,7 +7,7 @@
 //! from High-level Intermediate Representation (HIR) traversal without adding
 //! `rustc_private` dependencies to `common`.
 
-mod community;
+pub(crate) mod community;
 mod note;
 mod profile;
 mod suggestion;

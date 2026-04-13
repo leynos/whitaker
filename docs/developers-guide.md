@@ -61,6 +61,177 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Kani bounded model checking
+
+Whitaker uses the [Kani model checker](https://model-checking.github.io/kani/)
+to verify critical algorithms with bounded symbolic verification. Kani proofs
+complement traditional testing by exhaustively checking properties over all
+possible inputs within configured bounds.
+
+### Running Kani verifications
+
+Run all Kani harnesses from the workspace root:
+
+```sh
+make kani
+```
+
+This invokes `scripts/run-kani.sh`, which:
+
+1. Installs or reuses the pinned Kani toolchain via `scripts/install-kani.sh`
+2. Sets up the required environment (library paths, toolchain selection)
+3. Runs all Kani proof harnesses in the `common` crate
+
+To run a specific harness:
+
+```sh
+./scripts/run-kani.sh verify_build_adjacency_preserves_edges
+```
+
+### Kani tooling architecture
+
+The Kani workflow mirrors the existing Verus pattern:
+
+- **`scripts/install-kani.sh`**: Pins Kani 0.67.0 and downloads the pre-built
+  tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`. The script
+  installs the matching nightly Rust toolchain via `rustup` and symlinks it
+  into the Kani directory structure.
+
+- **`scripts/run-kani.sh`**: Invokes the pinned `cargo-kani` binary with the
+  correct environment. Sets `RUSTUP_TOOLCHAIN` to ensure Cargo uses the
+  Kani-pinned toolchain, and configures platform-specific library paths
+  (`DYLD_LIBRARY_PATH` on macOS, `LD_LIBRARY_PATH` on Linux).
+
+- **`make kani`**: Top-level quality gate that runs all harnesses by default.
+
+### Writing Kani harnesses
+
+Kani harnesses live colocated with the code they verify, typically in a
+`#[cfg(kani)]` verification submodule. For example:
+
+```rust
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    #[kani::proof]
+    fn verify_property() {
+        // Generate symbolic inputs
+        let input: u32 = kani::any();
+
+        // Add preconditions
+        kani::assume(input > 0);
+        kani::assume(input < 100);
+
+        // Call function under test
+        let result = function_to_verify(input);
+
+        // Assert postconditions
+        assert!(result.is_valid());
+    }
+}
+```
+
+Key principles:
+
+- **Bounded symbolic inputs**: Use fixed-size arrays or bounded ranges to keep
+  the state space tractable. Rust's standard `sort_by` and nested loops can
+  cause CBMC (C Bounded Model Checker) state-space explosion at higher bounds.
+
+- **Input contracts**: Use `kani::assume` to constrain symbolic inputs to match
+  the preconditions that production code guarantees. Model the actual input
+  contract, not arbitrary malformed inputs.
+
+- **One property per harness**: Separate harnesses simplify root-cause analysis
+  when a property fails. Six focused harnesses are clearer than one combined
+  check.
+
+- **Crate visibility**: Kani harnesses can call `pub(crate)` functions directly,
+  avoiding the need to widen the public API for verification purposes.
+
+### `cfg(kani)` configuration and crate visibility
+
+Kani harnesses are gated behind `#[cfg(kani)]`, which is only defined when Kani
+compiles the crate. Under the Rust 2024 edition, any `cfg` name not registered
+with the compiler triggers an `unexpected_cfgs` lint warning. To suppress this,
+register `cfg(kani)` in the crate's `Cargo.toml`:
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+```
+
+This tells `rustc` that `kani` is an expected configuration name, so normal
+`cargo check` and `cargo clippy` runs do not emit spurious warnings. The entry
+lives in `common/Cargo.toml` because the Kani harnesses currently reside in the
+`common` crate.
+
+Kani harnesses verify private helpers that are not part of the public API.
+Rather than making these helpers fully public, the following items are promoted
+to `pub(crate)` visibility:
+
+- **`community` module** (`common/src/decomposition_advice/mod.rs`): Promoted
+  from `mod community` to `pub(crate) mod community` so that
+  `test_support::decomposition` helpers and unit tests can import
+  `SimilarityEdge` and `build_adjacency`.
+
+- **`build_adjacency` function**
+  (`common/src/decomposition_advice/community.rs`): Promoted from `fn` to
+  `pub(crate) fn` so that colocated Kani harnesses and the test-support
+  adjacency report can call it directly without widening the crate's public API
+  surface.
+
+- **`SimilarityEdge::new(left, right, weight)`**
+  (`common/src/decomposition_advice/community.rs`): A `pub(crate)` constructor
+  added to allow Kani harnesses and test-support modules to create edge values
+  without exposing a public constructor on the production type. It is used
+  internally by `adjacency_report` to convert validated `EdgeInput` values into
+  `SimilarityEdge` instances before delegating to `build_adjacency`. External
+  callers should use `adjacency_report` rather than constructing
+  `SimilarityEdge` directly.
+
+This pattern keeps the runtime API narrow while giving verification and test
+code the access it needs.
+
+### Test-support APIs for adjacency testing
+
+The `common::test_support::decomposition` module provides declarative helpers
+for integration and behaviour-driven tests:
+
+- **`adjacency_report(node_count, edges)`**: Validates edge input (canonical
+  order, in-bounds, positive weights), builds adjacency lists via
+  `build_adjacency`, and returns `Result<AdjacencyReport, AdjacencyError>`.
+  Callers can `match` on the result, `.expect(...)` in tests, or propagate the
+  error upward when invalid declarative input should fail the caller.
+
+- **`AdjacencyError`**: Typed validation failure for the `Err` branch. The
+  shipped variants are `NonCanonicalEdge { index, left, right }` when
+  `left >= right`, `EndpointOutOfRange { index, right, node_count }` when an
+  endpoint exceeds the graph size, and `ZeroWeight { index }` when a weight is
+  non-positive for the production contract. Callers should inspect these
+  variants when they need to assert a specific rejection path.
+
+- **`AdjacencyReport`**: Wrapper around adjacency vectors on the `Ok` branch,
+  with methods for testing properties:
+  - `is_symmetric()`: Checks that all edges appear in both directions
+  - `all_indices_in_bounds()`: Verifies neighbour indices are valid
+  - `is_sorted()`: Confirms neighbours are sorted by index
+  - `neighbours_of(node)`: Returns neighbours of a node (or `None` if
+    out-of-bounds)
+
+- **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight`
+  fields, passed to `adjacency_report` and interpreted on the `Ok` branch as
+  canonical-order, in-range, positive-weight edge input for behaviour-driven
+  development (BDD) scenarios.
+
+The test-support API validates input and delegates to the shipped
+`build_adjacency` function, keeping raw adjacency vectors crate-internal while
+providing a clean testing interface.
+
+See
+[`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
+ for the complete design rationale and implementation decisions.
+
 ## Installer release helper binaries
 
 The `whitaker-installer` crate exposes several internal release-helper binaries
