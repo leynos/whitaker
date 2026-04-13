@@ -44,14 +44,10 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
         let agent = ureq::Agent::new_with_config(config);
 
         // Download the archive
-        let response =
-            agent
-                .get(&url)
-                .call()
-                .map_err(|error| DependencyBinaryInstallError::Download {
-                    url: url.clone(),
-                    reason: error.to_string(),
-                })?;
+        let response = agent
+            .get(&url)
+            .call()
+            .map_err(|error| map_ureq_error(&url, &error))?;
         let mut file = File::create(destination)?;
         let mut body = response.into_body();
         let mut reader = body.as_reader();
@@ -59,12 +55,10 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
         drop(file);
 
         // Download and parse the expected checksum
-        let checksum_response = agent.get(&checksum_url).call().map_err(|error| {
-            DependencyBinaryInstallError::Download {
-                url: checksum_url.clone(),
-                reason: error.to_string(),
-            }
-        })?;
+        let checksum_response = agent
+            .get(&checksum_url)
+            .call()
+            .map_err(|error| map_ureq_error(&checksum_url, &error))?;
         let checksum_body = checksum_response
             .into_body()
             .read_to_string()
@@ -105,4 +99,49 @@ fn asset_url(filename: &str) -> String {
     // Dependency binaries are published to the rolling release so the
     // repository-owned manifest can advance independently of installer tags.
     HttpDownloader::asset_url(filename)
+}
+
+/// Map `ureq` failures into semantic dependency-installer errors.
+fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallError {
+    match error {
+        ureq::Error::StatusCode(404 | 410) => DependencyBinaryInstallError::NotFound {
+            url: url.to_owned(),
+        },
+        other => DependencyBinaryInstallError::Download {
+            url: url.to_owned(),
+            reason: other.to_string(),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for downloader error mapping.
+
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(404, true)]
+    #[case(410, true)]
+    #[case(403, false)]
+    #[case(500, false)]
+    fn map_ureq_error_maps_status_codes(#[case] status: u16, #[case] is_not_found: bool) {
+        let error = map_ureq_error(
+            "https://example.test/archive.tgz",
+            &ureq::Error::StatusCode(status),
+        );
+
+        if is_not_found {
+            assert!(matches!(
+                error,
+                DependencyBinaryInstallError::NotFound { .. }
+            ));
+        } else {
+            assert!(matches!(
+                error,
+                DependencyBinaryInstallError::Download { .. }
+            ));
+        }
+    }
 }

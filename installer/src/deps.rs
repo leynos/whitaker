@@ -39,25 +39,26 @@ impl CommandExecutor for SystemCommandExecutor {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DependencyTool {
     package: &'static str,
     command: &'static str,
     args: &'static [&'static str],
 }
 
-const DEPENDENCY_TOOLS: [DependencyTool; 2] = [
-    DependencyTool {
-        package: "cargo-dylint",
-        command: "cargo",
-        args: &["dylint", "--version"],
-    },
-    DependencyTool {
-        package: "dylint-link",
-        command: "dylint-link",
-        args: &["--version"],
-    },
-];
+const CARGO_DYLINT_TOOL: DependencyTool = DependencyTool {
+    package: "cargo-dylint",
+    command: "cargo",
+    args: &["dylint", "--version"],
+};
+
+const DYLINT_LINK_TOOL: DependencyTool = DependencyTool {
+    package: "dylint-link",
+    command: "dylint-link",
+    args: &["--version"],
+};
+
+const DEPENDENCY_TOOLS: [DependencyTool; 2] = [CARGO_DYLINT_TOOL, DYLINT_LINK_TOOL];
 
 /// Status of Dylint tool availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,8 +94,8 @@ pub struct DependencyInstallOptions<'a> {
 #[must_use]
 pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> DylintToolStatus {
     DylintToolStatus {
-        cargo_dylint: is_tool_installed(executor, &DEPENDENCY_TOOLS[0]),
-        dylint_link: is_tool_installed(executor, &DEPENDENCY_TOOLS[1]),
+        cargo_dylint: is_tool_installed(executor, &CARGO_DYLINT_TOOL),
+        dylint_link: is_tool_installed(executor, &DYLINT_LINK_TOOL),
     }
 }
 

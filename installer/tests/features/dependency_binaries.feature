@@ -15,15 +15,15 @@ Feature: Dependency binary installation
     Then the install succeeds
     And stderr contains "Installed dylint-link from repository release."
 
-  Scenario: Repository asset is unavailable and cargo binstall succeeds
+  Scenario: Repository asset is unavailable and cargo install builds from source
     Given the missing tool is "cargo-dylint"
     And the repository installer fails with "not found"
     And cargo binstall is available
     When dependency installation runs
     Then the install succeeds
-    And stderr contains "Installed cargo-dylint with cargo binstall."
+    And stderr contains "Installed cargo-dylint from source with cargo install."
 
-  Scenario: Repository asset is unavailable, cargo binstall fails, and the error propagates
+  Scenario: Repository asset is unavailable and cargo install failure propagates
     Given the missing tool is "cargo-dylint"
     And the repository installer fails with "not found"
     And cargo binstall is available
@@ -38,7 +38,7 @@ Feature: Dependency binary installation
     And cargo binstall is unavailable
     When dependency installation runs
     Then the install succeeds
-    And stderr contains "Installed cargo-dylint with cargo install."
+    And stderr contains "Installed cargo-dylint from source with cargo install."
 
   Scenario: Repository asset and cargo binstall are unavailable and cargo install fails
     Given the missing tool is "cargo-dylint"

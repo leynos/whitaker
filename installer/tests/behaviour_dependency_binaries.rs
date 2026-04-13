@@ -20,6 +20,7 @@ use whitaker_installer::test_utils::{
 
 enum RepositoryInstallerBehaviour {
     Success,
+    NotFound,
     Failure(String),
 }
 
@@ -40,6 +41,14 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
                 dependency.package(),
                 target
             ))),
+            RepositoryInstallerBehaviour::NotFound => Err(DependencyBinaryInstallError::NotFound {
+                url: format!(
+                    "{}/releases/download/v{}/{}",
+                    dependency.repository(),
+                    dependency.version(),
+                    dependency.package()
+                ),
+            }),
             RepositoryInstallerBehaviour::Failure(message) => {
                 Err(DependencyBinaryInstallError::Install {
                     binary: dependency.binary().to_owned(),
@@ -82,7 +91,11 @@ fn given_repository_success(world: &mut DependencyBinaryWorld) {
 
 #[given("the repository installer fails with \"{message}\"")]
 fn given_repository_failure(world: &mut DependencyBinaryWorld, message: String) {
-    world.repository_behaviour = Some(RepositoryInstallerBehaviour::Failure(message));
+    world.repository_behaviour = Some(if message == "not found" {
+        RepositoryInstallerBehaviour::NotFound
+    } else {
+        RepositoryInstallerBehaviour::Failure(message)
+    });
 }
 
 #[given("the repository installer succeeds but verification fails")]
@@ -129,6 +142,10 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         .missing_tool
         .clone()
         .expect("missing tool should be configured");
+    let is_repository_asset_missing = matches!(
+        world.repository_behaviour,
+        Some(RepositoryInstallerBehaviour::NotFound)
+    );
     let expect_repository_verification = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::Success)
@@ -147,6 +164,8 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         &tool,
         ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
+            has_repository_context: !world.is_unsupported_target,
+            is_repository_asset_missing,
             should_verify_repository_install: expect_repository_verification,
             is_repository_verification_failing: world.should_repository_verification_fail,
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),

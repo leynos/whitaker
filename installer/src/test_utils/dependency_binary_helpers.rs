@@ -1,5 +1,6 @@
 //! Test helpers for dependency binary installation tests.
 
+use crate::dependency_binaries::find_dependency_binary;
 use crate::error::Result;
 use crate::test_utils::{ExpectedCall, failure_output, success_output};
 use std::process::Output;
@@ -8,6 +9,10 @@ use std::process::Output;
 pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
     pub is_binstall_available: bool,
+    /// Whether repository metadata is available to pin cargo fallbacks.
+    pub has_repository_context: bool,
+    /// Whether the repository failure is a missing asset.
+    pub is_repository_asset_missing: bool,
     /// Whether to verify repository installation.
     pub should_verify_repository_install: bool,
     /// Whether repository verification should fail.
@@ -42,9 +47,10 @@ pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCal
 
 /// Creates an expected call for installing a tool with cargo-binstall.
 pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
+    let version = dependency_version(tool);
     ExpectedCall {
         cmd: "cargo",
-        args: vec!["binstall", "-y", tool],
+        args: vec!["binstall", "-y", "--version", version, tool],
         result,
     }
 }
@@ -56,6 +62,25 @@ pub fn cargo_install(tool: &'static str, result: Result<Output>) -> ExpectedCall
         args: vec!["install", tool],
         result,
     }
+}
+
+fn cargo_source_install(
+    tool: &'static str,
+    version: &'static str,
+    result: Result<Output>,
+) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["install", "--locked", "--version", version, tool],
+        result,
+    }
+}
+
+fn dependency_version(tool: &str) -> &'static str {
+    find_dependency_binary(tool)
+        .expect("dependency manifest should parse")
+        .map(|dependency| dependency.version())
+        .unwrap_or_else(|| panic!("unexpected tool: {tool}"))
 }
 
 /// Creates an expected call for verifying repository installation.
@@ -95,12 +120,26 @@ struct PostPrimaryConfig {
     tool: String,
     /// Static tool name for cargo install args.
     tool_static: &'static str,
+    /// Whether repository metadata is available to pin cargo fallbacks.
+    has_repository_context: bool,
     /// Whether the primary installation succeeded.
     primary_succeeded: bool,
     /// Whether to use binstall (vs cargo install).
     use_binstall: bool,
     /// Error message for cargo install failure (None if succeeds).
     cargo_install_failure: Option<String>,
+}
+
+fn repo_aware_cargo_install(
+    tool: &'static str,
+    has_repository_context: bool,
+    result: Result<Output>,
+) -> ExpectedCall {
+    if has_repository_context {
+        cargo_source_install(tool, dependency_version(tool), result)
+    } else {
+        cargo_install(tool, result)
+    }
 }
 
 /// Builds the sequence of calls that follow the primary install attempt.
@@ -114,46 +153,82 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
     // binstall failed: check if we should sequence a cargo-install attempt
     if cfg.cargo_install_failure.is_none() {
         // cargo install succeeds after binstall fails
-        let cargo_call = ExpectedCall {
-            cmd: "cargo",
-            args: vec!["install", cfg.tool_static],
-            result: Ok(success_output()),
-        };
+        let cargo_call = repo_aware_cargo_install(
+            cfg.tool_static,
+            cfg.has_repository_context,
+            Ok(success_output()),
+        );
         return vec![cargo_call, tool_verification_check(&cfg.tool)];
     }
     // binstall failed and cargo install also fails
-    let cargo_call = ExpectedCall {
-        cmd: "cargo",
-        args: vec!["install", cfg.tool_static],
-        result: Ok(failure_output(cfg.cargo_install_failure.as_ref().unwrap())),
-    };
-    vec![cargo_call]
+    if let Some(message) = cfg.cargo_install_failure.as_deref() {
+        let cargo_call = repo_aware_cargo_install(
+            cfg.tool_static,
+            cfg.has_repository_context,
+            Ok(failure_output(message)),
+        );
+        vec![cargo_call]
+    } else {
+        vec![]
+    }
+}
+
+fn source_install_fallback_calls(
+    tool: &str,
+    tool_static: &'static str,
+    config: &ExpectedCallConfig<'_>,
+) -> Vec<ExpectedCall> {
+    let version = dependency_version(tool);
+    let result = config.cargo_install_failure.map_or_else(
+        || Ok(success_output()),
+        |message| Ok(failure_output(message)),
+    );
+    let install_call = cargo_source_install(tool_static, version, result);
+    if config.cargo_install_failure.is_none() {
+        vec![install_call, tool_verification_check(tool)]
+    } else {
+        vec![install_call]
+    }
+}
+
+fn binstall_args_for_tool(
+    tool: &str,
+    tool_static: &'static str,
+    config: &ExpectedCallConfig<'_>,
+) -> Vec<&'static str> {
+    if config.has_repository_context {
+        let version = dependency_version(tool);
+        vec!["binstall", "-y", "--version", version, tool_static]
+    } else {
+        vec!["binstall", "-y", tool_static]
+    }
 }
 
 /// Creates expected calls for cargo fallback installation (binstall or install).
-pub fn cargo_fallback_calls(
-    tool: &str,
-    binstall_available: bool,
-    cargo_binstall_failure: Option<&str>,
-    cargo_install_failure: Option<&str>,
-) -> Vec<ExpectedCall> {
+pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
     // Intentional leak in tests to extend lifetime for static string usage;
     // acceptable here as it will not be freed.
     let tool_static: &'static str = Box::leak(tool.to_owned().into_boxed_str());
 
-    let (use_binstall, failure_message) = if binstall_available {
-        (true, cargo_binstall_failure)
+    if config.is_repository_asset_missing {
+        return source_install_fallback_calls(tool, tool_static, config);
+    }
+
+    let (use_binstall, failure_message) = if config.is_binstall_available {
+        (true, config.cargo_binstall_failure)
     } else {
-        (false, cargo_install_failure)
+        (false, config.cargo_install_failure)
+    };
+
+    let args = if use_binstall {
+        binstall_args_for_tool(tool, tool_static, config)
+    } else {
+        vec!["install", tool_static]
     };
 
     let install_call = ExpectedCall {
         cmd: "cargo",
-        args: if use_binstall {
-            vec!["binstall", "-y", tool_static]
-        } else {
-            vec!["install", tool_static]
-        },
+        args,
         result: Ok(match failure_message {
             Some(message) => failure_output(message),
             None => success_output(),
@@ -164,9 +239,10 @@ pub fn cargo_fallback_calls(
     let post_config = PostPrimaryConfig {
         tool: tool.to_owned(),
         tool_static,
+        has_repository_context: config.has_repository_context,
         primary_succeeded: failure_message.is_none(),
         use_binstall,
-        cargo_install_failure: cargo_install_failure.map(String::from),
+        cargo_install_failure: config.cargo_install_failure.map(String::from),
     };
     calls.extend(post_primary_calls(&post_config));
     calls
@@ -186,12 +262,7 @@ pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<Expecte
         }
     }
 
-    calls.extend(cargo_fallback_calls(
-        tool,
-        config.is_binstall_available,
-        config.cargo_binstall_failure,
-        config.cargo_install_failure,
-    ));
+    calls.extend(cargo_fallback_calls(tool, &config));
     calls
 }
 
