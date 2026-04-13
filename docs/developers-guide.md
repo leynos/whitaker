@@ -48,12 +48,14 @@ lint's structured diagnostics instead of brittle text matching.
 
 The tests are annotated with `#[serial]` from `serial_test` so concurrent
 subprocess runs do not interfere with one another. They are also marked
-`#[ignore]` by default because they depend on external tooling and a prebuilt
-lint artefact. Before running them, install `cargo-dylint` and `dylint-link`,
-and build the lint library. Run them with `cargo test -- --ignored`, or the
-equivalent nextest invocation with `--ignored`.
+`#[ignore]` by default because they depend on external tooling and a buildable
+workspace. Before running them, install `cargo-dylint` and `dylint-link`. The
+harness calls `build_lint_library()` before running `cargo dylint`, so the
+workspace build step is handled automatically. Run them with
+`cargo test -- --ignored`, or the equivalent nextest invocation with
+`--ignored`.
 
-The parametrised `#[rstest]` case
+The parameterized `#[rstest]` case
 `exclusion_behaviour_matches_fixture_configuration` covers both fixtures. For
 each case, it asserts the subprocess exit status and the `no_std_fs_operations`
 diagnostic count, so the test verifies both the success path for excluded

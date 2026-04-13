@@ -7,18 +7,19 @@
 //! # Prerequisites
 //!
 //! - `cargo-dylint` and `dylint-link` must be installed
-//! - The lint library must be built before running these tests
+//! - The workspace must be buildable so the harness can build the lint library
 //!
 //! These tests are marked `#[ignore]` by default because they require external
-//! dependencies and a built lint library. Run with `--ignored` to execute.
+//! dependencies. Run with `--ignored` to execute.
 
 use std::env;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use cargo_metadata::{Message, Metadata, MetadataCommand};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serial_test::serial;
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
@@ -133,8 +134,15 @@ fn find_cdylib_in_artifacts(stdout: &[u8], package_id: &cargo_metadata::PackageI
     panic!("cdylib artifact not found in build output");
 }
 
+/// Result of invoking `cargo dylint` against a fixture crate.
+struct CargoDylintResult {
+    is_success: bool,
+    stdout: Vec<u8>,
+    stderr: String,
+}
+
 /// Runs `cargo dylint` on the given fixture project directory.
-fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> (bool, Vec<u8>, String) {
+fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResult {
     let output = Command::new("cargo")
         .arg("dylint")
         .arg("--all")
@@ -149,7 +157,11 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> (bool, Vec<u8>, 
 
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    (output.status.success(), output.stdout, stderr)
+    CargoDylintResult {
+        is_success: output.status.success(),
+        stdout: output.stdout,
+        stderr,
+    }
 }
 
 /// Counts diagnostics emitted by the `no_std_fs_operations` lint from cargo JSON output.
@@ -177,39 +189,46 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
+#[fixture]
+fn lint_library_path() -> PathBuf {
+    static LINT_LIBRARY_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    LINT_LIBRARY_PATH.get_or_init(build_lint_library).clone()
+}
+
 #[rstest]
 #[case("excluded_project", false, true)]
 #[case("non_excluded_project", true, false)]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
 fn exclusion_behaviour_matches_fixture_configuration(
+    lint_library_path: PathBuf,
     #[case] fixture: &str,
     #[case] expect_diagnostics: bool,
     #[case] expected_success: bool,
 ) {
-    let library_path = build_lint_library();
     let fixture_dir = fixture_path(fixture);
 
-    let (success, stdout, stderr) = run_cargo_dylint(&fixture_dir, &library_path);
-    let count = diagnostic_count(&stdout);
+    let result = run_cargo_dylint(&fixture_dir, &lint_library_path);
+    let count = diagnostic_count(&result.stdout);
 
     assert!(
-        success == expected_success,
+        result.is_success == expected_success,
         "fixture `{fixture}` should return success={expected_success}, but stderr was:\n{}",
-        stderr
+        result.stderr
     );
 
     if expect_diagnostics {
         assert!(
             count > 0,
             "fixture `{fixture}` should emit `no_std_fs_operations` diagnostics, but stderr was:\n{}",
-            stderr
+            result.stderr
         );
     } else {
         assert!(
             count == 0,
             "fixture `{fixture}` should emit zero `no_std_fs_operations` diagnostics, but stderr was:\n{}",
-            stderr
+            result.stderr
         );
     }
 }
