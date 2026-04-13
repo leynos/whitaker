@@ -2,9 +2,6 @@
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use whitaker_installer::dependency_binaries::{
     DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
@@ -16,10 +13,9 @@ use whitaker_installer::deps::{
 };
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::test_support::env_test_guard;
 use whitaker_installer::test_utils::{
     StubDirs, StubExecutor,
-    dependency_binary_helpers::{ExpectedCallConfig, expected_calls},
+    dependency_binary_helpers::{ExpectedCallConfig, expected_calls, with_fake_binary_on_path},
 };
 
 enum RepositoryInstallerBehaviour {
@@ -68,6 +64,7 @@ struct DependencyBinaryWorld {
     missing_tool: Option<String>,
     repository_behaviour: Option<RepositoryInstallerBehaviour>,
     should_repository_verification_fail: bool,
+    expect_missing_dylint_link: bool,
     is_binstall_available: bool,
     cargo_binstall_failure: Option<String>,
     cargo_install_failure: Option<String>,
@@ -81,24 +78,6 @@ struct DependencyBinaryWorld {
 #[fixture]
 fn world() -> DependencyBinaryWorld {
     DependencyBinaryWorld::default()
-}
-
-fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
-    let _guard = env_test_guard();
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join(binary_name);
-    fs::write(&binary_path, []).expect("write fake binary");
-    #[cfg(unix)]
-    {
-        let mut permissions = fs::metadata(&binary_path)
-            .expect("read fake binary metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
-    }
-
-    let path = temp_dir.path().display().to_string();
-    temp_env::with_var("PATH", Some(path), run)
 }
 
 #[given("the missing tool is \"{tool}\"")]
@@ -124,6 +103,11 @@ fn given_repository_failure(world: &mut DependencyBinaryWorld, message: String) 
 fn given_repository_verification_failure(world: &mut DependencyBinaryWorld) {
     world.repository_behaviour = Some(RepositoryInstallerBehaviour::Success);
     world.should_repository_verification_fail = true;
+}
+
+#[given("dylint-link is missing from PATH after installation")]
+fn given_missing_dylint_link_on_path(world: &mut DependencyBinaryWorld) {
+    world.expect_missing_dylint_link = true;
 }
 
 #[given("cargo binstall is available")]
@@ -216,11 +200,13 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             },
         )
     };
-    world.install_result = Some(if tool == "dylint-link" {
-        with_fake_binary_on_path("dylint-link", run_install)
-    } else {
-        run_install()
-    });
+    world.install_result = Some(
+        if tool == "dylint-link" && !world.expect_missing_dylint_link {
+            with_fake_binary_on_path("dylint-link", run_install)
+        } else {
+            run_install()
+        },
+    );
     executor.assert_finished();
 }
 
@@ -333,5 +319,10 @@ fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) {
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 9)]
 fn scenario_provenance_lists_both_dependencies(world: DependencyBinaryWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/dependency_binaries.feature", index = 10)]
+fn scenario_dylint_link_missing_after_install_fails(world: DependencyBinaryWorld) {
     let _ = world;
 }

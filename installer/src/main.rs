@@ -18,7 +18,8 @@ use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{
-    CommandExecutor, SystemCommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
+    CommandExecutor, DylintToolStatus, SystemCommandExecutor, check_dylint_tools,
+    install_dylint_tools_with_output,
 };
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
@@ -188,7 +189,7 @@ fn ensure_dylint_tools_with_install(
     executor: &dyn CommandExecutor,
     quiet: bool,
     stderr: &mut dyn Write,
-    install: impl FnOnce(&whitaker_installer::deps::DylintToolStatus, &mut dyn Write) -> Result<()>,
+    install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
     if status.all_installed() {

@@ -2,58 +2,17 @@
 
 use super::*;
 use rstest::rstest;
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::Duration;
 use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::dependency_binaries::{
-    DependencyBinaryInstallError, DependencyBinaryInstaller,
-};
+use whitaker_installer::dependency_binaries::DependencyBinaryInstaller;
 use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::test_support::env_test_guard;
+use whitaker_installer::test_utils::dependency_binary_helpers::{
+    AlwaysNotFoundRepositoryInstaller, with_fake_binary_on_path,
+};
 use whitaker_installer::test_utils::*;
-
-struct AlwaysNotFoundRepositoryInstaller;
-
-impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
-    fn install(
-        &self,
-        dependency: &whitaker_installer::dependency_binaries::DependencyBinary,
-        target: &TargetTriple,
-        _dirs: &dyn BaseDirs,
-    ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
-        Err(DependencyBinaryInstallError::NotFound {
-            url: format!(
-                "https://example.test/{}-{}-v{}.tgz",
-                dependency.package(),
-                target,
-                dependency.version()
-            ),
-        })
-    }
-}
-
-fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
-    let _guard = env_test_guard();
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join(binary_name);
-    fs::write(&binary_path, []).expect("write fake binary");
-    #[cfg(unix)]
-    {
-        let mut permissions = fs::metadata(&binary_path)
-            .expect("read fake binary metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
-    }
-
-    let path = temp_dir.path().display().to_string();
-    temp_env::with_var("PATH", Some(path), run)
-}
 
 fn dependency_install_options<'a>(
     repository_installer: &'a dyn DependencyBinaryInstaller,

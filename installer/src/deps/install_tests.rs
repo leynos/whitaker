@@ -1,29 +1,8 @@
 //! Tests for dependency-install status refresh behaviour.
 
 use super::*;
-use crate::test_support::env_test_guard;
+use crate::test_utils::dependency_binary_helpers::with_fake_binary_on_path;
 use rstest::rstest;
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-
-fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
-    let _guard = env_test_guard();
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join(binary_name);
-    fs::write(&binary_path, []).expect("write fake binary");
-    #[cfg(unix)]
-    {
-        let mut permissions = fs::metadata(&binary_path)
-            .expect("read fake binary metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
-    }
-
-    let path = temp_dir.path().display().to_string();
-    temp_env::with_var("PATH", Some(path), run)
-}
 
 #[rstest]
 #[case(InstallOutcome::CargoBinstall)]

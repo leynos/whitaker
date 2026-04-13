@@ -180,21 +180,50 @@ fn is_binary_on_path(binary_name: &str) -> bool {
     };
 
     std::env::split_paths(&path_var).any(|directory| {
-        let direct = directory.join(binary_name);
-        if is_executable_file(&direct) {
-            return true;
-        }
-
-        #[cfg(windows)]
-        {
-            let windows_executable = directory.join(format!("{binary_name}.exe"));
-            if is_executable_file(&windows_executable) {
-                return true;
-            }
-        }
-
-        false
+        binary_candidates(&directory, binary_name)
+            .into_iter()
+            .any(|candidate| is_executable_file(&candidate))
     })
+}
+
+fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::PathBuf> {
+    #[cfg(windows)]
+    let mut candidates = vec![directory.join(binary_name)];
+    #[cfg(not(windows))]
+    let candidates = vec![directory.join(binary_name)];
+    #[cfg(windows)]
+    {
+        let lowercase_name = binary_name.to_ascii_lowercase();
+        candidates.extend(
+            windows_path_extensions()
+                .into_iter()
+                .filter(|extension| !lowercase_name.ends_with(&extension.to_ascii_lowercase()))
+                .map(|extension| directory.join(format!("{binary_name}{extension}"))),
+        );
+    }
+    candidates
+}
+
+#[cfg(windows)]
+fn windows_path_extensions() -> Vec<String> {
+    let path_ext = std::env::var_os("PATHEXT")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| std::ffi::OsString::from(".COM;.EXE;.BAT;.CMD"));
+
+    path_ext
+        .to_string_lossy()
+        .split(';')
+        .filter_map(|extension| {
+            let trimmed = extension.trim();
+            if trimmed.is_empty() {
+                None
+            } else if trimmed.starts_with('.') {
+                Some(trimmed.to_owned())
+            } else {
+                Some(format!(".{trimmed}"))
+            }
+        })
+        .collect()
 }
 
 #[cfg(unix)]

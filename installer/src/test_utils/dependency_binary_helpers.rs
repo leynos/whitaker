@@ -1,9 +1,92 @@
 //! Test helpers for dependency binary installation tests.
 
 use crate::dependency_binaries::find_dependency_binary;
+#[cfg(any(test, feature = "test-support"))]
+use crate::dependency_binaries::{
+    DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
+};
+#[cfg(any(test, feature = "test-support"))]
+use crate::dirs::BaseDirs;
 use crate::error::Result;
+#[cfg(any(test, feature = "test-support"))]
+use crate::installer_packaging::TargetTriple;
+#[cfg(any(test, feature = "test-support"))]
+use crate::test_support::env_test_guard;
 use crate::test_utils::{ExpectedCall, failure_output, success_output};
+#[cfg(any(test, feature = "test-support"))]
+use std::fs;
+#[cfg(all(any(test, feature = "test-support"), unix))]
+use std::os::unix::fs::PermissionsExt;
+#[cfg(any(test, feature = "test-support"))]
+use std::path::{Path, PathBuf};
 use std::process::Output;
+
+/// Repository installer test double that always reports a missing archive.
+#[cfg(any(test, feature = "test-support"))]
+pub struct AlwaysNotFoundRepositoryInstaller;
+
+#[cfg(any(test, feature = "test-support"))]
+impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
+    fn install(
+        &self,
+        dependency: &DependencyBinary,
+        target: &TargetTriple,
+        _dirs: &dyn BaseDirs,
+    ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
+        Err(DependencyBinaryInstallError::NotFound {
+            url: format!(
+                "https://example.test/{}-{}-v{}.tgz",
+                dependency.package(),
+                target,
+                dependency.version()
+            ),
+        })
+    }
+}
+
+/// Writes an empty fake binary at `path`.
+#[cfg(any(test, feature = "test-support"))]
+pub fn write_fake_binary(path: &Path, is_executable: bool) {
+    fs::write(path, []).expect("write fake binary");
+    #[cfg(unix)]
+    {
+        let mode = if is_executable { 0o755 } else { 0o644 };
+        let mut permissions = fs::metadata(path)
+            .expect("read fake binary metadata")
+            .permissions();
+        permissions.set_mode(mode);
+        fs::set_permissions(path, permissions).expect("set fake binary permissions");
+    }
+    #[cfg(not(unix))]
+    let _ = is_executable;
+}
+
+/// Runs a closure with `PATH` pointing at one or more fake directories.
+#[cfg(any(test, feature = "test-support"))]
+pub fn with_fake_path<T>(setup: impl FnOnce(&[PathBuf]), run: impl FnOnce() -> T) -> T {
+    let _guard = env_test_guard();
+    let temp_dirs = [
+        tempfile::tempdir().expect("create temp dir"),
+        tempfile::tempdir().expect("create temp dir"),
+    ];
+    let path_dirs = temp_dirs
+        .iter()
+        .map(|dir| dir.path().to_path_buf())
+        .collect::<Vec<_>>();
+    setup(&path_dirs);
+    let path = std::env::join_paths(path_dirs.iter().map(PathBuf::as_path))
+        .expect("join fake PATH directories");
+    temp_env::with_var("PATH", Some(path), run)
+}
+
+/// Runs a closure with `PATH` containing a fake executable in the first entry.
+#[cfg(any(test, feature = "test-support"))]
+pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+    with_fake_path(
+        |directories| write_fake_binary(&directories[0].join(binary_name), true),
+        run,
+    )
+}
 
 /// Configuration for generating expected calls in dependency binary tests.
 pub struct ExpectedCallConfig<'a> {

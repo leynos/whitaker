@@ -6,12 +6,11 @@ use crate::installer_packaging::TargetTriple;
 use crate::test_support::env_test_guard;
 use crate::test_utils::dependency_binary_helpers::{
     binstall_install, binstall_version_check_with_result, cargo_dylint_check_with_result,
+    with_fake_binary_on_path, with_fake_path, write_fake_binary,
 };
 use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use temp_env::with_vars_unset;
 
 fn install_options<'a>(
     repository_installer: &'a dyn DependencyBinaryInstaller,
@@ -28,24 +27,6 @@ fn install_options<'a>(
         target: Some(target),
         quiet,
     }
-}
-
-fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
-    let _guard = env_test_guard();
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let binary_path = temp_dir.path().join(binary_name);
-    fs::write(&binary_path, []).expect("write fake binary");
-    #[cfg(unix)]
-    {
-        let mut permissions = fs::metadata(&binary_path)
-            .expect("read fake binary metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
-    }
-
-    let path = temp_dir.path().display().to_string();
-    temp_env::with_var("PATH", Some(path), run)
 }
 
 #[test]
@@ -75,6 +56,98 @@ fn check_dylint_tools_reports_installed_tools() {
             }
         );
         executor.assert_finished();
+    });
+}
+
+#[test]
+fn is_binary_on_path_returns_false_when_path_is_unset() {
+    with_vars_unset(["PATH"], || {
+        assert!(!is_binary_on_path("dylint-link"));
+    });
+}
+
+#[test]
+fn is_binary_on_path_returns_false_when_path_is_empty() {
+    let _guard = env_test_guard();
+    temp_env::with_var("PATH", Some(""), || {
+        assert!(!is_binary_on_path("dylint-link"));
+    });
+}
+
+#[test]
+fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories() {
+    with_fake_path(
+        |_| {},
+        || {
+            assert!(!is_binary_on_path("dylint-link"));
+        },
+    );
+}
+
+#[test]
+fn is_binary_on_path_checks_multiple_directories() {
+    with_fake_path(
+        |directories| write_fake_binary(&directories[1].join("dylint-link"), true),
+        || {
+            assert!(is_binary_on_path("dylint-link"));
+        },
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn is_executable_file_rejects_non_executable_files() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let binary_path = temp_dir.path().join("dylint-link");
+    write_fake_binary(&binary_path, false);
+
+    assert!(!is_executable_file(&binary_path));
+}
+
+#[cfg(unix)]
+#[test]
+fn is_executable_file_accepts_executable_files() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let binary_path = temp_dir.path().join("dylint-link");
+    write_fake_binary(&binary_path, true);
+
+    assert!(is_executable_file(&binary_path));
+}
+
+#[cfg(windows)]
+#[test]
+fn is_binary_on_path_accepts_windows_executable_suffix() {
+    with_fake_path(
+        |directories| write_fake_binary(&directories[0].join("dylint-link.exe"), true),
+        || {
+            assert!(is_binary_on_path("dylint-link"));
+        },
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
+    let _guard = env_test_guard();
+    temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
+        with_fake_path(
+            |directories| write_fake_binary(&directories[0].join("dylint-link.cmd"), true),
+            || {
+                let executor =
+                    StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
+
+                let status = check_dylint_tools(&executor);
+
+                assert_eq!(
+                    status,
+                    DylintToolStatus {
+                        cargo_dylint: true,
+                        dylint_link: true,
+                    }
+                );
+                executor.assert_finished();
+            },
+        );
     });
 }
 

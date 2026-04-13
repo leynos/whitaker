@@ -456,6 +456,37 @@ code checks for a resolvable `dylint-link` binary only after local
 `cargo-dylint` installs and does not re-check it when the pre-built repository
 artefact was used or when `dylint-link` was already present.
 
+The PATH-based `dylint-link` verification in `installer/src/deps.rs` is
+implemented by two small private helpers:
+
+- `is_binary_on_path(binary_name)` walks `PATH` with `std::env::split_paths`,
+  checks each directory for `<binary_name>`, and on Windows also checks the
+  executable suffixes from `PATHEXT` while falling back to
+  `.COM;.EXE;.BAT;.CMD` when `PATHEXT` is unset.
+- `is_executable_file(path)` applies the platform-specific file test:
+  executable-bit plus regular-file checks on Unix, and `path.is_file()` on
+  non-Unix targets where the executable suffix carries the meaning.
+
+These helpers are covered by direct unit tests in `installer/src/deps/tests.rs`
+for missing PATH values, empty PATH values, multiple PATH directories,
+non-executable Unix files, executable Unix files, and Windows `PATHEXT`
+resolution via both direct helper tests and `check_dylint_tools()`.
+
+Installer PATH-fixture helpers now live in
+`installer/src/test_utils/dependency_binary_helpers.rs` instead of being
+duplicated across multiple test modules. The key helpers are:
+
+- `with_fake_binary_on_path(binary_name, run)`, which creates a temporary PATH
+  entry containing one executable and runs the closure under `env_test_guard()`.
+- `with_fake_path(setup, run)`, which provides two temporary PATH directories
+  for tests that need to control PATH ordering or place binaries in later
+  entries.
+- `write_fake_binary(path, is_executable)`, which writes a fake binary and, on
+  Unix, sets executable permissions explicitly for positive and negative tests.
+- `AlwaysNotFoundRepositoryInstaller`, a repository-installer test double used
+  by `installer/src/tests.rs` to force the direct Cargo fallback path without
+  network access.
+
 ### CLI tool usage
 
 Release automation uses the `whitaker-package-dependency-binary` helper in

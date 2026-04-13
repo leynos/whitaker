@@ -106,6 +106,17 @@ cargo dylint --all
 The installer generates wrapper scripts and provides shell configuration
 snippets to simplify this setup.
 
+Dependency-tool verification is asymmetric by design:
+
+- `cargo-dylint` is checked by running `cargo dylint --version`.
+- `dylint-link` is checked by resolving the executable on `PATH` instead of
+  running `dylint-link --version`, because upstream requires `RUSTUP_TOOLCHAIN`
+  even for `--version`.
+
+On Windows, the installer honours `PATHEXT` while scanning `PATH`, so the
+normal Cargo-installed `dylint-link.exe` and other shell-resolved executable
+suffixes are recognised.
+
 The wrappers are:
 
 - `whitaker` — runs `cargo dylint` with the staged library path.

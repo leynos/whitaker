@@ -39,7 +39,11 @@ This:
    to `cargo binstall` when available and then to `cargo install`. When the
    source-build path is taken, the installer reports that it is falling back to
    Cargo, and on success it prints
-   `Installed <tool> from source with cargo install.`.
+   `Installed <tool> from source with cargo install.`. After installation,
+   `cargo-dylint` is verified by running `cargo dylint --version`, while
+   `dylint-link` is verified by resolving the executable on `PATH`. This avoids
+   false failures from upstream `dylint-link --version`, which requires
+   `RUSTUP_TOOLCHAIN` even when the binary is correctly installed.
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
@@ -49,6 +53,12 @@ This:
 
 After installation, run `whitaker --all` in any Rust project to lint it. Use
 `whitaker-ls` to list the installed Whitaker suite libraries.
+
+On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
+the usual executable suffixes when `PATHEXT` is unset, so a normal
+Cargo-installed executable such as `dylint-link.exe` in
+`%USERPROFILE%\\.cargo\\bin` is treated as installed without needing a separate
+wrapper or environment-variable workaround.
 
 **Options:**
 
