@@ -9,7 +9,6 @@ use crate::dependency_binaries::{
 };
 use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
-use std::fs;
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -202,7 +201,7 @@ fn is_binary_on_path(binary_name: &str) -> bool {
 fn is_executable_file(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
 
-    fs::metadata(path)
+    std::fs::metadata(path)
         .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
 }
