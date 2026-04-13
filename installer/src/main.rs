@@ -20,8 +20,6 @@ use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{
     CommandExecutor, SystemCommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
 };
-#[cfg(test)]
-use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -181,16 +179,8 @@ fn determine_dry_run_target_dir(
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_executor(&executor, quiet, stderr)
-}
-
-fn ensure_dylint_tools_with_executor(
-    executor: &dyn CommandExecutor,
-    quiet: bool,
-    stderr: &mut dyn Write,
-) -> Result<()> {
-    ensure_dylint_tools_with_install(executor, quiet, stderr, |status, stderr| {
-        install_dylint_tools_with_output(executor, status, quiet, stderr)
+    ensure_dylint_tools_with_install(&executor, quiet, stderr, |status, stderr| {
+        install_dylint_tools_with_output(&executor, status, quiet, stderr)
     })
 }
 
@@ -213,18 +203,6 @@ fn ensure_dylint_tools_with_install(
         write_stderr_line(stderr, "");
     }
     Ok(())
-}
-
-#[cfg(test)]
-fn ensure_dylint_tools_with_executor_and_options(
-    executor: &dyn CommandExecutor,
-    quiet: bool,
-    stderr: &mut dyn Write,
-    options: DependencyInstallOptions<'_>,
-) -> Result<()> {
-    ensure_dylint_tools_with_install(executor, quiet, stderr, |status, stderr| {
-        install_dylint_tools_with_options(executor, status, stderr, options)
-    })
 }
 
 /// Ensures a Whitaker workspace is available.

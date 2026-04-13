@@ -12,7 +12,7 @@ use thiserror::Error;
 /// # Example
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::{
+/// use whitaker_installer::dependency_binaries::{
 ///     parse_manifest, required_dependency_binaries, DependencyBinary
 /// };
 ///
@@ -117,7 +117,7 @@ impl From<toml::de::Error> for ManifestError {
 /// # Example
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::manifest_contents;
+/// use whitaker_installer::dependency_binaries::manifest_contents;
 ///
 /// let contents = manifest_contents();
 /// assert!(contents.contains("dependency_binaries"));
@@ -140,7 +140,7 @@ pub fn manifest_contents() -> &'static str {
 /// Parse the embedded manifest:
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::{
+/// use whitaker_installer::dependency_binaries::{
 ///     manifest_contents, parse_manifest
 /// };
 ///
@@ -153,7 +153,7 @@ pub fn manifest_contents() -> &'static str {
 /// Parse a custom manifest string:
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::parse_manifest;
+/// use whitaker_installer::dependency_binaries::parse_manifest;
 ///
 /// let manifest = r#"
 ///     [[dependency_binaries]]
@@ -172,7 +172,7 @@ pub fn manifest_contents() -> &'static str {
 /// Reject duplicate packages:
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::parse_manifest;
+/// use whitaker_installer::dependency_binaries::parse_manifest;
 ///
 /// let manifest_with_duplicates = r#"
 ///     [[dependency_binaries]]
@@ -219,7 +219,7 @@ pub fn parse_manifest(contents: &str) -> Result<Vec<DependencyBinary>, ManifestE
 /// # Example
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::required_dependency_binaries;
+/// use whitaker_installer::dependency_binaries::required_dependency_binaries;
 ///
 /// let dependencies = required_dependency_binaries()
 ///     .expect("embedded manifest should be valid");
@@ -249,7 +249,7 @@ pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Man
 /// Find an existing package (returns `Some`):
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::find_dependency_binary;
+/// use whitaker_installer::dependency_binaries::find_dependency_binary;
 ///
 /// let tool = find_dependency_binary("cargo-dylint")
 ///     .expect("manifest should parse")
@@ -262,7 +262,7 @@ pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Man
 /// Search for a non-existent package (returns `None`):
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::find_dependency_binary;
+/// use whitaker_installer::dependency_binaries::find_dependency_binary;
 ///
 /// let result = find_dependency_binary("non-existent-package")
 ///     .expect("manifest should parse");
@@ -273,7 +273,7 @@ pub fn required_dependency_binaries() -> Result<&'static [DependencyBinary], Man
 /// Handle manifest parse errors:
 ///
 /// ```
-/// use whitaker_installer::dependency_binaries::manifest::find_dependency_binary;
+/// use whitaker_installer::dependency_binaries::find_dependency_binary;
 ///
 /// // This will only fail if the embedded manifest is corrupted
 /// match find_dependency_binary("cargo-dylint") {
