@@ -3,11 +3,14 @@
 use super::*;
 use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
 use crate::installer_packaging::TargetTriple;
+use crate::test_support::env_test_guard;
 use crate::test_utils::dependency_binary_helpers::{
     binstall_install, binstall_version_check_with_result, cargo_dylint_check_with_result,
-    dylint_link_check_with_result,
 };
 use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 fn install_options<'a>(
@@ -27,6 +30,24 @@ fn install_options<'a>(
     }
 }
 
+fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+    let _guard = env_test_guard();
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let binary_path = temp_dir.path().join(binary_name);
+    fs::write(&binary_path, []).expect("write fake binary");
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(&binary_path)
+            .expect("read fake binary metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
+    }
+
+    let path = temp_dir.path().display().to_string();
+    temp_env::with_var("PATH", Some(path), run)
+}
+
 #[test]
 fn dylint_tool_status_all_installed_when_both_present() {
     assert!(
@@ -40,21 +61,21 @@ fn dylint_tool_status_all_installed_when_both_present() {
 
 #[test]
 fn check_dylint_tools_reports_installed_tools() {
-    let executor = StubExecutor::new(vec![
-        cargo_dylint_check_with_result(Ok(success_output())),
-        dylint_link_check_with_result(Ok(success_output())),
-    ]);
+    with_fake_binary_on_path("dylint-link", || {
+        let executor =
+            StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
 
-    let status = check_dylint_tools(&executor);
+        let status = check_dylint_tools(&executor);
 
-    assert_eq!(
-        status,
-        DylintToolStatus {
-            cargo_dylint: true,
-            dylint_link: true,
-        }
-    );
-    executor.assert_finished();
+        assert_eq!(
+            status,
+            DylintToolStatus {
+                cargo_dylint: true,
+                dylint_link: true,
+            }
+        );
+        executor.assert_finished();
+    });
 }
 
 #[test]
@@ -275,20 +296,21 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
             result: Ok(success_output()),
         },
         cargo_dylint_check_with_result(Ok(success_output())),
-        dylint_link_check_with_result(Ok(success_output())),
     ]);
     let mut stderr = Vec::new();
 
-    install_dylint_tools_with_options(
-        &executor,
-        &DylintToolStatus {
-            cargo_dylint: false,
-            dylint_link: false,
-        },
-        &mut stderr,
-        install_options(&repository_installer, false),
-    )
-    .expect("cargo-dylint source build should satisfy both tools");
+    with_fake_binary_on_path("dylint-link", || {
+        install_dylint_tools_with_options(
+            &executor,
+            &DylintToolStatus {
+                cargo_dylint: false,
+                dylint_link: false,
+            },
+            &mut stderr,
+            install_options(&repository_installer, false),
+        )
+        .expect("cargo-dylint source build should satisfy both tools");
+    });
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Installed cargo-dylint from source with cargo install."));

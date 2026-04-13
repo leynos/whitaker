@@ -409,7 +409,10 @@ The dependency-install path is split into focused modules under
 `installer/src/deps.rs` drives the high-level fallback order:
 
 1. Attempt the repository-hosted dependency archive for the current target.
-2. Verify the installed tool is now runnable.
+2. Verify the installed tool is now usable. `cargo-dylint` is checked by
+   running `cargo dylint --version`, while `dylint-link` is checked by
+   resolving the executable on `PATH` because upstream requires
+   `RUSTUP_TOOLCHAIN` even for `--version`.
 3. If the repository download reports `NotFound`, skip `cargo binstall` and
    fall back directly to `cargo install`.
 4. For other repository failures, fall back to `cargo binstall` when available
@@ -449,9 +452,9 @@ latest upstream release.
 `update_status_after_install()` delegates the local-install probe decision to
 `should_refresh_companions()`. That helper returns `true` only when the install
 outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
-code probes for `dylint-link` only after local `cargo-dylint` installs and does
-not re-check it when the pre-built repository artefact was used or when
-`dylint-link` was already present.
+code checks for a resolvable `dylint-link` binary only after local
+`cargo-dylint` installs and does not re-check it when the pre-built repository
+artefact was used or when `dylint-link` was already present.
 
 ### CLI tool usage
 

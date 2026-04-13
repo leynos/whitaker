@@ -2,6 +2,9 @@
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use whitaker_installer::dependency_binaries::{
     DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
@@ -13,6 +16,7 @@ use whitaker_installer::deps::{
 };
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
+use whitaker_installer::test_support::env_test_guard;
 use whitaker_installer::test_utils::{
     StubDirs, StubExecutor,
     dependency_binary_helpers::{ExpectedCallConfig, expected_calls},
@@ -77,6 +81,24 @@ struct DependencyBinaryWorld {
 #[fixture]
 fn world() -> DependencyBinaryWorld {
     DependencyBinaryWorld::default()
+}
+
+fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+    let _guard = env_test_guard();
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let binary_path = temp_dir.path().join(binary_name);
+    fs::write(&binary_path, []).expect("write fake binary");
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(&binary_path)
+            .expect("read fake binary metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
+    }
+
+    let path = temp_dir.path().display().to_string();
+    temp_env::with_var("PATH", Some(path), run)
 }
 
 #[given("the missing tool is \"{tool}\"")]
@@ -181,17 +203,24 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let dirs = StubDirs {
         bin_dir: Some(PathBuf::from("/tmp/bin")),
     };
-    world.install_result = Some(install_dylint_tools_with_options(
-        &executor,
-        &status,
-        &mut world.stderr,
-        DependencyInstallOptions {
-            dirs: &dirs,
-            repository_installer: &repository_installer,
-            target,
-            quiet: false,
-        },
-    ));
+    let run_install = || {
+        install_dylint_tools_with_options(
+            &executor,
+            &status,
+            &mut world.stderr,
+            DependencyInstallOptions {
+                dirs: &dirs,
+                repository_installer: &repository_installer,
+                target,
+                quiet: false,
+            },
+        )
+    };
+    world.install_result = Some(if tool == "dylint-link" {
+        with_fake_binary_on_path("dylint-link", run_install)
+    } else {
+        run_install()
+    });
     executor.assert_finished();
 }
 

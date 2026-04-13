@@ -2,11 +2,75 @@
 
 use super::*;
 use rstest::rstest;
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::Duration;
 use whitaker_installer::cli::InstallArgs;
+use whitaker_installer::dependency_binaries::{
+    DependencyBinaryInstallError, DependencyBinaryInstaller,
+};
+use whitaker_installer::deps::DependencyInstallOptions;
 use whitaker_installer::dirs::BaseDirs;
+use whitaker_installer::installer_packaging::TargetTriple;
+use whitaker_installer::test_support::env_test_guard;
 use whitaker_installer::test_utils::*;
+
+struct AlwaysNotFoundRepositoryInstaller;
+
+impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
+    fn install(
+        &self,
+        dependency: &whitaker_installer::dependency_binaries::DependencyBinary,
+        target: &TargetTriple,
+        _dirs: &dyn BaseDirs,
+    ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
+        Err(DependencyBinaryInstallError::NotFound {
+            url: format!(
+                "https://example.test/{}-{}-v{}.tgz",
+                dependency.package(),
+                target,
+                dependency.version()
+            ),
+        })
+    }
+}
+
+fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+    let _guard = env_test_guard();
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let binary_path = temp_dir.path().join(binary_name);
+    fs::write(&binary_path, []).expect("write fake binary");
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(&binary_path)
+            .expect("read fake binary metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&binary_path, permissions).expect("mark fake binary executable");
+    }
+
+    let path = temp_dir.path().display().to_string();
+    temp_env::with_var("PATH", Some(path), run)
+}
+
+fn dependency_install_options<'a>(
+    repository_installer: &'a dyn DependencyBinaryInstaller,
+    quiet: bool,
+) -> DependencyInstallOptions<'a> {
+    let dirs = TestBaseDirs {
+        home_dir: Some(PathBuf::from("/tmp")),
+        bin_dir: Some(PathBuf::from("/tmp/bin")),
+        data_dir: Some(PathBuf::from("/tmp")),
+    };
+    DependencyInstallOptions {
+        dirs: Box::leak(Box::new(dirs)),
+        repository_installer,
+        target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")),
+        quiet,
+    }
+}
 
 #[test]
 fn exit_code_for_run_result_returns_zero_on_success() {
@@ -80,25 +144,26 @@ fn resolve_requested_crates_rejects_unknown_lints() {
 
 #[test]
 fn ensure_dylint_tools_skips_install_when_installed() {
-    let executor = StubExecutor::new(vec![
-        ExpectedCall {
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = StubExecutor::new(vec![ExpectedCall {
             cmd: "cargo",
             args: vec!["dylint", "--version"],
             result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result: Ok(success_output()),
-        },
-    ]);
+        }]);
+        let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
-    let mut stderr = Vec::new();
-    let result = ensure_dylint_tools_with_executor(&executor, false, &mut stderr);
+        let mut stderr = Vec::new();
+        let result = ensure_dylint_tools_with_executor_and_options(
+            &executor,
+            false,
+            &mut stderr,
+            dependency_install_options(&repository_installer, false),
+        );
 
-    assert!(result.is_ok());
-    assert!(stderr.is_empty());
-    executor.assert_finished();
+        assert!(result.is_ok());
+        assert!(stderr.is_empty());
+        executor.assert_finished();
+    });
 }
 
 #[rstest]
@@ -113,98 +178,99 @@ fn ensure_dylint_tools_installs_missing_tools(
     #[case] expected_start: &str,
     #[case] expected_end: &str,
 ) {
-    let executor = StubExecutor::new(vec![
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: Ok(failure_output("missing cargo-dylint")),
-        },
-        ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result: Ok(failure_output("missing dylint-link")),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "--version"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result: Ok(success_output()),
-        },
-    ]);
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = StubExecutor::new(vec![
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["dylint", "--version"],
+                result: Ok(failure_output("missing cargo-dylint")),
+            },
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["binstall", "--version"],
+                result: Ok(success_output()),
+            },
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+                result: Ok(success_output()),
+            },
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["dylint", "--version"],
+                result: Ok(success_output()),
+            },
+        ]);
+        let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
-    let mut stderr = Vec::new();
-    let result = ensure_dylint_tools_with_executor(&executor, quiet, &mut stderr);
+        let mut stderr = Vec::new();
+        let result = ensure_dylint_tools_with_executor_and_options(
+            &executor,
+            quiet,
+            &mut stderr,
+            dependency_install_options(&repository_installer, quiet),
+        );
 
-    assert!(result.is_ok());
-    let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
-    if quiet {
-        assert!(
-            stderr_text.is_empty(),
-            "expected stderr to be empty when quiet, got {stderr_text:?}"
-        );
-    } else {
-        assert!(
-            stderr_text.starts_with(expected_start),
-            "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
-        );
-        assert!(
-            stderr_text.ends_with(expected_end),
-            "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
-        );
-    }
-    executor.assert_finished();
+        assert!(result.is_ok());
+        let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
+        if quiet {
+            assert!(
+                stderr_text.is_empty(),
+                "expected stderr to be empty when quiet, got {stderr_text:?}"
+            );
+        } else {
+            assert!(
+                stderr_text.starts_with(expected_start),
+                "expected stderr to start with {expected_start:?}, got {stderr_text:?}"
+            );
+            assert!(
+                stderr_text.ends_with(expected_end),
+                "expected stderr to end with {expected_end:?}, got {stderr_text:?}"
+            );
+        }
+        executor.assert_finished();
+    });
 }
 
 #[test]
 fn ensure_dylint_tools_propagates_install_failures() {
-    let executor = StubExecutor::new(vec![
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: Ok(failure_output("missing cargo-dylint")),
-        },
-        ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["binstall", "--version"],
-            result: Ok(success_output()),
-        },
-        ExpectedCall {
-            cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
-            result: Ok(failure_output("cargo install failed")),
-        },
-    ]);
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = StubExecutor::new(vec![
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["dylint", "--version"],
+                result: Ok(failure_output("missing cargo-dylint")),
+            },
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["binstall", "--version"],
+                result: Ok(success_output()),
+            },
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+                result: Ok(failure_output("cargo install failed")),
+            },
+        ]);
+        let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
-    let mut stderr = Vec::new();
-    let err = ensure_dylint_tools_with_executor(&executor, false, &mut stderr)
+        let mut stderr = Vec::new();
+        let err = ensure_dylint_tools_with_executor_and_options(
+            &executor,
+            false,
+            &mut stderr,
+            dependency_install_options(&repository_installer, false),
+        )
         .expect_err("expected install failure");
 
-    assert!(matches!(
-        err,
-        InstallerError::DependencyInstall { tool, message }
-            if tool == "cargo-dylint"
-                && message == "cargo install failed"
-    ));
-    executor.assert_finished();
+        assert!(matches!(
+            err,
+            InstallerError::DependencyInstall { tool, message }
+                if tool == "cargo-dylint"
+                    && message == "cargo install failed"
+        ));
+        executor.assert_finished();
+    });
 }
 
 #[derive(Debug, Clone)]

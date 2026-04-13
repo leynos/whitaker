@@ -9,8 +9,10 @@ use crate::dependency_binaries::{
 };
 use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
+use std::fs;
 use std::io;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Output};
 
 mod install;
@@ -163,11 +165,51 @@ pub fn install_dylint_tools_with_options(
 }
 
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
+    if tool == &DYLINT_LINK_TOOL {
+        return is_binary_on_path(tool.command);
+    }
     command_succeeds(executor, tool.command, tool.args)
 }
 
 fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
     command_succeeds(executor, "cargo", &["binstall", "--version"])
+}
+
+fn is_binary_on_path(binary_name: &str) -> bool {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+
+    std::env::split_paths(&path_var).any(|directory| {
+        let direct = directory.join(binary_name);
+        if is_executable_file(&direct) {
+            return true;
+        }
+
+        #[cfg(windows)]
+        {
+            let windows_executable = directory.join(format!("{binary_name}.exe"));
+            if is_executable_file(&windows_executable) {
+                return true;
+            }
+        }
+
+        false
+    })
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 #[cfg(test)]

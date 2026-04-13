@@ -20,6 +20,8 @@ use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::{
     CommandExecutor, SystemCommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
 };
+#[cfg(test)]
+use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -66,26 +68,21 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
-
     if args.dry_run {
         return run_dry(args, &dirs, stderr);
     }
     let install_started = Instant::now();
-
     // Step 1: Check and install Dylint dependencies if needed
     if !args.skip_deps {
         ensure_dylint_tools(args.quiet, stderr)?;
     }
-
     // Step 2: Ensure workspace is available (clone if needed)
     let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
-
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-
     // Step 3.5: Attempt prebuilt download when install options allow it.
     let prebuilt_context = PrebuiltInstallationContext {
         args,
@@ -103,7 +100,6 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         };
         return finish_install_and_record_metrics(&finish_context, stderr);
     }
-
     if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
         &requested_crates,
         &toolchain,
@@ -118,7 +114,6 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         };
         return finish_install_and_record_metrics(&finish_context, stderr);
     }
-
     let context = PipelineContext {
         workspace_root: &workspace_root,
         toolchain: &toolchain,
@@ -128,11 +123,9 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         experimental: args.experimental,
         quiet: args.quiet,
     };
-
     // Step 4: Build and stage
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
-
     // Step 5: Generate wrapper scripts if requested
     let finish_context = FinishInstallContext {
         args,
@@ -153,7 +146,6 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     toolchain.verify_installed()?;
     let target_dir = determine_dry_run_target_dir(args, dirs, &toolchain, &requested_crates)?;
-
     let info = DryRunInfo {
         workspace_root: &workspace_root,
         toolchain: toolchain.channel(),
@@ -180,7 +172,6 @@ fn determine_dry_run_target_dir(
     if !args.should_attempt_prebuilt(requested_crates) {
         return Ok(build_target_dir);
     }
-
     let Ok(host_target) = detect_host_target() else {
         return Ok(build_target_dir);
     };
@@ -198,24 +189,42 @@ fn ensure_dylint_tools_with_executor(
     quiet: bool,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    let status = check_dylint_tools(executor);
+    ensure_dylint_tools_with_install(executor, quiet, stderr, |status, stderr| {
+        install_dylint_tools_with_output(executor, status, quiet, stderr)
+    })
+}
 
+fn ensure_dylint_tools_with_install(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+    install: impl FnOnce(&whitaker_installer::deps::DylintToolStatus, &mut dyn Write) -> Result<()>,
+) -> Result<()> {
+    let status = check_dylint_tools(executor);
     if status.all_installed() {
         return Ok(());
     }
-
     if !quiet {
         write_stderr_line(stderr, "Installing required Dylint tools...");
     }
-
-    install_dylint_tools_with_output(executor, &status, quiet, stderr)?;
-
+    install(&status, stderr)?;
     if !quiet {
         write_stderr_line(stderr, "Dylint tools installed successfully.");
         write_stderr_line(stderr, "");
     }
-
     Ok(())
+}
+
+#[cfg(test)]
+fn ensure_dylint_tools_with_executor_and_options(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+    options: DependencyInstallOptions<'_>,
+) -> Result<()> {
+    ensure_dylint_tools_with_install(executor, quiet, stderr, |status, stderr| {
+        install_dylint_tools_with_options(executor, status, stderr, options)
+    })
 }
 
 /// Ensures a Whitaker workspace is available.

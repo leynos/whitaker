@@ -84,32 +84,28 @@ fn dependency_version(tool: &str) -> &'static str {
 }
 
 /// Creates an expected call for verifying repository installation.
-pub fn repository_verification_call(tool: &str, verification_fails: bool) -> ExpectedCall {
+pub fn repository_verification_call(tool: &str, verification_fails: bool) -> Option<ExpectedCall> {
     let result = if verification_fails {
         Ok(failure_output("still missing"))
     } else {
         Ok(success_output())
     };
     match tool {
-        "cargo-dylint" => ExpectedCall {
+        "cargo-dylint" => Some(ExpectedCall {
             cmd: "cargo",
             args: vec!["dylint", "--version"],
             result,
-        },
-        "dylint-link" => ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result,
-        },
+        }),
+        "dylint-link" => None,
         other => panic!("unexpected tool: {other}"),
     }
 }
 
 /// Returns the expected verification call for a given tool.
-fn tool_verification_check(tool: &str) -> ExpectedCall {
+fn tool_verification_check(tool: &str) -> Option<ExpectedCall> {
     match tool {
-        "cargo-dylint" => cargo_dylint_check(),
-        "dylint-link" => dylint_link_check(),
+        "cargo-dylint" => Some(cargo_dylint_check()),
+        "dylint-link" => None,
         other => panic!("unexpected tool: {other}"),
     }
 }
@@ -145,7 +141,7 @@ fn repo_aware_cargo_install(
 /// Builds the sequence of calls that follow the primary install attempt.
 fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
     if cfg.primary_succeeded {
-        return vec![tool_verification_check(&cfg.tool)];
+        return tool_verification_check(&cfg.tool).into_iter().collect();
     }
     if !cfg.use_binstall {
         return vec![];
@@ -158,7 +154,9 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
             cfg.has_repository_context,
             Ok(success_output()),
         );
-        return vec![cargo_call, tool_verification_check(&cfg.tool)];
+        let mut calls = vec![cargo_call];
+        calls.extend(tool_verification_check(&cfg.tool));
+        return calls;
     }
     // binstall failed and cargo install also fails
     if let Some(message) = cfg.cargo_install_failure.as_deref() {
@@ -185,7 +183,9 @@ fn source_install_fallback_calls(
     );
     let install_call = cargo_source_install(tool_static, version, result);
     if config.cargo_install_failure.is_none() {
-        vec![install_call, tool_verification_check(tool)]
+        let mut calls = vec![install_call];
+        calls.extend(tool_verification_check(tool));
+        calls
     } else {
         vec![install_call]
     }
@@ -253,7 +253,7 @@ pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<Expecte
     let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
     if config.should_verify_repository_install {
-        calls.push(repository_verification_call(
+        calls.extend(repository_verification_call(
             tool,
             config.is_repository_verification_failing,
         ));
@@ -280,24 +280,6 @@ pub fn cargo_dylint_check_with_result(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
         args: vec!["dylint", "--version"],
-        result,
-    }
-}
-
-/// Creates an expected call for verifying dylint-link installation.
-pub fn dylint_link_check() -> ExpectedCall {
-    ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
-        result: Ok(success_output()),
-    }
-}
-
-/// Creates an expected call for verifying dylint-link with a fixed result.
-pub fn dylint_link_check_with_result(result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
         result,
     }
 }
