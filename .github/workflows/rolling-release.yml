@@ -393,13 +393,13 @@ jobs:
           printf '%s\n' "dist/dependency-binaries-licences.md" >> dist/release-assets.txt
 
       - name: Delete existing rolling release
-        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result != 'failure'
+        if: steps.assets.outputs.has_assets == 'true'
         run: gh release delete rolling --cleanup-tag --yes || true
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create rolling release
-        if: steps.assets.outputs.has_assets == 'true' && needs.build-dependency-binaries.result != 'failure'
+        if: steps.assets.outputs.has_assets == 'true'
         run: |
           set -euxo pipefail
           SHA=$(git rev-parse --short HEAD)

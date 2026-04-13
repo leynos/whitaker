@@ -94,6 +94,27 @@ libraries = [
 ]
 ```
 
+### Rolling release downloads
+
+Whitaker publishes a `rolling` pre-release tag that is continuously updated and
+overwritten on every push to `main`. It is intended for early adopters who want
+the latest available build outputs before the next stable release is cut.
+
+Rolling releases are best-effort builds. If some matrix legs fail, Whitaker
+still publishes the artefacts that were built successfully. For example, a
+target-specific `cargo-dylint` archive may be missing from one rolling release
+even though other target archives were updated successfully. Do not assume that
+every supported target is present in every rolling release.
+
+Stable releases differ from `rolling`: a stable tag is expected to contain the
+complete artefact set for the release. For production installs, pin to a stable
+release tag rather than consuming `rolling`.
+
+If you consume rolling-release archives from scripts or CI, verify that the
+required target archive exists before proceeding. Treat missing archives as an
+expected condition for rolling releases rather than assuming the artefact set
+is complete.
+
 ### Selecting individual lints
 
 To load specific lints instead of the full suite, specify each lint explicitly:

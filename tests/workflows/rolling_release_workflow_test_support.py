@@ -8,6 +8,9 @@ It provides:
 - `_get_job_dict()` to fetch job mappings such as `jobs["publish"]`.
 - `_workflow_dispatch_inputs()` to return `workflow_dispatch.inputs`.
 - `_github_expression_value()` to normalize `${{ ... }}` expressions.
+- `_github_expression_mentions_operand()` to find a standalone operand token.
+- `_github_expression_negates_operand()` to detect `!operand`.
+- `_github_expression_compares_operand_to_false()` to detect `operand == false`.
 - `_get_needs_list()` to normalize a job `needs` field to `list[str]`.
 - `_find_step_by_name()` to locate named workflow steps in a step list.
 - `_nesting_delta()`, `_collect_branch_lines()`, and
@@ -87,6 +90,42 @@ def _github_expression_value(value: object) -> str:
     if stripped.startswith("${{") and stripped.endswith("}}"):
         return stripped[3:-2].strip()
     return stripped
+
+
+def _github_operand_pattern(operand: str) -> re.Pattern[str]:
+    """Return a regex that matches an operand as a standalone token."""
+    return re.compile(rf"(?<![\w.-]){re.escape(operand)}(?![\w.-])")
+
+
+def _github_expression_mentions_operand(expression: object, operand: str) -> bool:
+    """Return whether a GitHub expression mentions the operand token."""
+    return _github_operand_pattern(operand).search(
+        _github_expression_value(expression)
+    ) is not None
+
+
+def _github_expression_negates_operand(expression: object, operand: str) -> bool:
+    """Return whether a GitHub expression contains `!<operand>`."""
+    operand_pattern = _github_operand_pattern(operand).pattern
+    return re.search(
+        rf"(?<!!)!\s*(?:\(\s*{operand_pattern}\s*\)|{operand_pattern})",
+        _github_expression_value(expression),
+    ) is not None
+
+
+def _github_expression_compares_operand_to_false(
+    expression: object,
+    operand: str,
+) -> bool:
+    """Return whether a GitHub expression compares the operand to false."""
+    normalized_expression = _github_expression_value(expression)
+    operand_pattern = _github_operand_pattern(operand).pattern
+    false_literal_pattern = r"(?:'false'|\"false\"|false)"
+    return re.search(
+        rf"(?:{operand_pattern}\s*==\s*{false_literal_pattern}"
+        rf"|{false_literal_pattern}\s*==\s*{operand_pattern})",
+        normalized_expression,
+    ) is not None
 
 
 def _get_needs_list(publish_job: dict[str, Any]) -> list[str]:

@@ -32,6 +32,9 @@ from tests.workflows.rolling_release_workflow_test_support import (
     _find_step_by_name,
     _get_job_dict,
     _get_needs_list,
+    _github_expression_compares_operand_to_false,
+    _github_expression_mentions_operand,
+    _github_expression_negates_operand,
     _github_expression_value,
     _load_workflow_mapping,
 )
@@ -187,6 +190,72 @@ def test_publish_job_runs_even_if_build_lints_fails(workflow_text: str) -> None:
         "download step must continue on error so zero-artefact runs can fall "
         "through to has_assets=false"
     )
+
+
+def _assert_step_guard_gated_on_assets_only(
+    steps: list,
+    step_name: str,
+    action: str,
+) -> None:
+    """Assert a publish-step guard depends only on collected assets."""
+    step = _find_step_by_name(steps, step_name)
+    assert step is not None, (
+        f"publish job must include {step_name!r} before rolling release "
+        f"{action}"
+    )
+
+    guard = _github_expression_value(step.get("if"))
+    assert _github_expression_mentions_operand(
+        guard,
+        "steps.assets.outputs.has_assets",
+    ), (
+        f"rolling release {action} must be gated on collected assets, so "
+        "successful dependency archives still publish when other matrix legs "
+        "fail"
+    )
+    assert not _github_expression_negates_operand(
+        guard,
+        "steps.assets.outputs.has_assets",
+    ), (
+        f"rolling release {action} must treat has_assets as a positive guard, "
+        "not a negated condition"
+    )
+    assert not _github_expression_compares_operand_to_false(
+        guard,
+        "steps.assets.outputs.has_assets",
+    ), f"rolling release {action} must not compare has_assets to false"
+    assert not _github_expression_mentions_operand(
+        guard,
+        "needs.build-dependency-binaries.result",
+    ), (
+        f"rolling release {action} must not be gated on dependency build "
+        "results, so successful dependency archives still publish when other "
+        "matrix legs fail"
+    )
+
+
+def test_publish_release_does_not_require_full_dependency_matrix_success(
+    workflow_text: str,
+) -> None:
+    """Ensure publish step releases partial dependency artefacts."""
+    workflow_mapping = _load_workflow_mapping(workflow_text)
+    jobs = _get_job_dict(workflow_mapping, "jobs")
+    publish_job = _get_job_dict(jobs, "publish")
+    needs_list = _get_needs_list(publish_job)
+
+    assert "build-dependency-binaries" in needs_list, (
+        "publish job must still depend on build-dependency-binaries so release "
+        "publication waits for all successful dependency artefacts to be "
+        "collected"
+    )
+    steps = publish_job.get("steps")
+    _assert_step_guard_gated_on_assets_only(
+        steps, "Delete existing rolling release", "deletion"
+    )
+    _assert_step_guard_gated_on_assets_only(
+        steps, "Create rolling release", "creation"
+    )
+
 
 def test_restore_step_guards_against_missing_dependency_assets(
     workflow_text: str,
