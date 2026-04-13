@@ -165,7 +165,12 @@ pub fn install_dylint_tools_with_options(
 
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
     if tool == &DYLINT_LINK_TOOL {
-        return is_binary_on_path(tool.command);
+        if !is_binary_on_path(tool.command) {
+            return false;
+        }
+
+        return find_binary_on_path(tool.command)
+            .is_some_and(|binary_path| dylint_link_probe_succeeds(&binary_path));
     }
     command_succeeds(executor, tool.command, tool.args)
 }
@@ -175,15 +180,45 @@ fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
 }
 
 fn is_binary_on_path(binary_name: &str) -> bool {
-    let Some(path_var) = std::env::var_os("PATH") else {
-        return false;
-    };
+    find_binary_on_path(binary_name).is_some()
+}
 
-    std::env::split_paths(&path_var).any(|directory| {
-        binary_candidates(&directory, binary_name)
-            .into_iter()
-            .any(|candidate| is_executable_file(&candidate))
-    })
+fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+
+    std::env::split_paths(&path_var)
+        .find_map(|directory| find_binary_in_directory(&directory, binary_name))
+}
+
+fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::path::PathBuf> {
+    binary_candidates(directory, binary_name)
+        .into_iter()
+        .find(|candidate| is_executable_file(candidate))
+}
+
+fn dylint_link_probe_succeeds(binary_path: &Path) -> bool {
+    let mut command = Command::new(binary_path);
+    command.arg("--help");
+
+    if let Some(toolchain) = dylint_link_probe_toolchain() {
+        command.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
+
+    command.output().is_ok_and(|output| output.status.success())
+}
+
+fn dylint_link_probe_toolchain() -> Option<String> {
+    std::env::var("RUSTUP_TOOLCHAIN")
+        .ok()
+        .filter(|toolchain| !toolchain.trim().is_empty())
+        .or_else(|| {
+            host_target().map(|target| {
+                // `dylint-link` reads `RUSTUP_TOOLCHAIN` before it inspects CLI
+                // arguments, so the probe synthesizes a stable host toolchain
+                // when the caller did not provide one.
+                format!("stable-{}", target.as_str())
+            })
+        })
 }
 
 fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::PathBuf> {

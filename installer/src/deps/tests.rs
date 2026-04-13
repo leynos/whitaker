@@ -6,7 +6,7 @@ use crate::installer_packaging::TargetTriple;
 use crate::test_support::env_test_guard;
 use crate::test_utils::dependency_binary_helpers::{
     binstall_install, binstall_version_check_with_result, cargo_dylint_check_with_result,
-    with_fake_binary_on_path, with_fake_path, write_fake_binary,
+    with_fake_binary_on_path, with_fake_path, write_fake_binary, write_fake_binary_with_status,
 };
 use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
@@ -57,6 +57,35 @@ fn check_dylint_tools_reports_installed_tools() {
         );
         executor.assert_finished();
     });
+}
+
+#[test]
+fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
+    with_fake_path(
+        |directories| {
+            #[cfg(windows)]
+            let binary_path = directories[0].join("dylint-link.cmd");
+            #[cfg(not(windows))]
+            let binary_path = directories[0].join("dylint-link");
+
+            write_fake_binary_with_status(&binary_path, true, 1);
+        },
+        || {
+            let executor =
+                StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
+
+            let status = check_dylint_tools(&executor);
+
+            assert_eq!(
+                status,
+                DylintToolStatus {
+                    cargo_dylint: true,
+                    dylint_link: false,
+                }
+            );
+            executor.assert_finished();
+        },
+    );
 }
 
 #[test]

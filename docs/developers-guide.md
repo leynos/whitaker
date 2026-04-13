@@ -411,8 +411,10 @@ The dependency-install path is split into focused modules under
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
    running `cargo dylint --version`, while `dylint-link` is checked by
-   resolving the executable on `PATH` because upstream requires
-   `RUSTUP_TOOLCHAIN` even for `--version`.
+   resolving the executable on `PATH` and invoking it with `--help`. The probe
+   synthesizes `RUSTUP_TOOLCHAIN` from the host target when the environment
+   variable is unset, because upstream reads that variable before processing
+   CLI flags.
 3. If the repository download reports `NotFound`, skip `cargo binstall` and
    fall back directly to `cargo install`.
 4. For other repository failures, fall back to `cargo binstall` when available
@@ -456,21 +458,30 @@ code checks for a resolvable `dylint-link` binary only after local
 `cargo-dylint` installs and does not re-check it when the pre-built repository
 artefact was used or when `dylint-link` was already present.
 
-The PATH-based `dylint-link` verification in `installer/src/deps.rs` is
-implemented by two small private helpers:
+The `dylint-link` verification in `installer/src/deps.rs` is implemented by
+four small private helpers:
 
 - `is_binary_on_path(binary_name)` walks `PATH` with `std::env::split_paths`,
   checks each directory for `<binary_name>`, and on Windows also checks the
   executable suffixes from `PATHEXT` while falling back to
   `.COM;.EXE;.BAT;.CMD` when `PATHEXT` is unset.
+- `find_binary_on_path(binary_name)` returns the first executable candidate so
+  the install check can validate the exact path it found.
+- `dylint_link_probe_toolchain()` preserves an existing `RUSTUP_TOOLCHAIN`
+  value or synthesizes `stable-<host-target>` so `dylint-link --help` can run
+  in the same environments where `dylint-link --version` exits early.
+- `dylint_link_probe_succeeds(path)` runs the resolved binary with `--help` and
+  requires a successful exit status before Whitaker treats the tool as
+  installed.
 - `is_executable_file(path)` applies the platform-specific file test:
   executable-bit plus regular-file checks on Unix, and `path.is_file()` on
   non-Unix targets where the executable suffix carries the meaning.
 
 These helpers are covered by direct unit tests in `installer/src/deps/tests.rs`
 for missing PATH values, empty PATH values, multiple PATH directories,
-non-executable Unix files, executable Unix files, and Windows `PATHEXT`
-resolution via both direct helper tests and `check_dylint_tools()`.
+non-executable Unix files, executable Unix files, broken PATH shims, and
+Windows `PATHEXT` resolution via both direct helper tests and
+`check_dylint_tools()`.
 
 Installer PATH-fixture helpers now live in
 `installer/src/test_utils/dependency_binary_helpers.rs` instead of being

@@ -44,10 +44,16 @@ impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
     }
 }
 
-/// Writes an empty fake binary at `path`.
+/// Writes a fake binary at `path` that exits successfully.
 #[cfg(any(test, feature = "test-support"))]
 pub fn write_fake_binary(path: &Path, is_executable: bool) {
-    fs::write(path, []).expect("write fake binary");
+    write_fake_binary_with_status(path, is_executable, 0);
+}
+
+/// Writes a fake binary at `path` that exits with the supplied status code.
+#[cfg(any(test, feature = "test-support"))]
+pub fn write_fake_binary_with_status(path: &Path, is_executable: bool, exit_code: i32) {
+    fs::write(path, fake_binary_contents(exit_code)).expect("write fake binary");
     #[cfg(unix)]
     {
         let mode = if is_executable { 0o755 } else { 0o644 };
@@ -59,6 +65,18 @@ pub fn write_fake_binary(path: &Path, is_executable: bool) {
     }
     #[cfg(not(unix))]
     let _ = is_executable;
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
+    #[cfg(windows)]
+    {
+        format!("@echo off\r\nexit /b {exit_code}\r\n").into_bytes()
+    }
+    #[cfg(not(windows))]
+    {
+        format!("#!/bin/sh\nexit {exit_code}\n").into_bytes()
+    }
 }
 
 /// Runs a closure with `PATH` pointing at one or more fake directories.
@@ -83,9 +101,21 @@ pub fn with_fake_path<T>(setup: impl FnOnce(&[PathBuf]), run: impl FnOnce() -> T
 #[cfg(any(test, feature = "test-support"))]
 pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
     with_fake_path(
-        |directories| write_fake_binary(&directories[0].join(binary_name), true),
+        |directories| write_fake_binary(&path_binary_location(&directories[0], binary_name), true),
         run,
     )
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
+    #[cfg(windows)]
+    {
+        directory.join(format!("{binary_name}.cmd"))
+    }
+    #[cfg(not(windows))]
+    {
+        directory.join(binary_name)
+    }
 }
 
 /// Configuration for generating expected calls in dependency binary tests.
