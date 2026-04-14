@@ -400,8 +400,8 @@ Local workflow tests use the Makefile variables `UV` and `WORKFLOW_TEST_VENV`:
   `.venv`.
 
 Use `make workflow-test-deps` to create or refresh that environment, and
-`make workflow-test` to run the opt-in `act` plus `pytest` workflow smoke
-tests against it.
+`make workflow-test` to run the opt-in `act` plus `pytest` workflow smoke tests
+against it.
 
 ### Worked example: adding another packaging binary
 
@@ -426,8 +426,8 @@ path = "src/bin/package_example.rs"
 
 If the workflow should invoke that helper, add an assertion to
 `test_installer_packaging_bins_match_release_workflow_contract` before relying
-on it in release automation. That keeps the breakage in unit-style Python
-tests instead of the rolling-release pipeline.
+on it in release automation. That keeps the breakage in unit-style Python tests
+instead of the rolling-release pipeline.
 
 ## Dependency binary packaging
 

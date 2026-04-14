@@ -53,9 +53,11 @@ fn expected_error(name: &str) -> Result<IndexError, String> {
             ));
         };
         let bands = bands
+            .trim()
             .parse::<usize>()
             .map_err(|error| format!("invalid bands value `{bands}`: {error}"))?;
         let rows = rows
+            .trim()
             .parse::<usize>()
             .map_err(|error| format!("invalid rows value `{rows}`: {error}"))?;
         return Ok(IndexError::invalid_band_row_product(bands, rows));
