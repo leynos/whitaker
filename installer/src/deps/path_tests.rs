@@ -133,6 +133,17 @@ fn is_binary_on_path_accepts_windows_executable_suffix() {
 
 #[cfg(windows)]
 #[test]
+fn is_binary_on_path_ignores_files_without_executable_suffix() {
+    with_fake_path(
+        |directories| write_fake_binary(&directories[1].join("dylint-link"), true),
+        || {
+            assert!(!is_binary_on_path("dylint-link"));
+        },
+    );
+}
+
+#[cfg(windows)]
+#[test]
 fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
     let _guard = env_test_guard();
     temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
