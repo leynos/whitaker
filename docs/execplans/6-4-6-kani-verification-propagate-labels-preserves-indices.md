@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 This document must be maintained in accordance with `AGENTS.md`.
 
@@ -146,20 +146,27 @@ Observable success after implementation:
   sidecar, and the repository testing/documentation guidance.
 - [x] 2026-04-13: Draft this ExecPlan with a concrete proof shape, runtime test
   strategy, documentation closure steps, and an explicit approval gate.
-- [ ] After approval: split the Kani verification module if needed so 6.4.5
-  and 6.4.6 proofs remain under the file-size limit and share symbolic helpers.
-- [ ] After approval: add failing unit tests defining the observable
-  `propagate_labels` contract.
-- [ ] After approval: add `rstest-bdd` happy-path, unhappy-path, and edge-case
+- [x] 2026-04-14: Split the Kani verification module into
+  `community_kani/{mod,adjacency,shared,propagate_labels}.rs` so 6.4.5 and
+  6.4.6 proof families stay navigable and under the file-size limit.
+- [x] 2026-04-14: Add unit tests defining the observable `propagate_labels`
+  contract, covering length, in-range labels, isolated nodes, zero iterations,
+  lexical tie-breaking, and bounded non-convergence.
+- [x] 2026-04-14: Add `rstest-bdd` happy-path, unhappy-path, and edge-case
   coverage through `common::test_support::decomposition`.
-- [ ] After approval: add bounded Kani harnesses for `propagate_labels`.
-- [ ] After approval: record 6.4.6 implementation decisions in
+- [~] 2026-04-14: Add bounded Kani harnesses for `propagate_labels`; harnesses
+  are implemented, but `make kani` is still blocked by CBMC state explosion in
+  runtime `Vec`/iterator paths after three modelling iterations.
+- [x] 2026-04-14: Record 6.4.6 implementation decisions in
   `docs/brain-trust-lints-design.md`.
 - [ ] After approval: mark roadmap item 6.4.6 done in `docs/roadmap.md`.
-- [ ] After approval: run `make fmt`, `make markdownlint`, `make nixie`,
-  `make check-fmt`, `make lint`, `make test`, and `make kani` successfully.
-- [ ] After approval: finalize the living sections in this ExecPlan after
-  implementation.
+- [~] 2026-04-14: Run `make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, `make test`, and `make kani`; formatting,
+  markdown, diagram, formatter-check, and lint gates passed, while `make test`
+  still reproduces the pre-existing installer failures and `make kani` remains
+  blocked.
+- [x] 2026-04-14: Finalize the living sections in this ExecPlan with the
+  implemented design, the gate results, and the remaining blockers.
 
 ## Surprises & Discoveries
 
@@ -167,6 +174,14 @@ Observable success after implementation:
   `common/src/decomposition_advice/community.rs`, while `build_adjacency` is
   already `pub(crate)` from roadmap item 6.4.5. The 6.4.6 work will likely need
   a crate-visible seam for direct unit tests and test-support helpers.
+- `scripts/install-kani.sh` returned exit status `1` even on a warm cache
+  because its `trap` cleanup function evaluated `[ -n "${tmp_dir}" ]` as the
+  final command. This had to be fixed before any trustworthy `make kani`
+  attempt.
+- Kani still spends most of its effort in outer container construction and
+  iterator machinery (`Vec` growth, `find_map`, and `memcmp`) rather than the
+  label-propagation assertions, even after reducing the propagation harnesses
+  to a fixed three-node graph with symbolic edge-presence booleans.
 - The current runtime already guarantees label indices start in range because
   labels are initialised as `0..vectors.len()`, and new labels come only from
   neighbour labels returned by `best_neighbour_label`.
@@ -208,6 +223,25 @@ Observable success after implementation:
 - Decision: signpost the relevant local documentation and skills directly in
   this plan. Rationale: the next implementer should be able to execute the work
   from this file alone. Date/Author: 2026-04-13 / Codex.
+- Decision: expose `community::propagate_labels_report` as a crate-visible seam
+  returning labels, iteration count, and active-node presence. Rationale: unit
+  tests, BDD helpers, and Kani harnesses all need the same observable runtime
+  result without widening the public decomposition API. Date/Author: 2026-04-14
+  / Codex.
+- Decision: simplify label tie-breaking from full `MethodFeatureVector` ordering
+  to `method_name()` plus label index. Rationale: this preserves deterministic
+  behaviour for runtime clustering while removing a large proof burden from
+  `BTreeMap`-backed vector comparison inside Kani. Date/Author: 2026-04-14 /
+  Codex.
+- Decision: fix `scripts/install-kani.sh` cleanup to return success on warm
+  caches. Rationale: the pre-existing trap bug made the Kani sidecar exit
+  non-zero before any proof ran, so `make kani` could not be treated as a
+  reliable gate. Date/Author: 2026-04-14 / Codex.
+- Decision: stop further Kani-model churn after three propagation-model
+  iterations. Rationale: the ExecPlan tolerance says to escalate once the proof
+  still fails after repeated bounded-model simplification attempts; the current
+  blocker is in CBMC container machinery, not in the propagation property
+  logic. Date/Author: 2026-04-14 / Codex.
 
 ## Context and orientation
 
@@ -430,13 +464,22 @@ Expected success signals after implementation:
 
 ## Outcomes & Retrospective
 
-This section is intentionally incomplete until implementation is approved and
-finished.
+Current state:
 
-Planned completion criteria:
-
-1. roadmap item 6.4.6 is implemented and marked done,
-2. the proof, unit-test, and behaviour-test story is documented and
-   reproducible, and
-3. the final bounded-model trade-offs are recorded clearly enough for a future
-   contributor to extend or revisit the proof.
+1. The runtime seam, unit tests, BDD coverage, and Kani module split are
+   implemented.
+2. `scripts/install-kani.sh` is fixed so the warm-cache path returns success.
+3. `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`, and
+   `make lint` all passed for this change set.
+4. `make test` still fails outside the 6.4.6 scope in the pre-existing
+   installer cases `ensure_dylint_tools_propagates_install_failures`,
+   `ensure_dylint_tools_installs_missing_tools::case_1_logs_when_not_quiet`,
+   and
+   `ensure_dylint_tools_installs_missing_tools::case_2_quiet_suppresses_output`.
+5. Targeted `whitaker-common` unit and BDD coverage for label propagation
+   passes, so the 6.4.6 runtime seam is verified at the crate level even though
+   the full workspace test gate is red for unrelated reasons.
+6. Roadmap item 6.4.6 is not yet complete because `make kani` is still blocked
+   by CBMC state explosion in `Vec`/iterator machinery after three modelling
+   iterations, and the roadmap cannot be marked done while `make test` and
+   `make kani` remain unsuccessful.

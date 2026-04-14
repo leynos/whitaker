@@ -104,6 +104,14 @@ impl MethodFeatureVector {
     }
 }
 
+pub(crate) fn minimal_feature_vector(method_name: &str) -> MethodFeatureVector {
+    MethodFeatureVector {
+        method_name: method_name.to_owned(),
+        weights: BTreeMap::new(),
+        metadata: BTreeMap::new(),
+    }
+}
+
 pub(crate) fn build_feature_vector(profile: &MethodProfile) -> MethodFeatureVector {
     let mut weights = BTreeMap::new();
     let mut metadata = BTreeMap::new();
@@ -223,7 +231,7 @@ pub(crate) fn cosine_threshold_met(
     left_side >= right_side
 }
 
-#[cfg(test)]
+#[cfg(any(test, kani))]
 pub(crate) fn test_feature_vector(
     method_name: &str,
     weights: &[(&str, u64)],

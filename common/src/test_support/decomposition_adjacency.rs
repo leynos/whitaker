@@ -224,7 +224,7 @@ pub fn adjacency_report(
     })
 }
 
-fn validate_edges(
+pub(crate) fn validate_edges(
     node_count: usize,
     edges: &[EdgeInput],
 ) -> Result<Vec<SimilarityEdge>, AdjacencyError> {

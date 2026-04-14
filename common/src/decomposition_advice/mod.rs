@@ -19,4 +19,6 @@ mod tests;
 pub use note::format_diagnostic_note;
 pub use profile::{DecompositionContext, MethodProfile, MethodProfileBuilder, SubjectKind};
 pub use suggestion::{DecompositionSuggestion, SuggestedExtractionKind, suggest_decomposition};
-pub(crate) use vector::{build_feature_vector, dot_product, methods_meet_cosine_threshold};
+pub(crate) use vector::{
+    build_feature_vector, dot_product, methods_meet_cosine_threshold, minimal_feature_vector,
+};
