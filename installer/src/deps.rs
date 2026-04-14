@@ -165,12 +165,10 @@ pub fn install_dylint_tools_with_options(
 
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
     if tool == &DYLINT_LINK_TOOL {
-        if !is_binary_on_path(tool.command) {
-            return false;
-        }
-
-        return find_binary_on_path(tool.command)
-            .is_some_and(|binary_path| dylint_link_probe_succeeds(&binary_path));
+        return match find_binary_on_path(tool.command) {
+            Some(binary_path) => dylint_link_probe_succeeds(&binary_path),
+            None => false,
+        };
     }
     command_succeeds(executor, tool.command, tool.args)
 }
@@ -179,6 +177,7 @@ fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
     command_succeeds(executor, "cargo", &["binstall", "--version"])
 }
 
+#[cfg(test)]
 fn is_binary_on_path(binary_name: &str) -> bool {
     find_binary_on_path(binary_name).is_some()
 }

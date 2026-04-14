@@ -459,14 +459,12 @@ code checks for a resolvable `dylint-link` binary only after local
 artefact was used or when `dylint-link` was already present.
 
 The `dylint-link` verification in `installer/src/deps.rs` is implemented by
-four small private helpers:
+five small private helpers:
 
-- `is_binary_on_path(binary_name)` walks `PATH` with `std::env::split_paths`,
-  checks each directory for `<binary_name>`, and on Windows also checks the
-  executable suffixes from `PATHEXT` while falling back to
-  `.COM;.EXE;.BAT;.CMD` when `PATHEXT` is unset.
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
   the install check can validate the exact path it found.
+- `find_binary_in_directory(directory, binary_name)` performs the per-directory
+  search that `find_binary_on_path()` uses while walking `PATH`.
 - `dylint_link_probe_toolchain()` preserves an existing `RUSTUP_TOOLCHAIN`
   value or synthesizes `stable-<host-target>` so `dylint-link --help` can run
   in the same environments where `dylint-link --version` exits early.

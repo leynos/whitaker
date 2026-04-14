@@ -111,7 +111,7 @@ Dependency-tool verification is asymmetric by design:
 - `cargo-dylint` is checked by running `cargo dylint --version`.
 - `dylint-link` is checked by resolving the executable on `PATH` and then
   invoking it with `--help`. The probe injects `RUSTUP_TOOLCHAIN` when the
-  caller has not already set it which avoids the false negatives from
+  caller has not already set it, which avoids the false negatives from
   `dylint-link --version` while still rejecting stale shims and broken scripts.
 
 On Windows, the installer honours `PATHEXT` while scanning `PATH`, so the
