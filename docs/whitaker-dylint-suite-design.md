@@ -1,5 +1,14 @@
 # Whitaker Rust Dylint Workspace — Lint Suite Design and Roadmap
 
+> [!NOTE]
+> Follow-on design work now lives in focused companion documents for newer
+> phases, including the
+> [brain trust lints design](brain-trust-lints-design.md), the
+> [clone detector design](whitaker-clone-detector-design.md), the
+> [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md),
+> and the
+> [ownership shape lints design](ownership-shape-lints-design.md).
+
 This single document consolidates the workspace design, the seven core lints
 (with the **revised conditional rule**), the separate `no_unwrap_or_else_panic`
 lint crate, a feasibility study for a **Bumpy Road** detector, and a phased
