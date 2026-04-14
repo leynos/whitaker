@@ -143,12 +143,7 @@ fn given_manifest_loaded(world: &mut DependencyBinaryWorld) {
         .to_vec();
 }
 
-#[when("dependency installation runs")]
-fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
-    let tool = world
-        .missing_tool
-        .clone()
-        .expect("missing tool should be configured");
+fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecutor {
     let is_repository_asset_missing = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::NotFound)
@@ -157,18 +152,8 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::Success)
     ) && !world.is_unsupported_target;
-    let repository_installer = StubRepositoryInstaller {
-        behaviour: world.repository_behaviour.take().unwrap_or(
-            RepositoryInstallerBehaviour::Failure("missing repository".to_owned()),
-        ),
-    };
-    let status = DylintToolStatus {
-        cargo_dylint: tool != "cargo-dylint",
-        dylint_link: tool != "dylint-link",
-    };
-
-    let executor = StubExecutor::new(expected_calls(
-        &tool,
+    StubExecutor::new(expected_calls(
+        tool,
         ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
             has_repository_context: !world.is_unsupported_target,
@@ -178,7 +163,25 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
             cargo_install_failure: world.cargo_install_failure.as_deref(),
         },
-    ));
+    ))
+}
+
+#[when("dependency installation runs")]
+fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
+    let tool = world
+        .missing_tool
+        .clone()
+        .expect("missing tool should be configured");
+    let executor = build_stub_executor(world, &tool);
+    let repository_installer = StubRepositoryInstaller {
+        behaviour: world.repository_behaviour.take().unwrap_or(
+            RepositoryInstallerBehaviour::Failure("missing repository".to_owned()),
+        ),
+    };
+    let status = DylintToolStatus {
+        cargo_dylint: tool != "cargo-dylint",
+        dylint_link: tool != "dylint-link",
+    };
 
     let target = if world.is_unsupported_target {
         None

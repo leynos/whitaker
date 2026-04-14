@@ -465,6 +465,8 @@ five small private helpers:
   the install check can validate the exact path it found.
 - `find_binary_in_directory(directory, binary_name)` performs the per-directory
   search that `find_binary_on_path()` uses while walking `PATH`.
+- `binary_candidates(directory, binary_name)` builds the ordered set of
+  candidate paths that each directory contributes to the lookup.
 - `dylint_link_probe_toolchain()` preserves an existing `RUSTUP_TOOLCHAIN`
   value or synthesizes `stable-<host-target>` so `dylint-link --help` can run
   in the same environments where `dylint-link --version` exits early.
@@ -474,12 +476,15 @@ five small private helpers:
 - `is_executable_file(path)` applies the platform-specific file test:
   executable-bit plus regular-file checks on Unix, and `path.is_file()` on
   non-Unix targets where the executable suffix carries the meaning.
+- `windows_path_extensions()` normalizes `PATHEXT` on Windows so
+  `binary_candidates()` can expand extensionless names the same way the shell
+  does.
 
-These helpers are covered by direct unit tests in `installer/src/deps/tests.rs`
-for missing PATH values, empty PATH values, multiple PATH directories,
-non-executable Unix files, executable Unix files, broken PATH shims, and
-Windows `PATHEXT` resolution via both direct helper tests and
-`check_dylint_tools()`.
+These key helpers are covered by direct unit tests in
+`installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,
+multiple PATH directories, non-executable Unix files, executable Unix files,
+broken PATH shims, and Windows `PATHEXT` resolution via both direct helper
+tests and `check_dylint_tools()`.
 
 Installer PATH-fixture helpers now live in
 `installer/src/test_utils/dependency_binary_helpers.rs` instead of being

@@ -229,14 +229,15 @@ fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::Path
     {
         if Path::new(binary_name).extension().is_some() {
             candidates.push(directory.join(binary_name));
+        } else {
+            let lowercase_name = binary_name.to_ascii_lowercase();
+            candidates.extend(
+                windows_path_extensions()
+                    .into_iter()
+                    .filter(|extension| !lowercase_name.ends_with(&extension.to_ascii_lowercase()))
+                    .map(|extension| directory.join(format!("{binary_name}{extension}"))),
+            );
         }
-        let lowercase_name = binary_name.to_ascii_lowercase();
-        candidates.extend(
-            windows_path_extensions()
-                .into_iter()
-                .filter(|extension| !lowercase_name.ends_with(&extension.to_ascii_lowercase()))
-                .map(|extension| directory.join(format!("{binary_name}{extension}"))),
-        );
     }
     candidates
 }
