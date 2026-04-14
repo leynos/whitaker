@@ -113,7 +113,7 @@ fn ensure_dylint_tools_skips_install_when_installed() {
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&repository_installer, false);
-        let result = ensure_dylint_tools_with_options(&executor, false, &mut stderr, options);
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
 
         assert!(result.is_ok());
         assert!(stderr.is_empty());
@@ -160,7 +160,7 @@ fn ensure_dylint_tools_installs_missing_tools(
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&repository_installer, quiet);
-        let result = ensure_dylint_tools_with_options(&executor, quiet, &mut stderr, options);
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
 
         assert!(result.is_ok());
         let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
@@ -207,7 +207,7 @@ fn ensure_dylint_tools_propagates_install_failures() {
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&repository_installer, false);
-        let err = ensure_dylint_tools_with_options(&executor, false, &mut stderr, options)
+        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, options)
             .expect_err("expected install failure");
 
         assert!(matches!(

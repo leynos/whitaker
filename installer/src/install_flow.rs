@@ -29,10 +29,10 @@ use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUIT
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,
     stderr: &mut dyn Write,
-    all_installed: bool,
+    is_all_installed: bool,
     do_install: impl FnOnce(&mut dyn Write) -> Result<()>,
 ) -> Result<()> {
-    if all_installed {
+    if is_all_installed {
         return Ok(());
     }
 
@@ -64,12 +64,11 @@ pub(crate) fn ensure_dylint_tools_with_executor(
 #[cfg(test)]
 pub(crate) fn ensure_dylint_tools_with_options(
     executor: &dyn CommandExecutor,
-    quiet: bool,
     stderr: &mut dyn Write,
     options: DependencyInstallOptions<'_>,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
+    ensure_dylint_tools_core(options.quiet, stderr, status.all_installed(), |stderr| {
         install_dylint_tools_with_options(executor, &status, stderr, options)
     })
 }

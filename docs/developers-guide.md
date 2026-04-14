@@ -499,7 +499,7 @@ The `dylint-link` verification in `installer/src/deps.rs` is implemented by
 seven small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
-  the install check can validate the exact path it found.
+  the installation check can validate the exact path it found.
 - `find_binary_in_directory(directory, binary_name)` performs the per-directory
   search that `find_binary_on_path()` uses while walking `PATH`.
 - `binary_candidates(directory, binary_name)` builds the ordered set of
