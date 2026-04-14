@@ -288,6 +288,108 @@ The shared module should also define small, deterministic summaries such as
 Whitaker's brain-trust helpers, prefer `BTreeMap` and `BTreeSet` for
 deterministic iteration and snapshot stability.[^brain-trust-design]
 
+For screen readers: The following class diagram shows the shared ownership
+shape enums, summary records, and evaluation entry points. It highlights how
+use and escape classifications feed summary objects, which are then consumed by
+the central evaluation logic to produce an `EvaluationResult`.
+
+<!-- markdownlint-disable MD013 -->
+```mermaid
+classDiagram
+
+class UseClass {
+  <<enum>>
+  SharedBorrow
+  MethodBySharedRef
+  CopyRead
+  MutableBorrow
+  MethodByMutableRef
+  Move
+  Return
+  Store
+  UnknownCall
+}
+
+class EscapeKind {
+  <<enum>>
+  No
+  Return
+  Store
+  ClosureCapture
+  StaticCallback
+  ThreadBoundary
+  ExternalApiBoundary
+  Unknown
+}
+
+class ApiConstraint {
+  <<enum>>
+  None
+  SharedHandleRequired
+  TraitSignatureRequired
+  StaticCallbackRequired
+  ThreadSafeSharedRequired
+}
+
+class FixConfidence {
+  <<enum>>
+  MachineApplicable
+  MaybeIncorrect
+  DiagnosticOnly
+}
+
+class CloneUseSummary {
+  +use_classes : Map
+  +escape_kind : EscapeKind
+}
+
+class OwnedParamPressure {
+  +callee_id : DefId
+  +param_index : usize
+  +callsite_count : usize
+  +source_type : TypeId
+}
+
+class SharedOwnershipSummary {
+  +wrapper_type : TypeId
+  +escape_kind : EscapeKind
+  +api_constraint : ApiConstraint
+}
+
+class ExactBorrowMapping {
+  +owned_type : TypeId
+  +borrow_type : TypeId
+}
+
+class EvaluationResult {
+  +emit : bool
+  +level : LintLevel
+  +fix_confidence : FixConfidence
+  +diagnostic_args : Map
+}
+
+class OwnershipShapeEvaluation {
+  +evaluate_clone_only_used_by_borrow(summary : CloneUseSummary) EvaluationResult
+  +evaluate_owned_param_causes_clone(pressure : OwnedParamPressure, summary : CloneUseSummary, mapping : ExactBorrowMapping) EvaluationResult
+  +evaluate_local_shared_ownership(summary : SharedOwnershipSummary) EvaluationResult
+}
+
+UseClass --> CloneUseSummary : used_by
+EscapeKind --> CloneUseSummary : classifies
+EscapeKind --> SharedOwnershipSummary : classifies
+ApiConstraint --> SharedOwnershipSummary : constrained_by
+FixConfidence --> EvaluationResult : sets
+CloneUseSummary --> OwnershipShapeEvaluation : input
+OwnedParamPressure --> OwnershipShapeEvaluation : input
+SharedOwnershipSummary --> OwnershipShapeEvaluation : input
+ExactBorrowMapping --> OwnershipShapeEvaluation : consulted_by
+EvaluationResult --> OwnershipShapeEvaluation : output
+```
+<!-- markdownlint-enable MD013 -->
+
+*Figure: Shared ownership-shape model showing the core enums, summaries, and
+evaluation entry points used across the proposed lint suite.*
+
 ### Resolution strategy
 
 The lints should resolve functions, methods, and wrapper constructors by
@@ -497,6 +599,56 @@ common owned-to-borrow mappings:
 For other concrete types, emit a generic "consider borrowing this parameter
 instead of taking ownership" help message without a machine-applicable
 signature rewrite.
+
+For screen readers: The following flow diagram shows the two-pass
+`owned_param_causes_clone` analysis. The lint first scans call expressions to
+record clone pressure for local callees, then groups those candidates by
+parameter, summarises each parameter's observed use, applies exemptions, and
+emits a diagnostic only when the evaluation still indicates read-only clone
+pressure.
+
+<!-- markdownlint-disable MD013 -->
+```mermaid
+graph TD
+  A["Start lint pass for owned_param_causes_clone"] --> B["Iterate over all functions and methods in crate"]
+  B --> C["Pass A: inspect each call expression"]
+
+  C --> C1["Is argument a clone_like operation on a retained value?"]
+  C1 -- "No" --> C_NEXT["Skip argument"]
+  C1 -- "Yes" --> C2["Resolve callee DefId and argument index"]
+
+  C2 --> C3["Is callee defined in this crate?"]
+  C3 -- "No" --> C_NEXT
+  C3 -- "Yes" --> C4["Record OwnedParamPressure entry with callsite span and source type"]
+
+  C4 --> C_NEXT
+  C_NEXT --> C_DONE["All calls processed"]
+  C_DONE --> D["Group pressure entries by callee and parameter index"]
+
+  D --> E["Pass B: for each candidate parameter"]
+  E --> E1["Summarise parameter usage using HIR and MIR"]
+  E1 --> E2["Classify parameter as ReadOnlyBorrowed, Consumed, MutablyBorrowed, or Opaque"]
+
+  E2 --> E3["Apply exemption rules (exported API, trait method, extern, async)"]
+  E3 -- "Exempt" --> NEXT_PARAM["Skip emission for this parameter"]
+  E3 -- "Not exempt" --> E4["Combine parameter summary with OwnedParamPressure and ExactBorrowMapping"]
+
+  E4 --> E5["Call ownership_shape evaluation to decide emission and FixConfidence"]
+  E5 -- "Do not emit" --> NEXT_PARAM
+  E5 -- "Emit diagnostic" --> F["Build diagnostic args and choose message slugs"]
+
+  F --> G["Emit lint diagnostic at parameter span with optional callsite note"]
+  G --> NEXT_PARAM
+
+  NEXT_PARAM --> H["More candidate parameters?"]
+  H -- "Yes" --> E
+  H -- "No" --> I["End lint pass"]
+```
+<!-- markdownlint-enable MD013 -->
+
+*Figure: `owned_param_causes_clone` flow from call-site clone-pressure
+collection through parameter summarisation, exemption handling, evaluation, and
+diagnostic emission.*
 
 ### Diagnostics
 
