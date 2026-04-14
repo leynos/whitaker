@@ -13,6 +13,11 @@ use std::time::Duration;
 use whitaker_installer::builder::{library_extension, library_prefix};
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::crate_name::CrateName;
+use whitaker_installer::deps::{
+    CommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
+};
+#[cfg(test)]
+use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_install};
@@ -20,6 +25,54 @@ use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+
+pub(crate) fn ensure_dylint_tools_core(
+    quiet: bool,
+    stderr: &mut dyn Write,
+    all_installed: bool,
+    do_install: impl FnOnce(&mut dyn Write) -> Result<()>,
+) -> Result<()> {
+    if all_installed {
+        return Ok(());
+    }
+
+    if !quiet {
+        write_stderr_line(stderr, "Installing required Dylint tools...");
+    }
+
+    do_install(stderr)?;
+
+    if !quiet {
+        write_stderr_line(stderr, "Dylint tools installed successfully.");
+        write_stderr_line(stderr, "");
+    }
+
+    Ok(())
+}
+
+pub(crate) fn ensure_dylint_tools_with_executor(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let status = check_dylint_tools(executor);
+    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
+        install_dylint_tools_with_output(executor, &status, quiet, stderr)
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn ensure_dylint_tools_with_options(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+    options: DependencyInstallOptions<'_>,
+) -> Result<()> {
+    let status = check_dylint_tools(executor);
+    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
+        install_dylint_tools_with_options(executor, &status, stderr, options)
+    })
+}
 
 /// Context needed to attempt prebuilt installation.
 pub(crate) struct PrebuiltInstallationContext<'a> {

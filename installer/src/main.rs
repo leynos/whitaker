@@ -7,9 +7,11 @@
 mod install_flow;
 mod staged_suite;
 
+#[cfg(test)]
+use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
     MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
-    try_prebuilt_installation, write_install_metrics,
+    ensure_dylint_tools_with_executor, try_prebuilt_installation, write_install_metrics,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
@@ -17,12 +19,7 @@ use std::io::Write;
 use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    CommandExecutor, DylintToolStatus, SystemCommandExecutor, check_dylint_tools,
-    install_dylint_tools_with_output,
-};
-#[cfg(test)]
-use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
+use whitaker_installer::deps::SystemCommandExecutor;
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -183,51 +180,6 @@ fn determine_dry_run_target_dir(
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
     ensure_dylint_tools_with_executor(&executor, quiet, stderr)
-}
-
-fn ensure_dylint_tools_core(
-    quiet: bool,
-    stderr: &mut dyn Write,
-    all_installed: bool,
-    do_install: impl FnOnce(&mut dyn Write) -> Result<()>,
-) -> Result<()> {
-    if all_installed {
-        return Ok(());
-    }
-    if !quiet {
-        write_stderr_line(stderr, "Installing required Dylint tools...");
-    }
-    do_install(stderr)?;
-    if !quiet {
-        write_stderr_line(stderr, "Dylint tools installed successfully.");
-        write_stderr_line(stderr, "");
-    }
-
-    Ok(())
-}
-
-fn ensure_dylint_tools_with_executor(
-    executor: &dyn CommandExecutor,
-    quiet: bool,
-    stderr: &mut dyn Write,
-) -> Result<()> {
-    let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_output(executor, &status, quiet, stderr)
-    })
-}
-
-#[cfg(test)]
-fn ensure_dylint_tools_with_options(
-    executor: &dyn CommandExecutor,
-    quiet: bool,
-    stderr: &mut dyn Write,
-    options: DependencyInstallOptions<'_>,
-) -> Result<()> {
-    let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_options(executor, &status, stderr, options)
-    })
 }
 
 /// Ensures a Whitaker workspace is available.
