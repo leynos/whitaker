@@ -86,7 +86,14 @@ fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
 #[test]
 fn is_binary_on_path_checks_multiple_directories() {
     with_fake_path(
-        |directories| write_fake_binary(&directories[1].join("dylint-link"), true),
+        |directories| {
+            #[cfg(windows)]
+            let binary_path = directories[1].join("dylint-link.exe");
+            #[cfg(not(windows))]
+            let binary_path = directories[1].join("dylint-link");
+
+            write_fake_binary(&binary_path, true);
+        },
         || {
             assert!(is_binary_on_path("dylint-link"));
         },
