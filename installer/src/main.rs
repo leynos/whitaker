@@ -182,31 +182,39 @@ fn determine_dry_run_target_dir(
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_install(&executor, quiet, stderr, |status, stderr| {
-        install_dylint_tools_with_output(&executor, status, quiet, stderr)
-    })
+    ensure_dylint_tools_with_executor(&executor, quiet, stderr)
 }
 
-fn ensure_dylint_tools_with_install(
-    executor: &dyn CommandExecutor,
+fn ensure_dylint_tools_core(
     quiet: bool,
     stderr: &mut dyn Write,
-    install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
+    all_installed: bool,
+    do_install: impl FnOnce(&mut dyn Write) -> Result<()>,
 ) -> Result<()> {
-    let status = check_dylint_tools(executor);
-    if status.all_installed() {
+    if all_installed {
         return Ok(());
     }
     if !quiet {
         write_stderr_line(stderr, "Installing required Dylint tools...");
     }
-    install(&status, stderr)?;
+    do_install(stderr)?;
     if !quiet {
         write_stderr_line(stderr, "Dylint tools installed successfully.");
         write_stderr_line(stderr, "");
     }
 
     Ok(())
+}
+
+fn ensure_dylint_tools_with_executor(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+) -> Result<()> {
+    let status = check_dylint_tools(executor);
+    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
+        install_dylint_tools_with_output(executor, &status, quiet, stderr)
+    })
 }
 
 #[cfg(test)]
@@ -217,22 +225,9 @@ fn ensure_dylint_tools_with_options(
     options: DependencyInstallOptions<'_>,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
-
-    if status.all_installed() {
-        return Ok(());
-    }
-
-    if !quiet {
-        write_stderr_line(stderr, "Installing required Dylint tools...");
-    }
-
-    install_dylint_tools_with_options(executor, &status, stderr, options)?;
-
-    if !quiet {
-        write_stderr_line(stderr, "Dylint tools installed successfully.");
-        write_stderr_line(stderr, "");
-    }
-    Ok(())
+    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
+        install_dylint_tools_with_options(executor, &status, stderr, options)
+    })
 }
 
 /// Ensures a Whitaker workspace is available.
