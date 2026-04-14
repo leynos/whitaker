@@ -58,8 +58,8 @@ After installation, run `whitaker --all` in any Rust project to lint it. Use
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
 Cargo-installed executable such as `dylint-link.exe` in
-`%USERPROFILE%\\.cargo\\bin` is located correctly and then verified with the
-same invocation-based probe without needing a separate wrapper or manual
+`%USERPROFILE%\.cargo\bin` is located correctly and then verified with the same
+invocation-based probe without needing a separate wrapper or manual
 environment-variable workaround.
 
 **Options:**

@@ -223,11 +223,14 @@ fn dylint_link_probe_toolchain() -> Option<String> {
 
 fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::PathBuf> {
     #[cfg(windows)]
-    let mut candidates = vec![directory.join(binary_name)];
+    let mut candidates = Vec::new();
     #[cfg(not(windows))]
     let candidates = vec![directory.join(binary_name)];
     #[cfg(windows)]
     {
+        if Path::new(binary_name).extension().is_some() {
+            candidates.push(directory.join(binary_name));
+        }
         let lowercase_name = binary_name.to_ascii_lowercase();
         candidates.extend(
             windows_path_extensions()
@@ -275,5 +278,7 @@ fn is_executable_file(path: &Path) -> bool {
     path.is_file()
 }
 
+#[cfg(test)]
+mod path_tests;
 #[cfg(test)]
 mod tests;

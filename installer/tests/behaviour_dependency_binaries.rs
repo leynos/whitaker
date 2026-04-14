@@ -3,6 +3,7 @@
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::path::PathBuf;
+use temp_env::with_var;
 use whitaker_installer::dependency_binaries::{
     DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
     required_dependency_binaries,
@@ -13,9 +14,10 @@ use whitaker_installer::deps::{
 };
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
+use whitaker_installer::test_support::env_test_guard;
 use whitaker_installer::test_utils::{
     StubDirs, StubExecutor,
-    dependency_binary_helpers::{ExpectedCallConfig, expected_calls, with_fake_binary_on_path},
+    dependency_binary_helpers::{ExpectedCallConfig, expected_calls, write_fake_binary},
 };
 
 enum RepositoryInstallerBehaviour {
@@ -33,14 +35,13 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         &self,
         dependency: &DependencyBinary,
         target: &TargetTriple,
-        _dirs: &dyn BaseDirs,
+        dirs: &dyn BaseDirs,
     ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
         match &self.behaviour {
-            RepositoryInstallerBehaviour::Success => Ok(PathBuf::from(format!(
-                "/tmp/bin/{}-{}",
-                dependency.package(),
-                target
-            ))),
+            RepositoryInstallerBehaviour::Success => dirs.bin_dir().map_or_else(
+                || Err(DependencyBinaryInstallError::MissingBinDir),
+                |bin_dir| Ok(bin_dir.join(format!("{}-{}", dependency.package(), target))),
+            ),
             RepositoryInstallerBehaviour::NotFound => Err(DependencyBinaryInstallError::NotFound {
                 url: format!(
                     "{}/releases/download/v{}/{}",
@@ -184,8 +185,10 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     } else {
         Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"))
     };
+    let bin_dir_temp = tempfile::tempdir().expect("bin dir tempdir should be created");
+    let bin_dir = bin_dir_temp.path().to_path_buf();
     let dirs = StubDirs {
-        bin_dir: Some(PathBuf::from("/tmp/bin")),
+        bin_dir: Some(bin_dir.clone()),
     };
     let run_install = || {
         install_dylint_tools_with_options(
@@ -202,7 +205,13 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     };
     world.install_result = Some(
         if tool == "dylint-link" && !world.expect_missing_dylint_link {
-            with_fake_binary_on_path("dylint-link", run_install)
+            let _guard = env_test_guard();
+            #[cfg(windows)]
+            let dylint_link_path = bin_dir.join("dylint-link.cmd");
+            #[cfg(not(windows))]
+            let dylint_link_path = bin_dir.join("dylint-link");
+            write_fake_binary(&dylint_link_path, true);
+            with_var("PATH", Some(&bin_dir), run_install)
         } else {
             run_install()
         },
