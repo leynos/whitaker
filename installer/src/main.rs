@@ -21,6 +21,8 @@ use whitaker_installer::deps::{
     CommandExecutor, DylintToolStatus, SystemCommandExecutor, check_dylint_tools,
     install_dylint_tools_with_output,
 };
+#[cfg(test)]
+use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -199,6 +201,33 @@ fn ensure_dylint_tools_with_install(
         write_stderr_line(stderr, "Installing required Dylint tools...");
     }
     install(&status, stderr)?;
+    if !quiet {
+        write_stderr_line(stderr, "Dylint tools installed successfully.");
+        write_stderr_line(stderr, "");
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+fn ensure_dylint_tools_with_options(
+    executor: &dyn CommandExecutor,
+    quiet: bool,
+    stderr: &mut dyn Write,
+    options: DependencyInstallOptions<'_>,
+) -> Result<()> {
+    let status = check_dylint_tools(executor);
+
+    if status.all_installed() {
+        return Ok(());
+    }
+
+    if !quiet {
+        write_stderr_line(stderr, "Installing required Dylint tools...");
+    }
+
+    install_dylint_tools_with_options(executor, &status, stderr, options)?;
+
     if !quiet {
         write_stderr_line(stderr, "Dylint tools installed successfully.");
         write_stderr_line(stderr, "");

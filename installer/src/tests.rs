@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::dependency_binaries::DependencyBinaryInstaller;
-use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
+use whitaker_installer::deps::DependencyInstallOptions;
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
 use whitaker_installer::test_utils::dependency_binary_helpers::{
@@ -113,10 +113,7 @@ fn ensure_dylint_tools_skips_install_when_installed() {
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&repository_installer, false);
-        let result =
-            ensure_dylint_tools_with_install(&executor, false, &mut stderr, |status, stderr| {
-                install_dylint_tools_with_options(&executor, status, stderr, options)
-            });
+        let result = ensure_dylint_tools_with_options(&executor, false, &mut stderr, options);
 
         assert!(result.is_ok());
         assert!(stderr.is_empty());
@@ -163,10 +160,7 @@ fn ensure_dylint_tools_installs_missing_tools(
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&repository_installer, quiet);
-        let result =
-            ensure_dylint_tools_with_install(&executor, quiet, &mut stderr, |status, stderr| {
-                install_dylint_tools_with_options(&executor, status, stderr, options)
-            });
+        let result = ensure_dylint_tools_with_options(&executor, quiet, &mut stderr, options);
 
         assert!(result.is_ok());
         let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
@@ -213,10 +207,7 @@ fn ensure_dylint_tools_propagates_install_failures() {
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&repository_installer, false);
-        let err =
-            ensure_dylint_tools_with_install(&executor, false, &mut stderr, |status, stderr| {
-                install_dylint_tools_with_options(&executor, status, stderr, options)
-            })
+        let err = ensure_dylint_tools_with_options(&executor, false, &mut stderr, options)
             .expect_err("expected install failure");
 
         assert!(matches!(
