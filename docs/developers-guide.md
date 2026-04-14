@@ -459,7 +459,7 @@ code checks for a resolvable `dylint-link` binary only after local
 artefact was used or when `dylint-link` was already present.
 
 The `dylint-link` verification in `installer/src/deps.rs` is implemented by
-five small private helpers:
+seven small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
   the install check can validate the exact path it found.
