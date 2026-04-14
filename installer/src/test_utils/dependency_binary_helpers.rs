@@ -1,9 +1,122 @@
 //! Test helpers for dependency binary installation tests.
 
 use crate::dependency_binaries::find_dependency_binary;
+#[cfg(any(test, feature = "test-support"))]
+use crate::dependency_binaries::{
+    DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
+};
+#[cfg(any(test, feature = "test-support"))]
+use crate::dirs::BaseDirs;
 use crate::error::Result;
+#[cfg(any(test, feature = "test-support"))]
+use crate::installer_packaging::TargetTriple;
+#[cfg(any(test, feature = "test-support"))]
+use crate::test_support::env_test_guard;
 use crate::test_utils::{ExpectedCall, failure_output, success_output};
+#[cfg(any(test, feature = "test-support"))]
+use std::fs;
+#[cfg(all(any(test, feature = "test-support"), unix))]
+use std::os::unix::fs::PermissionsExt;
+#[cfg(any(test, feature = "test-support"))]
+use std::path::{Path, PathBuf};
 use std::process::Output;
+
+/// Repository installer test double that always reports a missing archive.
+#[cfg(any(test, feature = "test-support"))]
+pub struct AlwaysNotFoundRepositoryInstaller;
+
+#[cfg(any(test, feature = "test-support"))]
+impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
+    fn install(
+        &self,
+        dependency: &DependencyBinary,
+        target: &TargetTriple,
+        _dirs: &dyn BaseDirs,
+    ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
+        Err(DependencyBinaryInstallError::NotFound {
+            url: format!(
+                "https://example.test/{}-{}-v{}.tgz",
+                dependency.package(),
+                target,
+                dependency.version()
+            ),
+        })
+    }
+}
+
+/// Writes a fake binary at `path` that exits successfully.
+#[cfg(any(test, feature = "test-support"))]
+pub fn write_fake_binary(path: &Path, is_executable: bool) {
+    write_fake_binary_with_status(path, is_executable, 0);
+}
+
+/// Writes a fake binary at `path` that exits with the supplied status code.
+#[cfg(any(test, feature = "test-support"))]
+pub fn write_fake_binary_with_status(path: &Path, is_executable: bool, exit_code: i32) {
+    fs::write(path, fake_binary_contents(exit_code)).expect("write fake binary");
+    #[cfg(unix)]
+    {
+        let mode = if is_executable { 0o755 } else { 0o644 };
+        let mut permissions = fs::metadata(path)
+            .expect("read fake binary metadata")
+            .permissions();
+        permissions.set_mode(mode);
+        fs::set_permissions(path, permissions).expect("set fake binary permissions");
+    }
+    #[cfg(not(unix))]
+    let _ = is_executable;
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
+    #[cfg(windows)]
+    {
+        format!("@echo off\r\nexit /b {exit_code}\r\n").into_bytes()
+    }
+    #[cfg(not(windows))]
+    {
+        format!("#!/bin/sh\nexit {exit_code}\n").into_bytes()
+    }
+}
+
+/// Runs a closure with `PATH` pointing at one or more fake directories.
+#[cfg(any(test, feature = "test-support"))]
+pub fn with_fake_path<T>(setup: impl FnOnce(&[PathBuf]), run: impl FnOnce() -> T) -> T {
+    let _guard = env_test_guard();
+    let temp_dirs = [
+        tempfile::tempdir().expect("create temp dir"),
+        tempfile::tempdir().expect("create temp dir"),
+    ];
+    let path_dirs = temp_dirs
+        .iter()
+        .map(|dir| dir.path().to_path_buf())
+        .collect::<Vec<_>>();
+    setup(&path_dirs);
+    let path = std::env::join_paths(path_dirs.iter().map(PathBuf::as_path))
+        .expect("join fake PATH directories");
+    temp_env::with_var("PATH", Some(path), run)
+}
+
+/// Runs a closure with `PATH` containing a fake executable in the first entry.
+#[cfg(any(test, feature = "test-support"))]
+pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+    with_fake_path(
+        |directories| write_fake_binary(&path_binary_location(&directories[0], binary_name), true),
+        run,
+    )
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
+    #[cfg(windows)]
+    {
+        directory.join(format!("{binary_name}.cmd"))
+    }
+    #[cfg(not(windows))]
+    {
+        directory.join(binary_name)
+    }
+}
 
 /// Configuration for generating expected calls in dependency binary tests.
 pub struct ExpectedCallConfig<'a> {
@@ -84,32 +197,28 @@ fn dependency_version(tool: &str) -> &'static str {
 }
 
 /// Creates an expected call for verifying repository installation.
-pub fn repository_verification_call(tool: &str, verification_fails: bool) -> ExpectedCall {
+pub fn repository_verification_call(tool: &str, verification_fails: bool) -> Option<ExpectedCall> {
     let result = if verification_fails {
         Ok(failure_output("still missing"))
     } else {
         Ok(success_output())
     };
     match tool {
-        "cargo-dylint" => ExpectedCall {
+        "cargo-dylint" => Some(ExpectedCall {
             cmd: "cargo",
             args: vec!["dylint", "--version"],
             result,
-        },
-        "dylint-link" => ExpectedCall {
-            cmd: "dylint-link",
-            args: vec!["--version"],
-            result,
-        },
+        }),
+        "dylint-link" => None,
         other => panic!("unexpected tool: {other}"),
     }
 }
 
 /// Returns the expected verification call for a given tool.
-fn tool_verification_check(tool: &str) -> ExpectedCall {
+fn tool_verification_check(tool: &str) -> Option<ExpectedCall> {
     match tool {
-        "cargo-dylint" => cargo_dylint_check(),
-        "dylint-link" => dylint_link_check(),
+        "cargo-dylint" => Some(cargo_dylint_check()),
+        "dylint-link" => None,
         other => panic!("unexpected tool: {other}"),
     }
 }
@@ -145,7 +254,7 @@ fn repo_aware_cargo_install(
 /// Builds the sequence of calls that follow the primary install attempt.
 fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
     if cfg.primary_succeeded {
-        return vec![tool_verification_check(&cfg.tool)];
+        return tool_verification_check(&cfg.tool).into_iter().collect();
     }
     if !cfg.use_binstall {
         return vec![];
@@ -158,7 +267,9 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
             cfg.has_repository_context,
             Ok(success_output()),
         );
-        return vec![cargo_call, tool_verification_check(&cfg.tool)];
+        let mut calls = vec![cargo_call];
+        calls.extend(tool_verification_check(&cfg.tool));
+        return calls;
     }
     // binstall failed and cargo install also fails
     if let Some(message) = cfg.cargo_install_failure.as_deref() {
@@ -185,7 +296,9 @@ fn source_install_fallback_calls(
     );
     let install_call = cargo_source_install(tool_static, version, result);
     if config.cargo_install_failure.is_none() {
-        vec![install_call, tool_verification_check(tool)]
+        let mut calls = vec![install_call];
+        calls.extend(tool_verification_check(tool));
+        calls
     } else {
         vec![install_call]
     }
@@ -253,7 +366,7 @@ pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<Expecte
     let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
     if config.should_verify_repository_install {
-        calls.push(repository_verification_call(
+        calls.extend(repository_verification_call(
             tool,
             config.is_repository_verification_failing,
         ));
@@ -280,24 +393,6 @@ pub fn cargo_dylint_check_with_result(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
         args: vec!["dylint", "--version"],
-        result,
-    }
-}
-
-/// Creates an expected call for verifying dylint-link installation.
-pub fn dylint_link_check() -> ExpectedCall {
-    ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
-        result: Ok(success_output()),
-    }
-}
-
-/// Creates an expected call for verifying dylint-link with a fixed result.
-pub fn dylint_link_check_with_result(result: Result<Output>) -> ExpectedCall {
-    ExpectedCall {
-        cmd: "dylint-link",
-        args: vec!["--version"],
         result,
     }
 }

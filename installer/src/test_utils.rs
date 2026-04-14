@@ -289,3 +289,5 @@ impl CommandExecutor for StubExecutor {
 /// Test helpers for dependency binary installation behaviour tests.
 #[cfg(any(test, feature = "test-support"))]
 pub mod dependency_binary_helpers;
+#[cfg(test)]
+mod dependency_binary_helpers_tests;

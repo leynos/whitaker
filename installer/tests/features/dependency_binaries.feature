@@ -79,3 +79,11 @@ Feature: Dependency binary installation
     Then the provenance contains "https://github.com/trailofbits/dylint"
     And the provenance contains "cargo-dylint"
     And the provenance contains "dylint-link"
+
+  Scenario: dylint-link remains unavailable after cargo install
+    Given the missing tool is "dylint-link"
+    And the repository installer fails with "not found"
+    And cargo binstall is unavailable
+    And dylint-link is missing from PATH after installation
+    When dependency installation runs
+    Then the install fails for "dylint-link" with message containing "still unavailable"

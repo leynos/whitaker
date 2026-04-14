@@ -3,6 +3,7 @@
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use std::path::PathBuf;
+use temp_env::with_var;
 use whitaker_installer::dependency_binaries::{
     DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
     required_dependency_binaries,
@@ -13,9 +14,10 @@ use whitaker_installer::deps::{
 };
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
+use whitaker_installer::test_support::env_test_guard;
 use whitaker_installer::test_utils::{
     StubDirs, StubExecutor,
-    dependency_binary_helpers::{ExpectedCallConfig, expected_calls},
+    dependency_binary_helpers::{ExpectedCallConfig, expected_calls, write_fake_binary},
 };
 
 enum RepositoryInstallerBehaviour {
@@ -33,14 +35,13 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         &self,
         dependency: &DependencyBinary,
         target: &TargetTriple,
-        _dirs: &dyn BaseDirs,
+        dirs: &dyn BaseDirs,
     ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
         match &self.behaviour {
-            RepositoryInstallerBehaviour::Success => Ok(PathBuf::from(format!(
-                "/tmp/bin/{}-{}",
-                dependency.package(),
-                target
-            ))),
+            RepositoryInstallerBehaviour::Success => dirs.bin_dir().map_or_else(
+                || Err(DependencyBinaryInstallError::MissingBinDir),
+                |bin_dir| Ok(bin_dir.join(format!("{}-{}", dependency.package(), target))),
+            ),
             RepositoryInstallerBehaviour::NotFound => Err(DependencyBinaryInstallError::NotFound {
                 url: format!(
                     "{}/releases/download/v{}/{}",
@@ -64,6 +65,7 @@ struct DependencyBinaryWorld {
     missing_tool: Option<String>,
     repository_behaviour: Option<RepositoryInstallerBehaviour>,
     should_repository_verification_fail: bool,
+    expect_missing_dylint_link: bool,
     is_binstall_available: bool,
     cargo_binstall_failure: Option<String>,
     cargo_install_failure: Option<String>,
@@ -104,6 +106,11 @@ fn given_repository_verification_failure(world: &mut DependencyBinaryWorld) {
     world.should_repository_verification_fail = true;
 }
 
+#[given("dylint-link is missing from PATH after installation")]
+fn given_missing_dylint_link_on_path(world: &mut DependencyBinaryWorld) {
+    world.expect_missing_dylint_link = true;
+}
+
 #[given("cargo binstall is available")]
 fn given_binstall_available(world: &mut DependencyBinaryWorld) {
     world.is_binstall_available = true;
@@ -136,12 +143,7 @@ fn given_manifest_loaded(world: &mut DependencyBinaryWorld) {
         .to_vec();
 }
 
-#[when("dependency installation runs")]
-fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
-    let tool = world
-        .missing_tool
-        .clone()
-        .expect("missing tool should be configured");
+fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecutor {
     let is_repository_asset_missing = matches!(
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::NotFound)
@@ -150,6 +152,27 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::Success)
     ) && !world.is_unsupported_target;
+    StubExecutor::new(expected_calls(
+        tool,
+        ExpectedCallConfig {
+            is_binstall_available: world.is_binstall_available,
+            has_repository_context: !world.is_unsupported_target,
+            is_repository_asset_missing,
+            should_verify_repository_install: expect_repository_verification,
+            is_repository_verification_failing: world.should_repository_verification_fail,
+            cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
+            cargo_install_failure: world.cargo_install_failure.as_deref(),
+        },
+    ))
+}
+
+#[when("dependency installation runs")]
+fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
+    let tool = world
+        .missing_tool
+        .clone()
+        .expect("missing tool should be configured");
+    let executor = build_stub_executor(world, &tool);
     let repository_installer = StubRepositoryInstaller {
         behaviour: world.repository_behaviour.take().unwrap_or(
             RepositoryInstallerBehaviour::Failure("missing repository".to_owned()),
@@ -160,38 +183,42 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
         dylint_link: tool != "dylint-link",
     };
 
-    let executor = StubExecutor::new(expected_calls(
-        &tool,
-        ExpectedCallConfig {
-            is_binstall_available: world.is_binstall_available,
-            has_repository_context: !world.is_unsupported_target,
-            is_repository_asset_missing,
-            should_verify_repository_install: expect_repository_verification,
-            is_repository_verification_failing: world.should_repository_verification_fail,
-            cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
-            cargo_install_failure: world.cargo_install_failure.as_deref(),
-        },
-    ));
-
     let target = if world.is_unsupported_target {
         None
     } else {
         Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"))
     };
+    let bin_dir_temp = tempfile::tempdir().expect("bin dir tempdir should be created");
+    let bin_dir = bin_dir_temp.path().to_path_buf();
     let dirs = StubDirs {
-        bin_dir: Some(PathBuf::from("/tmp/bin")),
+        bin_dir: Some(bin_dir.clone()),
     };
-    world.install_result = Some(install_dylint_tools_with_options(
-        &executor,
-        &status,
-        &mut world.stderr,
-        DependencyInstallOptions {
-            dirs: &dirs,
-            repository_installer: &repository_installer,
-            target,
-            quiet: false,
+    let run_install = || {
+        install_dylint_tools_with_options(
+            &executor,
+            &status,
+            &mut world.stderr,
+            DependencyInstallOptions {
+                dirs: &dirs,
+                repository_installer: &repository_installer,
+                target,
+                quiet: false,
+            },
+        )
+    };
+    world.install_result = Some(
+        if tool == "dylint-link" && !world.expect_missing_dylint_link {
+            let _guard = env_test_guard();
+            #[cfg(windows)]
+            let dylint_link_path = bin_dir.join("dylint-link.cmd");
+            #[cfg(not(windows))]
+            let dylint_link_path = bin_dir.join("dylint-link");
+            write_fake_binary(&dylint_link_path, true);
+            with_var("PATH", Some(&bin_dir), run_install)
+        } else {
+            run_install()
         },
-    ));
+    );
     executor.assert_finished();
 }
 
@@ -304,5 +331,10 @@ fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) {
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 9)]
 fn scenario_provenance_lists_both_dependencies(world: DependencyBinaryWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/dependency_binaries.feature", index = 10)]
+fn scenario_dylint_link_missing_after_install_fails(world: DependencyBinaryWorld) {
     let _ = world;
 }

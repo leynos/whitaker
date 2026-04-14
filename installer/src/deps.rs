@@ -11,6 +11,7 @@ use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
 use std::io;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Output};
 
 mod install;
@@ -163,6 +164,12 @@ pub fn install_dylint_tools_with_options(
 }
 
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
+    if tool == &DYLINT_LINK_TOOL {
+        return match find_binary_on_path(tool.command) {
+            Some(binary_path) => dylint_link_probe_succeeds(&binary_path),
+            None => false,
+        };
+    }
     command_succeeds(executor, tool.command, tool.args)
 }
 
@@ -170,5 +177,108 @@ fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
     command_succeeds(executor, "cargo", &["binstall", "--version"])
 }
 
+#[cfg(test)]
+fn is_binary_on_path(binary_name: &str) -> bool {
+    find_binary_on_path(binary_name).is_some()
+}
+
+fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+
+    std::env::split_paths(&path_var)
+        .find_map(|directory| find_binary_in_directory(&directory, binary_name))
+}
+
+fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::path::PathBuf> {
+    binary_candidates(directory, binary_name)
+        .into_iter()
+        .find(|candidate| is_executable_file(candidate))
+}
+
+fn dylint_link_probe_succeeds(binary_path: &Path) -> bool {
+    let mut command = Command::new(binary_path);
+    command.arg("--help");
+
+    if let Some(toolchain) = dylint_link_probe_toolchain() {
+        command.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
+
+    command.output().is_ok_and(|output| output.status.success())
+}
+
+fn dylint_link_probe_toolchain() -> Option<String> {
+    std::env::var("RUSTUP_TOOLCHAIN")
+        .ok()
+        .filter(|toolchain| !toolchain.trim().is_empty())
+        .or_else(|| {
+            host_target().map(|target| {
+                // `dylint-link` reads `RUSTUP_TOOLCHAIN` before it inspects CLI
+                // arguments, so the probe synthesizes a stable host toolchain
+                // when the caller did not provide one.
+                format!("stable-{}", target.as_str())
+            })
+        })
+}
+
+fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::PathBuf> {
+    #[cfg(windows)]
+    let mut candidates = Vec::new();
+    #[cfg(not(windows))]
+    let candidates = vec![directory.join(binary_name)];
+    #[cfg(windows)]
+    {
+        if Path::new(binary_name).extension().is_some() {
+            candidates.push(directory.join(binary_name));
+        } else {
+            let lowercase_name = binary_name.to_ascii_lowercase();
+            candidates.extend(
+                windows_path_extensions()
+                    .into_iter()
+                    .filter(|extension| !lowercase_name.ends_with(&extension.to_ascii_lowercase()))
+                    .map(|extension| directory.join(format!("{binary_name}{extension}"))),
+            );
+        }
+    }
+    candidates
+}
+
+#[cfg(windows)]
+fn windows_path_extensions() -> Vec<String> {
+    let path_ext = std::env::var_os("PATHEXT")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| std::ffi::OsString::from(".COM;.EXE;.BAT;.CMD"));
+
+    path_ext
+        .to_string_lossy()
+        .split(';')
+        .filter_map(|extension| {
+            let trimmed = extension.trim();
+            if trimmed.is_empty() {
+                None
+            } else if trimmed.starts_with('.') {
+                Some(trimmed.to_owned())
+            } else {
+                Some(format!(".{trimmed}"))
+            }
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(test)]
+mod path_tests;
 #[cfg(test)]
 mod tests;

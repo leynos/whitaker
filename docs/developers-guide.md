@@ -409,7 +409,12 @@ The dependency-install path is split into focused modules under
 `installer/src/deps.rs` drives the high-level fallback order:
 
 1. Attempt the repository-hosted dependency archive for the current target.
-2. Verify the installed tool is now runnable.
+2. Verify the installed tool is now usable. `cargo-dylint` is checked by
+   running `cargo dylint --version`, while `dylint-link` is checked by
+   resolving the executable on `PATH` and invoking it with `--help`. The probe
+   synthesizes `RUSTUP_TOOLCHAIN` from the host target when the environment
+   variable is unset, because upstream reads that variable before processing
+   CLI flags.
 3. If the repository download reports `NotFound`, skip `cargo binstall` and
    fall back directly to `cargo install`.
 4. For other repository failures, fall back to `cargo binstall` when available
@@ -449,9 +454,52 @@ latest upstream release.
 `update_status_after_install()` delegates the local-install probe decision to
 `should_refresh_companions()`. That helper returns `true` only when the install
 outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
-code probes for `dylint-link` only after local `cargo-dylint` installs and does
-not re-check it when the pre-built repository artefact was used or when
-`dylint-link` was already present.
+code checks for a resolvable `dylint-link` binary only after local
+`cargo-dylint` installs and does not re-check it when the pre-built repository
+artefact was used or when `dylint-link` was already present.
+
+The `dylint-link` verification in `installer/src/deps.rs` is implemented by
+seven small private helpers:
+
+- `find_binary_on_path(binary_name)` returns the first executable candidate so
+  the install check can validate the exact path it found.
+- `find_binary_in_directory(directory, binary_name)` performs the per-directory
+  search that `find_binary_on_path()` uses while walking `PATH`.
+- `binary_candidates(directory, binary_name)` builds the ordered set of
+  candidate paths that each directory contributes to the lookup.
+- `dylint_link_probe_toolchain()` preserves an existing `RUSTUP_TOOLCHAIN`
+  value or synthesizes `stable-<host-target>` so `dylint-link --help` can run
+  in the same environments where `dylint-link --version` exits early.
+- `dylint_link_probe_succeeds(path)` runs the resolved binary with `--help` and
+  requires a successful exit status before Whitaker treats the tool as
+  installed.
+- `is_executable_file(path)` applies the platform-specific file test:
+  executable-bit plus regular-file checks on Unix, and `path.is_file()` on
+  non-Unix targets where the executable suffix carries the meaning.
+- `windows_path_extensions()` normalizes `PATHEXT` on Windows so
+  `binary_candidates()` can expand extensionless names the same way the shell
+  does.
+
+These key helpers are covered by direct unit tests in
+`installer/src/deps/path_tests.rs` for missing PATH values, empty PATH values,
+multiple PATH directories, non-executable Unix files, executable Unix files,
+broken PATH shims, and Windows `PATHEXT` resolution via both direct helper
+tests and `check_dylint_tools()`.
+
+Installer PATH-fixture helpers now live in
+`installer/src/test_utils/dependency_binary_helpers.rs` instead of being
+duplicated across multiple test modules. The key helpers are:
+
+- `with_fake_binary_on_path(binary_name, run)`, which creates a temporary PATH
+  entry containing one executable and runs the closure under `env_test_guard()`.
+- `with_fake_path(setup, run)`, which provides two temporary PATH directories
+  for tests that need to control PATH ordering or place binaries in later
+  entries.
+- `write_fake_binary(path, is_executable)`, which writes a fake binary and, on
+  Unix, sets executable permissions explicitly for positive and negative tests.
+- `AlwaysNotFoundRepositoryInstaller`, a repository-installer test double used
+  by `installer/src/tests.rs` to force the direct Cargo fallback path without
+  network access.
 
 ### CLI tool usage
 
