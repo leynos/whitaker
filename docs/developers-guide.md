@@ -24,6 +24,51 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
+### Integration tests for lint exclusion behaviour
+
+The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
+the `excluded_crates` configuration. These integration tests invoke
+`cargo dylint` in a subprocess, so they exercise the full lint-loading and
+configuration path, rather than only unit-level helpers.
+
+The fixtures live under `crates/no_std_fs_operations/tests/fixtures/` as two
+small crates: `excluded_project`, which configures the exclusion, and
+`non_excluded_project`, which leaves the lint unexcluded. Each fixture
+`Cargo.toml` includes an empty `[workspace]` table so Cargo treats the fixture
+as its own workspace root. This prevents Cargo from resolving upwards to the
+enclosing Whitaker workspace and inheriting unrelated configuration.
+
+The harness centres on `run_cargo_dylint`, which executes
+`cargo dylint --all -- --message-format json` with `DYLINT_LIBRARY_PATH` set to
+the built lint library and `DYLINT_RUSTFLAGS=-D warnings` set to deny warnings
+during the run. `diagnostic_count` then parses the JSON message stream with
+`cargo_metadata::Message` and counts only `CompilerMessage` entries whose
+`code.code` is `no_std_fs_operations`, which keeps the assertions tied to the
+lint's structured diagnostics instead of brittle text matching.
+
+The tests are annotated with `#[serial]` from `serial_test`, and the
+repository-level nextest contract also requires them to match the
+`serial-dylint-ui` test group in `.config/nextest.toml` when they are exercised
+through `make test`. Both the attribute and the repo-level group are required
+for correct serialized execution because nextest runs each test in a separate
+process, so the in-process `#[serial]` mutex alone is not sufficient. They are
+also marked `#[ignore]` by default because they depend on external tooling and
+a buildable workspace. Before running them, install `cargo-dylint` and
+`dylint-link`. The harness calls `build_lint_library()` before running
+`cargo dylint`, so the workspace build is handled automatically. Run them with
+one of the following commands:
+
+```sh
+cargo test -p no_std_fs_operations --test integration_exclusion -- --ignored
+cargo nextest run -p no_std_fs_operations --test integration_exclusion --run-ignored ignored-only
+```
+
+The parameterized `#[rstest]` case
+`exclusion_behaviour_matches_fixture_configuration` covers both fixtures. For
+each case, it asserts the subprocess exit status and the `no_std_fs_operations`
+diagnostic count, so the test verifies both the success path for excluded
+crates and the failure path for non-excluded crates.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests
@@ -462,7 +507,7 @@ The `dylint-link` verification in `installer/src/deps.rs` is implemented by
 seven small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
-  the install check can validate the exact path it found.
+  the installation check can validate the exact path it found.
 - `find_binary_in_directory(directory, binary_name)` performs the per-directory
   search that `find_binary_on_path()` uses while walking `PATH`.
 - `binary_candidates(directory, binary_name)` builds the ordered set of

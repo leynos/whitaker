@@ -1,12 +1,12 @@
 //! Tests for the installer CLI entrypoint.
 
 use super::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::path::PathBuf;
 use std::time::Duration;
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::dependency_binaries::DependencyBinaryInstaller;
-use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
+use whitaker_installer::deps::DependencyInstallOptions;
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
 use whitaker_installer::test_utils::dependency_binary_helpers::{
@@ -15,19 +15,24 @@ use whitaker_installer::test_utils::dependency_binary_helpers::{
 use whitaker_installer::test_utils::*;
 
 fn dependency_install_options<'a>(
+    dirs: &'a TestBaseDirs,
     repository_installer: &'a dyn DependencyBinaryInstaller,
     quiet: bool,
 ) -> DependencyInstallOptions<'a> {
-    let dirs = TestBaseDirs {
-        home_dir: Some(PathBuf::from("/tmp")),
-        bin_dir: Some(PathBuf::from("/tmp/bin")),
-        data_dir: Some(PathBuf::from("/tmp")),
-    };
     DependencyInstallOptions {
-        dirs: Box::leak(Box::new(dirs)),
+        dirs,
         repository_installer,
         target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")),
         quiet,
+    }
+}
+
+#[fixture]
+fn test_base_dirs() -> TestBaseDirs {
+    TestBaseDirs {
+        home_dir: Some(PathBuf::from("/tmp")),
+        bin_dir: Some(PathBuf::from("/tmp/bin")),
+        data_dir: Some(PathBuf::from("/tmp")),
     }
 }
 
@@ -101,8 +106,8 @@ fn resolve_requested_crates_rejects_unknown_lints() {
     ));
 }
 
-#[test]
-fn ensure_dylint_tools_skips_install_when_installed() {
+#[rstest]
+fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs) {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![ExpectedCall {
             cmd: "cargo",
@@ -112,11 +117,8 @@ fn ensure_dylint_tools_skips_install_when_installed() {
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&repository_installer, false);
-        let result =
-            ensure_dylint_tools_with_install(&executor, false, &mut stderr, |status, stderr| {
-                install_dylint_tools_with_options(&executor, status, stderr, options)
-            });
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
 
         assert!(result.is_ok());
         assert!(stderr.is_empty());
@@ -132,6 +134,7 @@ fn ensure_dylint_tools_skips_install_when_installed() {
 )]
 #[case::quiet_suppresses_output(true, "", "")]
 fn ensure_dylint_tools_installs_missing_tools(
+    test_base_dirs: TestBaseDirs,
     #[case] quiet: bool,
     #[case] expected_start: &str,
     #[case] expected_end: &str,
@@ -162,11 +165,8 @@ fn ensure_dylint_tools_installs_missing_tools(
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&repository_installer, quiet);
-        let result =
-            ensure_dylint_tools_with_install(&executor, quiet, &mut stderr, |status, stderr| {
-                install_dylint_tools_with_options(&executor, status, stderr, options)
-            });
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet);
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
 
         assert!(result.is_ok());
         let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
@@ -189,8 +189,8 @@ fn ensure_dylint_tools_installs_missing_tools(
     });
 }
 
-#[test]
-fn ensure_dylint_tools_propagates_install_failures() {
+#[rstest]
+fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs) {
     with_fake_binary_on_path("dylint-link", || {
         let executor = StubExecutor::new(vec![
             ExpectedCall {
@@ -212,11 +212,8 @@ fn ensure_dylint_tools_propagates_install_failures() {
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&repository_installer, false);
-        let err =
-            ensure_dylint_tools_with_install(&executor, false, &mut stderr, |status, stderr| {
-                install_dylint_tools_with_options(&executor, status, stderr, options)
-            })
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
+        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, options)
             .expect_err("expected install failure");
 
         assert!(matches!(

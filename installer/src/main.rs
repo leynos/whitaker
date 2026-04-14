@@ -7,9 +7,11 @@
 mod install_flow;
 mod staged_suite;
 
+#[cfg(test)]
+use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
     MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
-    try_prebuilt_installation, write_install_metrics,
+    ensure_dylint_tools_with_executor, try_prebuilt_installation, write_install_metrics,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
@@ -17,10 +19,7 @@ use std::io::Write;
 use std::time::Instant;
 use whitaker_installer::cli::{Cli, Command, InstallArgs};
 use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    CommandExecutor, DylintToolStatus, SystemCommandExecutor, check_dylint_tools,
-    install_dylint_tools_with_output,
-};
+use whitaker_installer::deps::SystemCommandExecutor;
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
@@ -180,30 +179,7 @@ fn determine_dry_run_target_dir(
 /// Checks for and installs Dylint tools if missing.
 fn ensure_dylint_tools(quiet: bool, stderr: &mut dyn Write) -> Result<()> {
     let executor = SystemCommandExecutor;
-    ensure_dylint_tools_with_install(&executor, quiet, stderr, |status, stderr| {
-        install_dylint_tools_with_output(&executor, status, quiet, stderr)
-    })
-}
-
-fn ensure_dylint_tools_with_install(
-    executor: &dyn CommandExecutor,
-    quiet: bool,
-    stderr: &mut dyn Write,
-    install: impl FnOnce(&DylintToolStatus, &mut dyn Write) -> Result<()>,
-) -> Result<()> {
-    let status = check_dylint_tools(executor);
-    if status.all_installed() {
-        return Ok(());
-    }
-    if !quiet {
-        write_stderr_line(stderr, "Installing required Dylint tools...");
-    }
-    install(&status, stderr)?;
-    if !quiet {
-        write_stderr_line(stderr, "Dylint tools installed successfully.");
-        write_stderr_line(stderr, "");
-    }
-    Ok(())
+    ensure_dylint_tools_with_executor(&executor, quiet, stderr)
 }
 
 /// Ensures a Whitaker workspace is available.
