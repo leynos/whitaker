@@ -46,14 +46,22 @@ during the run. `diagnostic_count` then parses the JSON message stream with
 `code.code` is `no_std_fs_operations`, which keeps the assertions tied to the
 lint's structured diagnostics instead of brittle text matching.
 
-The tests are annotated with `#[serial]` from `serial_test` so concurrent
-subprocess runs do not interfere with one another. They are also marked
-`#[ignore]` by default because they depend on external tooling and a buildable
-workspace. Before running them, install `cargo-dylint` and `dylint-link`. The
-harness calls `build_lint_library()` before running `cargo dylint`, so the
-workspace build step is handled automatically. Run them with
-`cargo test -- --ignored`, or the equivalent nextest invocation with
-`--ignored`.
+The tests are annotated with `#[serial]` from `serial_test`, and the
+repository-level nextest contract also requires them to match the
+`serial-dylint-ui` test group in `.config/nextest.toml` when they are exercised
+through `make test`. Both the attribute and the repo-level group are required
+for correct serialized execution because nextest runs each test in a separate
+process, so the in-process `#[serial]` mutex alone is not sufficient. They are
+also marked `#[ignore]` by default because they depend on external tooling and
+a buildable workspace. Before running them, install `cargo-dylint` and
+`dylint-link`. The harness calls `build_lint_library()` before running
+`cargo dylint`, so the workspace build is handled automatically. Run them with
+one of the following commands:
+
+```sh
+cargo test -p no_std_fs_operations --test integration_exclusion -- --ignored
+cargo nextest run -p no_std_fs_operations --test integration_exclusion --run-ignored ignored-only
+```
 
 The parameterized `#[rstest]` case
 `exclusion_behaviour_matches_fixture_configuration` covers both fixtures. For

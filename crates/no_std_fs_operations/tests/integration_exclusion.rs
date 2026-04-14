@@ -196,29 +196,47 @@ fn lint_library_path() -> PathBuf {
     LINT_LIBRARY_PATH.get_or_init(build_lint_library).clone()
 }
 
+struct Expectation {
+    should_emit_diagnostics: bool,
+    should_succeed: bool,
+}
+
 #[rstest]
-#[case("excluded_project", false, true)]
-#[case("non_excluded_project", true, false)]
+#[case(
+    "excluded_project",
+    Expectation {
+        should_emit_diagnostics: false,
+        should_succeed: true,
+    }
+)]
+#[case(
+    "non_excluded_project",
+    Expectation {
+        should_emit_diagnostics: true,
+        should_succeed: false,
+    }
+)]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
 fn exclusion_behaviour_matches_fixture_configuration(
     lint_library_path: PathBuf,
     #[case] fixture: &str,
-    #[case] expect_diagnostics: bool,
-    #[case] expected_success: bool,
+    #[case] expectation: Expectation,
 ) {
+    let should_emit_diagnostics = expectation.should_emit_diagnostics;
+    let should_succeed = expectation.should_succeed;
     let fixture_dir = fixture_path(fixture);
 
     let result = run_cargo_dylint(&fixture_dir, &lint_library_path);
     let count = diagnostic_count(&result.stdout);
 
     assert!(
-        result.is_success == expected_success,
-        "fixture `{fixture}` should return success={expected_success}, but stderr was:\n{}",
+        result.is_success == should_succeed,
+        "fixture `{fixture}` should return success={should_succeed}, but stderr was:\n{}",
         result.stderr
     );
 
-    if expect_diagnostics {
+    if should_emit_diagnostics {
         assert!(
             count > 0,
             "fixture `{fixture}` should emit `no_std_fs_operations` diagnostics, but stderr was:\n{}",
