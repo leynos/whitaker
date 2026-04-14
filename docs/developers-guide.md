@@ -28,7 +28,7 @@ This executes unit, behaviour, and UI harness tests. The shared target enables
 
 The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
 the `excluded_crates` configuration. These integration tests invoke
-`cargo dylint` in a subprocess so they exercise the full lint-loading and
+`cargo dylint` in a subprocess, so they exercise the full lint-loading and
 configuration path, rather than only unit-level helpers.
 
 The fixtures live under `crates/no_std_fs_operations/tests/fixtures/` as two
