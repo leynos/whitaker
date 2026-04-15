@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 002: formal proof strategy for the clone detector pipeline
+# Architectural decision record (ADR) 003: formal proof strategy for the clone detector pipeline
 
 ## Status
 

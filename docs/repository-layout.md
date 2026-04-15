@@ -22,7 +22,7 @@ Table: Top-level repository layout.
 | `.cargo/`    | Cargo configuration shared across the workspace.                                                                                      |
 | `.config/`   | Project configuration such as the nextest profile and test filters.                                                                   |
 | `.github/`   | Continuous Integration (CI), release, and automation workflows.                                                                       |
-| `common/`    | Shared analysis, diagnostics, localization, decomposition, and test-support code used across multiple lint crates.                    |
+| `common/`    | Shared analysis, diagnostics, localisation, decomposition, and test-support code used across multiple lint crates.                    |
 | `crates/`    | Individual lint crates, selected vendored `rustc_*` compatibility crates, and support crates such as clone-analysis and SARIF output. |
 | `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                        |
 | `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                              |

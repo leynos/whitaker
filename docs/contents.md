@@ -23,8 +23,9 @@
 
 - [Whitaker Dylint suite design](whitaker-dylint-suite-design.md) explains the
   architecture and rationale behind the core lint suite.
-- [Whitaker CLI design](whitaker-cli-design.md) describes the command-line
-  surface and design choices for installer and operator workflows.
+- [Whitaker command-line interface (CLI) design](whitaker-cli-design.md)
+  describes the command-line surface and design choices for installer and
+  operator workflows.
 - [Whitaker clone detector design](whitaker-clone-detector-design.md)
   documents the clone detector architecture, data flow, and supporting
   reasoning.
@@ -33,8 +34,9 @@
 
 ## User-facing and technical reference material
 
-- [Rstest BDD user's guide](rstest-bdd-users-guide.md) explains how to use
-  `rstest-bdd` effectively in Whitaker-oriented Rust test suites.
+- [Rstest Behaviour-Driven Development (BDD) user's guide](rstest-bdd-users-guide.md)
+  explains how to use `rstest-bdd` effectively in Whitaker-oriented Rust test
+  suites.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md)
   explains fixture-oriented testing patterns used throughout the repository.
 - [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md)
@@ -57,7 +59,7 @@
 - [Architectural decision record (ADR) 002: Dylint `expect` attribute macro](adr-002-dylint-expect-attribute-macro.md)
   records the decision and migration guidance for the `#[expect(...)]`
   attribute-macro approach.
-- [Architectural decision record (ADR) 002: formal proof strategy for clone detector pipeline](adr-002-formal-proof-strategy-for-clone-detector-pipeline.md)
+- [Architectural decision record (ADR) 003: formal proof strategy for clone detector pipeline](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md)
   records the formal verification direction for the clone detector pipeline and
   its proof boundaries.
 

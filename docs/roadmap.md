@@ -345,24 +345,24 @@
   (Run 0). Requires 7.1.1.
 - [ ] 7.2.4. Add sidecar proof workflows and Makefile targets for clone-detector
   Verus and Kani checks. Requires 7.2.2. See
-  [ADR 002](adr-002-formal-proof-strategy-for-clone-detector-pipeline.md).
+  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md).
 - [ ] 7.2.5. Use Verus to prove `LshConfig::new` rejects zero `bands` and
   `rows`, and enforces `bands * rows == MINHASH_SIZE`. Requires 7.2.4. See
-  [ADR 002](adr-002-formal-proof-strategy-for-clone-detector-pipeline.md) and
+  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
 - [ ] 7.2.6. Use Verus to prove `CandidatePair::new` canonicalizes fragment
   ordering and suppresses self-pairs. Requires 7.2.4. See
-  [ADR 002](adr-002-formal-proof-strategy-for-clone-detector-pipeline.md) and
+  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
 - [ ] 7.2.7. Use Kani to verify bounded `MinHasher::sketch` invariants,
   including deterministic output, duplicate-hash insensitivity, and empty-input
   failure. Requires 7.2.4. See
-  [ADR 002](adr-002-formal-proof-strategy-for-clone-detector-pipeline.md) and
+  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
 - [ ] 7.2.8. Use Kani to verify bounded `LshIndex` invariants, including no
   self-pairs, canonical pair ordering, repeated-band deduplication, and
   insertion-order independence. Requires 7.2.4. See
-  [ADR 002](adr-002-formal-proof-strategy-for-clone-detector-pipeline.md) and
+  [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
 
 ### 7.3. AST refinement (Type-3)
