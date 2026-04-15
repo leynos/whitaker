@@ -21,6 +21,22 @@ checker". It reports observable, mechanically defensible phenomena:
 This phase concerns **value clones**, not Whitaker's separate **code clone
 detector** pipeline.
 
+## At a glance
+
+For readers skimming the design, the three proposed lints differ mainly in what
+signal they treat as strongest evidence:
+
+- `clone_only_used_by_borrow`: starts from a concrete clone expression and
+  asks whether every observed use is read-only borrowing or copy-like access.
+- `owned_param_causes_clone`: starts from repeated call-site clone pressure and
+  asks whether a same-crate by-value parameter is only read by the callee.
+- `local_shared_ownership`: starts from a locally created shared-ownership or
+  interior-mutability wrapper and asks whether it ever escapes or serves a real
+  API-imposed boundary.
+
+In short, the first lint is clone-centric, the second is signature-centric, and
+the third is wrapper-centric.
+
 ## Why this phase belongs in Whitaker
 
 Whitaker's original core suite established its house style around readable
@@ -29,8 +45,7 @@ avoidance. The project already ships shared Dylint infrastructure, per-lint
 `cdylib` crates, localized diagnostics, and UI-test harness helpers, and its
 roadmap has expanded into deeper maintainability analyses such as Bumpy Road,
 brain-type and brain-trait lints, the code-clone detector pipeline, and
-upcoming `rstest` hygiene
-work.[^whitaker-readme][^whitaker-design][^whitaker-roadmap]
+upcoming `rstest` hygiene work.[^1][^2][^3]
 
 That leaves a conspicuous Rust-specific gap: **ownership shape**. In Rust,
 otherwise straightforward code often acquires unnecessary clones, `Rc` or
@@ -53,7 +68,7 @@ Whitaker should not duplicate existing Clippy coverage. Clippy already detects
 several local ownership smells, including `redundant_clone`,
 `unnecessary_to_owned`, `needless_pass_by_value`, `clone_on_ref_ptr`,
 `rc_buffer`, `redundant_allocation`, and
-`arc_with_non_send_sync`.[^clippy-redundant-clone][^clippy-unnecessary-to-owned][^clippy-needless-pass-by-value][^clippy-clone-on-ref-ptr][^clippy-rc-buffer][^clippy-redundant-allocation][^clippy-arc-non-send-sync]
+`arc_with_non_send_sync`.[^4][^5][^6][^7][^8][^9][^10]
 
 Whitaker's contribution should therefore be narrower and more structural:
 
@@ -105,7 +120,7 @@ diagnostics accordingly.
 The suite should follow Whitaker's existing design patterns: one lint per
 crate, shared diagnostics and localization helpers in `common`, deterministic
 data structures, UI coverage, and configurable rollout from experimental to
-standard.[^whitaker-design][^brain-trust-design][^whitaker-roadmap-rstest]
+standard.[^2][^11][^12]
 
 ### 5. Start with local, crate-contained analysis
 
@@ -117,7 +132,7 @@ external API boundaries provide enough signal for a valuable first phase.
 
 This work should land in the roadmap as **Phase 9. Ownership shape lints**. The
 current roadmap already extends through Phase 8, so Phase 9 fits the sequence
-cleanly.[^whitaker-roadmap]
+cleanly.[^3]
 
 ## Lint suite overview
 
@@ -178,7 +193,7 @@ imply a new compiler lint group on day one.
 The Servo `servo-shot` example is a useful calibration case because, at a
 glance, it contains exactly the kinds of patterns an overzealous ownership lint
 would attack: `Rc` handles, `.clone()` on `Rc`, `Cell` fields, and an
-`Rc<Cell<bool>>` captured by a callback.[^servo-shot-main]
+`Rc<Cell<bool>>` captured by a callback.[^13]
 
 A closer look shows that most of this shape is **API-induced rather than
 incidental**:
@@ -191,8 +206,7 @@ incidental**:
 - `WebView` itself is a handle backed by `Rc<RefCell<_>>`.
 
 Those are precisely the kinds of external constraints that the lint suite must
-classify as suppressing
-evidence.[^servo-webview-builder][^servo-webview][^servo-webview-delegate][^servo-webview-api]
+classify as suppressing evidence.[^14][^15][^16][^17]
 
 Concretely, the following shapes should not trigger:
 
@@ -214,14 +228,14 @@ Whitaker already establishes the right implementation pattern:
 - shared diagnostics and localization live in `common`;
 - human-facing strings go through Fluent bundles with stable message slugs; and
 - lint logic can rely on late passes with type information, while more
-  specialised flow-sensitive checks may use MIR where
-  necessary.[^whitaker-design-lints][^whitaker-i18n][^rustc-lints]
+  specialized flow-sensitive checks may use the Rust compiler's Mid-level
+  Intermediate Representation (MIR) where necessary.[^18][^19][^20]
 
 This phase should follow the same split used by the brain-trust work:
 
 - **pure, compiler-independent models and evaluation logic** in `common`; and
-- **HIR and MIR walkers and rustc-private integration** in the lint
-  crates.[^brain-trust-design]
+- **High-level Intermediate Representation (HIR) and MIR walkers plus
+  rustc-private integration** in the lint crates.[^11]
 
 ### Proposed crate and module layout
 
@@ -286,7 +300,7 @@ pub enum FixConfidence {
 The shared module should also define small, deterministic summaries such as
 `CloneUseSummary`, `OwnedParamPressure`, and `SharedOwnershipSummary`. As with
 Whitaker's brain-trust helpers, prefer `BTreeMap` and `BTreeSet` for
-deterministic iteration and snapshot stability.[^brain-trust-design]
+deterministic iteration and snapshot stability.[^11]
 
 For screen readers: The following class diagram shows the shared ownership
 shape enums, summary records, and evaluation entry points. It highlights how
@@ -396,8 +410,7 @@ The lints should resolve functions, methods, and wrapper constructors by
 **resolved `DefId` paths**, not by source text snippets. Whitaker already uses
 `tcx.def_path_str(def_id)` plus a simple path parser in `no_std_fs_operations`;
 the ownership suite should adopt the same technique for `Clone`, `ToOwned`,
-`Rc`, `Arc`, `Cell`, `RefCell`, `Mutex`, and `RwLock`
-classifiers.[^whitaker-def-path]
+`Rc`, `Arc`, `Cell`, `RefCell`, `Mutex`, and `RwLock` classifiers.[^21]
 
 ### HIR prefilter, MIR confirmation
 
@@ -406,22 +419,22 @@ The suite should use a two-stage approach:
 1. **HIR prefilter** to cheaply find candidate clone expressions, candidate
    wrapper constructors, local call-site clone pressure, and syntactic origins
    such as "simple place expression" versus "arbitrary temporary".
-2. **MIR confirmation** to classify uses and escapes conservatively enough that
-   diagnostics remain credible.
+2. **MIR confirmation** to classify uses and escapes conservatively enough
+   that diagnostics remain credible.
 
 This matches the problem domain. Late lints run after analysis with full type
 information, and Rust's lint infrastructure explicitly supports both late
 passes and MIR-based checks for cases where flow-sensitive facts
-matter.[^rustc-lints][^rustc-mir]
+matter.[^20][^22]
 
 ## Lint 1: `clone_only_used_by_borrow`
 
-### `owned_param_causes_clone` intent
+### `clone_only_used_by_borrow` intent
 
 Detect clones whose resulting value is only observed through immutable borrows
 or `&self` method calls before being dropped.
 
-### `owned_param_causes_clone` detection model
+### `clone_only_used_by_borrow` detection model
 
 A candidate arises from one of the following operations:
 
@@ -490,7 +503,7 @@ consume(tmp);
 s.push('!');
 ```
 
-### `owned_param_causes_clone` diagnostics
+### `clone_only_used_by_borrow` diagnostics
 
 Primary message:
 
@@ -513,7 +526,7 @@ Machine-applicable suggestions should be limited to:
 
 More complex cases should remain diagnostic-only.
 
-### `owned_param_causes_clone` false-positive controls
+### `clone_only_used_by_borrow` false-positive controls
 
 Suppress when:
 
@@ -526,7 +539,7 @@ Suppress when:
 
 ## Lint 2: `owned_param_causes_clone`
 
-### `local_shared_ownership` intent
+### `owned_param_causes_clone` intent
 
 Detect local, same-crate functions or methods whose by-value parameter shapes
 are creating clone pressure in real call sites even though the callee only
@@ -536,7 +549,7 @@ This lint is the suite's main product differentiator. It turns "this parameter
 could be a reference" into "this parameter is *currently causing callers to
 allocate or clone*".
 
-### `local_shared_ownership` detection model
+### `owned_param_causes_clone` detection model
 
 The lint runs in two passes.
 
@@ -557,7 +570,7 @@ Each candidate stores:
 - source place kind; and
 - whether the call occurs in a macro expansion.
 
-#### Pass B: summarise callee parameter usage
+#### Pass B: summarize callee parameter usage
 
 For each candidate callee parameter, classify the parameter as one of:
 
@@ -584,7 +597,7 @@ Suppress by default when the callee is:
 
 The exported-API suppression mirrors Clippy's existing
 `avoid-breaking-exported-api` pattern for several ownership-related
-lints.[^clippy-needless-pass-by-value][^clippy-redundant-allocation]
+lints.[^6][^9]
 
 ### Exact borrow mappings
 
@@ -603,7 +616,7 @@ signature rewrite.
 For screen readers: The following flow diagram shows the two-pass
 `owned_param_causes_clone` analysis. The lint first scans call expressions to
 record clone pressure for local callees, then groups those candidates by
-parameter, summarises each parameter's observed use, applies exemptions, and
+parameter, summarizes each parameter's observed use, applies exemptions, and
 emits a diagnostic only when the evaluation still indicates read-only clone
 pressure.
 
@@ -647,7 +660,7 @@ graph TD
 <!-- markdownlint-enable MD013 -->
 
 *Figure: `owned_param_causes_clone` flow from call-site clone-pressure
-collection through parameter summarisation, exemption handling, evaluation, and
+collection through parameter summarization, exemption handling, evaluation, and
 diagnostic emission.*
 
 ### Diagnostics
@@ -716,7 +729,7 @@ body via:
 - `Mutex::new(...)`
 - `RwLock::new(...)`
 
-Nested forms such as `Rc<RefCell<T>>` and `Arc<Mutex<T>>` should be recognised
+Nested forms such as `Rc<RefCell<T>>` and `Arc<Mutex<T>>` should be recognized
 explicitly.
 
 ### Detection model
@@ -756,7 +769,7 @@ The lint should distinguish three families:
 This lint should remain **diagnostic-only** in the first release.
 
 A machine-applicable rewrite from `Rc<RefCell<T>>` to `let mut x = T` is too
-risky. The lint should instead point to the constructor span, summarise the
+risky. The lint should instead point to the constructor span, summarize the
 evidence, and suggest a manual review.
 
 ### Servo-style exemptions
@@ -770,8 +783,7 @@ Suppress when the wrapper exists because:
   legitimate local state carrier.
 
 That suppresses the Servo `Rc<Cell<bool>>` callback bridge and `Cell`-backed
-delegate state described
-above.[^servo-shot-main][^servo-webview-builder][^servo-webview-delegate][^servo-webview-api]
+delegate state described above.[^13][^14][^16][^17]
 
 ### `local_shared_ownership` false-positive controls
 
@@ -815,13 +827,13 @@ Pure decision functions that accept summaries and return:
 - the diagnostic argument map needed for Fluent.
 
 This mirrors Whitaker's existing preference for pure evaluation helpers in
-`common` and thin lint-driver crates.[^brain-trust-design]
+`common` and thin lint-driver crates.[^11]
 
 ## Diagnostics and localization
 
 Whitaker already localizes diagnostics through Fluent bundles, uses stable
 slugs, and routes messages, notes, labels, and help text through shared
-helpers. The ownership suite should do the same.[^whitaker-i18n]
+helpers. The ownership suite should do the same.[^19]
 
 Suggested lint slugs:
 
@@ -846,13 +858,13 @@ Diagnostic arguments should include concrete facts such as:
 - `{ exact_borrow_type }`
 
 As elsewhere in Whitaker, missing translations should degrade to deterministic
-English rather than panic.[^whitaker-i18n]
+English rather than panic.[^19]
 
 ## Configuration
 
-Whitaker's longer-term roadmap is moving toward a unified CLI and
-`whitaker.toml` configuration surface while retaining compatibility with
-`dylint.toml` during migration.[^whitaker-roadmap-config] This phase should
+Whitaker's longer-term roadmap is moving toward a unified command-line
+interface (CLI) and `whitaker.toml` configuration surface while retaining
+compatibility with `dylint.toml` during migration.[^23] This phase should
 follow that direction:
 
 - define the canonical schema in `whitaker.toml` form; and
@@ -901,7 +913,7 @@ Use Whitaker's existing `rstest-bdd` pattern for:
 - localization fallback;
 - public-API suppression;
 - callback-boundary suppression; and
-- representative machine-suggestion cases.[^whitaker-design][^whitaker-i18n]
+- representative machine-suggestion cases.[^2][^19]
 
 ### UI tests
 
@@ -984,7 +996,7 @@ Keep `local_shared_ownership` experimental until:
 - the lint demonstrates clear signal on non-framework, non-async code.
 
 This mirrors the roadmap precedent for feature-gated experimental sets and
-explicit promotion criteria.[^whitaker-roadmap-rstest]
+explicit promotion criteria.[^12]
 
 ## Open questions
 
@@ -1013,62 +1025,62 @@ evidence rather than anomalies.
 
 ## References
 
-[^whitaker-readme]: Whitaker README, current lint inventory and project
+[^1]: Whitaker README, current lint inventory and project
     framing. <https://github.com/leynos/whitaker>
-[^whitaker-design]: Whitaker suite design, shared helpers, localization, UI
+[^2]: Whitaker suite design, shared helpers, localization, UI
     harness, and existing core-lint architecture.
     <https://raw.githubusercontent.com/leynos/whitaker/main/docs/whitaker-dylint-suite-design.md>
-[^whitaker-design-lints]: Whitaker suite design, per-lint crate scaffolding and
+[^3]: Whitaker roadmap, current phase sequence through Phase 8
+    and related delivered work.
+    <https://raw.githubusercontent.com/leynos/whitaker/main/docs/roadmap.md>
+[^4]: Clippy `redundant_clone`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone>
+[^5]: Clippy `unnecessary_to_owned`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_to_owned>
+[^6]: Clippy `needless_pass_by_value`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value>
+[^7]: Clippy `clone_on_ref_ptr`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_ref_ptr>
+[^8]: Clippy `rc_buffer`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#rc_buffer>
+[^9]: Clippy `redundant_allocation`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#redundant_allocation>
+[^10]: Clippy `arc_with_non_send_sync`.
+    <https://rust-lang.github.io/rust-clippy/master/index.html#arc_with_non_send_sync>
+[^11]: Whitaker brain-trust lints design, pure-helper pattern
+    and deterministic data structures in `common`.
+    <https://raw.githubusercontent.com/leynos/whitaker/main/docs/brain-trust-lints-design.md>
+[^12]: Whitaker roadmap, experimental-set and
+    promotion-criteria precedent in Phase 8.
+    <https://raw.githubusercontent.com/leynos/whitaker/main/docs/roadmap.md>
+[^13]: `servo-shot` example source.
+    <https://raw.githubusercontent.com/simonw/research/main/servo-crate-exploration/servo-shot/src/main.rs>
+[^14]: Servo `WebViewBuilder` docs,
+    `Rc<dyn RenderingContext>` and `Rc<dyn WebViewDelegate>` API shape.
+    <https://doc.servo.org/servo/webview/struct.WebViewBuilder.html>
+[^15]: Servo `WebView` docs, handle backed by
+    `Rc<RefCell<WebViewInner>>`.
+    <https://doc.servo.org/servo/struct.WebView.html>
+[^16]: Servo `WebViewDelegate` docs, callback surface uses
+    `&self`.
+    <https://doc.servo.org/servo/webview_delegate/trait.WebViewDelegate.html>
+[^17]: Servo `WebView` docs, `'static` callback requirements for
+    `evaluate_javascript` and `take_screenshot`.
+    <https://doc.servo.org/servo/struct.WebView.html>
+[^18]: Whitaker suite design, per-lint crate scaffolding and
     suite wiring.
     <https://raw.githubusercontent.com/leynos/whitaker/main/docs/whitaker-dylint-suite-design.md>
-[^whitaker-i18n]: Whitaker suite design, localization and diagnostic structure.
+[^19]: Whitaker suite design, localization and diagnostic structure.
     <https://raw.githubusercontent.com/leynos/whitaker/main/docs/whitaker-dylint-suite-design.md>
-[^whitaker-def-path]: Whitaker suite design,
+[^20]: Rust compiler development guide, lint timing and late or MIR
+    lint infrastructure.
+    <https://rustc-dev-guide.rust-lang.org/diagnostics.html>
+[^21]: Whitaker suite design,
     `no_std_fs_operations` implementation using `tcx.def_path_str(def_id)` and
     parsed path segments.
     <https://raw.githubusercontent.com/leynos/whitaker/main/docs/whitaker-dylint-suite-design.md>
-[^whitaker-roadmap]: Whitaker roadmap, current phase sequence through Phase 8
-    and related delivered work.
-    <https://raw.githubusercontent.com/leynos/whitaker/main/docs/roadmap.md>
-[^whitaker-roadmap-config]: Whitaker roadmap, unified CLI / `whitaker.toml`
+[^22]: Rust compiler development guide, MIR overview and passes.
+    <https://rustc-dev-guide.rust-lang.org/mir/index.html>
+[^23]: Whitaker roadmap, unified CLI / `whitaker.toml`
     direction with compatibility period.
     <https://raw.githubusercontent.com/leynos/whitaker/main/docs/roadmap.md>
-[^whitaker-roadmap-rstest]: Whitaker roadmap, experimental-set and
-    promotion-criteria precedent in Phase 8.
-    <https://raw.githubusercontent.com/leynos/whitaker/main/docs/roadmap.md>
-[^brain-trust-design]: Whitaker brain-trust lints design, pure-helper pattern
-    and deterministic data structures in `common`.
-    <https://raw.githubusercontent.com/leynos/whitaker/main/docs/brain-trust-lints-design.md>
-[^clippy-redundant-clone]: Clippy `redundant_clone`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#redundant_clone>
-[^clippy-unnecessary-to-owned]: Clippy `unnecessary_to_owned`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#unnecessary_to_owned>
-[^clippy-needless-pass-by-value]: Clippy `needless_pass_by_value`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#needless_pass_by_value>
-[^clippy-clone-on-ref-ptr]: Clippy `clone_on_ref_ptr`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#clone_on_ref_ptr>
-[^clippy-rc-buffer]: Clippy `rc_buffer`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#rc_buffer>
-[^clippy-redundant-allocation]: Clippy `redundant_allocation`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#redundant_allocation>
-[^clippy-arc-non-send-sync]: Clippy `arc_with_non_send_sync`.
-    <https://rust-lang.github.io/rust-clippy/master/index.html#arc_with_non_send_sync>
-[^rustc-lints]: Rust compiler development guide, lint timing and late or MIR
-    lint infrastructure.
-    <https://rustc-dev-guide.rust-lang.org/diagnostics.html>
-[^rustc-mir]: Rust compiler development guide, MIR overview and passes.
-    <https://rustc-dev-guide.rust-lang.org/mir/index.html>
-[^servo-shot-main]: `servo-shot` example source.
-    <https://raw.githubusercontent.com/simonw/research/main/servo-crate-exploration/servo-shot/src/main.rs>
-[^servo-webview-builder]: Servo `WebViewBuilder` docs,
-    `Rc<dyn RenderingContext>` and `Rc<dyn WebViewDelegate>` API shape.
-    <https://doc.servo.org/servo/webview/struct.WebViewBuilder.html>
-[^servo-webview]: Servo `WebView` docs, handle backed by
-    `Rc<RefCell<WebViewInner>>`.
-    <https://doc.servo.org/servo/struct.WebView.html>
-[^servo-webview-delegate]: Servo `WebViewDelegate` docs, callback surface uses
-    `&self`.
-    <https://doc.servo.org/servo/webview_delegate/trait.WebViewDelegate.html>
-[^servo-webview-api]: Servo `WebView` docs, `'static` callback requirements for
-    `evaluate_javascript` and `take_screenshot`.
-    <https://doc.servo.org/servo/struct.WebView.html>

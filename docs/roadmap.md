@@ -526,7 +526,7 @@
 - [ ] 9.1.1. Add `common::ownership_shape` model types, evaluation helpers, and
   diagnostic argument builders. See
   [ownership shape lints design](ownership-shape-lints-design.md) §Shared
-  implementation approach and §Diagnostics and localization. Requires 1.1.1.
+  implementation approach and §Diagnostics and localisation. Requires 1.1.1.
 - [ ] 9.1.2. Add resolved-path classifiers for clone-like operations and
   wrapper constructors, following the `def_path_str` plus parsed-segment
   pattern used by `no_std_fs_operations`. See
@@ -540,7 +540,6 @@
   [ownership shape lints design](ownership-shape-lints-design.md) §HIR
   prefilter, MIR confirmation and §Worked exception model: Servo-style code
   must stay quiet. Requires 9.1.1 and 9.1.2.
-
 
 ### 9.2. `clone_only_used_by_borrow`
 
@@ -589,15 +588,15 @@
   Requires 9.4.4 and 1.2.1.
 
 
-### 9.5. Localization, documentation, and promotion
+### 9.5. Localisation, documentation, and promotion
 
 - [ ] 9.5.1. Add Fluent entries and diagnostic argument mappings for all three
   lints. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Diagnostics and localization. Requires 9.2.5, 9.3.5, 9.4.5, and 2.3.3.
+  §Diagnostics and localisation. Requires 9.2.5, 9.3.5, 9.4.5, and 2.3.3.
 - [ ] 9.5.2. Add Welsh and Gaelic smoke coverage for the ownership-shape
   diagnostics. See
   [ownership shape lints design](ownership-shape-lints-design.md) §Diagnostics
-  and localization and §Testing strategy. Requires 9.5.1.
+  and localisation and §Testing strategy. Requires 9.5.1.
 - [ ] 9.5.3. Update `docs/users-guide.md` and `docs/developers-guide.md` with
   lint intent, configuration, and rollout guidance for the ownership-shape
   suite. See [ownership shape lints design](ownership-shape-lints-design.md)
@@ -606,7 +605,6 @@
   UI stability and false-positive tuning across representative repositories.
   See [ownership shape lints design](ownership-shape-lints-design.md) §Rollout
   plan. Requires 9.5.1 and 9.5.2.
-
 ### 9.3. `owned_param_causes_clone`
 
 - [ ] 9.3.1. Create the lint crate and register `OWNED_PARAM_CAUSES_CLONE`.
