@@ -92,8 +92,8 @@ jobs:
       - name: Test
         run: make test NEXTEST_PROFILE=ci
 
-      - name: Installer smoke test
-        run: make install-smoke
+      - name: Installer release dry run
+        run: make release-installer-dry-run
 
       - name: Show sccache stats
         if: ${{ always() }}
