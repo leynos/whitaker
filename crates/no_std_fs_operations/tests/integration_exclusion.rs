@@ -13,14 +13,15 @@
 //! dependencies. Run with `--ignored` to execute.
 
 use std::env;
+use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
 use cargo_metadata::{Message, Metadata, MetadataCommand};
-use rstest::{fixture, rstest};
 use serial_test::serial;
+use tempfile::TempDir;
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 
@@ -141,6 +142,100 @@ struct CargoDylintResult {
     stderr: String,
 }
 
+/// Standalone project fixture created in a temporary directory for integration tests.
+struct FixtureProject {
+    _temp_dir: TempDir,
+    root: PathBuf,
+}
+
+impl FixtureProject {
+    fn root(&self) -> &Path {
+        &self.root
+    }
+}
+
+/// Creates a temporary fixture project for verifying exclusion behaviour.
+fn create_fixture_project(crate_name: &str, is_excluded: bool) -> FixtureProject {
+    let temp_dir = TempDir::new().expect("failed to create temporary fixture directory");
+    let root = temp_dir.path().to_path_buf();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        format!(
+            concat!(
+                "[package]\n",
+                "name = \"{crate_name}\"\n",
+                "version = \"0.1.0\"\n",
+                "edition = \"2024\"\n",
+                "\n",
+                "[dependencies]\n",
+            ),
+            crate_name = crate_name
+        ),
+    )
+    .expect("failed to write fixture Cargo.toml");
+
+    fs::write(
+        root.join("dylint.toml"),
+        fixture_dylint_config(crate_name, is_excluded),
+    )
+    .expect("failed to write fixture dylint.toml");
+
+    let source_dir = root.join("src");
+    fs::create_dir(&source_dir).expect("failed to create fixture src directory");
+    fs::write(source_dir.join("lib.rs"), fixture_source(crate_name))
+        .expect("failed to write fixture source");
+
+    FixtureProject {
+        _temp_dir: temp_dir,
+        root,
+    }
+}
+
+fn fixture_dylint_config(crate_name: &str, is_excluded: bool) -> String {
+    let excluded_crates = if is_excluded {
+        format!("[\"{crate_name}\"]")
+    } else {
+        "[]".to_owned()
+    };
+
+    format!(
+        concat!(
+            "[no_std_fs_operations]\n",
+            "excluded_crates = {excluded_crates}\n",
+        ),
+        excluded_crates = excluded_crates
+    )
+}
+
+fn fixture_source(crate_name: &str) -> String {
+    format!(
+        concat!(
+            "//! Temporary fixture crate for `no_std_fs_operations` integration tests.\n",
+            "\n",
+            "use std::fs::File;\n",
+            "use std::path::Path;\n",
+            "\n",
+            "/// Opens a file for reading.\n",
+            "///\n",
+            "/// # Examples\n",
+            "///\n",
+            "/// ```no_run\n",
+            "/// use {crate_name}::open_file;\n",
+            "///\n",
+            "/// let file = open_file(\"Cargo.toml\").expect(\"file should exist\");\n",
+            "/// let result = open_file(\"nonexistent.txt\");\n",
+            "/// assert!(result.is_err());\n",
+            "/// # drop(file);\n",
+            "/// ```\n",
+            "pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {{\n",
+            "    File::open(path)\n",
+            "}}\n",
+        ),
+        crate_name = crate_name
+    )
+}
+
 /// Runs `cargo dylint` on the given fixture project directory.
 fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResult {
     let output = Command::new("cargo")
@@ -181,15 +276,6 @@ fn diagnostic_count(output: &[u8]) -> usize {
         .count()
 }
 
-/// Returns the path to a named fixture project under `tests/fixtures/`.
-fn fixture_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name)
-}
-
-#[fixture]
 fn lint_library_path() -> PathBuf {
     static LINT_LIBRARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
@@ -201,51 +287,66 @@ struct Expectation {
     should_succeed: bool,
 }
 
-#[rstest]
-#[case(
-    "excluded_project",
-    Expectation {
-        should_emit_diagnostics: false,
-        should_succeed: true,
-    }
-)]
-#[case(
-    "non_excluded_project",
-    Expectation {
-        should_emit_diagnostics: true,
-        should_succeed: false,
-    }
-)]
+#[test]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
-fn exclusion_behaviour_matches_fixture_configuration(
-    lint_library_path: PathBuf,
-    #[case] fixture: &str,
-    #[case] expectation: Expectation,
-) {
-    let should_emit_diagnostics = expectation.should_emit_diagnostics;
-    let should_succeed = expectation.should_succeed;
-    let fixture_dir = fixture_path(fixture);
+fn excluded_crate_suppresses_diagnostics() {
+    let lint_library_path = lint_library_path();
+    let fixture = create_fixture_project("excluded_test_crate", true);
+    assert_fixture_behaviour(
+        fixture.root(),
+        &lint_library_path,
+        "excluded_test_crate",
+        Expectation {
+            should_emit_diagnostics: false,
+            should_succeed: true,
+        },
+    );
+}
 
-    let result = run_cargo_dylint(&fixture_dir, &lint_library_path);
+#[test]
+#[ignore = "requires cargo-dylint and built lint library"]
+#[serial]
+fn non_excluded_crate_emits_diagnostics() {
+    let lint_library_path = lint_library_path();
+    let fixture = create_fixture_project("non_excluded_crate", false);
+    assert_fixture_behaviour(
+        fixture.root(),
+        &lint_library_path,
+        "non_excluded_crate",
+        Expectation {
+            should_emit_diagnostics: true,
+            should_succeed: false,
+        },
+    );
+}
+
+fn assert_fixture_behaviour(
+    fixture_dir: &Path,
+    lint_library_path: &Path,
+    crate_name: &str,
+    expectation: Expectation,
+) {
+    let result = run_cargo_dylint(fixture_dir, lint_library_path);
     let count = diagnostic_count(&result.stdout);
 
     assert!(
-        result.is_success == should_succeed,
-        "fixture `{fixture}` should return success={should_succeed}, but stderr was:\n{}",
+        result.is_success == expectation.should_succeed,
+        "crate `{crate_name}` should return success={}, but stderr was:\n{}",
+        expectation.should_succeed,
         result.stderr
     );
 
-    if should_emit_diagnostics {
+    if expectation.should_emit_diagnostics {
         assert!(
             count > 0,
-            "fixture `{fixture}` should emit `no_std_fs_operations` diagnostics, but stderr was:\n{}",
+            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics, but stderr was:\n{}",
             result.stderr
         );
     } else {
         assert!(
             count == 0,
-            "fixture `{fixture}` should emit zero `no_std_fs_operations` diagnostics, but stderr was:\n{}",
+            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics, but stderr was:\n{}",
             result.stderr
         );
     }

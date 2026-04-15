@@ -1,2 +1,0 @@
-[no_std_fs_operations]
-excluded_crates = ["excluded_test_crate"]
