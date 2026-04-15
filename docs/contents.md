@@ -1,7 +1,7 @@
 # Documentation contents
 
 - [Documentation contents](contents.md) explains how the Whitaker documentation
-  set is organised and helps readers find the right document quickly.
+  set is organized and helps readers find the right document quickly.
 
 ## Guides
 
