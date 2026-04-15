@@ -1747,6 +1747,7 @@ dependencies = [
  "rustc_span",
  "serde",
  "serial_test",
+ "tempfile",
  "toml 0.9.12+spec-1.1.0",
  "whitaker",
  "whitaker-common",
