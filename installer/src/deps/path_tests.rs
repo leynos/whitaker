@@ -148,7 +148,9 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
     let _guard = env_test_guard();
     temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
         with_fake_path(
-            |directories| write_fake_binary(&directories[0].join("dylint-link.cmd"), true),
+            |directories| {
+                write_fake_binary_with_status(&directories[0].join("dylint-link.cmd"), true, 0)
+            },
             || {
                 let executor =
                     StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
