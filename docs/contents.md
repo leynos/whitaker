@@ -34,36 +34,42 @@
 
 ## User-facing and technical reference material
 
-- [Rstest Behaviour-Driven Development (BDD) user's guide](rstest-bdd-users-guide.md)
-  explains how to use `rstest-bdd` effectively in Whitaker-oriented Rust test
-  suites.
+- Rstest Behaviour-Driven Development (BDD) user's guide
+  <rstest-bdd-users-guide.md> explains how to use `rstest-bdd` effectively in
+  Whitaker-oriented Rust test suites.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md)
   explains fixture-oriented testing patterns used throughout the repository.
-- [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md)
-  explains the repository's preferred approach to testable Rust design.
+- Reliable testing in Rust via dependency injection
+  <reliable-testing-in-rust-via-dependency-injection.md> explains the
+  repository's preferred approach to testable Rust design.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md) explains how to keep
   Rust doctests accurate without unnecessary execution.
-- [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
-  records the complexity patterns Whitaker flags and the refactorings they are
-  intended to encourage.
-- [Lints for rstest fixtures and test hygiene](lints-for-rstest-fixtures-and-test-hygiene.md)
-  explains the lint rationale and coding guidance around fixture-heavy tests.
-- [Local validation of GitHub Actions with act and pytest](local-validation-of-github-actions-with-act-and-pytest.md)
-  explains how to exercise workflow logic locally before pushing changes.
+- Complexity antipatterns and refactoring strategies
+  <complexity-antipatterns-and-refactoring-strategies.md> records the
+  complexity patterns Whitaker flags and the refactorings they are intended to
+  encourage.
+- Lints for rstest fixtures and test hygiene
+  <lints-for-rstest-fixtures-and-test-hygiene.md> explains the lint rationale
+  and coding guidance around fixture-heavy tests.
+- Local validation of GitHub Actions with act and pytest
+  <local-validation-of-github-actions-with-act-and-pytest.md> explains how to
+  exercise workflow logic locally before pushing changes.
 
 ## Decision records
 
-- [Architectural decision record (ADR) 001: prebuilt Dylint libraries](adr-001-prebuilt-dylint-libraries.md)
-  records the decision to ship prebuilt Dylint libraries and the constraints
-  that follow from that release model.
-- [Architectural decision record (ADR) 002: Dylint `expect` attribute macro](adr-002-dylint-expect-attribute-macro.md)
-  records the decision and migration guidance for the `#[expect(...)]`
-  attribute-macro approach.
-- [Architectural decision record (ADR) 003: formal proof strategy for clone detector pipeline](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md)
-  records the formal verification direction for the clone detector pipeline and
-  its proof boundaries.
+- Architectural decision record (ADR) 001: prebuilt Dylint libraries
+  <adr-001-prebuilt-dylint-libraries.md> records the decision to ship prebuilt
+  Dylint libraries and the constraints that follow from that release model.
+- Architectural decision record (ADR) 002: Dylint `expect` attribute macro
+  <adr-002-dylint-expect-attribute-macro.md> records the decision and migration
+  guidance for the `#[expect(...)]` attribute-macro approach.
+- Architectural decision record (ADR) 003: formal proof strategy for clone
+  detector pipeline
+  <adr-003-formal-proof-strategy-for-clone-detector-pipeline.md> records the
+  formal verification direction for the clone detector pipeline and its proof
+  boundaries.
 
 ## Planning material
 
-- `docs/execplans/` stores execution plans for branch-scoped implementation
-  work and larger follow-up tasks.
+- [docs/execplans/](execplans/) stores execution plans for branch-scoped
+  implementation work and larger follow-up tasks.
