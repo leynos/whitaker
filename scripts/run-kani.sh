@@ -55,7 +55,6 @@ run_clone_detector_harnesses() {
             "$@"
     done
 }
-}
 
 run_decomposition_harnesses() {
     cd "${REPO_ROOT}/common"

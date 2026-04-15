@@ -547,7 +547,7 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    `crates/whitaker_clones_core/src/index/kani.rs` calls the real
    `LshConfig::new` constructor, uses one concrete smoke harness, one bounded
    symbolic harness over `[0, 128]²`, and one overflow-specific harness that
-   forces the `checked_mul(None)` branch. Together these harnesses assert the
+   forces the `checked_mul(None)` branch. Together, these harnesses assert the
    returned configuration or typed `IndexError` matches the same runtime
    contract documented above. The crate explicitly allows `cfg(kani)` in its
    `unexpected_cfgs` configuration so normal builds stay quiet.
