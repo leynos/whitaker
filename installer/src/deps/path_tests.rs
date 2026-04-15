@@ -121,23 +121,18 @@ fn is_executable_file_accepts_executable_files() {
 }
 
 #[cfg(windows)]
-#[test]
-fn is_binary_on_path_accepts_windows_executable_suffix() {
+#[rstest::rstest]
+#[case("dylint-link.exe", 0, true)]
+#[case("dylint-link", 1, false)]
+fn is_binary_on_path_handles_windows_executable_suffixes(
+    #[case] binary_name: &str,
+    #[case] dir_index: usize,
+    #[case] expected: bool,
+) {
     with_fake_path(
-        |directories| write_fake_binary(&directories[0].join("dylint-link.exe"), true),
+        |directories| write_fake_binary(&directories[dir_index].join(binary_name), true),
         || {
-            assert!(is_binary_on_path("dylint-link"));
-        },
-    );
-}
-
-#[cfg(windows)]
-#[test]
-fn is_binary_on_path_ignores_files_without_executable_suffix() {
-    with_fake_path(
-        |directories| write_fake_binary(&directories[1].join("dylint-link"), true),
-        || {
-            assert!(!is_binary_on_path("dylint-link"));
+            assert_eq!(is_binary_on_path(binary_name), expected);
         },
     );
 }
