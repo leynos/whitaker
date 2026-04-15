@@ -38,6 +38,9 @@
 - **Reference:** Use the markdown files within the `docs/` directory as a
   knowledge base and source of truth for project requirements, dependency
   choices, and architectural decisions.
+- **Orient:** Start documentation-oriented work by reading
+  `docs/contents.md` to locate the relevant material and
+  `docs/repository-layout.md` to map the repository structure before editing.
 - **Update:** When new decisions are made, requirements change, libraries are
   added/removed, or architectural patterns evolve, **proactively update** the
   relevant file(s) in the `docs/` directory to reflect the latest state.
