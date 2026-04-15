@@ -86,7 +86,14 @@ fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
 #[test]
 fn is_binary_on_path_checks_multiple_directories() {
     with_fake_path(
-        |directories| write_fake_binary(&directories[1].join("dylint-link"), true),
+        |directories| {
+            #[cfg(windows)]
+            let binary_path = directories[1].join("dylint-link.exe");
+            #[cfg(not(windows))]
+            let binary_path = directories[1].join("dylint-link");
+
+            write_fake_binary(&binary_path, true);
+        },
         || {
             assert!(is_binary_on_path("dylint-link"));
         },
@@ -114,12 +121,18 @@ fn is_executable_file_accepts_executable_files() {
 }
 
 #[cfg(windows)]
-#[test]
-fn is_binary_on_path_accepts_windows_executable_suffix() {
+#[rstest::rstest]
+#[case("dylint-link.exe", 0, true)]
+#[case("dylint-link", 1, false)]
+fn is_binary_on_path_handles_windows_executable_suffixes(
+    #[case] binary_name: &str,
+    #[case] dir_index: usize,
+    #[case] expected: bool,
+) {
     with_fake_path(
-        |directories| write_fake_binary(&directories[0].join("dylint-link.exe"), true),
+        |directories| write_fake_binary(&directories[dir_index].join(binary_name), true),
         || {
-            assert!(is_binary_on_path("dylint-link"));
+            assert_eq!(is_binary_on_path(binary_name), expected);
         },
     );
 }
@@ -127,11 +140,12 @@ fn is_binary_on_path_accepts_windows_executable_suffix() {
 #[cfg(windows)]
 #[test]
 fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
-    let _guard = env_test_guard();
-    temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
-        with_fake_path(
-            |directories| write_fake_binary(&directories[0].join("dylint-link.cmd"), true),
-            || {
+    with_fake_path(
+        |directories| {
+            write_fake_binary_with_status(&directories[0].join("dylint-link.cmd"), true, 0)
+        },
+        || {
+            temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
                 let executor =
                     StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
 
@@ -145,7 +159,7 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
                     }
                 );
                 executor.assert_finished();
-            },
-        );
-    });
+            });
+        },
+    );
 }
