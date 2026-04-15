@@ -5,26 +5,24 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  BUILD_PROFILE: debug
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
+
 jobs:
-  build-test:
-    runs-on: ${{ matrix.os }}
+  linux-full:
+    runs-on: ubicloud-standard-4-ubuntu-2404
     defaults:
       run:
         shell: bash
-    permissions:
-      contents: read
-    env:
-      CARGO_TERM_COLOR: always
-      CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-      CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
-      RUSTFLAGS: -D warnings
-      RUSTDOCFLAGS: -D warnings
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-          - os: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -32,13 +30,18 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        with:
+          tool: nextest@0.9.114
+
+      - name: Check formatting
+        run: make check-fmt
+
       - name: Install bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
         with:
           bun-version: '1.2.21'
-
-      - name: Check formatting
-        run: make check-fmt
 
       - name: Install Mermaid CLI
         run: |
@@ -66,23 +69,32 @@ jobs:
       - name: Lint
         run: make lint
 
-      - name: Test
+      - name: Publish dry run
+        run: make publish-check
+
+  windows-compat:
+    runs-on: windows-latest
+    defaults:
+      run:
         shell: bash
-        run: |
-          set -euxo pipefail
-          cargo binstall --no-confirm --locked cargo-nextest
-          make test NEXTEST_PROFILE=ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c749ab3a96026e14051a2198bf75f94650581b75
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
+        with:
+          tool: nextest@0.9.114
+
+      - name: Test
+        run: make test NEXTEST_PROFILE=ci
 
       - name: Installer smoke test
         run: make install-smoke
 
-      - name: Publish dry run
-        run: make publish-check
-
-      - name: Upload coverage data to CodeScene
-        if: ${{ matrix.coverage && env.CS_ACCESS_TOKEN && vars.CODESCENE_CLI_SHA256 }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@c749ab3a96026e14051a2198bf75f94650581b75
-        with:
-          format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      - name: Show sccache stats
+        if: ${{ always() }}
+        run: sccache --show-stats || true

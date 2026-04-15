@@ -88,6 +88,13 @@ make test NEXTEST_PROFILE=ci
 Continuous Integration (CI) always uses the `ci` profile, so installer tests
 are never silently skipped in the pipeline.
 
+The CI workflow is split by purpose rather than running the same stack on every
+operating system. `linux-full` is the authoritative gate for formatting,
+Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
+`windows-compat` is a narrower compatibility lane that runs
+`make test NEXTEST_PROFILE=ci` and `make install-smoke` to prove the workspace
+still builds and behaves correctly on Windows.
+
 Table: Test profiles and typical usage.
 
 | Profile   | What runs                                  | Typical use        |
