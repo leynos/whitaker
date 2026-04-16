@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus kani
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps verus kani
 
 APP ?= whitaker-installer
 CARGO ?= cargo
@@ -137,6 +137,61 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	command -v whitaker-installer >/dev/null; \
 	whitaker-installer --help >/dev/null; \
 	whitaker-installer --version >/dev/null
+
+release-installer-dry-run: ## Build and package the host-platform installer archive
+	set -eu; \
+	TMP_DIR=$$(mktemp -d); \
+	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
+	HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}'); \
+	VERSION=$$($(CARGO) metadata --manifest-path installer/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "whitaker-installer") | .version'); \
+	if [ -z "$$VERSION" ]; then \
+		echo "Failed to extract whitaker-installer version from Cargo metadata"; \
+		exit 1; \
+	fi; \
+	$(CARGO) build $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
+	$(CARGO) build $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer; \
+	DIST_DIR="$$TMP_DIR/dist"; \
+	mkdir -p "$$DIST_DIR"; \
+	case "$$HOST_TRIPLE" in \
+		*windows*) \
+			INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer.exe"; \
+			PACKAGER="./target/release/whitaker-package-installer.exe"; \
+			ARCHIVE_GLOB="$$DIST_DIR/*.zip"; \
+			;; \
+		*) \
+			INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer"; \
+			PACKAGER="./target/release/whitaker-package-installer"; \
+			ARCHIVE_GLOB="$$DIST_DIR/*.tgz"; \
+			;; \
+	esac; \
+	"$$PACKAGER" \
+		--crate-version "$$VERSION" \
+		--target "$$HOST_TRIPLE" \
+		--binary-path "$$INSTALLER_BIN" \
+		--output-dir "$$DIST_DIR"; \
+	python scripts/generate_checksums.py "$$DIST_DIR"; \
+	found_archive=false; \
+	for archive in $$ARCHIVE_GLOB; do \
+		if [ -f "$$archive" ]; then \
+			found_archive=true; \
+			break; \
+		fi; \
+	done; \
+	if [ "$$found_archive" != "true" ]; then \
+		echo "Expected installer archive matching $$ARCHIVE_GLOB"; \
+		exit 1; \
+	fi; \
+	found_checksum=false; \
+	for checksum in "$$DIST_DIR"/*.sha256; do \
+		if [ -f "$$checksum" ]; then \
+			found_checksum=true; \
+			break; \
+		fi; \
+	done; \
+	if [ "$$found_checksum" != "true" ]; then \
+		echo "Expected installer checksum in $$DIST_DIR"; \
+		exit 1; \
+	fi
 
 publish-check: ## Build, test, and validate packages before publishing
 	@command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
