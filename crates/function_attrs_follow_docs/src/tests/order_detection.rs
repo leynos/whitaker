@@ -129,6 +129,37 @@ fn recovered_attribute_spans_stay_in_item_bounds() {
     ));
 }
 
+#[rstest]
+fn dummy_item_spans_accept_recovered_attributes() {
+    let attribute_span = test_span(12, 20);
+
+    assert!(attribute_within_item(Some(attribute_span), None, DUMMY_SP));
+}
+
+#[rstest]
+fn raw_item_span_is_used_when_recovery_fails() {
+    let raw_item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 20);
+
+    assert!(attribute_within_item(
+        Some(attribute_span),
+        None,
+        raw_item_span
+    ));
+}
+
+#[rstest]
+fn recovered_attribute_spans_outside_item_are_rejected() {
+    let item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 45);
+
+    assert!(!attribute_within_item(
+        Some(attribute_span),
+        Some(item_span),
+        item_span
+    ));
+}
+
 #[scenario(path = "tests/features/function_doc_order.feature", index = 0)]
 fn scenario_accepts_doc_first(world: AttributeWorld, result: Option<(usize, usize)>) {
     let _ = (world, result);

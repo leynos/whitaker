@@ -55,7 +55,7 @@ fn when_recover(world: &SpanRecoveryWorld) {
 fn source_span(line: usize) -> SourceSpan {
     match SourceSpan::new(SourceLocation::new(line, 1), SourceLocation::new(line, 8)) {
         Ok(span) => span,
-        Err(error) => panic!("behaviour test spans should be valid: {error:?}"),
+        Err(error) => panic!("behaviour test span invalid for line {line}: {error:?}"),
     }
 }
 

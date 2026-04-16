@@ -7,9 +7,7 @@ use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
-use whitaker_common::{
-    Attribute, AttributeKind, AttributePath, SpanRecoveryFrame, recover_user_editable_span,
-};
+use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
 
 /// Returns the body span for an inline or file-backed module.
 ///
@@ -91,7 +89,24 @@ pub fn span_recovery_frames(span: Span) -> Vec<SpanRecoveryFrame<Span>> {
 /// Recovers the first user-editable HIR span from a macro expansion chain.
 #[must_use]
 pub fn recover_user_editable_hir_span(span: Span) -> Option<Span> {
-    recover_user_editable_span(span_recovery_frames(span).as_slice()).into_option()
+    let mut current = span;
+
+    loop {
+        if current.is_dummy() {
+            return None;
+        }
+
+        if !current.from_expansion() {
+            return Some(current);
+        }
+
+        let next = current.source_callsite();
+        if next.is_dummy() || next == current {
+            return None;
+        }
+
+        current = next;
+    }
 }
 
 fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
