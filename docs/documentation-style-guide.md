@@ -73,6 +73,7 @@ material, the user's guide explains how to use the project, the developer's
 guide explains how to work on the project, the design document explains why the
 system is shaped the way it is, and the repository layout document explains
 where important things live. For discoverability, use canonical filenames
+<<<<<<< /tmp/.tmpDIJy9w/ours
 unless a stronger repository-specific constraint applies. A minimal canonical
 set looks like
 `docs/{contents,users-guide,developers-guide,repository-layout}.md` plus a
@@ -184,6 +185,116 @@ Use a dedicated design document, conventionally named
 rationale, and intended evolution of a system or subsystem. This document is
 the correct location for design intent; that material must not be buried in the
 user's guide or developer's guide.
+||||||| /tmp/.tmpDIJy9w/base
+## Example snippet
+=======
+unless a stronger repository-specific constraint applies: `docs/contents.md`,
+`docs/users-guide.md`, `docs/developers-guide.md`, `docs/repository-layout.md`,
+and a primary design document with an explicit product or topic name such as
+`docs/theoremc-design.md` or `docs/query-planner-design.md`.
+
+### Contents file
+
+Use a dedicated contents file, typically `docs/contents.md`, as the index for
+the documentation set.
+
+- Make the document title explicit, for example `# Documentation contents`.
+- Begin with the contents file linking to itself so readers can confirm they
+  are at the index.
+- List each document exactly once with an inline link and a short descriptive
+  phrase explaining why someone would open it.
+- Group related material together, such as decision records, reference
+  documents, guides, and plan directories.
+- Keep the descriptions audience-focused. Explain the purpose of the document,
+  not merely its filename.
+- Prefer stable ordering so repeated readers can scan predictably. Grouping by
+  topic is usually better than strict alphabetic ordering.
+- When listing a directory, add one nested level only where it materially
+  improves navigation, for example to enumerate execution plans beneath an
+  `execplans/` entry.
+- Update the contents file whenever a document is added, renamed, or removed.
+
+### User's guide
+
+Use the user's guide, canonically `docs/users-guide.md`, for readers who need
+to apply the project rather than modify its internals. In a library, this means
+consumers of the application programming interface (API). In an application,
+this means operators, end users, or integrators.
+
+- Open with one short paragraph that states the audience and scope.
+- Organize the guide around user-facing tasks, concepts, and guarantees rather
+  than internal module boundaries.
+- Introduce the primary workflow early, with a minimal working example that a
+  reader can adapt immediately.
+- Put public-facing reference material here when users need it to succeed, for
+  example CLI usage, configuration keys, file-format rules, or API surface
+  summaries.
+- Present rules, constraints, defaults, and error behaviour near the feature
+  they affect, rather than scattering them across the document.
+- Use tables where they clarify field sets, command options, or compatibility
+  matrices.
+- Include concrete examples in code or data form when describing formats,
+  schemas, or command usage.
+- Higher-level user workflows belong here, for example "load a document",
+  "configure the service", or "interpret diagnostics".
+- Link to design documents or maintainer references when deeper rationale would
+  otherwise overload the guide.
+- Exclude maintainer-only concerns such as internal layering debates, future
+  refactor plans, or enforcement tooling unless they directly affect users.
+
+### Developer's guide
+
+Use the developer's guide, canonically `docs/developers-guide.md`, for
+maintainers and contributors. Treat this as the operating manual for working on
+the existing system, not as the place for the project's primary design document.
+
+- Open with one short paragraph that states the audience and the operational
+  scope of the guide.
+- Link early to the design document, accepted decision records, and other
+  normative references that explain architecture or rationale in depth.
+- Put maintainer-facing implementation guidance here, for example build, test,
+  lint, release, debugging, extension, and contribution workflows.
+- Use numbered sections for long-form technical documents to improve
+  cross-referencing in reviews and follow-up discussions.
+- Separate normative rules from informative explanation. Mark source-of-truth
+  sections clearly.
+- Include compact interface maps or workflow diagrams where they materially
+  improve implementation guidance.
+- Keep subsystem descriptions focused on current responsibilities,
+  integration points, and operational expectations. Put design rationale, major
+  trade-offs, and proposed architecture in design documents instead.
+- Keep the document synchronized with decision records, roadmap items, and the
+  codebase. A stale developer's guide is worse than a shorter one.
+
+### Design document, ADR, and RFC
+
+Use these document types for different jobs. Do not collapse them into one
+catch-all "design note".
+
+- A **design document** explains the shape of a system or subsystem: its
+  architecture, constraints, data flow, rationale, and intended evolution. It
+  is usually a living document and may describe the current implementation, the
+  target implementation, or both.
+- An **Architecture Decision Record (ADR)** captures one accepted decision. It
+  should be narrow, stable, and explicit about context, decision, consequences,
+  and status. Use an ADR when the important thing to preserve is the outcome,
+  not the full exploratory discussion that led to it.
+- A **Request for Comments (RFC)** proposes a change before acceptance. It is
+  the right format for changes that need reviewing, alternatives analysis,
+  migration planning, or cross-team discussion. An RFC may later be accepted,
+  rejected, superseded, or distilled into one or more ADRs.
+
+In short: use a design document to explain the system, an ADR to record a
+decision, and an RFC to propose a change.
+
+### Design document
+
+Use a dedicated design document, conventionally named
+`docs/<product-or-topic>-design.md`, to explain the architecture,
+constraints, rationale, and intended evolution of a system or subsystem. This
+document is the correct location for design intent; that material must not be
+buried in the user's guide or developer's guide.
+>>>>>>> /tmp/.tmpDIJy9w/theirs
 
 - Start with a concise front matter section that states status, scope, primary
   audience, and the decision records or other documents that take precedence.
