@@ -1,6 +1,6 @@
 [package]
 name = "no_unwrap_or_else_panic"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 publish = false
 description = "Dylint lint that flags unwrap_or_else closures which panic"

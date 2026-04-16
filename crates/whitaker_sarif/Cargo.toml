@@ -1,6 +1,6 @@
 [package]
 name = "whitaker_sarif"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 publish = false
 description = "SARIF 2.1.0 models, builders, and merge logic for Whitaker clone detection"

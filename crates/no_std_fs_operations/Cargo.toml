@@ -1,6 +1,6 @@
 [package]
 name = "no_std_fs_operations"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 
 [lib]
