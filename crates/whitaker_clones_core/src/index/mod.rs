@@ -1,6 +1,8 @@
 //! MinHash and LSH indexing for token-pass candidate generation.
 
 mod error;
+#[cfg(kani)]
+mod kani;
 mod lsh;
 mod minhash;
 mod types;

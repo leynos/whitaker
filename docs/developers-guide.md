@@ -106,48 +106,104 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Proof workflows
+
+Whitaker now ships repository-managed proof tooling for the formal verification
+work introduced around decomposition advice and the clone-detector pipeline.
+Run these commands from the workspace root.
+
+### Make targets
+
+Use the Makefile targets for normal proof runs:
+
+```sh
+make verus                 # Run all Verus proof files
+make verus-clone-detector  # Run clone-detector Verus proofs only
+make kani                  # Run all Kani harness groups
+make kani-clone-detector   # Run clone-detector Kani harnesses only
+```
+
+`make verus` currently runs both decomposition-advice proofs and the
+clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
+adjacency harnesses and the clone-detector harness group in one pass.
+
+### Verus scope and trust boundary
+
+The clone-detector Verus file is intentionally an implementation-shaped model
+of `LshConfig::new` and `validate_product`, not a direct proof of the compiled
+Rust body in `crates/whitaker_clones_core`.
+
+This distinction matters. In the current sidecar setup, Verus can describe the
+contract of an external Rust function with mechanisms such as
+`assume_specification`, `external_fn_specification`, or `external_body`, but
+those routes add trusted assumptions rather than proving the production
+implementation itself. The repository therefore keeps the Verus proof honest:
+it mirrors the real branch order and `checked_mul` overflow behaviour, while
+Kani calls the actual constructor and checks its runtime behaviour directly.
+
+For `LshConfig::new`, the split is:
+
+- Verus proves the constructor model rejects zero bands, rejects zero rows,
+  accepts only exact products of `MINHASH_SIZE`, and rejects overflowing
+  products via the same `checked_mul` semantics as the runtime code.
+- Kani executes the real constructor with one concrete acceptance harness, one
+  bounded symbolic harness over `[0, 128]²`, and one overflow harness that
+  forces the `checked_mul(None)` branch.
+
+### Tooling scripts
+
+The proof targets are thin wrappers over repository scripts:
+
+- `scripts/install-verus.sh` downloads the pinned Verus release into
+  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`, makes the binaries
+  executable, and installs the Rust toolchain that Verus requests.
+- `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
+  file in turn.
+- `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
+  `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
+  nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
+  Kani directory structure.
+- `scripts/run-kani.sh` sets the Kani-specific environment, runs the
+  decomposition/common harnesses through the existing workflow, and runs the
+  clone-detector harnesses one harness per `cargo-kani` invocation so each
+  proof appears explicitly in the output, including the overflow-specific
+  harness for `LshConfig::new`.
+
+The installer scripts are idempotent. The first proof run may take longer while
+toolchains and verifier binaries are downloaded; later runs reuse the cached
+installation.
+
+### Examples
+
+Run the narrow clone-detector proof workflow during iteration:
+
+```sh
+make verus-clone-detector
+make kani-clone-detector
+```
+
+Run a Verus group directly through the wrapper:
+
+```sh
+./scripts/run-verus.sh clone-detector
+./scripts/run-verus.sh all --time
+```
+
+Run all Kani groups, a specific decomposition harness, or the clone-detector
+group directly:
+
+```sh
+./scripts/run-kani.sh
+./scripts/run-kani.sh verify_build_adjacency_preserves_edges
+./scripts/run-kani.sh clone-detector
+```
+
 ## Kani bounded model checking
 
 Whitaker uses the [Kani model checker](https://model-checking.github.io/kani/)
 to verify critical algorithms with bounded symbolic verification. Kani proofs
 complement traditional testing by exhaustively checking properties over all
 possible inputs within configured bounds.
-
-### Running Kani verifications
-
-Run all Kani harnesses from the workspace root:
-
-```sh
-make kani
-```
-
-This invokes `scripts/run-kani.sh`, which:
-
-1. Installs or reuses the pinned Kani toolchain via `scripts/install-kani.sh`
-2. Sets up the required environment (library paths, toolchain selection)
-3. Runs all Kani proof harnesses in the `common` crate
-
-To run a specific harness:
-
-```sh
-./scripts/run-kani.sh verify_build_adjacency_preserves_edges
-```
-
-### Kani tooling architecture
-
-The Kani workflow mirrors the existing Verus pattern:
-
-- **`scripts/install-kani.sh`**: Pins Kani 0.67.0 and downloads the pre-built
-  tarball into `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`. The script
-  installs the matching nightly Rust toolchain via `rustup` and symlinks it
-  into the Kani directory structure.
-
-- **`scripts/run-kani.sh`**: Invokes the pinned `cargo-kani` binary with the
-  correct environment. Sets `RUSTUP_TOOLCHAIN` to ensure Cargo uses the
-  Kani-pinned toolchain, and configures platform-specific library paths
-  (`DYLD_LIBRARY_PATH` on macOS, `LD_LIBRARY_PATH` on Linux).
-
-- **`make kani`**: Top-level quality gate that runs all harnesses by default.
 
 ### Writing Kani harnesses
 
@@ -182,15 +238,11 @@ Key principles:
 - **Bounded symbolic inputs**: Use fixed-size arrays or bounded ranges to keep
   the state space tractable. Rust's standard `sort_by` and nested loops can
   cause CBMC (C Bounded Model Checker) state-space explosion at higher bounds.
-
 - **Input contracts**: Use `kani::assume` to constrain symbolic inputs to match
   the preconditions that production code guarantees. Model the actual input
   contract, not arbitrary malformed inputs.
-
 - **One property per harness**: Separate harnesses simplify root-cause analysis
-  when a property fails. Six focused harnesses are clearer than one combined
-  check.
-
+  when a property fails. Focused harnesses are clearer than one combined check.
 - **Crate visibility**: Kani harnesses can call `pub(crate)` functions directly,
   avoiding the need to widen the public API for verification purposes.
 
@@ -208,8 +260,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 This tells `rustc` that `kani` is an expected configuration name, so normal
 `cargo check` and `cargo clippy` runs do not emit spurious warnings. The entry
-lives in `common/Cargo.toml` because the Kani harnesses currently reside in the
-`common` crate.
+lives in `common/Cargo.toml` for the decomposition harnesses and in
+`crates/whitaker_clones_core/Cargo.toml` for the clone-detector harnesses.
 
 Kani harnesses verify private helpers that are not part of the public API.
 Rather than making these helpers fully public, the following items are promoted
@@ -219,13 +271,11 @@ to `pub(crate)` visibility:
   from `mod community` to `pub(crate) mod community` so that
   `test_support::decomposition` helpers and unit tests can import
   `SimilarityEdge` and `build_adjacency`.
-
 - **`build_adjacency` function**
   (`common/src/decomposition_advice/community.rs`): Promoted from `fn` to
   `pub(crate) fn` so that colocated Kani harnesses and the test-support
   adjacency report can call it directly without widening the crate's public API
   surface.
-
 - **`SimilarityEdge::new(left, right, weight)`**
   (`common/src/decomposition_advice/community.rs`): A `pub(crate)` constructor
   added to allow Kani harnesses and test-support modules to create edge values
@@ -248,14 +298,12 @@ for integration and behaviour-driven tests:
   `build_adjacency`, and returns `Result<AdjacencyReport, AdjacencyError>`.
   Callers can `match` on the result, `.expect(...)` in tests, or propagate the
   error upward when invalid declarative input should fail the caller.
-
 - **`AdjacencyError`**: Typed validation failure for the `Err` branch. The
   shipped variants are `NonCanonicalEdge { index, left, right }` when
   `left >= right`, `EndpointOutOfRange { index, right, node_count }` when an
   endpoint exceeds the graph size, and `ZeroWeight { index }` when a weight is
   non-positive for the production contract. Callers should inspect these
   variants when they need to assert a specific rejection path.
-
 - **`AdjacencyReport`**: Wrapper around adjacency vectors on the `Ok` branch,
   with methods for testing properties:
   - `is_symmetric()`: Checks that all edges appear in both directions
@@ -263,7 +311,6 @@ for integration and behaviour-driven tests:
   - `is_sorted()`: Confirms neighbours are sorted by index
   - `neighbours_of(node)`: Returns neighbours of a node (or `None` if
     out-of-bounds)
-
 - **`EdgeInput`**: Declarative edge struct with `left`, `right`, `weight`
   fields, passed to `adjacency_report` and interpreted on the `Ok` branch as
   canonical-order, in-range, positive-weight edge input for behaviour-driven
@@ -275,7 +322,7 @@ providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
- for the complete design rationale and implementation decisions.
+for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
 
@@ -347,8 +394,8 @@ formatting changes in the workflow YAML.
 
 Local workflow tests use the Makefile variables `UV` and `WORKFLOW_TEST_VENV`:
 
-- `UV` selects the `uv` executable used to create and populate the workflow-test
-  virtual environment.
+- `UV` selects the `uv` executable used to create and populate the
+  workflow-test virtual environment.
 - `WORKFLOW_TEST_VENV` selects the virtual-environment path, defaulting to
   `.venv`.
 

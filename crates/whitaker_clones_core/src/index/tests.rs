@@ -69,6 +69,8 @@ fn fragment_ids() -> FragmentIds {
 #[case(((0, 4), IndexError::ZeroBands))]
 #[case(((4, 0), IndexError::ZeroRows))]
 #[case(((8, 8), IndexError::invalid_band_row_product(8, 8)))]
+#[case(((3, 42), IndexError::invalid_band_row_product(3, 42)))]
+#[case(((usize::MAX, 2), IndexError::invalid_band_row_product(usize::MAX, 2)))]
 fn config_rejects_invalid_inputs(#[case] case: ((usize, usize), IndexError)) {
     let ((bands, rows), expected) = case;
 
@@ -79,6 +81,7 @@ fn config_rejects_invalid_inputs(#[case] case: ((usize, usize), IndexError)) {
 #[case((1, MINHASH_SIZE))]
 #[case((2, MINHASH_SIZE / 2))]
 #[case((4, MINHASH_SIZE / 4))]
+#[case((32, 4))]
 fn config_accepts_valid_inputs(#[case] case: (usize, usize)) {
     let (bands, rows) = case;
 

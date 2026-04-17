@@ -518,6 +518,45 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    and repeated collisions across multiple bands still produce one stable
    `CandidatePair`.
 
+## Implementation decisions (7.2.4 and 7.2.5)
+
+1. **Split proof workflow by responsibility.** Clone-detector constructor
+   semantics use Verus, while bounded runtime smoke checks use Kani. Ordinary
+   unit tests and `rstest-bdd` scenarios remain the first regression net for
+   `LshConfig::new`.
+
+2. **Sidecar proof entry points stay outside the default Cargo path.** The
+   repository now exposes `make verus-clone-detector` and
+   `make kani-clone-detector`, backed by `scripts/run-verus.sh`,
+   `scripts/install-kani.sh`, and `scripts/run-kani.sh`. The umbrella
+   `make verus` target runs all Verus proofs, while `make kani` currently runs
+   the practical clone-detector Kani harness set and leaves room for future
+   bounded checks.
+
+3. **Verus proves an implementation-shaped model, not the compiled Rust body.**
+   The clone-detector Verus file now mirrors the real branch order in
+   `LshConfig::new` and `validate_product`: zero-band rejection, then zero-row
+   rejection, then `checked_mul`-based acceptance or invalid-product rejection.
+   This keeps the proof aligned with runtime control flow, including overflow
+   rejection, without pretending that the sidecar file has directly verified
+   the production Rust function. Direct linkage would require trusted Verus
+   assumptions for external code, so the repository records that limitation
+   explicitly and relies on Kani for implementation execution.
+
+4. **Kani harnesses stay adjacent to the index code under `cfg(kani)`.**
+   `crates/whitaker_clones_core/src/index/kani.rs` calls the real
+   `LshConfig::new` constructor, uses one concrete smoke harness, one bounded
+   symbolic harness over `[0, 128]²`, and one overflow-specific harness that
+   forces the `checked_mul(None)` branch. Together, these harnesses assert the
+   returned configuration or typed `IndexError` matches the same runtime
+   contract documented above. The crate explicitly allows `cfg(kani)` in its
+   `unexpected_cfgs` configuration so normal builds stay quiet.
+
+5. **Overflow remains an invalid-product rejection, not a special public API.**
+   Runtime validation still relies on `checked_mul`; large values such as
+   `usize::MAX` with `rows = 2` return `IndexError::InvalidBandRowProduct`
+   rather than panicking or widening the public API with proof-specific helpers.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates
