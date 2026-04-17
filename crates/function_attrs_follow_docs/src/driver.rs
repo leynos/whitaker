@@ -259,7 +259,9 @@ fn attribute_within_item(
         return true;
     }
 
-    let item_span = item_span.unwrap_or(raw_item_span);
+    let Some(item_span) = item_span else {
+        return false;
+    };
 
     attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi()
 }

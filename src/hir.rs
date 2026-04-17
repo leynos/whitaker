@@ -313,4 +313,35 @@ mod tests {
     //! - `crates/no_expect_outside_tests/examples/pass_expect_in_rstest_harness.rs`
     //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs`
     //!   (`rstest_example_compiles_under_test_harness`)
+    use super::{recover_user_editable_hir_span, span_recovery_frames};
+    use rustc_span::{BytePos, DUMMY_SP, Span};
+    use whitaker_common::SpanRecoveryFrame;
+
+    fn test_span(lo: u32, hi: u32) -> Span {
+        Span::with_root_ctxt(BytePos(lo), BytePos(hi))
+    }
+
+    #[test]
+    fn dummy_span_yields_no_frames() {
+        assert!(span_recovery_frames(DUMMY_SP).is_empty());
+    }
+
+    #[test]
+    fn non_expanded_span_yields_single_direct_frame() {
+        let span = test_span(10, 20);
+        let frames = span_recovery_frames(span);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames.first(), Some(&SpanRecoveryFrame::new(span, false)));
+    }
+
+    #[test]
+    fn recover_user_editable_hir_span_returns_none_for_dummy() {
+        assert_eq!(recover_user_editable_hir_span(DUMMY_SP), None);
+    }
+
+    #[test]
+    fn recover_user_editable_hir_span_returns_direct_span() {
+        let span = test_span(10, 20);
+        assert_eq!(recover_user_editable_hir_span(span), Some(span));
+    }
 }

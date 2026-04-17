@@ -298,9 +298,33 @@ ______________________________________________________________________
 
 ### `function_attrs_follow_docs`
 
-Ensures doc comments appear before all other outer attributes on functions.
+Ensures doc comments appear before all other outer attributes on functions,
+methods, and trait methods.
 
-**How to fix:** Move doc comments to appear before other attributes:
+#### Macro-aware span recovery
+
+When attributes are generated or reordered by a procedural macro (for example
+`rstest` or `derive`), the lint recovers the original source span from the
+macro expansion chain. Attributes whose spans cannot be traced back to any
+user-written source location (macro-only glue) are silently excluded from the
+ordering check, so the lint never fires on compiler- or macro-generated code
+that the developer cannot edit.
+
+#### What is checked
+
+- Free functions annotated with `#[rstest]`, `#[test]`, or any other attribute
+  that does not prevent source-span recovery.
+- Inherent methods and trait methods.
+
+#### What is ignored
+
+- Attributes whose recovered span is macro-only (e.g., inline hints injected
+  by `#[derive(...)]`).
+- Inner attributes (`#![...]`).
+
+#### How to fix&#8203;
+
+Move doc comments so they appear before other outer attributes:
 
 ```rust
 // Wrong
@@ -312,6 +336,27 @@ fn example() {}
 /// This function does something.
 #[inline]
 fn example() {}
+```
+
+With `rstest`, place the doc comment before all attributes including the test
+annotation:
+
+```rust
+// Wrong
+#[rstest]
+#[case(1, 2, 3)]
+/// Verifies addition.
+fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
+    assert_eq!(a + b, expected);
+}
+
+// Correct
+/// Verifies addition.
+#[rstest]
+#[case(1, 2, 3)]
+fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
+    assert_eq!(a + b, expected);
+}
 ```
 
 ______________________________________________________________________
