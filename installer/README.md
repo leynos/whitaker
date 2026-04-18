@@ -8,6 +8,9 @@ builds, links, and stages the lint libraries for local use, avoiding the need
 to rebuild from source on each `cargo dylint` invocation. It also ensures the
 pinned Rust toolchain and required components are installed via rustup.
 
+Pass `--cranelift` when the selected toolchain also needs the
+`rustc-codegen-cranelift` rustup component.
+
 ## Installation
 
 ```bash

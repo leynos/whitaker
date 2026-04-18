@@ -123,9 +123,14 @@ pub fn expect_toolchain_install(
 }
 
 // Helper to test that ensure_installed fails with the expected error.
-pub fn assert_install_fails_with<F, E>(toolchain: Toolchain, setup_mocks: F, error_matcher: E)
-where
+pub fn assert_install_fails_with<F, I, E>(
+    toolchain: Toolchain,
+    setup_mocks: F,
+    install: I,
+    error_matcher: E,
+) where
     F: FnOnce(&mut MockCommandRunner, &mut mockall::Sequence),
+    I: FnOnce(&Toolchain, &MockCommandRunner) -> Result<ToolchainInstallStatus>,
     E: FnOnce(InstallerError),
 {
     let mut runner = MockCommandRunner::new();
@@ -133,9 +138,7 @@ where
 
     setup_mocks(&mut runner, &mut seq);
 
-    let err = toolchain
-        .ensure_installed_with(&runner)
-        .expect_err("expected installation failure");
+    let err = install(&toolchain, &runner).expect_err("expected installation failure");
 
     error_matcher(err);
 }
@@ -144,16 +147,22 @@ where
 pub fn matches_multi_component_add(
     channel: &str,
     components: &[&str],
-) -> impl Fn(&str, &[&str]) -> bool {
+) -> impl Fn(&str, &[&str]) -> bool + use<> {
     let channel = channel.to_owned();
     let components: Vec<String> = components.iter().map(|s| (*s).to_owned()).collect();
     move |program, args| {
+        let Some(actual_components) = args.get(4..) else {
+            return false;
+        };
         program == "rustup"
-            && args.len() == 4 + components.len()
             && args[0] == "component"
             && args[1] == "add"
             && args[2] == "--toolchain"
             && args[3] == channel
-            && args[4..].iter().zip(&components).all(|(a, b)| *a == b)
+            && actual_components.len() == components.len()
+            && actual_components
+                .iter()
+                .zip(&components)
+                .all(|(a, b)| *a == b)
     }
 }

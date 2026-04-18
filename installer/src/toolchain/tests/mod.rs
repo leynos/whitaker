@@ -10,6 +10,8 @@ use test_helpers::{
     test_toolchain,
 };
 
+const CRANELIFT_COMPONENT: &str = "rustc-codegen-cranelift";
+
 // Asserts that a parsing function rejects invalid contents with an
 // InvalidToolchainFile error containing the expected reason substring.
 fn assert_parse_fails_with_reason<F, T>(contents: &str, expected_reason: &str, parse_fn: F)
@@ -84,7 +86,7 @@ fn ensure_installed_installs_missing_toolchain() {
     expect_rustc_version(&mut runner, &mut seq, channel, 0);
 
     let status = toolchain
-        .ensure_installed_with(&runner)
+        .ensure_installed_with(&runner, &[])
         .expect("toolchain should install");
 
     assert!(status.installed_toolchain());
@@ -108,7 +110,52 @@ fn ensure_installed_adds_required_components_when_toolchain_present() {
         .returning(|_, _| Ok(output_with_status(0)));
 
     let status = toolchain
-        .ensure_installed_with(&runner)
+        .ensure_installed_with(&runner, &[])
+        .expect("toolchain should be ready");
+
+    assert!(!status.installed_toolchain());
+}
+
+#[test]
+fn ensure_installed_adds_cranelift_component_when_requested() {
+    let channel = "nightly-2025-09-18";
+    let toolchain = test_toolchain(channel);
+    let mut runner = MockCommandRunner::new();
+    let mut seq = mockall::Sequence::new();
+    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
+
+    expect_rustc_version(&mut runner, &mut seq, channel, 0);
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, &expected_components))
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(|_, _| Ok(output_with_status(0)));
+
+    let status = toolchain
+        .ensure_installed_with(&runner, &[CRANELIFT_COMPONENT])
+        .expect("toolchain should be ready");
+
+    assert!(!status.installed_toolchain());
+}
+
+#[test]
+fn ensure_installed_adds_only_required_components_when_no_extras_requested() {
+    let channel = "nightly-2025-09-18";
+    let toolchain = test_toolchain(channel);
+    let mut runner = MockCommandRunner::new();
+    let mut seq = mockall::Sequence::new();
+
+    expect_rustc_version(&mut runner, &mut seq, channel, 0);
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, REQUIRED_COMPONENTS))
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(|_, _| Ok(output_with_status(0)));
+
+    let status = toolchain
+        .ensure_installed_with(&runner, &[])
         .expect("toolchain should be ready");
 
     assert!(!status.installed_toolchain());
@@ -119,6 +166,7 @@ fn ensure_installed_adds_required_components_when_toolchain_present() {
 enum InstallFailure {
     ToolchainInstall,
     ComponentAdd,
+    CraneliftComponentAdd,
     ToolchainUnusableAfterInstall,
 }
 
@@ -151,6 +199,16 @@ fn setup_failure_mocks(
                         && args[0] == "component"
                         && args[1] == "add"
                 })
+                .times(1)
+                .in_sequence(seq)
+                .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+        }
+        InstallFailure::CraneliftComponentAdd => {
+            let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
+            expect_rustc_version(runner, seq, channel, 0);
+            runner
+                .expect_run()
+                .withf(matches_multi_component_add(channel, &expected_components))
                 .times(1)
                 .in_sequence(seq)
                 .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
@@ -198,8 +256,26 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
             assert!(
                 matches!(
                     err,
-                    InstallerError::ToolchainComponentInstallFailed { ref toolchain, ref message, .. }
-                        if toolchain == channel && message.contains("component failed")
+                    InstallerError::ToolchainComponentInstallFailed {
+                        ref toolchain,
+                        ref message,
+                        ..
+                    } if toolchain == channel && message.contains("component failed")
+                ),
+                "expected ToolchainComponentInstallFailed error, got {err:?}"
+            );
+        }
+        InstallFailure::CraneliftComponentAdd => {
+            assert!(
+                matches!(
+                    err,
+                    InstallerError::ToolchainComponentInstallFailed {
+                        ref toolchain,
+                        ref components,
+                        ref message,
+                    } if toolchain == channel
+                        && components.contains(CRANELIFT_COMPONENT)
+                        && message.contains("component failed")
                 ),
                 "expected ToolchainComponentInstallFailed error, got {err:?}"
             );
@@ -220,14 +296,20 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
 #[rstest]
 #[case::toolchain_install_fails(InstallFailure::ToolchainInstall)]
 #[case::component_add_fails(InstallFailure::ComponentAdd)]
+#[case::cranelift_component_add_fails(InstallFailure::CraneliftComponentAdd)]
 #[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall)]
 fn ensure_installed_reports_failure(#[case] failure: InstallFailure) {
     let channel = "nightly-2025-09-18";
     let toolchain = test_toolchain(channel);
+    let additional_components = match failure {
+        InstallFailure::CraneliftComponentAdd => &[CRANELIFT_COMPONENT][..],
+        _ => &[],
+    };
 
     assert_install_fails_with(
         toolchain,
         |runner, seq| setup_failure_mocks(runner, seq, channel, failure),
+        |toolchain, runner| toolchain.ensure_installed_with(runner, additional_components),
         |err| assert_failure_error(err, channel, failure),
     );
 }

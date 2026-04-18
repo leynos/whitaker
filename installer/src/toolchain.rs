@@ -122,15 +122,22 @@ impl Toolchain {
     ///
     /// Returns an error if rustup fails to install the toolchain or required
     /// components.
-    pub fn ensure_installed(&self) -> Result<ToolchainInstallStatus> {
+    pub fn ensure_installed(
+        &self,
+        additional_components: &[&str],
+    ) -> Result<ToolchainInstallStatus> {
         let runner = SystemCommandRunner;
-        self.ensure_installed_with(&runner)
+        self.ensure_installed_with(&runner, additional_components)
     }
 
-    fn ensure_installed_with(&self, runner: &dyn CommandRunner) -> Result<ToolchainInstallStatus> {
+    fn ensure_installed_with(
+        &self,
+        runner: &dyn CommandRunner,
+        additional_components: &[&str],
+    ) -> Result<ToolchainInstallStatus> {
         if self.is_installed_with(runner)? {
             // Toolchain already present - just ensure components are installed
-            self.install_components_with(runner)?;
+            self.install_components_with(runner, additional_components)?;
             return Ok(ToolchainInstallStatus {
                 installed_toolchain: false,
             });
@@ -138,7 +145,7 @@ impl Toolchain {
 
         // Toolchain not installed - attempt installation then verify
         self.install_toolchain_with(runner)?;
-        self.install_components_with(runner)?;
+        self.install_components_with(runner, additional_components)?;
 
         // Verify the newly installed toolchain is actually usable
         if !self.is_installed_with(runner)? {
@@ -182,9 +189,18 @@ impl Toolchain {
         })
     }
 
-    fn install_components_with(&self, runner: &dyn CommandRunner) -> Result<()> {
+    fn install_components_with(
+        &self,
+        runner: &dyn CommandRunner,
+        additional_components: &[&str],
+    ) -> Result<()> {
+        let component_list: Vec<&str> = REQUIRED_COMPONENTS
+            .iter()
+            .copied()
+            .chain(additional_components.iter().copied())
+            .collect();
         let mut args: Vec<&str> = vec!["component", "add", "--toolchain", &self.channel];
-        args.extend(REQUIRED_COMPONENTS);
+        args.extend(component_list.iter().copied());
 
         let output = run_rustup(runner, &args)?;
 
@@ -194,7 +210,7 @@ impl Toolchain {
 
         Err(InstallerError::ToolchainComponentInstallFailed {
             toolchain: self.channel.clone(),
-            components: REQUIRED_COMPONENTS.join(", "),
+            components: component_list.join(", "),
             message: stderr_message(&output),
         })
     }

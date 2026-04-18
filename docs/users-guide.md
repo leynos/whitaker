@@ -64,6 +64,7 @@ environment-variable workaround.
 
 **Options:**
 
+- `--cranelift` — Install `rustc-codegen-cranelift` for the selected toolchain
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation (prints
   `DYLINT_LIBRARY_PATH` instructions instead)

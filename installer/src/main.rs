@@ -79,7 +79,12 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
+    let additional_components: &[&str] = if args.cranelift {
+        &["rustc-codegen-cranelift"]
+    } else {
+        &[]
+    };
+    ensure_toolchain_installed(&toolchain, additional_components, args.quiet, stderr)?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
     // Step 3.5: Attempt prebuilt download when install options allow it.
     let prebuilt_context = PrebuiltInstallationContext {
@@ -230,10 +235,11 @@ fn resolve_toolchain(
 
 fn ensure_toolchain_installed(
     toolchain: &Toolchain,
+    additional_components: &[&str],
     quiet: bool,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    let status = toolchain.ensure_installed()?;
+    let status = toolchain.ensure_installed(additional_components)?;
     if status.installed_toolchain() && !quiet {
         write_stderr_line(
             stderr,

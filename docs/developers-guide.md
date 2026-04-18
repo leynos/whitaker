@@ -944,6 +944,7 @@ Whitaker data directory keyed by toolchain and target:
 - `--individual-lints` — Build individual crates instead of the suite
 - `--experimental` — Include experimental lints in the build (none currently)
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
+- `--cranelift` — Install `rustc-codegen-cranelift` for the selected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
 - `--dry-run` — Show what would be done without running
 - `-v, --verbose` — Increase output verbosity (repeatable)
