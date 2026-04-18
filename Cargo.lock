@@ -1708,6 +1708,7 @@ checksum = "5c8b7b69b0eafaa88ec8dc9fe7c3860af0a147517e5207cfbd0ecd21cd7cde18"
 name = "no_expect_outside_tests"
 version = "0.2.4"
 dependencies = [
+ "camino",
  "dylint_linting",
  "dylint_testing",
  "log",

@@ -1,10 +1,12 @@
 //! Additional UI-style regressions that need compiler flags or example-target
 //! support beyond the basic `ui/` source fixtures.
 
+use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
+use std::path::{Path, PathBuf};
 use temp_env::with_vars_unset;
-use whitaker_common::test_support::{env_test_guard, run_test_runner};
+use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
 
 fn run_example_under_test_harness(example_name: &str, label: &str) {
     run_example_under_test_harness_with_flags(example_name, label, &["--test"]);
@@ -37,11 +39,119 @@ fn run_example_under_test_harness_with_flags(
     });
 }
 
+fn run_fixture_under_test_harness(
+    crate_name: &str,
+    directory: &Utf8Path,
+    fixture_name: &str,
+    rustc_flags: &[&str],
+) -> Result<(), String> {
+    let source = fixture_source_path(directory, fixture_name);
+    let mut env = prepare_fixture(directory, &source)
+        .map_err(|error| format!("failed to prepare {fixture_name}: {error}"))?;
+    let harness_flags = test_harness_flags(rustc_flags)?;
+    let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
+
+    run_test_runner(fixture_name, || {
+        let _guard = env_test_guard();
+        with_vars_unset(
+            [
+                "RUSTC_WRAPPER",
+                "RUSTC_WORKSPACE_WRAPPER",
+                "CARGO_BUILD_RUSTC_WRAPPER",
+            ],
+            || {
+                let mut test = Test::src_base(crate_name, env.workdir());
+                if let Some(config) = env.take_config() {
+                    test.dylint_toml(config);
+                }
+                test.rustc_flags(harness_flag_refs.as_slice());
+                test.run();
+            },
+        );
+    })
+}
+
+fn fixture_source_path(directory: &Utf8Path, fixture_name: &str) -> PathBuf {
+    directory.as_std_path().join(format!("{fixture_name}.rs"))
+}
+
+fn test_harness_flags(extra_flags: &[&str]) -> Result<Vec<String>, String> {
+    let deps_dir = dependency_directory()?;
+    let tokio_rlib = dependency_rlib(&deps_dir, "tokio")?;
+    let mut flags: Vec<String> = extra_flags.iter().map(|flag| (*flag).to_owned()).collect();
+    flags.extend([
+        "--edition=2024".to_owned(),
+        "-L".to_owned(),
+        format!("dependency={}", deps_dir.display()),
+        "--extern".to_owned(),
+        format!("tokio={}", tokio_rlib.display()),
+    ]);
+    Ok(flags)
+}
+
+fn dependency_directory() -> Result<PathBuf, String> {
+    let test_binary = std::env::current_exe()
+        .map_err(|error| format!("failed to locate current test binary: {error}"))?;
+    test_binary.parent().map(Path::to_path_buf).ok_or_else(|| {
+        format!(
+            "test binary has no parent directory: {}",
+            test_binary.display()
+        )
+    })
+}
+
+fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String> {
+    let prefix = format!("lib{crate_name}-");
+    let mut matches: Vec<_> = std::fs::read_dir(deps_dir)
+        .map_err(|error| {
+            format!(
+                "failed to read dependency directory {}: {error}",
+                deps_dir.display()
+            )
+        })?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name().is_some_and(|name| {
+                name.to_str()
+                    .is_some_and(|name| name.starts_with(&prefix) && name.ends_with(".rlib"))
+            })
+        })
+        .collect();
+    matches.sort();
+    matches.into_iter().next().ok_or_else(|| {
+        format!(
+            "failed to locate `{crate_name}` rlib in dependency directory {}",
+            deps_dir.display()
+        )
+    })
+}
+
 #[rstest]
 #[case("pass_expect_in_tokio_test_harness", "Tokio")]
+#[case(
+    "pass_expect_in_tokio_nonstandard_module_harness",
+    "Tokio non-standard module"
+)]
 #[case("pass_expect_in_rstest_harness", "rstest")]
 fn example_compiles_under_test_harness(#[case] example_name: &str, #[case] label: &str) {
     run_example_under_test_harness(example_name, label);
+}
+
+#[test]
+fn tokio_path_loaded_module_compiles_under_test_harness() {
+    let crate_name = env!("CARGO_PKG_NAME");
+    let directory = "examples";
+    let fixture_name = "pass_expect_in_tokio_path_module_harness";
+
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
+        run_fixture_under_test_harness(crate_name, dir, fixture_name, &["--test"])
+    })
+    .unwrap_or_else(|error| {
+        panic!(
+            "Tokio path module regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}"
+        )
+    });
 }
 
 #[test]

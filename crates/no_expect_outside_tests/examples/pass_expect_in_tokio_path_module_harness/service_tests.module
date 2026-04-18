@@ -1,0 +1,7 @@
+//! File-backed Tokio test module used by the path-loaded harness regression.
+
+#[tokio::test]
+async fn pass_expect_in_tokio_path_module_harness() {
+    let value = Ok::<_, ()>("ok");
+    value.expect("Tokio path-loaded tests should permit expect");
+}
