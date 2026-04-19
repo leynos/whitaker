@@ -548,9 +548,7 @@
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Integration constraints. Requires 8.5.1.
 
-
 ## 9. Ownership shape lints
-
 
 ### 9.1. Shared foundations
 
@@ -594,6 +592,29 @@
   cases. See [ownership shape lints design](ownership-shape-lints-design.md)
   §18 Testing strategy. Requires 9.2.3 and 1.2.1.
 
+### 9.3. `owned_param_causes_clone`
+
+- [ ] 9.3.1. Create the lint crate and register `OWNED_PARAM_CAUSES_CLONE`.
+  See [ownership shape lints design](ownership-shape-lints-design.md) §13 Lint
+  2: `owned_param_causes_clone`. Requires 9.1.1.
+- [ ] 9.3.2. Implement local call-site clone-pressure collection that records
+  callee identity, argument index, source shape, and retained-source evidence.
+  See [ownership shape lints design](ownership-shape-lints-design.md) §13.2.1
+  Pass A: collect clone-pressure evidence at call sites. Requires 9.3.1, 9.1.2,
+  and 9.1.4.
+- [ ] 9.3.3. Implement callee parameter summaries and exported, trait, FFI, and
+  async suppression rules. See
+  [ownership shape lints design](ownership-shape-lints-design.md) §13.2.2 Pass
+  B: summarize callee parameter usage and §13.3 Exemptions. Requires 9.3.2.
+- [ ] 9.3.4. Add exact borrow-type help for the initial mapping set without
+  rewriting unsupported signatures. See
+  [ownership shape lints design](ownership-shape-lints-design.md) §13.4 Exact
+  borrow mappings and §13.5 Diagnostics. Requires 9.3.3 and 9.1.3.
+- [ ] 9.3.5. Add UI coverage for private, exported, trait, async, and
+  non-trigger scenarios. See
+  [ownership shape lints design](ownership-shape-lints-design.md) §18 Testing
+  strategy. Requires 9.3.4 and 1.2.1.
+
 ### 9.4. `local_shared_ownership`
 
 - [ ] 9.4.1. Create the lint crate and register `LOCAL_SHARED_OWNERSHIP` behind
@@ -621,7 +642,6 @@
   exception model: Servo-style code must stay quiet and §18 Testing strategy.
   Requires 9.4.4 and 1.2.1.
 
-
 ### 9.5. Localization, documentation, and promotion
 
 - [ ] 9.5.1. Add Fluent entries and diagnostic argument mappings for all three
@@ -642,75 +662,23 @@
 
 ## 10. Async-trait architecture hygiene lints
 
-### 9.3. `owned_param_causes_clone`
+### 10.1. Shared family analysis and configuration
 
-- [ ] 9.3.1. Create the lint crate and register `OWNED_PARAM_CAUSES_CLONE`.
-  See [ownership shape lints design](ownership-shape-lints-design.md) §13 Lint
-  2: `owned_param_causes_clone`. Requires 9.1.1.
-- [ ] 9.3.2. Implement local call-site clone-pressure collection that records
-  callee identity, argument index, source shape, and retained-source evidence.
-  See [ownership shape lints design](ownership-shape-lints-design.md) §13.2.1
-  Pass A: collect clone-pressure evidence at call sites. Requires 9.3.1, 9.1.2,
-  and 9.1.4.
-- [ ] 9.3.3. Implement callee parameter summaries and exported, trait, FFI, and
-  async suppression rules. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §13.2.2 Pass
-  B: summarize callee parameter usage and §13.3 Exemptions. Requires 9.3.2.
-- [ ] 9.3.4. Add exact borrow-type help for the initial mapping set without
-  rewriting unsupported signatures. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §13.4 Exact
-  borrow mappings and §13.5 Diagnostics. Requires 9.3.3 and 9.1.3.
-- [ ] 9.3.5. Add UI coverage for private, exported, trait, async, and
-  non-trigger scenarios. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §18 Testing
-  strategy. Requires 9.3.4 and 1.2.1.
-
-### 12.3. `cargo-compile-hygiene` tool and checks
-
-- [ ] 12.3.1. Create the `cargo-compile-hygiene` Cargo subcommand with
-  `check`, `check --json`, `explain`, and `baseline --write` entrypoints, using
-  `cargo metadata --format-version 1` as the primary graph input. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Tool shape and why it is a Cargo subcommand and §Commands and CLI UX.
-  Requires 12.1.1.
-- [ ] 12.3.2. Implement the `integration_target_budget`,
-  `heavy_dependency_not_optional`, and `duplicate_major_version_hotspots`
-  checks with shortest-path or hotspot explanations in reports. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Checks. Requires 12.3.1.
-- [ ] 12.3.3. Implement the `tls_backend_multiplicity` and
-  `package_boundary_purity` checks, including per-configuration graph analysis
-  for feature-matrix runs. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Checks and §Invocation patterns and feature-matrix handling. Requires
-  12.3.1.
-- [ ] 12.3.4. Add human-readable and JSON reporting with finding IDs, metrics,
-  remediation guidance, and CI-oriented exit semantics. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Output formats and example reports. Requires 12.3.2 and 12.3.3.
-
-
-### 12.4. CI, rollout, and migration guidance
-
-- [ ] 12.4.1. Add default, minimal, and all-features CI jobs that run both the
-  Whitaker lint set and `cargo-compile-hygiene` across the same feature matrix.
+- [ ] 10.1.1. Add `whitaker::async_trait_hygiene` modules behind the
+  `dylint-driver` feature and implement the `AsyncTraitFamilyIndex` data model.
   See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Invocation patterns and feature-matrix handling. Requires 12.2.3, 12.3.4,
-  and 4.1.1.
-- [ ] 12.4.2. Update `docs/users-guide.md`, `docs/developers-guide.md`, and
-  CLI-facing workflow documentation with shared policy examples, report
-  interpretation guidance, and migration sequencing for downstream adopters.
-  See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Comparison table: what belongs where and §Migration guidance for Axinite
-  and Gauss. Requires 12.2.3 and 12.3.4.
-- [ ] 12.4.3. Define staged rollout criteria for promoting selected
-  architecture and compile-hygiene findings from report-only or `warn` status
-  to CI-failing policy. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Severity levels and build gating and §Integration, CI, and rollout.
-  Requires 12.4.1.
+  [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
+   §Shared helper placement in Whitaker and §AsyncTraitFamilyIndex fields.
+  Requires 1.1.1.
+- [ ] 10.1.2. Implement dyn-use closure, supertrait closure, boxed-future
+  alias detection, sibling lookup, and adapter discovery with deterministic
+  ordering. See
+  [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
+   §Algorithms and §AsyncTraitFamilyIndex fields. Requires 10.1.1.
+- [ ] 10.1.3. Add shared configuration types and loaders for suite defaults,
+  allowlists, alias policy, and `Send` policy overrides. See
+  [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
+   §Configuration model. Requires 10.1.1 and 3.6.3.
 
 ### 10.2. Inventory and family-completeness lints
 
@@ -731,49 +699,24 @@
   [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
    §Proposed lint table. Requires 10.2.2 and 1.2.1.
 
+### 10.3. Signature-shape and migration-ratchet lints
 
-## 11. Test-support dead-code and masked-expectation analysis
-
-
-### 10.1. Shared family analysis and configuration
-
-- [ ] 10.1.1. Add `whitaker::async_trait_hygiene` modules behind the
-  `dylint-driver` feature and implement the `AsyncTraitFamilyIndex` data model.
-  See
+- [ ] 10.3.1. Create the `async_dyn_direct_impl_prefers_native` and
+  `async_dyn_boxed_future_alias_required` lint crates and implement their
+  family-shape checks. See
   [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
-   §Shared helper placement in Whitaker and §AsyncTraitFamilyIndex fields.
-  Requires 1.1.1.
-- [ ] 10.1.2. Implement dyn-use closure, supertrait closure, boxed-future
-  alias detection, sibling lookup, and adapter discovery with deterministic
-  ordering. See
+   §Proposed lint table. Requires 10.1.2 and 10.1.3.
+- [ ] 10.3.2. Create the `native_async_future_must_be_send` and
+  `native_async_multi_borrow_requires_named_lifetime` lint crates, including
+  per-family non-`Send` policy overrides. See
   [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
-   §Algorithms and §AsyncTraitFamilyIndex fields. Requires 10.1.1.
-- [ ] 10.1.3. Add shared configuration types and loaders for suite defaults,
-  allowlists, alias policy, and `Send` policy overrides. See
+   §Proposed lint table and §Pending architectural decisions and trade-offs.
+  Requires 10.3.1.
+- [ ] 10.3.3. Add UI coverage for direct dyn impls, raw boxed-future returns,
+  missing `+ Send`, allowed non-`Send` families, and multi-borrow lifetime
+  fixes. See
   [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
-   §Configuration model. Requires 10.1.1 and 3.6.3.
-
-
-### 12.1. Shared policy schema and lint taxonomy
-
-- [ ] 12.1.1. Add shared `[workspace.metadata.whitaker]` policy parsing for
-  layers, forbidden dependencies, feature islands, compile-hygiene thresholds,
-  and allowlists. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Policy storage and shared configuration model. Requires 3.6.3.
-- [ ] 12.1.2. Register Whitaker lint groups and naming conventions for
-  `arch_*`, `hygiene_*`, `tests_*`, and `advisory_*` rules so CI and users can
-  enable coherent policy sets. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Whitaker lint namespaces and naming conventions and §Severity levels and
-  build gating. Requires 12.1.1.
-- [ ] 12.1.3. Document suppression guidance for early, late, and
-  pre-expansion Whitaker lints, including
-  `cfg_attr(dylint_lib = "whitaker", ...)` and `#[allow(unknown_lints)]` escape
-  hatches. See
-  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-   §Feature-matrix and “unknown lint” ergonomics. Requires 12.1.2.
-
+   §Proposed lint table. Requires 10.3.2 and 1.2.1.
 
 ### 10.4. Suite wiring, rollout, and documentation
 
@@ -795,26 +738,43 @@
    §Configuration model and §Migration waves and default levels. Requires
   10.4.1.
 
+## 11. Test-support dead-code and masked-expectation analysis
 
-### 10.3. Signature-shape and migration-ratchet lints
+### 11.1. Detector lints and module-graph discovery
 
-- [ ] 10.3.1. Create the `async_dyn_direct_impl_prefers_native` and
-  `async_dyn_boxed_future_alias_required` lint crates and implement their
-  family-shape checks. See
-  [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
-   §Proposed lint table. Requires 10.1.2 and 10.1.3.
-- [ ] 10.3.2. Create the `native_async_future_must_be_send` and
-  `native_async_multi_borrow_requires_named_lifetime` lint crates, including
-  per-family non-`Send` policy overrides. See
-  [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
-   §Proposed lint table and §Pending architectural decisions and trade-offs.
-  Requires 10.3.1.
-- [ ] 10.3.3. Add UI coverage for direct dyn impls, raw boxed-future returns,
-  missing `+ Send`, allowed non-`Send` families, and multi-borrow lifetime
-  fixes. See
-  [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md)
-   §Proposed lint table. Requires 10.3.2 and 1.2.1.
+- [ ] 11.1.1. Create the `test_support_dead_code` lint crate and implement the
+  fast detector for dead-code suppressions in integration-test support modules.
+  See
+  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
+   §Proposed rule contracts. Requires 1.1.1.
+- [ ] 11.1.2. Create the `masked_dead_code_expectations` lint crate and detect
+  `#[expect(dead_code)]` under `allow(unfulfilled_lint_expectations)` in the
+  same support-module scope. See
+  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
+   §Proposed rule contracts. Requires 11.1.1.
+- [ ] 11.1.3. Add integration-test module-graph discovery for `tests/*.rs`
+  harnesses, ordinary `mod` edges, and explicit `#[path]` edges so workspace
+  analysis can identify importer targets precisely. See
+  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
+   §Multi-pass execution path. Requires 11.1.1 and 3.5.2.
 
+### 11.2. Overlay builds and workspace analysis
+
+- [ ] 11.2.1. Implement overlay workspace creation and text-edit planning that
+  strips only `dead_code` suppressions, preserves unrelated lints, and inserts
+  probe items without mutating the working tree. See
+  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
+   §Multi-pass execution path. Requires 11.1.3.
+- [ ] 11.2.2. Add per-target `cargo check --message-format=json` replay plus a
+  collector that records organic and synthetic use sites for support items. See
+  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
+   §Multi-pass execution path and §Diagnostic model and report format. Requires
+  11.2.1.
+- [ ] 11.2.3. Add masked-expectation replay runs that remove
+  `allow(unfulfilled_lint_expectations)` only where needed and classify stale
+  expectations per importer target. See
+  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
+   §Multi-pass execution path. Requires 11.2.2.
 
 ### 11.3. Reporting, `whitaker check` integration, and validation
 
@@ -840,6 +800,27 @@
   [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
    §Constraints, failure modes, and rollout. Requires 11.3.1.
 
+## 12. Architecture and compile-time hygiene enforcement
+
+### 12.1. Shared policy schema and lint taxonomy
+
+- [ ] 12.1.1. Add shared `[workspace.metadata.whitaker]` policy parsing for
+  layers, forbidden dependencies, feature islands, compile-hygiene thresholds,
+  and allowlists. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Policy storage and shared configuration model. Requires 3.6.3.
+- [ ] 12.1.2. Register Whitaker lint groups and naming conventions for
+  `arch_*`, `hygiene_*`, `tests_*`, and `advisory_*` rules so CI and users can
+  enable coherent policy sets. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Whitaker lint namespaces and naming conventions and §Severity levels and
+  build gating. Requires 12.1.1.
+- [ ] 12.1.3. Document suppression guidance for early, late, and
+  pre-expansion Whitaker lints, including
+  `cfg_attr(dylint_lib = "whitaker", ...)` and `#[allow(unknown_lints)]` escape
+  hatches. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Feature-matrix and “unknown lint” ergonomics. Requires 12.1.2.
 
 ### 12.2. Whitaker lint MVP for architecture and source-level hygiene
 
@@ -862,43 +843,48 @@
    §`whitaker::tests_ui_test_macro_outside_app` and
   §`whitaker::advisory_async_trait_clear_misuse`. Requires 12.1.3 and 1.2.1.
 
+### 12.3. `cargo-compile-hygiene` tool and checks
 
-### 11.1. Detector lints and module-graph discovery
+- [ ] 12.3.1. Create the `cargo-compile-hygiene` Cargo subcommand with
+  `check`, `check --json`, `explain`, and `baseline --write` entrypoints, using
+  `cargo metadata --format-version 1` as the primary graph input. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Tool shape and why it is a Cargo subcommand and §Commands and CLI UX.
+  Requires 12.1.1.
+- [ ] 12.3.2. Implement the `integration_target_budget`,
+  `heavy_dependency_not_optional`, and `duplicate_major_version_hotspots`
+  checks with shortest-path or hotspot explanations in reports. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Checks. Requires 12.3.1.
+- [ ] 12.3.3. Implement the `tls_backend_multiplicity` and
+  `package_boundary_purity` checks, including per-configuration graph analysis
+  for feature-matrix runs. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Checks and §Invocation patterns and feature-matrix handling. Requires
+  12.3.1.
+- [ ] 12.3.4. Add human-readable and JSON reporting with finding IDs, metrics,
+  remediation guidance, and CI-oriented exit semantics. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Output formats and example reports. Requires 12.3.2 and 12.3.3.
 
-- [ ] 11.1.1. Create the `test_support_dead_code` lint crate and implement the
-  fast detector for dead-code suppressions in integration-test support modules.
+### 12.4. CI, rollout, and migration guidance
+
+- [ ] 12.4.1. Add default, minimal, and all-features CI jobs that run both the
+  Whitaker lint set and `cargo-compile-hygiene` across the same feature matrix.
   See
-  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
-   §Proposed rule contracts. Requires 1.1.1.
-- [ ] 11.1.2. Create the `masked_dead_code_expectations` lint crate and detect
-  `#[expect(dead_code)]` under `allow(unfulfilled_lint_expectations)` in the
-  same support-module scope. See
-  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
-   §Proposed rule contracts. Requires 11.1.1.
-- [ ] 11.1.3. Add integration-test module-graph discovery for `tests/*.rs`
-  harnesses, ordinary `mod` edges, and explicit `#[path]` edges so workspace
-  analysis can identify importer targets precisely. See
-  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
-   §Multi-pass execution path. Requires 11.1.1 and 3.5.2.
-
-
-### 11.2. Overlay builds and workspace analysis
-
-- [ ] 11.2.1. Implement overlay workspace creation and text-edit planning that
-  strips only `dead_code` suppressions, preserves unrelated lints, and inserts
-  probe items without mutating the working tree. See
-  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
-   §Multi-pass execution path. Requires 11.1.3.
-- [ ] 11.2.2. Add per-target `cargo check --message-format=json` replay plus a
-  collector that records organic and synthetic use sites for support items. See
-  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
-   §Multi-pass execution path and §Diagnostic model and report format. Requires
-  11.2.1.
-- [ ] 11.2.3. Add masked-expectation replay runs that remove
-  `allow(unfulfilled_lint_expectations)` only where needed and classify stale
-  expectations per importer target. See
-  [technical design for `test_support_dead_code` and `masked_dead_code_expectations`](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md)
-   §Multi-pass execution path. Requires 11.2.2.
-
-
-## 12. Architecture and compile-time hygiene enforcement
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Invocation patterns and feature-matrix handling. Requires 12.2.3, 12.3.4,
+  and 4.1.1.
+- [ ] 12.4.2. Update `docs/users-guide.md`, `docs/developers-guide.md`, and
+  CLI-facing workflow documentation with shared policy examples, report
+  interpretation guidance, and migration sequencing for downstream adopters.
+  See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Comparison table: what belongs where and §Migration guidance for Axinite
+  and Gauss. Requires 12.2.3 and 12.3.4.
+- [ ] 12.4.3. Define staged rollout criteria for promoting selected
+  architecture and compile-hygiene findings from report-only or `warn` status
+  to CI-failing policy. See
+  [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
+   §Severity levels and build gating and §Integration, CI, and rollout.
+  Requires 12.4.1.

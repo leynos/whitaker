@@ -219,7 +219,7 @@ Axinite’s migration audit found repeated cases where a trait had *no direct dy
 call sites* but still could not migrate because a dyn-backed trait inherited it
 as a supertrait. [^3]
 
-So we compute `dyn_required` as:
+`dyn_required` is computed as:
 
 ```text
 dyn_required = dyn_used ∪ supertraits_transitive(dyn_used)
@@ -251,7 +251,7 @@ while let Some(t) = worklist.pop():
 ADR 006 formalizes the naming rule: keep `Tool`/`Database`/… as the dyn-facing
 trait name, and use `NativeTool`/`NativeDatabase` as the sibling. [^1]
 
-We detect siblings by finding, for a given dyn-facing trait `T`:
+Sibling traits are detected by finding, for a given dyn-facing trait `T`:
 
 - expected native name = `format!("{prefix}{T}")` (default prefix `Native`)
 - sibling must live in the same parent module (same `tcx.parent(def_id)`),
@@ -265,7 +265,7 @@ repeated trait names.
 The ADR defines the adapter as a blanket impl bridging `Native*` into the dyn
 trait. [^1]
 
-We treat an impl as the family’s canonical adapter when all hold:
+An impl is treated as the family’s canonical adapter when all hold:
 
 - it implements the **dyn-facing** trait,
 - the self type is a type parameter (e.g. `T`) rather than a concrete type, and
@@ -281,7 +281,7 @@ condition, because HIR body matching across rustc versions is brittle.
 ADR 006 recommends a single boxed-future alias to keep signatures readable (and
 to avoid repeating long `Pin<Box<dyn Future…>>` types). [^1]
 
-We detect aliases by scanning `type` items and matching the syntactic shape:
+Aliases are detected by scanning `type` items and matching the syntactic shape:
 
 - outer: `Pin< … >` in `core::pin` or `std::pin`
 - inner: `Box< … >` in `alloc::boxed` or `std::boxed`

@@ -384,13 +384,13 @@ actually dead, which are local, and which are truly shared. [^3]
 [^1]: Cargo and Rust documentation covering integration-test target structure,
       `dead_code`, `#[expect(...)]`, `unfulfilled_lint_expectations`,
       underscore-name suppression, and external-tool integration.
-      <https://doc.rust-lang.org/cargo/reference/cargo-targets.html?highlight=test&utm_source=chatgpt.com>
-      <https://doc.rust-lang.org/cargo/reference/external-tools.html?utm_source=chatgpt.com>
-      <https://doc.rust-lang.org/reference/attributes/diagnostics.html?utm_source=chatgpt.com>
-      <https://doc.rust-lang.org/stable/nightly-rustc/rustc_lint/builtin/static.DEAD_CODE.html?utm_source=chatgpt.com>
+      <https://doc.rust-lang.org/cargo/reference/cargo-targets.html?highlight=test>
+      <https://doc.rust-lang.org/cargo/reference/external-tools.html>
+      <https://doc.rust-lang.org/reference/attributes/diagnostics.html>
+      <https://doc.rust-lang.org/stable/nightly-rustc/rustc_lint/builtin/static.DEAD_CODE.html>
 [^2]: Dylint documentation describing dynamic-library lint execution and the
       `LateLintPass` model.
-      <https://github.com/trailofbits/dylint?utm_source=chatgpt.com>
+      <https://github.com/trailofbits/dylint>
 [^3]: Whitaker workspace references used for the proposed split between
       lint-time detection and richer `whitaker check` analysis: the CLI design,
       workspace manifest, suite registry, and Dylint suite design.

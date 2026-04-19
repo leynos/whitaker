@@ -18,7 +18,7 @@ duplicate version hotspots, TLS backend multiplicity, and package boundary
 purity). [^2][^1]
 
 Both tools share configuration via `Cargo.toml` workspace metadata (and
-optionally `dylint.toml`/`dylint.toml`-style tables for Dylint), enabling a
+optionally `dylint.toml`/`whitaker.toml`-style tables for Dylint), enabling a
 single policy source of truth (layer definitions, forbidden dependencies,
 feature “islands”, thresholds). Cargo explicitly supports third-party tooling
 via (a) `cargo metadata`, (b) stable JSON message formats, and (c) custom
@@ -1291,7 +1291,7 @@ tool configuration. [^2]
       graph analysis.
       <https://doc.rust-lang.org/cargo/reference/external-tools.html>
       <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>
-      <https://doc.rust-lang.org/cargo/reference/cargo-targets.html?utm_source=chatgpt.com>
+      <https://doc.rust-lang.org/cargo/reference/cargo-targets.html>
       <https://doc.rust-lang.org/cargo/reference/manifest.html>
       <https://dev-doc.rust-lang.org/beta/cargo/commands/cargo-tree.html>
 [^3]: Rust compiler and Clippy development references covering tool-lint
@@ -1300,8 +1300,8 @@ tool configuration. [^2]
       <https://doc.rust-lang.org/beta/nightly-rustc/rustc_session/macro.declare_tool_lint.html>
       <https://github.com/rust-lang/rustc-dev-guide/blob/main/src/diagnostics/lintstore.md?plain=1>
       <https://doc.rust-lang.org/rustc/lints/levels.html>
-      <https://doc.rust-lang.org/stable/clippy/development/lint_passes.html?utm_source=chatgpt.com>
-      <https://docs.adacore.com/live/wave/rust/html/rust_ug/_static/clippy/development/type_checking.html?utm_source=chatgpt.com>
+      <https://doc.rust-lang.org/stable/clippy/development/lint_passes.html>
+      <https://docs.adacore.com/live/wave/rust/html/rust_ug/_static/clippy/development/type_checking.html>
       <https://github.com/rust-lang/rust-clippy>
 [^4]: Repository evidence from Wildside, Axinite, and Gauss used to motivate
       the lint split, package-boundary rules, feature islands, and advisory
