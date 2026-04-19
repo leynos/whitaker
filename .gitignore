@@ -5,3 +5,4 @@ bin/act
 __pycache__/
 *.py[cod]
 *.so
+*:Zone.Identifier
