@@ -1,4 +1,4 @@
-# Async-trait Architecture Hygiene Dylint Suite Design for Whitaker
+# Async-trait architecture hygiene dylint suite design for Whitaker
 
 ## Executive summary
 
