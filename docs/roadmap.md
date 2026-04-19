@@ -25,6 +25,28 @@
 - [x] 1.2.1. Integrate `dylint_testing` harness boilerplate for UI tests across
   all lint crates.
 
+
+### 1.3. Conditional Dylint `expect` support
+
+- [ ] 1.3.1. Add the `crates/whitaker_support_macros` proc-macro crate and
+  implement `#[whitaker_support::dylint_expect(...)]` with `lib`, `lints`, and
+  optional `reason` arguments. See
+  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Decision outcome /
+  proposed direction and §Functional requirements.
+- [ ] 1.3.2. Add the `crates/whitaker_support` re-export crate, wire both
+  support crates into the workspace, and document the supported attribute
+  surface with API examples. See
+  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Decision outcome /
+  proposed direction and §Migration plan.
+- [ ] 1.3.3. Add compatibility coverage that proves the attribute stays warning
+  free in non-Dylint builds, Clippy runs, and Dylint runs with the matching
+  `dylint_lib` value. See [ADR 002](adr-002-dylint-expect-attribute-macro.md)
+  §Technical requirements and §Migration plan. Requires 1.3.1 and 1.3.2.
+- [ ] 1.3.4. Document intended usage, narrow-scope review guidance, and
+  pre-expansion limitations for the conditional `expect` attribute. See
+  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Decision outcome /
+  proposed direction and §Known risks and limitations. Requires 1.3.3.
+
 ## 2. Core lint delivery
 
 ### 2.1. Lint crate template
@@ -47,6 +69,11 @@
 - [x] 2.2.6. Implement `module_max_lines` with configurable thresholds.
 - [x] 2.2.7. Implement `conditional_max_n_branches` for complex predicates.
 - [x] 2.2.8. Implement `no_unwrap_or_else_panic` with optional `clippy` helpers.
+- [ ] 2.2.9. Replace ad hoc conditional `allow` and `expect` sequences in
+  Whitaker-managed code with `#[whitaker_support::dylint_expect(...)]`, keeping
+  suppressions narrowly scoped to the item they justify. See
+  [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Migration plan. Requires
+  1.3.1, 1.3.2, and 1.3.3.
 
 ### 2.3. Localisation enablement
 
@@ -108,7 +135,12 @@
   behaviour behind an internal library boundary. See
   [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
   §Compatibility and migration. Requires 3.2.1.
-- [ ] 3.5.2. Publish `whitaker` release artefacts with `cargo-binstall`
+- [ ] 3.5.2. Implement `whitaker check` as the default linting path, including
+  lazy dependency repair, `--no-install`, forwarded cargo arguments after `--`,
+  and operational error handling that preserves lint-failure exit semantics.
+  See [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
+  §`whitaker check`. Requires 3.6.3, 3.6.4, and 3.7.1.
+- [ ] 3.5.3. Publish `whitaker` release artefacts with `cargo-binstall`
   metadata that mirror the existing installer packaging flow. See
   [Whitaker CLI design](whitaker-cli-design.md) §Public CLI surface and
   §Compatibility and migration. Requires 3.5.1 and 4.3.1.

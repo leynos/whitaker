@@ -24,8 +24,8 @@
 - [Whitaker Dylint suite design](whitaker-dylint-suite-design.md) explains the
   architecture and rationale behind the core lint suite.
 - [Whitaker command-line interface (CLI) design](whitaker-cli-design.md)
-  describes the command-line surface and design choices for installer and
-  operator workflows.
+  defines the unified `whitaker` binary, its configuration model, and the
+  installation and diagnostic workflows behind it.
 - [Whitaker clone detector design](whitaker-clone-detector-design.md)
   documents the clone detector architecture, data flow, and supporting
   reasoning.
@@ -57,17 +57,19 @@
 
 ## Decision records
 
-- Architectural decision record (ADR) 001: prebuilt Dylint libraries
-  <adr-001-prebuilt-dylint-libraries.md> records the decision to ship prebuilt
-  Dylint libraries and the constraints that follow from that release model.
-- Architectural decision record (ADR) 002: Dylint `expect` attribute macro
-  <adr-002-dylint-expect-attribute-macro.md> records the decision and migration
-  guidance for the `#[expect(...)]` attribute-macro approach.
-- Architectural decision record (ADR) 003: formal proof strategy for clone
-  detector pipeline
-  <adr-003-formal-proof-strategy-for-clone-detector-pipeline.md> records the
-  formal verification direction for the clone detector pipeline and its proof
-  boundaries.
+- [Architectural decision record (ADR) 001: prebuilt Dylint
+  libraries](adr-001-prebuilt-dylint-libraries.md) records the decision to ship
+  prebuilt Dylint libraries and the constraints that follow from that release
+  model.
+- [Architectural decision record (ADR) 002: Dylint `expect` attribute
+  macro](adr-002-dylint-expect-attribute-macro.md) records the support-macro
+  decision, migration phases, and known limitations for conditional
+  `#[expect(...)]` usage.
+- [Architectural decision record (ADR) 003: formal proof strategy for clone
+  detector
+  pipeline](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md)
+  records the formal verification direction for the clone detector pipeline and
+  its proof boundaries.
 
 ## Planning material
 
