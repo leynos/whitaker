@@ -322,7 +322,7 @@ providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
-for the complete design rationale and implementation decisions.
+ for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
 

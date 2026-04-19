@@ -2,6 +2,7 @@
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
+use std::path::Path;
 use std::path::PathBuf;
 use temp_env::with_var;
 use whitaker_installer::dependency_binaries::{
@@ -166,6 +167,22 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
     ))
 }
 
+fn run_install_with_dylint_link_on_path(
+    expect_missing_dylint_link: bool,
+    bin_dir: &Path,
+    run_install: impl FnOnce() -> std::result::Result<(), whitaker_installer::error::InstallerError>,
+) -> std::result::Result<(), whitaker_installer::error::InstallerError> {
+    let _guard = env_test_guard();
+    if !expect_missing_dylint_link {
+        #[cfg(windows)]
+        let dylint_link_path = bin_dir.join("dylint-link.cmd");
+        #[cfg(not(windows))]
+        let dylint_link_path = bin_dir.join("dylint-link");
+        write_fake_binary(&dylint_link_path, true);
+    }
+    with_var("PATH", Some(bin_dir), run_install)
+}
+
 #[when("dependency installation runs")]
 fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let tool = world
@@ -206,19 +223,15 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             },
         )
     };
-    world.install_result = Some(
-        if tool == "dylint-link" && !world.expect_missing_dylint_link {
-            let _guard = env_test_guard();
-            #[cfg(windows)]
-            let dylint_link_path = bin_dir.join("dylint-link.cmd");
-            #[cfg(not(windows))]
-            let dylint_link_path = bin_dir.join("dylint-link");
-            write_fake_binary(&dylint_link_path, true);
-            with_var("PATH", Some(&bin_dir), run_install)
-        } else {
-            run_install()
-        },
-    );
+    world.install_result = Some(if tool == "dylint-link" {
+        run_install_with_dylint_link_on_path(
+            world.expect_missing_dylint_link,
+            &bin_dir,
+            run_install,
+        )
+    } else {
+        run_install()
+    });
     executor.assert_finished();
 }
 
