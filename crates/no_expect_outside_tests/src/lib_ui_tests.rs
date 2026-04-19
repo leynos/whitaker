@@ -8,25 +8,49 @@ use std::path::{Path, PathBuf};
 use temp_env::with_vars_unset;
 use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
 
-fn run_example_under_test_harness(example_name: &str, label: &str) {
-    run_example_under_test_harness_with_flags(example_name, label, &["--test"]);
+/// Describes a single example-based regression to run under the test harness.
+struct ExampleHarnessRun<'a> {
+    name: &'a str,
+    label: &'a str,
+    rustc_flags: &'a [&'a str],
 }
 
-fn run_example_under_test_harness_with_flags(
-    example_name: &str,
-    label: &str,
-    rustc_flags: &[&str],
-) {
+impl<'a> ExampleHarnessRun<'a> {
+    fn new(name: &'a str, label: &'a str) -> Self {
+        Self {
+            name,
+            label,
+            rustc_flags: &["--test"],
+        }
+    }
+
+    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+        Self {
+            name,
+            label,
+            rustc_flags,
+        }
+    }
+}
+
+/// Describes a fixture-based regression to run under the test harness.
+struct FixtureHarnessRun<'a> {
+    crate_name: &'a str,
+    fixture_name: &'a str,
+    rustc_flags: &'a [&'a str],
+}
+
+fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_test_runner(example_name, || {
+        run_test_runner(spec.name, || {
             let _guard = env_test_guard();
             with_vars_unset(
                 ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"],
                 || {
-                    let mut test = Test::example(crate_name, example_name);
-                    test.rustc_flags(rustc_flags);
+                    let mut test = Test::example(crate_name, spec.name);
+                    test.rustc_flags(spec.rustc_flags);
                     test.run();
                 },
             );
@@ -34,24 +58,23 @@ fn run_example_under_test_harness_with_flags(
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{label} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}"
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            spec.label
         )
     });
 }
 
 fn run_fixture_under_test_harness(
-    crate_name: &str,
+    spec: &FixtureHarnessRun<'_>,
     directory: &Utf8Path,
-    fixture_name: &str,
-    rustc_flags: &[&str],
 ) -> Result<(), String> {
-    let source = fixture_source_path(directory, fixture_name);
+    let source = fixture_source_path(directory, spec.fixture_name);
     let mut env = prepare_fixture(directory, &source)
-        .map_err(|error| format!("failed to prepare {fixture_name}: {error}"))?;
-    let harness_flags = test_harness_flags(rustc_flags)?;
+        .map_err(|error| format!("failed to prepare {}: {error}", spec.fixture_name))?;
+    let harness_flags = test_harness_flags(spec.rustc_flags)?;
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
-    run_test_runner(fixture_name, || {
+    run_test_runner(spec.fixture_name, || {
         let _guard = env_test_guard();
         with_vars_unset(
             [
@@ -60,7 +83,7 @@ fn run_fixture_under_test_harness(
                 "CARGO_BUILD_RUSTC_WRAPPER",
             ],
             || {
-                let mut test = Test::src_base(crate_name, env.workdir());
+                let mut test = Test::src_base(spec.crate_name, env.workdir());
                 if let Some(config) = env.take_config() {
                     test.dylint_toml(config);
                 }
@@ -135,17 +158,21 @@ fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String>
 )]
 #[case("pass_expect_in_rstest_harness", "rstest")]
 fn example_compiles_under_test_harness(#[case] example_name: &str, #[case] label: &str) {
-    run_example_under_test_harness(example_name, label);
+    run_example_under_test_harness(&ExampleHarnessRun::new(example_name, label));
 }
 
 #[test]
 fn tokio_path_loaded_module_compiles_under_test_harness() {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    let fixture_name = "pass_expect_in_tokio_path_module_harness";
+    let spec = FixtureHarnessRun {
+        crate_name,
+        fixture_name: "pass_expect_in_tokio_path_module_harness",
+        rustc_flags: &["--test"],
+    };
 
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
-        run_fixture_under_test_harness(crate_name, dir, fixture_name, &["--test"])
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
+        run_fixture_under_test_harness(&spec, dir)
     })
     .unwrap_or_else(|error| {
         panic!(
@@ -156,9 +183,9 @@ fn tokio_path_loaded_module_compiles_under_test_harness() {
 
 #[test]
 fn rstest_expect_outside_tests_still_fails_in_non_harness_code() {
-    run_example_under_test_harness_with_flags(
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
         "fail_expect_in_rstest_non_test_module",
         "rstest non-harness",
         &["--test", "-D", "no_expect_outside_tests"],
-    );
+    ));
 }
