@@ -206,19 +206,19 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             },
         )
     };
-    world.install_result = Some(
-        if tool == "dylint-link" && !world.expect_missing_dylint_link {
-            let _guard = env_test_guard();
+    world.install_result = Some(if tool == "dylint-link" {
+        let _guard = env_test_guard();
+        if !world.expect_missing_dylint_link {
             #[cfg(windows)]
             let dylint_link_path = bin_dir.join("dylint-link.cmd");
             #[cfg(not(windows))]
             let dylint_link_path = bin_dir.join("dylint-link");
             write_fake_binary(&dylint_link_path, true);
-            with_var("PATH", Some(&bin_dir), run_install)
-        } else {
-            run_install()
-        },
-    );
+        }
+        with_var("PATH", Some(&bin_dir), run_install)
+    } else {
+        run_install()
+    });
     executor.assert_finished();
 }
 
