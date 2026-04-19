@@ -1,6 +1,16 @@
+---
+Status: Proposed design for a future Whitaker lint phase.
+Scope: Crate-local ownership-shape lints for clone pressure and local shared ownership patterns.
+Primary audience: Whitaker maintainers implementing lint crates, shared helpers, and roadmap tasks.
+Precedent documents:
+  - docs/whitaker-dylint-suite-design.md
+  - docs/brain-trust-lints-design.md
+  - docs/roadmap.md
+---
+
 # Ownership shape lints design for value clones and local shared ownership
 
-## Purpose and scope
+## 1. Purpose and scope
 
 This document proposes the next core-lint phase for Whitaker: an
 ownership-shape suite aimed at value clones and local shared-ownership patterns
@@ -21,7 +31,7 @@ checker". It reports observable, mechanically defensible phenomena:
 This phase concerns **value clones**, not Whitaker's separate **code clone
 detector** pipeline.
 
-## At a glance
+## 2. At a glance
 
 For readers skimming the design, the three proposed lints differ mainly in what
 signal they treat as strongest evidence:
@@ -37,7 +47,7 @@ signal they treat as strongest evidence:
 In short, the first lint is clone-centric, the second is signature-centric, and
 the third is wrapper-centric.
 
-## Why this phase belongs in Whitaker
+## 3. Why this phase belongs in Whitaker
 
 Whitaker's original core suite established its house style around readable
 structure, explicit documentation, bounded control-flow complexity, and panic
@@ -62,7 +72,7 @@ patterns can:
 Whitaker should address that gap, but it should do so with a false-positive
 budget that matches the rest of the suite.
 
-## Product motivation and positioning
+## 4. Product motivation and positioning
 
 Whitaker should not duplicate existing Clippy coverage. Clippy already detects
 several local ownership smells, including `redundant_clone`,
@@ -81,7 +91,7 @@ This is especially important for Rust code that is exploratory,
 machine-generated, newly ported from other languages, or authored by
 contributors who have not yet internalized borrow-oriented API design.
 
-## Non-goals
+## 5. Non-goals
 
 This phase will not:
 
@@ -95,50 +105,50 @@ This phase will not:
 - supersede Clippy's purely local syntactic lints; or
 - auto-rewrite non-trivial smart-pointer refactors.
 
-## Design principles
+## 6. Design principles
 
-### 1. Report shape, not intent
+### 6.1. Report shape, not intent
 
 Lint names, messages, and documentation should describe the ownership
 phenomenon rather than speculate about why the code was written that way.
 
-### 2. Prefer high-confidence facts over broad coverage
+### 6.2. Prefer high-confidence facts over broad coverage
 
 A smaller suite with reliable findings is more valuable than an accusatory lint
 that fires on every `Rc<RefCell<_>>` in a GUI, browser, async, or
 callback-heavy codebase.
 
-### 3. Treat API boundaries as first-class evidence
+### 6.3. Treat API boundaries as first-class evidence
 
 Rust code often uses clones or wrappers because an API *requires* a particular
 ownership or lifetime shape. That is not noise around the design. It is the
 design. The lints must detect these boundaries and suppress or downgrade
 diagnostics accordingly.
 
-### 4. Reuse Whitaker's existing infrastructure
+### 6.4. Reuse Whitaker's existing infrastructure
 
 The suite should follow Whitaker's existing design patterns: one lint per
 crate, shared diagnostics and localization helpers in `common`, deterministic
 data structures, UI coverage, and configurable rollout from experimental to
 standard.[^2][^11][^12]
 
-### 5. Start with local, crate-contained analysis
+### 6.5. Start with local, crate-contained analysis
 
 The first release should stay within one crate and avoid speculative
 cross-crate reasoning. Local or private functions, local bodies, and resolved
 external API boundaries provide enough signal for a valuable first phase.
 
-## Phase title and roadmap placement
+## 7. Phase title and roadmap placement
 
 This work should land in the roadmap as **Phase 9. Ownership shape lints**. The
 current roadmap already extends through Phase 8, so Phase 9 fits the sequence
 cleanly.[^3]
 
-## Lint suite overview
+## 8. Lint suite overview
 
 The phase should ship three lints:
 
-### Metadata for `clone_only_used_by_borrow`
+### 8.1. Metadata for `clone_only_used_by_borrow`
 
 Warn when a cloned value is only ever immutably borrowed before drop, and the
 original value appears borrowable across the same region.
@@ -146,7 +156,7 @@ original value appears borrowable across the same region.
 This is the highest-confidence lint in the phase and the likeliest candidate
 for stable, warn-by-default status after validation.
 
-### Metadata for `owned_param_causes_clone`
+### 8.2. Metadata for `owned_param_causes_clone`
 
 Warn on local, same-crate functions or methods whose by-value parameter shape
 induces actual clones at call sites even though the callee only reads the
@@ -156,7 +166,7 @@ This lint complements rather than replaces Clippy's `needless_pass_by_value`:
 it requires *observed clone pressure* at local call sites, which makes the
 diagnosis more concrete and more actionably Whitaker-like.
 
-### Metadata for `local_shared_ownership`
+### 8.3. Metadata for `local_shared_ownership`
 
 Flag locally created `Rc`, `Arc`, or interior-mutability wrappers that do not
 escape and whose observed use-pattern does not appear to require shared
@@ -164,22 +174,22 @@ ownership or runtime borrow mediation.
 
 This lint should start as experimental and feature-gated.
 
-## Suggested lint metadata
+## 9. Suggested lint metadata
 
-### `clone_only_used_by_borrow`
+### 9.1. `clone_only_used_by_borrow`
 
 - Kind: `ownership`
 - Default level: `warn`
 - Rollout target: standard suite after false-positive validation
 
-### `owned_param_causes_clone`
+### 9.2. `owned_param_causes_clone`
 
 - Kind: `ownership`
 - Default level: `warn`
 - Rollout target: experimental first, standard once public-API and generic
   suppression rules settle
 
-### `local_shared_ownership`
+### 9.3. `local_shared_ownership`
 
 - Kind: `ownership`
 - Default level: `allow` or experimental `warn`
@@ -188,7 +198,7 @@ This lint should start as experimental and feature-gated.
 The `ownership` label is a documentation and selection category. It need not
 imply a new compiler lint group on day one.
 
-## Worked exception model: Servo-style code must stay quiet
+## 10. Worked exception model: Servo-style code must stay quiet
 
 The Servo `servo-shot` example is a useful calibration case because, at a
 glance, it contains exactly the kinds of patterns an overzealous ownership lint
@@ -218,9 +228,9 @@ Concretely, the following shapes should not trigger:
 
 This case should ship as a regression fixture in the UI suite.
 
-## Shared implementation approach
+## 11. Shared implementation approach
 
-### Architectural fit
+### 11.1. Architectural fit
 
 Whitaker already establishes the right implementation pattern:
 
@@ -237,7 +247,7 @@ This phase should follow the same split used by the brain-trust work:
 - **High-level Intermediate Representation (HIR) and MIR walkers plus
   rustc-private integration** in the lint crates.[^11]
 
-### Proposed crate and module layout
+### 11.2. Proposed crate and module layout
 
 ```text
 common/
@@ -256,7 +266,7 @@ crates/
 └── local_shared_ownership/
 ```
 
-### Proposed shared domain model
+### 11.3. Proposed shared domain model
 
 ```rust
 pub enum UseClass {
@@ -404,7 +414,7 @@ EvaluationResult --> OwnershipShapeEvaluation : output
 *Figure: Shared ownership-shape model showing the core enums, summaries, and
 evaluation entry points used across the proposed lint suite.*
 
-### Resolution strategy
+### 11.4. Resolution strategy
 
 The lints should resolve functions, methods, and wrapper constructors by
 **resolved `DefId` paths**, not by source text snippets. Whitaker already uses
@@ -412,7 +422,7 @@ The lints should resolve functions, methods, and wrapper constructors by
 the ownership suite should adopt the same technique for `Clone`, `ToOwned`,
 `Rc`, `Arc`, `Cell`, `RefCell`, `Mutex`, and `RwLock` classifiers.[^21]
 
-### HIR prefilter, MIR confirmation
+### 11.5. High-level Intermediate Representation (HIR) prefilter, Mid-level Intermediate Representation (MIR) confirmation
 
 The suite should use a two-stage approach:
 
@@ -427,14 +437,14 @@ information, and Rust's lint infrastructure explicitly supports both late
 passes and MIR-based checks for cases where flow-sensitive facts
 matter.[^20][^22]
 
-## Lint 1: `clone_only_used_by_borrow`
+## 12. Lint 1: `clone_only_used_by_borrow`
 
-### `clone_only_used_by_borrow` intent
+### 12.1. `clone_only_used_by_borrow` intent
 
 Detect clones whose resulting value is only observed through immutable borrows
 or `&self` method calls before being dropped.
 
-### `clone_only_used_by_borrow` detection model
+### 12.2. `clone_only_used_by_borrow` detection model
 
 A candidate arises from one of the following operations:
 
@@ -459,7 +469,7 @@ The lint fires only when:
 - the original receiver is a simple place whose borrow would not overlap a move
   or mutable borrow before the clone's last use.
 
-### Examples
+### 12.3. Examples
 
 Positive:
 
@@ -503,7 +513,7 @@ consume(tmp);
 s.push('!');
 ```
 
-### `clone_only_used_by_borrow` diagnostics
+### 12.4. `clone_only_used_by_borrow` diagnostics
 
 Primary message:
 
@@ -516,7 +526,7 @@ Notes:
 - suppress the message entirely if the replacement borrow would overlap a
   mutable use of the original.
 
-### Suggestion policy
+### 12.5. Suggestion policy
 
 Machine-applicable suggestions should be limited to:
 
@@ -526,7 +536,7 @@ Machine-applicable suggestions should be limited to:
 
 More complex cases should remain diagnostic-only.
 
-### `clone_only_used_by_borrow` false-positive controls
+### 12.6. `clone_only_used_by_borrow` false-positive controls
 
 Suppress when:
 
@@ -537,9 +547,9 @@ Suppress when:
 - the clone exists to satisfy an explicit API shape that will be handled by
   `owned_param_causes_clone` instead.
 
-## Lint 2: `owned_param_causes_clone`
+## 13. Lint 2: `owned_param_causes_clone`
 
-### `owned_param_causes_clone` intent
+### 13.1. `owned_param_causes_clone` intent
 
 Detect local, same-crate functions or methods whose by-value parameter shapes
 are creating clone pressure in real call sites even though the callee only
@@ -549,11 +559,11 @@ This lint is the suite's main product differentiator. It turns "this parameter
 could be a reference" into "this parameter is *currently causing callers to
 allocate or clone*".
 
-### `owned_param_causes_clone` detection model
+### 13.2. `owned_param_causes_clone` detection model
 
 The lint runs in two passes.
 
-#### Pass A: collect clone-pressure evidence at call sites
+#### 13.2.1. Pass A: collect clone-pressure evidence at call sites
 
 Record a candidate when all of the following hold:
 
@@ -570,7 +580,7 @@ Each candidate stores:
 - source place kind; and
 - whether the call occurs in a macro expansion.
 
-#### Pass B: summarize callee parameter usage
+#### 13.2.2. Pass B: summarize callee parameter usage
 
 For each candidate callee parameter, classify the parameter as one of:
 
@@ -585,7 +595,7 @@ The lint fires when:
 - the parameter is `ReadOnlyBorrowed`; and
 - the callee is not exempt.
 
-### Exemptions
+### 13.3. Exemptions
 
 Suppress by default when the callee is:
 
@@ -599,7 +609,7 @@ The exported-API suppression mirrors Clippy's existing
 `avoid-breaking-exported-api` pattern for several ownership-related
 lints.[^6][^9]
 
-### Exact borrow mappings
+### 13.4. Exact borrow mappings
 
 For the first release, support machine-guided rewrite hints only for exact,
 common owned-to-borrow mappings:
@@ -663,7 +673,7 @@ graph TD
 collection through parameter summarization, exemption handling, evaluation, and
 diagnostic emission.*
 
-### Diagnostics
+### 13.5. Diagnostics
 
 Primary span: parameter binding or function signature.
 
@@ -679,7 +689,7 @@ Notes:
 
 A secondary call-site note may be emitted at one representative clone span.
 
-### Example
+### 13.6. Example
 
 ```rust
 fn normalise(name: String) -> usize {
@@ -698,7 +708,7 @@ fn normalise(name: &str) -> usize {
 }
 ```
 
-### False-positive controls
+### 13.7. False-positive controls
 
 Suppress when:
 
@@ -710,14 +720,14 @@ Suppress when:
 - the clone source is itself a temporary, so the evidence does not actually
   show retained ownership pressure.
 
-## Lint 3: `local_shared_ownership`
+## 14. Lint 3: `local_shared_ownership`
 
-### Intent
+### 14.1. Intent
 
 Detect non-escaping shared-ownership or runtime-borrow wrappers whose observed
 use-pattern looks local and sequential.
 
-### Scope
+### 14.2. Scope
 
 The first release should restrict itself to wrappers created in the current
 body via:
@@ -732,7 +742,7 @@ body via:
 Nested forms such as `Rc<RefCell<T>>` and `Arc<Mutex<T>>` should be recognized
 explicitly.
 
-### Detection model
+### 14.3. Detection model
 
 A candidate wrapper is linted only when all of the following are true:
 
@@ -744,7 +754,7 @@ A candidate wrapper is linted only when all of the following are true:
 - the observed operations are limited to local, sequential `get`, `set`,
   `borrow`, `borrow_mut`, `lock`, `read`, or `write` patterns.
 
-### Diagnostic classes
+### 14.4. Diagnostic classes
 
 The lint should distinguish three families:
 
@@ -764,7 +774,7 @@ The lint should distinguish three families:
    - likely advice: "non-escaping shared mutable wrapper appears heavier than
      the local usage requires"
 
-### `local_shared_ownership` suggestion policy
+### 14.5. `local_shared_ownership` suggestion policy
 
 This lint should remain **diagnostic-only** in the first release.
 
@@ -772,7 +782,7 @@ A machine-applicable rewrite from `Rc<RefCell<T>>` to `let mut x = T` is too
 risky. The lint should instead point to the constructor span, summarize the
 evidence, and suggest a manual review.
 
-### Servo-style exemptions
+### 14.6. Servo-style exemptions
 
 Suppress when the wrapper exists because:
 
@@ -785,7 +795,7 @@ Suppress when the wrapper exists because:
 That suppresses the Servo `Rc<Cell<bool>>` callback bridge and `Cell`-backed
 delegate state described above.[^13][^14][^16][^17]
 
-### `local_shared_ownership` false-positive controls
+### 14.7. `local_shared_ownership` false-positive controls
 
 Suppress when:
 
@@ -798,9 +808,9 @@ Suppress when:
 - the inner type is itself a framework handle type and the wrapper appears to
   be part of that framework's ownership contract.
 
-## Common helper requirements
+## 15. Common helper requirements
 
-### `common::ownership_shape::path_kinds`
+### 15.1. `common::ownership_shape::path_kinds`
 
 Resolved-path classifiers for:
 
@@ -813,11 +823,11 @@ Resolved-path classifiers for:
 - callback, async, and task APIs that impose `'static` or thread-safe shared
   state.
 
-### `common::ownership_shape::exact_borrow_mappings`
+### 15.2. `common::ownership_shape::exact_borrow_mappings`
 
 A pure mapping table used by `owned_param_causes_clone`.
 
-### `common::ownership_shape::evaluation`
+### 15.3. `common::ownership_shape::evaluation`
 
 Pure decision functions that accept summaries and return:
 
@@ -829,7 +839,7 @@ Pure decision functions that accept summaries and return:
 This mirrors Whitaker's existing preference for pure evaluation helpers in
 `common` and thin lint-driver crates.[^11]
 
-## Diagnostics and localization
+## 16. Diagnostics and localization
 
 Whitaker already localizes diagnostics through Fluent bundles, uses stable
 slugs, and routes messages, notes, labels, and help text through shared
@@ -860,7 +870,7 @@ Diagnostic arguments should include concrete facts such as:
 As elsewhere in Whitaker, missing translations should degrade to deterministic
 English rather than panic.[^19]
 
-## Configuration
+## 17. Configuration
 
 Whitaker's longer-term roadmap is moving toward a unified command-line
 interface (CLI) and `whitaker.toml` configuration surface while retaining
@@ -893,9 +903,9 @@ ignore_trait_signature_constraints = true
 ignore_external_api_boundaries = true
 ```
 
-## Testing strategy
+## 18. Testing strategy
 
-### Unit tests
+### 18.1. Unit tests
 
 Pure tests in `common` should cover:
 
@@ -905,7 +915,7 @@ Pure tests in `common` should cover:
 - escape-kind reduction; and
 - diagnostic argument shaping.
 
-### Behaviour tests
+### 18.2. Behaviour tests
 
 Use Whitaker's existing `rstest-bdd` pattern for:
 
@@ -915,11 +925,11 @@ Use Whitaker's existing `rstest-bdd` pattern for:
 - callback-boundary suppression; and
 - representative machine-suggestion cases.[^2][^19]
 
-### UI tests
+### 18.3. UI tests
 
 Each lint crate should ship pass or fail fixtures.
 
-#### UI tests for `clone_only_used_by_borrow`
+#### 18.3.1. UI tests for `clone_only_used_by_borrow`
 
 Positive fixtures:
 
@@ -934,7 +944,7 @@ Negative fixtures:
 - unknown by-value call;
 - macro expansion.
 
-#### UI tests for `owned_param_causes_clone`
+#### 18.3.2. UI tests for `owned_param_causes_clone`
 
 Positive fixtures:
 
@@ -949,7 +959,7 @@ Negative fixtures:
 - async function;
 - source temporary rather than retained local.
 
-#### UI tests for `local_shared_ownership`
+#### 18.3.3. UI tests for `local_shared_ownership`
 
 Positive fixtures:
 
@@ -963,9 +973,9 @@ Negative fixtures:
 - `Rc<dyn Trait>` required by external API;
 - Servo-style legitimate builder and callback usage.
 
-## Rollout plan
+## 19. Rollout plan
 
-### Release 1
+### 19.1. Release 1
 
 - ship `clone_only_used_by_borrow` as experimental `warn`;
 - ship `owned_param_causes_clone` as experimental `warn` with exported-API
@@ -973,7 +983,7 @@ Negative fixtures:
 - ship `local_shared_ownership` as experimental and feature-gated, off by
   default.
 
-### Promotion criteria
+### 19.2. Promotion criteria
 
 Promote `clone_only_used_by_borrow` when:
 
@@ -998,7 +1008,7 @@ Keep `local_shared_ownership` experimental until:
 This mirrors the roadmap precedent for feature-gated experimental sets and
 explicit promotion criteria.[^12]
 
-## Open questions
+## 20. Open questions
 
 1. Which MIR query offers the best compromise between source-span fidelity and
    post-borrow-check accuracy for external Dylint lints in Whitaker's pinned
@@ -1013,7 +1023,7 @@ explicit promotion criteria.[^12]
 5. Should Whitaker eventually expose an `ownership` rule selection group in the
    planned unified CLI?
 
-## Decision summary
+## 21. Decision summary
 
 Whitaker should add a neutral, ownership-shape phase rather than a moralizing
 "borrow-checker workaround" lint. The suite should begin with one
@@ -1023,7 +1033,7 @@ Whitaker's current Dylint, localization, diagnostics, and pure-helper
 architecture, while treating framework and callback boundaries as suppressing
 evidence rather than anomalies.
 
-## References
+## 22. References
 
 [^1]: Whitaker README, current lint inventory and project
     framing. <https://github.com/leynos/whitaker>

@@ -556,111 +556,113 @@
 
 - [ ] 9.1.1. Add `common::ownership_shape` model types, evaluation helpers, and
   diagnostic argument builders. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Shared
-  implementation approach and §Diagnostics and localisation. Requires 1.1.1.
+  [ownership shape lints design](ownership-shape-lints-design.md) §11 Shared
+  implementation approach and §16 Diagnostics and localization. Requires 1.1.1.
 - [ ] 9.1.2. Add resolved-path classifiers for clone-like operations and
   wrapper constructors, following the `def_path_str` plus parsed-segment
   pattern used by `no_std_fs_operations`. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Resolution
-  strategy and §Common helper requirements. Requires 9.1.1.
+  [ownership shape lints design](ownership-shape-lints-design.md) §11.4
+  Resolution strategy and §15 Common helper requirements. Requires 9.1.1.
 - [ ] 9.1.3. Add exact borrow mappings for the initial concrete type set. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Lint 2:
-  `owned_param_causes_clone` and §Common helper requirements. Requires 9.1.1.
+  [ownership shape lints design](ownership-shape-lints-design.md) §13 Lint 2:
+  `owned_param_causes_clone` and §15 Common helper requirements. Requires 9.1.1.
 - [ ] 9.1.4. Add crate-local MIR summary helpers for local uses, escapes, and
   boundary classification. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §HIR
-  prefilter, MIR confirmation and §Worked exception model: Servo-style code
-  must stay quiet. Requires 9.1.1 and 9.1.2.
+  [ownership shape lints design](ownership-shape-lints-design.md) §11.5
+  High-level Intermediate Representation (HIR) prefilter, Mid-level
+  Intermediate Representation (MIR) confirmation and §10 Worked exception
+  model: Servo-style code must stay quiet. Requires 9.1.1 and 9.1.2.
 
 ### 9.2. `clone_only_used_by_borrow`
 
 - [ ] 9.2.1. Create the lint crate and register
   `CLONE_ONLY_USED_BY_BORROW`. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Lint 1:
+  [ownership shape lints design](ownership-shape-lints-design.md) §12 Lint 1:
   `clone_only_used_by_borrow`. Requires 9.1.1.
 - [ ] 9.2.2. Implement HIR candidate prefiltering for `clone` and `to_owned`
   forms. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Lint 1: `clone_only_used_by_borrow` and §HIR prefilter, MIR confirmation.
-  Requires 9.2.1 and 9.1.2.
+  §12 Lint 1: `clone_only_used_by_borrow` and §11.5 High-level Intermediate
+  Representation (HIR) prefilter, Mid-level Intermediate Representation (MIR)
+  confirmation. Requires 9.2.1 and 9.1.2.
 - [ ] 9.2.3. Implement MIR use classification and original-place conflict
   checks. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Lint 1: `clone_only_used_by_borrow`. Requires 9.2.2 and 9.1.4.
+  §12 Lint 1: `clone_only_used_by_borrow`. Requires 9.2.2 and 9.1.4.
 - [ ] 9.2.4. Add machine-applicable suggestions for direct-call and simple-let
   forms. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Suggestion policy. Requires 9.2.3.
+  §12.5 Suggestion policy. Requires 9.2.3.
 - [ ] 9.2.5. Add UI pass and fail coverage, including macro and mutable-conflict
   cases. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Testing strategy. Requires 9.2.3 and 1.2.1.
-
+  §18 Testing strategy. Requires 9.2.3 and 1.2.1.
 
 ### 9.4. `local_shared_ownership`
 
 - [ ] 9.4.1. Create the lint crate and register `LOCAL_SHARED_OWNERSHIP` behind
   an experimental feature. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Lint 3:
-  `local_shared_ownership` and §Rollout plan. Requires 9.1.1.
+  [ownership shape lints design](ownership-shape-lints-design.md) §14 Lint 3:
+  `local_shared_ownership` and §19 Rollout plan. Requires 9.1.1.
 - [ ] 9.4.2. Implement wrapper-construction detection and non-escape
   classification for `Rc`, `Arc`, interior mutability, and shared-mutable
   combinations. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Scope and
-  §Detection model. Requires 9.4.1, 9.1.2, and 9.1.4.
+  [ownership shape lints design](ownership-shape-lints-design.md) §14.2 Scope
+  and §14.3 Detection model. Requires 9.4.1, 9.1.2, and 9.1.4.
 - [ ] 9.4.3. Implement callback, async, thread, trait-surface, and external-API
   suppression. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Servo-style
-  exemptions and §False-positive controls. Requires 9.4.2.
+  [ownership shape lints design](ownership-shape-lints-design.md) §14.6
+  Servo-style exemptions and §14.7 `local_shared_ownership` false-positive
+  controls. Requires 9.4.2.
 - [ ] 9.4.4. Add diagnostic classes for interior-mutability-only,
   shared-handle-only, and shared-mutable-wrapper cases. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Diagnostic
-  classes and §Suggestion policy. Requires 9.4.3.
+  [ownership shape lints design](ownership-shape-lints-design.md) §14.4
+  Diagnostic classes and §14.5 `local_shared_ownership` suggestion policy.
+  Requires 9.4.3.
 - [ ] 9.4.5. Add Servo-style regression fixtures and framework-boundary
   negatives. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Worked
-  exception model: Servo-style code must stay quiet and §Testing strategy.
+  [ownership shape lints design](ownership-shape-lints-design.md) §10 Worked
+  exception model: Servo-style code must stay quiet and §18 Testing strategy.
   Requires 9.4.4 and 1.2.1.
 
 
-### 9.5. Localisation, documentation, and promotion
+### 9.5. Localization, documentation, and promotion
 
 - [ ] 9.5.1. Add Fluent entries and diagnostic argument mappings for all three
   lints. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Diagnostics and localisation. Requires 9.2.5, 9.3.5, 9.4.5, and 2.3.3.
+  §16 Diagnostics and localization. Requires 9.2.5, 9.3.5, 9.4.5, and 2.3.3.
 - [ ] 9.5.2. Add Welsh and Gaelic smoke coverage for the ownership-shape
   diagnostics. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Diagnostics
-  and localisation and §Testing strategy. Requires 9.5.1.
+  [ownership shape lints design](ownership-shape-lints-design.md) §16
+  Diagnostics and localization and §18 Testing strategy. Requires 9.5.1.
 - [ ] 9.5.3. Update `docs/users-guide.md` and `docs/developers-guide.md` with
   lint intent, configuration, and rollout guidance for the ownership-shape
   suite. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §Configuration and §Rollout plan. Requires 9.5.1.
+  §17 Configuration and §19 Rollout plan. Requires 9.5.1.
 - [ ] 9.5.4. Define promotion criteria from experimental to standard based on
   UI stability and false-positive tuning across representative repositories.
-  See [ownership shape lints design](ownership-shape-lints-design.md) §Rollout
-  plan. Requires 9.5.1 and 9.5.2.
-
+  See [ownership shape lints design](ownership-shape-lints-design.md) §19
+  Rollout plan. Requires 9.5.1 and 9.5.2.
 
 ## 10. Async-trait architecture hygiene lints
 
 ### 9.3. `owned_param_causes_clone`
 
 - [ ] 9.3.1. Create the lint crate and register `OWNED_PARAM_CAUSES_CLONE`.
-  See [ownership shape lints design](ownership-shape-lints-design.md) §Lint 2:
-  `owned_param_causes_clone`. Requires 9.1.1.
+  See [ownership shape lints design](ownership-shape-lints-design.md) §13 Lint
+  2: `owned_param_causes_clone`. Requires 9.1.1.
 - [ ] 9.3.2. Implement local call-site clone-pressure collection that records
   callee identity, argument index, source shape, and retained-source evidence.
-  See [ownership shape lints design](ownership-shape-lints-design.md) §Pass A:
-  collect clone-pressure evidence at call sites. Requires 9.3.1, 9.1.2, and
-  9.1.4.
+  See [ownership shape lints design](ownership-shape-lints-design.md) §13.2.1
+  Pass A: collect clone-pressure evidence at call sites. Requires 9.3.1, 9.1.2,
+  and 9.1.4.
 - [ ] 9.3.3. Implement callee parameter summaries and exported, trait, FFI, and
   async suppression rules. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Pass B:
-  summarise callee parameter usage and §Exemptions. Requires 9.3.2.
+  [ownership shape lints design](ownership-shape-lints-design.md) §13.2.2 Pass
+  B: summarize callee parameter usage and §13.3 Exemptions. Requires 9.3.2.
 - [ ] 9.3.4. Add exact borrow-type help for the initial mapping set without
   rewriting unsupported signatures. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Exact borrow
-  mappings and §Diagnostics. Requires 9.3.3 and 9.1.3.
+  [ownership shape lints design](ownership-shape-lints-design.md) §13.4 Exact
+  borrow mappings and §13.5 Diagnostics. Requires 9.3.3 and 9.1.3.
 - [ ] 9.3.5. Add UI coverage for private, exported, trait, async, and
   non-trigger scenarios. See
-  [ownership shape lints design](ownership-shape-lints-design.md) §Testing
+  [ownership shape lints design](ownership-shape-lints-design.md) §18 Testing
   strategy. Requires 9.3.4 and 1.2.1.
 
 ### 12.3. `cargo-compile-hygiene` tool and checks
