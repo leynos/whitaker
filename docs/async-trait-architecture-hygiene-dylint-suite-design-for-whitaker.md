@@ -1,6 +1,12 @@
 # Async-trait architecture hygiene dylint suite design for Whitaker
 
-## Executive summary
+Status: Proposed Scope: Single-crate async-trait architecture hygiene lint
+suite with no cross-crate analysis. Primary audience: Whitaker compiler and
+lint maintainers, and Rust contributors. Precedence documents: Axinite ADR 006,
+`docs/whitaker-dylint-suite-design.md`, and later ADRs or roadmap decisions
+that supersede this design.
+
+## 1. Executive summary
 
 The goal of this design is to add an opinionated, architecture-hygiene lint
 suite to the Whitaker Dylint workspace that makes “async + dyn dispatch”
@@ -22,9 +28,9 @@ The suite is intentionally scoped to single-crate analysis (no cross-crate
 inventories, no workspace-wide graphing), mirroring existing Whitaker design
 choices and keeping performance predictable. [^2]
 
-## Repository reconnaissance
+## 2. Repository reconnaissance
 
-### Whitaker locations inspected
+### 2.1 Whitaker locations inspected
 
 The existing Whitaker workspace is structured around per-lint `cdylib` crates
 under `crates/*`, a shared `common` helper crate, and an aggregated suite crate
@@ -40,7 +46,7 @@ Code-level “HIR helper” precedent exists in `src/hir.rs` (module spans,
 attribute conversion, test-attribute detection), which is an obvious
 integration point for a new trait-family index. [^2]
 
-### Axinite materials inspected
+### 2.2 Axinite materials inspected
 
 Axinite’s migration plan and ADR provide the design target and concrete failure
 modes the lints should encode:
@@ -53,7 +59,7 @@ modes the lints should encode:
 - ExecPlan: “Roll out ADR 006…” (wave-based rollout discipline, explicit `Send`
   policy, and evidence collection expectations). [^3]
 
-### External primary sources consulted
+### 2.3 External primary sources consulted
 
 This design relies on primary/official sources for language constraints and
 library mechanics:
@@ -74,9 +80,9 @@ library mechanics:
   `cfg_attr(dylint_lib=...)`, but pre-expansion lints require
   `#[allow(unknown_lints)]` to avoid “unknown lint” warnings. [^8]
 
-## Goals, scope, non-goals, and taxonomy
+## 3. Goals, scope, non-goals, and taxonomy
 
-### Goals
+### 3.1 Goals
 
 The suite should:
 
@@ -95,7 +101,7 @@ The suite should:
    `Send`-bound parity and multi-borrow lifetime binding—into lintable
    structural rules. [^1][^3]
 
-### Scope
+### 3.2 Scope
 
 These lints operate at the Rust compiler HIR/type-check level and are
 crate-local, consistent with Whitaker’s existing approach to local analysis and
@@ -106,7 +112,7 @@ families, dispatch modes, and boundary representations; it is allowed to be
 opinionated, but it must ship with strong false-positive controls and clear
 “escape hatch” guidance.
 
-### Non-goals
+### 3.3 Non-goals
 
 - Cross-crate / whole-workspace enforcement (for example, proving that *no
   downstream crate* uses a trait as `dyn`). This is not a tractable contract
@@ -119,7 +125,7 @@ opinionated, but it must ship with strong false-positive controls and clear
   evidence as a separate artefact captured by CI commands like
   `cargo check --timings`, not something enforced via static analysis. [^3]
 
-### Categorization taxonomy for Whitaker lints
+### 3.4 Categorization taxonomy for Whitaker lints
 
 Whitaker already uses a “kind” vocabulary such as `style`, `restriction`,
 `pedantic`, and `maintainability`. [^2] To avoid “random bugbear” accretion,
@@ -135,12 +141,12 @@ this suite should commit to a narrow taxonomy mapping:
   behaviour during or after migration (eg. requiring `+ Send` where
   `async-trait` previously implied it by default). [^5][^3]
 
-## Lint catalogue
+## 4. Lint catalogue
 
 The suite is intended as a *cohesive set*: some lints are “inventory”/advisory
 for early rollout; others become “ratchets” once a family is migrated.
 
-### Proposed lint table
+### 4.1 Proposed lint table
 
 | Lint name                                           | Kind                      | Default | Trigger summary                                                                                                                      | HIR queries and patterns                                                                                                                                                            | False-positive controls                                                                                                                      | Suggested fix                                                                                          | Canonical UI tests                                                   |
 | --------------------------------------------------- | ------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
@@ -158,16 +164,16 @@ hazards—losing implicit `Send` guarantees and multi-borrow lifetime binding—
 those are treated as first-class lint rules rather than “docs-only” advice.
 [^1][^3]
 
-### Implementation notes on lint granularity
+### 4.2 Implementation notes on lint granularity
 
 The lints are deliberately fine-grained rather than one monolithic “ADR 006
 compliance” lint. This enables migration waves that start with inventory-only
 warnings and end with a small number of `deny` ratchets once a family is
 migrated, matching Axinite’s incremental approach. [^3]
 
-## Shared analysis design
+## 5. Shared analysis design
 
-### AsyncTraitFamilyIndex fields
+### 5.1 AsyncTraitFamilyIndex fields
 
 The `AsyncTraitFamilyIndex` is a crate-local, derived-data index computed once
 per compilation session (per crate being linted). It is analogous in spirit to
@@ -192,9 +198,9 @@ the index. [^2]
 Determinism note: choose `BTreeMap/BTreeSet` for stable iteration and stable
 diagnostics ordering, consistent with other Whitaker architecture designs. [^2]
 
-### Algorithms
+### 5.2 Algorithms
 
-#### Candidate trait discovery
+#### 5.2.1 Candidate trait discovery
 
 A “candidate async interface trait” is a local trait that contains at least one
 method whose return type is either:
@@ -206,7 +212,7 @@ This intentionally classifies both hand-written boxed-future dyn traits and
 `async-trait` macro output, because for architecture hygiene they are the same
 artefact: an object-safe async boundary expressed via erased futures. [^5]
 
-#### Dyn-use closure and supertrait closure
+#### 5.2.2 Dyn-use closure and supertrait closure
 
 Two language facts shape the closure computation:
 
@@ -246,7 +252,7 @@ while let Some(t) = worklist.pop():
     if dyn_required.insert(s): worklist.push(s)
 ```
 
-#### Native sibling detection
+#### 5.2.3 Native sibling detection
 
 ADR 006 formalizes the naming rule: keep `Tool`/`Database`/… as the dyn-facing
 trait name, and use `NativeTool`/`NativeDatabase` as the sibling. [^1]
@@ -260,7 +266,7 @@ Sibling traits are detected by finding, for a given dyn-facing trait `T`:
 This “same parent” rule keeps the match unambiguous in large codebases with
 repeated trait names.
 
-#### Blanket adapter detection
+#### 5.2.4 Blanket adapter detection
 
 The ADR defines the adapter as a blanket impl bridging `Native*` into the dyn
 trait. [^1]
@@ -276,7 +282,7 @@ Method-body inspection (e.g. checking for `Box::pin(NativeTrait::method(..))`)
 is optional and should be a second-stage “confidence upgrade”, not a required
 condition, because HIR body matching across rustc versions is brittle.
 
-#### Boxed-future alias detection
+#### 5.2.5 Boxed-future alias detection
 
 ADR 006 recommends a single boxed-future alias to keep signatures readable (and
 to avoid repeating long `Pin<Box<dyn Future…>>` types). [^1]
@@ -289,7 +295,7 @@ Aliases are detected by scanning `type` items and matching the syntactic shape:
 
 This detection is deliberately syntactic/structural rather than string-based.
 
-### Family graph diagram
+### 5.3 Family graph diagram
 
 This diagram shows how dyn-facing and native sibling traits connect through the
 blanket adapter and concrete implementation choices.
@@ -310,9 +316,9 @@ flowchart TD
 Caption: Family graph showing dyn-facing traits, native siblings, and the
 blanket adapter.
 
-## Integration plan and rollout strategy
+## 6. Integration plan and rollout strategy
 
-### Shared helper placement in Whitaker
+### 6.1 Shared helper placement in Whitaker
 
 Whitaker distinguishes between:
 
@@ -334,7 +340,7 @@ Proposed module layout:
 - `whitaker/src/async_trait_hygiene/config.rs` (shared config structs and
   parsing helpers)
 
-### New lint crates
+### 6.2 New lint crates
 
 Whitaker’s documented convention is one lint per `cdylib` crate with
 feature-gated rustc dependencies. [^2]
@@ -346,7 +352,7 @@ on:
   `AsyncTraitFamilyIndex`)
 - `common` (diagnostic helpers, i18n, etc)
 
-### Suite plumbing
+### 6.3 Suite plumbing
 
 There are two viable integration modes:
 
@@ -359,7 +365,7 @@ There are two viable integration modes:
 Either way, the suite wiring pattern is clear: add lint declarations to the
 suite list and register pass types in the combined pass. [^2]
 
-### Configuration model
+### 6.4 Configuration model
 
 A practical config model for migration waves:
 
@@ -378,7 +384,7 @@ Directory/crate overrides should be implemented via explicit allowlists and
 path-prefix matching against `SourceMap` filenames, not by attempting to infer
 Cargo workspace structure from inside rustc.
 
-### Migration waves and default levels
+### 6.5 Migration waves and default levels
 
 Align the rollout with Axinite’s “prove in waves” discipline (inventory →
 migrate family-by-family → ratchet). [^3]
@@ -399,7 +405,7 @@ Suggested wave policy:
     in production modules
   - warn on direct dyn impls where native+adapter exist
 
-#### Rollout timeline diagram
+#### 6.5.1 Rollout timeline diagram
 
 This diagram summarizes the staged rollout from inventory to migration and then
 to the regression-prevention ratchet.
@@ -422,9 +428,9 @@ timeline
 
 Caption: Rollout timeline showing the inventory, migration, and ratchet waves.
 
-## Performance, CI boundaries, and open decisions
+## 7. Performance, CI boundaries, and open decisions
 
-### Performance and compile-time cost considerations
+### 7.1 Performance and compile-time cost considerations
 
 The motivation for eliminating `async-trait` in dyn-heavy codebases is not
 “micro-optimizing futures”; it is reducing proc-macro expansion and boilerplate
@@ -447,7 +453,7 @@ For the lint suite itself, the expensive step is building
 This is consistent with Whitaker’s documented preference for local, linear
 analyses rather than global program graphs. [^2]
 
-### CI and xtask responsibilities versus lints
+### 7.2 CI and xtask responsibilities versus lints
 
 Two responsibilities should explicitly remain outside lints:
 
@@ -461,7 +467,7 @@ Two responsibilities should explicitly remain outside lints:
   limitation is structurally unavoidable for per-crate linting and should be
   documented prominently.
 
-### Pending architectural decisions and trade-offs
+### 7.3 Pending architectural decisions and trade-offs
 
 **Alias locality versus shared alias module.** ADR 006 defaults to a shared
 boxed-future alias (“one helper module”) to reduce signature verbosity.
@@ -499,7 +505,7 @@ encourage teams to pair it with a separate, workspace-level audit step when
 planning migrations, matching Axinite’s discipline of explicit inventories and
 approvals. [^1][^3]
 
-## References
+## 8. References
 
 [^1]: Axinite ADR 006, `Dual-trait pattern for dyn-backed async interfaces`.
       <https://raw.githubusercontent.com/leynos/axinite/refs/heads/main/docs/adr-006-dual-trait-pattern-for-dyn-backed-async-interfaces.md>

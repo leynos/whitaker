@@ -1,6 +1,12 @@
 # Technical design for `test_support_dead_code` and `masked_dead_code_expectations`
 
-## Design summary
+Status: Proposed Scope: Crate-local detector lints plus workspace analysis for
+dead or over-suppressed test-support code. Primary audience: Whitaker
+contributors, lint authors, reviewers, and QA engineers. Precedence documents:
+`docs/whitaker-dylint-suite-design.md`, `docs/whitaker-cli-design.md`, and
+later ADRs or roadmap decisions that supersede this design.
+
+## 1. Design summary
 
 Whitaker should treat this problem as a workspace-cleanup and refactoring
 problem, not as a style scold. Cargo compiles each integration-test target
@@ -30,7 +36,7 @@ infrastructure. Adding two new lint crates and one shared workspace-analysis
 engine therefore fits the repository’s architecture rather than fighting it.
 [^3]
 
-## Repository evidence and the actual pathology
+## 2. Repository evidence and the actual pathology
 
 The axinite example matters because it shows how the original “shared bag of
 helpers” story can stop being true over time. The repository now has a
@@ -94,7 +100,7 @@ in targets that actually use them, and the file-level
 tell the developer so. This is exactly what `masked_dead_code_expectations`
 should expose. [^6][^7][^1]
 
-## Proposed rule contracts
+## 3. Proposed rule contracts
 
 `test_support_dead_code` should fire on non-top-level modules reachable from
 integration-test targets when Whitaker finds any of the following in scope:
@@ -127,7 +133,7 @@ say which helpers are globally dead, which are genuinely shared, and which
 expectations are stale because the helper is live in at least one importer
 target. That keeps the user-facing story unified and actionable. [^6]
 
-## Multi-pass execution path
+## 4. Multi-pass execution path
 
 The workspace analysis should run in four deliberate phases.
 
@@ -207,7 +213,7 @@ multi-target. The usefulness of the synthetic/organic split follows directly
 from axinite’s existing `touch!`, `touch_const!`, and anonymous `const _:`
 keepalive code. [^5]
 
-## Diagnostic model and report format
+## 5. Diagnostic model and report format
 
 The default human-readable diagnostic should inventory items, not counts. A
 file-level warning should lead with the suppression site, then group items
@@ -320,7 +326,7 @@ operational summaries, and this analysis belongs in the same family. A JSON
 form makes later autofix or reporting work possible without locking Whitaker
 into automatic deletion or code movement in v1. [^3]
 
-## Worked examples
+## 6. Worked examples
 
 In axinite, the most important design conclusion is that the tool should not
 hard-code the “shared across many test crates” story. The current repository
@@ -344,7 +350,7 @@ several helpers are genuinely shared. That makes mdtablefix the canonical
 justification for a rule that inventories per-item target reach, rather than
 just yelling about the presence of `#[expect(dead_code)]`. [^6][^7]
 
-## Constraints, failure modes, and rollout
+## 7. Constraints, failure modes, and rollout
 
 The scope should stay tight in v1. Whitaker should analyse integration-test
 support only, and only for the active package, feature set, and target triple.
@@ -379,7 +385,7 @@ existing architecture, and delivers the part the exploration asked for: a tool
 that helps people unbork the codebase by telling them which support items are
 actually dead, which are local, and which are truly shared. [^3]
 
-## References
+## 8. References
 
 [^1]: Cargo and Rust documentation covering integration-test target structure,
       `dead_code`, `#[expect(...)]`, `unfulfilled_lint_expectations`,
