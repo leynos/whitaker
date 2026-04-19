@@ -1,11 +1,13 @@
 ---
-Status: Proposed design for a future Whitaker lint phase.
-Scope: Crate-local ownership-shape lints for clone pressure and local shared ownership patterns.
-Primary audience: Whitaker maintainers implementing lint crates, shared helpers, and roadmap tasks.
+Status: Proposed
+Scope: ownership-shape lints for Phase 9.
+Primary audience: Whitaker contributors and lint implementers.
+Review tags:
+  - "[type:docstyle]"
 Precedent documents:
-  - docs/whitaker-dylint-suite-design.md
-  - docs/brain-trust-lints-design.md
-  - docs/roadmap.md
+  - "[Whitaker Dylint suite design](whitaker-dylint-suite-design.md)"
+  - "[Brain trust lints design](brain-trust-lints-design.md)"
+  - "[Roadmap](roadmap.md)"
 ---
 
 # Ownership shape lints design for value clones and local shared ownership
