@@ -6,8 +6,14 @@
 > [brain trust lints design](brain-trust-lints-design.md), the
 > [clone detector design](whitaker-clone-detector-design.md), the
 > [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md),
+> [ownership shape lints design](ownership-shape-lints-design.md), the
+> [async-trait architecture hygiene Dylint suite design](async-trait-architecture-hygiene-dylint-suite-design-for-whitaker.md),
+> the
+> [test-support dead-code and masked-expectations design](technical-design-for-test-support-dead-code-and-masked-dead-code-expectations.md),
 > and the
-> [ownership shape lints design](ownership-shape-lints-design.md).
+> [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md).
+> Use this document for the foundational suite conventions and those
+> companion documents for later phase-specific architecture and rollout work.
 
 This single document consolidates the workspace design, the seven core lints
 (with the **revised conditional rule**), the separate `no_unwrap_or_else_panic`
@@ -1294,6 +1300,13 @@ function and is suitable as a stable Dylint rule in the default suite.
 - [ ] CI workflows.
 
 ## 15) Phased roadmap (small, nested tasks)
+
+> [!NOTE]
+> The historical phased outline below captures the original suite-delivery
+> sequence. Active follow-on planning for the later specialist phases now lives
+> in [docs/roadmap.md](roadmap.md), with detailed architecture in the companion
+> design documents for ownership-shape lints, async-trait hygiene,
+> test-support dead-code analysis, and cargo-compile-hygiene.
 
 ### Phase 0 — Repo scaffolding
 

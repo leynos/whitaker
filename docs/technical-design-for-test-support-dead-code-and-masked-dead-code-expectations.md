@@ -11,8 +11,7 @@ only when that exact `expect` suppresses the lint; if some other lint-level
 attribute changes handling, the expectation goes stale and
 `unfulfilled_lint_expectations` should fire instead. In other words, the core
 pathology is real, upstream behaviour explains it, and a single-target lint
-cannot answer the whole question by itself.
-[^1]
+cannot answer the whole question by itself. [^1]
 
 I recommend a split design. `test_support_dead_code` should exist as a normal
 Whitaker lint crate in the Dylint suite, but only as a fast detector and
@@ -21,8 +20,7 @@ workspace analysis phase that runs under `whitaker check` and produces per-item
 inventories, target classifications, and usage sites. That split matches
 Dylint’s execution model, where lints run as dynamic libraries implementing
 `LateLintPass`, and it also fits Whitaker’s documented direction toward a
-first-class `whitaker` CLI that owns richer workspace-aware analysis.
-[^2][^3]
+first-class `whitaker` CLI that owns richer workspace-aware analysis. [^2][^3]
 
 Whitaker’s current workspace layout already accommodates this cleanly. The root
 workspace contains `common`, `crates/*`, `installer`, and `suite`, and the
@@ -60,8 +58,7 @@ consumers in the E2E metrics test and the test rig, while `TurnMetrics`,
 That makes `metrics.rs` an excellent worked example for a lint whose output
 should say “these items look globally dead” and “these items are single-target
 live”, rather than merely “5 dead, 4 alive”. The compiler run must remain the
-final oracle, but repository evidence already points in that direction.
-[^4]
+final oracle, but repository evidence already points in that direction. [^4]
 
 Axinite also contains a second, subtler smell that the design should account
 for: manual keepalive shims. `tests/support/mod.rs` defines `touch!`,
@@ -110,8 +107,7 @@ edges or `#[path]` edges. In plain Dylint mode it should emit a lightweight
 warning that says, in effect, “this suppression needs workspace analysis”. In
 full Whitaker mode it should emit an inventory-based report that classifies
 every suppressed item as globally dead, organic single-target live, organic
-multi-target live, or live only through synthetic keepalive shims.
-[^1][^2]
+multi-target live, or live only through synthetic keepalive shims. [^1][^2]
 
 `masked_dead_code_expectations` should stay narrower than a general “masked
 expectations” lint, at least in v1. It should fire only when
@@ -121,8 +117,7 @@ family of “I tried to be precise, then turned the alarm off” patterns that t
 exploration identified. In plain Dylint mode it should flag the mask
 immediately. In full Whitaker mode it should attach a stale-expectation
 inventory showing which `expect(dead_code)` annotations are stale in which
-targets and where the corresponding organic uses sit.
-[^1][^6]
+targets and where the corresponding organic uses sit. [^1][^6]
 
 Both rules should share one analysis engine and produce one merged report when
 they hit the same file. In mdtablefix, for example,
@@ -130,8 +125,7 @@ they hit the same file. In mdtablefix, for example,
 expectations”; it should also reuse the `test_support_dead_code` machinery to
 say which helpers are globally dead, which are genuinely shared, and which
 expectations are stale because the helper is live in at least one importer
-target. That keeps the user-facing story unified and actionable.
-[^6]
+target. That keeps the user-facing story unified and actionable. [^6]
 
 ## Multi-pass execution path
 
@@ -155,8 +149,7 @@ remove only `dead_code` suppressions from `allow` and `expect` attributes,
 preserve unrelated lints, and inject a probe item such as
 `fn whitaker_dead_code_probe_7f3c2e() {}` immediately after inner attributes.
 The probe must not begin with an underscore, because the compiler explicitly
-documents underscore-prefixed names as a way to silence `dead_code`.
-[^1]
+documents underscore-prefixed names as a way to silence `dead_code`. [^1]
 
 The third phase should run an instrumented per-target compilation. For each
 importer target, Whitaker should invoke
@@ -166,8 +159,7 @@ surrounding Whitaker invocation already resolved. The JSON stream gives
 Whitaker structured compiler diagnostics, and a small collector lint loaded
 during the same run can record def-use edges for the candidate support files.
 `cargo check` already supports selecting specific integration-test targets, and
-Cargo’s JSON message stream is designed for external tools.
-[^1]
+Cargo’s JSON message stream is designed for external tools. [^1]
 
 That instrumented run should collect two distinct classes of evidence. First,
 rustc’s own `dead_code` diagnostics remain the ground truth for whether an item
@@ -189,8 +181,7 @@ build in which it restores the original `expect(dead_code)` annotations but
 removes the mask. This pass should gather `unfulfilled_lint_expectations`
 diagnostics so Whitaker can say exactly which expectations are stale in which
 targets. That second pass is what turns “masked expectations exist” into “these
-eight expectations are stale in these four importer targets”.
-[^1]
+eight expectations are stale in these four importer targets”. [^1]
 
 The classification logic should stay simple:
 
@@ -272,8 +263,7 @@ That specific shape matches the current axinite evidence:
 already differentiates likely dead items such as `TurnMetrics`, `MetricDelta`,
 and `total_tool_time_ms` from items that the E2E metrics tests or test rig
 actively consume. The compiler run should still determine the final
-classification, but the report should look like this, not like a histogram.
-[^4]
+classification, but the report should look like this, not like a histogram. [^4]
 
 `masked_dead_code_expectations` should use the same idea. It should not stop at
 “scope contains `allow(unfulfilled_lint_expectations)`”. It should show exactly
@@ -322,8 +312,7 @@ warning[masked_dead_code_expectations]: dead_code expectations are masked by all
 That shape reflects the repository’s current state far better than a simple
 “masked expectation exists” warning. The Reference semantics justify the
 stale-expectation language, and the mdtablefix search results already show
-those helpers as live across real importer targets.
-[^1][^6][^7]
+those helpers as live across real importer targets. [^1][^6][^7]
 
 Whitaker should also expose the same inventory as machine-readable JSON. The
 CLI design already treats JSON output as a first-class interface for
@@ -343,8 +332,7 @@ many test targets”, but “under the current workspace configuration, this fil
 imports into one target, so the blanket suppression now masks dead or overly
 broad support code”. The same report should explicitly separate genuine test
 uses in `tests/e2e_traces/metrics.rs` and `tests/support/test_rig/rig.rs` from
-synthetic keepalive shims in `tests/support/mod.rs`.
-[^4][^5]
+synthetic keepalive shims in `tests/support/mod.rs`. [^4][^5]
 
 In mdtablefix, the worked example should show the opposite conclusion.
 `tests/common/mod.rs` really is shared support, because `tests/prelude/mod.rs`
@@ -354,8 +342,7 @@ helpers shared, delete anything globally dead, and stop pretending that every
 helper is expected dead everywhere”. The collector evidence already shows that
 several helpers are genuinely shared. That makes mdtablefix the canonical
 justification for a rule that inventories per-item target reach, rather than
-just yelling about the presence of `#[expect(dead_code)]`.
-[^6][^7]
+just yelling about the presence of `#[expect(dead_code)]`. [^6][^7]
 
 ## Constraints, failure modes, and rollout
 
@@ -364,16 +351,14 @@ support only, and only for the active package, feature set, and target triple.
 Cargo documentation explicitly frames target selection and feature selection as
 part of how external tools should integrate with builds, so Whitaker should
 report what is dead under the build the user actually asked for, not under an
-imagined cross-product of every feature combination.
-[^1]
+imagined cross-product of every feature combination. [^1]
 
 Whitaker should not auto-move code between files in v1. Deletion is tempting
 for items proved dead in all importer targets, but even there rustc’s own
 `dead_code` documentation warns about cases where apparently unused fields or
 items still matter through drop side effects or other type-level behaviour. The
 safe v1 contract is “report precisely, suggest concretely, and maybe offer a
-later opt-in fix for removing the suppression attribute itself”.
-[^1]
+later opt-in fix for removing the suppression attribute itself”. [^1]
 
 The design should also explicitly treat `#[expect(dead_code)]` as a dubious
 migration target rather than the canonical remedy. The Reference semantics
@@ -382,8 +367,7 @@ only fulfilled when that exact `expect` suppresses the lint. There is also at
 least one current rustc issue where `#[expect(dead_code)]` appears in an
 incremental-compilation ICE involving `shallow_lint_levels_on`. Whitaker
 therefore should not frame “replace `allow(dead_code)` with `expect(dead_code)`
-everywhere” as the recommended end state for shared test support.
-[^1]
+everywhere” as the recommended end state for shared test support. [^1]
 
 The rollout path should be incremental. First, add the two lint crates and the
 shared analyser crate or module, and wire the lightweight detector into the
@@ -393,8 +377,7 @@ and a small corpus of UI and behaviour tests drawn from the axinite and
 mdtablefix patterns. That path keeps Dylint compatibility, fits Whitaker’s
 existing architecture, and delivers the part the exploration asked for: a tool
 that helps people unbork the codebase by telling them which support items are
-actually dead, which are local, and which are truly shared.
-[^3]
+actually dead, which are local, and which are truly shared. [^3]
 
 ## References
 

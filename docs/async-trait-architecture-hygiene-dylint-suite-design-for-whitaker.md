@@ -28,15 +28,13 @@ choices and keeping performance predictable. [^2]
 
 The existing Whitaker workspace is structured around per-lint `cdylib` crates
 under `crates/*`, a shared `common` helper crate, and an aggregated suite crate
-that registers multiple lints in one Dylint library.
-[^2] The suite wiring uses a combined late lint pass
-and a registry list of included lints. [^2]
+that registers multiple lints in one Dylint library. [^2] The suite wiring uses
+a combined late lint pass and a registry list of included lints. [^2]
 
 For lint-crate ergonomics and build hygiene, Whitaker uses feature-gating
 (`dylint-driver`) to keep `rustc_private` dependencies out of unit-test builds,
-and enables `constituent` for suite aggregation. [^2]
-The root `whitaker` crate already hosts `rustc_private`-bound helpers behind
-the same feature gate. [^2]
+and enables `constituent` for suite aggregation. [^2] The root `whitaker` crate
+already hosts `rustc_private`-bound helpers behind the same feature gate. [^2]
 
 Code-level “HIR helper” precedent exists in `src/hir.rs` (module spans,
 attribute conversion, test-attribute detection), which is an obvious
@@ -65,8 +63,7 @@ library mechanics:
   not dyn-compatible. [^4]
 - `async-trait` docs: the crate exists specifically to support async-in-traits
   with dyn traits by erasing the future to `Pin<Box<dyn Future + …>>`; it
-  defaults to `Send` futures unless `#[async_trait(?Send)]` is used.
-  [^5]
+  defaults to `Send` futures unless `#[async_trait(?Send)]` is used. [^5]
 - Rust Blog announcement for `async fn`/RPITIT in traits: dynamic dispatch
   remains unsupported; `trait-variant` is positioned as a utility, with dyn
   support described as future work. [^6]
@@ -75,8 +72,7 @@ library mechanics:
   explicit `+ Send` when that matters. [^7]
 - Dylint docs: conditional compilation works for most lints via
   `cfg_attr(dylint_lib=...)`, but pre-expansion lints require
-  `#[allow(unknown_lints)]` to avoid “unknown lint” warnings.
-  [^8]
+  `#[allow(unknown_lints)]` to avoid “unknown lint” warnings. [^8]
 
 ## Goals, scope, non-goals, and taxonomy
 
@@ -89,8 +85,7 @@ The suite should:
    relationships that implicitly tie traits to dyn usage.
 2. Enforce the ADR 006 dual-trait pattern **where dynamic dispatch is actually
    in play**: dyn-facing trait returning boxed futures, sibling `Native*` trait
-   returning `impl Future + Send`, and blanket adapter bridging them.
-   [^1]
+   returning `impl Future + Send`, and blanket adapter bridging them. [^1]
 3. Prevent unnecessary use of `async-trait`-style boxing when the trait is not
    dyn-required (directly or as a supertrait of a dyn trait), reflecting
    Axinite’s real-world discovery that “concrete-only” candidates were rarer
@@ -122,15 +117,13 @@ opinionated, but it must ship with strong false-positive controls and clear
   whole-program rewrites.
 - Measuring compile times inside lints. Axinite’s rollout plan treats timing
   evidence as a separate artefact captured by CI commands like
-  `cargo check --timings`, not something enforced via static analysis.
-  [^3]
+  `cargo check --timings`, not something enforced via static analysis. [^3]
 
 ### Categorization taxonomy for Whitaker lints
 
 Whitaker already uses a “kind” vocabulary such as `style`, `restriction`,
-`pedantic`, and `maintainability`. [^2] To avoid
-“random bugbear” accretion, this suite should commit to a narrow taxonomy
-mapping:
+`pedantic`, and `maintainability`. [^2] To avoid “random bugbear” accretion,
+this suite should commit to a narrow taxonomy mapping:
 
 - **restriction**: rules that prevent semantically risky or
   architecture-breaking patterns (eg. reintroducing `async-trait` boxing on a
@@ -140,8 +133,7 @@ mapping:
 - **compatibility** (documented sublabel, but mapped to
   restriction/maintainability in crate docs): rules whose purpose is preserving
   behaviour during or after migration (eg. requiring `+ Send` where
-  `async-trait` previously implied it by default).
-  [^5][^3]
+  `async-trait` previously implied it by default). [^5][^3]
 
 ## Lint catalogue
 
@@ -198,8 +190,7 @@ the index. [^2]
 | `diagnostic_paths`     | small strings                                 | `tcx.def_path_str(def_id)` snapshots for messages                                                  | stable reporting                               |
 
 Determinism note: choose `BTreeMap/BTreeSet` for stable iteration and stable
-diagnostics ordering, consistent with other Whitaker architecture designs.
-[^2]
+diagnostics ordering, consistent with other Whitaker architecture designs. [^2]
 
 ### Algorithms
 
@@ -213,16 +204,14 @@ method whose return type is either:
 
 This intentionally classifies both hand-written boxed-future dyn traits and
 `async-trait` macro output, because for architecture hygiene they are the same
-artefact: an object-safe async boundary expressed via erased futures.
-[^5]
+artefact: an object-safe async boundary expressed via erased futures. [^5]
 
 #### Dyn-use closure and supertrait closure
 
 Two language facts shape the closure computation:
 
 - Trait objects require a dyn-compatible base trait, and trait objects
-  implement the base trait **and its supertraits**.
-  [^4]
+  implement the base trait **and its supertraits**. [^4]
 - `async fn` and return-position `impl Trait` prevent dyn compatibility.
   [^4][^5]
 
@@ -260,8 +249,7 @@ while let Some(t) = worklist.pop():
 #### Native sibling detection
 
 ADR 006 formalizes the naming rule: keep `Tool`/`Database`/… as the dyn-facing
-trait name, and use `NativeTool`/`NativeDatabase` as the sibling.
-[^1]
+trait name, and use `NativeTool`/`NativeDatabase` as the sibling. [^1]
 
 We detect siblings by finding, for a given dyn-facing trait `T`:
 
@@ -327,11 +315,10 @@ Whitaker distinguishes between:
   `dylint-driver` feature. [^2]
 
 `AsyncTraitFamilyIndex` should live in the `whitaker` crate (not `common`)
-under `#[cfg(feature = "dylint-driver")]`, alongside existing HIR helpers.
-[^2] This keeps the index available to lint crates
-without forcing compiler dependencies into `common`, consistent with other
-Whitaker designs that keep pure logic separate from extraction.
-[^2]
+under `#[cfg(feature = "dylint-driver")]`, alongside existing HIR helpers. [^2]
+This keeps the index available to lint crates without forcing compiler
+dependencies into `common`, consistent with other Whitaker designs that keep
+pure logic separate from extraction. [^2]
 
 Proposed module layout:
 
@@ -364,8 +351,7 @@ There are two viable integration modes:
   Cargo feature on the suite crate so teams opt in explicitly.
 
 Either way, the suite wiring pattern is clear: add lint declarations to the
-suite list and register pass types in the combined pass.
-[^2]
+suite list and register pass types in the combined pass. [^2]
 
 ### Configuration model
 
@@ -433,10 +419,10 @@ The motivation for eliminating `async-trait` in dyn-heavy codebases is not
 “micro-optimizing futures”; it is reducing proc-macro expansion and boilerplate
 generation. Axinite measured 158 `async-trait` uses across 74 files early in
 the migration and described each use as generating boxing/dynamic dispatch
-boilerplate at compile time. [^3] The `async-trait` crate
-documentation confirms the core mechanical transformation into boxed futures
-and the default `Send` behaviour, which are exactly the costs and semantics
-teams must make explicit when migrating. [^5]
+boilerplate at compile time. [^3] The `async-trait` crate documentation
+confirms the core mechanical transformation into boxed futures and the default
+`Send` behaviour, which are exactly the costs and semantics teams must make
+explicit when migrating. [^5]
 
 For the lint suite itself, the expensive step is building
 `AsyncTraitFamilyIndex`. The design keeps that cost bounded:
@@ -468,25 +454,25 @@ Two responsibilities should explicitly remain outside lints:
 
 **Alias locality versus shared alias module.** ADR 006 defaults to a shared
 boxed-future alias (“one helper module”) to reduce signature verbosity.
-[^1][^3] Whitaker lints should support both “one canonical
-alias” and “family-local alias” modes, because some codebases prefer keeping
-interface types private to the module. The trade-off is between global
-consistency (better for large migrations) and local encapsulation.
+[^1][^3] Whitaker lints should support both “one canonical alias” and
+“family-local alias” modes, because some codebases prefer keeping interface
+types private to the module. The trade-off is between global consistency
+(better for large migrations) and local encapsulation.
 
 **Native trait surface form.** Using `fn -> impl Future + Send` in `Native*`
 traits avoids both dyn-compatibility issues and the rustc `async_fn_in_trait`
-warning about unspecified auto-trait bounds on futures.
-[^7][^6] This suite should treat
-`async fn` *in native sibling traits* as a lintable smell (at least for
-exported traits), even if it sometimes compiles fine, because it undermines the
-main point of the native sibling: making `Send`/lifetime bounds explicit.
+warning about unspecified auto-trait bounds on futures. [^7][^6] This suite
+should treat `async fn` *in native sibling traits* as a lintable smell (at
+least for exported traits), even if it sometimes compiles fine, because it
+undermines the main point of the native sibling: making `Send`/lifetime bounds
+explicit.
 
 **Detecting `#[async_trait]` usage.** A pre-expansion lint would be the most
 direct way to catch the attribute, but Dylint’s own documentation notes that
-pre-expansion lints have special “unknown lint” suppression requirements.
-[^8] The proposed `async_trait_signature_markers_present` lint
-avoids that complexity by detecting high-confidence expansion markers in HIR
-instead. The trade-off is that it is a heuristic (though a strong one).
+pre-expansion lints have special “unknown lint” suppression requirements. [^8]
+The proposed `async_trait_signature_markers_present` lint avoids that
+complexity by detecting high-confidence expansion markers in HIR instead. The
+trade-off is that it is a heuristic (though a strong one).
 
 **How hard to enforce “generic bounds prefer Native*”.** This can quickly
 become a high false-positive rule because a generic bound may exist for future
@@ -495,13 +481,12 @@ The design therefore keeps this as an optional “advisory” lint (not in the
 initial core) unless a downstream team explicitly wants to ratchet on it.
 
 **Cross-crate truth versus crate-local truth.** Because trait objects include
-supertraits, crate-local closure computation is necessary and useful.
-[^4] But it still cannot capture downstream dyn
-usage. The suite should expose this limitation directly in help text for
-`async_trait_concrete_only`, and strongly encourage teams to pair it with a
-separate, workspace-level audit step when planning migrations, matching
-Axinite’s discipline of explicit inventories and approvals.
-[^1][^3]
+supertraits, crate-local closure computation is necessary and useful. [^4] But
+it still cannot capture downstream dyn usage. The suite should expose this
+limitation directly in help text for `async_trait_concrete_only`, and strongly
+encourage teams to pair it with a separate, workspace-level audit step when
+planning migrations, matching Axinite’s discipline of explicit inventories and
+approvals. [^1][^3]
 
 ## References
 
