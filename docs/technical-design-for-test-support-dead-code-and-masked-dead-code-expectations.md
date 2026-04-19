@@ -1,10 +1,13 @@
 # Technical design for `test_support_dead_code` and `masked_dead_code_expectations`
 
-Status: Proposed Scope: Crate-local detector lints plus workspace analysis for
-dead or over-suppressed test-support code. Primary audience: Whitaker
-contributors, lint authors, reviewers, and QA engineers. Precedence documents:
-`docs/whitaker-dylint-suite-design.md`, `docs/whitaker-cli-design.md`, and
-later ADRs or roadmap decisions that supersede this design.
+- Status: Proposed
+- Scope: Crate-local detector lints plus workspace analysis for dead or
+  over-suppressed test-support code.
+- Primary audience: Whitaker contributors, lint authors, reviewers, and QA
+  engineers.
+- Precedence documents: `docs/whitaker-dylint-suite-design.md`,
+  `docs/whitaker-cli-design.md`, and later ADRs or roadmap decisions that
+  supersede this design.
 
 ## 1. Design summary
 

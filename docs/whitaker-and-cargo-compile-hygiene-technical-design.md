@@ -1,4 +1,4 @@
-# Whitaker and cargo-compile-hygiene Technical Design
+# Whitaker and cargo-compile-hygiene technical design
 
 - Status: Proposed
 - Scope: Whitaker lint and Cargo-subcommand enforcement for architecture and
@@ -81,7 +81,7 @@ The goals therefore separate cleanly into two enforcement planes:
   constraints (how many test targets; duplicate versions; heavy dependency
   “optionality”; TLS backend multiplicity; package boundary purity). This is
   `cargo-compile-hygiene`’s remit, implemented using `cargo metadata`’s JSON.
-  Cargo recommends using `--format-version` to stabilise expectations. [^2]
+  Cargo recommends using `--format-version` to stabilize expectations. [^2]
 
 A critical design constraint: Dylint’s lints rely on `rustc` internal APIs (as
 Clippy does), so Whitaker must be versioned and maintained with the Rust
@@ -151,7 +151,7 @@ Rustc defines several lint levels (`allow`, `expect`, `warn`, `force-warn`,
 `deny`, `forbid`). “Forbid” prevents lowering the level via attributes (subject
 to lint capping). [^3]
 
-Whitaker should standardise on three policy severities (mapped onto rustc
+Whitaker should standardize on three policy severities (mapped onto rustc
 levels):
 
 - **hard policy (default `deny`):** architectural boundary violations that
@@ -217,7 +217,7 @@ late. [^3]
 
 ### 4.2 Common configuration schema shapes
 
-Whitaker should standardise configuration like this (examples; open-ended
+Whitaker should standardize configuration like this (examples; open-ended
 defaults):
 
 ```toml
@@ -1220,16 +1220,16 @@ A practical migration sequence:
    ```
 
 4. **Enable `tls_backend_multiplicity`**  
-   Once feature sets stabilise, make that check a failure in CI for default
-   features if the project intends to standardise on one TLS backend. Axinite
+   Once feature sets stabilize, that check should fail in CI for default
+   features if the project intends to standardize on one TLS backend. Axinite
    explicitly observed dual stacks due to conflicting reqwest defaults. [^4]
 
-5. **Track duplicates as hotspots, not “must fix”**  
+5. **Duplicate hotspots tracked as advisory, not “must fix”**
    Axinite’s duplicate stacks are partly upstream (libsql pulling older
-   ecosystems). Use `duplicate_major_version_hotspots` to surface and rank
-   them, but keep failures off unless you have a realistic remediation path.
-   Cargo’s docs frame duplicates as something to identify and investigate; they
-   do not guarantee easy resolution. [^2][^4]
+   ecosystems). `duplicate_major_version_hotspots` should surface and rank
+   duplicates, while CI failures remain disabled unless a realistic remediation
+   path exists. Cargo’s docs frame duplicates as something to identify and
+   investigate; they do not guarantee easy resolution. [^2][^4]
 
 6. **Keep async-trait migration lint advisory**  
    Axinite’s own audit shows most async-trait uses are blocked by trait-object
@@ -1255,12 +1255,12 @@ A Gauss-focused migration sequence:
    outside the app crate, consistent with planned test relocation and crate
    purity. [^4]
 
-3. **Treat integration test target budgets cautiously**  
+3. **Integration test target budgets treated cautiously**
    Gauss’s integration-test consolidation plan ended up preserving target
    counts for pragmatic reasons (naming convention instead of module
-   consolidation). If you later decide build-time reductions matter more than
-   isolation, set budgets that reflect a desired future state and use the
-   tool’s reporting to drive an incremental consolidation project. [^4]
+   consolidation). If build-time reduction later matters more than isolation,
+   budgets can reflect a desired future state, and the tool’s reporting can
+   drive an incremental consolidation project. [^4]
 
 4. **Add architectural lints only where architecture is explicit**  
    If Gauss has explicit layer boundaries akin to Wildside’s

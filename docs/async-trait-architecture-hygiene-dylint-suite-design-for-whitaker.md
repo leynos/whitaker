@@ -1,10 +1,12 @@
 # Async-trait architecture hygiene dylint suite design for Whitaker
 
-Status: Proposed Scope: Single-crate async-trait architecture hygiene lint
-suite with no cross-crate analysis. Primary audience: Whitaker compiler and
-lint maintainers, and Rust contributors. Precedence documents: Axinite ADR 006,
-`docs/whitaker-dylint-suite-design.md`, and later ADRs or roadmap decisions
-that supersede this design.
+- Status: Proposed
+- Scope: Single-crate async-trait architecture hygiene lint suite with no
+  cross-crate analysis.
+- Primary audience: Whitaker compiler and lint maintainers, and Rust
+  contributors.
+- Precedence: Axinite ADR 006, `docs/whitaker-dylint-suite-design.md`, and
+  later ADRs or roadmap decisions that supersede this design.
 
 ## 1. Executive summary
 
@@ -158,6 +160,8 @@ for early rollout; others become “ratchets” once a family is migrated.
 | `native_async_future_must_be_send`                  | compatibility restriction | deny    | Native sibling method returns `impl Future` without `+ Send` when policy requires Send parity                                        | Inspect `Native*` trait method return bounds; require explicit `+ Send` unless family marked `allow_nonsend`                                                                        | Config toggle per family (for `#[async_trait(?Send)]`-equivalent designs)                                                                    | Add `+ Send` to return type                                                                            | `ui/native_missing_send_deny.rs`, `ui/native_nonsend_allowed.rs`     |
 | `native_async_multi_borrow_requires_named_lifetime` | maintainability           | warn    | Native sibling method uses `+ '_` but captures more than `&self` (multi-borrow), risking E0477-style failure and brittle signatures  | Detect `impl Future + … + '_` combined with ≥2 reference-bearing inputs; require an explicit named lifetime parameter applied consistently                                          | Only fire when a `'_` lifetime appears explicitly; allowlist specific methods                                                                | Introduce `'a` and apply to all borrows and return `+ 'a`                                              | `ui/native_multi_borrow_lifetime_warn.rs`                            |
 | `async_trait_signature_markers_present`             | restriction               | warn    | “High confidence” `async-trait` macro expansion markers still present (eg. `< 'async_trait>` lifetime + boxed dyn future return)     | Inspect trait/impl method generics for `'async_trait` and return types for boxed dyn futures with `'async_trait` bound                                                              | Allow on legacy modules; ignore `async_trait` name collisions by requiring both markers                                                      | Migrate to native/dual-trait pattern; eliminate macro-generated signature                              | `ui/async_trait_markers_warn.rs`                                     |
+
+Table: Async-trait architecture hygiene lint catalogue.
 
 The Axinite rollout explicitly called out two recurrent migration
 hazards—losing implicit `Send` guarantees and multi-borrow lifetime binding—so
