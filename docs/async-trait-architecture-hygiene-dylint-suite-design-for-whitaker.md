@@ -291,6 +291,9 @@ This detection is deliberately syntactic/structural rather than string-based.
 
 ### Family graph diagram
 
+This diagram shows how dyn-facing and native sibling traits connect through the
+blanket adapter and concrete implementation choices.
+
 ```mermaid
 flowchart TD
   DynUse["dyn call sites\n(Box/Arc/&dyn)"] --> DynTrait["Dyn-facing trait\nFoo: object-safe\nreturns BoxFuture"]
@@ -303,6 +306,9 @@ flowchart TD
   ImplTypes["Concrete types"] -->|prefer| NativeTrait
   ImplTypes -->|escape hatch| DynTrait
 ```
+
+Caption: Family graph showing dyn-facing traits, native siblings, and the
+blanket adapter.
 
 ## Integration plan and rollout strategy
 
@@ -395,6 +401,9 @@ Suggested wave policy:
 
 #### Rollout timeline diagram
 
+This diagram summarizes the staged rollout from inventory to migration and then
+to the regression-prevention ratchet.
+
 ```mermaid
 timeline
   title Async-trait hygiene lint rollout
@@ -410,6 +419,8 @@ timeline
     Deny macro-signature regressions : C
     Tighten adapter requirements : C
 ```
+
+Caption: Rollout timeline showing the inventory, migration, and ratchet waves.
 
 ## Performance, CI boundaries, and open decisions
 

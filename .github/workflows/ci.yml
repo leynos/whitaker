@@ -53,7 +53,7 @@ jobs:
           version: 'latest'
 
       - name: Install Nixie
-        run: uv tool install nixie-cli
+        run: uv tool install "nixie-cli==1.0.0"
 
       - name: Nixie
         run: make nixie

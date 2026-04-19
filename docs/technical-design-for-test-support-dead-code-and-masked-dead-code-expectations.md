@@ -13,14 +13,14 @@ attribute changes handling, the expectation goes stale and
 pathology is real, upstream behaviour explains it, and a single-target lint
 cannot answer the whole question by itself. [^1]
 
-I recommend a split design. `test_support_dead_code` should exist as a normal
-Whitaker lint crate in the Dylint suite, but only as a fast detector and
-metadata emitter. The fully actionable result should come from a Whitaker
-workspace analysis phase that runs under `whitaker check` and produces per-item
-inventories, target classifications, and usage sites. That split matches
-Dylint’s execution model, where lints run as dynamic libraries implementing
-`LateLintPass`, and it also fits Whitaker’s documented direction toward a
-first-class `whitaker` CLI that owns richer workspace-aware analysis. [^2][^3]
+A split design is appropriate. `test_support_dead_code` should exist as a
+normal Whitaker lint crate in the Dylint suite, but only as a fast detector and
+metadata emitter, while a Whitaker workspace analysis phase invoked via
+`whitaker check` should produce per-item inventories, target classifications,
+and usage sites. That split matches Dylint’s execution model, where lints run
+as dynamic libraries implementing `LateLintPass`, and it also fits Whitaker’s
+documented direction toward a first-class `whitaker` CLI that owns richer
+workspace-aware analysis. [^2][^3]
 
 Whitaker’s current workspace layout already accommodates this cleanly. The root
 workspace contains `common`, `crates/*`, `installer`, and `suite`, and the

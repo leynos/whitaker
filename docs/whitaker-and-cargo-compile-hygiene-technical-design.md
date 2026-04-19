@@ -1,5 +1,14 @@
 # Whitaker and cargo-compile-hygiene Technical Design
 
+- Status: Proposed
+- Scope: Whitaker lint and Cargo-subcommand enforcement for architecture and
+  compile-time hygiene across Rust workspaces.
+- Primary audience: Whitaker contributors, lint authors, and workspace
+  maintainers.
+- Precedence documents: `docs/whitaker-dylint-suite-design.md`,
+  `docs/whitaker-cli-design.md`, and any later ADRs or roadmap decisions that
+  supersede this design.
+
 ## Executive summary
 
 This design proposes a two-part enforcement system for Rust workspaces:
@@ -1026,6 +1035,9 @@ ergonomics. [^2]
 
 ### Component interaction and data flow
 
+This diagram describes how Dylint-based Whitaker checks and the
+`cargo-compile-hygiene` subcommand consume workspace data and emit findings.
+
 ```mermaid
 flowchart LR
   Dev[Developer / CI runner] -->|cargo dylint --all| Dylint[cargo-dylint + Dylint driver]
@@ -1043,6 +1055,8 @@ flowchart LR
   Whitaker --> Findings[Diagnostics / lint output]
   CCH --> Report[Text/JSON report]
 ```
+
+Caption: Toolchain flow for Whitaker Dylint checks and `cargo-compile-hygiene`.
 
 Dylint runs lints from dynamic libraries by registering them with `rustc` via a
 driver; its architecture mirrors the “driver wraps rustc” model used by Clippy,
@@ -1105,34 +1119,49 @@ boundary violations often hide. [^2][^3]
 
 ### Rollout timeline
 
+This diagram shows the delivery sequence and measurable completion criteria for
+the foundation, MVP, and stabilization workstreams.
+
 ```mermaid
-gantt
-  title Whitaker + cargo-compile-hygiene rollout
-  dateFormat  YYYY-MM-DD
-  axisFormat  %d %b
+flowchart TB
+  subgraph Foundation
+    a1["a1 Define shared config schema\n(workspace.metadata.whitaker)\nAccept: schema PR merged and parsing tests pass"]
+    a2["a2 Wire Dylint library loading via\nworkspace.metadata.dylint\nAccept: CI smoke tests load shared config"]
+    a3["a3 Implement cargo-compile-hygiene skeleton\n+ metadata parsing\nAccept: CLI reads metadata and fixture tests pass"]
+    a1 --> a2 --> a3
+  end
 
-  section Foundation
-  Define shared config schema (workspace.metadata.whitaker) :a1, 2026-03-25, 7d
-  Wire Dylint library loading via workspace.metadata.dylint :a2, 2026-03-25, 7d
-  Implement cargo-compile-hygiene skeleton + metadata parsing :a3, 2026-03-25, 10d
+  subgraph "Whitaker MVP lints"
+    b1["b1 arch_hexagonal_layer_boundary\n(port Wildside)\nAccept: Wildside-style regression fixtures pass in UI tests"]
+    b2["b2 hygiene_public_api_leaks_optional_dep\nAccept: exported-signature cases pass with optional-dependency diagnostics"]
+    b3["b3 tests_ui_test_macro_outside_app\n(pre-expansion)\nAccept: fixtures catch misuse and stay quiet on valid code"]
+    b1 --> b2 --> b3
+  end
 
-  section Whitaker MVP lints
-  arch_hexagonal_layer_boundary (port Wildside) :b1, 2026-04-01, 14d
-  hygiene_public_api_leaks_optional_dep :b2, 2026-04-05, 14d
-  tests_ui_test_macro_outside_app (pre-expansion) :b3, 2026-04-08, 10d
+  subgraph "cargo-compile-hygiene MVP checks"
+    c1["c1 integration_target_budget\nAccept: target-budget findings and thresholds appear in text and JSON reports"]
+    c2["c2 duplicate_major_version_hotspots\nAccept: hotspot reports identify duplicate stacks and explanation paths"]
+    c3["c3 heavy_dependency_not_optional\nAccept: optionality breaches are detected across the feature matrix"]
+    c4["c4 tls_backend_multiplicity\nAccept: reports distinguish parallel TLS stacks per configuration"]
+    c5["c5 package_boundary_purity\nAccept: package-boundary violations are reported from cargo metadata analysis"]
+    c1 --> c2 --> c3 --> c4 --> c5
+  end
 
-  section cargo-compile-hygiene MVP checks
-  integration_target_budget :c1, 2026-04-01, 7d
-  duplicate_major_version_hotspots :c2, 2026-04-03, 7d
-  heavy_dependency_not_optional :c3, 2026-04-05, 10d
-  tls_backend_multiplicity :c4, 2026-04-10, 7d
-  package_boundary_purity :c5, 2026-04-10, 7d
+  subgraph Stabilization
+    d1["d1 CI feature matrix integration + baseline reports\nAccept: baseline reports stay stable across the feature matrix"]
+    d2["d2 Developer docs + suppression guidance\nAccept: guide updates land with suppression examples"]
+    d3["d3 Promote selected lints from warn to deny\nAccept: promotion criteria are met and CI gates stay green"]
+    d1 --> d2 --> d3
+  end
 
-  section Stabilization
-  CI feature matrix integration + baseline reports :d1, 2026-04-15, 10d
-  Developer docs + suppression guidance :d2, 2026-04-15, 7d
-  Promote selected lints from warn to deny :d3, 2026-04-22, 7d
+  a3 --> b1
+  a3 --> c1
+  b3 --> d1
+  c5 --> d1
 ```
+
+Caption: Delivery sequence for foundation work, Whitaker MVP lints,
+`cargo-compile-hygiene` MVP checks, and stabilization criteria.
 
 The emphasis is to land hard-boundary lints early (architectural contracts) and
 keep compile-time hygiene checks initially as warning/reporting, then promote
