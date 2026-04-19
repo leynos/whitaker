@@ -602,8 +602,8 @@
   See [ownership shape lints design](ownership-shape-lints-design.md) §13.2.1
   Pass A: collect clone-pressure evidence at call sites. Requires 9.3.1, 9.1.2,
   and 9.1.4.
-- [ ] 9.3.3. Implement callee parameter summaries and exported, trait, FFI, and
-  async suppression rules. See
+- [ ] 9.3.3. Implement callee parameter summaries and exported, trait, foreign
+  function interface (FFI), and async suppression rules. See
   [ownership shape lints design](ownership-shape-lints-design.md) §13.2.2 Pass
   B: summarize callee parameter usage and §13.3 Exemptions. Requires 9.3.2.
 - [ ] 9.3.4. Add exact borrow-type help for the initial mapping set without
