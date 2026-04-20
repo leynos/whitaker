@@ -53,7 +53,7 @@ fn verify_propagate_labels_returns_vector_per_input() {
 
     let report = propagate_labels_report(&vectors, &adjacency, bounded_iteration_count());
 
-    assert_eq!(report.labels().len(), NODE_COUNT);
+    assert_eq!(report.labels.len(), NODE_COUNT);
 }
 
 /// Verifies that every propagated label remains a valid node index.
@@ -65,7 +65,7 @@ fn verify_propagate_labels_preserves_label_indices() {
 
     let report = propagate_labels_report(&vectors, &adjacency, bounded_iteration_count());
 
-    for &label in report.labels() {
+    for &label in &report.labels {
         assert!(label < NODE_COUNT);
     }
 }
@@ -79,8 +79,8 @@ fn verify_propagate_labels_zero_iterations_keeps_initial_labels() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 0);
 
-    assert_eq!(report.iteration_count(), 0);
-    for (index, &label) in report.labels().iter().enumerate() {
+    assert_eq!(report.iteration_count, 0);
+    for (index, &label) in report.labels.iter().enumerate() {
         assert_eq!(label, index);
     }
 }
@@ -96,6 +96,6 @@ fn verify_propagate_labels_bounded_return_for_any_max_iterations() {
 
     let report = propagate_labels_report(&vectors, &adjacency, max_iterations);
 
-    assert_eq!(report.labels().len(), NODE_COUNT);
-    assert!(report.iteration_count() <= max_iterations);
+    assert_eq!(report.labels.len(), NODE_COUNT);
+    assert!(report.iteration_count <= max_iterations);
 }

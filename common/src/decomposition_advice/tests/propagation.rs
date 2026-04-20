@@ -23,7 +23,7 @@ fn propagate_labels_returns_one_label_per_vector() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 3);
 
-    assert_eq!(report.labels().len(), vectors.len());
+    assert_eq!(report.labels.len(), vectors.len());
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn propagate_labels_keeps_labels_in_range_for_connected_graph() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 4);
 
-    assert!(report.labels().iter().all(|&label| label < vectors.len()));
+    assert!(report.labels.iter().all(|&label| label < vectors.len()));
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn propagate_labels_leaves_isolated_nodes_with_original_labels() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 3);
 
-    assert_eq!(report.labels()[2], 2);
+    assert_eq!(report.labels[2], 2);
 }
 
 #[test]
@@ -53,8 +53,8 @@ fn propagate_labels_respects_zero_iteration_bound() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 0);
 
-    assert_eq!(report.labels(), &[0, 1, 2]);
-    assert_eq!(report.iteration_count(), 0);
+    assert_eq!(report.labels, vec![0, 1, 2]);
+    assert_eq!(report.iteration_count, 0);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn propagate_labels_uses_lexical_tie_break_for_equal_scores() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 1);
 
-    assert_eq!(report.labels()[0], 1);
+    assert_eq!(report.labels[0], 1);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn propagate_labels_returns_after_bound_even_when_not_converged() {
     let single_pass = propagate_labels_report(&vectors, &adjacency, 1);
     let two_passes = propagate_labels_report(&vectors, &adjacency, 2);
 
-    assert_eq!(single_pass.iteration_count(), 1);
-    assert_eq!(single_pass.labels().len(), vectors.len());
-    assert_ne!(single_pass.labels(), two_passes.labels());
+    assert_eq!(single_pass.iteration_count, 1);
+    assert_eq!(single_pass.labels.len(), vectors.len());
+    assert_ne!(single_pass.labels, two_passes.labels);
 }

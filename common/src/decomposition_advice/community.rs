@@ -106,27 +106,8 @@ pub(crate) fn detect_communities(vectors: &[MethodFeatureVector]) -> Vec<Vec<usi
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LabelPropagationReport {
-    labels: Vec<usize>,
-    iteration_count: usize,
-    has_active_nodes: bool,
-}
-
-impl LabelPropagationReport {
-    pub(crate) fn labels(&self) -> &[usize] {
-        &self.labels
-    }
-
-    pub(crate) fn iteration_count(&self) -> usize {
-        self.iteration_count
-    }
-
-    pub(crate) fn has_active_nodes(&self) -> bool {
-        self.has_active_nodes
-    }
-
-    fn into_labels(self) -> Vec<usize> {
-        self.labels
-    }
+    pub(crate) labels: Vec<usize>,
+    pub(crate) iteration_count: usize,
 }
 
 pub(crate) fn build_adjacency(
@@ -152,7 +133,7 @@ pub(crate) fn propagate_labels(
     adjacency: &[Vec<(usize, u64)>],
     max_iterations: usize,
 ) -> Vec<usize> {
-    propagate_labels_report(vectors, adjacency, max_iterations).into_labels()
+    propagate_labels_report(vectors, adjacency, max_iterations).labels
 }
 
 pub(crate) fn propagate_labels_report(
@@ -170,7 +151,6 @@ pub(crate) fn propagate_labels_report(
         return LabelPropagationReport {
             labels,
             iteration_count: 0,
-            has_active_nodes: false,
         };
     }
     let mut iteration_count = 0;
@@ -198,7 +178,6 @@ pub(crate) fn propagate_labels_report(
     LabelPropagationReport {
         labels,
         iteration_count,
-        has_active_nodes: true,
     }
 }
 
@@ -213,13 +192,12 @@ fn best_neighbour_label(
         return None;
     }
 
-    let mut scores = vec![0; labels.len()];
+    let mut scores: Vec<(usize, u64)> = Vec::with_capacity(neighbours.len());
     let mut best: Option<(usize, u64)> = None;
 
     for &(neighbour, weight) in neighbours {
         let label = labels[neighbour];
-        scores[label] += weight;
-        let score = scores[label];
+        let score = score_label(&mut scores, label, weight);
 
         if should_replace_best(best, label, score, vectors) {
             best = Some((label, score));
@@ -227,6 +205,19 @@ fn best_neighbour_label(
     }
 
     best.map(|(label, _)| label)
+}
+
+fn score_label(scores: &mut Vec<(usize, u64)>, label: usize, weight: u64) -> u64 {
+    if let Some((_, score)) = scores
+        .iter_mut()
+        .find(|(seen_label, _)| *seen_label == label)
+    {
+        *score += weight;
+        *score
+    } else {
+        scores.push((label, weight));
+        weight
+    }
 }
 
 fn should_replace_best(
@@ -237,28 +228,20 @@ fn should_replace_best(
 ) -> bool {
     match current_best {
         None => true,
-        Some(best) => is_better_label((candidate_label, candidate_score), best, vectors),
+        Some((best_label, best_score)) => {
+            // Prefer higher score; on tie, pick the lexically earlier method
+            // name and then the smaller label index to keep runs deterministic.
+            if candidate_score != best_score {
+                candidate_score > best_score
+            } else {
+                let candidate_name = vectors[candidate_label].method_name();
+                let best_name = vectors[best_label].method_name();
+
+                candidate_name < best_name
+                    || (candidate_name == best_name && candidate_label < best_label)
+            }
+        }
     }
-}
-
-fn is_better_label(
-    candidate: (usize, u64),
-    best: (usize, u64),
-    vectors: &[MethodFeatureVector],
-) -> bool {
-    candidate.1 > best.1
-        || (candidate.1 == best.1 && breaks_label_tie(candidate.0, best.0, vectors))
-}
-
-fn breaks_label_tie(
-    candidate_label: usize,
-    best_label: usize,
-    vectors: &[MethodFeatureVector],
-) -> bool {
-    let candidate_name = vectors[candidate_label].method_name();
-    let best_name = vectors[best_label].method_name();
-
-    candidate_name < best_name || (candidate_name == best_name && candidate_label < best_label)
 }
 
 #[cfg(kani)]

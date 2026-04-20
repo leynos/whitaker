@@ -240,8 +240,8 @@ Observable success after implementation:
 - Decision: stop further Kani-model churn after three propagation-model
   iterations. Rationale: the ExecPlan tolerance says to escalate once the proof
   still fails after repeated bounded-model simplification attempts; the current
-  blocker is in CBMC container machinery, not in the propagation property
-  logic. Date/Author: 2026-04-14 / Codex.
+  blocker is in C Bounded Model Checker (CBMC) container machinery, not in the
+  propagation property logic. Date/Author: 2026-04-14 / Codex.
 
 ## Context and orientation
 

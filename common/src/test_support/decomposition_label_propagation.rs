@@ -1,7 +1,11 @@
 //! Observable label-propagation seams for decomposition advice tests.
 
 use crate::decomposition_advice::{
-    community::propagate_labels_report as runtime_propagate_labels_report, minimal_feature_vector,
+    community::{
+        LabelPropagationReport as RuntimeLabelPropagationReport,
+        propagate_labels_report as runtime_propagate_labels_report,
+    },
+    minimal_feature_vector,
 };
 
 use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
@@ -30,8 +34,7 @@ use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LabelPropagationReport {
-    labels: Vec<usize>,
-    iteration_count: usize,
+    runtime: RuntimeLabelPropagationReport,
     has_active_nodes: bool,
 }
 
@@ -39,20 +42,20 @@ impl LabelPropagationReport {
     /// Returns the final label vector.
     #[must_use]
     pub fn labels(&self) -> &[usize] {
-        &self.labels
+        &self.runtime.labels
     }
 
     /// Returns the propagated label for `node`, or `None` if it is out of
     /// range.
     #[must_use]
     pub fn label_of(&self, node: usize) -> Option<usize> {
-        self.labels.get(node).copied()
+        self.labels().get(node).copied()
     }
 
     /// Returns the number of propagation passes performed.
     #[must_use]
     pub fn iteration_count(&self) -> usize {
-        self.iteration_count
+        self.runtime.iteration_count
     }
 
     /// Returns `true` when the graph contains at least one active node.
@@ -64,7 +67,10 @@ impl LabelPropagationReport {
     /// Returns `true` when every label is a valid node index.
     #[must_use]
     pub fn all_labels_in_bounds(&self) -> bool {
-        self.labels.iter().all(|&label| label < self.labels.len())
+        self.runtime
+            .labels
+            .iter()
+            .all(|&label| label < self.runtime.labels.len())
     }
 }
 
@@ -88,11 +94,11 @@ pub fn label_propagation_report(
         .iter()
         .map(|method_name| minimal_feature_vector(method_name))
         .collect::<Vec<_>>();
-    let report = runtime_propagate_labels_report(&vectors, &adjacency, max_iterations);
+    let has_active_nodes = adjacency.iter().any(|neighbours| !neighbours.is_empty());
+    let runtime = runtime_propagate_labels_report(&vectors, &adjacency, max_iterations);
 
     Ok(LabelPropagationReport {
-        labels: report.labels().to_vec(),
-        iteration_count: report.iteration_count(),
-        has_active_nodes: report.has_active_nodes(),
+        runtime,
+        has_active_nodes,
     })
 }
