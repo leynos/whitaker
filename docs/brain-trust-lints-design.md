@@ -588,10 +588,10 @@ further decomposition analysis was omitted.
 
 - **Label propagation now has a crate-visible report seam**:
   `common::decomposition_advice::community::propagate_labels_report()` returns
-  the final labels, the number of propagation passes actually executed, and
-  whether the graph had any active nodes. The public API stays unchanged;
-  behavioural tests observe the runtime through
-  `common::test_support::decomposition::label_propagation_report()`.
+  the final labels and the number of propagation passes actually executed. The
+  public API stays unchanged, and behavioural tests observe the runtime through
+  `common::test_support::decomposition::label_propagation_report()`, which
+  derives `has_active_nodes` in the test-support seam.
 - **Unit and BDD coverage now pin the observable runtime contract**:
   unit tests cover output length, in-range labels, isolated nodes, zero
   iterations, lexical tie-breaking, and bounded non-convergence. Behaviour

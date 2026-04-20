@@ -27,9 +27,9 @@ propagation:
 
 Observable success after implementation:
 
-1. `make kani` completes full Kani/CBMC verification for new
-   `propagate_labels` harnesses with zero failures, using the existing pinned
-   Kani sidecar introduced for roadmap item 6.4.5.
+1. `make kani` completes full Kani/C Bounded Model Checker (CBMC)
+   verification for new `propagate_labels` harnesses with zero failures, using
+   the existing pinned Kani sidecar introduced for roadmap item 6.4.5.
 2. Unit tests exercise `propagate_labels` through crate-visible seams and cover
    happy paths, unhappy paths, and edge cases such as isolated nodes, tied
    neighbour scores, zero iterations, and bounded non-convergence inputs.

@@ -104,6 +104,17 @@ pub(crate) fn detect_communities(vectors: &[MethodFeatureVector]) -> Vec<Vec<usi
     communities
 }
 
+/// Observable output from deterministic label propagation.
+///
+/// `labels` contains one final community label per input method vector. Each
+/// label is always a valid node index because propagation starts from the
+/// identity labelling `0..vectors.len()` and only adopts labels already owned
+/// by neighbours.
+///
+/// `iteration_count` records how many full passes over the active-node set
+/// were executed. The count increments once per attempted propagation pass,
+/// including the final pass that detects convergence. A value of `0` therefore
+/// means either `max_iterations == 0` or the graph had no active nodes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LabelPropagationReport {
     pub(crate) labels: Vec<usize>,
@@ -136,6 +147,16 @@ pub(crate) fn propagate_labels(
     propagate_labels_report(vectors, adjacency, max_iterations).labels
 }
 
+/// Runs deterministic weighted label propagation and reports its final state.
+///
+/// The returned report owns the final labels and the number of propagation
+/// passes that were actually executed. Callers inside the crate can therefore
+/// inspect the labels without re-running propagation or borrowing the input
+/// graph.
+///
+/// The function never errors. If `adjacency` contains no active nodes, or if
+/// `max_iterations` is `0`, it returns the initial self labelling with an
+/// `iteration_count` of `0`.
 pub(crate) fn propagate_labels_report(
     vectors: &[MethodFeatureVector],
     adjacency: &[Vec<(usize, u64)>],
