@@ -92,73 +92,38 @@ fn ensure_installed_installs_missing_toolchain() {
     assert!(status.installed_toolchain());
 }
 
-#[test]
-fn ensure_installed_adds_required_components_when_toolchain_present() {
+fn run_component_installation_test(extra: &[&str], expected: &[&str]) {
     let channel = "nightly-2025-09-18";
     let toolchain = test_toolchain(channel);
     let mut runner = MockCommandRunner::new();
     let mut seq = mockall::Sequence::new();
 
     expect_rustc_version(&mut runner, &mut seq, channel, 0);
-
-    // Expect required components to be installed
     runner
         .expect_run()
-        .withf(matches_multi_component_add(channel, REQUIRED_COMPONENTS))
+        .withf(matches_multi_component_add(channel, expected))
         .times(1)
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
     let status = toolchain
-        .ensure_installed_with(&runner, &[])
+        .ensure_installed_with(&runner, extra)
         .expect("toolchain should be ready");
 
     assert!(!status.installed_toolchain());
 }
 
-#[test]
-fn ensure_installed_adds_cranelift_component_when_requested() {
-    let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel);
-    let mut runner = MockCommandRunner::new();
-    let mut seq = mockall::Sequence::new();
-    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
-
-    expect_rustc_version(&mut runner, &mut seq, channel, 0);
-    runner
-        .expect_run()
-        .withf(matches_multi_component_add(channel, &expected_components))
-        .times(1)
-        .in_sequence(&mut seq)
-        .returning(|_, _| Ok(output_with_status(0)));
-
-    let status = toolchain
-        .ensure_installed_with(&runner, &[CRANELIFT_COMPONENT])
-        .expect("toolchain should be ready");
-
-    assert!(!status.installed_toolchain());
-}
-
-#[test]
-fn ensure_installed_adds_only_required_components_when_no_extras_requested() {
-    let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel);
-    let mut runner = MockCommandRunner::new();
-    let mut seq = mockall::Sequence::new();
-
-    expect_rustc_version(&mut runner, &mut seq, channel, 0);
-    runner
-        .expect_run()
-        .withf(matches_multi_component_add(channel, REQUIRED_COMPONENTS))
-        .times(1)
-        .in_sequence(&mut seq)
-        .returning(|_, _| Ok(output_with_status(0)));
-
-    let status = toolchain
-        .ensure_installed_with(&runner, &[])
-        .expect("toolchain should be ready");
-
-    assert!(!status.installed_toolchain());
+#[rstest]
+#[case::no_extras(vec![], REQUIRED_COMPONENTS.to_vec())]
+#[case::with_cranelift(
+    vec![CRANELIFT_COMPONENT],
+    [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat()
+)]
+fn ensure_installed_adds_correct_components(
+    #[case] extra: Vec<&'static str>,
+    #[case] expected: Vec<&'static str>,
+) {
+    run_component_installation_test(&extra, &expected);
 }
 
 // Describes the type of installation failure being tested.
