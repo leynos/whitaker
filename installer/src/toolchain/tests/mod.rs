@@ -205,56 +205,66 @@ fn setup_failure_mocks(
     }
 }
 
+fn assert_toolchain_install_failed(err: InstallerError, channel: &str) {
+    assert!(
+        matches!(
+            err,
+            InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
+                if toolchain == channel && message.contains("network down")
+        ),
+        "expected ToolchainInstallFailed error, got {err:?}"
+    );
+}
+
+fn assert_component_add_failed(err: InstallerError, channel: &str) {
+    assert!(
+        matches!(
+            err,
+            InstallerError::ToolchainComponentInstallFailed {
+                ref toolchain,
+                ref message,
+                ..
+            } if toolchain == channel && message.contains("component failed")
+        ),
+        "expected ToolchainComponentInstallFailed error, got {err:?}"
+    );
+}
+
+fn assert_cranelift_component_add_failed(err: InstallerError, channel: &str) {
+    assert!(
+        matches!(
+            err,
+            InstallerError::ToolchainComponentInstallFailed {
+                ref toolchain,
+                ref components,
+                ref message,
+            } if toolchain == channel
+                && components.contains(CRANELIFT_COMPONENT)
+                && message.contains("component failed")
+        ),
+        "expected ToolchainComponentInstallFailed with cranelift component, got {err:?}"
+    );
+}
+
+fn assert_toolchain_not_installed(err: InstallerError, channel: &str) {
+    assert!(
+        matches!(
+            err,
+            InstallerError::ToolchainNotInstalled { ref toolchain }
+                if toolchain == channel
+        ),
+        "expected ToolchainNotInstalled error, got {err:?}"
+    );
+}
+
 fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
     match failure {
-        InstallFailure::ToolchainInstall => {
-            assert!(
-                matches!(
-                    err,
-                    InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
-                        if toolchain == channel && message.contains("network down")
-                ),
-                "expected ToolchainInstallFailed error, got {err:?}"
-            );
-        }
-        InstallFailure::ComponentAdd => {
-            assert!(
-                matches!(
-                    err,
-                    InstallerError::ToolchainComponentInstallFailed {
-                        ref toolchain,
-                        ref message,
-                        ..
-                    } if toolchain == channel && message.contains("component failed")
-                ),
-                "expected ToolchainComponentInstallFailed error, got {err:?}"
-            );
-        }
+        InstallFailure::ToolchainInstall => assert_toolchain_install_failed(err, channel),
+        InstallFailure::ComponentAdd => assert_component_add_failed(err, channel),
         InstallFailure::CraneliftComponentAdd => {
-            assert!(
-                matches!(
-                    err,
-                    InstallerError::ToolchainComponentInstallFailed {
-                        ref toolchain,
-                        ref components,
-                        ref message,
-                    } if toolchain == channel
-                        && components.contains(CRANELIFT_COMPONENT)
-                        && message.contains("component failed")
-                ),
-                "expected ToolchainComponentInstallFailed error, got {err:?}"
-            );
+            assert_cranelift_component_add_failed(err, channel)
         }
-        InstallFailure::ToolchainUnusableAfterInstall => {
-            assert!(
-                matches!(
-                    err,
-                    InstallerError::ToolchainNotInstalled { ref toolchain }
-                        if toolchain == channel
-                ),
-                "expected ToolchainNotInstalled error, got {err:?}"
-            );
-        }
+        InstallFailure::ToolchainUnusableAfterInstall => assert_toolchain_not_installed(err, channel),
     }
 }
 
