@@ -264,7 +264,9 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
         InstallFailure::CraneliftComponentAdd => {
             assert_cranelift_component_add_failed(err, channel)
         }
-        InstallFailure::ToolchainUnusableAfterInstall => assert_toolchain_not_installed(err, channel),
+        InstallFailure::ToolchainUnusableAfterInstall => {
+            assert_toolchain_not_installed(err, channel)
+        }
     }
 }
 

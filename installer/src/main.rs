@@ -79,12 +79,12 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    let additional_components: &[&str] = if args.cranelift {
-        &["rustc-codegen-cranelift"]
-    } else {
-        &[]
-    };
-    ensure_toolchain_installed(&toolchain, additional_components, args.quiet, stderr)?;
+    ensure_toolchain_installed(
+        &toolchain,
+        resolve_additional_components(args),
+        args.quiet,
+        stderr,
+    )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
     // Step 3.5: Attempt prebuilt download when install options allow it.
     let prebuilt_context = PrebuiltInstallationContext {
@@ -230,6 +230,15 @@ fn resolve_toolchain(
     match override_channel {
         Some(channel) => Ok(Toolchain::with_override(workspace_root, channel)),
         None => Toolchain::detect(workspace_root),
+    }
+}
+
+/// Returns the set of additional rustup components requested by the CLI flags.
+fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
+    if args.cranelift {
+        &["rustc-codegen-cranelift"]
+    } else {
+        &[]
     }
 }
 
