@@ -192,7 +192,7 @@ fn best_neighbour_label(
         return None;
     }
 
-    let mut scores: Vec<(usize, u64)> = Vec::with_capacity(neighbours.len());
+    let mut scores = BTreeMap::new();
     let mut best: Option<(usize, u64)> = None;
 
     for &(neighbour, weight) in neighbours {
@@ -207,17 +207,10 @@ fn best_neighbour_label(
     best.map(|(label, _)| label)
 }
 
-fn score_label(scores: &mut Vec<(usize, u64)>, label: usize, weight: u64) -> u64 {
-    if let Some((_, score)) = scores
-        .iter_mut()
-        .find(|(seen_label, _)| *seen_label == label)
-    {
-        *score += weight;
-        *score
-    } else {
-        scores.push((label, weight));
-        weight
-    }
+fn score_label(scores: &mut BTreeMap<usize, u64>, label: usize, weight: u64) -> u64 {
+    let score = scores.entry(label).or_default();
+    *score += weight;
+    *score
 }
 
 fn should_replace_best(
