@@ -617,7 +617,7 @@ further decomposition analysis was omitted.
   presence/weights, CBMC still spends its budget in `Vec` growth, `find_map`,
   and `memcmp` rather than discharging the label-index and bounded-return
   assertions. Roadmap item 6.4.6 therefore remains in progress until the proof
-  model is simplified further or the runtime path is made more Kani-friendly
+  model is simplified further, or the runtime path is made more Kani-friendly
   without changing behaviour.
 
 ## SARIF output

@@ -183,7 +183,7 @@ Observable success after implementation:
   label-propagation assertions, even after reducing the propagation harnesses
   to a fixed three-node graph with symbolic edge-presence booleans.
 - The current runtime already guarantees label indices start in range because
-  labels are initialised as `0..vectors.len()`, and new labels come only from
+  labels are initialized as `0..vectors.len()`, and new labels come only from
   neighbour labels returned by `best_neighbour_label`.
 - The "termination" property is structurally tied to the
   `for _ in 0..max_iterations` loop. The proof work is therefore about bounded
@@ -386,7 +386,7 @@ The bounded symbolic model should:
    arrays,
 3. generate a symbolic `max_iterations` with a small bound compatible with the
    chosen `#[kani::unwind(...)]`, and
-4. materialise enough `MethodFeatureVector` values to satisfy the runtime's
+4. materialize enough `MethodFeatureVector` values to satisfy the runtime's
    deterministic lexical tie-break logic.
 
 Avoid proving stronger claims than the roadmap asks for. In particular, do not

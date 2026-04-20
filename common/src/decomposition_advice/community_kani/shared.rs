@@ -25,8 +25,8 @@ pub(super) fn bounded_iteration_count() -> usize {
     max_iterations
 }
 
-/// Materialises a concrete `Vec<SimilarityEdge>` from a symbolic fixed-size
-/// array, constraining each active edge to the production contract.
+/// Materializes a concrete `Vec<SimilarityEdge>` from symbolic choices,
+/// constraining each active edge to the production contract.
 pub(super) fn constrained_edges(node_count: usize) -> Vec<SimilarityEdge> {
     let active_count: usize = kani::any();
     kani::assume(active_count <= MAX_EDGES);

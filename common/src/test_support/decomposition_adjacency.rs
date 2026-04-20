@@ -224,6 +224,13 @@ pub fn adjacency_report(
     })
 }
 
+/// Validates declarative [`EdgeInput`] entries against adjacency invariants and
+/// converts valid edges into [`SimilarityEdge`] values.
+///
+/// # Errors
+///
+/// Returns [`AdjacencyError`] when an edge is non-canonical, references a node
+/// index outside `node_count`, or carries zero weight.
 pub(crate) fn validate_edges(
     node_count: usize,
     edges: &[EdgeInput],

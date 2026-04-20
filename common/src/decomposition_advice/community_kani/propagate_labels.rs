@@ -24,6 +24,10 @@ fn symbolic_adjacency() -> [Vec<(usize, u64)>; NODE_COUNT] {
     add_symbolic_edge(&mut node_0, 0, &mut node_2, 2);
     add_symbolic_edge(&mut node_1, 1, &mut node_2, 2);
 
+    node_0.sort_by_key(|(neighbour, _)| *neighbour);
+    node_1.sort_by_key(|(neighbour, _)| *neighbour);
+    node_2.sort_by_key(|(neighbour, _)| *neighbour);
+
     [node_0, node_1, node_2]
 }
 
