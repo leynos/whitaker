@@ -224,10 +224,10 @@ Observable success after implementation:
   this plan. Rationale: the next implementer should be able to execute the work
   from this file alone. Date/Author: 2026-04-13 / Codex.
 - Decision: expose `community::propagate_labels_report` as a crate-visible seam
-  returning labels, iteration count, and active-node presence. Rationale: unit
-  tests, BDD helpers, and Kani harnesses all need the same observable runtime
-  result without widening the public decomposition API. Date/Author: 2026-04-14
-  / Codex.
+  returning labels and iteration count, with `has_active_nodes` derived in the
+  test-support and BDD helper seam. Rationale: unit tests, BDD helpers, and
+  Kani harnesses all need the same observable runtime result without widening
+  the public decomposition API. Date/Author: 2026-04-14 / Codex.
 - Decision: simplify label tie-breaking from full `MethodFeatureVector` ordering
   to `method_name()` plus label index. Rationale: this preserves deterministic
   behaviour for runtime clustering while removing a large proof burden from

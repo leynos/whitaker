@@ -154,9 +154,13 @@ pub(crate) fn propagate_labels(
 /// inspect the labels without re-running propagation or borrowing the input
 /// graph.
 ///
-/// The function never errors. If `adjacency` contains no active nodes, or if
-/// `max_iterations` is `0`, it returns the initial self labelling with an
-/// `iteration_count` of `0`.
+/// Callers must ensure that every node index referenced from `adjacency` is in
+/// bounds for the initial self labelling `0..vectors.len()`. The helper
+/// assumes validated adjacency input and may panic if a neighbour index falls
+/// outside that range.
+///
+/// If `adjacency` contains no active nodes, or if `max_iterations` is `0`, it
+/// returns the initial self labelling with an `iteration_count` of `0`.
 pub(crate) fn propagate_labels_report(
     vectors: &[MethodFeatureVector],
     adjacency: &[Vec<(usize, u64)>],
