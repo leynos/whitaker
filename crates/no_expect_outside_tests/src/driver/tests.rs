@@ -163,6 +163,9 @@ fn has_test_like_hir_attributes_accepts_additional_test_attributes() {
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
 //    - These verify that `#[cfg(test)]` module ancestry marks nested contexts
 //      as test-only regardless of the exact module-name heuristic
+//    - fail_expect_in_file_backed_non_test_fn.rs confirms the ancestry does
+//      not leak into ordinary top-level functions next to a file-backed test
+//      module
 //
 // 3. Example-based regression coverage for the `rustc --test` harness path:
 //    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
@@ -172,6 +175,11 @@ fn has_test_like_hir_attributes_accepts_additional_test_attributes() {
 //    - `pass_expect_in_tokio_nonstandard_module_harness` and
 //      `pass_expect_in_tokio_path_module_harness` cover non-standard module
 //      names and `#[path]`-loaded Tokio tests under the harness path.
+//    - `pass_expect_in_tokio_path_module_harness_no_config` keeps the
+//      `cfg(test)` ancestor walk as the load-bearing path for file-backed
+//      Tokio tests without extra configuration.
+//    - `fail_expect_in_tokio_crate_non_test_fn` verifies that configured
+//      Tokio test attributes remain scoped to actual test functions.
 //
 // 4. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works

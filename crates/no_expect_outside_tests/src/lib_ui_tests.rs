@@ -243,7 +243,13 @@ fn example_compiles_under_test_harness(#[case] example_name: &str, #[case] label
 #[case(
     "examples",
     "pass_expect_in_tokio_path_module_harness",
-    "Tokio path module",
+    "Tokio path module with config",
+    &["tokio"],
+)]
+#[case(
+    "examples",
+    "pass_expect_in_tokio_path_module_harness_no_config",
+    "Tokio path module without config",
     &["tokio"],
 )]
 #[case(
@@ -275,6 +281,18 @@ fn rstest_expect_outside_tests_still_fails_in_non_harness_code() {
         "rstest non-harness",
         &["--test", "-D", "no_expect_outside_tests"],
     ));
+}
+
+#[test]
+fn tokio_expect_outside_tests_still_fails_in_non_test_code() {
+    run_fixture_harness_test(&FixtureHarnessRun {
+        crate_name: env!("CARGO_PKG_NAME"),
+        directory: "examples",
+        fixture_name: "fail_expect_in_tokio_crate_non_test_fn",
+        label: "Tokio non-test function",
+        rustc_flags: &["--test", "-D", "no_expect_outside_tests"],
+        extern_crates: &["tokio"],
+    });
 }
 
 #[cfg(test)]

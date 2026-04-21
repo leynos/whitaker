@@ -1,0 +1,16 @@
+error: Avoid calling expect on `std::option::Option<&str>` outside test-only code.
+  --> $DIR/fail_expect_in_file_backed_non_test_fn.rs:14:13
+   |
+LL |     let _ = value.expect("file-backed cfg(test) ancestry must not leak into main");
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: The call originates within function `main` which is not recognised as a test.
+   = help: Handle the `None` variant of `std::option::Option<&str>` or move the code into a test.
+note: the lint level is defined here
+  --> $DIR/fail_expect_in_file_backed_non_test_fn.rs:6:9
+   |
+LL | #![deny(no_expect_outside_tests)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
