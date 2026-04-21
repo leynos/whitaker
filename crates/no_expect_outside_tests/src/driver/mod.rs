@@ -23,7 +23,7 @@ use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
 use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 
-use crate::context::{collect_context, summarise_context};
+use crate::context::{collect_context, is_cfg_test_attribute, summarise_context};
 use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
 
 dylint_linting::impl_late_lint! {
@@ -133,7 +133,7 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
         // processes them differently. Allow expect() in functions that appear to
         // be tests based on the harness context.
         if self.is_test_harness
-            && is_likely_test_function(cx, expr, &self.harness_marked_test_functions)
+            && is_likely_test_function(cx, expr, &self.harness_marked_test_functions, additional)
         {
             return;
         }
@@ -176,6 +176,7 @@ fn is_likely_test_function<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &hir::Expr<'tcx>,
     harness_marked_test_functions: &HashSet<hir::HirId>,
+    additional_test_attributes: &[AttributePath],
 ) -> bool {
     if cx
         .tcx
@@ -183,20 +184,14 @@ fn is_likely_test_function<'tcx>(
         .filter_map(|(_, node)| extract_function_item(node))
         .any(|item| {
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            has_test_attribute(attrs)
+            has_test_like_hir_attributes(attrs, additional_test_attributes)
                 || is_harness_marked_test_function(item.hir_id(), harness_marked_test_functions)
         })
     {
         return true;
     }
 
-    // Check if we're inside a module named "tests" (common convention for unit tests)
-    let in_test_module = cx
-        .tcx
-        .hir_parent_iter(expr.hir_id)
-        .any(|(_, node)| is_test_named_module(node));
-
-    if in_test_module {
+    if is_in_cfg_test_module(cx, expr.hir_id) {
         return true;
     }
 
@@ -222,17 +217,19 @@ fn is_likely_test_function<'tcx>(
     false
 }
 
-fn is_test_named_module(node: hir::Node<'_>) -> bool {
-    let hir::Node::Item(item) = node else {
-        return false;
-    };
-    let hir::ItemKind::Mod { .. } = item.kind else {
-        return false;
-    };
-    let Some(ident) = item.kind.ident() else {
-        return false;
-    };
-    matches!(ident.name.as_str(), "test" | "tests")
+fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {
+    cx.tcx.hir_parent_iter(hir_id).any(|(ancestor_id, node)| {
+        let hir::Node::Item(item) = node else {
+            return false;
+        };
+        if !matches!(item.kind, hir::ItemKind::Mod { .. }) {
+            return false;
+        }
+        cx.tcx
+            .hir_attrs(ancestor_id)
+            .iter()
+            .any(is_cfg_test_attribute)
+    })
 }
 
 fn extract_function_item(node: hir::Node<'_>) -> Option<&hir::Item<'_>> {
@@ -247,11 +244,6 @@ fn is_harness_marked_test_function(
     harness_marked_test_functions: &HashSet<hir::HirId>,
 ) -> bool {
     harness_marked_test_functions.contains(&function_hir_id)
-}
-
-// Check if any attribute is #[test].
-fn has_test_attribute(attrs: &[hir::Attribute]) -> bool {
-    has_test_like_hir_attributes(attrs, &[])
 }
 
 // Detect source-level test framework attributes.
