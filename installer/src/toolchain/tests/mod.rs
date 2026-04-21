@@ -193,7 +193,7 @@ impl CapturingCommandRunner {
 }
 
 impl CommandRunner for CapturingCommandRunner {
-    fn run<'a>(&self, program: &str, args: &[&'a str]) -> std::io::Result<Output> {
+    fn run(&self, program: &str, args: &[&str]) -> std::io::Result<Output> {
         self.calls.borrow_mut().push((
             program.to_owned(),
             args.iter().map(|arg| (*arg).to_owned()).collect(),

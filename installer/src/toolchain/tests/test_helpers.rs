@@ -122,7 +122,7 @@ pub fn expect_toolchain_install(
     );
 }
 
-// Helper to test that ensure_installed fails with the expected error.
+/// Helper to test that ensure_installed fails with the expected error.
 pub fn assert_install_fails_with<F, I, E>(
     toolchain: Toolchain,
     setup_mocks: F,
@@ -143,7 +143,7 @@ pub fn assert_install_fails_with<F, I, E>(
     error_matcher(err);
 }
 
-// Returns a predicate that matches a rustup component add command with multiple components.
+/// Returns a predicate that matches a rustup component add command with multiple components.
 pub fn matches_multi_component_add(
     channel: &str,
     components: &[&str],

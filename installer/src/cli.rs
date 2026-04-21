@@ -100,11 +100,7 @@ pub struct InstallArgs {
     pub toolchain: Option<String>,
 
     /// Install rustc-codegen-cranelift via rustup.
-    #[arg(
-        long,
-        default_value_t = false,
-        help = "Install rustc-codegen-cranelift via rustup"
-    )]
+    #[arg(long, default_value_t = false)]
     pub cranelift: bool,
 
     /// Show configuration and exit without building.
