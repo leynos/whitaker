@@ -53,6 +53,48 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
     }
 }
 
+/// Returns the set of additional rustup components requested by the CLI flags.
+fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
+    if args.cranelift {
+        &["rustc-codegen-cranelift"]
+    } else {
+        &[]
+    }
+}
+
+/// Attempts prebuilt download and staged-suite fast paths.
+///
+/// Returns `Some((staging_path, mode))` if either succeeds, or `None` if
+/// the caller should proceed to a full build.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "The requested helper signature is part of the task contract."
+)]
+fn try_fast_path_installation(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    requested_crates: &[CrateName],
+    toolchain: &Toolchain,
+    target_dir: &Utf8PathBuf,
+    stderr: &mut dyn Write,
+) -> Result<Option<(Utf8PathBuf, InstallMode)>> {
+    let prebuilt_context = PrebuiltInstallationContext {
+        args,
+        dirs,
+        requested_crates,
+        toolchain_channel: toolchain.channel(),
+    };
+    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
+        return Ok(Some((staging_path, InstallMode::Download)));
+    }
+    if let Some(staging_path) =
+        staged_suite::try_test_staged_suite_installation(requested_crates, toolchain, target_dir)?
+    {
+        return Ok(Some((staging_path, InstallMode::Build)));
+    }
+    Ok(None)
+}
+
 /// Runs the install command to build and stage lint libraries.
 ///
 /// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
@@ -86,33 +128,20 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         stderr,
     )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    // Step 3.5: Attempt prebuilt download when install options allow it.
-    let prebuilt_context = PrebuiltInstallationContext {
+    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
+    if let Some((staging_path, install_mode)) = try_fast_path_installation(
         args,
-        dirs: &dirs,
-        requested_crates: &requested_crates,
-        toolchain_channel: toolchain.channel(),
-    };
-    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
-        let finish_context = FinishInstallContext {
-            args,
-            dirs: &dirs,
-            staging_path: &staging_path,
-            install_mode: InstallMode::Download,
-            install_started,
-        };
-        return finish_install_and_record_metrics(&finish_context, stderr);
-    }
-    if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
+        &dirs,
         &requested_crates,
         &toolchain,
         &target_dir,
+        stderr,
     )? {
         let finish_context = FinishInstallContext {
             args,
             dirs: &dirs,
             staging_path: &staging_path,
-            install_mode: InstallMode::Build,
+            install_mode,
             install_started,
         };
         return finish_install_and_record_metrics(&finish_context, stderr);
@@ -230,15 +259,6 @@ fn resolve_toolchain(
     match override_channel {
         Some(channel) => Ok(Toolchain::with_override(workspace_root, channel)),
         None => Toolchain::detect(workspace_root),
-    }
-}
-
-/// Returns the set of additional rustup components requested by the CLI flags.
-fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
-    if args.cranelift {
-        &["rustc-codegen-cranelift"]
-    } else {
-        &[]
     }
 }
 
