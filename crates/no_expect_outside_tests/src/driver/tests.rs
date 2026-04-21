@@ -144,7 +144,7 @@ fn has_test_like_hir_attributes_accepts_additional_test_attributes() {
 }
 
 // -------------------------------------------------------------------------
-// Coverage notes for is_test_named_module, extract_function_item, and the
+// Coverage notes for extract_function_item and the
 // is_likely_test_function fallback
 //
 // These helpers require full HIR context (hir::Node, hir::Item) which cannot
@@ -159,19 +159,23 @@ fn has_test_like_hir_attributes_accepts_additional_test_attributes() {
 //    - pass_expect_in_test.rs, pass_expect_in_rstest.rs, pass_expect_in_tokio_test.rs
 //    - These verify that test attributes are recognized without the fallback
 //
-// 2. UI tests for cfg(test) module detection:
+// 2. UI tests for arbitrary cfg(test) ancestry detection:
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
-//    - These verify #[cfg(test)] mod test/tests detection
+//    - These verify that `#[cfg(test)]` module ancestry marks nested contexts
+//      as test-only regardless of the exact module-name heuristic
 //
 // 3. Example-based regression coverage for the `rustc --test` harness path:
 //    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
 //      example target under `--test`, placing `.expect(...)` calls inside
 //      nested closure and async-block bodies so the parent walk and sibling
 //      const descriptor fallback are both exercised.
+//    - `pass_expect_in_tokio_nonstandard_module_harness` and
+//      `pass_expect_in_tokio_path_module_harness` cover non-standard module
+//      names and `#[path]`-loaded Tokio tests under the harness path.
 //
 // 4. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works
-//    correctly for tests/ directory detection and cfg(test) ancestry checks.
+//    correctly for `cfg(test)` ancestry checks and harness-based recovery.
 //
 // The remaining helper with isolated unit coverage is straightforward:
 // - extract_function_item: matches `hir::Node::Item` values whose kind is `Fn`

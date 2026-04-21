@@ -34,10 +34,8 @@ pub(crate) fn collect_context<'tcx>(
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        has_cfg_test = has_cfg_test
-            || attrs.iter().any(is_cfg_test_attribute)
-            || (matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }))
-                && has_test_like_hir_attributes(attrs, additional_test_attributes));
+        has_cfg_test =
+            has_cfg_test || ancestor_marks_test_context(node, attrs, additional_test_attributes);
 
         if let Some(entry) = context_entry_for(node, attrs) {
             entries.push(entry);
@@ -45,6 +43,16 @@ pub(crate) fn collect_context<'tcx>(
     }
 
     (entries, has_cfg_test)
+}
+
+fn ancestor_marks_test_context(
+    node: Node<'_>,
+    attrs: &[hir::Attribute],
+    additional_test_attributes: &[AttributePath],
+) -> bool {
+    attrs.iter().any(is_cfg_test_attribute)
+        || (matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }))
+            && has_test_like_hir_attributes(attrs, additional_test_attributes))
 }
 
 pub(crate) fn summarise_context(
