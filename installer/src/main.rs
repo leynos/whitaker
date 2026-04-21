@@ -66,30 +66,24 @@ fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] 
 ///
 /// Returns `Some((staging_path, mode))` if either succeeds, or `None` if
 /// the caller should proceed to a full build.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "The requested helper signature is part of the task contract."
-)]
 fn try_fast_path_installation(
-    args: &InstallArgs,
-    dirs: &dyn BaseDirs,
-    requested_crates: &[CrateName],
-    toolchain: &Toolchain,
-    target_dir: &Utf8PathBuf,
+    context: &FastPathContext<'_>,
     stderr: &mut dyn Write,
 ) -> Result<Option<(Utf8PathBuf, InstallMode)>> {
     let prebuilt_context = PrebuiltInstallationContext {
-        args,
-        dirs,
-        requested_crates,
-        toolchain_channel: toolchain.channel(),
+        args: context.args,
+        dirs: context.dirs,
+        requested_crates: context.requested_crates,
+        toolchain_channel: context.toolchain.channel(),
     };
     if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
         return Ok(Some((staging_path, InstallMode::Download)));
     }
-    if let Some(staging_path) =
-        staged_suite::try_test_staged_suite_installation(requested_crates, toolchain, target_dir)?
-    {
+    if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
+        context.requested_crates,
+        context.toolchain,
+        context.target_dir,
+    )? {
         return Ok(Some((staging_path, InstallMode::Build)));
     }
     Ok(None)
@@ -129,14 +123,16 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
     // Step 3.5: Attempt prebuilt download or staged-suite fast path.
-    if let Some((staging_path, install_mode)) = try_fast_path_installation(
+    let fast_path_context = FastPathContext {
         args,
-        &dirs,
-        &requested_crates,
-        &toolchain,
-        &target_dir,
-        stderr,
-    )? {
+        dirs: &dirs,
+        requested_crates: &requested_crates,
+        toolchain: &toolchain,
+        target_dir: &target_dir,
+    };
+    if let Some((staging_path, install_mode)) =
+        try_fast_path_installation(&fast_path_context, stderr)?
+    {
         let finish_context = FinishInstallContext {
             args,
             dirs: &dirs,
@@ -302,6 +298,15 @@ struct FinishInstallContext<'a> {
     staging_path: &'a Utf8Path,
     install_mode: InstallMode,
     install_started: Instant,
+}
+
+/// Aggregates the immutable inputs for fast-path installation attempts.
+struct FastPathContext<'a> {
+    args: &'a InstallArgs,
+    dirs: &'a dyn BaseDirs,
+    requested_crates: &'a [CrateName],
+    toolchain: &'a Toolchain,
+    target_dir: &'a Utf8PathBuf,
 }
 
 /// Finalise installation and record aggregate installer metrics.
