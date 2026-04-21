@@ -146,6 +146,80 @@ enum InstallFailure {
     ToolchainUnusableAfterInstall,
 }
 
+fn setup_toolchain_install_failure_mocks(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    channel: &str,
+) {
+    expect_rustc_version(runner, seq, channel, 1);
+    expect_toolchain_install(
+        runner,
+        seq,
+        ToolchainInstallExpectation {
+            channel,
+            exit_code: 1,
+            stderr: Some("network down"),
+        },
+    );
+}
+
+fn setup_component_add_failure_mocks(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    channel: &str,
+) {
+    expect_rustc_version(runner, seq, channel, 0);
+    runner
+        .expect_run()
+        .withf(|program, args| {
+            program == "rustup" && args.len() >= 4 && args[0] == "component" && args[1] == "add"
+        })
+        .times(1)
+        .in_sequence(seq)
+        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+}
+
+fn setup_cranelift_component_add_failure_mocks(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    channel: &str,
+) {
+    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
+    expect_rustc_version(runner, seq, channel, 0);
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, &expected_components))
+        .times(1)
+        .in_sequence(seq)
+        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+}
+
+fn setup_toolchain_unusable_failure_mocks(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    channel: &str,
+) {
+    expect_rustc_version(runner, seq, channel, 1);
+    expect_toolchain_install(
+        runner,
+        seq,
+        ToolchainInstallExpectation {
+            channel,
+            exit_code: 0,
+            stderr: None,
+        },
+    );
+    runner
+        .expect_run()
+        .withf(|program, args| {
+            program == "rustup" && args.len() >= 4 && args[0] == "component" && args[1] == "add"
+        })
+        .times(1)
+        .in_sequence(seq)
+        .returning(|_, _| Ok(output_with_status(0)));
+    expect_rustc_version(runner, seq, channel, 1);
+}
+
 fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -155,64 +229,16 @@ fn setup_failure_mocks(
     let channel = channel.as_str();
     match failure {
         InstallFailure::ToolchainInstall => {
-            expect_rustc_version(runner, seq, channel, 1);
-            expect_toolchain_install(
-                runner,
-                seq,
-                ToolchainInstallExpectation {
-                    channel,
-                    exit_code: 1,
-                    stderr: Some("network down"),
-                },
-            );
+            setup_toolchain_install_failure_mocks(runner, seq, channel);
         }
         InstallFailure::ComponentAdd => {
-            expect_rustc_version(runner, seq, channel, 0);
-            runner
-                .expect_run()
-                .withf(|program, args| {
-                    program == "rustup"
-                        && args.len() >= 4
-                        && args[0] == "component"
-                        && args[1] == "add"
-                })
-                .times(1)
-                .in_sequence(seq)
-                .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+            setup_component_add_failure_mocks(runner, seq, channel);
         }
         InstallFailure::CraneliftComponentAdd => {
-            let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
-            expect_rustc_version(runner, seq, channel, 0);
-            runner
-                .expect_run()
-                .withf(matches_multi_component_add(channel, &expected_components))
-                .times(1)
-                .in_sequence(seq)
-                .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+            setup_cranelift_component_add_failure_mocks(runner, seq, channel);
         }
         InstallFailure::ToolchainUnusableAfterInstall => {
-            expect_rustc_version(runner, seq, channel, 1);
-            expect_toolchain_install(
-                runner,
-                seq,
-                ToolchainInstallExpectation {
-                    channel,
-                    exit_code: 0,
-                    stderr: None,
-                },
-            );
-            runner
-                .expect_run()
-                .withf(|program, args| {
-                    program == "rustup"
-                        && args.len() >= 4
-                        && args[0] == "component"
-                        && args[1] == "add"
-                })
-                .times(1)
-                .in_sequence(seq)
-                .returning(|_, _| Ok(output_with_status(0)));
-            expect_rustc_version(runner, seq, channel, 1);
+            setup_toolchain_unusable_failure_mocks(runner, seq, channel);
         }
     }
 }
