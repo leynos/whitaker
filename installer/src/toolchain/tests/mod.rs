@@ -275,17 +275,15 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
             &format!("ToolchainComponentInstallFailed with cranelift for {channel}"),
             |e| is_cranelift_component_install_failed(e, channel),
         ),
-        InstallFailure::ToolchainUnusableAfterInstall => assert_error_matches(
-            &err,
-            &format!("ToolchainNotInstalled for {channel}"),
-            |e| {
+        InstallFailure::ToolchainUnusableAfterInstall => {
+            assert_error_matches(&err, &format!("ToolchainNotInstalled for {channel}"), |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainNotInstalled { toolchain }
                         if toolchain == channel
                 )
-            },
-        ),
+            })
+        }
     }
 }
 
