@@ -298,10 +298,12 @@ ______________________________________________________________________
 
 ### `function_attrs_follow_docs`
 
-Ensures doc comments appear before all other outer attributes on functions,
+#### Purpose for `function_attrs_follow_docs`
+
+Ensures doc comments appear before other outer attributes on functions,
 methods, and trait methods.
 
-#### Macro-aware span recovery
+#### Scope and behaviour for `function_attrs_follow_docs`
 
 When attributes are generated or reordered by a procedural macro (for example
 `rstest` or `derive`), the lint recovers the original source span from the
@@ -310,19 +312,38 @@ user-written source location (macro-only glue) are silently excluded from the
 ordering check, so the lint never fires on compiler- or macro-generated code
 that the developer cannot edit.
 
-#### What is checked
+The lint checks:
 
 - Free functions annotated with `#[rstest]`, `#[test]`, or any other attribute
   that does not prevent source-span recovery.
 - Inherent methods and trait methods.
 
-#### What is ignored
+The lint ignores:
 
-- Attributes whose recovered span is macro-only (e.g., inline hints injected
-  by `#[derive(...)]`).
+- Attributes whose recovered span is macro-only (for example, inline hints
+  injected by `#[derive(...)]`).
 - Inner attributes (`#![...]`).
 
-#### How to fix&#8203;
+#### Configuration for `function_attrs_follow_docs`
+
+`function_attrs_follow_docs` has no configuration knobs.
+
+#### What is allowed for `function_attrs_follow_docs`
+
+- Doc comments that appear before every other outer attribute on the same
+  function, method, or trait method.
+- Macro-generated attributes whose spans are excluded because they are
+  macro-only.
+- Inner attributes, which are outside the lint's scope.
+
+#### What is denied for `function_attrs_follow_docs`
+
+- Outer attributes that appear before a doc comment on the same function,
+  method, or trait method.
+- Macro-expanded attributes that recover to a user-editable source span and
+  sort before the doc comment.
+
+#### How to fix for `function_attrs_follow_docs`
 
 Move doc comments so they appear before other outer attributes:
 
@@ -338,7 +359,7 @@ fn example() {}
 fn example() {}
 ```
 
-With `rstest`, place the doc comment before all attributes including the test
+With `rstest`, place the doc comment before all attributes, including the test
 annotation:
 
 ```rust

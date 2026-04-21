@@ -4,6 +4,8 @@
 // Link against `rustc_driver` only when consumers need the dylint driver runtime.
 // Unit tests of this crate should not pull the compiler driver to avoid the
 // duplicated `std`/`core` link errors seen during all-features test runs.
+#[cfg(feature = "dylint-driver")]
+extern crate rustc_data_structures;
 #[cfg(all(feature = "dylint-driver", not(test)))]
 extern crate rustc_driver;
 

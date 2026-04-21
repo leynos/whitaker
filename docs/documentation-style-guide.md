@@ -413,7 +413,7 @@ Include these sections as appropriate to the decision's complexity:
 
 ### ADR template
 
-```text
+```plaintext
 # Architectural decision record (ADR) NNN: <title>
 
 ## Status
@@ -641,7 +641,7 @@ This hierarchy should align with the GIST framework:
 
 ### Roadmap example
 
-```text
+```plaintext
 ## 1. Core infrastructure
 
 ### 1.1. Logging subsystem

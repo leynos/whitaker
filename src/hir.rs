@@ -314,34 +314,94 @@ mod tests {
     //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs`
     //!   (`rstest_example_compiles_under_test_harness`)
     use super::{recover_user_editable_hir_span, span_recovery_frames};
-    use rustc_span::{BytePos, DUMMY_SP, Span};
+    use rustc_data_structures::stable_hasher::HashingControls;
+    use rustc_span::def_id::{DefId, DefPathHash, LocalDefId};
+    use rustc_span::edition::Edition;
+    use rustc_span::hygiene::{ExpnData, ExpnKind, LocalExpnId, MacroKind, Transparency};
+    use rustc_span::{BytePos, DUMMY_SP, Span, SpanData, StableSourceFileId, SyntaxContext, sym};
     use whitaker_common::SpanRecoveryFrame;
 
     fn test_span(lo: u32, hi: u32) -> Span {
         Span::with_root_ctxt(BytePos(lo), BytePos(hi))
     }
 
+    #[derive(Clone, Copy)]
+    struct TestHashStableContext;
+
+    impl rustc_span::HashStableContext for TestHashStableContext {
+        fn def_path_hash(&self, _def_id: DefId) -> DefPathHash {
+            DefPathHash::default()
+        }
+
+        fn hash_spans(&self) -> bool {
+            false
+        }
+
+        fn unstable_opts_incremental_ignore_spans(&self) -> bool {
+            true
+        }
+
+        fn def_span(&self, _def_id: LocalDefId) -> Span {
+            DUMMY_SP
+        }
+
+        fn span_data_to_lines_and_cols(
+            &mut self,
+            _span: &SpanData,
+        ) -> Option<(StableSourceFileId, usize, BytePos, usize, BytePos)> {
+            None
+        }
+
+        fn hashing_controls(&self) -> HashingControls {
+            HashingControls { hash_spans: false }
+        }
+    }
+
+    fn expanded_span(span: Span, call_site: Span) -> Span {
+        let expn_id = LocalExpnId::fresh_empty();
+        expn_id.set_expn_data(
+            ExpnData::default(
+                ExpnKind::Macro(MacroKind::Bang, sym::include),
+                call_site,
+                Edition::Edition2024,
+                None,
+                None,
+            ),
+            TestHashStableContext,
+        );
+
+        span.with_ctxt(
+            SyntaxContext::root().apply_mark(expn_id.to_expn_id(), Transparency::Transparent),
+        )
+    }
+
     #[test]
-    fn dummy_span_yields_no_frames() {
+    fn dummy_span_yields_no_frames_or_recovered_span() {
         assert!(span_recovery_frames(DUMMY_SP).is_empty());
-    }
-
-    #[test]
-    fn non_expanded_span_yields_single_direct_frame() {
-        let span = test_span(10, 20);
-        let frames = span_recovery_frames(span);
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames.first(), Some(&SpanRecoveryFrame::new(span, false)));
-    }
-
-    #[test]
-    fn recover_user_editable_hir_span_returns_none_for_dummy() {
         assert_eq!(recover_user_editable_hir_span(DUMMY_SP), None);
     }
 
     #[test]
-    fn recover_user_editable_hir_span_returns_direct_span() {
+    fn non_expanded_span_yields_single_direct_frame_and_span() {
         let span = test_span(10, 20);
+        let frames = span_recovery_frames(span);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames.first(), Some(&SpanRecoveryFrame::new(span, false)));
         assert_eq!(recover_user_editable_hir_span(span), Some(span));
+    }
+
+    #[test]
+    fn recoverable_span_yields_expansion_frame_then_callsite() {
+        let recovered = test_span(10, 20);
+        let expanded = expanded_span(test_span(30, 40), recovered);
+
+        assert_eq!(
+            span_recovery_frames(expanded),
+            vec![
+                SpanRecoveryFrame::new(expanded, true),
+                SpanRecoveryFrame::new(recovered, false),
+            ]
+        );
+        assert_eq!(recover_user_editable_hir_span(expanded), Some(recovered));
     }
 }

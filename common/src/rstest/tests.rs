@@ -218,50 +218,31 @@ fn assert_span_recovery(
 }
 
 #[rstest]
-fn keeps_direct_user_editable_span() {
-    let span = source_span(1, 1, 8);
-
-    assert_span_recovery([(span, false)], UserEditableSpan::Direct(span));
-}
-
-#[rstest]
-fn recovers_macro_frame_to_first_user_span() {
-    let macro_span = source_span(2, 1, 8);
-    let user_span = source_span(10, 1, 12);
-
-    assert_span_recovery(
-        [(macro_span, true), (user_span, false)],
-        UserEditableSpan::Recovered(user_span),
-    );
-}
-
-#[rstest]
-fn recovers_first_user_span_from_nested_macro_chain() {
-    let outer_macro = source_span(2, 1, 4);
-    let inner_macro = source_span(3, 1, 5);
-    let user_span = source_span(14, 1, 6);
-    let later_user_span = source_span(20, 1, 9);
-
-    assert_span_recovery(
-        [
-            (outer_macro, true),
-            (inner_macro, true),
-            (user_span, false),
-            (later_user_span, false),
-        ],
-        UserEditableSpan::Recovered(user_span),
-    );
-}
-
-#[rstest]
-fn treats_empty_frame_list_as_macro_only() {
-    assert_span_recovery([], UserEditableSpan::MacroOnly);
-}
-
-#[rstest]
-fn treats_all_expansion_frames_as_macro_only() {
-    let first = source_span(4, 1, 4);
-    let second = source_span(5, 1, 6);
-
-    assert_span_recovery([(first, true), (second, true)], UserEditableSpan::MacroOnly);
+#[case::keeps_direct_user_editable_span(
+    vec![(source_span(1, 1, 8), false)],
+    UserEditableSpan::Direct(source_span(1, 1, 8)),
+)]
+#[case::recovers_macro_frame_to_first_user_span(
+    vec![(source_span(2, 1, 8), true), (source_span(10, 1, 12), false)],
+    UserEditableSpan::Recovered(source_span(10, 1, 12)),
+)]
+#[case::recovers_first_user_span_from_nested_macro_chain(
+    vec![
+        (source_span(2, 1, 4), true),
+        (source_span(3, 1, 5), true),
+        (source_span(14, 1, 6), false),
+        (source_span(20, 1, 9), false),
+    ],
+    UserEditableSpan::Recovered(source_span(14, 1, 6)),
+)]
+#[case::treats_empty_frame_list_as_macro_only(vec![], UserEditableSpan::MacroOnly)]
+#[case::treats_all_expansion_frames_as_macro_only(
+    vec![(source_span(4, 1, 4), true), (source_span(5, 1, 6), true)],
+    UserEditableSpan::MacroOnly,
+)]
+fn recovers_user_editable_span_from_frame_sequences(
+    #[case] frames: Vec<(SourceSpan, bool)>,
+    #[case] expected: UserEditableSpan<SourceSpan>,
+) {
+    assert_span_recovery(frames, expected);
 }

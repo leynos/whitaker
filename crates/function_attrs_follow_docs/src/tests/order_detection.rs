@@ -118,11 +118,11 @@ fn macro_only_attributes_are_dropped_from_item_comparison() {
 }
 
 #[rstest]
-fn none_item_span_drops_attribute_when_raw_item_span_is_not_dummy() {
+fn raw_item_span_bounds_attribute_when_item_recovery_fails() {
     let raw_item_span = test_span(10, 40);
     let attribute_span = test_span(12, 20);
 
-    assert!(!attribute_within_item(
+    assert!(attribute_within_item(
         Some(attribute_span),
         None,
         raw_item_span,

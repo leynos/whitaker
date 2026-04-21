@@ -246,6 +246,8 @@ fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
 ///
 /// Dummy item spans are treated as in-bounds. Attributes with no recoverable
 /// user-editable span are discarded so the lint never compares macro-only glue.
+/// When item-span recovery fails, the raw item span remains the containment
+/// fallback for user-authored items.
 fn attribute_within_item(
     attribute_span: Option<Span>,
     item_span: Option<Span>,
@@ -259,9 +261,7 @@ fn attribute_within_item(
         return true;
     }
 
-    let Some(item_span) = item_span else {
-        return false;
-    };
+    let item_span = item_span.unwrap_or(raw_item_span);
 
     attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi()
 }
