@@ -318,7 +318,10 @@ mod tests {
     use rustc_span::def_id::{DefId, DefPathHash, LocalDefId};
     use rustc_span::edition::Edition;
     use rustc_span::hygiene::{ExpnData, ExpnKind, LocalExpnId, MacroKind, Transparency};
-    use rustc_span::{BytePos, DUMMY_SP, Span, SpanData, StableSourceFileId, SyntaxContext, sym};
+    use rustc_span::{
+        BytePos, DUMMY_SP, Span, SpanData, StableSourceFileId, SyntaxContext,
+        create_default_session_globals_then, sym,
+    };
     use whitaker_common::SpanRecoveryFrame;
 
     fn test_span(lo: u32, hi: u32) -> Span {
@@ -358,21 +361,23 @@ mod tests {
     }
 
     fn expanded_span(span: Span, call_site: Span) -> Span {
-        let expn_id = LocalExpnId::fresh_empty();
-        expn_id.set_expn_data(
-            ExpnData::default(
-                ExpnKind::Macro(MacroKind::Bang, sym::include),
-                call_site,
-                Edition::Edition2024,
-                None,
-                None,
-            ),
-            TestHashStableContext,
-        );
+        create_default_session_globals_then(|| {
+            let expn_id = LocalExpnId::fresh_empty();
+            expn_id.set_expn_data(
+                ExpnData::default(
+                    ExpnKind::Macro(MacroKind::Bang, sym::include),
+                    call_site,
+                    Edition::Edition2024,
+                    None,
+                    None,
+                ),
+                TestHashStableContext,
+            );
 
-        span.with_ctxt(
-            SyntaxContext::root().apply_mark(expn_id.to_expn_id(), Transparency::Transparent),
-        )
+            span.with_ctxt(
+                SyntaxContext::root().apply_mark(expn_id.to_expn_id(), Transparency::Transparent),
+            )
+        })
     }
 
     #[test]

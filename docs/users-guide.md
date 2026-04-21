@@ -314,9 +314,10 @@ that the developer cannot edit.
 
 The lint checks:
 
-- Free functions annotated with `#[rstest]`, `#[test]`, or any other attribute
-  that does not prevent source-span recovery.
-- Inherent methods and trait methods.
+- Every free function, inherent method, and trait method.
+- Macro-aware span recovery still applies when those items carry attributes
+  such as `#[rstest]` or `#[test]`; these are examples, not the condition that
+  enables the lint.
 
 The lint ignores:
 
