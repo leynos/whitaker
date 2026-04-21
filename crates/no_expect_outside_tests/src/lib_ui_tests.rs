@@ -225,6 +225,26 @@ fn tokio_path_loaded_module_compiles_under_test_harness() {
 }
 
 #[test]
+fn file_backed_cfg_test_module_compiles_under_test_harness() {
+    let crate_name = env!("CARGO_PKG_NAME");
+    let directory = "ui";
+    let spec = FixtureHarnessRun {
+        crate_name,
+        fixture_name: "pass_expect_in_file_backed_test_module",
+        rustc_flags: &["--test"],
+    };
+
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
+        run_fixture_under_test_harness(&spec, dir)
+    })
+    .unwrap_or_else(|error| {
+        panic!(
+            "File-backed cfg(test) regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}"
+        )
+    });
+}
+
+#[test]
 fn rstest_expect_outside_tests_still_fails_in_non_harness_code() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(
         "fail_expect_in_rstest_non_test_module",

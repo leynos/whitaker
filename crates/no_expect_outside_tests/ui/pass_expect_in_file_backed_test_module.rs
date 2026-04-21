@@ -6,7 +6,7 @@
 #![deny(no_expect_outside_tests)]
 
 #[cfg(test)]
-#[path = "auxiliary/pass_expect_in_file_backed_test_module_service_tests.rs"]
+#[path = "pass_expect_in_file_backed_test_module/auxiliary/pass_expect_in_file_backed_test_module_service_tests.rs"]
 mod service_tests;
 
 fn main() {}
