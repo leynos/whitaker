@@ -58,55 +58,42 @@ pub fn has_test_like_hir_attributes(
 /// The first frame is always the original span when it is not dummy. Later
 /// frames follow the `source_callsite()` chain until the walk stops making
 /// progress or reaches a user-editable span.
+fn walk_span_chain(start: Span) -> impl Iterator<Item = Span> {
+    let mut current = Some(start);
+
+    std::iter::from_fn(move || {
+        let span = current?;
+        if span.is_dummy() {
+            current = None;
+            return None;
+        }
+
+        current = if span.from_expansion() {
+            let next = span.source_callsite();
+            if next.is_dummy() || next == span {
+                None
+            } else {
+                Some(next)
+            }
+        } else {
+            None
+        };
+
+        Some(span)
+    })
+}
+
 #[must_use]
 pub fn span_recovery_frames(span: Span) -> Vec<SpanRecoveryFrame<Span>> {
-    let mut frames = Vec::new();
-    let mut current = span;
-
-    loop {
-        if current.is_dummy() {
-            break;
-        }
-
-        let from_expansion = current.from_expansion();
-        frames.push(SpanRecoveryFrame::new(current, from_expansion));
-
-        if !from_expansion {
-            break;
-        }
-
-        let next = current.source_callsite();
-        if next.is_dummy() || next == current {
-            break;
-        }
-
-        current = next;
-    }
-
-    frames
+    walk_span_chain(span)
+        .map(|current| SpanRecoveryFrame::new(current, current.from_expansion()))
+        .collect()
 }
 
 /// Recovers the first user-editable HIR span from a macro expansion chain.
 #[must_use]
 pub fn recover_user_editable_hir_span(span: Span) -> Option<Span> {
-    let mut current = span;
-
-    loop {
-        if current.is_dummy() {
-            return None;
-        }
-
-        if !current.from_expansion() {
-            return Some(current);
-        }
-
-        let next = current.source_callsite();
-        if next.is_dummy() || next == current {
-            return None;
-        }
-
-        current = next;
-    }
+    walk_span_chain(span).find(|current| !current.from_expansion())
 }
 
 fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
@@ -314,6 +301,7 @@ mod tests {
     //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs`
     //!   (`rstest_example_compiles_under_test_harness`)
     use super::{recover_user_editable_hir_span, span_recovery_frames};
+    use rstest::{fixture, rstest};
     use rustc_data_structures::stable_hasher::HashingControls;
     use rustc_span::def_id::{DefId, DefPathHash, LocalDefId};
     use rustc_span::edition::Edition;
@@ -375,35 +363,54 @@ mod tests {
         )
     }
 
-    #[test]
-    fn dummy_span_yields_no_frames_or_recovered_span() {
-        assert!(span_recovery_frames(DUMMY_SP).is_empty());
-        assert_eq!(recover_user_editable_hir_span(DUMMY_SP), None);
+    #[derive(Clone, Copy)]
+    enum SpanRecoveryCase {
+        Dummy,
+        Direct,
+        Recovered,
     }
 
-    #[test]
-    fn non_expanded_span_yields_single_direct_frame_and_span() {
-        let span = test_span(10, 20);
-        let frames = span_recovery_frames(span);
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames.first(), Some(&SpanRecoveryFrame::new(span, false)));
-        assert_eq!(recover_user_editable_hir_span(span), Some(span));
+    #[fixture]
+    fn build_span_case()
+    -> impl Fn(SpanRecoveryCase) -> (Span, Vec<SpanRecoveryFrame<Span>>, Option<Span>) {
+        move |case| match case {
+            SpanRecoveryCase::Dummy => (DUMMY_SP, vec![], None),
+            SpanRecoveryCase::Direct => {
+                let span = test_span(10, 20);
+                (span, vec![SpanRecoveryFrame::new(span, false)], Some(span))
+            }
+            SpanRecoveryCase::Recovered => {
+                let recovered = test_span(10, 20);
+                let expanded = expanded_span(test_span(30, 40), recovered);
+
+                (
+                    expanded,
+                    vec![
+                        SpanRecoveryFrame::new(expanded, true),
+                        SpanRecoveryFrame::new(recovered, false),
+                    ],
+                    Some(recovered),
+                )
+            }
+        }
     }
 
-    #[test]
-    fn recoverable_span_yields_expansion_frame_then_callsite() {
+    #[rstest]
+    #[case::dummy(SpanRecoveryCase::Dummy)]
+    #[case::direct(SpanRecoveryCase::Direct)]
+    #[case::recovered(SpanRecoveryCase::Recovered)]
+    fn span_recovery_walks_expected_frames(
+        #[case] case: SpanRecoveryCase,
+        build_span_case: impl Fn(SpanRecoveryCase) -> (Span, Vec<SpanRecoveryFrame<Span>>, Option<Span>),
+    ) {
         rustc_span::create_default_session_globals_then(|| {
-            let recovered = test_span(10, 20);
-            let expanded = expanded_span(test_span(30, 40), recovered);
+            let (span, expected_frames, expected_recovered_span) = build_span_case(case);
 
+            assert_eq!(span_recovery_frames(span), expected_frames);
             assert_eq!(
-                span_recovery_frames(expanded),
-                vec![
-                    SpanRecoveryFrame::new(expanded, true),
-                    SpanRecoveryFrame::new(recovered, false),
-                ]
+                recover_user_editable_hir_span(span),
+                expected_recovered_span
             );
-            assert_eq!(recover_user_editable_hir_span(expanded), Some(recovered));
         });
     }
 }
