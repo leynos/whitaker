@@ -12,6 +12,17 @@ use test_helpers::{
 
 const CRANELIFT_COMPONENT: &str = "rustc-codegen-cranelift";
 
+/// A typed toolchain channel identifier for use in tests
+/// (e.g. `"nightly-2025-09-18"`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ToolchainChannel<'a>(&'a str);
+
+impl<'a> ToolchainChannel<'a> {
+    fn as_str(self) -> &'a str {
+        self.0
+    }
+}
+
 // Asserts that a parsing function rejects invalid contents with an
 // InvalidToolchainFile error containing the expected reason substring.
 fn assert_parse_fails_with_reason<F, T>(contents: &str, expected_reason: &str, parse_fn: F)
@@ -138,9 +149,10 @@ enum InstallFailure {
 fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
-    channel: &str,
+    channel: ToolchainChannel<'_>,
     failure: InstallFailure,
 ) {
+    let channel = channel.as_str();
     match failure {
         InstallFailure::ToolchainInstall => {
             expect_rustc_version(runner, seq, channel, 1);
@@ -205,7 +217,8 @@ fn setup_failure_mocks(
     }
 }
 
-fn assert_toolchain_install_failed(err: InstallerError, channel: &str) {
+fn assert_toolchain_install_failed(err: InstallerError, channel: ToolchainChannel<'_>) {
+    let channel = channel.as_str();
     assert!(
         matches!(
             err,
@@ -216,7 +229,8 @@ fn assert_toolchain_install_failed(err: InstallerError, channel: &str) {
     );
 }
 
-fn assert_component_add_failed(err: InstallerError, channel: &str) {
+fn assert_component_add_failed(err: InstallerError, channel: ToolchainChannel<'_>) {
+    let channel = channel.as_str();
     assert!(
         matches!(
             err,
@@ -230,7 +244,8 @@ fn assert_component_add_failed(err: InstallerError, channel: &str) {
     );
 }
 
-fn assert_cranelift_component_add_failed(err: InstallerError, channel: &str) {
+fn assert_cranelift_component_add_failed(err: InstallerError, channel: ToolchainChannel<'_>) {
+    let channel = channel.as_str();
     assert!(
         matches!(
             err,
@@ -246,7 +261,8 @@ fn assert_cranelift_component_add_failed(err: InstallerError, channel: &str) {
     );
 }
 
-fn assert_toolchain_not_installed(err: InstallerError, channel: &str) {
+fn assert_toolchain_not_installed(err: InstallerError, channel: ToolchainChannel<'_>) {
+    let channel = channel.as_str();
     assert!(
         matches!(
             err,
@@ -257,15 +273,20 @@ fn assert_toolchain_not_installed(err: InstallerError, channel: &str) {
     );
 }
 
-fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
+fn assert_failure_error(err: InstallerError, channel: ToolchainChannel<'_>, failure: InstallFailure) {
+    let channel = channel.as_str();
     match failure {
-        InstallFailure::ToolchainInstall => assert_toolchain_install_failed(err, channel),
-        InstallFailure::ComponentAdd => assert_component_add_failed(err, channel),
+        InstallFailure::ToolchainInstall => {
+            assert_toolchain_install_failed(err, ToolchainChannel(channel))
+        }
+        InstallFailure::ComponentAdd => {
+            assert_component_add_failed(err, ToolchainChannel(channel))
+        }
         InstallFailure::CraneliftComponentAdd => {
-            assert_cranelift_component_add_failed(err, channel)
+            assert_cranelift_component_add_failed(err, ToolchainChannel(channel))
         }
         InstallFailure::ToolchainUnusableAfterInstall => {
-            assert_toolchain_not_installed(err, channel)
+            assert_toolchain_not_installed(err, ToolchainChannel(channel))
         }
     }
 }
@@ -276,8 +297,8 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
 #[case::cranelift_component_add_fails(InstallFailure::CraneliftComponentAdd)]
 #[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall)]
 fn ensure_installed_reports_failure(#[case] failure: InstallFailure) {
-    let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel);
+    let channel = ToolchainChannel("nightly-2025-09-18");
+    let toolchain = test_toolchain(channel.as_str());
     let additional_components = match failure {
         InstallFailure::CraneliftComponentAdd => &[CRANELIFT_COMPONENT][..],
         _ => &[],
