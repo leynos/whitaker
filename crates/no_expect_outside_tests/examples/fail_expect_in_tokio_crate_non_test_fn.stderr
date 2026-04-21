@@ -1,5 +1,5 @@
 error: Avoid calling expect on `std::option::Option<&str>` outside test-only code.
-  --> $DIR/fail_expect_in_tokio_crate_non_test_fn.rs:10:13
+  --> $DIR/fail_expect_in_tokio_crate_non_test_fn.rs:9:13
    |
 LL |     let _ = parsed.expect("ordinary code in a Tokio crate must still lint");
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
