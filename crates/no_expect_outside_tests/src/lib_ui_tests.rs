@@ -37,7 +37,9 @@ impl<'a> ExampleHarnessRun<'a> {
 /// Describes a fixture-based regression to run under the test harness.
 struct FixtureHarnessRun<'a> {
     crate_name: &'a str,
+    directory: &'a str,
     fixture_name: &'a str,
+    label: &'a str,
     rustc_flags: &'a [&'a str],
     extern_crates: &'a [&'a str],
 }
@@ -100,6 +102,22 @@ fn run_fixture_under_test_harness(
             },
         );
     })
+}
+
+fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
+    let crate_name = spec.crate_name;
+    let directory = spec.directory;
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
+        run_fixture_under_test_harness(spec, dir)
+    })
+    .unwrap_or_else(|error| {
+        panic!(
+            "{} regression should execute without diffs: \
+             RunnerFailure {{ crate_name: \"{crate_name}\", \
+             directory: \"{directory}\", message: {error:?} }}",
+            spec.label
+        )
+    });
 }
 
 fn fixture_source_path(directory: &Utf8Path, fixture_name: &str) -> PathBuf {
@@ -221,45 +239,32 @@ fn example_compiles_under_test_harness(#[case] example_name: &str, #[case] label
     run_example_under_test_harness(&ExampleHarnessRun::new(example_name, label));
 }
 
-#[test]
-fn tokio_path_loaded_module_compiles_under_test_harness() {
-    let crate_name = env!("CARGO_PKG_NAME");
-    let directory = "examples";
-    let spec = FixtureHarnessRun {
-        crate_name,
-        fixture_name: "pass_expect_in_tokio_path_module_harness",
+#[rstest]
+#[case(
+    "examples",
+    "pass_expect_in_tokio_path_module_harness",
+    "Tokio path module",
+    &["tokio"],
+)]
+#[case(
+    "ui",
+    "pass_expect_in_file_backed_test_module",
+    "File-backed cfg(test)",
+    &[],
+)]
+fn fixture_compiles_under_test_harness(
+    #[case] directory: &str,
+    #[case] fixture_name: &str,
+    #[case] label: &str,
+    #[case] extern_crates: &[&str],
+) {
+    run_fixture_harness_test(&FixtureHarnessRun {
+        crate_name: env!("CARGO_PKG_NAME"),
+        directory,
+        fixture_name,
+        label,
         rustc_flags: &["--test"],
-        extern_crates: &["tokio"],
-    };
-
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
-        run_fixture_under_test_harness(&spec, dir)
-    })
-    .unwrap_or_else(|error| {
-        panic!(
-            "Tokio path module regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}"
-        )
-    });
-}
-
-#[test]
-fn file_backed_cfg_test_module_compiles_under_test_harness() {
-    let crate_name = env!("CARGO_PKG_NAME");
-    let directory = "ui";
-    let spec = FixtureHarnessRun {
-        crate_name,
-        fixture_name: "pass_expect_in_file_backed_test_module",
-        rustc_flags: &["--test"],
-        extern_crates: &[],
-    };
-
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
-        run_fixture_under_test_harness(&spec, dir)
-    })
-    .unwrap_or_else(|error| {
-        panic!(
-            "File-backed cfg(test) regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}"
-        )
+        extern_crates,
     });
 }
 
