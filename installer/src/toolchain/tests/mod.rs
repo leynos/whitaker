@@ -4,6 +4,7 @@ mod test_helpers;
 
 use super::*;
 use rstest::rstest;
+use std::cell::RefCell;
 use test_helpers::{
     ToolchainInstallExpectation, assert_install_fails_with, expect_rustc_version,
     expect_toolchain_install, matches_multi_component_add, output_with_status, output_with_stderr,
@@ -103,6 +104,42 @@ fn ensure_installed_installs_missing_toolchain() {
     assert!(status.installed_toolchain());
 }
 
+#[test]
+fn ensure_installed_adds_required_and_additional_components_when_toolchain_missing() {
+    let channel = "nightly-2025-09-18";
+    let toolchain = test_toolchain(channel);
+
+    let mut runner = MockCommandRunner::new();
+    let mut seq = mockall::Sequence::new();
+
+    expect_rustc_version(&mut runner, &mut seq, channel, 1);
+    expect_toolchain_install(
+        &mut runner,
+        &mut seq,
+        ToolchainInstallExpectation {
+            channel,
+            exit_code: 0,
+            stderr: None,
+        },
+    );
+
+    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, &expected_components))
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(|_, _| Ok(output_with_status(0)));
+
+    expect_rustc_version(&mut runner, &mut seq, channel, 0);
+
+    let status = toolchain
+        .ensure_installed_with(&runner, &[CRANELIFT_COMPONENT])
+        .expect("toolchain should install");
+
+    assert!(status.installed_toolchain());
+}
+
 fn run_component_installation_test(extra: &[&str], expected: &[&str]) {
     let channel = "nightly-2025-09-18";
     let toolchain = test_toolchain(channel);
@@ -135,6 +172,79 @@ fn ensure_installed_adds_correct_components(
     #[case] expected: Vec<&'static str>,
 ) {
     run_component_installation_test(&extra, &expected);
+}
+
+struct CapturingCommandRunner {
+    calls: RefCell<Vec<(String, Vec<String>)>>,
+    output: Output,
+}
+
+impl CapturingCommandRunner {
+    fn new(output: Output) -> Self {
+        Self {
+            calls: RefCell::new(Vec::new()),
+            output,
+        }
+    }
+
+    fn recorded_calls(&self) -> Vec<(String, Vec<String>)> {
+        self.calls.borrow().clone()
+    }
+}
+
+impl CommandRunner for CapturingCommandRunner {
+    fn run<'a>(&self, program: &str, args: &[&'a str]) -> std::io::Result<Output> {
+        self.calls.borrow_mut().push((
+            program.to_owned(),
+            args.iter().map(|arg| (*arg).to_owned()).collect(),
+        ));
+        Ok(self.output.clone())
+    }
+}
+
+#[test]
+fn install_components_with_additional_components_assembles_rustup_args_in_order() {
+    let toolchain = test_toolchain("nightly-2025-09-18");
+    let runner = CapturingCommandRunner::new(output_with_status(0));
+
+    toolchain
+        .install_components_with(&runner, &[CRANELIFT_COMPONENT])
+        .expect("component installation should succeed");
+
+    let expected_args: Vec<String> = ["component", "add", "--toolchain", "nightly-2025-09-18"]
+        .into_iter()
+        .chain(REQUIRED_COMPONENTS.iter().copied())
+        .chain([CRANELIFT_COMPONENT])
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        runner.recorded_calls(),
+        vec![("rustup".to_owned(), expected_args)]
+    );
+}
+
+#[test]
+fn install_components_with_failure_reports_all_components() {
+    let toolchain = test_toolchain("nightly-2025-09-18");
+    let runner = CapturingCommandRunner::new(output_with_stderr(1, "component failed"));
+
+    let err = toolchain
+        .install_components_with(&runner, &[CRANELIFT_COMPONENT])
+        .expect_err("component installation should fail");
+
+    assert!(
+        matches!(
+            err,
+            InstallerError::ToolchainComponentInstallFailed {
+                ref toolchain,
+                ref components,
+                ref message,
+            } if toolchain == "nightly-2025-09-18"
+                && components == "rust-src, rustc-dev, llvm-tools-preview, rustc-codegen-cranelift"
+                && message.contains("component failed")
+        ),
+        "expected ToolchainComponentInstallFailed with all components, got {err:?}"
+    );
 }
 
 // Describes the type of installation failure being tested.
