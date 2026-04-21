@@ -217,77 +217,68 @@ fn setup_failure_mocks(
     }
 }
 
-fn assert_toolchain_install_failed(err: InstallerError, channel: ToolchainChannel<'_>) {
-    let channel = channel.as_str();
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainInstallFailed { ref toolchain, ref message }
-                if toolchain == channel && message.contains("network down")
-        ),
-        "expected ToolchainInstallFailed error, got {err:?}"
-    );
+/// Asserts that `err` satisfies `predicate`, printing `description` on failure.
+fn assert_error_matches<F>(err: &InstallerError, description: &str, predicate: F)
+where
+    F: FnOnce(&InstallerError) -> bool,
+{
+    assert!(predicate(err), "expected {description}, got {err:?}");
 }
 
-fn assert_component_add_failed(err: InstallerError, channel: ToolchainChannel<'_>) {
-    let channel = channel.as_str();
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainComponentInstallFailed {
-                ref toolchain,
-                ref message,
-                ..
-            } if toolchain == channel && message.contains("component failed")
-        ),
-        "expected ToolchainComponentInstallFailed error, got {err:?}"
-    );
-}
-
-fn assert_cranelift_component_add_failed(err: InstallerError, channel: ToolchainChannel<'_>) {
-    let channel = channel.as_str();
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainComponentInstallFailed {
-                ref toolchain,
-                ref components,
-                ref message,
-            } if toolchain == channel
-                && components.contains(CRANELIFT_COMPONENT)
-                && message.contains("component failed")
-        ),
-        "expected ToolchainComponentInstallFailed with cranelift component, got {err:?}"
-    );
-}
-
-fn assert_toolchain_not_installed(err: InstallerError, channel: ToolchainChannel<'_>) {
-    let channel = channel.as_str();
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainNotInstalled { ref toolchain }
-                if toolchain == channel
-        ),
-        "expected ToolchainNotInstalled error, got {err:?}"
-    );
-}
-
-fn assert_failure_error(err: InstallerError, channel: ToolchainChannel<'_>, failure: InstallFailure) {
-    let channel = channel.as_str();
+fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
     match failure {
-        InstallFailure::ToolchainInstall => {
-            assert_toolchain_install_failed(err, ToolchainChannel(channel))
-        }
-        InstallFailure::ComponentAdd => {
-            assert_component_add_failed(err, ToolchainChannel(channel))
-        }
-        InstallFailure::CraneliftComponentAdd => {
-            assert_cranelift_component_add_failed(err, ToolchainChannel(channel))
-        }
-        InstallFailure::ToolchainUnusableAfterInstall => {
-            assert_toolchain_not_installed(err, ToolchainChannel(channel))
-        }
+        InstallFailure::ToolchainInstall => assert_error_matches(
+            &err,
+            &format!("ToolchainInstallFailed for {channel}"),
+            |e| {
+                matches!(
+                    e,
+                    InstallerError::ToolchainInstallFailed { toolchain, message }
+                        if toolchain == channel && message.contains("network down")
+                )
+            },
+        ),
+        InstallFailure::ComponentAdd => assert_error_matches(
+            &err,
+            &format!("ToolchainComponentInstallFailed for {channel}"),
+            |e| {
+                matches!(
+                    e,
+                    InstallerError::ToolchainComponentInstallFailed {
+                        toolchain,
+                        message,
+                        ..
+                    } if toolchain == channel && message.contains("component failed")
+                )
+            },
+        ),
+        InstallFailure::CraneliftComponentAdd => assert_error_matches(
+            &err,
+            &format!("ToolchainComponentInstallFailed with cranelift for {channel}"),
+            |e| {
+                matches!(
+                    e,
+                    InstallerError::ToolchainComponentInstallFailed {
+                        toolchain,
+                        components,
+                        message,
+                    } if toolchain == channel
+                        && components.contains(CRANELIFT_COMPONENT)
+                        && message.contains("component failed")
+                )
+            },
+        ),
+        InstallFailure::ToolchainUnusableAfterInstall => assert_error_matches(
+            &err,
+            &format!("ToolchainNotInstalled for {channel}"),
+            |e| {
+                matches!(
+                    e,
+                    InstallerError::ToolchainNotInstalled { toolchain }
+                        if toolchain == channel
+                )
+            },
+        ),
     }
 }
 
@@ -308,7 +299,7 @@ fn ensure_installed_reports_failure(#[case] failure: InstallFailure) {
         toolchain,
         |runner, seq| setup_failure_mocks(runner, seq, channel, failure),
         |toolchain, runner| toolchain.ensure_installed_with(runner, additional_components),
-        |err| assert_failure_error(err, channel, failure),
+        |err| assert_failure_error(err, channel.as_str(), failure),
     );
 }
 
