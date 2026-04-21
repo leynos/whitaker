@@ -39,6 +39,7 @@ struct FixtureHarnessRun<'a> {
     crate_name: &'a str,
     fixture_name: &'a str,
     rustc_flags: &'a [&'a str],
+    extern_crates: &'a [&'a str],
 }
 
 #[derive(Debug)]
@@ -78,7 +79,7 @@ fn run_fixture_under_test_harness(
     let source = fixture_source_path(directory, spec.fixture_name);
     let mut env = prepare_fixture(directory, &source)
         .map_err(|error| format!("failed to prepare {}: {error}", spec.fixture_name))?;
-    let harness_flags = test_harness_flags(spec.rustc_flags)?;
+    let harness_flags = test_harness_flags(spec.rustc_flags, spec.extern_crates)?;
     let harness_flag_refs: Vec<_> = harness_flags.iter().map(String::as_str).collect();
 
     run_test_runner(spec.fixture_name, || {
@@ -105,17 +106,25 @@ fn fixture_source_path(directory: &Utf8Path, fixture_name: &str) -> PathBuf {
     directory.as_std_path().join(format!("{fixture_name}.rs"))
 }
 
-fn test_harness_flags(extra_flags: &[&str]) -> Result<Vec<String>, String> {
-    let deps_dir = dependency_directory()?;
-    let tokio_rlib = dependency_rlib(&deps_dir, "tokio")?;
+fn test_harness_flags(extra_flags: &[&str], extern_crates: &[&str]) -> Result<Vec<String>, String> {
     let mut flags: Vec<String> = extra_flags.iter().map(|flag| (*flag).to_owned()).collect();
+    flags.push("--edition=2024".to_owned());
+    if extern_crates.is_empty() {
+        return Ok(flags);
+    }
+
+    let deps_dir = dependency_directory()?;
     flags.extend([
-        "--edition=2024".to_owned(),
         "-L".to_owned(),
         format!("dependency={}", deps_dir.display()),
-        "--extern".to_owned(),
-        format!("tokio={}", tokio_rlib.display()),
     ]);
+    for crate_name in extern_crates {
+        let dependency_rlib = dependency_rlib(&deps_dir, crate_name)?;
+        flags.extend([
+            "--extern".to_owned(),
+            format!("{crate_name}={}", dependency_rlib.display()),
+        ]);
+    }
     Ok(flags)
 }
 
@@ -161,8 +170,16 @@ fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<Dependen
                 deps_dir.display()
             )
         })?
-        .filter_map(Result::ok)
-        .filter_map(|entry| dependency_rlib_candidate(entry.path(), prefix).transpose())
+        .map(|entry_result| {
+            let entry = entry_result.map_err(|error| {
+                format!(
+                    "failed to read dependency entry in {}: {error}",
+                    deps_dir.display()
+                )
+            })?;
+            dependency_rlib_candidate(entry.path(), prefix)
+        })
+        .filter_map(|candidate| candidate.transpose())
         .collect()
 }
 
@@ -212,6 +229,7 @@ fn tokio_path_loaded_module_compiles_under_test_harness() {
         crate_name,
         fixture_name: "pass_expect_in_tokio_path_module_harness",
         rustc_flags: &["--test"],
+        extern_crates: &["tokio"],
     };
 
     whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
@@ -232,6 +250,7 @@ fn file_backed_cfg_test_module_compiles_under_test_harness() {
         crate_name,
         fixture_name: "pass_expect_in_file_backed_test_module",
         rustc_flags: &["--test"],
+        extern_crates: &[],
     };
 
     whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
@@ -255,7 +274,10 @@ fn rstest_expect_outside_tests_still_fails_in_non_harness_code() {
 
 #[cfg(test)]
 mod dependency_rlib_tests {
+    //! Coverage for dependency artefact selection and related test fixtures.
+
     use super::dependency_rlib;
+    use rstest::{fixture, rstest};
     use std::fs::File;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, SystemTime};
@@ -263,32 +285,75 @@ mod dependency_rlib_tests {
     #[derive(Debug)]
     struct TemporaryDirectory(PathBuf);
 
-    #[test]
-    fn dependency_rlib_prefers_newest_matching_artifact() {
-        let directory = TemporaryDirectory::new("newest");
-        let older = create_rlib(directory.path(), "libtokio-older.rlib");
-        let newer = create_rlib(directory.path(), "libtokio-newer.rlib");
-        set_modified_time(&older, 10);
-        set_modified_time(&newer, 20);
-
-        let selected = dependency_rlib(directory.path(), "tokio")
-            .expect("newest Tokio artefact should resolve");
-
-        assert_eq!(selected, newer);
+    #[derive(Clone, Copy, Debug)]
+    struct ArtifactSpec<'a> {
+        file_name: &'a str,
+        seconds_since_epoch: u64,
     }
 
-    #[test]
-    fn dependency_rlib_breaks_timestamp_ties_lexicographically() {
-        let directory = TemporaryDirectory::new("ties");
-        let earlier_name = create_rlib(directory.path(), "libtokio-alpha.rlib");
-        let later_name = create_rlib(directory.path(), "libtokio-zulu.rlib");
-        set_modified_time(&earlier_name, 30);
-        set_modified_time(&later_name, 30);
+    impl<'a> ArtifactSpec<'a> {
+        const fn new(file_name: &'a str, seconds_since_epoch: u64) -> Self {
+            Self {
+                file_name,
+                seconds_since_epoch,
+            }
+        }
+    }
 
+    #[derive(Debug)]
+    struct DependencyRlibSelection {
+        _directory: TemporaryDirectory,
+        expected: PathBuf,
+        selected: PathBuf,
+    }
+
+    const NEWEST_ARTIFACTS: [ArtifactSpec<'static>; 2] = [
+        ArtifactSpec::new("libtokio-older.rlib", 10),
+        ArtifactSpec::new("libtokio-newer.rlib", 20),
+    ];
+    const TIED_ARTIFACTS: [ArtifactSpec<'static>; 2] = [
+        ArtifactSpec::new("libtokio-alpha.rlib", 30),
+        ArtifactSpec::new("libtokio-zulu.rlib", 30),
+    ];
+
+    #[fixture]
+    fn selection_directory() -> TemporaryDirectory {
+        TemporaryDirectory::new("selection")
+    }
+
+    fn resolve_dependency_rlib_selection(
+        directory: TemporaryDirectory,
+        artifacts: &[ArtifactSpec<'_>],
+        expected_file_name: &str,
+    ) -> DependencyRlibSelection {
+        for artifact in artifacts {
+            let path = create_rlib(directory.path(), artifact.file_name);
+            set_modified_time(&path, artifact.seconds_since_epoch);
+        }
+
+        let expected = directory.path().join(expected_file_name);
         let selected = dependency_rlib(directory.path(), "tokio")
-            .expect("Tokio artefact should resolve when timestamps tie");
+            .expect("Tokio artefact should resolve from fixture directory");
 
-        assert_eq!(selected, earlier_name);
+        DependencyRlibSelection {
+            _directory: directory,
+            expected,
+            selected,
+        }
+    }
+
+    #[rstest]
+    #[case("newest", &NEWEST_ARTIFACTS, "libtokio-newer.rlib")]
+    #[case("ties", &TIED_ARTIFACTS, "libtokio-alpha.rlib")]
+    fn dependency_rlib_selects_expected_artifact(
+        selection_directory: TemporaryDirectory,
+        #[case] _directory_name: &str,
+        #[case] artifacts: &[ArtifactSpec<'_>],
+        #[case] expected_file_name: &str,
+    ) {
+        let selection =
+            resolve_dependency_rlib_selection(selection_directory, artifacts, expected_file_name);
+        assert_eq!(selection.selected, selection.expected);
     }
 
     impl TemporaryDirectory {
