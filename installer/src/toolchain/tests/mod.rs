@@ -225,6 +225,24 @@ where
     assert!(predicate(err), "expected {description}, got {err:?}");
 }
 
+fn is_cranelift_component_install_failed(err: &InstallerError, channel: &str) -> bool {
+    let InstallerError::ToolchainComponentInstallFailed {
+        toolchain,
+        components,
+        message,
+    } = err
+    else {
+        return false;
+    };
+    if toolchain != channel {
+        return false;
+    }
+    if !components.contains(CRANELIFT_COMPONENT) {
+        return false;
+    }
+    message.contains("component failed")
+}
+
 fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
     match failure {
         InstallFailure::ToolchainInstall => assert_error_matches(
@@ -255,18 +273,7 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
         InstallFailure::CraneliftComponentAdd => assert_error_matches(
             &err,
             &format!("ToolchainComponentInstallFailed with cranelift for {channel}"),
-            |e| {
-                matches!(
-                    e,
-                    InstallerError::ToolchainComponentInstallFailed {
-                        toolchain,
-                        components,
-                        message,
-                    } if toolchain == channel
-                        && components.contains(CRANELIFT_COMPONENT)
-                        && message.contains("component failed")
-                )
-            },
+            |e| is_cranelift_component_install_failed(e, channel),
         ),
         InstallFailure::ToolchainUnusableAfterInstall => assert_error_matches(
             &err,
