@@ -37,12 +37,11 @@ fn setup_component_add_failure_mocks(
     seq: &mut mockall::Sequence,
     channel: &str,
 ) {
+    let expected_components = REQUIRED_COMPONENTS;
     expect_rustc_version(runner, seq, channel, 0);
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup" && args.len() >= 4 && args[0] == "component" && args[1] == "add"
-        })
+        .withf(matches_multi_component_add(channel, expected_components))
         .times(1)
         .in_sequence(seq)
         .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
@@ -68,6 +67,7 @@ fn setup_toolchain_unusable_failure_mocks(
     seq: &mut mockall::Sequence,
     channel: &str,
 ) {
+    let expected_components = REQUIRED_COMPONENTS;
     expect_rustc_version(runner, seq, channel, 1);
     expect_toolchain_install(
         runner,
@@ -80,9 +80,7 @@ fn setup_toolchain_unusable_failure_mocks(
     );
     runner
         .expect_run()
-        .withf(|program, args| {
-            program == "rustup" && args.len() >= 4 && args[0] == "component" && args[1] == "add"
-        })
+        .withf(matches_multi_component_add(channel, expected_components))
         .times(1)
         .in_sequence(seq)
         .returning(|_, _| Ok(output_with_status(0)));

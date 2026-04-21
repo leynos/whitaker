@@ -41,12 +41,14 @@ pub fn test_toolchain(channel: &str) -> Toolchain {
     }
 }
 
+/// Captures command invocations and returns a preconfigured `Output`.
 pub(crate) struct CapturingCommandRunner {
     calls: RefCell<Vec<(String, Vec<String>)>>,
     output: Output,
 }
 
 impl CapturingCommandRunner {
+    /// Creates a capture runner that clones `output` for every executed command.
     pub(crate) fn new(output: Output) -> Self {
         Self {
             calls: RefCell::new(Vec::new()),
@@ -54,6 +56,7 @@ impl CapturingCommandRunner {
         }
     }
 
+    /// Returns a cloned list of recorded `(program, args)` pairs without mutating state.
     pub(crate) fn recorded_calls(&self) -> Vec<(String, Vec<String>)> {
         self.calls.borrow().clone()
     }
