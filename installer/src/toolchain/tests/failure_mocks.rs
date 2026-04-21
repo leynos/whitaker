@@ -32,19 +32,28 @@ fn setup_toolchain_install_failure_mocks(
     );
 }
 
+fn setup_component_add_failure_mocks_inner(
+    runner: &mut MockCommandRunner,
+    seq: &mut mockall::Sequence,
+    channel: &str,
+    extra_components: &[&str],
+) {
+    let components = [REQUIRED_COMPONENTS, extra_components].concat();
+    expect_rustc_version(runner, seq, channel, 0);
+    runner
+        .expect_run()
+        .withf(matches_multi_component_add(channel, &components))
+        .times(1)
+        .in_sequence(seq)
+        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+}
+
 fn setup_component_add_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
     channel: &str,
 ) {
-    let expected_components = REQUIRED_COMPONENTS;
-    expect_rustc_version(runner, seq, channel, 0);
-    runner
-        .expect_run()
-        .withf(matches_multi_component_add(channel, expected_components))
-        .times(1)
-        .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+    setup_component_add_failure_mocks_inner(runner, seq, channel, &[]);
 }
 
 fn setup_cranelift_component_add_failure_mocks(
@@ -52,14 +61,7 @@ fn setup_cranelift_component_add_failure_mocks(
     seq: &mut mockall::Sequence,
     channel: &str,
 ) {
-    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
-    expect_rustc_version(runner, seq, channel, 0);
-    runner
-        .expect_run()
-        .withf(matches_multi_component_add(channel, &expected_components))
-        .times(1)
-        .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+    setup_component_add_failure_mocks_inner(runner, seq, channel, &[CRANELIFT_COMPONENT]);
 }
 
 fn setup_toolchain_unusable_failure_mocks(
