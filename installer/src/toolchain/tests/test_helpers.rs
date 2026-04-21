@@ -1,6 +1,7 @@
 //! Test helpers for toolchain tests.
 
 use super::*;
+use std::cell::RefCell;
 use std::process::ExitStatus;
 
 #[cfg(unix)]
@@ -37,6 +38,34 @@ pub fn test_toolchain(channel: &str) -> Toolchain {
     Toolchain {
         channel: channel.to_owned(),
         workspace_root: Utf8PathBuf::from("."),
+    }
+}
+
+pub(crate) struct CapturingCommandRunner {
+    calls: RefCell<Vec<(String, Vec<String>)>>,
+    output: Output,
+}
+
+impl CapturingCommandRunner {
+    pub(crate) fn new(output: Output) -> Self {
+        Self {
+            calls: RefCell::new(Vec::new()),
+            output,
+        }
+    }
+
+    pub(crate) fn recorded_calls(&self) -> Vec<(String, Vec<String>)> {
+        self.calls.borrow().clone()
+    }
+}
+
+impl CommandRunner for CapturingCommandRunner {
+    fn run(&self, program: &str, args: &[&str]) -> std::io::Result<Output> {
+        self.calls.borrow_mut().push((
+            program.to_owned(),
+            args.iter().map(|arg| (*arg).to_owned()).collect(),
+        ));
+        Ok(self.output.clone())
     }
 }
 

@@ -1,28 +1,18 @@
 //! Tests for toolchain detection and installation.
 
+mod failure_mocks;
 mod test_helpers;
 
 use super::*;
+use failure_mocks::{InstallFailure, assert_failure_error, setup_failure_mocks};
 use rstest::rstest;
-use std::cell::RefCell;
 use test_helpers::{
-    ToolchainInstallExpectation, assert_install_fails_with, expect_rustc_version,
+    CapturingCommandRunner, ToolchainInstallExpectation, expect_rustc_version,
     expect_toolchain_install, matches_multi_component_add, output_with_status, output_with_stderr,
     test_toolchain,
 };
 
 const CRANELIFT_COMPONENT: &str = "rustc-codegen-cranelift";
-
-/// A typed toolchain channel identifier for use in tests
-/// (e.g. `"nightly-2025-09-18"`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ToolchainChannel<'a>(&'a str);
-
-impl<'a> ToolchainChannel<'a> {
-    fn as_str(self) -> &'a str {
-        self.0
-    }
-}
 
 // Asserts that a parsing function rejects invalid contents with an
 // InvalidToolchainFile error containing the expected reason substring.
@@ -174,34 +164,6 @@ fn ensure_installed_adds_correct_components(
     run_component_installation_test(&extra, &expected);
 }
 
-struct CapturingCommandRunner {
-    calls: RefCell<Vec<(String, Vec<String>)>>,
-    output: Output,
-}
-
-impl CapturingCommandRunner {
-    fn new(output: Output) -> Self {
-        Self {
-            calls: RefCell::new(Vec::new()),
-            output,
-        }
-    }
-
-    fn recorded_calls(&self) -> Vec<(String, Vec<String>)> {
-        self.calls.borrow().clone()
-    }
-}
-
-impl CommandRunner for CapturingCommandRunner {
-    fn run(&self, program: &str, args: &[&str]) -> std::io::Result<Output> {
-        self.calls.borrow_mut().push((
-            program.to_owned(),
-            args.iter().map(|arg| (*arg).to_owned()).collect(),
-        ));
-        Ok(self.output.clone())
-    }
-}
-
 #[test]
 fn install_components_with_additional_components_assembles_rustup_args_in_order() {
     let toolchain = test_toolchain("nightly-2025-09-18");
@@ -227,6 +189,8 @@ fn install_components_with_additional_components_assembles_rustup_args_in_order(
 fn install_components_with_failure_reports_all_components() {
     let toolchain = test_toolchain("nightly-2025-09-18");
     let runner = CapturingCommandRunner::new(output_with_stderr(1, "component failed"));
+    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
+    let expected_component_list = expected_components.join(", ");
 
     let err = toolchain
         .install_components_with(&runner, &[CRANELIFT_COMPONENT])
@@ -240,187 +204,11 @@ fn install_components_with_failure_reports_all_components() {
                 ref components,
                 ref message,
             } if toolchain == "nightly-2025-09-18"
-                && components == "rust-src, rustc-dev, llvm-tools-preview, rustc-codegen-cranelift"
+                && components == &expected_component_list
                 && message.contains("component failed")
         ),
         "expected ToolchainComponentInstallFailed with all components, got {err:?}"
     );
-}
-
-// Describes the type of installation failure being tested.
-#[derive(Debug, Clone, Copy)]
-enum InstallFailure {
-    ToolchainInstall,
-    ComponentAdd,
-    CraneliftComponentAdd,
-    ToolchainUnusableAfterInstall,
-}
-
-fn setup_toolchain_install_failure_mocks(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    channel: &str,
-) {
-    expect_rustc_version(runner, seq, channel, 1);
-    expect_toolchain_install(
-        runner,
-        seq,
-        ToolchainInstallExpectation {
-            channel,
-            exit_code: 1,
-            stderr: Some("network down"),
-        },
-    );
-}
-
-fn setup_component_add_failure_mocks(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    channel: &str,
-) {
-    expect_rustc_version(runner, seq, channel, 0);
-    runner
-        .expect_run()
-        .withf(|program, args| {
-            program == "rustup" && args.len() >= 4 && args[0] == "component" && args[1] == "add"
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
-}
-
-fn setup_cranelift_component_add_failure_mocks(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    channel: &str,
-) {
-    let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
-    expect_rustc_version(runner, seq, channel, 0);
-    runner
-        .expect_run()
-        .withf(matches_multi_component_add(channel, &expected_components))
-        .times(1)
-        .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
-}
-
-fn setup_toolchain_unusable_failure_mocks(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    channel: &str,
-) {
-    expect_rustc_version(runner, seq, channel, 1);
-    expect_toolchain_install(
-        runner,
-        seq,
-        ToolchainInstallExpectation {
-            channel,
-            exit_code: 0,
-            stderr: None,
-        },
-    );
-    runner
-        .expect_run()
-        .withf(|program, args| {
-            program == "rustup" && args.len() >= 4 && args[0] == "component" && args[1] == "add"
-        })
-        .times(1)
-        .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_status(0)));
-    expect_rustc_version(runner, seq, channel, 1);
-}
-
-fn setup_failure_mocks(
-    runner: &mut MockCommandRunner,
-    seq: &mut mockall::Sequence,
-    channel: ToolchainChannel<'_>,
-    failure: InstallFailure,
-) {
-    let channel = channel.as_str();
-    match failure {
-        InstallFailure::ToolchainInstall => {
-            setup_toolchain_install_failure_mocks(runner, seq, channel);
-        }
-        InstallFailure::ComponentAdd => {
-            setup_component_add_failure_mocks(runner, seq, channel);
-        }
-        InstallFailure::CraneliftComponentAdd => {
-            setup_cranelift_component_add_failure_mocks(runner, seq, channel);
-        }
-        InstallFailure::ToolchainUnusableAfterInstall => {
-            setup_toolchain_unusable_failure_mocks(runner, seq, channel);
-        }
-    }
-}
-
-/// Asserts that `err` satisfies `predicate`, printing `description` on failure.
-fn assert_error_matches<F>(err: &InstallerError, description: &str, predicate: F)
-where
-    F: FnOnce(&InstallerError) -> bool,
-{
-    assert!(predicate(err), "expected {description}, got {err:?}");
-}
-
-fn is_cranelift_component_install_failed(err: &InstallerError, channel: &str) -> bool {
-    let InstallerError::ToolchainComponentInstallFailed {
-        toolchain,
-        components,
-        message,
-    } = err
-    else {
-        return false;
-    };
-    if toolchain != channel {
-        return false;
-    }
-    if !components.contains(CRANELIFT_COMPONENT) {
-        return false;
-    }
-    message.contains("component failed")
-}
-
-fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
-    match failure {
-        InstallFailure::ToolchainInstall => assert_error_matches(
-            &err,
-            &format!("ToolchainInstallFailed for {channel}"),
-            |e| {
-                matches!(
-                    e,
-                    InstallerError::ToolchainInstallFailed { toolchain, message }
-                        if toolchain == channel && message.contains("network down")
-                )
-            },
-        ),
-        InstallFailure::ComponentAdd => assert_error_matches(
-            &err,
-            &format!("ToolchainComponentInstallFailed for {channel}"),
-            |e| {
-                matches!(
-                    e,
-                    InstallerError::ToolchainComponentInstallFailed {
-                        toolchain,
-                        message,
-                        ..
-                    } if toolchain == channel && message.contains("component failed")
-                )
-            },
-        ),
-        InstallFailure::CraneliftComponentAdd => assert_error_matches(
-            &err,
-            &format!("ToolchainComponentInstallFailed with cranelift for {channel}"),
-            |e| is_cranelift_component_install_failed(e, channel),
-        ),
-        InstallFailure::ToolchainUnusableAfterInstall => {
-            assert_error_matches(&err, &format!("ToolchainNotInstalled for {channel}"), |e| {
-                matches!(
-                    e,
-                    InstallerError::ToolchainNotInstalled { toolchain }
-                        if toolchain == channel
-                )
-            })
-        }
-    }
 }
 
 #[rstest]
@@ -429,18 +217,18 @@ fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFail
 #[case::cranelift_component_add_fails(InstallFailure::CraneliftComponentAdd)]
 #[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall)]
 fn ensure_installed_reports_failure(#[case] failure: InstallFailure) {
-    let channel = ToolchainChannel("nightly-2025-09-18");
-    let toolchain = test_toolchain(channel.as_str());
+    let channel = "nightly-2025-09-18";
+    let toolchain = test_toolchain(channel);
     let additional_components = match failure {
         InstallFailure::CraneliftComponentAdd => &[CRANELIFT_COMPONENT][..],
         _ => &[],
     };
 
-    assert_install_fails_with(
+    test_helpers::assert_install_fails_with(
         toolchain,
         |runner, seq| setup_failure_mocks(runner, seq, channel, failure),
         |toolchain, runner| toolchain.ensure_installed_with(runner, additional_components),
-        |err| assert_failure_error(err, channel.as_str(), failure),
+        |err| assert_failure_error(err, channel, failure),
     );
 }
 
