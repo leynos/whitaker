@@ -121,15 +121,21 @@ fn macro_only_attributes_are_dropped_from_item_comparison() {
 fn raw_item_span_bounds_attribute_when_item_recovery_fails() {
     let raw_item_span = test_span(10, 40);
     let attribute_span = test_span(12, 20);
-    let out_of_bounds_attribute_span = test_span(41, 45);
 
     assert!(attribute_within_item(
         Some(attribute_span),
         None,
         raw_item_span,
     ));
+}
+
+#[rstest]
+fn raw_item_span_rejects_out_of_bounds_attribute_when_item_recovery_fails() {
+    let raw_item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 45);
+
     assert!(!attribute_within_item(
-        Some(out_of_bounds_attribute_span),
+        Some(attribute_span),
         None,
         raw_item_span,
     ));
