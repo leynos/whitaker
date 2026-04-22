@@ -92,6 +92,19 @@ fn dependency_rlib_selects_expected_artifact(
     assert_eq!(selection.selected, selection.expected);
 }
 
+#[rstest]
+fn dependency_rlib_returns_err_when_no_matching_rlib_present(
+    selection_directory: TemporaryDirectory,
+) {
+    let error = dependency_rlib(selection_directory.path(), "tokio")
+        .expect_err("missing Tokio artefacts should fail to resolve");
+
+    assert!(
+        error.contains("failed to locate `tokio` rlib in dependency directory"),
+        "unexpected error message, got: {error}",
+    );
+}
+
 impl TemporaryDirectory {
     /// Creates a new uniquely named temporary directory under the system temp
     /// path.

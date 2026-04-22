@@ -823,7 +823,7 @@ Two structs group the string parameters that describe a single regression run:
 | `run_fixture_under_test_harness` | Prepares a fixture directory, assembles rustc flags (including extern-crate links), and delegates to `run_test_runner`.                |
 | `run_fixture_harness_test`       | End-to-end driver: calls `run_with_runner` and panics with a labelled message on failure. Used by parametrised `#[rstest]` test cases. |
 
-#### Dependency rlib resolution
+#### Dependency Rust library (`rlib`) resolution
 
 When a regression requires a real external crate (e.g. `tokio`), the harness
 must locate the built rlib so it can pass `--extern tokio=…` to the compiler.
