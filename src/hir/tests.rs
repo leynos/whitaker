@@ -82,6 +82,7 @@ fn expanded_span(span: Span, call_site: Span) -> Span {
 enum SpanRecoveryCase {
     Dummy,
     Direct,
+    MacroOnly,
     Recovered,
 }
 
@@ -93,6 +94,10 @@ fn build_span_case()
         SpanRecoveryCase::Direct => {
             let span = test_span(10, 20);
             (span, vec![SpanRecoveryFrame::new(span, false)], Some(span))
+        }
+        SpanRecoveryCase::MacroOnly => {
+            let expanded = expanded_span(test_span(30, 40), DUMMY_SP);
+            (expanded, vec![SpanRecoveryFrame::new(expanded, true)], None)
         }
         SpanRecoveryCase::Recovered => {
             let recovered = test_span(10, 20);
@@ -113,6 +118,7 @@ fn build_span_case()
 #[rstest]
 #[case::dummy(SpanRecoveryCase::Dummy)]
 #[case::direct(SpanRecoveryCase::Direct)]
+#[case::macro_only(SpanRecoveryCase::MacroOnly)]
 #[case::recovered(SpanRecoveryCase::Recovered)]
 fn span_recovery_walks_expected_frames(
     #[case] case: SpanRecoveryCase,
