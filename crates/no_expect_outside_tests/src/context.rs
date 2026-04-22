@@ -27,32 +27,47 @@ pub(crate) fn collect_context<'tcx>(
     additional_test_attributes: &[AttributePath],
 ) -> (Vec<ContextEntry>, bool) {
     let mut entries = Vec::new();
-    let mut has_cfg_test = false;
+    let mut has_test_context_ancestry = false;
 
     let mut ancestors: Vec<_> = cx.tcx.hir_parent_iter(hir_id).collect();
     ancestors.reverse();
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        has_cfg_test = has_cfg_test
-            || attrs.iter().any(is_cfg_test_attribute)
-            || (matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }))
-                && has_test_like_hir_attributes(attrs, additional_test_attributes));
+        has_test_context_ancestry = has_test_ancestry(
+            has_test_context_ancestry,
+            attrs,
+            &node,
+            additional_test_attributes,
+        );
 
         if let Some(entry) = context_entry_for(node, attrs) {
             entries.push(entry);
         }
     }
 
-    (entries, has_cfg_test)
+    (entries, has_test_context_ancestry)
+}
+
+fn has_test_ancestry(
+    has_test_context_ancestry: bool,
+    attrs: &[hir::Attribute],
+    node: &Node<'_>,
+    additional_test_attributes: &[AttributePath],
+) -> bool {
+    has_test_context_ancestry
+        || attrs.iter().any(is_cfg_test_attribute)
+        || (matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }))
+            && has_test_like_hir_attributes(attrs, additional_test_attributes))
 }
 
 pub(crate) fn summarise_context(
     entries: &[ContextEntry],
-    has_cfg_test: bool,
+    has_test_context_ancestry: bool,
     additional_test_attributes: &[AttributePath],
 ) -> ContextSummary {
-    let is_test = has_cfg_test || in_test_like_context_with(entries, additional_test_attributes);
+    let is_test =
+        has_test_context_ancestry || in_test_like_context_with(entries, additional_test_attributes);
     let function_name = entries.iter().rev().find_map(|entry| {
         entry
             .kind()

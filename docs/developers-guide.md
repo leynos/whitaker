@@ -817,11 +817,11 @@ Two structs group the string parameters that describe a single regression run:
 
 #### Harness driver functions
 
-| Function                         | Purpose                                                                                                                                |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `run_example_under_test_harness` | Runs one example target under the dylint UI test harness using the flags in the `ExampleHarnessRun` spec.                              |
-| `run_fixture_under_test_harness` | Prepares a fixture directory, assembles rustc flags (including extern-crate links), and delegates to `run_test_runner`.                |
-| `run_fixture_harness_test`       | End-to-end driver: calls `run_with_runner` and panics with a labelled message on failure. Used by parametrised `#[rstest]` test cases. |
+| Function                         | Purpose                                                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `run_example_under_test_harness` | Runs one example target under the dylint UI test harness using the flags in the `ExampleHarnessRun` spec.                               |
+| `run_fixture_under_test_harness` | Prepares a fixture directory, assembles rustc flags (including extern-crate links), and delegates to `run_test_runner`.                 |
+| `run_fixture_harness_test`       | End-to-end driver: calls `run_with_runner` and panics with a labelled message on failure. Used by parameterized `#[rstest]` test cases. |
 
 #### Dependency Rust library (`rlib`) resolution
 

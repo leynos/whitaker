@@ -121,8 +121,8 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
         }
 
         let additional = self.additional_test_attributes.as_slice();
-        let (entries, has_cfg_test) = collect_context(cx, expr.hir_id, additional);
-        let summary = summarise_context(entries.as_slice(), has_cfg_test, additional);
+        let (entries, has_test_context_ancestry) = collect_context(cx, expr.hir_id, additional);
+        let summary = summarise_context(entries.as_slice(), has_test_context_ancestry, additional);
 
         if summary.is_test {
             return;
