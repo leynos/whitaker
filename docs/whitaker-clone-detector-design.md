@@ -557,6 +557,31 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    `usize::MAX` with `rows = 2` return `IndexError::InvalidBandRowProduct`
    rather than panicking or widening the public API with proof-specific helpers.
 
+## Implementation decisions (7.2.6)
+
+1. **`CandidatePair::new` now has direct constructor coverage.** The runtime
+   contract is pinned with unit tests in `src/index/tests.rs` and a dedicated
+   `rstest-bdd` harness in `tests/candidate_pair_behaviour.rs`, rather than
+   relying only on indirect `LshIndex` coverage.
+
+2. **Canonical order is lexical `FragmentId` order.** `FragmentId` remains a
+   string-backed newtype with derived ordering, so `CandidatePair::new`
+   canonicalizes using lexical string order. The direct tests include a
+   similar-looking pair (`"fragment-2"` and `"fragment-10"`) to make clear that
+   the contract is lexical rather than natural-number ordering.
+
+3. **Self-pair suppression remains a constructor-level invariant.** Equal
+   fragment IDs still return `None` from `CandidatePair::new`, which keeps
+   downstream candidate generation and SARIF emission free from accidental
+   self-matches.
+
+4. **The Verus proof stays implementation-shaped and order-modelled.** The
+   sidecar proof for `CandidatePair::new` mirrors the runtime three-way branch
+   structure over an ordered identifier model rather than claiming to verify
+   Rust `String` internals or the compiled `FragmentId` body directly. Runtime
+   tests pin the concrete lexical-string semantics, while Verus proves the
+   canonicalization control flow.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates

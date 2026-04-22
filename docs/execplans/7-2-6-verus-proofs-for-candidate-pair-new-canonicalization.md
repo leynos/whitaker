@@ -4,11 +4,9 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`.
-
-Implementation must not begin until the user explicitly approves this plan.
 
 ## Purpose / big picture
 
@@ -172,21 +170,23 @@ Relevant skills for the implementation turn:
 
 - [x] Stage A: Gather repository context, inspect the current proof workflow,
   and draft this ExecPlan (2026-04-21).
-- [ ] Stage B: Add failing direct unit tests for `CandidatePair::new` happy,
-  unhappy, and edge-case behaviour.
-- [ ] Stage C: Add failing `rstest-bdd` v0.5.0 scenarios for direct
-  `CandidatePair::new` behaviour.
-- [ ] Stage D: Add a dedicated Verus sidecar proof for `CandidatePair::new`
-  and wire it into `scripts/run-verus.sh`.
-- [ ] Stage E: Make the targeted tests and proof green, refactoring only as
-  needed to keep files small and readable.
-- [ ] Stage F: Update `docs/whitaker-clone-detector-design.md`,
-  `docs/developers-guide.md`, and `docs/users-guide.md` if user-visible
-  behaviour actually changed.
-- [ ] Stage G: Mark roadmap item 7.2.6 done in `docs/roadmap.md`.
-- [ ] Stage H: Run documentation, proof, lint, and test gates successfully.
-- [ ] Stage I: Finalize the living sections in this ExecPlan after the
-  implementation turn.
+- [x] Stage B: Add direct unit tests for `CandidatePair::new` happy, unhappy,
+  and edge-case behaviour (2026-04-22).
+- [x] Stage C: Add `rstest-bdd` v0.5.0 scenarios for direct
+  `CandidatePair::new` behaviour (2026-04-22).
+- [x] Stage D: Add a dedicated Verus sidecar proof for `CandidatePair::new`
+  and wire it into `scripts/run-verus.sh` (2026-04-22).
+- [x] Stage E: Make the targeted tests and proof green without a runtime
+  refactor (2026-04-22).
+- [x] Stage F: Update `docs/whitaker-clone-detector-design.md` and
+  `docs/developers-guide.md`, and confirm `docs/users-guide.md` needs no change
+  because this work is not user-visible (2026-04-22).
+- [x] Stage G: Mark roadmap item 7.2.6 done in `docs/roadmap.md`
+  (2026-04-22).
+- [x] Stage H: Run documentation, proof, lint, and test gates successfully
+  (2026-04-22).
+- [x] Stage I: Finalize the living sections in this ExecPlan after the
+  implementation turn (2026-04-22).
 
 ## Surprises & Discoveries
 
@@ -208,6 +208,12 @@ Relevant skills for the implementation turn:
   are emitted in lexical `FragmentId` order and that self-pairs are suppressed.
   The 7.2.6 work therefore proves an existing documented invariant rather than
   inventing a new one.
+- The implementation did not need any production-code refactor in
+  `index/types.rs`; direct tests and the new sidecar proof were sufficient to
+  pin the contract.
+- The Verus proof is simplest and clearest when it models an ordered
+  identifier domain with `nat` values, while runtime tests cover the concrete
+  lexical-string behaviour of `FragmentId`.
 
 ## Decision Log
 
@@ -228,6 +234,14 @@ Relevant skills for the implementation turn:
   automatic edit. Rationale: this roadmap slice is proof and developer-guidance
   work unless implementation exposes a new user-facing behaviour. Date/Author:
   2026-04-21 / Codex.
+- Decision: keep the runtime constructor body unchanged and prove/document the
+  existing behaviour instead of extracting a proof helper. Rationale: the
+  constructor is already small, direct, and readable, so a helper would add
+  surface area without reducing drift. Date/Author: 2026-04-22 / Codex.
+- Decision: model proof identifiers as `nat` values in Verus and rely on
+  direct runtime tests to pin lexical `FragmentId` semantics. Rationale: this
+  proves the constructor's ordering control flow without pretending to verify
+  Rust `String` internals. Date/Author: 2026-04-22 / Codex.
 
 ## Context and orientation
 
@@ -439,6 +453,46 @@ Expected success signals:
 
 ## Outcomes & Retrospective
 
-Pending implementation. After approval and delivery, replace this section with
-the actual results, the final proof and test counts, any deviations from the
-draft, and the lessons worth carrying into roadmap items 7.2.7 and 7.2.8.
+Delivered roadmap item 7.2.6 without changing the production constructor body.
+`CandidatePair::new` remains the same small three-branch runtime function, and
+the work landed as proof, test, and documentation hardening around that seam.
+
+Final shipped pieces:
+
+- Direct unit coverage in `crates/whitaker_clones_core/src/index/tests.rs` for
+  preserved canonical order, reversed-input canonicalization, self-pair
+  suppression, and the lexical-order edge case `"fragment-10" < "fragment-2"`.
+- Dedicated BDD coverage in
+  `crates/whitaker_clones_core/tests/candidate_pair_behaviour.rs` and
+  `tests/features/candidate_pair.feature` with four constructor-level scenarios.
+- New Verus sidecar `verus/clone_detector_candidate_pair.rs`.
+- Updated `scripts/run-verus.sh` so `clone-detector` and `all` include the new
+  proof file.
+- Updated `docs/whitaker-clone-detector-design.md`,
+  `docs/developers-guide.md`, and `docs/roadmap.md`.
+- Left `docs/users-guide.md` unchanged because the work did not alter any
+  public feature or user-visible workflow.
+
+Validation evidence:
+
+- `make fmt`
+- `make markdownlint`
+- `make nixie`
+- `make check-fmt`
+- `make lint`
+- `make test` -> `Summary [ 126.157s] 1348 tests run: 1348 passed, 2 skipped`
+- `make verus-clone-detector` -> `9 verified, 0 errors` for
+  `clone_detector_lsh_config.rs` and `7 verified, 0 errors` for
+  `clone_detector_candidate_pair.rs`
+- `make verus` -> `5 verified, 0 errors`, `8 verified, 0 errors`,
+  `9 verified, 0 errors`, and `7 verified, 0 errors` across the full Verus
+  proof set
+
+Lessons worth carrying into 7.2.7 and 7.2.8:
+
+- Keep constructor proofs separate and small; they are easiest to maintain
+  when one proof file maps to one runtime seam.
+- For ordering proofs, model the control flow over an ordered identifier
+  domain in Verus and let runtime tests pin the concrete string semantics.
+- Direct constructor-level tests reduce proof drift more effectively than
+  relying on indirect coverage through later pipeline stages.
