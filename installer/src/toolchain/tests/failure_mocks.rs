@@ -15,6 +15,13 @@ pub(super) enum InstallFailure {
     ToolchainUnusableAfterInstall,
 }
 
+/// Bundles the failure mode with any extra components requested for the test.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct FailureSetup<'a> {
+    pub(super) failure: InstallFailure,
+    pub(super) additional_components: &'a [&'a str],
+}
+
 fn setup_toolchain_install_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -68,7 +75,9 @@ fn setup_toolchain_unusable_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
     channel: &str,
+    additional_components: &[&str],
 ) {
+    let components = [REQUIRED_COMPONENTS, additional_components].concat();
     expect_rustc_version(runner, seq, channel, 1);
     expect_toolchain_install(
         runner,
@@ -81,7 +90,7 @@ fn setup_toolchain_unusable_failure_mocks(
     );
     runner
         .expect_run()
-        .withf(matches_multi_component_add(channel, REQUIRED_COMPONENTS))
+        .withf(matches_multi_component_add(channel, &components))
         .times(1)
         .in_sequence(seq)
         .returning(|_, _| Ok(output_with_status(0)));
@@ -92,9 +101,9 @@ pub(super) fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
     channel: &str,
-    failure: InstallFailure,
+    setup: FailureSetup<'_>,
 ) {
-    match failure {
+    match setup.failure {
         InstallFailure::ToolchainInstall => {
             setup_toolchain_install_failure_mocks(runner, seq, channel);
         }
@@ -105,7 +114,12 @@ pub(super) fn setup_failure_mocks(
             setup_cranelift_component_add_failure_mocks(runner, seq, channel);
         }
         InstallFailure::ToolchainUnusableAfterInstall => {
-            setup_toolchain_unusable_failure_mocks(runner, seq, channel);
+            setup_toolchain_unusable_failure_mocks(
+                runner,
+                seq,
+                channel,
+                setup.additional_components,
+            );
         }
     }
 }

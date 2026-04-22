@@ -4,7 +4,7 @@ mod failure_mocks;
 mod test_helpers;
 
 use super::*;
-use failure_mocks::{InstallFailure, assert_failure_error, setup_failure_mocks};
+use failure_mocks::{FailureSetup, InstallFailure, assert_failure_error, setup_failure_mocks};
 use rstest::rstest;
 use test_helpers::{
     CapturingCommandRunner, ToolchainInstallExpectation, expect_rustc_version,
@@ -189,21 +189,40 @@ fn install_components_with_failure_reports_all_components() {
 }
 
 #[rstest]
-#[case::toolchain_install_fails(InstallFailure::ToolchainInstall)]
-#[case::component_add_fails(InstallFailure::ComponentAdd)]
-#[case::cranelift_component_add_fails(InstallFailure::CraneliftComponentAdd)]
-#[case::toolchain_unusable_after_install(InstallFailure::ToolchainUnusableAfterInstall)]
-fn ensure_installed_reports_failure(#[case] failure: InstallFailure) {
+#[case::toolchain_install_fails(InstallFailure::ToolchainInstall, &[])]
+#[case::component_add_fails(InstallFailure::ComponentAdd, &[])]
+#[case::cranelift_component_add_fails(
+    InstallFailure::CraneliftComponentAdd,
+    &[CRANELIFT_COMPONENT],
+)]
+#[case::toolchain_unusable_after_install(
+    InstallFailure::ToolchainUnusableAfterInstall,
+    &[],
+)]
+#[case::toolchain_unusable_after_install_with_cranelift(
+    InstallFailure::ToolchainUnusableAfterInstall,
+    &[CRANELIFT_COMPONENT],
+)]
+fn ensure_installed_reports_failure(
+    #[case] failure: InstallFailure,
+    #[case] additional_components: &[&str],
+) {
     let channel = "nightly-2025-09-18";
     let toolchain = test_toolchain(channel);
-    let additional_components = match failure {
-        InstallFailure::CraneliftComponentAdd => &[CRANELIFT_COMPONENT][..],
-        _ => &[],
-    };
 
     test_helpers::assert_install_fails_with(
         toolchain,
-        |runner, seq| setup_failure_mocks(runner, seq, channel, failure),
+        |runner, seq| {
+            setup_failure_mocks(
+                runner,
+                seq,
+                channel,
+                FailureSetup {
+                    failure,
+                    additional_components,
+                },
+            )
+        },
         |toolchain, runner| toolchain.ensure_installed_with(runner, additional_components),
         |err| assert_failure_error(err, channel, failure),
     );

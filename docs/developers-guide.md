@@ -983,9 +983,9 @@ This skips building entirely, providing faster lint runs during development.
 
 ### Installer internal architecture
 
-`installer/src/main.rs` co-ordinates the install workflow through a small
-set of focused private helpers. Understanding them is useful when extending
-the install pipeline.
+`installer/src/main.rs` coordinates the installation workflow through a small
+set of focused private helpers. Understanding them is useful when extending the
+installation pipeline.
 
 #### `resolve_additional_components`
 
@@ -994,10 +994,10 @@ fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str]
 ```
 
 Translates CLI flags into the extra rustup component slice passed to
-`ensure_toolchain_installed`. At present the only flag it handles is
+`ensure_toolchain_installed`. At present, the only flag it handles is
 `--cranelift`, which adds `rustc-codegen-cranelift` to the component set.
-Adding a new optional component requires a new CLI flag on `InstallArgs` and
-a new arm in this function; no other callers need to change.
+Adding a new optional component requires a new CLI flag on `InstallArgs` and a
+new arm in this function; no other callers need to change.
 
 #### `FastPathContext`
 
@@ -1012,8 +1012,8 @@ struct FastPathContext<'a> {
 ```
 
 A parameter-object struct that bundles the five immutable inputs consumed by
-`try_fast_path_installation`. This follows the same idiom used elsewhere in
-the codebase (`FinishInstallContext`, `PrebuiltInstallationContext`,
+`try_fast_path_installation`. This follows the same idiom used elsewhere in the
+codebase (`FinishInstallContext`, `PrebuiltInstallationContext`,
 `MetricsWriteContext`) to keep function argument counts within the project
 threshold of four. Construct it in `run_install` before calling
 `try_fast_path_installation`.
@@ -1027,9 +1027,8 @@ fn try_fast_path_installation(
 ) -> Result<Option<(Utf8PathBuf, InstallMode)>>
 ```
 
-Attempts both fast paths in order and returns `Some((staging_path, mode))`
-if either succeeds, or `None` if `run_install` should proceed to a full
-build:
+Attempts both fast paths in order and returns `Some((staging_path, mode))` if
+either succeeds, or `None` if `run_install` should proceed to a full build:
 
 1. **Prebuilt download** (`InstallMode::Download`) — delegates to
    `try_prebuilt_installation` inside `install_flow`.

@@ -64,13 +64,12 @@ environment-variable workaround.
 
 **Options:**
 
-- `--cranelift` — Install `rustc-codegen-cranelift` for the selected
-  toolchain. `rustc-codegen-cranelift` is an alternative Rust compiler
-  back-end based on the Cranelift code generator. It is not bundled with
-  the standard nightly toolchain components and must be added explicitly via
-  `rustup component add`. Use this flag when your project or CI environment
-  requires the Cranelift back-end, or when a `rustc-codegen-cranelift`
-  component add step would otherwise need to precede the installer invocation.
+- `--cranelift` — Tell the installer to add the
+  `rustc-codegen-cranelift` component via `rustup component add`. The
+  `rustc-codegen-cranelift` component is not included in the standard nightly
+  toolchain, so enable `--cranelift` when your project or CI requires the
+  Cranelift back-end and you would otherwise need an explicit
+  `rustc-codegen-cranelift` component-add step before running the installer.
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation (prints
   `DYLINT_LIBRARY_PATH` instructions instead)
