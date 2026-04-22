@@ -78,8 +78,8 @@ runner in `src/lib_ui_tests.rs`.
 The harness splits cases into two shapes:
 
 - Example-based runs use `ExampleHarnessRun` plus
-  `dylint_testing::ui::Test::example`
-  when a single example target is enough and no extra fixture assets are needed.
+  `dylint_testing::ui::Test::example` when a single example target is enough
+  and no extra fixture assets are needed.
 - Fixture-based runs use `FixtureHarnessRun`, `prepare_fixture`, and
   `Test::src_base` when the case needs copied support files, a per-fixture
   `dylint.toml`, or additional `--extern` wiring.
@@ -794,6 +794,82 @@ Keep the regression split aligned with that compiler boundary:
 
 This separation exists so a proc-macro stub test cannot accidentally mask a
 failure in the real harness-descriptor path.
+
+### Test-context ancestry detection
+
+`no_expect_outside_tests` decides whether an `.expect(..)` call sits in test
+context by combining a HIR ancestry walk with attribute-shape matching.
+`collect_context` traverses the ancestors of the call site, accumulates
+`ContextEntry` items for modules, functions, impls, and blocks, and carries a
+boolean `has_test_context_ancestry` alongside that list. On each step,
+`has_test_ancestry` updates that boolean so the test-only decision can
+propagate from outer ancestors into nested helper code. `summarise_context`
+then combines the accumulated entries, the propagated boolean, and
+`in_test_like_context_with(additional_test_attributes)` to produce the final
+`ContextSummary.is_test` result. This pattern matters because user-configured
+test markers such as `my_framework::test` must affect the whole ancestry chain,
+not just the immediately enclosing function.
+
+- `collect_context` starts at the `.expect(..)` call site and walks outward.
+- `has_test_ancestry` returns `true` when any of these hold:
+  - a prior ancestor already set `has_test_context_ancestry`
+  - the current ancestor carries a `cfg(test)`-style attribute detected by
+    `is_cfg_test_attribute`
+  - the current ancestor is a function item whose attributes match Whitaker's
+    built-in test list or `additional_test_attributes`
+- `summarise_context` merges that ancestry flag with the collected
+  `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
+
+### UI test harness helpers (`lib_ui_tests.rs`)
+
+`crates/no_expect_outside_tests/src/lib_ui_tests.rs` provides the
+infrastructure for regressions that require compiler flags, example targets, or
+external crate dependencies that cannot be expressed with plain `ui/` source
+fixtures.
+
+#### Parameter structs
+
+Two structs group the string parameters that describe a single regression run:
+
+- **`ExampleHarnessRun`** — carries `name` (example binary name), `label`
+  (used in panic messages), and `rustc_flags`. Use `ExampleHarnessRun::new` for
+  the default `--test` flag, or `ExampleHarnessRun::with_flags` to supply a
+  custom flag list.
+- **`FixtureHarnessRun`** — carries `crate_name`, `directory` (top-level
+  directory such as `"examples"` or `"ui"`), `fixture_name`, `label`,
+  `rustc_flags`, and `extern_crates` (a list of additional crate names to wire
+  as `--extern` dependencies).
+
+#### Harness driver functions
+
+Table: Harness driver functions and responsibilities.
+
+| Function                         | Purpose                                                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `run_example_under_test_harness` | Runs one example target under the dylint UI test harness using the flags in the `ExampleHarnessRun` spec.                               |
+| `run_fixture_under_test_harness` | Prepares a fixture directory, assembles rustc flags (including extern-crate links), and delegates to `run_test_runner`.                 |
+| `run_fixture_harness_test`       | End-to-end driver: calls `run_with_runner` and panics with a labelled message on failure. Used by parameterized `#[rstest]` test cases. |
+
+#### Dependency Rust library (`rlib`) resolution
+
+When a regression requires a real external crate (e.g. `tokio`), the harness
+must locate the built rlib so it can pass `--extern tokio=…` to the compiler.
+`dependency_directory()` finds the parent of the running test binary, and
+`dependency_rlib()` scans that directory for `lib<crate>-*.rlib` files,
+selecting the most recently built artefact. Ties in modification time are
+broken by lexicographic path order for a stable, deterministic result.
+
+Unit tests for this selection logic live in
+`crates/no_expect_outside_tests/src/dependency_rlib_tests.rs`, loaded via a
+`#[path]` module declaration in `lib_ui_tests.rs`.
+
+#### `camino` dev-dependency
+
+`lib_ui_tests.rs` uses [`camino`](https://docs.rs/camino)'s `Utf8Path` to pass
+fixture directory paths to helper functions as UTF-8-guaranteed paths. This
+avoids repeated `.to_str().unwrap()` calls on `std::path::Path` throughout the
+harness. `camino` is a dev-dependency only; it is not present in the production
+library.
 
 ### Staged-suite installer shortcut
 

@@ -6,9 +6,12 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+/// A temporary directory that is removed automatically when dropped.
 #[derive(Debug)]
 struct TemporaryDirectory(PathBuf);
 
+/// Describes a single fixture artefact: its filename and the
+/// seconds-since-Unix-epoch modification timestamp to assign to it.
 #[derive(Clone, Copy, Debug)]
 struct ArtifactSpec<'a> {
     file_name: &'a str,
@@ -16,6 +19,7 @@ struct ArtifactSpec<'a> {
 }
 
 impl<'a> ArtifactSpec<'a> {
+    /// Creates a new spec with the given filename and modification timestamp.
     const fn new(file_name: &'a str, seconds_since_epoch: u64) -> Self {
         Self {
             file_name,
@@ -24,6 +28,9 @@ impl<'a> ArtifactSpec<'a> {
     }
 }
 
+/// Holds the outcome of a `dependency_rlib` selection exercise: the directory
+/// (kept alive so it is not dropped early), the path that was expected to be
+/// chosen, and the path that `dependency_rlib` actually selected.
 #[derive(Debug)]
 struct DependencyRlibSelection {
     _directory: TemporaryDirectory,
@@ -40,11 +47,16 @@ const TIED_ARTIFACTS: [ArtifactSpec<'static>; 2] = [
     ArtifactSpec::new("libtokio-zulu.rlib", 30),
 ];
 
+/// rstest fixture that creates a uniquely named temporary directory for a
+/// selection test.
 #[fixture]
 fn selection_directory() -> TemporaryDirectory {
     TemporaryDirectory::new("selection")
 }
 
+/// Creates `artifacts` inside `directory`, sets their modification times, then
+/// invokes `dependency_rlib` and returns both the expected and selected paths
+/// for the caller to compare.
 fn resolve_dependency_rlib_selection(
     directory: TemporaryDirectory,
     artifacts: &[ArtifactSpec<'_>],
@@ -80,7 +92,22 @@ fn dependency_rlib_selects_expected_artifact(
     assert_eq!(selection.selected, selection.expected);
 }
 
+#[rstest]
+fn dependency_rlib_returns_err_when_no_matching_rlib_present(
+    selection_directory: TemporaryDirectory,
+) {
+    let error = dependency_rlib(selection_directory.path(), "tokio")
+        .expect_err("missing Tokio artefacts should fail to resolve");
+
+    assert!(
+        error.contains("failed to locate `tokio` rlib in dependency directory"),
+        "unexpected error message, got: {error}",
+    );
+}
+
 impl TemporaryDirectory {
+    /// Creates a new uniquely named temporary directory under the system temp
+    /// path.
     fn new(name: &str) -> Self {
         let unique = format!(
             "no-expect-outside-tests-{name}-{}",
@@ -94,6 +121,7 @@ impl TemporaryDirectory {
         Self(directory)
     }
 
+    /// Returns the path to the temporary directory.
     fn path(&self) -> &Path {
         &self.0
     }
@@ -105,12 +133,16 @@ impl Drop for TemporaryDirectory {
     }
 }
 
+/// Creates an empty `.rlib` fixture file at `directory/file_name` and returns
+/// its path.
 fn create_rlib(directory: &Path, file_name: &str) -> PathBuf {
     let path = directory.join(file_name);
     File::create(&path).expect("rlib fixture should be created");
     path
 }
 
+/// Sets the last-modified time of `path` to `seconds_since_epoch` seconds
+/// after the Unix epoch.
 fn set_modified_time(path: &Path, seconds_since_epoch: u64) {
     let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(seconds_since_epoch);
     let file = File::options()

@@ -24,7 +24,7 @@ struct ExampleHarnessRun<'a> {
 }
 
 impl<'a> ExampleHarnessRun<'a> {
-    /// Builds the default `--test` example harness run for `name`.
+    /// Creates a run spec using the default `--test` harness flag.
     fn new(name: &'a str, label: &'a str) -> Self {
         Self {
             name,
@@ -33,7 +33,8 @@ impl<'a> ExampleHarnessRun<'a> {
         }
     }
 
-    /// Builds an example harness run with explicit compiler flags.
+    /// Creates a run spec with caller-supplied rustc flags (no defaults
+    /// applied).
     fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
         Self {
             name,
@@ -63,8 +64,8 @@ struct FixtureHarnessRun<'a> {
     extern_crates: &'a [&'a str],
 }
 
-/// Captures an `rlib` candidate discovered in the current test binary's deps
-/// directory for deterministic `--extern` resolution.
+/// A candidate rlib artefact found in the dependency directory, together with
+/// its last-modified timestamp for recency-based selection.
 #[derive(Debug)]
 struct DependencyRlib {
     /// Full path to the candidate artefact.
@@ -73,7 +74,10 @@ struct DependencyRlib {
     modified: SystemTime,
 }
 
-/// Runs one example target through the shared `rustc --test` harness workflow.
+/// Runs an example-based regression under the dylint UI test harness.
+///
+/// Applies `spec.rustc_flags` to the compilation and formats any failure
+/// message using `spec.label`.
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
@@ -98,8 +102,12 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     });
 }
 
-/// Stages one source fixture into a temporary workspace and runs it under the
-/// lint test harness.
+/// Runs a single fixture file under the test harness inside the runner closure
+/// supplied by `run_with_runner`.
+///
+/// Prepares the fixture environment, assembles the full set of rustc flags
+/// (base flags plus any required extern crate links), and delegates to
+/// `run_test_runner`.
 fn run_fixture_under_test_harness(
     spec: &FixtureHarnessRun<'_>,
     directory: &Utf8Path,
@@ -130,7 +138,10 @@ fn run_fixture_under_test_harness(
     })
 }
 
-/// Adapts `run_fixture_under_test_harness` to the shared UI runner API.
+/// Drives a fixture-based harness test end-to-end.
+///
+/// Calls `run_with_runner` using `spec.directory` and panics with a labelled
+/// message (using `spec.label`) if the runner returns an error.
 fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
     let crate_name = spec.crate_name;
     let directory = spec.directory;
@@ -147,13 +158,18 @@ fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
     });
 }
 
-/// Resolves the `.rs` source path for a named fixture within `directory`.
+/// Returns the path to the `.rs` source file for a named fixture inside
+/// `directory`.
 fn fixture_source_path(directory: &Utf8Path, fixture_name: &str) -> PathBuf {
     directory.as_std_path().join(format!("{fixture_name}.rs"))
 }
 
-/// Builds the `rustc` flags for a staged harness run, adding `--edition=2024`,
-/// dependency search paths, and resolved `--extern` entries when required.
+/// Builds the full rustc flag list for a harness run.
+///
+/// Starts with `extra_flags`, appends `--edition=2024`, and — when
+/// `extern_crates` is non-empty — locates the dependency directory and inserts
+/// the necessary `-L dependency=…` and `--extern …` flags for each requested
+/// crate.
 fn test_harness_flags(extra_flags: &[&str], extern_crates: &[&str]) -> Result<Vec<String>, String> {
     let mut flags: Vec<String> = extra_flags.iter().map(|flag| (*flag).to_owned()).collect();
     flags.push("--edition=2024".to_owned());
@@ -176,7 +192,8 @@ fn test_harness_flags(extra_flags: &[&str], extern_crates: &[&str]) -> Result<Ve
     Ok(flags)
 }
 
-/// Returns the dependency directory adjacent to the current test binary.
+/// Returns the directory that contains the rlib artefacts for the current test
+/// binary (i.e. the directory of `std::env::current_exe()`).
 fn dependency_directory() -> Result<PathBuf, String> {
     let test_binary = std::env::current_exe()
         .map_err(|error| format!("failed to locate current test binary: {error}"))?;
@@ -188,7 +205,11 @@ fn dependency_directory() -> Result<PathBuf, String> {
     })
 }
 
-/// Resolves the freshest matching `rlib` for `crate_name` in `deps_dir`.
+/// Selects the most recently built rlib for `crate_name` from `deps_dir`.
+///
+/// When two artefacts share the same modification timestamp the one with the
+/// lexicographically earlier path is chosen, giving a stable, deterministic
+/// result.
 fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String> {
     let prefix = format!("lib{crate_name}-");
     let mut matches = dependency_rlib_matches(deps_dir, &prefix)?;
@@ -212,7 +233,8 @@ fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String>
         })
 }
 
-/// Collects candidate `rlib` artefacts that match `prefix` inside `deps_dir`.
+/// Collects all `lib{crate_name}-*.rlib` candidates from `deps_dir` together
+/// with their modification timestamps.
 fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<DependencyRlib>, String> {
     std::fs::read_dir(deps_dir)
         .map_err(|error| {
@@ -234,8 +256,8 @@ fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<Dependen
         .collect()
 }
 
-/// Converts one filesystem path into an `rlib` candidate when it matches the
-/// expected crate prefix.
+/// Inspects a single directory entry and returns a `DependencyRlib` if the
+/// path matches the expected rlib naming convention, or `Ok(None)` otherwise.
 fn dependency_rlib_candidate(
     path: PathBuf,
     prefix: &str,
@@ -256,7 +278,8 @@ fn dependency_rlib_candidate(
     Ok(Some(DependencyRlib { path, modified }))
 }
 
-/// Returns `true` when `path` names an `rlib` whose stem begins with `prefix`.
+/// Returns `true` when `path` names a file that starts with `prefix` and has
+/// the `.rlib` extension.
 fn is_dependency_rlib(path: &Path, prefix: &str) -> bool {
     path.file_name().is_some_and(|name| {
         name.to_str()
@@ -331,6 +354,11 @@ fn tokio_expect_outside_tests_still_fails_in_non_test_code() {
     });
 }
 
+/// Unit tests for the rlib artefact selection and resolution helpers.
+///
+/// These tests create temporary fixture `.rlib` files with controlled
+/// modification timestamps and assert that `dependency_rlib` selects the
+/// newest artefact, breaking ties by lexicographic path order.
 #[cfg(test)]
 #[path = "dependency_rlib_tests.rs"]
 mod dependency_rlib_tests;
