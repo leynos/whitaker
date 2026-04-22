@@ -161,6 +161,7 @@ fn try_fast_path_installation_returns_none_when_prebuilt_disabled() {
 
     let _guard = env_test_guard();
     let args = InstallArgs {
+        is_build_only: true,
         lint: vec!["module_max_lines".to_owned()],
         ..InstallArgs::default()
     };
