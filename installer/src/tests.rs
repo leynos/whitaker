@@ -126,7 +126,7 @@ fn resolve_additional_components_returns_cranelift_when_flag_set() {
 
 #[test]
 fn fast_path_context_holds_supplied_values() {
-    use camino::Utf8PathBuf;
+    use camino::{Utf8Path, Utf8PathBuf};
     use whitaker_installer::toolchain::Toolchain;
 
     let args = InstallArgs::default();
@@ -135,10 +135,7 @@ fn fast_path_context_holds_supplied_values() {
         bin_dir: Some("/tmp/bin".into()),
         data_dir: Some("/tmp".into()),
     };
-    let toolchain = Toolchain {
-        channel: "nightly-2025-09-18".to_owned(),
-        workspace_root: Utf8PathBuf::from("."),
-    };
+    let toolchain = Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18");
     let target_dir = Utf8PathBuf::from("/tmp/target");
     let crates: Vec<whitaker_installer::crate_name::CrateName> = vec![];
 
@@ -159,7 +156,7 @@ fn fast_path_context_holds_supplied_values() {
 
 #[test]
 fn try_fast_path_installation_returns_none_when_prebuilt_disabled() {
-    use camino::Utf8PathBuf;
+    use camino::{Utf8Path, Utf8PathBuf};
     use whitaker_installer::toolchain::Toolchain;
 
     let _guard = env_test_guard();
@@ -172,10 +169,7 @@ fn try_fast_path_installation_returns_none_when_prebuilt_disabled() {
         bin_dir: Some("/tmp/bin".into()),
         data_dir: Some("/tmp".into()),
     };
-    let toolchain = Toolchain {
-        channel: "nightly-2025-09-18".to_owned(),
-        workspace_root: Utf8PathBuf::from("."),
-    };
+    let toolchain = Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18");
     let target_dir = Utf8PathBuf::from("/tmp/target");
     let crates = vec![whitaker_installer::crate_name::CrateName::from(
         "module_max_lines",
