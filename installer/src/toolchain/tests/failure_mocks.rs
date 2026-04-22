@@ -142,6 +142,26 @@ fn expected_cranelift_components() -> String {
         .join(", ")
 }
 
+fn is_component_install_failed(err: &InstallerError, channel: &str) -> bool {
+    let expected_components = expected_standard_components();
+    let InstallerError::ToolchainComponentInstallFailed {
+        toolchain,
+        components,
+        message,
+        ..
+    } = err
+    else {
+        return false;
+    };
+    if toolchain != channel {
+        return false;
+    }
+    if components != &expected_components {
+        return false;
+    }
+    message.contains("component failed")
+}
+
 fn is_cranelift_component_install_failed(err: &InstallerError, channel: &str) -> bool {
     let expected_components = expected_cranelift_components();
     let InstallerError::ToolchainComponentInstallFailed {
@@ -177,20 +197,7 @@ pub(super) fn assert_failure_error(err: InstallerError, channel: &str, failure: 
         InstallFailure::ComponentAdd => assert_error_matches(
             &err,
             &format!("ToolchainComponentInstallFailed for {channel}"),
-            |e| {
-                let expected_components = expected_standard_components();
-                matches!(
-                    e,
-                    InstallerError::ToolchainComponentInstallFailed {
-                        toolchain,
-                        components,
-                        message,
-                        ..
-                    } if toolchain == channel
-                        && components == &expected_components
-                        && message.contains("component failed")
-                )
-            },
+            |e| is_component_install_failed(e, channel),
         ),
         InstallFailure::CraneliftComponentAdd => assert_error_matches(
             &err,
