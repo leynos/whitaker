@@ -367,6 +367,30 @@ Set `additional_test_attributes` to an array of attribute paths written as
 strings. Each entry should match the path Whitaker sees on the test function,
 for example `my_framework::test` or `wasm_bindgen_test`.
 
+#### Ancestor context propagation
+
+`additional_test_attributes` now apply during ancestor context detection as
+well as direct annotation matching. If a parent function is annotated with a
+configured custom test attribute, Whitaker treats nested code within that
+function as test context too, so `.expect()` remains allowed throughout that
+ancestry chain.
+
+```rust
+// dylint.toml
+// [no_expect_outside_tests]
+// additional_test_attributes = ["my_framework::test"]
+
+#[my_framework::test]
+async fn my_test() {
+    helper(); // allowed — ancestor is a recognised test function
+}
+
+fn helper() {
+    let v: Option<u32> = Some(1);
+    let _ = v.expect("value present"); // allowed — called from within test ancestry
+}
+```
+
 #### What is allowed
 
 - Default markers such as `#[test]`, `#[::test]`,

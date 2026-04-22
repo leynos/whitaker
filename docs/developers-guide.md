@@ -795,6 +795,31 @@ Keep the regression split aligned with that compiler boundary:
 This separation exists so a proc-macro stub test cannot accidentally mask a
 failure in the real harness-descriptor path.
 
+### Test-context ancestry detection
+
+`no_expect_outside_tests` decides whether an `.expect(..)` call sits in test
+context by combining a HIR ancestry walk with attribute-shape matching.
+`collect_context` traverses the ancestors of the call site, accumulates
+`ContextEntry` items for modules, functions, impls, and blocks, and carries a
+boolean `has_test_context_ancestry` alongside that list. On each step,
+`has_test_ancestry` updates that boolean so the test-only decision can
+propagate from outer ancestors into nested helper code. `summarise_context`
+then combines the accumulated entries, the propagated boolean, and
+`in_test_like_context_with(additional_test_attributes)` to produce the final
+`ContextSummary.is_test` result. This pattern matters because user-configured
+test markers such as `my_framework::test` must affect the whole ancestry chain,
+not just the immediately enclosing function.
+
+- `collect_context` starts at the `.expect(..)` call site and walks outward.
+- `has_test_ancestry` returns `true` when any of these hold:
+  - a prior ancestor already set `has_test_context_ancestry`
+  - the current ancestor carries a `cfg(test)`-style attribute detected by
+    `is_cfg_test_attribute`
+  - the current ancestor is a function item whose attributes match Whitaker's
+    built-in test list or `additional_test_attributes`
+- `summarise_context` merges that ancestry flag with the collected
+  `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
+
 ### UI test harness helpers (`lib_ui_tests.rs`)
 
 `crates/no_expect_outside_tests/src/lib_ui_tests.rs` provides the

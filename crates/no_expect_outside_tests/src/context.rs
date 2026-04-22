@@ -21,6 +21,32 @@ pub(crate) struct ContextSummary {
     pub(crate) function_name: Option<String>,
 }
 
+/// Collects simplified context entries for the ancestors of a HIR node.
+///
+/// Walks the ancestor chain for `hir_id`, records any context-bearing nodes as
+/// `ContextEntry` values, and tracks whether any ancestor establishes test
+/// context through `cfg(test)` or a recognized test attribute.
+///
+/// # Parameters
+///
+/// - `cx`: Lint context used to walk the HIR and inspect ancestor attributes.
+/// - `hir_id`: The HIR node whose ancestor chain should be summarized.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that
+///   should be treated as test markers alongside Whitaker's built-in list.
+///
+/// # Returns
+///
+/// Returns `(entries, has_test_context_ancestry)`, where `entries` is the
+/// ordered list of simplified ancestor contexts and the boolean records whether
+/// any ancestor already established test-only ancestry.
+///
+/// # Examples
+///
+/// ```ignore
+/// let (entries, has_test_context_ancestry) =
+///     collect_context(cx, expr.hir_id, additional_test_attributes);
+/// assert!(!entries.is_empty() || !has_test_context_ancestry);
+/// ```
 pub(crate) fn collect_context<'tcx>(
     cx: &LateContext<'tcx>,
     hir_id: hir::HirId,
@@ -37,7 +63,7 @@ pub(crate) fn collect_context<'tcx>(
         has_test_context_ancestry = has_test_ancestry(
             has_test_context_ancestry,
             attrs,
-            &node,
+            matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. })),
             additional_test_attributes,
         );
 
@@ -52,15 +78,46 @@ pub(crate) fn collect_context<'tcx>(
 fn has_test_ancestry(
     has_test_context_ancestry: bool,
     attrs: &[hir::Attribute],
-    node: &Node<'_>,
+    is_function_item: bool,
     additional_test_attributes: &[AttributePath],
 ) -> bool {
     has_test_context_ancestry
         || attrs.iter().any(is_cfg_test_attribute)
-        || (matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }))
-            && has_test_like_hir_attributes(attrs, additional_test_attributes))
+        || (is_function_item && has_test_like_hir_attributes(attrs, additional_test_attributes))
 }
 
+/// Summarizes collected ancestor context into the lint's final test decision.
+///
+/// Combines the pre-computed ancestor entries with the carried
+/// `has_test_context_ancestry` flag so the lint can determine whether the
+/// current call site should be treated as test-only code.
+///
+/// # Parameters
+///
+/// - `entries`: Simplified ancestor contexts produced by `collect_context`.
+/// - `has_test_context_ancestry`: Whether any ancestor already established
+///   test-only ancestry via propagation, `cfg(test)`, or a recognized
+///   test-marker attribute.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that
+///   should be considered test markers during the final summary check.
+///
+/// # Returns
+///
+/// Returns a `ContextSummary` describing the derived test-context status and
+/// the innermost enclosing function name, if one was found.
+///
+/// # Examples
+///
+/// ```ignore
+/// let summary = summarise_context(
+///     &entries,
+///     has_test_context_ancestry,
+///     additional_test_attributes,
+/// );
+/// if summary.is_test {
+///     // `.expect()` is allowed in this context.
+/// }
+/// ```
 pub(crate) fn summarise_context(
     entries: &[ContextEntry],
     has_test_context_ancestry: bool,
@@ -167,6 +224,27 @@ where
     })
 }
 
+/// Returns whether a HIR attribute enables `cfg(test)` semantics.
+///
+/// Recognizes both direct `cfg(test)` attributes and `cfg_attr(.., cfg(test))`
+/// forms so callers can treat such ancestors as test-only context.
+///
+/// # Parameters
+///
+/// - `attr`: The HIR attribute to inspect.
+///
+/// # Returns
+///
+/// Returns `true` when the attribute is a `cfg(test)`-style marker and `false`
+/// otherwise.
+///
+/// # Examples
+///
+/// ```ignore
+/// if attrs.iter().any(is_cfg_test_attribute) {
+///     // The enclosing item participates in test-only compilation.
+/// }
+/// ```
 pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
     // avoid panics when calling path() on arbitrary parsed attributes.
