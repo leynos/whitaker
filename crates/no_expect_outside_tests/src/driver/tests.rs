@@ -85,16 +85,23 @@ fn is_test_attribute_returns_false_for_parsed_attributes() {
 }
 
 // -------------------------------------------------------------------------
-// Tests for has_test_attribute
+// Tests for has_test_like_hir_attributes
 // -------------------------------------------------------------------------
 
-fn assert_has_test_attribute(attr_segments: &[&[&str]], expected: bool) {
+fn assert_has_test_like_attributes(
+    attr_segments: &[&[&str]],
+    additional_test_attributes: &[AttributePath],
+    expected: bool,
+) {
     create_default_session_globals_then(|| {
         let attrs: Vec<hir::Attribute> = attr_segments
             .iter()
             .map(|segments| hir_attribute_from_segments(segments))
             .collect();
-        assert_eq!(has_test_attribute(&attrs), expected);
+        assert_eq!(
+            has_test_like_hir_attributes(&attrs, additional_test_attributes),
+            expected,
+        );
     });
 }
 
@@ -103,35 +110,41 @@ fn assert_has_test_attribute(attr_segments: &[&[&str]], expected: bool) {
 #[case::rstest_only(1)]
 #[case::tokio_test(2)]
 #[case::core_prelude_test(3)]
-fn has_test_attribute_detects_test_attributes(#[case] case_index: usize) {
+fn has_test_like_hir_attributes_detects_test_attributes(#[case] case_index: usize) {
     let test_cases: &[&[&[&str]]] = &[
         &[&["inline"], &["test"]],
         &[&["rstest"]],
         &[&["tokio", "test"]],
         &[&["core", "prelude", "v1", "test"]],
     ];
-    assert_has_test_attribute(test_cases[case_index], true);
+    assert_has_test_like_attributes(test_cases[case_index], &[], true);
 }
 
 #[test]
-fn has_test_attribute_returns_false_for_empty_array() {
+fn has_test_like_hir_attributes_returns_false_for_empty_array() {
     let attrs: [hir::Attribute; 0] = [];
-    assert!(!has_test_attribute(&attrs));
+    assert!(!has_test_like_hir_attributes(&attrs, &[]));
 }
 
 #[test]
-fn has_test_attribute_returns_false_for_non_test_attributes() {
-    assert_has_test_attribute(&[&["inline"], &["derive"], &["tokio", "main"]], false);
+fn has_test_like_hir_attributes_returns_false_for_non_test_attributes() {
+    assert_has_test_like_attributes(&[&["inline"], &["derive"], &["tokio", "main"]], &[], false);
 }
 
 #[test]
-fn has_test_attribute_handles_parsed_attributes() {
+fn has_test_like_hir_attributes_handles_parsed_attributes() {
     let attrs = [parsed_must_use_attribute()];
-    assert!(!has_test_attribute(&attrs));
+    assert!(!has_test_like_hir_attributes(&attrs, &[]));
+}
+
+#[test]
+fn has_test_like_hir_attributes_accepts_additional_test_attributes() {
+    let additional = [AttributePath::from("my_framework::test")];
+    assert_has_test_like_attributes(&[&["my_framework", "test"]], &additional, true);
 }
 
 // -------------------------------------------------------------------------
-// Coverage notes for is_test_named_module, extract_function_item, and the
+// Coverage notes for extract_function_item and the
 // is_likely_test_function fallback
 //
 // These helpers require full HIR context (hir::Node, hir::Item) which cannot
@@ -141,25 +154,37 @@ fn has_test_attribute_handles_parsed_attributes() {
 //
 // Behavioural coverage is achieved through:
 //
-// 1. UI tests for attribute detection (is_test_attribute, has_test_attribute):
+// 1. UI tests for attribute detection (is_test_attribute,
+//    has_test_like_hir_attributes):
 //    - pass_expect_in_test.rs, pass_expect_in_rstest.rs, pass_expect_in_tokio_test.rs
 //    - These verify that test attributes are recognized without the fallback
 //
-// 2. UI tests for cfg(test) module detection:
+// 2. UI tests for arbitrary cfg(test) ancestry detection:
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
-//    - These verify #[cfg(test)] mod test/tests detection
+//    - These verify that `#[cfg(test)]` module ancestry marks nested contexts
+//      as test-only regardless of the exact module-name heuristic
+//    - fail_expect_in_file_backed_non_test_fn.rs confirms the ancestry does
+//      not leak into ordinary top-level functions next to a file-backed test
+//      module
 //
 // 3. Example-based regression coverage for the `rustc --test` harness path:
 //    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
 //      example target under `--test`, placing `.expect(...)` calls inside
 //      nested closure and async-block bodies so the parent walk and sibling
 //      const descriptor fallback are both exercised.
+//    - `pass_expect_in_tokio_nonstandard_module_harness` and
+//      `pass_expect_in_tokio_path_module_harness` cover non-standard module
+//      names and `#[path]`-loaded Tokio tests under the harness path.
+//    - `pass_expect_in_tokio_path_module_harness_no_config` keeps the
+//      `cfg(test)` ancestor walk as the load-bearing path for file-backed
+//      Tokio tests without extra configuration.
+//    - `fail_expect_in_tokio_crate_non_test_fn` verifies that configured
+//      Tokio test attributes remain scoped to actual test functions.
 //
 // 4. Real-world validation: The lint is used on this repository's own
 //    integration tests (compiled with --test), validating the fallback works
-//    correctly for tests/ directory detection and module-name heuristics.
+//    correctly for `cfg(test)` ancestry checks and harness-based recovery.
 //
-// The individual helper functions have straightforward pattern matching:
-// - is_test_named_module: matches!(name, "test" | "tests")
+// The remaining helper with isolated unit coverage is straightforward:
 // - extract_function_item: matches `hir::Node::Item` values whose kind is `Fn`
 // -------------------------------------------------------------------------

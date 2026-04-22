@@ -1,0 +1,7 @@
+//! File-backed Tokio test module used by the no-config path regression.
+
+#[tokio::test]
+async fn pass_expect_in_tokio_path_module_harness_no_config() {
+    let value = Ok::<_, ()>("ok");
+    value.expect("cfg(test) ancestry should permit Tokio path-loaded tests");
+}

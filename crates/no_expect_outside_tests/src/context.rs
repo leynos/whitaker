@@ -9,6 +9,7 @@ use rustc_hir::Node;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
+use whitaker::hir::has_test_like_hir_attributes;
 use whitaker_common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
     PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
@@ -23,7 +24,7 @@ pub(crate) struct ContextSummary {
 pub(crate) fn collect_context<'tcx>(
     cx: &LateContext<'tcx>,
     hir_id: hir::HirId,
-    _additional_test_attributes: &[AttributePath],
+    additional_test_attributes: &[AttributePath],
 ) -> (Vec<ContextEntry>, bool) {
     let mut entries = Vec::new();
     let mut has_cfg_test = false;
@@ -33,7 +34,8 @@ pub(crate) fn collect_context<'tcx>(
 
     for (ancestor_id, node) in ancestors {
         let attrs = cx.tcx.hir_attrs(ancestor_id);
-        has_cfg_test = has_cfg_test || attrs.iter().any(is_cfg_test_attribute);
+        has_cfg_test =
+            has_cfg_test || ancestor_marks_test_context(node, attrs, additional_test_attributes);
 
         if let Some(entry) = context_entry_for(node, attrs) {
             entries.push(entry);
@@ -41,6 +43,16 @@ pub(crate) fn collect_context<'tcx>(
     }
 
     (entries, has_cfg_test)
+}
+
+fn ancestor_marks_test_context(
+    node: Node<'_>,
+    attrs: &[hir::Attribute],
+    additional_test_attributes: &[AttributePath],
+) -> bool {
+    attrs.iter().any(is_cfg_test_attribute)
+        || (matches!(node, Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }))
+            && has_test_like_hir_attributes(attrs, additional_test_attributes))
 }
 
 pub(crate) fn summarise_context(
@@ -148,7 +160,7 @@ where
     })
 }
 
-fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
+pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     // Parsed attributes (like #[must_use]) are not cfg-related; skip them to
     // avoid panics when calling path() on arbitrary parsed attributes.
     let hir::Attribute::Unparsed(_) = attr else {

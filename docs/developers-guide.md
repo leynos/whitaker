@@ -69,6 +69,35 @@ each case, it asserts the subprocess exit status and the `no_std_fs_operations`
 diagnostic count, so the test verifies both the success path for excluded
 crates and the failure path for non-excluded crates.
 
+### Fixture-based harness regressions
+
+Some lint regressions need more than the plain `ui/` compiletest fixtures. For
+those cases, crates such as `no_expect_outside_tests` keep a dedicated harness
+runner in `src/lib_ui_tests.rs`.
+
+The harness splits cases into two shapes:
+
+- Example-based runs use `ExampleHarnessRun` plus
+  `dylint_testing::ui::Test::example`
+  when a single example target is enough and no extra fixture assets are needed.
+- Fixture-based runs use `FixtureHarnessRun`, `prepare_fixture`, and
+  `Test::src_base` when the case needs copied support files, a per-fixture
+  `dylint.toml`, or additional `--extern` wiring.
+
+We use `camino::Utf8Path` for fixture directory handling so temporary staged
+paths remain explicitly UTF-8 and can be joined and passed through the harness
+helpers without repeated lossy conversions.
+
+When a fixture needs an external crate such as `tokio`, the harness resolves
+the artefact from the dependency directory next to the current test binary.
+`dependency_rlib` scans `target/.../deps` for `lib<crate>-*.rlib`, prefers the
+most recently modified artefact from the current build, and falls back to a
+stable path ordering when timestamps tie before emitting the `--extern` flag.
+
+This split keeps ordinary UI fixtures simple while still letting regression
+tests cover `rustc --test`, file-backed modules, per-case configuration, and
+real proc-macro crates where needed.
+
 ### Test profiles
 
 By default, `make test` excludes slow installer integration tests

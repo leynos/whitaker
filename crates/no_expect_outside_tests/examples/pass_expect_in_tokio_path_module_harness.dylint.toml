@@ -1,0 +1,2 @@
+[no_expect_outside_tests]
+additional_test_attributes = ["tokio::test"]
