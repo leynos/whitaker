@@ -153,9 +153,11 @@ fn expected_cranelift_components() -> String {
         .join(", ")
 }
 
-fn is_component_install_failed(err: &InstallerError, channel: ToolchainChannel<'_>) -> bool {
-    let channel = channel.as_str();
-    let expected_components = expected_standard_components();
+fn is_toolchain_component_install_failed(
+    err: &InstallerError,
+    channel: &str,
+    expected_components: &str,
+) -> bool {
     let InstallerError::ToolchainComponentInstallFailed {
         toolchain,
         components,
@@ -168,30 +170,7 @@ fn is_component_install_failed(err: &InstallerError, channel: ToolchainChannel<'
     if toolchain != channel {
         return false;
     }
-    if components != &expected_components {
-        return false;
-    }
-    message.contains("component failed")
-}
-
-fn is_cranelift_component_install_failed(
-    err: &InstallerError,
-    channel: ToolchainChannel<'_>,
-) -> bool {
-    let channel = channel.as_str();
-    let expected_components = expected_cranelift_components();
-    let InstallerError::ToolchainComponentInstallFailed {
-        toolchain,
-        components,
-        message,
-    } = err
-    else {
-        return false;
-    };
-    if toolchain != channel {
-        return false;
-    }
-    if components != &expected_components {
+    if components != expected_components {
         return false;
     }
     message.contains("component failed")
@@ -218,12 +197,24 @@ pub(super) fn assert_failure_error(
         InstallFailure::ComponentAdd => assert_error_matches(
             &err,
             &format!("ToolchainComponentInstallFailed for {channel}"),
-            |e| is_component_install_failed(e, ToolchainChannel(channel)),
+            |e| {
+                is_toolchain_component_install_failed(
+                    e,
+                    channel,
+                    &expected_standard_components(),
+                )
+            },
         ),
         InstallFailure::CraneliftComponentAdd => assert_error_matches(
             &err,
             &format!("ToolchainComponentInstallFailed with cranelift for {channel}"),
-            |e| is_cranelift_component_install_failed(e, ToolchainChannel(channel)),
+            |e| {
+                is_toolchain_component_install_failed(
+                    e,
+                    channel,
+                    &expected_cranelift_components(),
+                )
+            },
         ),
         InstallFailure::ToolchainUnusableAfterInstall => {
             assert_error_matches(&err, &format!("ToolchainNotInstalled for {channel}"), |e| {
