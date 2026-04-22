@@ -1,4 +1,4 @@
-//! Tests for HIR span recovery helpers and their macro-expansion behavior.
+//! Tests for HIR span recovery helpers and their macro-expansion behaviour.
 //!
 //! `collect_rstest_companion_test_functions` depends on a real
 //! `rustc_lint::LateContext`, which is only available while rustc is walking
