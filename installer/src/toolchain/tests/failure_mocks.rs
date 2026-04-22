@@ -90,6 +90,13 @@ fn setup_toolchain_unusable_failure_mocks(
     expect_rustc_version(runner, seq, channel, 1);
 }
 
+/// Configures `runner` and `seq` to simulate the failure described by `setup`
+/// for the given toolchain `channel`.
+///
+/// Sets up mock expectations in sequence so that `ensure_installed_with` will
+/// trigger the error variant corresponding to `setup.failure`. Any extra
+/// components in `setup.additional_components` are included in the expected
+/// `rustup component add` invocation where applicable.
 pub(super) fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -152,9 +159,15 @@ fn is_component_install_failed(
     if toolchain != channel {
         return false;
     }
-    toolchain == channel && components == &expected && message.contains("component failed")
+    components == &expected && message.contains("component failed")
 }
 
+/// Asserts that `err` is the `InstallerError` variant expected for `setup.failure`
+/// on toolchain `channel`.
+///
+/// Panics with a descriptive message if the error variant or its fields do not
+/// match expectations. For `ComponentAdd`, also verifies the reported component
+/// list includes the required components plus any in `setup.additional_components`.
 pub(super) fn assert_failure_error(
     err: InstallerError,
     channel: ToolchainChannel<'_>,
