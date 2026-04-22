@@ -31,6 +31,9 @@ impl<'a> ToolchainChannel<'a> {
     }
 }
 
+pub(super) const TOOLCHAIN_INSTALL_FAILURE_MESSAGE: &str = "network down";
+pub(super) const COMPONENT_INSTALL_FAILURE_MESSAGE: &str = "component failed";
+
 fn setup_toolchain_install_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -43,7 +46,7 @@ fn setup_toolchain_install_failure_mocks(
         ToolchainInstallExpectation {
             channel,
             exit_code: 1,
-            stderr: Some("network down"),
+            stderr: Some(TOOLCHAIN_INSTALL_FAILURE_MESSAGE),
         },
     );
 }
@@ -61,7 +64,7 @@ fn setup_component_add_failure_mocks_inner(
         .withf(matches_multi_component_add(channel, &components))
         .times(1)
         .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+        .returning(|_, _| Ok(output_with_stderr(1, COMPONENT_INSTALL_FAILURE_MESSAGE)));
 }
 
 fn setup_toolchain_unusable_failure_mocks(
@@ -127,6 +130,19 @@ pub(super) fn setup_failure_mocks(
     }
 }
 
+fn failure_summary(setup: FailureSetup<'_>) -> String {
+    match setup.failure {
+        InstallFailure::ToolchainInstall => "toolchain installation failure".to_owned(),
+        InstallFailure::ComponentAdd => format!(
+            "component installation failure for {}",
+            expected_components(setup.additional_components)
+        ),
+        InstallFailure::ToolchainUnusableAfterInstall => {
+            "toolchain unusable after installation".to_owned()
+        }
+    }
+}
+
 /// Asserts that `err` satisfies `predicate`, printing `description` on failure.
 fn assert_error_matches<F>(err: &InstallerError, description: &str, predicate: F)
 where
@@ -159,7 +175,7 @@ fn is_component_install_failed(
     if toolchain != channel {
         return false;
     }
-    components == &expected && message.contains("component failed")
+    components == &expected && message == COMPONENT_INSTALL_FAILURE_MESSAGE
 }
 
 /// Asserts that `err` is the `InstallerError` variant expected for `setup.failure`
@@ -174,31 +190,71 @@ pub(super) fn assert_failure_error(
     setup: FailureSetup<'_>,
 ) {
     let channel = channel.as_str();
+    let failure = failure_summary(setup);
     match setup.failure {
         InstallFailure::ToolchainInstall => assert_error_matches(
             &err,
-            &format!("ToolchainInstallFailed for {channel}"),
+            &format!("ToolchainInstallFailed for channel {channel} while exercising {failure}"),
             |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainInstallFailed { toolchain, message }
-                        if toolchain == channel && message.contains("network down")
+                        if toolchain == channel && message == TOOLCHAIN_INSTALL_FAILURE_MESSAGE
                 )
             },
         ),
         InstallFailure::ComponentAdd => assert_error_matches(
             &err,
-            &format!("ToolchainComponentInstallFailed for {channel}"),
+            &format!(
+                "ToolchainComponentInstallFailed for channel {channel} while exercising {failure}"
+            ),
             |e| is_component_install_failed(e, channel, setup.additional_components),
         ),
-        InstallFailure::ToolchainUnusableAfterInstall => {
-            assert_error_matches(&err, &format!("ToolchainNotInstalled for {channel}"), |e| {
+        InstallFailure::ToolchainUnusableAfterInstall => assert_error_matches(
+            &err,
+            &format!("ToolchainNotInstalled for channel {channel} while exercising {failure}"),
+            |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainNotInstalled { toolchain }
                         if toolchain == channel
                 )
-            })
-        }
+            },
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn component_failure_match_rejects_superstring_messages() {
+        let err = InstallerError::ToolchainComponentInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            components: expected_components(&[]),
+            message: format!("{COMPONENT_INSTALL_FAILURE_MESSAGE}: while syncing index"),
+        };
+
+        assert!(
+            !is_component_install_failed(&err, "nightly-2025-09-18", &[]),
+            "component failure helper should require the exact mocked failure marker"
+        );
+    }
+
+    #[test]
+    fn failure_summary_lists_requested_components() {
+        let summary = failure_summary(FailureSetup {
+            failure: InstallFailure::ComponentAdd,
+            additional_components: &[CRANELIFT_COMPONENT],
+        });
+
+        assert_eq!(
+            summary,
+            format!(
+                "component installation failure for {}",
+                expected_components(&[CRANELIFT_COMPONENT])
+            )
+        );
     }
 }
