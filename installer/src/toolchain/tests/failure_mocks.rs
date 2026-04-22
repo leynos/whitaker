@@ -22,6 +22,16 @@ pub(super) struct FailureSetup<'a> {
     pub(super) additional_components: &'a [&'a str],
 }
 
+/// A typed toolchain channel identifier (e.g. `"nightly-2025-09-18"`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ToolchainChannel<'a>(pub(super) &'a str);
+
+impl<'a> ToolchainChannel<'a> {
+    pub(super) fn as_str(self) -> &'a str {
+        self.0
+    }
+}
+
 fn setup_toolchain_install_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -100,9 +110,10 @@ fn setup_toolchain_unusable_failure_mocks(
 pub(super) fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
-    channel: &str,
+    channel: ToolchainChannel<'_>,
     setup: FailureSetup<'_>,
 ) {
+    let channel = channel.as_str();
     match setup.failure {
         InstallFailure::ToolchainInstall => {
             setup_toolchain_install_failure_mocks(runner, seq, channel);
@@ -142,7 +153,8 @@ fn expected_cranelift_components() -> String {
         .join(", ")
 }
 
-fn is_component_install_failed(err: &InstallerError, channel: &str) -> bool {
+fn is_component_install_failed(err: &InstallerError, channel: ToolchainChannel<'_>) -> bool {
+    let channel = channel.as_str();
     let expected_components = expected_standard_components();
     let InstallerError::ToolchainComponentInstallFailed {
         toolchain,
@@ -162,7 +174,11 @@ fn is_component_install_failed(err: &InstallerError, channel: &str) -> bool {
     message.contains("component failed")
 }
 
-fn is_cranelift_component_install_failed(err: &InstallerError, channel: &str) -> bool {
+fn is_cranelift_component_install_failed(
+    err: &InstallerError,
+    channel: ToolchainChannel<'_>,
+) -> bool {
+    let channel = channel.as_str();
     let expected_components = expected_cranelift_components();
     let InstallerError::ToolchainComponentInstallFailed {
         toolchain,
@@ -181,7 +197,12 @@ fn is_cranelift_component_install_failed(err: &InstallerError, channel: &str) ->
     message.contains("component failed")
 }
 
-pub(super) fn assert_failure_error(err: InstallerError, channel: &str, failure: InstallFailure) {
+pub(super) fn assert_failure_error(
+    err: InstallerError,
+    channel: ToolchainChannel<'_>,
+    failure: InstallFailure,
+) {
+    let channel = channel.as_str();
     match failure {
         InstallFailure::ToolchainInstall => assert_error_matches(
             &err,
@@ -197,12 +218,12 @@ pub(super) fn assert_failure_error(err: InstallerError, channel: &str, failure: 
         InstallFailure::ComponentAdd => assert_error_matches(
             &err,
             &format!("ToolchainComponentInstallFailed for {channel}"),
-            |e| is_component_install_failed(e, channel),
+            |e| is_component_install_failed(e, ToolchainChannel(channel)),
         ),
         InstallFailure::CraneliftComponentAdd => assert_error_matches(
             &err,
             &format!("ToolchainComponentInstallFailed with cranelift for {channel}"),
-            |e| is_cranelift_component_install_failed(e, channel),
+            |e| is_cranelift_component_install_failed(e, ToolchainChannel(channel)),
         ),
         InstallFailure::ToolchainUnusableAfterInstall => {
             assert_error_matches(&err, &format!("ToolchainNotInstalled for {channel}"), |e| {

@@ -4,7 +4,9 @@ mod failure_mocks;
 mod test_helpers;
 
 use super::*;
-use failure_mocks::{FailureSetup, InstallFailure, assert_failure_error, setup_failure_mocks};
+use failure_mocks::{
+    FailureSetup, InstallFailure, ToolchainChannel, assert_failure_error, setup_failure_mocks,
+};
 use rstest::rstest;
 use test_helpers::{
     CapturingCommandRunner, ToolchainInstallExpectation, expect_rustc_version,
@@ -207,8 +209,8 @@ fn ensure_installed_reports_failure(
     #[case] failure: InstallFailure,
     #[case] additional_components: &[&str],
 ) {
-    let channel = "nightly-2025-09-18";
-    let toolchain = test_toolchain(channel);
+    let channel = ToolchainChannel("nightly-2025-09-18");
+    let toolchain = test_toolchain(channel.as_str());
 
     test_helpers::assert_install_fails_with(
         toolchain,
