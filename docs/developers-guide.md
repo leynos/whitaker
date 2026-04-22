@@ -981,6 +981,66 @@ libraries = [
 
 This skips building entirely, providing faster lint runs during development.
 
+### Installer internal architecture
+
+`installer/src/main.rs` co-ordinates the install workflow through a small
+set of focused private helpers. Understanding them is useful when extending
+the install pipeline.
+
+#### `resolve_additional_components`
+
+```rust
+fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str]
+```
+
+Translates CLI flags into the extra rustup component slice passed to
+`ensure_toolchain_installed`. At present the only flag it handles is
+`--cranelift`, which adds `rustc-codegen-cranelift` to the component set.
+Adding a new optional component requires a new CLI flag on `InstallArgs` and
+a new arm in this function; no other callers need to change.
+
+#### `FastPathContext`
+
+```rust
+struct FastPathContext<'a> {
+    args: &'a InstallArgs,
+    dirs: &'a dyn BaseDirs,
+    requested_crates: &'a [CrateName],
+    toolchain: &'a Toolchain,
+    target_dir: &'a Utf8PathBuf,
+}
+```
+
+A parameter-object struct that bundles the five immutable inputs consumed by
+`try_fast_path_installation`. This follows the same idiom used elsewhere in
+the codebase (`FinishInstallContext`, `PrebuiltInstallationContext`,
+`MetricsWriteContext`) to keep function argument counts within the project
+threshold of four. Construct it in `run_install` before calling
+`try_fast_path_installation`.
+
+#### `try_fast_path_installation`
+
+```rust
+fn try_fast_path_installation(
+    context: &FastPathContext<'_>,
+    stderr: &mut dyn Write,
+) -> Result<Option<(Utf8PathBuf, InstallMode)>>
+```
+
+Attempts both fast paths in order and returns `Some((staging_path, mode))`
+if either succeeds, or `None` if `run_install` should proceed to a full
+build:
+
+1. **Prebuilt download** (`InstallMode::Download`) — delegates to
+   `try_prebuilt_installation` inside `install_flow`.
+2. **Staged-suite shortcut** (`InstallMode::Build`) — delegates to
+   `staged_suite::try_test_staged_suite_installation`, which is only active
+   when `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1` is set (debug builds only).
+
+When `try_fast_path_installation` returns `Some`, `run_install` constructs a
+`FinishInstallContext` from the returned values and delegates to
+`finish_install_and_record_metrics`, skipping the full build pipeline.
+
 ## Standard vs Experimental Lints
 
 Whitaker categorizes lints into two tiers:
