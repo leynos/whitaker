@@ -5,7 +5,8 @@ mod test_helpers;
 
 use super::*;
 use failure_mocks::{
-    FailureSetup, InstallFailure, ToolchainChannel, assert_failure_error, setup_failure_mocks,
+    COMPONENT_INSTALL_FAILURE_MESSAGE, FailureSetup, InstallFailure, ToolchainChannel,
+    assert_failure_error, setup_failure_mocks,
 };
 use rstest::rstest;
 use test_helpers::{
@@ -184,7 +185,7 @@ fn install_components_with_failure_reports_all_components() {
                 ref message,
             } if toolchain == "nightly-2025-09-18"
                 && components == &expected_component_list
-                && message.contains("component failed")
+                && message == COMPONENT_INSTALL_FAILURE_MESSAGE
         ),
         "expected ToolchainComponentInstallFailed with all components, got {err:?}"
     );
