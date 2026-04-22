@@ -65,6 +65,31 @@ fn fragment_ids() -> FragmentIds {
     }
 }
 
+fn pair_members(pair: &CandidatePair) -> (&str, &str) {
+    (pair.left().as_str(), pair.right().as_str())
+}
+
+#[rstest]
+#[case(("alpha", "beta", ("alpha", "beta")))]
+#[case(("beta", "alpha", ("alpha", "beta")))]
+#[case(("fragment-2", "fragment-10", ("fragment-10", "fragment-2")))]
+fn candidate_pair_orders_distinct_inputs(#[case] case: (&str, &str, (&str, &str))) {
+    let (left, right, expected) = case;
+
+    let pair = CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
+        .expect("distinct fragment IDs should form a canonical pair");
+
+    assert_eq!(pair_members(&pair), expected);
+}
+
+#[test]
+fn candidate_pair_suppresses_self_pairs() {
+    assert_eq!(
+        CandidatePair::new(FragmentId::from("alpha"), FragmentId::from("alpha")),
+        None
+    );
+}
+
 #[rstest]
 #[case(((0, 4), IndexError::ZeroBands))]
 #[case(((4, 0), IndexError::ZeroRows))]
