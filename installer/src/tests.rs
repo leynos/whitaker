@@ -4,11 +4,13 @@ use super::*;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
 use std::time::Duration;
+use temp_env::with_var_unset;
 use whitaker_installer::cli::InstallArgs;
 use whitaker_installer::dependency_binaries::DependencyBinaryInstaller;
 use whitaker_installer::deps::DependencyInstallOptions;
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
+use whitaker_installer::test_support::{TEST_STAGE_SUITE_ENV, env_test_guard};
 use whitaker_installer::test_utils::dependency_binary_helpers::{
     AlwaysNotFoundRepositoryInstaller, with_fake_binary_on_path,
 };
@@ -104,6 +106,93 @@ fn resolve_requested_crates_rejects_unknown_lints() {
         err,
         InstallerError::LintCrateNotFound { name } if name == CrateName::from("nonexistent_lint")
     ));
+}
+
+#[test]
+fn resolve_additional_components_returns_empty_when_cranelift_false() {
+    let args = InstallArgs::default();
+    assert!(resolve_additional_components(&args).is_empty());
+}
+
+#[test]
+fn resolve_additional_components_returns_cranelift_when_flag_set() {
+    let args = InstallArgs {
+        cranelift: true,
+        ..InstallArgs::default()
+    };
+    let components = resolve_additional_components(&args);
+    assert_eq!(components, &["rustc-codegen-cranelift"]);
+}
+
+#[test]
+fn fast_path_context_holds_supplied_values() {
+    use camino::Utf8PathBuf;
+    use whitaker_installer::toolchain::Toolchain;
+
+    let args = InstallArgs::default();
+    let dirs = TestBaseDirs {
+        home_dir: Some("/tmp".into()),
+        bin_dir: Some("/tmp/bin".into()),
+        data_dir: Some("/tmp".into()),
+    };
+    let toolchain = Toolchain {
+        channel: "nightly-2025-09-18".to_owned(),
+        workspace_root: Utf8PathBuf::from("."),
+    };
+    let target_dir = Utf8PathBuf::from("/tmp/target");
+    let crates: Vec<whitaker_installer::crate_name::CrateName> = vec![];
+
+    let ctx = FastPathContext {
+        args: &args,
+        dirs: &dirs,
+        requested_crates: &crates,
+        toolchain: &toolchain,
+        target_dir: &target_dir,
+    };
+
+    assert!(std::ptr::eq(ctx.args, &args));
+    assert_eq!(ctx.dirs.home_dir(), Some(PathBuf::from("/tmp")));
+    assert_eq!(ctx.toolchain.channel(), "nightly-2025-09-18");
+    assert_eq!(ctx.target_dir, &Utf8PathBuf::from("/tmp/target"));
+    assert!(ctx.requested_crates.is_empty());
+}
+
+#[test]
+fn try_fast_path_installation_returns_none_when_prebuilt_disabled() {
+    use camino::Utf8PathBuf;
+    use whitaker_installer::toolchain::Toolchain;
+
+    let _guard = env_test_guard();
+    let args = InstallArgs {
+        lint: vec!["module_max_lines".to_owned()],
+        ..InstallArgs::default()
+    };
+    let dirs = TestBaseDirs {
+        home_dir: Some("/tmp".into()),
+        bin_dir: Some("/tmp/bin".into()),
+        data_dir: Some("/tmp".into()),
+    };
+    let toolchain = Toolchain {
+        channel: "nightly-2025-09-18".to_owned(),
+        workspace_root: Utf8PathBuf::from("."),
+    };
+    let target_dir = Utf8PathBuf::from("/tmp/target");
+    let crates = vec![whitaker_installer::crate_name::CrateName::from(
+        "module_max_lines",
+    )];
+    let ctx = FastPathContext {
+        args: &args,
+        dirs: &dirs,
+        requested_crates: &crates,
+        toolchain: &toolchain,
+        target_dir: &target_dir,
+    };
+
+    with_var_unset(TEST_STAGE_SUITE_ENV, || {
+        let mut stderr = Vec::new();
+        let result = try_fast_path_installation(&ctx, &mut stderr).expect("should not error");
+        assert!(result.is_none());
+    });
 }
 
 #[rstest]
