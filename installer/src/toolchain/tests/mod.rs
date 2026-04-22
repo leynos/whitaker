@@ -193,10 +193,7 @@ fn install_components_with_failure_reports_all_components() {
 #[rstest]
 #[case::toolchain_install_fails(InstallFailure::ToolchainInstall, &[])]
 #[case::component_add_fails(InstallFailure::ComponentAdd, &[])]
-#[case::cranelift_component_add_fails(
-    InstallFailure::CraneliftComponentAdd,
-    &[CRANELIFT_COMPONENT],
-)]
+#[case::cranelift_component_add_fails(InstallFailure::ComponentAdd, &[CRANELIFT_COMPONENT])]
 #[case::toolchain_unusable_after_install(
     InstallFailure::ToolchainUnusableAfterInstall,
     &[],
@@ -211,22 +208,16 @@ fn ensure_installed_reports_failure(
 ) {
     let channel = ToolchainChannel("nightly-2025-09-18");
     let toolchain = test_toolchain(channel.as_str());
+    let setup = FailureSetup {
+        failure,
+        additional_components,
+    };
 
     test_helpers::assert_install_fails_with(
         toolchain,
-        |runner, seq| {
-            setup_failure_mocks(
-                runner,
-                seq,
-                channel,
-                FailureSetup {
-                    failure,
-                    additional_components,
-                },
-            )
-        },
+        |runner, seq| setup_failure_mocks(runner, seq, channel, setup),
         |toolchain, runner| toolchain.ensure_installed_with(runner, additional_components),
-        |err| assert_failure_error(err, channel, failure),
+        |err| assert_failure_error(err, channel, setup),
     );
 }
 
