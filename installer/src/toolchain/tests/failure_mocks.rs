@@ -129,7 +129,9 @@ where
 }
 
 fn expected_components(additional_components: &[&str]) -> String {
-    [REQUIRED_COMPONENTS, additional_components].concat().join(", ")
+    [REQUIRED_COMPONENTS, additional_components]
+        .concat()
+        .join(", ")
 }
 
 fn is_component_install_failed(
