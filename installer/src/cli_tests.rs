@@ -11,6 +11,7 @@ fn cli_parses_defaults() {
     assert!(cli.install.lint.is_empty());
     assert!(!cli.install.individual_lints);
     assert!(!cli.install.experimental);
+    assert!(!cli.install.cranelift);
     assert!(!cli.install.dry_run);
     assert_eq!(cli.install.verbosity, 0);
     assert!(!cli.install.quiet);
@@ -129,6 +130,7 @@ fn should_attempt_prebuilt_true_for_stable_bumpy_road_requests() {
 #[rstest]
 #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.individual_lints)]
 #[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.install.experimental)]
+#[case::cranelift(&["whitaker-installer", "--cranelift"], |cli: &Cli| cli.install.cranelift)]
 #[case::dry_run(&["whitaker-installer", "--dry-run"], |cli: &Cli| cli.install.dry_run)]
 #[case::verbose(&["whitaker-installer", "-v"], |cli: &Cli| cli.install.verbosity > 0)]
 #[case::quiet(&["whitaker-installer", "-q"], |cli: &Cli| cli.install.quiet)]
@@ -165,6 +167,7 @@ fn install_args_default_is_valid() {
     let args = InstallArgs::default();
     assert!(!args.individual_lints);
     assert!(!args.experimental);
+    assert!(!args.cranelift);
     assert!(!args.skip_deps);
 }
 

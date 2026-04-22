@@ -1,5 +1,7 @@
 //! Tests for the installer CLI entrypoint.
 
+mod fast_path;
+
 use super::*;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;

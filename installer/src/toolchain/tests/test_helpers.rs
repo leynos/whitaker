@@ -1,6 +1,7 @@
 //! Test helpers for toolchain tests.
 
 use super::*;
+use std::cell::RefCell;
 use std::process::ExitStatus;
 
 #[cfg(unix)]
@@ -37,6 +38,37 @@ pub fn test_toolchain(channel: &str) -> Toolchain {
     Toolchain {
         channel: channel.to_owned(),
         workspace_root: Utf8PathBuf::from("."),
+    }
+}
+
+/// Captures command invocations and returns a preconfigured `Output`.
+pub(crate) struct CapturingCommandRunner {
+    calls: RefCell<Vec<(String, Vec<String>)>>,
+    output: Output,
+}
+
+impl CapturingCommandRunner {
+    /// Creates a capture runner that clones `output` for every executed command.
+    pub(crate) fn new(output: Output) -> Self {
+        Self {
+            calls: RefCell::new(Vec::new()),
+            output,
+        }
+    }
+
+    /// Returns a cloned list of recorded `(program, args)` pairs without mutating state.
+    pub(crate) fn recorded_calls(&self) -> Vec<(String, Vec<String>)> {
+        self.calls.borrow().clone()
+    }
+}
+
+impl CommandRunner for CapturingCommandRunner {
+    fn run(&self, program: &str, args: &[&str]) -> std::io::Result<Output> {
+        self.calls.borrow_mut().push((
+            program.to_owned(),
+            args.iter().map(|arg| (*arg).to_owned()).collect(),
+        ));
+        Ok(self.output.clone())
     }
 }
 
@@ -122,10 +154,15 @@ pub fn expect_toolchain_install(
     );
 }
 
-// Helper to test that ensure_installed fails with the expected error.
-pub fn assert_install_fails_with<F, E>(toolchain: Toolchain, setup_mocks: F, error_matcher: E)
-where
+/// Helper to test that ensure_installed fails with the expected error.
+pub fn assert_install_fails_with<F, I, E>(
+    toolchain: Toolchain,
+    setup_mocks: F,
+    install: I,
+    error_matcher: E,
+) where
     F: FnOnce(&mut MockCommandRunner, &mut mockall::Sequence),
+    I: FnOnce(&Toolchain, &MockCommandRunner) -> Result<ToolchainInstallStatus>,
     E: FnOnce(InstallerError),
 {
     let mut runner = MockCommandRunner::new();
@@ -133,27 +170,31 @@ where
 
     setup_mocks(&mut runner, &mut seq);
 
-    let err = toolchain
-        .ensure_installed_with(&runner)
-        .expect_err("expected installation failure");
+    let err = install(&toolchain, &runner).expect_err("expected installation failure");
 
     error_matcher(err);
 }
 
-// Returns a predicate that matches a rustup component add command with multiple components.
+/// Returns a predicate that matches a rustup component add command with multiple components.
 pub fn matches_multi_component_add(
     channel: &str,
     components: &[&str],
-) -> impl Fn(&str, &[&str]) -> bool {
+) -> impl Fn(&str, &[&str]) -> bool + use<> {
     let channel = channel.to_owned();
     let components: Vec<String> = components.iter().map(|s| (*s).to_owned()).collect();
     move |program, args| {
+        let Some(actual_components) = args.get(4..) else {
+            return false;
+        };
         program == "rustup"
-            && args.len() == 4 + components.len()
             && args[0] == "component"
             && args[1] == "add"
             && args[2] == "--toolchain"
             && args[3] == channel
-            && args[4..].iter().zip(&components).all(|(a, b)| *a == b)
+            && actual_components.len() == components.len()
+            && actual_components
+                .iter()
+                .zip(&components)
+                .all(|(a, b)| *a == b)
     }
 }

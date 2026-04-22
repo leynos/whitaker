@@ -53,6 +53,42 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
     }
 }
 
+/// Returns the set of additional rustup components requested by the CLI flags.
+fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
+    if args.cranelift {
+        &["rustc-codegen-cranelift"]
+    } else {
+        &[]
+    }
+}
+
+/// Attempts prebuilt download and staged-suite fast paths.
+///
+/// Returns `Some((staging_path, mode))` if either succeeds, or `None` if
+/// the caller should proceed to a full build.
+fn try_fast_path_installation(
+    context: &FastPathContext<'_>,
+    stderr: &mut dyn Write,
+) -> Result<Option<(Utf8PathBuf, InstallMode)>> {
+    let prebuilt_context = PrebuiltInstallationContext {
+        args: context.args,
+        dirs: context.dirs,
+        requested_crates: context.requested_crates,
+        toolchain_channel: context.toolchain.channel(),
+    };
+    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
+        return Ok(Some((staging_path, InstallMode::Download)));
+    }
+    if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
+        context.requested_crates,
+        context.toolchain,
+        context.target_dir,
+    )? {
+        return Ok(Some((staging_path, InstallMode::Build)));
+    }
+    Ok(None)
+}
+
 /// Runs the install command to build and stage lint libraries.
 ///
 /// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
@@ -79,35 +115,29 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
-    ensure_toolchain_installed(&toolchain, args.quiet, stderr)?;
+    ensure_toolchain_installed(
+        &toolchain,
+        resolve_additional_components(args),
+        args.quiet,
+        stderr,
+    )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    // Step 3.5: Attempt prebuilt download when install options allow it.
-    let prebuilt_context = PrebuiltInstallationContext {
+    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
+    let fast_path_context = FastPathContext {
         args,
         dirs: &dirs,
         requested_crates: &requested_crates,
-        toolchain_channel: toolchain.channel(),
+        toolchain: &toolchain,
+        target_dir: &target_dir,
     };
-    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
+    if let Some((staging_path, install_mode)) =
+        try_fast_path_installation(&fast_path_context, stderr)?
+    {
         let finish_context = FinishInstallContext {
             args,
             dirs: &dirs,
             staging_path: &staging_path,
-            install_mode: InstallMode::Download,
-            install_started,
-        };
-        return finish_install_and_record_metrics(&finish_context, stderr);
-    }
-    if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
-        &requested_crates,
-        &toolchain,
-        &target_dir,
-    )? {
-        let finish_context = FinishInstallContext {
-            args,
-            dirs: &dirs,
-            staging_path: &staging_path,
-            install_mode: InstallMode::Build,
+            install_mode,
             install_started,
         };
         return finish_install_and_record_metrics(&finish_context, stderr);
@@ -230,10 +260,11 @@ fn resolve_toolchain(
 
 fn ensure_toolchain_installed(
     toolchain: &Toolchain,
+    additional_components: &[&str],
     quiet: bool,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    let status = toolchain.ensure_installed()?;
+    let status = toolchain.ensure_installed(additional_components)?;
     if status.installed_toolchain() && !quiet {
         write_stderr_line(
             stderr,
@@ -267,6 +298,15 @@ struct FinishInstallContext<'a> {
     staging_path: &'a Utf8Path,
     install_mode: InstallMode,
     install_started: Instant,
+}
+
+/// Aggregates the immutable inputs for fast-path installation attempts.
+struct FastPathContext<'a> {
+    args: &'a InstallArgs,
+    dirs: &'a dyn BaseDirs,
+    requested_crates: &'a [CrateName],
+    toolchain: &'a Toolchain,
+    target_dir: &'a Utf8PathBuf,
 }
 
 /// Finalise installation and record aggregate installer metrics.

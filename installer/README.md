@@ -8,6 +8,16 @@ builds, links, and stages the lint libraries for local use, avoiding the need
 to rebuild from source on each `cargo dylint` invocation. It also ensures the
 pinned Rust toolchain and required components are installed via rustup.
 
+Pass `--cranelift` when your project, CI, or build configuration requires the
+Cranelift back-end (`rustc-codegen-cranelift`). `rustc-codegen-cranelift` is an
+alternative compiler back-end that uses the Cranelift code generator instead of
+LLVM, which can produce faster debug builds. Some Whitaker configurations (or
+CI environments that pre-install it) require it to be available alongside the
+standard toolchain components. Without `--cranelift`, the installer only
+provisions the standard required toolchain components; the flag adds
+`rustc-codegen-cranelift` to that set so `rustup component add` includes it in
+a single step.
+
 ## Installation
 
 ```bash
