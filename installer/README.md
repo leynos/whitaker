@@ -14,9 +14,9 @@ alternative compiler back-end that uses the Cranelift code generator instead of
 LLVM, which can produce faster debug builds. Some Whitaker configurations (or
 CI environments that pre-install it) require it to be available alongside the
 standard toolchain components. Without `--cranelift`, the installer only
-provisions the standard required toolchain components (`rust-src`, `rustc-dev`,
-and `llvm-tools-preview`); the flag adds `rustc-codegen-cranelift` to that set
-so `rustup component add` includes it in a single step.
+provisions the standard required toolchain components; the flag adds
+`rustc-codegen-cranelift` to that set so `rustup component add` includes it in
+a single step.
 
 ## Installation
 
