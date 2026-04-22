@@ -85,3 +85,34 @@ fn try_fast_path_installation_returns_none_when_prebuilt_disabled(
         assert!(result.is_none());
     });
 }
+
+#[rstest]
+fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
+    mut fast_path_fixture: FastPathFixture,
+) {
+    use temp_env::with_var;
+    use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
+
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    fast_path_fixture.target_dir =
+        Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("temp dir is valid UTF-8");
+    // Suite-only request satisfies is_suite_only_request
+    fast_path_fixture.requested_crates = vec![CrateName::from("whitaker_suite")];
+    // Disable the prebuilt path so only the staged-suite branch fires
+    fast_path_fixture.args = InstallArgs {
+        is_build_only: true,
+        ..InstallArgs::default()
+    };
+
+    with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
+        let ctx = fast_path_fixture.context();
+        let mut stderr = Vec::new();
+        let result = try_fast_path_installation(&ctx, &mut stderr).expect("should not error");
+        assert!(
+            result.is_some(),
+            "expected Some((path, InstallMode::Build)), got None"
+        );
+        let (_, mode) = result.expect("staged suite should produce a build-mode fast path");
+        assert_eq!(mode, InstallMode::Build);
+    });
+}
