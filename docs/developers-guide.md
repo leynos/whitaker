@@ -817,6 +817,8 @@ Two structs group the string parameters that describe a single regression run:
 
 #### Harness driver functions
 
+Table: Harness driver functions and responsibilities.
+
 | Function                         | Purpose                                                                                                                                 |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `run_example_under_test_harness` | Runs one example target under the dylint UI test harness using the flags in the `ExampleHarnessRun` spec.                               |
