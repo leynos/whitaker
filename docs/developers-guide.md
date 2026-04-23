@@ -153,14 +153,15 @@ make kani-clone-detector   # Run clone-detector Kani harnesses only
 ```
 
 `make verus` currently runs both decomposition-advice proofs and the
-clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
-adjacency harnesses and the clone-detector harness group in one pass.
+clone-detector proofs for `LshConfig::new` and `CandidatePair::new`.
+`make kani` runs the decomposition adjacency harnesses and the clone-detector
+harness group in one pass.
 
 ### Verus scope and trust boundary
 
-The clone-detector Verus file is intentionally an implementation-shaped model
-of `LshConfig::new` and `validate_product`, not a direct proof of the compiled
-Rust body in `crates/whitaker_clones_core`.
+The clone-detector Verus files are intentionally implementation-shaped models
+of `LshConfig::new`, `validate_product`, and `CandidatePair::new`, not direct
+proofs of the compiled Rust bodies in `crates/whitaker_clones_core`.
 
 This distinction matters. In the current sidecar setup, Verus can describe the
 contract of an external Rust function with mechanisms such as
@@ -170,14 +171,23 @@ implementation itself. The repository therefore keeps the Verus proof honest:
 it mirrors the real branch order and `checked_mul` overflow behaviour, while
 Kani calls the actual constructor and checks its runtime behaviour directly.
 
-For `LshConfig::new`, the split is:
+For the current clone-detector constructors, the split is:
 
-- Verus proves the constructor model rejects zero bands, rejects zero rows,
-  accepts only exact products of `MINHASH_SIZE`, and rejects overflowing
-  products via the same `checked_mul` semantics as the runtime code.
+- Verus proves the `LshConfig::new` constructor model rejects zero bands,
+  rejects zero rows, accepts only exact products of `MINHASH_SIZE`, and rejects
+  overflowing products via the same `checked_mul` semantics as the runtime code.
+- Verus proves the `CandidatePair::new` constructor model suppresses equal
+  inputs, preserves already ordered distinct inputs, and swaps reversed
+  distinct inputs into canonical order. The sidecar now states that proof over
+  a trusted `FragmentId` bridge lemma: `FragmentId::partial_cmp` is modelled as
+  a strict total order via a ghost `nat` ranking, rather than being left as an
+  implicit assumption.
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
+- Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
+  `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
+  trusts rather than proving from `String` internals.
 
 ### Tooling scripts
 

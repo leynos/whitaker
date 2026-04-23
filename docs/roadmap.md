@@ -381,7 +381,7 @@
   `rows`, and enforces `bands * rows == MINHASH_SIZE`. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-- [ ] 7.2.6. Use Verus to prove `CandidatePair::new` canonicalizes fragment
+- [x] 7.2.6. Use Verus to prove `CandidatePair::new` canonicalizes fragment
   ordering and suppresses self-pairs. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
