@@ -307,7 +307,7 @@ methods, and trait methods.
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-When attributes are generated or reordered by a procedural macro (for example
+When attributes are generated or reordered by a procedural macro (for example,
 `rstest` or `derive`), the lint recovers the original source span from the
 macro expansion chain. Attributes whose spans cannot be traced back to any
 user-written source location (macro-only glue) are silently excluded from the
