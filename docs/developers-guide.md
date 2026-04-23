@@ -127,6 +127,46 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
+### Failure-mock test helpers
+
+`installer/src/toolchain/tests/failure_mocks.rs` provides reusable helpers for
+installer error-path tests that should stay deterministic and offline. They let
+tests exercise failure handling without talking to `rustup`, downloading a
+toolchain, or relying on network state.
+
+`TOOLCHAIN_INSTALL_FAILURE_MESSAGE` and `COMPONENT_INSTALL_FAILURE_MESSAGE` are
+the verbatim stderr payloads emitted by the mocks. The assertions match those
+messages with exact equality, so wording changes fail immediately instead of
+being hidden by looser substring checks.
+
+`FailureSetup` packages the `InstallFailure` variant under test together with
+any `additional_components` needed for that scenario. Pass the resulting value
+to `setup_failure_mocks` to configure the command-runner sequence, and then to
+`assert_failure_error` to check the resulting `InstallerError` variant.
+
+```rust
+let setup = FailureSetup {
+    failure: InstallFailure::ComponentAdd,
+    additional_components: &["rustfmt"],
+};
+setup_failure_mocks(&mut runner, &mut seq, channel, setup);
+let err = ensure_installed_with(&toolchain, &mut runner)
+    .expect_err("component-add scenario should fail");
+assert_failure_error(err, channel, setup);
+```
+
+`setup_failure_mocks(runner, seq, channel, setup)` wires the
+`MockCommandRunner` sequence for the failure described by `setup` on the given
+channel. It covers the shared rustc-version probe and the branch-specific mock
+responses for toolchain install failure, component-add failure, or post-install
+unusable toolchain.
+
+`assert_failure_error(err, channel, setup)` checks that `err` matches the
+expected `InstallerError` variant for the same scenario. When the shape does
+not match, it panics with a message like
+`"<Variant> for channel {channel} while exercising {failure}"`, which makes
+multi-toolchain or multi-failure test failures much easier to diagnose.
+
 ### Other useful commands
 
 ```sh
