@@ -26,12 +26,23 @@ pub(super) struct FailureSetup<'a> {
 pub(super) struct ToolchainChannel<'a>(pub(super) &'a str);
 
 impl<'a> ToolchainChannel<'a> {
+    /// Returns the inner channel string slice (e.g. `"nightly-2025-09-18"`).
     pub(super) fn as_str(self) -> &'a str {
         self.0
     }
 }
 
+/// The exact stderr string emitted by the mock when a toolchain installation
+/// fails. Used as the `message` payload in [`InstallerError::ToolchainInstallFailed`]
+/// and matched with strict equality in [`assert_failure_error`] to prevent
+/// wording-change regressions from going undetected.
 pub(super) const TOOLCHAIN_INSTALL_FAILURE_MESSAGE: &str = "network down";
+/// The exact stderr string emitted by the mock when a component installation
+/// fails. Matched with strict equality (not a substring) in
+/// `is_component_install_failed` so that any superstring variant is
+/// correctly rejected. The unit test
+/// `component_failure_match_rejects_superstring_messages` guards this
+/// invariant.
 pub(super) const COMPONENT_INSTALL_FAILURE_MESSAGE: &str = "component failed";
 
 fn setup_toolchain_install_failure_mocks(
