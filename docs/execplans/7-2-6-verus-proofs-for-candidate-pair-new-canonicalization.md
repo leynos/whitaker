@@ -208,11 +208,11 @@ Relevant skills for the implementation turn:
   are emitted in lexical `FragmentId` order and that self-pairs are suppressed.
   The 7.2.6 work therefore proves an existing documented invariant rather than
   inventing a new one.
-- The implementation did not need any production-code refactor in
-  `index/types.rs`; direct tests and the new sidecar proof were sufficient to
-  pin the contract.
-- The Verus proof is simplest and clearest when it models an ordered
-  identifier domain with `nat` values, while runtime tests cover the concrete
+- The strengthening pass extracted `FragmentId` into
+  `src/index/fragment_id.rs` so the sidecar can import the real source
+  definition instead of a hand-copied stand-in.
+- The Verus proof now keeps the `nat` model as a ghost ranking behind an
+  explicit `FragmentId` bridge lemma, while runtime tests cover the concrete
   lexical-string behaviour of `FragmentId`.
 
 ## Decision Log
@@ -238,10 +238,11 @@ Relevant skills for the implementation turn:
   existing behaviour instead of extracting a proof helper. Rationale: the
   constructor is already small, direct, and readable, so a helper would add
   surface area without reducing drift. Date/Author: 2026-04-22 / Codex.
-- Decision: model proof identifiers as `nat` values in Verus and rely on
-  direct runtime tests to pin lexical `FragmentId` semantics. Rationale: this
-  proves the constructor's ordering control flow without pretending to verify
-  Rust `String` internals. Date/Author: 2026-04-22 / Codex.
+- Decision: strengthen the proof with an explicit `FragmentId` bridge lemma and
+  keep the `nat` model behind a ghost ranking rather than as the public proof
+  surface. Rationale: this makes the strict-total-order assumption visible in
+  machine-checked form without pretending to verify Rust `String` internals.
+  Date/Author: 2026-04-23 / Codex.
 
 ## Context and orientation
 
@@ -382,7 +383,11 @@ logic over that domain.
 
 That proof does not need to model Rust `String` internals. Instead:
 
-- Verus establishes the control-flow theorem for any ordered IDs.
+- Verus establishes the control-flow theorem for any identifier type whose
+  `partial_cmp` satisfies the strict-total-order axioms used by the constructor
+  proof.
+- A dedicated bridge lemma makes that assumption explicit for `FragmentId` via
+  a ghost `nat` ranking.
 - Runtime unit and BDD tests establish that `FragmentId` uses lexical string
   ordering concretely.
 

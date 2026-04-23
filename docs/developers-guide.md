@@ -149,12 +149,16 @@ For the current clone-detector constructors, the split is:
   overflowing products via the same `checked_mul` semantics as the runtime code.
 - Verus proves the `CandidatePair::new` constructor model suppresses equal
   inputs, preserves already ordered distinct inputs, and swaps reversed
-  distinct inputs into canonical order for an ordered identifier domain.
+  distinct inputs into canonical order. The sidecar now states that proof over
+  a trusted `FragmentId` bridge lemma: `FragmentId::partial_cmp` is modelled as
+  a strict total order via a ghost `nat` ranking, rather than being left as an
+  implicit assumption.
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
-  `FragmentId` ordering contract that the `CandidatePair` proof models.
+  `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
+  trusts rather than proving from `String` internals.
 
 ### Tooling scripts
 
