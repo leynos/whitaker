@@ -520,14 +520,19 @@ allow_in_main = true
 - Panicking `unwrap_or_else` fallbacks inside doctests
 - Panicking `unwrap_or_else` fallbacks inside `main` when
   `allow_in_main = true`
+- `unwrap_or_else(|| panic!("value was {:?}", value))` inside test code when
+  the closure interpolates a runtime value into the panic message
 - Non-panicking `unwrap_or_else` fallbacks
 
 **What is denied:**
 
 - `unwrap_or_else(|| panic!(..))`
+- `unwrap_or_else(|| panic!("static message"))` inside tests when the closure
+  does not interpolate a runtime value; use `.expect("static message")` instead
 - `unwrap_or_else(|| value.unwrap())`
 
 **How to fix:** Propagate errors with `?` or use `.expect()` with a clear
 message if a panic is truly intended. In tests, replace
 `unwrap_or_else(|| panic!("msg"))` with `.expect("msg")` for clarity and
-brevity.
+brevity unless the closure needs to interpolate runtime state for a more useful
+diagnostic.

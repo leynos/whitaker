@@ -15,9 +15,6 @@ fn pass_expect_in_rstest_harness(#[case] value: i32) {
     assert_eq!(parsed, 1);
 }
 
-// `rstest` 0.26.1 does not export the legacy `#[rstest_parametrize]` macro, so
-// this regression covers the real `#[rstest]` + `#[case]` lowering shape
-// exercised by current projects while the shared attribute registry continues to
-// recognize the legacy name.
+// This fixture covers the current `#[rstest]` + `#[case]` lowering shape.
 
 fn main() {}
