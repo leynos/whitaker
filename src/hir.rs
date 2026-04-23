@@ -240,3 +240,21 @@ fn module_has_harness_descriptor<'tcx>(
             })
         })
 }
+
+#[cfg(test)]
+mod tests {
+    //! `collect_rstest_companion_test_functions` depends on a real
+    //! `rustc_lint::LateContext`, which is only available while rustc is
+    //! walking fully lowered HIR for an actual compilation session. The
+    //! helper inspects sibling HIR items, parent-module relationships, and
+    //! harness-generated companion modules, so there is no stable, lightweight
+    //! unit-test seam that can construct the required `LateContext` and HIR in
+    //! isolation inside this crate.
+    //!
+    //! Coverage therefore lives in the no-expect lint's UI/example harness
+    //! regressions, which exercise this detection path end-to-end with real
+    //! rstest expansion output:
+    //! - `crates/no_expect_outside_tests/examples/pass_expect_in_rstest_harness.rs`
+    //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs`
+    //!   (`rstest_example_compiles_under_test_harness`)
+}
