@@ -575,12 +575,14 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    downstream candidate generation and SARIF emission free from accidental
    self-matches.
 
-4. **The Verus proof stays implementation-shaped and order-modelled.** The
-   sidecar proof for `CandidatePair::new` mirrors the runtime three-way branch
-   structure over an ordered identifier model rather than claiming to verify
-   Rust `String` internals or the compiled `FragmentId` body directly. Runtime
-   tests pin the concrete lexical-string semantics, while Verus proves the
-   canonicalization control flow.
+4. **The Verus proof now names the `FragmentId` ordering trust boundary
+   explicitly.** The sidecar still mirrors the runtime three-way branch
+   structure, but it now imports the real `FragmentId` source definition,
+   introduces a trusted bridge lemma stating that `FragmentId::partial_cmp`
+   satisfies the strict-total-order axioms via a ghost `nat` ranking, and then
+   proves the constructor contract generically over that ordered domain.
+   Runtime tests still pin the concrete lexical-string semantics; the proof
+   does not verify Rust `String` internals directly.
 
 ## Minimal code skeletons (selected)
 
