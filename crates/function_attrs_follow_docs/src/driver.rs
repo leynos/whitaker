@@ -11,7 +11,7 @@ use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
-use whitaker::SharedConfig;
+use whitaker::{SharedConfig, recover_user_editable_hir_span};
 use whitaker_common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
     MessageResolution, get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
@@ -120,6 +120,7 @@ impl FunctionKind {
 
 struct AttrInfo {
     span: Span,
+    user_editable_span: Option<Span>,
     is_doc: bool,
     is_outer: bool,
 }
@@ -163,9 +164,11 @@ impl AttrInfo {
         let is_outer = attr
             .doc_resolution_scope()
             .is_none_or(|style| matches!(style, AttrStyle::Outer));
+        let user_editable_span = recover_user_editable_hir_span(span);
 
         Some(Self {
             span,
+            user_editable_span,
             is_doc,
             is_outer,
         })
@@ -176,8 +179,12 @@ impl AttrInfo {
     /// This normalises the locations so reordered HIR attributes sort by the
     /// original source positions.
     fn source_order_key(&self) -> (rustc_span::BytePos, rustc_span::BytePos) {
-        let span = self.span.source_callsite();
+        let span = self.user_editable_span.unwrap_or(self.span);
         (span.lo(), span.hi())
+    }
+
+    fn user_editable_span(&self) -> Option<Span> {
+        self.user_editable_span
     }
 }
 
@@ -205,12 +212,19 @@ struct FunctionAttributeCheck<'tcx, 'a> {
 }
 
 fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
+    let item_user_editable_span = recover_user_editable_hir_span(check.item_span);
     let mut infos: Vec<AttrInfo> = check
         .attrs
         .iter()
         .filter_map(AttrInfo::try_from_hir)
         .collect();
-    infos.retain(|info| attribute_within_item(info.span(), check.item_span));
+    infos.retain(|info| {
+        attribute_within_item(
+            info.user_editable_span(),
+            item_user_editable_span,
+            check.item_span,
+        )
+    });
     // Attribute macros can reorder attributes in HIR; rely on source order instead.
     infos.sort_by_key(|info| info.source_order_key());
 
@@ -230,15 +244,25 @@ fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
 
 /// Returns true when the attribute span falls within the item span.
 ///
-/// Dummy spans are treated as in-bounds, and callsite spans are used to
-/// normalise macro expansion locations.
-fn attribute_within_item(attribute_span: Span, item_span: Span) -> bool {
-    if item_span.is_dummy() {
+/// Dummy item spans are treated as in-bounds. Attributes with no recoverable
+/// user-editable span are discarded so the lint never compares macro-only glue.
+/// When item-span recovery fails, the raw item span remains the containment
+/// fallback for user-authored items.
+fn attribute_within_item(
+    attribute_span: Option<Span>,
+    item_span: Option<Span>,
+    raw_item_span: Span,
+) -> bool {
+    let Some(attribute_span) = attribute_span else {
+        return false;
+    };
+
+    if raw_item_span.is_dummy() {
         return true;
     }
 
-    let attribute_span = attribute_span.source_callsite();
-    let item_span = item_span.source_callsite();
+    let item_span = item_span.unwrap_or(raw_item_span);
+
     attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi()
 }
 

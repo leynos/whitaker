@@ -413,7 +413,7 @@ Include these sections as appropriate to the decision's complexity:
 
 ### ADR template
 
-```markdown
+```plaintext
 # Architectural decision record (ADR) NNN: <title>
 
 ## Status
@@ -641,7 +641,7 @@ This hierarchy should align with the GIST framework:
 
 ### Roadmap example
 
-```markdown
+```plaintext
 ## 1. Core infrastructure
 
 ### 1.1. Logging subsystem
@@ -660,6 +660,7 @@ This hierarchy should align with the GIST framework:
   - Define role hierarchy. See design-doc.md §4.3.
   - Add RBAC middleware to API endpoints.
   - Write integration tests for permission boundaries.
+
 ```
 
 ### Writing GIST-aligned steps

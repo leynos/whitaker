@@ -7,7 +7,7 @@ use rustc_hir as hir;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
-use whitaker_common::{Attribute, AttributeKind, AttributePath};
+use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
 
 /// Returns the body span for an inline or file-backed module.
 ///
@@ -51,6 +51,59 @@ pub fn has_test_like_hir_attributes(
         .iter()
         .filter_map(attribute_from_hir)
         .any(|attribute| attribute.is_test_like_with(additional))
+}
+
+/// Internal iterator over a `Span` callsite chain.
+///
+/// The walk yields the original span first, then follows `source_callsite()`
+/// while the current span still comes from expansion. It stops when it reaches
+/// a dummy span, a non-expansion span, or a callsite that is dummy or makes no
+/// progress.
+fn walk_span_chain(start: Span) -> impl Iterator<Item = Span> {
+    let mut current = Some(start);
+
+    std::iter::from_fn(move || {
+        let span = current?;
+        if span.is_dummy() {
+            current = None;
+            return None;
+        }
+
+        current = if span.from_expansion() {
+            let next = span.source_callsite();
+            if next.is_dummy() || next == span {
+                None
+            } else {
+                Some(next)
+            }
+        } else {
+            None
+        };
+
+        Some(span)
+    })
+}
+
+/// Collects ordered [`SpanRecoveryFrame`] values for a `rustc_span::Span`.
+///
+/// The first frame is always the original span when it is not dummy. Later
+/// frames follow the `source_callsite()` chain produced by
+/// [`walk_span_chain`], preserving each yielded span together with its
+/// `from_expansion()` state in a [`SpanRecoveryFrame`].
+///
+/// The walk stops when it reaches a dummy span, a user-editable span, or a
+/// `source_callsite()` value that is dummy or makes no further progress.
+#[must_use]
+pub fn span_recovery_frames(span: Span) -> Vec<SpanRecoveryFrame<Span>> {
+    walk_span_chain(span)
+        .map(|current| SpanRecoveryFrame::new(current, current.from_expansion()))
+        .collect()
+}
+
+/// Recovers the first user-editable HIR span from a macro expansion chain.
+#[must_use]
+pub fn recover_user_editable_hir_span(span: Span) -> Option<Span> {
+    walk_span_chain(span).find(|current| !current.from_expansion())
 }
 
 fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
@@ -242,19 +295,4 @@ fn module_has_harness_descriptor<'tcx>(
 }
 
 #[cfg(test)]
-mod tests {
-    //! `collect_rstest_companion_test_functions` depends on a real
-    //! `rustc_lint::LateContext`, which is only available while rustc is
-    //! walking fully lowered HIR for an actual compilation session. The
-    //! helper inspects sibling HIR items, parent-module relationships, and
-    //! harness-generated companion modules, so there is no stable, lightweight
-    //! unit-test seam that can construct the required `LateContext` and HIR in
-    //! isolation inside this crate.
-    //!
-    //! Coverage therefore lives in the no-expect lint's UI/example harness
-    //! regressions, which exercise this detection path end-to-end with real
-    //! rstest expansion output:
-    //! - `crates/no_expect_outside_tests/examples/pass_expect_in_rstest_harness.rs`
-    //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs`
-    //!   (`rstest_example_compiles_under_test_harness`)
-}
+mod tests;

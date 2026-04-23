@@ -298,9 +298,59 @@ ______________________________________________________________________
 
 ### `function_attrs_follow_docs`
 
-Ensures doc comments appear before all other outer attributes on functions.
+<!-- markdownlint-disable-next-line MD024 -->
+#### Purpose
 
-**How to fix:** Move doc comments to appear before other attributes:
+Ensures doc comments appear before other outer attributes on functions,
+methods, and trait methods.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Scope and behaviour
+
+When attributes are generated or reordered by a procedural macro (for example,
+`rstest` or `derive`), the lint recovers the original source span from the
+macro expansion chain. Attributes whose spans cannot be traced back to any
+user-written source location (macro-only glue) are silently excluded from the
+ordering check, so the lint never fires on compiler- or macro-generated code
+that the developer cannot edit.
+
+The lint checks:
+
+- All functions, methods, and trait methods that carry at least one outer
+  attribute — including macro-heavy cases such as `#[rstest]` and `#[test]`.
+
+The lint ignores:
+
+- Attributes whose recovered span is macro-only (for example, inline hints
+  injected by `#[derive(...)]`).
+- Inner attributes (`#![...]`).
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Configuration
+
+`function_attrs_follow_docs` has no configuration knobs.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is allowed
+
+- Doc comments that appear before every other outer attribute on the same
+  function, method, or trait method.
+- Macro-generated attributes whose spans are excluded because they are
+  macro-only.
+- Inner attributes, which are outside the lint's scope.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is denied
+
+- Outer attributes that appear before a doc comment on the same function,
+  method, or trait method.
+- Macro-expanded attributes that recover to a user-editable source span and
+  sort before the doc comment.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### How to fix
+
+Move doc comments so they appear before other outer attributes:
 
 ```rust
 // Wrong
@@ -312,6 +362,27 @@ fn example() {}
 /// This function does something.
 #[inline]
 fn example() {}
+```
+
+With `rstest`, place the doc comment before all attributes, including the test
+annotation:
+
+```rust
+// Wrong
+#[rstest]
+#[case(1, 2, 3)]
+/// Verifies addition.
+fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
+    assert_eq!(a + b, expected);
+}
+
+// Correct
+/// Verifies addition.
+#[rstest]
+#[case(1, 2, 3)]
+fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
+    assert_eq!(a + b, expected);
+}
 ```
 
 ______________________________________________________________________
@@ -348,11 +419,13 @@ ______________________________________________________________________
 
 ### `no_expect_outside_tests`
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Purpose
 
 Detect test attributes correctly so `no_expect_outside_tests` can allow
 `.expect()` in recognized test-only code while still flagging production use.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
 Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
@@ -362,6 +435,7 @@ Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
 setting extends that matching list with project-specific markers, so the lint
 treats those annotated functions as tests too.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 
 ```toml
@@ -397,6 +471,7 @@ fn helper() {
 }
 ```
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### What is allowed
 
 - Default markers such as `#[test]`, `#[::test]`,
@@ -406,12 +481,14 @@ fn helper() {
 - Project-specific markers listed in `additional_test_attributes`, such as
   `#[wasm_bindgen_test]`
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### What is denied
 
 Functions using `.expect()` will still be flagged when their test attribute is
 not in Whitaker's default list and is not listed in
 `additional_test_attributes`.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### How to fix
 
 - Add the missing test marker to `additional_test_attributes` if the function is

@@ -3,10 +3,11 @@
 //! These scenarios exercise `detect_misordered_doc` to ensure doc comments
 //! continue to precede other outer attributes across common layouts.
 
-use super::{OrderedAttribute, detect_misordered_doc};
+use super::{AttrInfo, OrderedAttribute, attribute_within_item, detect_misordered_doc};
 use rstest::fixture;
+use rstest::rstest;
 use rstest_bdd_macros::{given, scenario, then, when};
-use rustc_span::{DUMMY_SP, Span};
+use rustc_span::{BytePos, DUMMY_SP, Span};
 use std::cell::RefCell;
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 
@@ -89,6 +90,86 @@ fn order_ok(result: &Option<(usize, usize)>) {
 #[then("the order is rejected")]
 fn order_rejected(result: &Option<(usize, usize)>) {
     assert!(result.is_some());
+}
+
+fn test_span(lo: u32, hi: u32) -> Span {
+    Span::with_root_ctxt(BytePos(lo), BytePos(hi))
+}
+
+#[rstest]
+fn recovered_user_span_drives_source_ordering() {
+    let original = test_span(100, 110);
+    let recovered = test_span(10, 20);
+    let info = AttrInfo {
+        span: original,
+        user_editable_span: Some(recovered),
+        is_doc: false,
+        is_outer: true,
+    };
+
+    assert_eq!(info.source_order_key(), (recovered.lo(), recovered.hi()));
+}
+
+#[rstest]
+fn macro_only_attributes_are_dropped_from_item_comparison() {
+    let item_span = test_span(10, 40);
+
+    assert!(!attribute_within_item(None, Some(item_span), item_span));
+}
+
+#[rstest]
+fn raw_item_span_bounds_attribute_when_item_recovery_fails() {
+    let raw_item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 20);
+
+    assert!(attribute_within_item(
+        Some(attribute_span),
+        None,
+        raw_item_span,
+    ));
+}
+
+#[rstest]
+fn raw_item_span_rejects_out_of_bounds_attribute_when_item_recovery_fails() {
+    let raw_item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 45);
+
+    assert!(!attribute_within_item(
+        Some(attribute_span),
+        None,
+        raw_item_span,
+    ));
+}
+
+#[rstest]
+fn recovered_attribute_spans_stay_in_item_bounds() {
+    let item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 20);
+
+    assert!(attribute_within_item(
+        Some(attribute_span),
+        Some(item_span),
+        item_span
+    ));
+}
+
+#[rstest]
+fn dummy_item_spans_accept_recovered_attributes() {
+    let attribute_span = test_span(12, 20);
+
+    assert!(attribute_within_item(Some(attribute_span), None, DUMMY_SP));
+}
+
+#[rstest]
+fn recovered_attribute_spans_outside_item_are_rejected() {
+    let item_span = test_span(10, 40);
+    let attribute_span = test_span(12, 45);
+
+    assert!(!attribute_within_item(
+        Some(attribute_span),
+        Some(item_span),
+        item_span
+    ));
 }
 
 #[scenario(path = "tests/features/function_doc_order.feature", index = 0)]

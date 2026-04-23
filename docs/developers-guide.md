@@ -770,6 +770,83 @@ To add a new scenario:
   `DependencyBinaryInstaller` with configurable success or failure behaviour
   for scenario isolation.
 
+## Shared span recovery helpers
+
+Whitaker provides reusable, macro-aware span recovery utilities split across
+two layers.
+
+### Policy layer — `whitaker-common`
+
+`whitaker_common::rstest` exports a pure, `rustc`-independent policy:
+
+The following table lists the reusable policy symbols exported from
+`whitaker_common::rstest`.
+
+| Symbol                                                        | Description                                                                                                                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SpanRecoveryFrame<T>`                                        | A single frame in an ordered span chain, carrying the frame value and a `from_expansion: bool` flag.                                                        |
+| `UserEditableSpan<T>`                                         | Enum result: `Direct(T)` — first frame is user-editable; `Recovered(T)` — a later frame is user-editable; `MacroOnly` — no user-editable frame found.       |
+| `recover_user_editable_span(frames: &[SpanRecoveryFrame<T>])` | Scans the ordered frame chain and returns the first non-expansion frame as `Direct` or `Recovered`.                                                         |
+
+The policy layer has no dependency on `rustc_span` and can be unit-tested with
+any `Clone + PartialEq` span type (e.g., `miette::SourceSpan`).
+
+### Adapter layer — `whitaker` (feature `dylint-driver`)
+
+`whitaker::hir` provides a thin adapter over `rustc_span::Span`:
+
+The following table lists the `whitaker::hir` adapter functions that bridge
+from `rustc_span::Span` into the shared recovery policy.
+
+| Symbol                                                             | Description                                                                                                                                                   |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `span_recovery_frames(span: Span) -> Vec<SpanRecoveryFrame<Span>>` | Walks `source_callsite()` from `span`, building an ordered frame list. Stops on dummy spans, non-expansion frames, or when the walk makes no progress.        |
+| `recover_user_editable_hir_span(span: Span) -> Option<Span>`       | Calls `span_recovery_frames` then delegates to `recover_user_editable_span`, returning the inner value of `Direct` or `Recovered`, or `None` for `MacroOnly`. |
+
+Both functions are re-exported from `whitaker` under
+`#[cfg(feature = "dylint-driver")]`.
+
+### Consuming the helpers in a lint
+
+```rust
+use whitaker::recover_user_editable_hir_span;
+
+// Recover a user-editable span for an attribute.
+let user_span: Option<Span> = recover_user_editable_hir_span(attr.span);
+
+// Discard macro-only glue — the user has no source location to edit.
+if user_span.is_none() {
+    return;
+}
+```
+
+Use `recover_user_editable_hir_span` for both attribute spans and item spans.
+When the item span itself is macro-only, treat any attribute comparison on that
+item as vacuously in-bounds rather than emitting a spurious diagnostic.
+
+### Extending the policy
+
+To handle a new `T` (e.g., a custom span type in a test harness):
+
+1. Implement `Clone` on `T`.
+2. Construct `SpanRecoveryFrame<T>` values with
+   `SpanRecoveryFrame::new(value, from_expansion)`.
+3. Pass the ordered slice to `recover_user_editable_span`.
+
+No adapter code is needed unless `T` is `rustc_span::Span`.
+
+### Test coverage
+
+- **Unit tests** for the pure policy live in `common/src/rstest/tests.rs`.
+- **BDD scenarios** live in
+  `common/tests/rstest_span_recovery_behaviour.rs` and are driven by
+  `common/tests/features/rstest_span_recovery.feature`.
+- **Adapter tests** for `span_recovery_frames` and
+  `recover_user_editable_hir_span` live in `src/hir/tests.rs`, loaded by
+  `src/hir/mod.rs` under `#[cfg(test)]`.
+- **Integration tests** for the first consumer are in
+  `crates/function_attrs_follow_docs/src/tests/order_detection.rs`.
+
 ## Regression infrastructure
 
 Two recent regression families rely on infrastructure that is easy to miss when
