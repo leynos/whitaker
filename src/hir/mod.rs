@@ -294,4 +294,5 @@ fn module_has_harness_descriptor<'tcx>(
         })
 }
 
+#[cfg(test)]
 mod tests;
