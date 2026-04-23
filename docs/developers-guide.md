@@ -820,6 +820,30 @@ not just the immediately enclosing function.
 - `summarise_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
 
+Real `rstest` case expansion adds a second `--test` harness shape that the
+attribute and direct sibling-descriptor paths do not see. For parameterized
+cases, `rustc` lowers the user-written function into ordinary HIR and emits a
+same-named sibling module that contains the synthesized harness functions plus
+their `const` descriptors. The shared root HIR helper
+`collect_rstest_companion_test_functions()` in `src/hir.rs` extends the
+existing `collect_harness_test_functions()` pass to catch that shape before
+`no_expect_outside_tests` evaluates call-site context.
+
+This helper is architecturally significant for two reasons:
+
+- It keeps compiler-lowering knowledge in the shared HIR module rather than in
+  lint-specific ancestry logic, so other lints can reuse the same test-harness
+  discovery rules if they need them later.
+- It only marks a function when a same-named sibling module in the same module
+  scope contains a real harness descriptor, which prevents arbitrary const-only
+  companion modules from inheriting test status accidentally.
+
+The implementation walks each module group recursively, checks function items
+against same-named sibling modules, and then inspects the module contents for
+the usual function-plus-`const` harness descriptor pairing. That split lets the
+lint treat rstest companion modules as an extension of the existing `--test`
+harness model instead of a separate policy path.
+
 ### UI test harness helpers (`lib_ui_tests.rs`)
 
 `crates/no_expect_outside_tests/src/lib_ui_tests.rs` provides the
