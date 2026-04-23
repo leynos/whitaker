@@ -168,7 +168,8 @@ fn install_components_with_additional_components_assembles_rustup_args_in_order(
 #[test]
 fn install_components_with_failure_reports_all_components() {
     let toolchain = test_toolchain("nightly-2025-09-18");
-    let runner = CapturingCommandRunner::new(output_with_stderr(1, "component failed"));
+    let runner =
+        CapturingCommandRunner::new(output_with_stderr(1, COMPONENT_INSTALL_FAILURE_MESSAGE));
     let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
     let expected_component_list = expected_components.join(", ");
 
