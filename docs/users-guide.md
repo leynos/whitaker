@@ -597,19 +597,22 @@ allow_in_main = true
 - Panicking `unwrap_or_else` fallbacks inside doctests
 - Panicking `unwrap_or_else` fallbacks inside `main` when
   `allow_in_main = true`
-- `unwrap_or_else(|| panic!("value was {:?}", value))` inside test code when
-  the closure interpolates a runtime value into the panic message
+- `unwrap_or_else(|| panic!("value was {:?}", value))` inside test code only
+  when the closure uses interpolation and does not also include a plain static
+  panic message
 - Non-panicking `unwrap_or_else` fallbacks
 
 **What is denied:**
 
-- `unwrap_or_else(|| panic!(..))`
-- `unwrap_or_else(|| panic!("static message"))` inside tests when the closure
-  does not interpolate a runtime value; use `.expect("static message")` instead
+- `unwrap_or_else(|| panic!(..))` outside doctests, except for test-only
+  closures whose panic path is interpolation-only
+- `unwrap_or_else(|| panic!("static message"))` inside tests; plain static
+  panic messages are still denied, so use `.expect("static message")` instead
 - `unwrap_or_else(|| value.unwrap())`
 
 **How to fix:** Propagate errors with `?` or use `.expect()` with a clear
 message if a panic is truly intended. In tests, replace
 `unwrap_or_else(|| panic!("msg"))` with `.expect("msg")` for clarity and
-brevity unless the closure needs to interpolate runtime state for a more useful
-diagnostic.
+brevity. Keep `unwrap_or_else(|| panic!(...))` only when the panic needs to
+interpolate runtime state into the message; static panic strings are still
+denied in test code.
