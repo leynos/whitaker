@@ -770,7 +770,7 @@ To add a new scenario:
   `DependencyBinaryInstaller` with configurable success or failure behaviour
   for scenario isolation.
 
-## Shared Span Recovery Helpers
+## Shared span recovery helpers
 
 Whitaker provides reusable, macro-aware span recovery utilities split across
 two layers.
@@ -778,6 +778,9 @@ two layers.
 ### Policy layer — `whitaker-common`
 
 `whitaker_common::rstest` exports a pure, `rustc`-independent policy:
+
+The following table lists the reusable policy symbols exported from
+`whitaker_common::rstest`.
 
 | Symbol                                                        | Description                                                                                                                                                 |
 | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -791,6 +794,9 @@ any `Clone + PartialEq` span type (e.g., `miette::SourceSpan`).
 ### Adapter layer — `whitaker` (feature `dylint-driver`)
 
 `whitaker::hir` provides a thin adapter over `rustc_span::Span`:
+
+The following table lists the `whitaker::hir` adapter functions that bridge
+from `rustc_span::Span` into the shared recovery policy.
 
 | Symbol                                                             | Description                                                                                                                                                   |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -836,7 +842,8 @@ No adapter code is needed unless `T` is `rustc_span::Span`.
   `common/tests/rstest_span_recovery_behaviour.rs` and are driven by
   `common/tests/features/rstest_span_recovery.feature`.
 - **Adapter tests** for `span_recovery_frames` and
-  `recover_user_editable_hir_span` live in `src/hir.rs` under `#[cfg(test)]`.
+  `recover_user_editable_hir_span` live in `src/hir/tests.rs`, loaded by
+  `src/hir/mod.rs` under `#[cfg(test)]`.
 - **Integration tests** for the first consumer are in
   `crates/function_attrs_follow_docs/src/tests/order_detection.rs`.
 

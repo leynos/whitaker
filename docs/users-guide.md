@@ -298,12 +298,14 @@ ______________________________________________________________________
 
 ### `function_attrs_follow_docs`
 
-#### Purpose for `function_attrs_follow_docs`
+<!-- markdownlint-disable-next-line MD024 -->
+#### Purpose
 
 Ensures doc comments appear before other outer attributes on functions,
 methods, and trait methods.
 
-#### Scope and behaviour for `function_attrs_follow_docs`
+<!-- markdownlint-disable-next-line MD024 -->
+#### Scope and behaviour
 
 When attributes are generated or reordered by a procedural macro (for example
 `rstest` or `derive`), the lint recovers the original source span from the
@@ -323,11 +325,13 @@ The lint ignores:
   injected by `#[derive(...)]`).
 - Inner attributes (`#![...]`).
 
-#### Configuration for `function_attrs_follow_docs`
+<!-- markdownlint-disable-next-line MD024 -->
+#### Configuration
 
 `function_attrs_follow_docs` has no configuration knobs.
 
-#### What is allowed for `function_attrs_follow_docs`
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is allowed
 
 - Doc comments that appear before every other outer attribute on the same
   function, method, or trait method.
@@ -335,14 +339,16 @@ The lint ignores:
   macro-only.
 - Inner attributes, which are outside the lint's scope.
 
-#### What is denied for `function_attrs_follow_docs`
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is denied
 
 - Outer attributes that appear before a doc comment on the same function,
   method, or trait method.
 - Macro-expanded attributes that recover to a user-editable source span and
   sort before the doc comment.
 
-#### How to fix for `function_attrs_follow_docs`
+<!-- markdownlint-disable-next-line MD024 -->
+#### How to fix
 
 Move doc comments so they appear before other outer attributes:
 
@@ -413,11 +419,13 @@ ______________________________________________________________________
 
 ### `no_expect_outside_tests`
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Purpose
 
 Detect test attributes correctly so `no_expect_outside_tests` can allow
 `.expect()` in recognized test-only code while still flagging production use.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
 Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
@@ -427,6 +435,7 @@ Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
 setting extends that matching list with project-specific markers, so the lint
 treats those annotated functions as tests too.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 
 ```toml
@@ -462,6 +471,7 @@ fn helper() {
 }
 ```
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### What is allowed
 
 - Default markers such as `#[test]`, `#[::test]`,
@@ -471,12 +481,14 @@ fn helper() {
 - Project-specific markers listed in `additional_test_attributes`, such as
   `#[wasm_bindgen_test]`
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### What is denied
 
 Functions using `.expect()` will still be flagged when their test attribute is
 not in Whitaker's default list and is not listed in
 `additional_test_attributes`.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### How to fix
 
 - Add the missing test marker to `additional_test_attributes` if the function is

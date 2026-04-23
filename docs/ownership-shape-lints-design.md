@@ -1,15 +1,15 @@
 # Ownership shape lints design for value clones and local shared ownership
 
 Status: Proposed Scope: ownership-shape lints for Phase 9. Primary audience:
-Whitaker contributors and lint implementers. Review tags:
+Whitaker contributors and lint implementers.
 
-- "[type:docstyle]"
+Triage: `type:syntax/md` `type:docstyle`
 
 Precedent documents:
 
-- "[Whitaker Dylint suite design](whitaker-dylint-suite-design.md)"
-- "[Brain trust lints design](brain-trust-lints-design.md)"
-- "[Roadmap](roadmap.md)"
+- [Whitaker Dylint suite design](whitaker-dylint-suite-design.md)
+- [Brain trust lints design](brain-trust-lints-design.md)
+- [Roadmap](roadmap.md)
 
 ## 1. Purpose and scope
 

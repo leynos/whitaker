@@ -1,4 +1,13 @@
-//! Shared helpers for strict `rstest` test, fixture, and parameter detection.
+//! Shared helpers for strict `rstest` detection, parameter analysis, and span
+//! recovery.
+//!
+//! The module exports detection helpers such as [`ExpansionTrace`],
+//! [`RstestDetectionOptions`], [`is_rstest_fixture`], and [`is_rstest_test`];
+//! parameter helpers such as [`ParameterBinding`], [`RstestParameter`],
+//! [`RstestParameterKind`], [`classify_rstest_parameter`], and
+//! [`fixture_local_names`]; and span-recovery helpers such as
+//! [`SpanRecoveryFrame`], [`UserEditableSpan`], and
+//! [`recover_user_editable_span`].
 
 mod detection;
 mod parameter;
