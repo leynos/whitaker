@@ -239,6 +239,8 @@ pub(super) fn assert_failure_error(
 mod tests {
     use super::*;
     use crate::toolchain::tests::test_helpers::test_toolchain;
+    use rstest::rstest;
+    use std::panic::{self, AssertUnwindSafe};
 
     #[test]
     fn component_failure_match_rejects_superstring_messages() {
@@ -294,55 +296,68 @@ mod tests {
         );
     }
 
-    #[test]
-    #[should_panic(
-        expected = "ToolchainInstallFailed for channel nightly-2025-09-18 while exercising toolchain installation failure"
-    )]
-    fn assert_failure_error_panics_with_channel_and_failure_summary_for_install_mismatch() {
-        assert_failure_error(
-            InstallerError::ToolchainNotInstalled {
-                toolchain: "nightly-2025-09-18".to_owned(),
-            },
-            ToolchainChannel("nightly-2025-09-18"),
-            FailureSetup {
-                failure: InstallFailure::ToolchainInstall,
-                additional_components: &[],
-            },
-        );
+    fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+        if let Some(message) = payload.downcast_ref::<String>() {
+            return message.clone();
+        }
+
+        if let Some(message) = payload.downcast_ref::<&str>() {
+            return (*message).to_owned();
+        }
+
+        "non-string panic payload".to_owned()
     }
 
-    #[test]
-    #[should_panic(
-        expected = "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure for rust-src, rustc-dev, llvm-tools-preview, rustc-codegen-cranelift"
+    #[rstest]
+    #[case(
+        "ToolchainInstallFailed for channel nightly-2025-09-18 while exercising toolchain installation failure",
+        InstallerError::ToolchainNotInstalled {
+            toolchain: "nightly-2025-09-18".to_owned(),
+        },
+        ToolchainChannel("nightly-2025-09-18"),
+        FailureSetup {
+            failure: InstallFailure::ToolchainInstall,
+            additional_components: &[],
+        },
     )]
-    fn assert_failure_error_panics_with_channel_and_failure_summary_for_component_mismatch() {
-        assert_failure_error(
-            InstallerError::ToolchainNotInstalled {
-                toolchain: "nightly-2025-09-18".to_owned(),
-            },
-            ToolchainChannel("nightly-2025-09-18"),
-            FailureSetup {
-                failure: InstallFailure::ComponentAdd,
-                additional_components: &[CRANELIFT_COMPONENT],
-            },
-        );
-    }
+    #[case(
+        "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure for rust-src, rustc-dev, llvm-tools-preview, rustc-codegen-cranelift",
+        InstallerError::ToolchainNotInstalled {
+            toolchain: "nightly-2025-09-18".to_owned(),
+        },
+        ToolchainChannel("nightly-2025-09-18"),
+        FailureSetup {
+            failure: InstallFailure::ComponentAdd,
+            additional_components: &[CRANELIFT_COMPONENT],
+        },
+    )]
+    #[case(
+        "ToolchainNotInstalled for channel nightly-2025-09-18 while exercising toolchain unusable after installation",
+        InstallerError::ToolchainInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
+        },
+        ToolchainChannel("nightly-2025-09-18"),
+        FailureSetup {
+            failure: InstallFailure::ToolchainUnusableAfterInstall,
+            additional_components: &[],
+        },
+    )]
+    fn assert_failure_error_panics_with_various_channels_and_summaries(
+        #[case] expected_message: &str,
+        #[case] installer_error: InstallerError,
+        #[case] channel: ToolchainChannel<'_>,
+        #[case] failure_setup: FailureSetup<'_>,
+    ) {
+        let panic_payload = panic::catch_unwind(AssertUnwindSafe(|| {
+            assert_failure_error(installer_error, channel, failure_setup);
+        }))
+        .expect_err("assert_failure_error should panic for mismatched installer errors");
 
-    #[test]
-    #[should_panic(
-        expected = "ToolchainNotInstalled for channel nightly-2025-09-18 while exercising toolchain unusable after installation"
-    )]
-    fn assert_failure_error_panics_with_channel_and_failure_summary_for_unusable_mismatch() {
-        assert_failure_error(
-            InstallerError::ToolchainInstallFailed {
-                toolchain: "nightly-2025-09-18".to_owned(),
-                message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
-            },
-            ToolchainChannel("nightly-2025-09-18"),
-            FailureSetup {
-                failure: InstallFailure::ToolchainUnusableAfterInstall,
-                additional_components: &[],
-            },
+        let message = panic_message(panic_payload);
+        assert!(
+            message.contains(expected_message),
+            "expected panic containing '{expected_message}', got '{message}'"
         );
     }
 }
