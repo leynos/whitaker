@@ -599,21 +599,23 @@ allow_in_main = true
   `allow_in_main = true`
 - `unwrap_or_else(|| panic!("value was {:?}", value))` inside test code when
   the closure interpolates a runtime value into the panic message
-- `unwrap_or_else(|| panic!("static message"))` inside tests when a
-  test-specific exception allows a static message, though
-  `.expect("static message")` remains clearer
 - Non-panicking `unwrap_or_else` fallbacks
 
 **What is denied:**
 
-- `unwrap_or_else(|| panic!(..))` only when the `panic!` message interpolates
-  runtime values
+- `unwrap_or_else(|| panic!(..))` outside tests, subject to the standard
+  denial
+- `unwrap_or_else(|| panic!(..))` in tests unless the `panic!` message
+  interpolates runtime values
+- `unwrap_or_else(|| panic!("static message"))` in tests; use
+  `.expect("static message")` instead
 - `unwrap_or_else(|| value.unwrap())`
 
 **How to fix:** Propagate errors with `?` or use `.expect()` with a clear
 message if a panic is truly intended. In tests, replace
 `unwrap_or_else(|| panic!("msg"))` with `.expect("msg")` for clarity and
 brevity, unless the closure needs to interpolate runtime state for a more
-useful diagnostic. When the closure contains a static string literal in tests,
-prefer `.expect("static message")`; a static `panic!` fallback is only for the
-documented test-specific exception.
+useful diagnostic. The rule denies only closures whose `panic!` message does
+not meet the interpolated-only test exception. When the closure contains a
+static string literal in tests, prefer `.expect("static message")`; only
+interpolated-only `panic!` fallbacks are permitted there.
