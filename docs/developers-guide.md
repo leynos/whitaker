@@ -150,7 +150,7 @@ let setup = FailureSetup {
     additional_components: &["rustfmt"],
 };
 setup_failure_mocks(&mut runner, &mut seq, channel, setup);
-let err = ensure_installed_with(&toolchain, &mut runner)
+let err = toolchain.ensure_installed_with(&mut runner, setup.additional_components)
     .expect_err("component-add scenario should fail");
 assert_failure_error(err, channel, setup);
 ```
