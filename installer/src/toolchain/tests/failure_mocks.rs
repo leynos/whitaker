@@ -238,6 +238,7 @@ pub(super) fn assert_failure_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::toolchain::tests::test_helpers::test_toolchain;
 
     #[test]
     fn component_failure_match_rejects_superstring_messages() {
@@ -266,6 +267,82 @@ mod tests {
                 "component installation failure for {}",
                 expected_components(&[CRANELIFT_COMPONENT])
             )
+        );
+    }
+
+    #[test]
+    fn setup_component_add_failure_mocks_inner_drives_component_failure_in_isolation() {
+        let channel = "nightly-2025-09-18";
+        let toolchain = test_toolchain(channel);
+        let mut runner = MockCommandRunner::new();
+        let mut seq = mockall::Sequence::new();
+
+        setup_component_add_failure_mocks_inner(
+            &mut runner,
+            &mut seq,
+            channel,
+            &[CRANELIFT_COMPONENT],
+        );
+
+        let err = toolchain
+            .ensure_installed_with(&runner, &[CRANELIFT_COMPONENT])
+            .expect_err("component-add mock should force installation failure");
+
+        assert!(
+            is_component_install_failed(&err, channel, &[CRANELIFT_COMPONENT]),
+            "direct component-add helper should yield the expected component failure, got {err:?}"
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ToolchainInstallFailed for channel nightly-2025-09-18 while exercising toolchain installation failure"
+    )]
+    fn assert_failure_error_panics_with_channel_and_failure_summary_for_install_mismatch() {
+        assert_failure_error(
+            InstallerError::ToolchainNotInstalled {
+                toolchain: "nightly-2025-09-18".to_owned(),
+            },
+            ToolchainChannel("nightly-2025-09-18"),
+            FailureSetup {
+                failure: InstallFailure::ToolchainInstall,
+                additional_components: &[],
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure for rust-src, rustc-dev, llvm-tools-preview, rustc-codegen-cranelift"
+    )]
+    fn assert_failure_error_panics_with_channel_and_failure_summary_for_component_mismatch() {
+        assert_failure_error(
+            InstallerError::ToolchainNotInstalled {
+                toolchain: "nightly-2025-09-18".to_owned(),
+            },
+            ToolchainChannel("nightly-2025-09-18"),
+            FailureSetup {
+                failure: InstallFailure::ComponentAdd,
+                additional_components: &[CRANELIFT_COMPONENT],
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ToolchainNotInstalled for channel nightly-2025-09-18 while exercising toolchain unusable after installation"
+    )]
+    fn assert_failure_error_panics_with_channel_and_failure_summary_for_unusable_mismatch() {
+        assert_failure_error(
+            InstallerError::ToolchainInstallFailed {
+                toolchain: "nightly-2025-09-18".to_owned(),
+                message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
+            },
+            ToolchainChannel("nightly-2025-09-18"),
+            FailureSetup {
+                failure: InstallFailure::ToolchainUnusableAfterInstall,
+                additional_components: &[],
+            },
         );
     }
 }
