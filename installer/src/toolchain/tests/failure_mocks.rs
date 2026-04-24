@@ -6,6 +6,8 @@ use crate::toolchain::tests::test_helpers::{
     matches_multi_component_add, output_with_status, output_with_stderr,
 };
 
+pub(super) const COMPONENT_INSTALL_FAILURE_MESSAGE: &str = "component failed";
+
 /// Describes the type of installation failure being tested.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum InstallFailure {
@@ -61,7 +63,7 @@ fn setup_component_add_failure_mocks_inner(
         .withf(matches_multi_component_add(channel, &components))
         .times(1)
         .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+        .returning(|_, _| Ok(output_with_stderr(1, COMPONENT_INSTALL_FAILURE_MESSAGE)));
 }
 
 fn setup_toolchain_unusable_failure_mocks(
@@ -152,7 +154,9 @@ fn is_component_install_failed(
     if toolchain != channel {
         return false;
     }
-    toolchain == channel && components == &expected && message.contains("component failed")
+    toolchain == channel
+        && components == &expected
+        && message.contains(COMPONENT_INSTALL_FAILURE_MESSAGE)
 }
 
 pub(super) fn assert_failure_error(
