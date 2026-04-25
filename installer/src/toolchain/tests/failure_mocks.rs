@@ -297,15 +297,15 @@ mod tests {
     }
 
     fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
-        if let Some(message) = payload.downcast_ref::<String>() {
-            return message.clone();
-        }
-
-        if let Some(message) = payload.downcast_ref::<&str>() {
-            return (*message).to_owned();
-        }
-
-        "non-string panic payload".to_owned()
+        payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| {
+                payload
+                    .downcast_ref::<&str>()
+                    .map(|message| (*message).to_owned())
+            })
+            .unwrap_or_else(|| "non-string panic payload".to_owned())
     }
 
     #[rstest]
