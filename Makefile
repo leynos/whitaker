@@ -147,6 +147,9 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 
 release-installer-dry-run: ## Build and package the host-platform installer archive
 	set -eu; \
+	for tool in awk jq mktemp python rustc; do \
+		command -v "$$tool" >/dev/null || { echo "Install $$tool to run release-installer-dry-run"; exit 1; }; \
+	done; \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}'); \

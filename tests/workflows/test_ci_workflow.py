@@ -56,6 +56,21 @@ def _step_names(job: Mapping[str, Any]) -> list[str]:
     return names
 
 
+def _assert_steps_in_order(
+    step_names: list[str],
+    required_steps: list[str],
+    message: str,
+) -> None:
+    """Assert that the required workflow steps appear in order."""
+    search_from = 0
+    for required_step in required_steps:
+        try:
+            step_index = step_names.index(required_step, search_from)
+        except ValueError:
+            pytest.fail(message)
+        search_from = step_index + 1
+
+
 def _find_step(job: Mapping[str, Any], name: str) -> dict[str, Any]:
     """Return a named workflow step from the job mapping."""
     match job.get("steps"):
@@ -121,6 +136,12 @@ def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope() -> None:
     assert str(env.get("CARGO_INCREMENTAL")) == "0", (
         "CI must disable incremental Cargo builds when relying on sccache"
     )
+    assert env.get("RUSTFLAGS") == "-D warnings", (
+        "CI must treat all Rust compiler warnings as errors via RUSTFLAGS"
+    )
+    assert env.get("RUSTDOCFLAGS") == "-D warnings", (
+        "CI must treat all rustdoc warnings as errors via RUSTDOCFLAGS"
+    )
 
 
 def test_linux_full_keeps_the_full_linux_validation_stack() -> None:
@@ -129,10 +150,55 @@ def test_linux_full_keeps_the_full_linux_validation_stack() -> None:
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
     linux_job = _get_mapping_item(jobs, "linux-full", parent_name="CI workflow jobs")
 
-    assert _step_names(linux_job) == [
-        "Checkout",
-        "Setup Rust",
-        "Install cargo-nextest",
+    _assert_steps_in_order(
+        _step_names(linux_job),
+        [
+            "Check formatting",
+            "Nixie",
+            "Markdown lint",
+            "Lint",
+            "Publish dry run",
+        ],
+        (
+            "linux-full must remain the only CI lane that runs format, Mermaid, "
+            "Nixie, Markdown lint, Clippy/doc linting, and publish-check"
+        ),
+    )
+
+    assert (
+        _find_step(linux_job, "Publish dry run").get("run") == "make publish-check"
+    ), (
+        "linux-full must keep publish-check on Linux only"
+    )
+
+
+def test_windows_compat_stays_limited_to_windows_compatibility_checks() -> None:
+    """Ensure Windows validates installer behaviour without Linux-only work."""
+    workflow = _load_workflow_mapping()
+    jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
+    windows_job = _get_mapping_item(
+        jobs,
+        "windows-compat",
+        parent_name="CI workflow jobs",
+    )
+
+    step_names = _step_names(windows_job)
+    _assert_steps_in_order(
+        step_names,
+        [
+            "Setup Rust",
+            "Install cargo-nextest",
+            "Test",
+            "Installer release dry run",
+            "Show sccache stats",
+        ],
+        (
+            "windows-compat must stay focused on Rust tests, installer release "
+            "validation, and cache diagnostics"
+        ),
+    )
+
+    linux_only_steps = {
         "Check formatting",
         "Install bun",
         "Install Mermaid CLI",
@@ -142,39 +208,14 @@ def test_linux_full_keeps_the_full_linux_validation_stack() -> None:
         "Markdown lint",
         "Lint",
         "Publish dry run",
-    ], (
-        "linux-full must remain the only CI lane that runs format, Mermaid, "
-        "Nixie, Markdown lint, Clippy/doc linting, and publish-check"
+    }
+    assert linux_only_steps.isdisjoint(step_names), (
+        "windows-compat must not duplicate Linux-only validation work"
     )
 
-    assert _find_step(linux_job, "Publish dry run").get("run") == "make publish-check", (
-        "linux-full must keep publish-check on Linux only"
-    )
-
-
-def test_windows_compat_stays_limited_to_windows_compatibility_checks() -> None:
-    """Ensure Windows validates build and installer behaviour without Linux-only work."""
-    workflow = _load_workflow_mapping()
-    jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
-    windows_job = _get_mapping_item(
-        jobs,
-        "windows-compat",
-        parent_name="CI workflow jobs",
-    )
-
-    assert _step_names(windows_job) == [
-        "Checkout",
-        "Setup Rust",
-        "Install cargo-nextest",
-        "Test",
-        "Installer release dry run",
-        "Show sccache stats",
-    ], (
-        "windows-compat must stay focused on Rust tests, installer release "
-        "validation, and cache diagnostics"
-    )
-
-    assert _find_step(windows_job, "Test").get("run") == "make test NEXTEST_PROFILE=ci", (
+    assert (
+        _find_step(windows_job, "Test").get("run") == "make test NEXTEST_PROFILE=ci"
+    ), (
         "windows-compat must run the full CI test profile on Windows"
     )
     assert _find_step(windows_job, "Installer release dry run").get("run") == (

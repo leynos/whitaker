@@ -123,7 +123,9 @@ Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
 `windows-compat` is a narrower compatibility lane that runs
 `make test NEXTEST_PROFILE=ci` and `make release-installer-dry-run` to prove
 the workspace still builds on Windows and that the Windows installer release
-packaging path stays valid.
+packaging path stays valid. The release dry-run target is a POSIX-shell target;
+Windows CI runs it under Bash and requires the same command-line tools as local
+POSIX environments.
 
 Table: Test profiles and typical usage.
 

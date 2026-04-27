@@ -43,7 +43,10 @@ make release-installer-dry-run
 
 This target builds the installer, invokes `whitaker-package-installer`, and
 generates checksums for the resulting archive so release packaging issues are
-caught before tagging or publishing.
+caught before tagging or publishing. It is a POSIX-shell target and checks for
+the required `awk`, `jq`, `mktemp`, `python`, and `rustc` commands before doing
+build work. On Windows, run it from an environment that provides those tools,
+such as the Bash shell used by CI.
 
 ## Dry run
 
