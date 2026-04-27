@@ -9,15 +9,23 @@ use crate::toolchain::tests::test_helpers::{
 /// Describes the type of installation failure being tested.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum InstallFailure {
+    /// `rustup toolchain install` exits unsuccessfully before components are
+    /// added.
     ToolchainInstall,
+    /// `rustup component add` exits unsuccessfully for the required components,
+    /// plus any additional components requested by the test.
     ComponentAdd,
+    /// `rustup toolchain install` succeeds, but the installed toolchain remains
+    /// unusable when `rustc --version` is checked afterwards.
     ToolchainUnusableAfterInstall,
 }
 
 /// Bundles the failure mode with any extra components requested for the test.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FailureSetup<'a> {
+    /// The failure branch that the mocks should exercise.
     pub(super) failure: InstallFailure,
+    /// Extra `rustup` components expected alongside the required components.
     pub(super) additional_components: &'a [&'a str],
 }
 
@@ -192,9 +200,13 @@ fn is_component_install_failed(
 /// Asserts that `err` is the `InstallerError` variant expected for `setup.failure`
 /// on toolchain `channel`.
 ///
+/// For `ComponentAdd`, also verifies the reported component list includes the
+/// required components plus any in `setup.additional_components`.
+///
+/// # Panics
+///
 /// Panics with a descriptive message if the error variant or its fields do not
-/// match expectations. For `ComponentAdd`, also verifies the reported component
-/// list includes the required components plus any in `setup.additional_components`.
+/// match expectations.
 pub(super) fn assert_failure_error(
     err: InstallerError,
     channel: ToolchainChannel<'_>,
