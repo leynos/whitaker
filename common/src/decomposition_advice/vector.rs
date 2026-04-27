@@ -120,6 +120,7 @@ impl MethodFeatureVector {
 /// assert!(vector.weights().is_empty());
 /// assert!(vector.metadata().is_empty());
 /// ```
+#[cfg(any(test, kani))]
 pub(crate) fn minimal_feature_vector(method_name: &str) -> MethodFeatureVector {
     MethodFeatureVector {
         method_name: method_name.to_owned(),

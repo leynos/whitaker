@@ -1,11 +1,11 @@
 //! Observable label-propagation seams for decomposition advice tests.
 
 use crate::decomposition_advice::{
+    MethodProfileBuilder, build_feature_vector,
     community::{
         LabelPropagationReport as RuntimeLabelPropagationReport,
         propagate_labels_report as runtime_propagate_labels_report,
     },
-    minimal_feature_vector,
 };
 
 use super::adjacency::{AdjacencyError, EdgeInput, validate_edges};
@@ -92,7 +92,7 @@ pub fn label_propagation_report(
     );
     let vectors = method_names
         .iter()
-        .map(|method_name| minimal_feature_vector(method_name))
+        .map(|method_name| build_feature_vector(&MethodProfileBuilder::new(*method_name).build()))
         .collect::<Vec<_>>();
     let has_active_nodes = adjacency.iter().any(|neighbours| !neighbours.is_empty());
     let runtime = runtime_propagate_labels_report(&vectors, &adjacency, max_iterations);

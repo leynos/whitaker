@@ -78,7 +78,14 @@ pub(crate) fn detect_communities(vectors: &[MethodFeatureVector]) -> Vec<Vec<usi
     let edges = build_similarity_edges(vectors);
     let adjacency = build_adjacency(vectors.len(), &edges);
     let max_iterations = vectors.len().saturating_mul(2).max(1);
-    let labels = propagate_labels(vectors, &adjacency, max_iterations);
+    let report = propagate_labels_report(vectors, &adjacency, max_iterations);
+    log::debug!(
+        "label propagation complete: nodes={}, iterations={}, converged={}",
+        vectors.len(),
+        report.iteration_count,
+        report.iteration_count < max_iterations,
+    );
+    let labels = report.labels;
 
     let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
     for (node, label) in labels.into_iter().enumerate() {
@@ -146,6 +153,10 @@ pub(crate) fn build_adjacency(
 /// of active-node passes. This convenience wrapper delegates to
 /// [`propagate_labels_report`] and returns only the final label vector; callers
 /// that need the executed pass count should use [`propagate_labels_report`].
+#[expect(
+    dead_code,
+    reason = "kept as a final-label convenience seam for direct tests and Kani harnesses"
+)]
 pub(crate) fn propagate_labels(
     vectors: &[MethodFeatureVector],
     adjacency: &[Vec<(usize, u64)>],

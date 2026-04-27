@@ -5,7 +5,8 @@ use rstest::{fixture, rstest};
 use crate::decomposition_advice::community::{
     SimilarityEdge, build_adjacency, propagate_labels_report,
 };
-use crate::decomposition_advice::vector::{MethodFeatureVector, minimal_feature_vector};
+use crate::decomposition_advice::minimal_feature_vector;
+use crate::decomposition_advice::vector::MethodFeatureVector;
 
 fn vectors(method_names: &[&str]) -> Vec<MethodFeatureVector> {
     method_names
@@ -156,6 +157,27 @@ fn propagate_labels_uses_lexical_tie_break_for_equal_scores(
     lexical_tie_adjacency: Vec<Vec<(usize, u64)>>,
 ) {
     let report = propagate_labels_report(&lexical_tie_vectors, &lexical_tie_adjacency, 1);
+
+    assert_eq!(report.labels[0], 1);
+}
+
+#[rstest]
+fn propagate_labels_prefers_heavier_star_neighbour_when_counts_match() {
+    let vectors = vectors(&["hub", "zeta", "alpha"]);
+    let adjacency = build_adjacency(3, &[edge(0, 1, 9), edge(0, 2, 1)]);
+
+    let report = propagate_labels_report(&vectors, &adjacency, 1);
+
+    assert_eq!(report.labels[0], 1);
+    assert_eq!(report.labels[0], report.labels[1]);
+}
+
+#[rstest]
+fn propagate_labels_prefers_triangle_weight_over_count_tie() {
+    let vectors = vectors(&["hub", "zeta", "alpha"]);
+    let adjacency = build_adjacency(3, &[edge(0, 1, 12), edge(0, 2, 1), edge(1, 2, 1)]);
+
+    let report = propagate_labels_report(&vectors, &adjacency, 1);
 
     assert_eq!(report.labels[0], 1);
 }
