@@ -134,6 +134,17 @@ packaging path stays valid. The release dry-run target is a POSIX-shell target;
 Windows CI runs it under Bash and requires the same command-line tools as local
 POSIX environments.
 
+Both lanes share the workflow-level environment contract:
+`BUILD_PROFILE=debug` narrows `sccache` keys to debug builds only, preventing
+cache pollution from release builds; `CARGO_INCREMENTAL=0` disables incremental
+compilation, which is incompatible with `sccache`; `RUSTC_WRAPPER=sccache`
+routes all `rustc` invocations through `sccache`; `SCCACHE_GHA_ENABLED=true`
+activates the GitHub Actions cache backend for `sccache`; and
+`RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` deny compiler and doc
+warnings as errors across both lanes. Together, these variables keep the cache
+scope narrow, ensure `sccache` is active for all compilation, and enforce a
+warnings-as-errors build contract.
+
 ### CI build caching
 
 CI uses `sccache` through the GitHub Actions backend to share Rust compilation
