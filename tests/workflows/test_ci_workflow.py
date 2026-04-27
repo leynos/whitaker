@@ -12,7 +12,8 @@ from ruamel.yaml import YAML
 WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
 
 
-def _load_workflow_mapping() -> dict[str, Any]:
+@pytest.fixture(scope="module")
+def workflow() -> dict[str, Any]:
     """Load the CI workflow YAML and return it as a mapping."""
     parsed = YAML(typ="safe").load(WORKFLOW_PATH.read_text(encoding="utf-8"))
     match parsed:
@@ -88,9 +89,10 @@ def _find_step(job: Mapping[str, Any], name: str) -> dict[str, Any]:
     pytest.fail(f"CI job must include {name!r} step")
 
 
-def test_ci_splits_linux_and_windows_jobs_by_purpose() -> None:
+def test_ci_splits_linux_and_windows_jobs_by_purpose(
+    workflow: Mapping[str, Any],
+) -> None:
     """Ensure CI uses dedicated Linux and Windows jobs instead of a shared matrix."""
-    workflow = _load_workflow_mapping()
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
 
     assert "build-test" not in jobs, (
@@ -118,9 +120,10 @@ def test_ci_splits_linux_and_windows_jobs_by_purpose() -> None:
     )
 
 
-def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope() -> None:
+def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope(
+    workflow: Mapping[str, Any],
+) -> None:
     """Ensure the workflow enables sccache and narrows cache scope to debug builds."""
-    workflow = _load_workflow_mapping()
     env = _get_mapping_item(workflow, "env", parent_name="CI workflow")
 
     assert env.get("BUILD_PROFILE") == "debug", (
@@ -144,9 +147,10 @@ def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope() -> None:
     )
 
 
-def test_linux_full_keeps_the_full_linux_validation_stack() -> None:
+def test_linux_full_keeps_the_full_linux_validation_stack(
+    workflow: Mapping[str, Any],
+) -> None:
     """Ensure Linux remains the single lane for Linux-shaped validation work."""
-    workflow = _load_workflow_mapping()
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
     linux_job = _get_mapping_item(jobs, "linux-full", parent_name="CI workflow jobs")
 
@@ -172,9 +176,10 @@ def test_linux_full_keeps_the_full_linux_validation_stack() -> None:
     )
 
 
-def test_windows_compat_stays_limited_to_windows_compatibility_checks() -> None:
+def test_windows_compat_stays_limited_to_windows_compatibility_checks(
+    workflow: Mapping[str, Any],
+) -> None:
     """Ensure Windows validates installer behaviour without Linux-only work."""
-    workflow = _load_workflow_mapping()
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
     windows_job = _get_mapping_item(
         jobs,

@@ -159,18 +159,18 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		exit 1; \
 	fi; \
 	$(CARGO) build $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
-	$(CARGO) build $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer; \
+	$(CARGO) build $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
 	DIST_DIR="$$TMP_DIR/dist"; \
 	mkdir -p "$$DIST_DIR"; \
 	case "$$HOST_TRIPLE" in \
 		*windows*) \
 			INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer.exe"; \
-			PACKAGER="./target/release/whitaker-package-installer.exe"; \
+			PACKAGER="./target/$$HOST_TRIPLE/release/whitaker-package-installer.exe"; \
 			ARCHIVE_GLOB="$$DIST_DIR/*.zip"; \
 			;; \
 		*) \
 			INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer"; \
-			PACKAGER="./target/release/whitaker-package-installer"; \
+			PACKAGER="./target/$$HOST_TRIPLE/release/whitaker-package-installer"; \
 			ARCHIVE_GLOB="$$DIST_DIR/*.tgz"; \
 			;; \
 	esac; \
