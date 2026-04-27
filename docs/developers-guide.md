@@ -353,6 +353,36 @@ See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
  for the complete design rationale and implementation decisions.
 
+### Test-support APIs for label-propagation testing
+
+The `common::test_support::decomposition` module also provides a declarative
+label-propagation helper for integration and behaviour-driven tests:
+
+- **`label_propagation_report(method_names, edges, max_iterations)`**:
+  Validates edge input by delegating to `validate_edges`, constructs minimal
+  method vectors from `method_names`, runs deterministic label propagation for
+  up to `max_iterations` passes, and returns
+  `Result<LabelPropagationReport, AdjacencyError>`. The same `AdjacencyError`
+  variants used by `adjacency_report` apply, because malformed declarative
+  graph input is rejected before runtime propagation is called.
+- **`LabelPropagationReport`**: Wrapper around the runtime propagation report
+  on the `Ok` branch, with methods for testing properties:
+  - `labels()`: Returns the final label vector
+  - `label_of(node)`: Returns the propagated label for a node, or `None` when
+    the node is out of bounds
+  - `iteration_count()`: Returns the number of propagation passes performed
+  - `has_active_nodes()`: Reports whether the validated input graph contains at
+    least one non-isolated node
+  - `all_labels_in_bounds()`: Verifies every final label is a valid node index
+
+The test-support API validates input and delegates to the shipped label
+propagation runtime, keeping raw adjacency vectors and runtime reports
+crate-internal while providing a clean testing interface.
+
+See
+[`docs/execplans/6-4-6-kani-verification-propagate-labels-preserves-indices.md`](./execplans/6-4-6-kani-verification-propagate-labels-preserves-indices.md)
+ for the complete design rationale and implementation decisions.
+
 ## Installer release helper binaries
 
 The `whitaker-installer` crate exposes several internal release-helper binaries

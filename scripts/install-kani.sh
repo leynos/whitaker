@@ -23,7 +23,9 @@ KANI_RELEASE_TAG=${KANI_RELEASE_TAG:-kani-${KANI_VERSION}}
 tmp_dir=""
 
 cleanup() {
-    [ -n "${tmp_dir}" ] && rm -rf "${tmp_dir}"
+    if [ -n "${tmp_dir}" ]; then
+        rm -rf "${tmp_dir}"
+    fi
 }
 
 trap cleanup EXIT INT TERM HUP

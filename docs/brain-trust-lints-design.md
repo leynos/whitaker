@@ -584,6 +584,42 @@ further decomposition analysis was omitted.
 - **Stale `rstest-bdd` version comment corrected**: the `common/Cargo.toml`
   dev-dependency comment now reads `0.5.x` instead of the outdated `0.2.x`.
 
+### Implementation decisions (6.4.6, in progress)
+
+- **Label propagation now has a crate-visible report seam**:
+  `common::decomposition_advice::community::propagate_labels_report()` returns
+  the final labels and the number of propagation passes actually executed. The
+  public API stays unchanged, and behavioural tests observe the runtime through
+  `common::test_support::decomposition::label_propagation_report()`, which
+  derives `has_active_nodes` in the test-support seam.
+- **Unit and BDD coverage now pin the observable runtime contract**:
+  unit tests cover output length, in-range labels, isolated nodes, zero
+  iterations, lexical tie-breaking, and bounded non-convergence. Behaviour
+  tests cover disconnected communities, isolated graphs, zero-iteration input,
+  deterministic tie-breaking, and malformed-edge rejection through test support.
+- **Tie-breaking is now `method_name()` first, label index second**: the
+  previous full `MethodFeatureVector` ordering was deterministic but expensive
+  for Kani because it pulled `BTreeMap` comparison into the proof path. The
+  shipped runtime now breaks equal-score ties by lexical method name, with the
+  label index as a deterministic fallback when names match.
+- **The Kani proof file is split by concern**:
+  `community_kani/adjacency.rs` keeps the completed 6.4.5 harnesses, while
+  `community_kani/propagate_labels.rs` holds the new 6.4.6 harness family and
+  `community_kani/shared.rs` holds the shared adjacency model for 6.4.5.
+- **The Kani install sidecar had a warm-cache trap bug**:
+  `scripts/install-kani.sh` originally exited with status `1` after printing
+  the cached install directory because the `trap` cleanup function returned the
+  status of `[ -n "${tmp_dir}" ]`. The cleanup now uses an explicit `if` so
+  cached installs no longer poison `make kani`.
+- **The current propagation proof blocker is CBMC state explosion in runtime
+  containers, not in the property logic**: after three modelling iterations,
+  including a fixed three-node propagation harness with symbolic edge
+  presence/weights, CBMC still spends its budget in `Vec` growth, `find_map`,
+  and `memcmp` rather than discharging the label-index and bounded-return
+  assertions. Roadmap item 6.4.6 therefore remains in progress until the proof
+  model is simplified further, or the runtime path is made more Kani-friendly
+  without changing behaviour.
+
 ## SARIF output
 
 The lints can optionally emit SARIF 2.1.0 (Static Analysis Results Interchange
