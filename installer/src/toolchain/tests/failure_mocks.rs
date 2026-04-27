@@ -9,15 +9,23 @@ use crate::toolchain::tests::test_helpers::{
 /// Describes the type of installation failure being tested.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum InstallFailure {
+    /// `rustup toolchain install` exits unsuccessfully before components are
+    /// added.
     ToolchainInstall,
+    /// `rustup component add` exits unsuccessfully for the required components,
+    /// plus any additional components requested by the test.
     ComponentAdd,
+    /// `rustup toolchain install` succeeds, but the installed toolchain remains
+    /// unusable when `rustc --version` is checked afterwards.
     ToolchainUnusableAfterInstall,
 }
 
 /// Bundles the failure mode with any extra components requested for the test.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FailureSetup<'a> {
+    /// The failure branch that the mocks should exercise.
     pub(super) failure: InstallFailure,
+    /// Extra `rustup` components expected alongside the required components.
     pub(super) additional_components: &'a [&'a str],
 }
 
@@ -26,10 +34,24 @@ pub(super) struct FailureSetup<'a> {
 pub(super) struct ToolchainChannel<'a>(pub(super) &'a str);
 
 impl<'a> ToolchainChannel<'a> {
+    /// Returns the inner channel string slice (e.g. `"nightly-2025-09-18"`).
     pub(super) fn as_str(self) -> &'a str {
         self.0
     }
 }
+
+/// The exact stderr string emitted by the mock when a toolchain installation
+/// fails. Used as the `message` payload in [`InstallerError::ToolchainInstallFailed`]
+/// and matched with strict equality in [`assert_failure_error`] to prevent
+/// wording-change regressions from going undetected.
+pub(super) const TOOLCHAIN_INSTALL_FAILURE_MESSAGE: &str = "network down";
+/// The exact stderr string emitted by the mock when a component installation
+/// fails. Matched with strict equality (not a substring) in
+/// `is_component_install_failed` so that any superstring variant is
+/// correctly rejected. The unit test
+/// `component_failure_match_rejects_superstring_messages` guards this
+/// invariant.
+pub(super) const COMPONENT_INSTALL_FAILURE_MESSAGE: &str = "component failed";
 
 fn setup_toolchain_install_failure_mocks(
     runner: &mut MockCommandRunner,
@@ -43,7 +65,7 @@ fn setup_toolchain_install_failure_mocks(
         ToolchainInstallExpectation {
             channel,
             exit_code: 1,
-            stderr: Some("network down"),
+            stderr: Some(TOOLCHAIN_INSTALL_FAILURE_MESSAGE),
         },
     );
 }
@@ -61,7 +83,7 @@ fn setup_component_add_failure_mocks_inner(
         .withf(matches_multi_component_add(channel, &components))
         .times(1)
         .in_sequence(seq)
-        .returning(|_, _| Ok(output_with_stderr(1, "component failed")));
+        .returning(|_, _| Ok(output_with_stderr(1, COMPONENT_INSTALL_FAILURE_MESSAGE)));
 }
 
 fn setup_toolchain_unusable_failure_mocks(
@@ -90,6 +112,13 @@ fn setup_toolchain_unusable_failure_mocks(
     expect_rustc_version(runner, seq, channel, 1);
 }
 
+/// Configures `runner` and `seq` to simulate the failure described by `setup`
+/// for the given toolchain `channel`.
+///
+/// Sets up mock expectations in sequence so that `ensure_installed_with` will
+/// trigger the error variant corresponding to `setup.failure`. Any extra
+/// components in `setup.additional_components` are included in the expected
+/// `rustup component add` invocation where applicable.
 pub(super) fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -116,6 +145,19 @@ pub(super) fn setup_failure_mocks(
                 channel,
                 setup.additional_components,
             );
+        }
+    }
+}
+
+fn failure_summary(setup: FailureSetup<'_>) -> String {
+    match setup.failure {
+        InstallFailure::ToolchainInstall => "toolchain installation failure".to_owned(),
+        InstallFailure::ComponentAdd => format!(
+            "component installation failure for {}",
+            expected_components(setup.additional_components)
+        ),
+        InstallFailure::ToolchainUnusableAfterInstall => {
+            "toolchain unusable after installation".to_owned()
         }
     }
 }
@@ -152,40 +194,181 @@ fn is_component_install_failed(
     if toolchain != channel {
         return false;
     }
-    toolchain == channel && components == &expected && message.contains("component failed")
+    components == &expected && message == COMPONENT_INSTALL_FAILURE_MESSAGE
 }
 
+/// Asserts that `err` is the `InstallerError` variant expected for `setup.failure`
+/// on toolchain `channel`.
+///
+/// For `ComponentAdd`, also verifies the reported component list includes the
+/// required components plus any in `setup.additional_components`.
+///
+/// # Panics
+///
+/// Panics with a descriptive message if the error variant or its fields do not
+/// match expectations.
 pub(super) fn assert_failure_error(
     err: InstallerError,
     channel: ToolchainChannel<'_>,
     setup: FailureSetup<'_>,
 ) {
     let channel = channel.as_str();
+    let failure = failure_summary(setup);
     match setup.failure {
         InstallFailure::ToolchainInstall => assert_error_matches(
             &err,
-            &format!("ToolchainInstallFailed for {channel}"),
+            &format!("ToolchainInstallFailed for channel {channel} while exercising {failure}"),
             |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainInstallFailed { toolchain, message }
-                        if toolchain == channel && message.contains("network down")
+                        if toolchain == channel && message == TOOLCHAIN_INSTALL_FAILURE_MESSAGE
                 )
             },
         ),
         InstallFailure::ComponentAdd => assert_error_matches(
             &err,
-            &format!("ToolchainComponentInstallFailed for {channel}"),
+            &format!(
+                "ToolchainComponentInstallFailed for channel {channel} while exercising {failure}"
+            ),
             |e| is_component_install_failed(e, channel, setup.additional_components),
         ),
-        InstallFailure::ToolchainUnusableAfterInstall => {
-            assert_error_matches(&err, &format!("ToolchainNotInstalled for {channel}"), |e| {
+        InstallFailure::ToolchainUnusableAfterInstall => assert_error_matches(
+            &err,
+            &format!("ToolchainNotInstalled for channel {channel} while exercising {failure}"),
+            |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainNotInstalled { toolchain }
                         if toolchain == channel
                 )
-            })
-        }
+            },
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn component_failure_match_rejects_superstring_messages() {
+        let err = InstallerError::ToolchainComponentInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            components: expected_components(&[]),
+            message: format!("{COMPONENT_INSTALL_FAILURE_MESSAGE}: while syncing index"),
+        };
+
+        assert!(
+            !is_component_install_failed(&err, "nightly-2025-09-18", &[]),
+            "component failure helper should require the exact mocked failure marker"
+        );
+    }
+
+    #[test]
+    fn assert_failure_error_accepts_matching_toolchain_install_error() {
+        let channel = ToolchainChannel("nightly-2025-09-18");
+        let err = InstallerError::ToolchainInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
+        };
+
+        assert_failure_error(
+            err,
+            channel,
+            FailureSetup {
+                failure: InstallFailure::ToolchainInstall,
+                additional_components: &[],
+            },
+        );
+    }
+
+    #[test]
+    fn assert_failure_error_accepts_matching_component_add_error() {
+        let channel = ToolchainChannel("nightly-2025-09-18");
+        let components = expected_components(&[CRANELIFT_COMPONENT]);
+        let err = InstallerError::ToolchainComponentInstallFailed {
+            toolchain: "nightly-2025-09-18".to_owned(),
+            components,
+            message: COMPONENT_INSTALL_FAILURE_MESSAGE.to_owned(),
+        };
+
+        assert_failure_error(
+            err,
+            channel,
+            FailureSetup {
+                failure: InstallFailure::ComponentAdd,
+                additional_components: &[CRANELIFT_COMPONENT],
+            },
+        );
+    }
+
+    #[test]
+    fn assert_failure_error_accepts_matching_toolchain_unusable_error() {
+        let channel = ToolchainChannel("nightly-2025-09-18");
+        let err = InstallerError::ToolchainNotInstalled {
+            toolchain: "nightly-2025-09-18".to_owned(),
+        };
+
+        assert_failure_error(
+            err,
+            channel,
+            FailureSetup {
+                failure: InstallFailure::ToolchainUnusableAfterInstall,
+                additional_components: &[],
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ToolchainInstallFailed for channel nightly-2025-09-18 while exercising toolchain installation failure"
+    )]
+    fn assert_failure_error_panics_on_toolchain_install_mismatch() {
+        assert_failure_error(
+            InstallerError::ToolchainNotInstalled {
+                toolchain: "nightly-2025-09-18".to_owned(),
+            },
+            ToolchainChannel("nightly-2025-09-18"),
+            FailureSetup {
+                failure: InstallFailure::ToolchainInstall,
+                additional_components: &[],
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure"
+    )]
+    fn assert_failure_error_panics_on_component_add_mismatch() {
+        assert_failure_error(
+            InstallerError::ToolchainNotInstalled {
+                toolchain: "nightly-2025-09-18".to_owned(),
+            },
+            ToolchainChannel("nightly-2025-09-18"),
+            FailureSetup {
+                failure: InstallFailure::ComponentAdd,
+                additional_components: &[],
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ToolchainNotInstalled for channel nightly-2025-09-18 while exercising toolchain unusable after installation"
+    )]
+    fn assert_failure_error_panics_on_toolchain_unusable_mismatch() {
+        assert_failure_error(
+            InstallerError::ToolchainInstallFailed {
+                toolchain: "nightly-2025-09-18".to_owned(),
+                message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
+            },
+            ToolchainChannel("nightly-2025-09-18"),
+            FailureSetup {
+                failure: InstallFailure::ToolchainUnusableAfterInstall,
+                additional_components: &[],
+            },
+        );
     }
 }
