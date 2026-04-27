@@ -189,12 +189,13 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks() -> None:
             "Setup Rust",
             "Install cargo-nextest",
             "Test",
+            "Installer smoke test",
             "Installer release dry run",
             "Show sccache stats",
         ],
         (
-            "windows-compat must stay focused on Rust tests, installer release "
-            "validation, and cache diagnostics"
+            "windows-compat must stay focused on Rust tests, installer smoke "
+            "coverage, installer release validation, and cache diagnostics"
         ),
     )
 
@@ -218,6 +219,9 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks() -> None:
     ), (
         "windows-compat must run the full CI test profile on Windows"
     )
+    assert _find_step(windows_job, "Installer smoke test").get("run") == (
+        "make install-smoke"
+    ), "windows-compat must install and execute the packaged installer"
     assert _find_step(windows_job, "Installer release dry run").get("run") == (
         "make release-installer-dry-run"
     ), "windows-compat must validate the host-platform installer release path"

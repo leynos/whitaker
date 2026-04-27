@@ -121,8 +121,9 @@ The CI workflow is split by purpose rather than running the same stack on every
 operating system. `linux-full` is the authoritative gate for formatting,
 Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
 `windows-compat` is a narrower compatibility lane that runs
-`make test NEXTEST_PROFILE=ci` and `make release-installer-dry-run` to prove
-the workspace still builds on Windows and that the Windows installer release
+`make test NEXTEST_PROFILE=ci`, `make install-smoke`, and
+`make release-installer-dry-run` to prove the workspace still builds on
+Windows, the installed binary can execute, and the Windows installer release
 packaging path stays valid. The release dry-run target is a POSIX-shell target;
 Windows CI runs it under Bash and requires the same command-line tools as local
 POSIX environments.
