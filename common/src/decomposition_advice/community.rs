@@ -149,25 +149,6 @@ pub(crate) fn build_adjacency(
     adjacency
 }
 
-/// Propagates labels for up to `max_iterations` passes.
-///
-/// `vectors` provides the initial self labelling, `adjacency` provides the
-/// validated weighted neighbour lists, and `max_iterations` bounds the number
-/// of active-node passes. This convenience wrapper delegates to
-/// [`propagate_labels_report`] and returns only the final label vector; callers
-/// that need the executed pass count should use [`propagate_labels_report`].
-#[expect(
-    dead_code,
-    reason = "kept as a final-label convenience seam for direct tests and Kani harnesses"
-)]
-pub(crate) fn propagate_labels(
-    vectors: &[MethodFeatureVector],
-    adjacency: &[Vec<(usize, u64)>],
-    max_iterations: usize,
-) -> Vec<usize> {
-    propagate_labels_report(vectors, adjacency, max_iterations).labels
-}
-
 /// Runs deterministic weighted label propagation and reports its final state.
 ///
 /// The returned report owns the final labels and the number of propagation
