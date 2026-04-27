@@ -173,7 +173,14 @@ pub(crate) fn propagate_labels_report(
     adjacency: &[Vec<(usize, u64)>],
     max_iterations: usize,
 ) -> LabelPropagationReport {
+    assert_eq!(
+        adjacency.len(),
+        vectors.len(),
+        "propagate_labels_report requires adjacency rows to match vectors"
+    );
     let mut labels: Vec<usize> = (0..vectors.len()).collect();
+    // Each `node` comes from `adjacency`; keep rows aligned with `labels` so
+    // `labels[node]` stays in bounds.
     let active_nodes: Vec<_> = adjacency
         .iter()
         .enumerate()

@@ -172,3 +172,15 @@ fn propagate_labels_returns_after_bound_even_when_not_converged(
     assert_eq!(single_pass.labels.len(), non_converged_vectors.len());
     assert_ne!(single_pass.labels, two_passes.labels);
 }
+
+#[rstest]
+#[should_panic(expected = "propagate_labels_report requires adjacency rows to match vectors")]
+fn propagate_labels_rejects_extra_adjacency_rows(
+    connected_triplet_vectors: Vec<MethodFeatureVector>,
+    connected_triplet_adjacency: Vec<Vec<(usize, u64)>>,
+) {
+    let mut adjacency = connected_triplet_adjacency;
+    adjacency.push(vec![(0, 5)]);
+
+    propagate_labels_report(&connected_triplet_vectors, &adjacency, 1);
+}

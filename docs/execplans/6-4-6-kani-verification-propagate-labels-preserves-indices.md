@@ -34,7 +34,9 @@ Observable success after implementation:
    happy paths, unhappy paths, and edge cases such as isolated nodes, tied
    neighbour scores, zero iterations, and bounded non-convergence inputs.
 3. Behaviour tests using `rstest-bdd` `0.5.0` cover the same observable
-   outcomes through a narrow `common::test_support::decomposition` seam.
+   outcomes through
+   `common/src/test_support/decomposition_label_propagation.rs`, exported by
+   the narrow `common::test_support::decomposition` seam.
 4. `docs/brain-trust-lints-design.md` records the final 6.4.6 modelling and
    proof-bound decisions.
 5. `docs/roadmap.md` marks 6.4.6 done only after `make check-fmt`,
@@ -52,11 +54,10 @@ Observable success after implementation:
   `best_neighbour_label`.
 - Do not widen the public production API of
   `common::decomposition_advice`. Any new observable seam for integration tests
-  must live in `common::test_support::decomposition`.
-- Keep the Kani harnesses adjacent to the implementation. If the current
-  `common/src/decomposition_advice/community_kani.rs` would exceed the
-  repository's 400-line limit after adding 6.4.6, split it into a small
-  directory module such as:
+  must live in `common/src/test_support/decomposition_label_propagation.rs` and
+  be exported through `common::test_support::decomposition`.
+- Keep the Kani harnesses adjacent to the implementation in
+  `common/src/decomposition_advice/community_kani/`, split into:
 
   ```text
   common/src/decomposition_advice/community_kani/
@@ -80,7 +81,8 @@ Observable success after implementation:
 - Behaviour tests must respect the workspace Clippy
   `too_many_arguments` threshold of 4. Each BDD step may parse at most 3 values
   in addition to the fixture.
-- New public helpers in `common::test_support::decomposition` require Rustdoc
+- New public helpers in
+  `common/src/test_support/decomposition_label_propagation.rs` require Rustdoc
   comments with examples that follow `docs/rust-doctest-dry-guide.md`.
 - Record the final 6.4.6 implementation decisions in
   `docs/brain-trust-lints-design.md`.
@@ -124,15 +126,16 @@ Observable success after implementation:
   Likelihood: high. Mitigation: constrain harness inputs to valid adjacency
   graphs and place unhappy-path validation in test-support helpers instead of
   changing runtime semantics.
-- File-size risk: `community_kani.rs` already holds the completed 6.4.5
-  harnesses. Adding 6.4.6 in-place may exceed the 400-line repository limit.
-  Severity: medium. Likelihood: high. Mitigation: prefer an early split into a
-  `community_kani/` directory with shared symbolic helpers.
+- File-size risk: the `community_kani/` split must keep `mod.rs`,
+  `adjacency.rs`, `shared.rs`, and `propagate_labels.rs` under the 400-line
+  repository limit. Severity: medium. Likelihood: high. Mitigation: keep shared
+  symbolic helpers in `community_kani/shared.rs`.
 - Observation-seam risk: behavioural tests need observable labels or iteration
   reports without widening the production API. Severity: medium. Likelihood:
   high. Mitigation: add a narrow report helper in
-  `common::test_support::decomposition` that validates declarative graph input
-  and returns a stable label report.
+  `common/src/test_support/decomposition_label_propagation.rs` that validates
+  declarative graph input and returns a stable label report through
+  `common::test_support::decomposition`.
 - Misstated termination risk: it is easy to conflate "converges within bound"
   with "returns within bound". Severity: medium. Likelihood: medium.
   Mitigation: keep the proof and tests explicit that bounded return is the
@@ -153,7 +156,9 @@ Observable success after implementation:
   contract, covering length, in-range labels, isolated nodes, zero iterations,
   lexical tie-breaking, and bounded non-convergence.
 - [x] 2026-04-14: Add `rstest-bdd` happy-path, unhappy-path, and edge-case
-  coverage through `common::test_support::decomposition`.
+  coverage through
+  `common/src/test_support/decomposition_label_propagation.rs`, exported by
+  `common::test_support::decomposition`.
 - [~] 2026-04-14: Add bounded Kani harnesses for `propagate_labels`; harnesses
   are implemented, but `make kani` is still blocked by CBMC state explosion in
   runtime `Vec`/iterator paths after three modelling iterations.
@@ -188,11 +193,13 @@ Observable success after implementation:
 - The "termination" property is structurally tied to the
   `for _ in 0..max_iterations` loop. The proof work is therefore about bounded
   execution under symbolic inputs, not liveness or eventual convergence.
-- The existing 6.4.5 Kani harness file is still small enough to read in one
-  pass, but adding another proof family without restructuring would likely make
-  it awkward to navigate and easy to push past the file-size limit.
-- The repository already has a narrow decomposition test-support seam via
-  `common/src/test_support/decomposition.rs`. 6.4.6 should extend that seam
+- The shipped 6.4.5 and 6.4.6 Kani harnesses now live in
+  `common/src/decomposition_advice/community_kani/` as `mod.rs`,
+  `adjacency.rs`, `shared.rs`, and `propagate_labels.rs`, so each proof family
+  stays easy to navigate and under the file-size limit.
+- The repository already has a narrow decomposition test-support export via
+  `common::test_support::decomposition`. 6.4.6 should keep label propagation
+  helpers in `common/src/test_support/decomposition_label_propagation.rs`
   instead of inventing a second integration-test entry point.
 - `docs/rstest-bdd-users-guide.md` still contains examples mentioning
   `rstest-bdd` `0.2.0`, while the repository guidance and current work require
@@ -261,18 +268,18 @@ Today, the relevant runtime flow is:
 Repository areas likely to change during implementation:
 
 1. `common/src/decomposition_advice/community.rs`
-2. `common/src/decomposition_advice/community_kani.rs` or a split
-   `common/src/decomposition_advice/community_kani/` directory
-3. `common/src/decomposition_advice/tests.rs` and a new or expanded
+2. `common/src/decomposition_advice/community_kani/mod.rs`
+3. `common/src/decomposition_advice/community_kani/adjacency.rs`
+4. `common/src/decomposition_advice/community_kani/shared.rs`
+5. `common/src/decomposition_advice/community_kani/propagate_labels.rs`
+6. `common/src/decomposition_advice/tests.rs` and a new or expanded
    label-propagation-focused unit-test file
-4. `common/src/test_support/decomposition.rs`
-5. a new helper module under `common/src/test_support/` if needed to keep files
-   small
-6. `common/tests/decomposition_label_propagation_behaviour.rs`
-7. `common/tests/features/decomposition_label_propagation.feature`
-8. `docs/brain-trust-lints-design.md`
-9. `docs/roadmap.md`
-10. this ExecPlan
+7. `common/src/test_support/decomposition_label_propagation.rs`
+8. `common/tests/decomposition_label_propagation_behaviour.rs`
+9. `common/tests/features/decomposition_label_propagation.feature`
+10. `docs/brain-trust-lints-design.md`
+11. `docs/roadmap.md`
+12. this ExecPlan
 
 Relevant local documentation to consult while implementing:
 
@@ -309,10 +316,11 @@ shape is:
    `community::LabelPropagationReport`, while keeping declarative input
    validation and public test-facing wrappers in `common::test_support`.
 
-If `community_kani.rs` would exceed 400 lines after the new harnesses are
-added, split it before adding new proofs. Move the existing 6.4.5 harnesses
-without changing their semantics, then add a new `propagate_labels.rs`
-companion file plus a tiny shared helper module for symbolic graph material.
+Keep Kani proof code in `common/src/decomposition_advice/community_kani/` as
+`mod.rs`, `adjacency.rs`, `shared.rs`, and `propagate_labels.rs`. Move existing
+6.4.5 harnesses without changing their semantics, then add a new
+`propagate_labels.rs` companion file plus a tiny shared helper module for
+symbolic graph material.
 
 ### Stage B: Write failing unit tests first
 
@@ -332,11 +340,12 @@ builder rather than many-argument helper functions.
 
 ### Stage C: Add a narrow integration-test seam
 
-Extend `common/src/test_support/decomposition.rs` with a small helper such as
-`label_propagation_report(...) -> Result<LabelPropagationReport, LabelPropagationError>`.
- The public test-support report should wrap the crate-visible
-`community::LabelPropagationReport` rather than moving runtime report types
-into `common::test_support`.
+Extend `common/src/test_support/decomposition_label_propagation.rs` with a
+small `label_propagation_report(...)` helper that returns
+`Result<LabelPropagationReport, LabelPropagationError>`. The public
+test-support report should wrap the crate-visible
+`community::LabelPropagationReport` rather than moving runtime report types into
+`common::test_support`.
 
 The helper should:
 
