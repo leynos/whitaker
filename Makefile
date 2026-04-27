@@ -1,7 +1,7 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus kani verus-clone-detector kani-clone-detector
 
 APP ?= whitaker-installer
-CARGO ?= cargo
+CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
@@ -9,7 +9,7 @@ TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
 NEXTEST_PROFILE ?=
 RUST_FLAGS ?= -D warnings
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
-MDLINT ?= markdownlint-cli2
+MDLINT ?= $(or $(shell command -v markdownlint-cli2 2>/dev/null),$(HOME)/.bun/bin/markdownlint-cli2)
 NIXIE ?= nixie
 WHITAKER_REPO ?= $(CURDIR)
 WHITAKER_REV ?= HEAD
