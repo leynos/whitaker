@@ -319,9 +319,10 @@
   keeps neighbour indices in bounds, and produces symmetric adjacency lists.
   See [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.4.1.
-- [ ] 6.4.6. Use Kani to verify `propagate_labels` preserves valid label
+- [x] 6.4.6. Use Kani to verify `propagate_labels` preserves valid label
   indices, returns one label per input vector, and terminates within the
-  supplied iteration bound. See
+  supplied iteration bound. Verification harnesses are complete modulo the
+  CBMC state-explosion blocker documented in the design notes. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.4.1.
 

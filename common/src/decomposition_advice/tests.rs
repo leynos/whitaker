@@ -2,6 +2,7 @@
 
 mod adjacency;
 mod cosine_threshold;
+mod propagation;
 mod test_fixtures;
 mod vector_algebra;
 

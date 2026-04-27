@@ -6,6 +6,8 @@
 
 #[path = "decomposition_adjacency.rs"]
 mod adjacency;
+#[path = "decomposition_label_propagation.rs"]
+mod label_propagation;
 #[path = "decomposition_vector_algebra.rs"]
 mod vector_algebra;
 
@@ -16,6 +18,7 @@ use crate::decomposition_advice::{
 };
 
 pub use self::adjacency::{AdjacencyError, AdjacencyReport, EdgeInput, adjacency_report};
+pub use self::label_propagation::{LabelPropagationReport, label_propagation_report};
 pub use self::vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra};
 
 /// Input data for building a [`MethodProfile`] in tests.
