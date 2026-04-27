@@ -79,12 +79,15 @@ pub(crate) fn detect_communities(vectors: &[MethodFeatureVector]) -> Vec<Vec<usi
     let adjacency = build_adjacency(vectors.len(), &edges);
     let max_iterations = vectors.len().saturating_mul(2).max(1);
     let report = propagate_labels_report(vectors, &adjacency, max_iterations);
-    log::debug!(
-        "label propagation complete: nodes={}, iterations={}, converged={}",
-        vectors.len(),
-        report.iteration_count,
-        report.iteration_count < max_iterations,
-    );
+    if log::log_enabled!(log::Level::Debug) {
+        let converged = labels_are_stable(vectors, &adjacency, &report.labels);
+        log::debug!(
+            "label propagation complete: nodes={}, iterations={}, converged={}",
+            vectors.len(),
+            report.iteration_count,
+            converged,
+        );
+    }
     let labels = report.labels;
 
     let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
@@ -255,6 +258,23 @@ fn best_neighbour_label(
     }
 
     best.map(|(label, _)| label)
+}
+
+fn labels_are_stable(
+    vectors: &[MethodFeatureVector],
+    adjacency: &[Vec<(usize, u64)>],
+    labels: &[usize],
+) -> bool {
+    adjacency.iter().enumerate().all(|(node, neighbours)| {
+        if neighbours.is_empty() {
+            return true;
+        }
+
+        match best_neighbour_label(node, labels, adjacency, vectors) {
+            Some(best_label) => labels[node] == best_label,
+            None => true,
+        }
+    })
 }
 
 fn score_label(scores: &mut BTreeMap<usize, u64>, label: usize, weight: u64) -> u64 {
