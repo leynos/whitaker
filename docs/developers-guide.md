@@ -7,11 +7,17 @@ Whitaker itself. For using Whitaker lints in a project, see the
 ## Prerequisites
 
 - Rust nightly toolchain (version specified in `rust-toolchain.toml`)
+- `jq` for extracting package metadata in release dry runs
+- Python 3 for workflow tests and release checksum generation
 - `cargo-dylint` and `dylint-link` installed:
 
   ```sh
   cargo install cargo-dylint dylint-link
   ```
+
+CI also installs or provides job-specific tools such as `cargo-nextest`,
+`bun`, `uv`, Mermaid CLI, and Nixie before running the targets that need them.
+Local runs of those targets require the same tools on `PATH`.
 
 ## Running Tests
 
@@ -127,6 +133,24 @@ Windows, the installed binary can execute, and the Windows installer release
 packaging path stays valid. The release dry-run target is a POSIX-shell target;
 Windows CI runs it under Bash and requires the same command-line tools as local
 POSIX environments.
+
+
+### CI build caching
+
+CI uses `sccache` through the GitHub Actions backend to share Rust compilation
+artefacts between the Linux and Windows lanes. The workflow sets
+`SCCACHE_GHA_ENABLED=true` and `RUSTC_WRAPPER=sccache`, so Cargo invokes
+`rustc` through `sccache` automatically.
+
+The shared target cache is intentionally scoped to debug builds:
+
+- `BUILD_PROFILE=debug` keeps cache paths centred on the profile used by the
+  normal test and typecheck jobs.
+- `CARGO_INCREMENTAL=0` disables incremental build artefacts, which are
+  poorly suited to shared CI cache reuse and can make cache contents larger
+  without improving repeatability.
+- `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
+  warnings-as-errors contract even when builds are routed through `sccache`.
 
 Table: Test profiles and typical usage.
 
