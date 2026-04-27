@@ -139,6 +139,13 @@ pub(crate) fn build_adjacency(
     adjacency
 }
 
+/// Propagates labels for up to `max_iterations` passes.
+///
+/// `vectors` provides the initial self labelling, `adjacency` provides the
+/// validated weighted neighbour lists, and `max_iterations` bounds the number
+/// of active-node passes. This convenience wrapper delegates to
+/// [`propagate_labels_report`] and returns only the final label vector; callers
+/// that need the executed pass count should use [`propagate_labels_report`].
 pub(crate) fn propagate_labels(
     vectors: &[MethodFeatureVector],
     adjacency: &[Vec<(usize, u64)>],

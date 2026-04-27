@@ -62,7 +62,7 @@ Observable success after implementation:
   common/src/decomposition_advice/community_kani/
   - mod.rs
   - shared.rs
-  - build_adjacency.rs
+  - adjacency.rs
   - propagate_labels.rs
   ```
 
@@ -305,7 +305,9 @@ shape is:
 1. keep `propagate_labels` non-public outside the crate,
 2. promote it to `pub(crate)` only if direct unit tests or test-support helpers
    need to call it, and
-3. keep any report types or input validation in `common::test_support`.
+3. expose the runtime report as crate-visible
+   `community::LabelPropagationReport`, while keeping declarative input
+   validation and public test-facing wrappers in `common::test_support`.
 
 If `community_kani.rs` would exceed 400 lines after the new harnesses are
 added, split it before adding new proofs. Move the existing 6.4.5 harnesses
@@ -332,13 +334,17 @@ builder rather than many-argument helper functions.
 
 Extend `common/src/test_support/decomposition.rs` with a small helper such as
 `label_propagation_report(...) -> Result<LabelPropagationReport, LabelPropagationError>`.
+ The public test-support report should wrap the crate-visible
+`community::LabelPropagationReport` rather than moving runtime report types
+into `common::test_support`.
 
 The helper should:
 
 1. accept declarative graph input that is easy to express in BDD scenarios,
 2. validate the graph before calling runtime helpers,
-3. return stable output including the final labels and whether the input graph
-   had any active nodes, and
+3. return stable output including the final labels, the runtime pass count from
+   `community::LabelPropagationReport`, and active-node presence derived by the
+   wrapper at the call site, and
 4. provide one unhappy path by rejecting malformed edges or out-of-range
    indices.
 
