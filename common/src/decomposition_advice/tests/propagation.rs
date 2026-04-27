@@ -3,10 +3,10 @@
 use rstest::{fixture, rstest};
 
 use crate::decomposition_advice::community::{
-    SimilarityEdge, build_adjacency, propagate_labels_report,
+    SimilarityEdge, build_adjacency, detect_communities, propagate_labels_report,
 };
 use crate::decomposition_advice::minimal_feature_vector;
-use crate::decomposition_advice::vector::MethodFeatureVector;
+use crate::decomposition_advice::vector::{MethodFeatureVector, test_feature_vector};
 
 fn vectors(method_names: &[&str]) -> Vec<MethodFeatureVector> {
     method_names
@@ -205,4 +205,26 @@ fn propagate_labels_rejects_extra_adjacency_rows(
     adjacency.push(vec![(0, 5)]);
 
     propagate_labels_report(&connected_triplet_vectors, &adjacency, 1);
+}
+
+#[test]
+fn detect_communities_groups_connected_feature_vectors() {
+    let vectors = vec![
+        test_feature_vector("alpha", &[("shared", 1)]),
+        test_feature_vector("beta", &[("shared", 1)]),
+        test_feature_vector("gamma", &[("shared", 1)]),
+    ];
+
+    let communities = detect_communities(&vectors);
+
+    assert_eq!(communities, vec![vec![0, 1, 2]]);
+}
+
+#[test]
+fn detect_communities_keeps_minimal_vectors_separate() {
+    let vectors = vectors(&["alpha", "beta", "gamma"]);
+
+    let communities = detect_communities(&vectors);
+
+    assert_eq!(communities, vec![vec![0], vec![1], vec![2]]);
 }

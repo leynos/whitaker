@@ -123,6 +123,13 @@ make kani                  # Run all Kani harness groups
 make kani-clone-detector   # Run clone-detector Kani harnesses only
 ```
 
+The Makefile prepends `~/.cargo/bin` and `~/.bun/bin` to `PATH` for all
+make-target invocations
+(`PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(PATH)`). This ensures that
+`cargo`, `kani`, and Bun-based tooling installed in those locations are
+resolved ahead of any system-level copies, without requiring developers to
+modify their shell environment permanently.
+
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
 adjacency harnesses and the clone-detector harness group in one pass.

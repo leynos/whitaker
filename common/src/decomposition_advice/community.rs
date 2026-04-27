@@ -182,6 +182,10 @@ pub(crate) fn propagate_labels_report(
         .filter_map(|(node, neighbours)| (!neighbours.is_empty()).then_some(node))
         .collect();
     if active_nodes.is_empty() {
+        log::debug!(
+            "label propagation: no active nodes, skipping (total_nodes={})",
+            vectors.len(),
+        );
         return LabelPropagationReport {
             labels,
             iteration_count: 0,
@@ -205,8 +209,23 @@ pub(crate) fn propagate_labels_report(
         }
 
         if !changed {
+            log::debug!(
+                "label propagation converged: nodes={}, active_nodes={}, iterations={}",
+                vectors.len(),
+                active_nodes.len(),
+                iteration_count,
+            );
             break;
         }
+    }
+
+    if iteration_count == max_iterations {
+        log::debug!(
+            "label propagation reached iteration limit: nodes={}, active_nodes={}, max_iterations={}",
+            vectors.len(),
+            active_nodes.len(),
+            max_iterations,
+        );
     }
 
     LabelPropagationReport {

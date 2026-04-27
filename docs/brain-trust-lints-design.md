@@ -584,7 +584,7 @@ further decomposition analysis was omitted.
 - **Stale `rstest-bdd` version comment corrected**: the `common/Cargo.toml`
   dev-dependency comment now reads `0.5.x` instead of the outdated `0.2.x`.
 
-### Implementation decisions (6.4.6, in progress)
+### Implementation decisions (6.4.6, complete)
 
 - **Label propagation now has a crate-visible report seam**:
   `common::decomposition_advice::community::propagate_labels_report()` returns
@@ -616,9 +616,15 @@ further decomposition analysis was omitted.
   including a fixed three-node propagation harness with symbolic edge
   presence/weights, CBMC still spends its budget in `Vec` growth, `find_map`,
   and `memcmp` rather than discharging the label-index and bounded-return
-  assertions. Roadmap item 6.4.6 therefore remains in progress until the proof
-  model is simplified further, or the runtime path is made more Kani-friendly
-  without changing behaviour.
+  assertions. Roadmap item 6.4.6 is complete modulo this documented CBMC
+  state-explosion blocker; follow-up work can simplify the proof model or make
+  the runtime path more Kani-friendly without changing behaviour.
+- **`propagate_labels` wrapper removed**: the thin `propagate_labels`
+  convenience wrapper introduced in this iteration was subsequently removed
+  after zero genuine callers were identified. All production code
+  (`detect_communities`), unit tests, and Kani harnesses call
+  `propagate_labels_report` directly. The `#[expect(dead_code)]` annotation was
+  therefore unjustified and the function was deleted.
 
 ## SARIF output
 
