@@ -104,6 +104,22 @@ impl MethodFeatureVector {
     }
 }
 
+/// Constructs a minimal method feature vector.
+///
+/// The returned [`MethodFeatureVector`] uses the supplied `method_name` and
+/// empty `weights` and `metadata` maps. Use this helper in tests and Kani
+/// harnesses that need a named vector when feature weights are irrelevant to
+/// the property under inspection.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let vector = minimal_feature_vector("parse_config");
+///
+/// assert_eq!(vector.method_name(), "parse_config");
+/// assert!(vector.weights().is_empty());
+/// assert!(vector.metadata().is_empty());
+/// ```
 pub(crate) fn minimal_feature_vector(method_name: &str) -> MethodFeatureVector {
     MethodFeatureVector {
         method_name: method_name.to_owned(),
