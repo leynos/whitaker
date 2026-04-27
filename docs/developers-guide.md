@@ -134,7 +134,6 @@ packaging path stays valid. The release dry-run target is a POSIX-shell target;
 Windows CI runs it under Bash and requires the same command-line tools as local
 POSIX environments.
 
-
 ### CI build caching
 
 CI uses `sccache` through the GitHub Actions backend to share Rust compilation
