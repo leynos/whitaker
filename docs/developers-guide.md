@@ -127,7 +127,6 @@ Table: Test profiles and typical usage.
 When working on `whitaker-installer` code, run the full suite locally before
 pushing to catch installer regressions early.
 
-
 ### Failure-mock test helpers
 
 `installer/src/toolchain/tests/failure_mocks.rs` provides reusable helpers for
