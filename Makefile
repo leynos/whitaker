@@ -2,7 +2,7 @@
 
 APP ?= whitaker-installer
 PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(PATH)
-CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(HOME)/.cargo/bin/cargo)
+CARGO ?= $(or $(shell [ -x "$(HOME)/.cargo/bin/cargo" ] && echo "$(HOME)/.cargo/bin/cargo"),$(shell command -v cargo 2>/dev/null))
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
