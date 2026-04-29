@@ -199,6 +199,16 @@ make-target invocations
 resolved ahead of any system-level copies, without requiring developers to
 modify their shell environment permanently.
 
+`CARGO` and `MDLINT` are resolved at make-invocation time using `$(or ...)`
+shell probes rather than fixed command names. `CARGO` prefers
+`~/.cargo/bin/cargo` (the rustup proxy) when that file is executable, falling
+back to whatever `command -v cargo` resolves on `PATH`; this ensures the
+rustup-managed toolchain override is always honoured. `MDLINT` prefers the
+`markdownlint-cli2` binary found on `PATH` (typically a global npm or Bun
+install), falling back to `~/.bun/bin/markdownlint-cli2`. Both variables honour
+an existing environment value if set before invoking make, allowing
+per-developer overrides without modifying the Makefile.
+
 `make verus` currently runs both decomposition-advice proofs and the
 clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
 adjacency harnesses and the clone-detector harness group in one pass.

@@ -324,6 +324,32 @@ mod tests {
             ),
         }
     )]
+    #[case::toolchain_install_wrong_channel(
+        FailureErrorCase {
+            err: InstallerError::ToolchainInstallFailed {
+                toolchain: "stable".to_owned(),
+                message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
+            },
+            failure: InstallFailure::ToolchainInstall,
+            additional_components: &[],
+            expected_panic_message: Some(
+                "ToolchainInstallFailed for channel nightly-2025-09-18 while exercising toolchain installation failure",
+            ),
+        }
+    )]
+    #[case::toolchain_install_wrong_message(
+        FailureErrorCase {
+            err: InstallerError::ToolchainInstallFailed {
+                toolchain: "nightly-2025-09-18".to_owned(),
+                message: "unexpected error".to_owned(),
+            },
+            failure: InstallFailure::ToolchainInstall,
+            additional_components: &[],
+            expected_panic_message: Some(
+                "ToolchainInstallFailed for channel nightly-2025-09-18 while exercising toolchain installation failure",
+            ),
+        }
+    )]
     #[case::component_add_mismatch(
         FailureErrorCase {
             err: InstallerError::ToolchainNotInstalled {
@@ -336,11 +362,65 @@ mod tests {
             ),
         }
     )]
+    #[case::component_add_wrong_channel(
+        FailureErrorCase {
+            err: InstallerError::ToolchainComponentInstallFailed {
+                toolchain: "stable".to_owned(),
+                components: expected_components(&[]),
+                message: COMPONENT_INSTALL_FAILURE_MESSAGE.to_owned(),
+            },
+            failure: InstallFailure::ComponentAdd,
+            additional_components: &[],
+            expected_panic_message: Some(
+                "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure",
+            ),
+        }
+    )]
+    #[case::component_add_wrong_components(
+        FailureErrorCase {
+            err: InstallerError::ToolchainComponentInstallFailed {
+                toolchain: "nightly-2025-09-18".to_owned(),
+                components: "rust-src".to_owned(),
+                message: COMPONENT_INSTALL_FAILURE_MESSAGE.to_owned(),
+            },
+            failure: InstallFailure::ComponentAdd,
+            additional_components: &[],
+            expected_panic_message: Some(
+                "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure",
+            ),
+        }
+    )]
+    #[case::component_add_wrong_message(
+        FailureErrorCase {
+            err: InstallerError::ToolchainComponentInstallFailed {
+                toolchain: "nightly-2025-09-18".to_owned(),
+                components: expected_components(&[]),
+                message: "unexpected error".to_owned(),
+            },
+            failure: InstallFailure::ComponentAdd,
+            additional_components: &[],
+            expected_panic_message: Some(
+                "ToolchainComponentInstallFailed for channel nightly-2025-09-18 while exercising component installation failure",
+            ),
+        }
+    )]
     #[case::toolchain_unusable_mismatch(
         FailureErrorCase {
             err: InstallerError::ToolchainInstallFailed {
                 toolchain: "nightly-2025-09-18".to_owned(),
                 message: TOOLCHAIN_INSTALL_FAILURE_MESSAGE.to_owned(),
+            },
+            failure: InstallFailure::ToolchainUnusableAfterInstall,
+            additional_components: &[],
+            expected_panic_message: Some(
+                "ToolchainNotInstalled for channel nightly-2025-09-18 while exercising toolchain unusable after installation",
+            ),
+        }
+    )]
+    #[case::toolchain_unusable_wrong_channel(
+        FailureErrorCase {
+            err: InstallerError::ToolchainNotInstalled {
+                toolchain: "stable".to_owned(),
             },
             failure: InstallFailure::ToolchainUnusableAfterInstall,
             additional_components: &[],
