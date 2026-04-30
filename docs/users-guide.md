@@ -603,13 +603,19 @@ allow_in_main = true
 
 **What is denied:**
 
-- `unwrap_or_else(|| panic!(..))`
-- `unwrap_or_else(|| panic!("static message"))` inside tests when the closure
-  does not interpolate a runtime value; use `.expect("static message")` instead
+- `unwrap_or_else(|| panic!(..))` outside tests, subject to the standard
+  denial
+- `unwrap_or_else(|| panic!(..))` in tests unless the `panic!` message
+  interpolates runtime values
+- `unwrap_or_else(|| panic!("static message"))` in tests; use
+  `.expect("static message")` instead
 - `unwrap_or_else(|| value.unwrap())`
 
 **How to fix:** Propagate errors with `?` or use `.expect()` with a clear
 message if a panic is truly intended. In tests, replace
 `unwrap_or_else(|| panic!("msg"))` with `.expect("msg")` for clarity and
-brevity unless the closure needs to interpolate runtime state for a more useful
-diagnostic.
+brevity, unless the closure needs to interpolate runtime state for a more
+useful diagnostic. The rule denies only closures whose `panic!` message does
+not meet the interpolated-only test exception. When the closure contains a
+static string literal in tests, prefer `.expect("static message")`; only
+interpolated-only `panic!` fallbacks are permitted there.
