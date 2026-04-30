@@ -1,3 +1,5 @@
+//! Test helpers for mocking failure cases and coverage for toolchain installation tests.
+
 use super::*;
 use rstest::{fixture, rstest};
 
