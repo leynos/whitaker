@@ -158,6 +158,10 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         _step_names(linux_job),
         [
             "Check formatting",
+            "Install bun",
+            "Install Mermaid CLI",
+            "Setup uv",
+            "Install Nixie",
             "Nixie",
             "Markdown lint",
             "Lint",

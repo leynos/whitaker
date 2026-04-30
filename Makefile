@@ -152,6 +152,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 		echo "Install python3 or python to run release-installer-dry-run"; \
 		exit 1; \
 	fi; \
+	[ -n "$(CARGO)" ] || { echo "Install cargo to run release-installer-dry-run"; exit 1; }; \
 	for tool in awk jq mktemp rustc; do \
 		command -v "$$tool" >/dev/null || { echo "Install $$tool to run release-installer-dry-run"; exit 1; }; \
 	done; \

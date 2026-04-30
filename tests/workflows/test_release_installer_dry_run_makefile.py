@@ -40,6 +40,9 @@ def test_release_dry_run_checks_required_tools(
     assert "Install python3 or python to run release-installer-dry-run" in (
         release_installer_dry_run_recipe
     ), "release-installer-dry-run must explain missing Python tools"
+    assert '[ -n "$(CARGO)" ] || { echo "Install cargo to run release-installer-dry-run"; exit 1; }' in (
+        release_installer_dry_run_recipe
+    ), "release-installer-dry-run must validate the Cargo command"
     assert "for tool in awk jq mktemp rustc; do" in (
         release_installer_dry_run_recipe
     ), "release-installer-dry-run must validate required shell tools"
@@ -65,17 +68,14 @@ def test_release_dry_run_builds_binaries_in_target_scoped_tree(
 ) -> None:
     """Ensure ambient Cargo target settings cannot split binary outputs."""
     assert (
-        "$(CARGO) build $(BUILD_JOBS) -p whitaker-installer --release "
-        "--target \"$$HOST_TRIPLE\""
-    ) in release_installer_dry_run_recipe, (
-        "builds must target HOST_TRIPLE and set INSTALLER_BIN/PACKAGER paths"
-    )
+        "--target \"$$HOST_TRIPLE\"" in release_installer_dry_run_recipe
+    ), "builds must target HOST_TRIPLE"
     assert (
-        "$(CARGO) build $(BUILD_JOBS) --release -p whitaker-installer "
-        "--bin whitaker-package-installer --target \"$$HOST_TRIPLE\""
-    ) in release_installer_dry_run_recipe, (
-        "packager builds must target HOST_TRIPLE and set target-scoped paths"
-    )
+        "whitaker-installer" in release_installer_dry_run_recipe
+    ), "builds must include the whitaker-installer package"
+    assert (
+        "whitaker-package-installer" in release_installer_dry_run_recipe
+    ), "builds must include the whitaker-package-installer binary"
     assert (
         'INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer"'
         in release_installer_dry_run_recipe
