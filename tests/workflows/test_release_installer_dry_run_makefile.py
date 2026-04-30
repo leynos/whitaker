@@ -34,7 +34,13 @@ def test_release_dry_run_checks_required_tools(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure missing shell tools fail before build work starts."""
-    assert "for tool in awk jq mktemp python rustc; do" in (
+    assert "PYTHON=$$(command -v python3 || command -v python || true)" in (
+        release_installer_dry_run_recipe
+    ), "release-installer-dry-run must resolve python3 or python"
+    assert "Install python3 or python to run release-installer-dry-run" in (
+        release_installer_dry_run_recipe
+    ), "release-installer-dry-run must explain missing Python tools"
+    assert "for tool in awk jq mktemp rustc; do" in (
         release_installer_dry_run_recipe
     ), "release-installer-dry-run must validate required shell tools"
     assert "Install $$tool to run release-installer-dry-run" in (
@@ -104,7 +110,7 @@ def test_release_dry_run_generates_and_validates_checksums(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure archive and checksum creation are both validated."""
-    assert 'python scripts/generate_checksums.py "$$DIST_DIR"' in (
+    assert '"$$PYTHON" scripts/generate_checksums.py "$$DIST_DIR"' in (
         release_installer_dry_run_recipe
     ), "checksum generation and validation must be invoked"
     assert "Expected installer archive matching $$ARCHIVE_GLOB" in (

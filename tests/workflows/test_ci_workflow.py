@@ -169,11 +169,9 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         ),
     )
 
-    assert (
-        _find_step(linux_job, "Publish dry run").get("run") == "make publish-check"
-    ), (
-        "linux-full must keep publish-check on Linux only"
-    )
+    assert _find_step(linux_job, "Publish dry run").get("run") == (
+        'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
+    ), "linux-full must publish-check the release crates on Linux only"
 
 
 def test_windows_compat_stays_limited_to_windows_compatibility_checks(
@@ -186,6 +184,8 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         "windows-compat",
         parent_name="CI workflow jobs",
     )
+    if windows_job.get("defaults") != {"run": {"shell": "bash"}}:
+        pytest.fail("windows-compat must keep using Bash for POSIX make targets")
 
     step_names = _step_names(windows_job)
     _assert_steps_in_order(
