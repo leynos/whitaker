@@ -119,6 +119,14 @@ fn setup_toolchain_unusable_failure_mocks(
 /// trigger the error variant corresponding to `setup.failure`. Any extra
 /// components in `setup.additional_components` are included in the expected
 /// `rustup component add` invocation where applicable.
+///
+/// # Arguments
+///
+/// - `runner` - Mock command runner that receives the expected `rustup` and
+///   `rustc` calls.
+/// - `seq` - Mockall sequence enforcing the order of expected commands.
+/// - `channel` - Toolchain channel being installed or checked.
+/// - `setup` - Failure mode and additional components to model.
 pub(super) fn setup_failure_mocks(
     runner: &mut MockCommandRunner,
     seq: &mut mockall::Sequence,
@@ -203,6 +211,13 @@ fn is_component_install_failed(
 /// For `ComponentAdd`, also verifies the reported component list includes the
 /// required components plus any in `setup.additional_components`.
 ///
+/// # Arguments
+///
+/// - `err` - Installer error returned by the code under test.
+/// - `channel` - Toolchain channel expected in the error payload.
+/// - `setup` - Failure mode and additional components that define the expected
+///   error shape.
+///
 /// # Panics
 ///
 /// Panics with a descriptive message if the error variant or its fields do not
@@ -247,5 +262,6 @@ pub(super) fn assert_failure_error(
     }
 }
 
+/// Unit tests for failure-oriented toolchain installation helpers.
 #[cfg(test)]
 mod tests;
