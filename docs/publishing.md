@@ -34,6 +34,20 @@ This target builds the workspace, runs tests with the pinned toolchain, and
 packages the crates named in `PUBLISH_PACKAGES` for inspection, which here
 means both `whitaker-common` and `whitaker-installer`.
 
+To validate the installer archive path used by the release workflow on the
+current host platform, run:
+
+```sh
+make release-installer-dry-run
+```
+
+This target builds the installer, invokes `whitaker-package-installer`, and
+generates checksums for the resulting archive, so release packaging issues are
+caught before tagging or publishing. It is a POSIX-shell target and checks for
+the required `awk`, `jq`, `mktemp`, `python`, and `rustc` commands before doing
+build work. On Windows, run it from an environment that provides those tools,
+such as the Bash shell used by CI.
+
 ## Dry run
 
 Perform a dry run to see the exact artefacts that would be uploaded:

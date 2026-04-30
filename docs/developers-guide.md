@@ -7,11 +7,17 @@ Whitaker itself. For using Whitaker lints in a project, see the
 ## Prerequisites
 
 - Rust nightly toolchain (version specified in `rust-toolchain.toml`)
+- `jq` for extracting package metadata in release dry runs
+- Python 3 for workflow tests and release checksum generation
 - `cargo-dylint` and `dylint-link` installed:
 
   ```sh
   cargo install cargo-dylint dylint-link
   ```
+
+CI also installs or provides job-specific tools such as `cargo-nextest`,
+`bun`, `uv`, Mermaid CLI, and Nixie before running the targets that need them.
+Local runs of those targets require the same tools on `PATH`.
 
 ## Running Tests
 
@@ -116,6 +122,45 @@ make test NEXTEST_PROFILE=ci
 
 Continuous Integration (CI) always uses the `ci` profile, so installer tests
 are never silently skipped in the pipeline.
+
+The CI workflow is split by purpose rather than running the same stack on every
+operating system. `linux-full` is the authoritative gate for formatting,
+Mermaid/Nixie/Markdown validation, `make lint`, and `make publish-check`.
+`windows-compat` is a narrower compatibility lane that runs
+`make test NEXTEST_PROFILE=ci`, `make install-smoke`, and
+`make release-installer-dry-run` to prove the workspace still builds on
+Windows, the installed binary can execute, and the Windows installer release
+packaging path stays valid. The release dry-run target is a POSIX-shell target;
+Windows CI runs it under Bash and requires the same command-line tools as local
+POSIX environments.
+
+Both lanes share the workflow-level environment contract:
+`BUILD_PROFILE=debug` narrows `sccache` keys to debug builds only, preventing
+cache pollution from release builds; `CARGO_INCREMENTAL=0` disables incremental
+compilation, which is incompatible with `sccache`; `RUSTC_WRAPPER=sccache`
+routes all `rustc` invocations through `sccache`; `SCCACHE_GHA_ENABLED=true`
+activates the GitHub Actions cache backend for `sccache`; and
+`RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` deny compiler and doc
+warnings as errors across both lanes. Together, these variables keep the cache
+scope narrow, ensure `sccache` is active for all compilation, and enforce a
+warnings-as-errors build contract.
+
+### CI build caching
+
+CI uses `sccache` through the GitHub Actions backend to share Rust compilation
+artefacts between the Linux and Windows lanes. The workflow sets
+`SCCACHE_GHA_ENABLED=true` and `RUSTC_WRAPPER=sccache`, so Cargo invokes
+`rustc` through `sccache` automatically.
+
+The shared target cache is intentionally scoped to debug builds:
+
+- `BUILD_PROFILE=debug` keeps cache paths centred on the profile used by the
+  normal test and typecheck jobs.
+- `CARGO_INCREMENTAL=0` disables incremental build artefacts, which are
+  poorly suited to shared CI cache reuse and can make cache contents larger
+  without improving repeatability.
+- `RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` preserve the
+  warnings-as-errors contract even when builds are routed through `sccache`.
 
 Table: Test profiles and typical usage.
 
