@@ -5,14 +5,14 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `AGENTS.md`. The canonical
 plan file is
 `docs/execplans/8-1-3-argument-and-paragraph-fingerprint-data-models.md`.
 
-This draft must be approved before implementation begins. Do not start code
-changes for roadmap item 8.1.3 until the user explicitly approves this plan.
+This plan was approved for implementation on 2026-05-01. Code changes for
+roadmap item 8.1.3 may proceed within the tolerances below.
 
 ## Purpose / big picture
 
@@ -128,19 +128,28 @@ Success is observable when:
   patterns in `common/`.
 - [x] (2026-04-23) Drafted this ExecPlan at
   `docs/execplans/8-1-3-argument-and-paragraph-fingerprint-data-models.md`.
-- [ ] Establish the red baseline with focused unit and behavioural tests that
-  describe the missing fingerprint contracts.
-- [ ] Implement the shared argument fingerprint models and public constructors.
-- [ ] Implement the shared paragraph fingerprint models and deterministic
-  local-slot normalization helpers.
-- [ ] Re-export the new API from `common/src/rstest/mod.rs` and
-  `common/src/lib.rs`, with Rustdoc examples.
-- [ ] Record implementation decisions in
+- [x] (2026-05-01) Implementation approved by the user and plan status moved
+  to `IN PROGRESS`.
+- [x] (2026-05-01) Established the red baseline with focused unit and
+  behavioural tests. `cargo test -p whitaker-common rstest::` fails only
+  because the new fingerprint types are not yet exported.
+- [x] (2026-05-01) Implemented the shared argument fingerprint models and
+  public constructors in `common/src/rstest/argument_fingerprint.rs`.
+- [x] (2026-05-01) Implemented the shared paragraph fingerprint models and
+  deterministic `ParagraphNormalizer` helper in
+  `common/src/rstest/paragraph_fingerprint.rs`.
+- [x] (2026-05-01) Re-exported the new API from `common/src/rstest/mod.rs` and
+  `common/src/lib.rs`, with Rustdoc examples on the public constructors.
+- [x] (2026-05-01) Recorded implementation decisions in
   `docs/lints-for-rstest-fixtures-and-test-hygiene.md`.
-- [ ] Mark roadmap item 8.1.3 done in `docs/roadmap.md`.
-- [ ] Run `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
-  `make lint`, and `make test`.
-- [ ] Finalize the living sections in this document after implementation.
+- [x] (2026-05-01) Marked roadmap item 8.1.3 done in
+  `docs/roadmap.md` after the implementation and formatter-config fix were
+  validated.
+- [x] (2026-05-01) Ran `make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, and `make test`; all passed after adding the
+  legacy Markdown lint configuration.
+- [x] (2026-05-01) Finalized the living sections in this document after
+  implementation.
 
 ## Surprises & Discoveries
 
@@ -157,12 +166,22 @@ Success is observable when:
 - The stale `rstest-bdd` comment in `common/Cargo.toml` has already been fixed
   to `0.5.x`; 8.1.3 does not need to revisit that documentation hygiene.
 - The current behaviour harnesses in
-  `common/tests/rstest_detection_behaviour.rs`
-  and `common/tests/rstest_span_recovery_behaviour.rs` are good templates for a
+  `common/tests/rstest_detection_behaviour.rs` and
+  `common/tests/rstest_span_recovery_behaviour.rs` are good templates for a
   small, public-API-first fingerprint harness.
 - Previous 8.1.x work already documented one `rstest-bdd` caveat: `And`
   continues the previous keyword family. The fingerprint harness should prefer
   explicit step types instead of relying on subtle keyword transitions.
+- `rstest-bdd` binds step fixtures by parameter name. No-op inspection steps
+  still need the parameter named `world`; `_world` is treated as a missing
+  fixture.
+- The repository-wide `make fmt` target currently reaches unrelated Markdown
+  line-length failures after `cargo fmt --all` succeeds. This was observed
+  before any task-specific documentation completion check.
+- `make fmt` uses `mdformat-all`, which invokes the legacy `markdownlint`
+  binary rather than `markdownlint-cli2`. The legacy binary did not read
+  `.markdownlint-cli2.jsonc`, so it reported table and heading line-length
+  failures that `make markdownlint` correctly ignored.
 
 ## Decision Log
 
@@ -182,6 +201,16 @@ Success is observable when:
   `common/src/rstest/tests.rs` in place. Rationale: the repository's 400-line
   limit is a hard constraint, not a cleanup suggestion. Date/Author: 2026-04-23
   / plan author.
+- Decision: expose `LocalSlot` as a public `u32` newtype instead of the draft
+  `u16` shape. Rationale: the normalizer can keep a simple infallible API
+  without an overflow panic or Clippy-forbidden `expect`, while preserving the
+  same deterministic equality and ordering contract. Date/Author: 2026-05-01 /
+  implementation.
+- Decision: add `.markdownlint.json` mirroring `.markdownlint-cli2.jsonc`.
+  Rationale: `make fmt` shells out to `markdownlint --fix` through
+  `mdformat-all`, while `make markdownlint` uses `markdownlint-cli2`; both
+  entry points now share the same table, heading, and line-length policy.
+  Date/Author: 2026-05-01 / implementation.
 
 ## Context and orientation
 
@@ -451,6 +480,18 @@ Expected success signals:
 
 ## Outcomes & Retrospective
 
-Pending implementation. This draft is complete enough for review and approval,
-but no code, roadmap, or design-document completion state should change until
-the implementation turn is approved and finished.
+Roadmap item 8.1.3 is complete. `whitaker-common` now exposes public argument
+and paragraph fingerprint models through `common::rstest`, with deterministic
+paragraph local-slot normalization owned by `ParagraphNormalizer`. Unsupported
+arguments and unknown paragraph shapes remain explicit in the model layer for
+later lint policy decisions.
+
+The implementation added focused unit coverage and a public-API-first
+`rstest-bdd` behaviour harness. The design document records the final API
+placement and the `u32` slot ordinal refinement. The roadmap marks 8.1.3 done.
+
+The main lesson was that Markdown validation had two entry points with
+different configuration discovery: `make markdownlint` used
+`markdownlint-cli2`, while `make fmt` used legacy `markdownlint --fix` through
+`mdformat-all`. Adding `.markdownlint.json` aligned the formatter with the
+existing repository policy and made the full gate set reproducible.
