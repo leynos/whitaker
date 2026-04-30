@@ -188,7 +188,8 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         "windows-compat",
         parent_name="CI workflow jobs",
     )
-    if windows_job.get("defaults") != {"run": {"shell": "bash"}}:
+    defaults = windows_job.get("defaults", {})
+    if defaults.get("run", {}).get("shell") != "bash":
         pytest.fail("windows-compat must keep using Bash for POSIX make targets")
 
     step_names = _step_names(windows_job)
