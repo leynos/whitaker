@@ -1,4 +1,20 @@
-"""Validate CI workflow contracts for Linux and Windows lanes."""
+"""Validate CI workflow contracts for Linux and Windows lanes.
+
+This module treats `.github/workflows/ci.yml` as a behavioural contract rather
+than a loose implementation detail. The tests ensure Linux remains the full
+validation lane, Windows remains focused on compatibility and installer smoke
+coverage, and shared workflow environment variables keep caching and warnings
+policy consistent across both jobs.
+
+The tests expect `WORKFLOW_PATH` to point at a readable GitHub Actions workflow
+YAML file and return normal pytest pass/fail output. Run them directly with:
+
+```sh
+PYTHONPATH=. uv run pytest tests/workflows/test_ci_workflow.py
+```
+
+In CI, these checks are covered by the `linux-full` job's workflow-test gate.
+"""
 
 from __future__ import annotations
 
