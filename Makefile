@@ -1,5 +1,7 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke package-lints workflow-test workflow-test-deps verus kani verus-clone-detector kani-clone-detector
 
+export PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(HOME)/.local/bin:$(PATH)
+
 APP ?= whitaker-installer
 CARGO ?= cargo
 BUILD_JOBS ?=

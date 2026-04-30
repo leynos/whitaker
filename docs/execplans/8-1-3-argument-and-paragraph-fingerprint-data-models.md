@@ -182,6 +182,10 @@ Success is observable when:
   binary rather than `markdownlint-cli2`. The legacy binary did not read
   `.markdownlint-cli2.jsonc`, so it reported table and heading line-length
   failures that `make markdownlint` correctly ignored.
+- Post-turn hooks run `make` in an environment where user-local binary
+  directories are not guaranteed to be on `PATH`. The Makefile now prepends the
+  repository's expected user-local tool directories so `cargo`,
+  `markdownlint-cli2`, and related developer tools resolve consistently.
 
 ## Decision Log
 
@@ -211,6 +215,11 @@ Success is observable when:
   `mdformat-all`, while `make markdownlint` uses `markdownlint-cli2`; both
   entry points now share the same table, heading, and line-length policy.
   Date/Author: 2026-05-01 / implementation.
+- Decision: export a Makefile-local `PATH` containing `$(HOME)/.cargo/bin`,
+  `$(HOME)/.bun/bin`, and `$(HOME)/.local/bin`. Rationale: hook runs may not
+  inherit an interactive shell path, but the repository already documents and
+  uses tools installed in those user-local locations. Date/Author: 2026-05-01 /
+  implementation.
 
 ## Context and orientation
 
