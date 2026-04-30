@@ -36,10 +36,10 @@ def test_release_dry_run_checks_required_tools(
     """Ensure missing shell tools fail before build work starts."""
     assert "for tool in awk jq mktemp python rustc; do" in (
         release_installer_dry_run_recipe
-    )
+    ), "release-installer-dry-run must validate required shell tools"
     assert "Install $$tool to run release-installer-dry-run" in (
         release_installer_dry_run_recipe
-    )
+    ), "release-installer-dry-run must explain missing shell tools"
 
 
 def test_release_dry_run_detects_host_triple_with_rustc(
@@ -48,8 +48,10 @@ def test_release_dry_run_detects_host_triple_with_rustc(
     """Ensure archive naming and build output use the detected host triple."""
     assert "HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}')" in (
         release_installer_dry_run_recipe
-    )
-    assert "--target \"$$HOST_TRIPLE\"" in release_installer_dry_run_recipe
+    ), "HOST_TRIPLE detection must be emitted"
+    assert (
+        "--target \"$$HOST_TRIPLE\"" in release_installer_dry_run_recipe
+    ), "builds must target HOST_TRIPLE"
 
 
 def test_release_dry_run_builds_binaries_in_target_scoped_tree(
@@ -59,35 +61,43 @@ def test_release_dry_run_builds_binaries_in_target_scoped_tree(
     assert (
         "$(CARGO) build $(BUILD_JOBS) -p whitaker-installer --release "
         "--target \"$$HOST_TRIPLE\""
-    ) in release_installer_dry_run_recipe
+    ) in release_installer_dry_run_recipe, (
+        "builds must target HOST_TRIPLE and set INSTALLER_BIN/PACKAGER paths"
+    )
     assert (
         "$(CARGO) build $(BUILD_JOBS) --release -p whitaker-installer "
         "--bin whitaker-package-installer --target \"$$HOST_TRIPLE\""
-    ) in release_installer_dry_run_recipe
+    ) in release_installer_dry_run_recipe, (
+        "packager builds must target HOST_TRIPLE and set target-scoped paths"
+    )
     assert (
         'INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer"'
         in release_installer_dry_run_recipe
-    )
+    ), "INSTALLER_BIN must use the HOST_TRIPLE target tree"
     assert (
         'PACKAGER="./target/$$HOST_TRIPLE/release/whitaker-package-installer"'
         in release_installer_dry_run_recipe
-    )
+    ), "PACKAGER must use the HOST_TRIPLE target tree"
 
 
 def test_release_dry_run_uses_platform_archive_names(
     release_installer_dry_run_recipe: str,
 ) -> None:
     """Ensure Windows and non-Windows archives use the expected suffixes."""
-    assert 'ARCHIVE_GLOB="$$DIST_DIR/*.zip"' in release_installer_dry_run_recipe
-    assert 'ARCHIVE_GLOB="$$DIST_DIR/*.tgz"' in release_installer_dry_run_recipe
+    assert (
+        'ARCHIVE_GLOB="$$DIST_DIR/*.zip"' in release_installer_dry_run_recipe
+    ), "Windows branch must emit .zip archive glob"
+    assert (
+        'ARCHIVE_GLOB="$$DIST_DIR/*.tgz"' in release_installer_dry_run_recipe
+    ), "non-Windows branch must emit .tgz archive glob"
     assert (
         'INSTALLER_BIN="target/$$HOST_TRIPLE/release/whitaker-installer.exe"'
         in release_installer_dry_run_recipe
-    )
+    ), "Windows installer path must use the .exe suffix"
     assert (
         'PACKAGER="./target/$$HOST_TRIPLE/release/whitaker-package-installer.exe"'
         in release_installer_dry_run_recipe
-    )
+    ), "Windows packager path must use the .exe suffix"
 
 
 def test_release_dry_run_generates_and_validates_checksums(
@@ -96,11 +106,10 @@ def test_release_dry_run_generates_and_validates_checksums(
     """Ensure archive and checksum creation are both validated."""
     assert 'python scripts/generate_checksums.py "$$DIST_DIR"' in (
         release_installer_dry_run_recipe
-    )
+    ), "checksum generation and validation must be invoked"
     assert "Expected installer archive matching $$ARCHIVE_GLOB" in (
         release_installer_dry_run_recipe
-    )
+    ), "release dry run must validate archive creation"
     assert "Expected installer checksum in $$DIST_DIR" in (
         release_installer_dry_run_recipe
-    )
-
+    ), "release dry run must validate checksum creation"
