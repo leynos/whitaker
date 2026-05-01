@@ -226,7 +226,6 @@ Whitaker now ships repository-managed proof tooling for the formal verification
 work introduced around decomposition advice and the clone-detector pipeline.
 Run these commands from the workspace root.
 
-
 ### Clone-detector index structure
 
 The clone-detector index code is grouped under
