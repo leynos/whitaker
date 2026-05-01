@@ -2,9 +2,27 @@
 
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
+use rstest::rstest;
 use std::path::Path;
 use std::{fs, io};
-use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
+use temp_env::with_vars_unset;
+use whitaker_common::test_support::{
+    env_test_guard, prepare_fixture, run_fixtures_with, run_test_runner,
+};
+
+/// Describes a single example-based regression to run under the test harness.
+///
+/// `name` is the example target name, `label` is the human-readable case name
+/// used in panic messages, and `rustc_flags` supplies the extra harness flags
+/// passed to `dylint_testing`.
+struct ExampleHarnessRun<'a> {
+    /// Example target name passed to `Test::example`.
+    name: &'a str,
+    /// Human-readable label used when a regression runner fails.
+    label: &'a str,
+    /// Extra `rustc` flags used for the harness invocation.
+    rustc_flags: &'a [&'a str],
+}
 
 #[test]
 fn ui() {
@@ -18,6 +36,47 @@ fn ui() {
             "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
         )
     });
+}
+
+/// Runs an example-based regression under the dylint UI test harness.
+///
+/// Applies `spec.rustc_flags` to the compilation and formats any failure
+/// message using `spec.label`.
+fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
+    let crate_name = env!("CARGO_PKG_NAME");
+    let directory = "examples";
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+        run_example_under_test_harness_inner(crate_name, spec)
+    })
+    .unwrap_or_else(|error| {
+        panic!(
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            spec.label
+        )
+    });
+}
+
+/// Runs a single example target inside the runner closure supplied by
+/// `run_with_runner`.
+fn run_example_under_test_harness_inner(
+    crate_name: &str,
+    spec: &ExampleHarnessRun<'_>,
+) -> Result<(), String> {
+    run_test_runner(spec.name, || {
+        let _guard = env_test_guard();
+        with_vars_unset(
+            [
+                "RUSTC_WRAPPER",
+                "RUSTC_WORKSPACE_WRAPPER",
+                "CARGO_BUILD_RUSTC_WRAPPER",
+            ],
+            || {
+                let mut test = Test::example(crate_name, spec.name);
+                test.rustc_flags(spec.rustc_flags);
+                test.run();
+            },
+        );
+    })
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
@@ -85,4 +144,14 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
     }
 
     Ok(Some(flags))
+}
+
+#[rstest]
+#[case("pass_unwrap_in_rstest_harness", "rstest")]
+fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) {
+    run_example_under_test_harness(&ExampleHarnessRun {
+        name,
+        label,
+        rustc_flags: &["--test"],
+    });
 }
