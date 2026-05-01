@@ -20,7 +20,7 @@ serial-dylint-ui = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 
 [[profile.default.overrides]]
-# Include crate-local `ui::ui` entrypoints that wrap dylint UI fixtures.
+# Include crate-local UI entrypoints that wrap dylint UI fixtures.
 # On Windows, `dylint::driver_builder::get` persists a temporary file via
 # `tempfile::NamedTempFile::persist()`.  Windows Defender or indexing services
 # can briefly hold a handle on the file, causing the rename to fail with
@@ -31,9 +31,15 @@ serial-toolchain-installs = { max-threads = 1 }
 # integration binary is `tests/ui.rs` with a top-level `fn ui()` — the test
 # name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
+#
+# `ui::example_compiles_under_test_harness` also builds lint libraries through
+# the Dylint UI harness, but its rstest-generated name is not matched by the
+# `ui::ui` clauses.  Keep it in the same serial group so it cannot contend with
+# another UI build on Windows.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
+slow-timeout = { period = "10m", terminate-after = 1 }
 
 # Extend the timeout for toolchain auto-install behavioural tests, since the
 # isolated rustup setup may need to download and install a full nightly toolchain.
