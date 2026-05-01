@@ -18,6 +18,8 @@ use core::cmp::Ordering;
 use vstd::prelude::*;
 use vstd::std_specs::cmp::{PartialEqSpec, PartialOrdSpec};
 
+// Keep this path in sync with the runtime `FragmentId` source file; CI checks
+// the exact `#[path]` value and imported `FragmentId` symbol below.
 #[path = "../crates/whitaker_clones_core/src/index/fragment_id.rs"]
 mod fragment_id_runtime;
 
