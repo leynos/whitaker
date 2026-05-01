@@ -29,24 +29,36 @@ verus! {
 #[verifier::external_body]
 pub struct ExFragmentId(FragmentId);
 
-enum CandidatePairOutcome<Id> {
+enum CandidatePairOutcome {
     NoPair,
-    Pair(Id, Id),
+    Pair(FragmentId, FragmentId),
 }
 
+enum CandidatePairInputRelation {
+    Same,
+    Ordered,
+    Reversed,
+}
+
+// Bridge contract: equal ranks are exactly `eq_spec`, and rank comparison is
+// the trusted model for `FragmentId::partial_cmp` on both sides of the proof.
 pub uninterp spec fn fragment_id_rank(id: &FragmentId) -> nat;
+
+pub open spec fn fragment_id_rank_relation(left: &FragmentId, right: &FragmentId) -> Ordering {
+    if fragment_id_rank(left) < fragment_id_rank(right) {
+        Ordering::Less
+    } else if fragment_id_rank(left) > fragment_id_rank(right) {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
+}
 
 pub open spec fn fragment_id_partial_cmp_model(
     left: &FragmentId,
     right: &FragmentId,
 ) -> Option<Ordering> {
-    if fragment_id_rank(left) < fragment_id_rank(right) {
-        Some(Ordering::Less)
-    } else if fragment_id_rank(left) > fragment_id_rank(right) {
-        Some(Ordering::Greater)
-    } else {
-        Some(Ordering::Equal)
-    }
+    Some(fragment_id_rank_relation(left, right))
 }
 
 impl vstd::std_specs::cmp::PartialEqSpecImpl for FragmentId {
@@ -79,28 +91,35 @@ pub assume_specification[ <FragmentId as PartialOrd<FragmentId>>::partial_cmp ](
     right: &FragmentId,
 ) -> Option<Ordering>;
 
-pub open spec fn strict_total_order_axioms<Id: PartialOrd>() -> bool {
-    &&& forall|id: Id| #[trigger] id.eq_spec(&id)
-    &&& forall|left: Id, right: Id| #[trigger] left.partial_cmp_spec(&right)
+pub open spec fn fragment_id_strict_total_order_axioms() -> bool {
+    &&& forall|id: FragmentId| #[trigger] id.eq_spec(&id)
+    &&& forall|left: FragmentId, right: FragmentId| #[trigger] left.partial_cmp_spec(&right)
         != None::<Ordering>
-    &&& forall|left: Id, right: Id| #[trigger]
+    &&& forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) == Some(Ordering::Equal) <==> left.eq_spec(&right)
-    &&& forall|left: Id, right: Id| #[trigger]
+    &&& forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) == Some(Ordering::Less) <==> right.partial_cmp_spec(&left)
             == Some(Ordering::Greater)
-    &&& forall|left: Id, right: Id| #[trigger]
+    &&& forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) == Some(Ordering::Greater) <==> right.partial_cmp_spec(
             &left,
         ) == Some(Ordering::Less)
-    &&& forall|left: Id, middle: Id, right: Id|
+    &&& forall|left: FragmentId, middle: FragmentId, right: FragmentId|
         left.partial_cmp_spec(&middle) == Some(Ordering::Less) && #[trigger]
             middle.partial_cmp_spec(&right) == Some(Ordering::Less) ==> #[trigger]
             left.partial_cmp_spec(&right) == Some(Ordering::Less)
 }
 
+proof fn lemma_fragment_id_partial_cmp_matches_rank(left: FragmentId, right: FragmentId)
+    ensures
+        left.partial_cmp_spec(&right) == Some(fragment_id_rank_relation(&left, &right)),
+        right.partial_cmp_spec(&left) == Some(fragment_id_rank_relation(&right, &left)),
+{
+}
+
 proof fn lemma_fragment_id_partial_cmp_obeys_strict_total_order()
     ensures
-        strict_total_order_axioms::<FragmentId>(),
+        fragment_id_strict_total_order_axioms(),
 {
     assert forall|id: FragmentId| #[trigger] id.eq_spec(&id) by {
         assert(fragment_id_rank(&id) == fragment_id_rank(&id));
@@ -108,58 +127,25 @@ proof fn lemma_fragment_id_partial_cmp_obeys_strict_total_order()
 
     assert forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) != None::<Ordering> by {
-        if fragment_id_rank(&left) < fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Less));
-        } else if fragment_id_rank(&left) > fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Greater));
-        } else {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Equal));
-        }
+        lemma_fragment_id_partial_cmp_matches_rank(left, right);
     };
 
     assert forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) == Some(Ordering::Equal) <==> left.eq_spec(&right) by {
-        if fragment_id_rank(&left) < fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Less));
-            assert(!left.eq_spec(&right));
-        } else if fragment_id_rank(&left) > fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Greater));
-            assert(!left.eq_spec(&right));
-        } else {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Equal));
-            assert(left.eq_spec(&right));
-        }
+        lemma_fragment_id_partial_cmp_matches_rank(left, right);
     };
 
     assert forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) == Some(Ordering::Less) <==> right.partial_cmp_spec(&left)
             == Some(Ordering::Greater) by {
-        if fragment_id_rank(&left) < fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Less));
-            assert(right.partial_cmp_spec(&left) == Some(Ordering::Greater));
-        } else if fragment_id_rank(&left) > fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Greater));
-            assert(right.partial_cmp_spec(&left) == Some(Ordering::Less));
-        } else {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Equal));
-            assert(right.partial_cmp_spec(&left) == Some(Ordering::Equal));
-        }
+        lemma_fragment_id_partial_cmp_matches_rank(left, right);
     };
 
     assert forall|left: FragmentId, right: FragmentId| #[trigger]
         left.partial_cmp_spec(&right) == Some(Ordering::Greater) <==> right.partial_cmp_spec(
             &left,
         ) == Some(Ordering::Less) by {
-        if fragment_id_rank(&left) < fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Less));
-            assert(right.partial_cmp_spec(&left) == Some(Ordering::Greater));
-        } else if fragment_id_rank(&left) > fragment_id_rank(&right) {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Greater));
-            assert(right.partial_cmp_spec(&left) == Some(Ordering::Less));
-        } else {
-            assert(left.partial_cmp_spec(&right) == Some(Ordering::Equal));
-            assert(right.partial_cmp_spec(&left) == Some(Ordering::Equal));
-        }
+        lemma_fragment_id_partial_cmp_matches_rank(left, right);
     };
 
     assert forall|left: FragmentId, middle: FragmentId, right: FragmentId|
@@ -177,41 +163,57 @@ proof fn lemma_fragment_id_partial_cmp_obeys_strict_total_order()
     };
 }
 
-spec fn candidate_pair_new_result<Id: PartialOrd>(left: Id, right: Id) -> CandidatePairOutcome<Id> {
+spec fn candidate_pair_input_relation(
+    left: FragmentId,
+    right: FragmentId,
+) -> CandidatePairInputRelation {
     if left.eq_spec(&right) {
-        CandidatePairOutcome::NoPair
+        CandidatePairInputRelation::Same
     } else if left.partial_cmp_spec(&right) == Some(Ordering::Less) {
-        CandidatePairOutcome::Pair(left, right)
+        CandidatePairInputRelation::Ordered
     } else {
-        CandidatePairOutcome::Pair(right, left)
+        CandidatePairInputRelation::Reversed
     }
 }
 
-spec fn constructor_accepts<Id: PartialOrd>(left: Id, right: Id) -> bool {
+spec fn candidate_pair_new_result(left: FragmentId, right: FragmentId) -> CandidatePairOutcome {
+    match candidate_pair_input_relation(left, right) {
+        CandidatePairInputRelation::Same => CandidatePairOutcome::NoPair,
+        CandidatePairInputRelation::Ordered => CandidatePairOutcome::Pair(left, right),
+        CandidatePairInputRelation::Reversed => CandidatePairOutcome::Pair(right, left),
+    }
+}
+
+spec fn constructor_accepts(left: FragmentId, right: FragmentId) -> bool {
     match candidate_pair_new_result(left, right) {
         CandidatePairOutcome::Pair(_, _) => true,
         CandidatePairOutcome::NoPair => false,
     }
 }
 
-spec fn is_canonical_pair<Id: PartialOrd>(left: Id, right: Id, pair_left: Id, pair_right: Id) -> bool {
+spec fn is_canonical_pair(
+    left: FragmentId,
+    right: FragmentId,
+    pair_left: FragmentId,
+    pair_right: FragmentId,
+) -> bool {
     pair_left.partial_cmp_spec(&pair_right) == Some(Ordering::Less)
         && ((pair_left.eq_spec(&left) && pair_right.eq_spec(&right))
             || (pair_left.eq_spec(&right) && pair_right.eq_spec(&left)))
 }
 
-proof fn lemma_equal_inputs_are_suppressed<Id: PartialOrd>(id: Id)
+proof fn lemma_equal_inputs_are_suppressed(id: FragmentId)
     requires
-        strict_total_order_axioms::<Id>(),
+        fragment_id_strict_total_order_axioms(),
     ensures
-        candidate_pair_new_result(id, id) == CandidatePairOutcome::<Id>::NoPair,
+        candidate_pair_new_result(id, id) == CandidatePairOutcome::NoPair,
         !constructor_accepts(id, id),
 {
 }
 
-proof fn lemma_ordered_inputs_are_preserved<Id: PartialOrd>(left: Id, right: Id)
+proof fn lemma_ordered_inputs_are_preserved(left: FragmentId, right: FragmentId)
     requires
-        strict_total_order_axioms::<Id>(),
+        fragment_id_strict_total_order_axioms(),
         left.partial_cmp_spec(&right) == Some(Ordering::Less),
     ensures
         candidate_pair_new_result(left, right) == CandidatePairOutcome::Pair(left, right),
@@ -220,9 +222,9 @@ proof fn lemma_ordered_inputs_are_preserved<Id: PartialOrd>(left: Id, right: Id)
 {
 }
 
-proof fn lemma_reversed_inputs_are_swapped<Id: PartialOrd>(left: Id, right: Id)
+proof fn lemma_reversed_inputs_are_swapped(left: FragmentId, right: FragmentId)
     requires
-        strict_total_order_axioms::<Id>(),
+        fragment_id_strict_total_order_axioms(),
         left.partial_cmp_spec(&right) == Some(Ordering::Greater),
     ensures
         candidate_pair_new_result(left, right) == CandidatePairOutcome::Pair(right, left),
@@ -232,9 +234,41 @@ proof fn lemma_reversed_inputs_are_swapped<Id: PartialOrd>(left: Id, right: Id)
     assert(right.partial_cmp_spec(&left) == Some(Ordering::Less));
 }
 
-proof fn lemma_distinct_inputs_yield_one_canonical_pair<Id: PartialOrd>(left: Id, right: Id)
+proof fn lemma_distinct_ordered_inputs_yield_canonical_pair(left: FragmentId, right: FragmentId)
     requires
-        strict_total_order_axioms::<Id>(),
+        !left.eq_spec(&right),
+        left.partial_cmp_spec(&right) == Some(Ordering::Less),
+    ensures
+        constructor_accepts(left, right),
+        match candidate_pair_new_result(left, right) {
+            CandidatePairOutcome::Pair(pair_left, pair_right) => {
+                is_canonical_pair(left, right, pair_left, pair_right)
+            }
+            CandidatePairOutcome::NoPair => false,
+        },
+{
+    lemma_ordered_inputs_are_preserved(left, right);
+}
+
+proof fn lemma_distinct_reversed_inputs_yield_canonical_pair(left: FragmentId, right: FragmentId)
+    requires
+        !left.eq_spec(&right),
+        left.partial_cmp_spec(&right) == Some(Ordering::Greater),
+    ensures
+        constructor_accepts(left, right),
+        match candidate_pair_new_result(left, right) {
+            CandidatePairOutcome::Pair(pair_left, pair_right) => {
+                is_canonical_pair(left, right, pair_left, pair_right)
+            }
+            CandidatePairOutcome::NoPair => false,
+        },
+{
+    lemma_reversed_inputs_are_swapped(left, right);
+}
+
+proof fn lemma_distinct_inputs_yield_one_canonical_pair(left: FragmentId, right: FragmentId)
+    requires
+        fragment_id_strict_total_order_axioms(),
         !left.eq_spec(&right),
     ensures
         constructor_accepts(left, right),
@@ -245,40 +279,11 @@ proof fn lemma_distinct_inputs_yield_one_canonical_pair<Id: PartialOrd>(left: Id
             CandidatePairOutcome::NoPair => false,
         },
 {
-    match left.partial_cmp_spec(&right) {
-        Some(Ordering::Less) => {
-            lemma_ordered_inputs_are_preserved(left, right);
-        }
-        Some(Ordering::Equal) => {
-            assert(left.eq_spec(&right));
-            assert(false);
-        }
-        Some(Ordering::Greater) => {
-            lemma_reversed_inputs_are_swapped(left, right);
-        }
-        None => {
-            assert(false);
-        }
-    }
-}
-
-proof fn lemma_constructor_contract<Id: PartialOrd>(left: Id, right: Id)
-    requires
-        strict_total_order_axioms::<Id>(),
-    ensures
-        !constructor_accepts(left, right) <==> left.eq_spec(&right),
-        constructor_accepts(left, right) <==> !left.eq_spec(&right),
-        match candidate_pair_new_result(left, right) {
-            CandidatePairOutcome::Pair(pair_left, pair_right) => {
-                is_canonical_pair(left, right, pair_left, pair_right)
-            }
-            CandidatePairOutcome::NoPair => left.eq_spec(&right),
-        },
-{
-    if left.eq_spec(&right) {
-        lemma_equal_inputs_are_suppressed(left);
+    if left.partial_cmp_spec(&right) == Some(Ordering::Less) {
+        lemma_distinct_ordered_inputs_yield_canonical_pair(left, right);
     } else {
-        lemma_distinct_inputs_yield_one_canonical_pair(left, right);
+        assert(left.partial_cmp_spec(&right) == Some(Ordering::Greater));
+        lemma_distinct_reversed_inputs_yield_canonical_pair(left, right);
     }
 }
 
@@ -294,7 +299,11 @@ proof fn lemma_fragment_id_constructor_contract(left: FragmentId, right: Fragmen
         },
 {
     lemma_fragment_id_partial_cmp_obeys_strict_total_order();
-    lemma_constructor_contract(left, right);
+    if left.eq_spec(&right) {
+        lemma_equal_inputs_are_suppressed(left);
+    } else {
+        lemma_distinct_inputs_yield_one_canonical_pair(left, right);
+    }
 }
 
 fn main() {

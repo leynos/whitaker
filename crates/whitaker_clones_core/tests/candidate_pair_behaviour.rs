@@ -10,8 +10,8 @@ use whitaker_clones_core::{CandidatePair, FragmentId};
 
 #[derive(Debug, Default)]
 struct CandidatePairWorld {
-    left: RefCell<Option<String>>,
-    right: RefCell<Option<String>>,
+    left: RefCell<Option<FragmentId>>,
+    right: RefCell<Option<FragmentId>>,
     pair: RefCell<Option<CandidatePair>>,
 }
 
@@ -30,8 +30,8 @@ fn with_pair(world: &CandidatePairWorld, assert_fn: impl FnOnce(&CandidatePair))
 
 #[given("input fragment IDs {left} and {right}")]
 fn given_input_fragment_ids(world: &CandidatePairWorld, left: String, right: String) {
-    *world.left.borrow_mut() = Some(left);
-    *world.right.borrow_mut() = Some(right);
+    *world.left.borrow_mut() = Some(FragmentId::from(left));
+    *world.right.borrow_mut() = Some(FragmentId::from(right));
 }
 
 #[when("the candidate pair constructor is called")]
@@ -47,7 +47,7 @@ fn when_candidate_pair_constructor_is_called(world: &CandidatePairWorld) -> Resu
         .clone()
         .ok_or_else(|| "right fragment ID must be set before construction".to_owned())?;
 
-    *world.pair.borrow_mut() = CandidatePair::new(FragmentId::from(left), FragmentId::from(right));
+    *world.pair.borrow_mut() = CandidatePair::new(left, right);
     Ok(())
 }
 
