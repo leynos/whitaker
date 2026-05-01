@@ -287,16 +287,20 @@ struct Expectation {
     should_succeed: bool,
 }
 
+/// Shared driver for exclusion integration tests.
+fn run_exclusion_test(crate_name: &str, is_excluded: bool, expectation: Expectation) {
+    let lint_library_path = lint_library_path();
+    let fixture = create_fixture_project(crate_name, is_excluded);
+    assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation);
+}
+
 #[test]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
 fn excluded_crate_suppresses_diagnostics() {
-    let lint_library_path = lint_library_path();
-    let fixture = create_fixture_project("excluded_test_crate", true);
-    assert_fixture_behaviour(
-        fixture.root(),
-        &lint_library_path,
+    run_exclusion_test(
         "excluded_test_crate",
+        true,
         Expectation {
             should_emit_diagnostics: false,
             should_succeed: true,
@@ -308,12 +312,9 @@ fn excluded_crate_suppresses_diagnostics() {
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
 fn non_excluded_crate_emits_diagnostics() {
-    let lint_library_path = lint_library_path();
-    let fixture = create_fixture_project("non_excluded_crate", false);
-    assert_fixture_behaviour(
-        fixture.root(),
-        &lint_library_path,
+    run_exclusion_test(
         "non_excluded_crate",
+        false,
         Expectation {
             should_emit_diagnostics: true,
             should_succeed: false,
