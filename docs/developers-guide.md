@@ -1039,6 +1039,31 @@ their `const` descriptors. The shared root HIR helper
 existing `collect_harness_test_functions()` pass to catch that shape before
 `no_expect_outside_tests` evaluates call-site context.
 
+For example, this user-written test:
+
+```rust
+#[rstest]
+#[case(Some("value"))]
+fn accepts_rstest_case(#[case] input: Option<&str>) {
+    input.expect("rstest case setup may use expect");
+}
+```
+
+is represented as a module group shaped like this in the test harness:
+
+```text
+parent module
+|-- fn accepts_rstest_case(...)
+`-- mod accepts_rstest_case
+    |-- fn case_1()
+    `-- const case_1: test::TestDescAndFn
+```
+
+The important relationship is that the original function and the synthesized
+module are siblings under the same parent module and share the same name. That
+sibling module is the companion module; the parent module contents form the
+module group that the helper scans.
+
 This helper is architecturally significant for two reasons:
 
 - It keeps compiler-lowering knowledge in the shared HIR module rather than in
@@ -1048,11 +1073,18 @@ This helper is architecturally significant for two reasons:
   scope contains a real harness descriptor, which prevents arbitrary const-only
   companion modules from inheriting test status accidentally.
 
-The implementation walks each module group recursively, checks function items
-against same-named sibling modules, and then inspects the module contents for
-the usual function-plus-`const` harness descriptor pairing. That split lets the
-lint treat rstest companion modules as an extension of the existing `--test`
-harness model instead of a separate policy path.
+The implementation follows three steps:
+
+1. Walk each module group recursively so nested `mod tests` blocks and inline
+   modules are considered alongside crate-root items.
+2. For each function item, look for a same-named sibling module in the same
+   parent module.
+3. Inspect that sibling module for the usual synthesized function plus `const`
+   harness descriptor pairing before marking the original function as a test
+   context.
+
+That split lets the lint treat rstest companion modules as an extension of the
+existing `--test` harness model instead of a separate policy path.
 
 ### UI test harness helpers (`lib_ui_tests.rs`)
 
