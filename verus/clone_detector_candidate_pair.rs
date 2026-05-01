@@ -86,13 +86,29 @@ impl vstd::std_specs::cmp::PartialOrdSpecImpl for FragmentId {
     }
 }
 
-/// Trusts the production `PartialEq` implementation to match `eq_spec`.
+/// Trusts the production `PartialEq<FragmentId>` implementation for
+/// `FragmentId::eq` to match its `eq_spec` counterpart.
+///
+/// This declaration is a trust boundary: the proof assumes the runtime
+/// equality implementation and the Verus equality model describe the same
+/// relation.
+///
+/// Runtime unit tests and BDD scenarios ground this assumption in concrete
+/// lexical-string behaviour.
 pub assume_specification[ <FragmentId as PartialEq<FragmentId>>::eq ](
     left: &FragmentId,
     right: &FragmentId,
 ) -> bool;
 
-/// Trusts the production `PartialOrd` implementation to match the rank model.
+/// Trusts the production `PartialOrd<FragmentId>` implementation for
+/// `FragmentId::partial_cmp` to match its `partial_cmp_spec` counterpart.
+///
+/// This declaration is a trust boundary: the proof assumes the runtime
+/// ordering implementation and the Verus ordering model describe the same
+/// relation.
+///
+/// Runtime unit tests and BDD scenarios ground this assumption in concrete
+/// lexical-string behaviour.
 pub assume_specification[ <FragmentId as PartialOrd<FragmentId>>::partial_cmp ](
     left: &FragmentId,
     right: &FragmentId,
