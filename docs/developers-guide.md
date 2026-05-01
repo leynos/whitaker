@@ -226,6 +226,49 @@ Whitaker now ships repository-managed proof tooling for the formal verification
 work introduced around decomposition advice and the clone-detector pipeline.
 Run these commands from the workspace root.
 
+
+### Clone-detector index structure
+
+The clone-detector index code is grouped under
+`crates/whitaker_clones_core/src/index/` by the candidate-generation feature it
+serves. The module split keeps the public constructor contracts small enough to
+test and verify directly:
+
+- `fragment_id.rs` owns the `FragmentId` newtype. It is intentionally separate
+  from the LSH and pair types because its lexical ordering is a contract that
+  unit tests, BDD scenarios, and the Verus sidecar all rely on.
+- `types.rs` owns `CandidatePair`, `LshConfig`, and the fixed MinHash
+  signature types. `CandidatePair::new` consumes already validated `FragmentId`
+  values, suppresses self-pairs, and canonicalizes distinct pairs by the
+  ordering supplied by `FragmentId`.
+- `lsh.rs` and `minhash.rs` own the indexing and sketching algorithms that use
+  those small domain types, while `error.rs` keeps the index error contract out
+  of the algorithm modules.
+- `mod.rs` re-exports the public index surface so callers import
+  `FragmentId`, `CandidatePair`, `LshConfig`, `LshIndex`, and `MinHasher`
+  through `whitaker_clones_core` rather than depending on the internal module
+  layout.
+
+The `FragmentId` reorganization was done to remove a type-ownership tangle in
+`types.rs`. Keeping the identifier newtype in its own module makes the trusted
+ordering bridge in `verus/clone_detector_candidate_pair.rs` easy to audit:
+Verus trusts the derived production ordering for `FragmentId`, while ordinary
+tests pin the concrete string-backed behaviour.
+
+The direct `CandidatePair::new` coverage lives in the clone-core crate:
+
+- Unit tests in `crates/whitaker_clones_core/src/index/tests.rs` cover
+  self-pair suppression, already ordered inputs, reversed inputs, and the
+  lexical edge case `fragment-10 < fragment-2`.
+- The BDD harness in
+  `crates/whitaker_clones_core/tests/candidate_pair_behaviour.rs` exercises the
+  same public constructor through `rstest-bdd` steps.
+- The feature file is
+  `crates/whitaker_clones_core/tests/features/candidate_pair.feature`.
+- The test dependencies are declared in
+  `crates/whitaker_clones_core/Cargo.toml` as `rstest`, `rstest-bdd`, and
+  `rstest-bdd-macros`.
+
 ### Make targets
 
 Use the Makefile targets for normal proof runs:

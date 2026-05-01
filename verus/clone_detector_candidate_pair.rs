@@ -25,6 +25,7 @@ use fragment_id_runtime::FragmentId;
 
 verus! {
 
+/// Verus external type witness for the production `FragmentId` newtype.
 #[verifier::external_type_specification]
 #[verifier::external_body]
 pub struct ExFragmentId(FragmentId);
@@ -40,10 +41,13 @@ enum CandidatePairInputRelation {
     Reversed,
 }
 
-// Bridge contract: equal ranks are exactly `eq_spec`, and rank comparison is
-// the trusted model for `FragmentId::partial_cmp` on both sides of the proof.
+/// Trusted ghost rank used to bridge production `FragmentId` ordering.
+///
+/// Equal ranks are exactly `eq_spec`, and rank comparison is the trusted model
+/// for `FragmentId::partial_cmp` on both sides of the proof.
 pub uninterp spec fn fragment_id_rank(id: &FragmentId) -> nat;
 
+/// Classifies two fragment IDs by their trusted ghost ranks.
 pub open spec fn fragment_id_rank_relation(left: &FragmentId, right: &FragmentId) -> Ordering {
     if fragment_id_rank(left) < fragment_id_rank(right) {
         Ordering::Less
@@ -54,6 +58,7 @@ pub open spec fn fragment_id_rank_relation(left: &FragmentId, right: &FragmentId
     }
 }
 
+/// Models `FragmentId::partial_cmp` as a total comparison over ghost ranks.
 pub open spec fn fragment_id_partial_cmp_model(
     left: &FragmentId,
     right: &FragmentId,
@@ -81,16 +86,19 @@ impl vstd::std_specs::cmp::PartialOrdSpecImpl for FragmentId {
     }
 }
 
+/// Trusts the production `PartialEq` implementation to match `eq_spec`.
 pub assume_specification[ <FragmentId as PartialEq<FragmentId>>::eq ](
     left: &FragmentId,
     right: &FragmentId,
 ) -> bool;
 
+/// Trusts the production `PartialOrd` implementation to match the rank model.
 pub assume_specification[ <FragmentId as PartialOrd<FragmentId>>::partial_cmp ](
     left: &FragmentId,
     right: &FragmentId,
 ) -> Option<Ordering>;
 
+/// States the strict-total-order properties required by `CandidatePair::new`.
 pub open spec fn fragment_id_strict_total_order_axioms() -> bool {
     &&& forall|id: FragmentId| #[trigger] id.eq_spec(&id)
     &&& forall|left: FragmentId, right: FragmentId| #[trigger] left.partial_cmp_spec(&right)
