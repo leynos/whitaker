@@ -11,19 +11,31 @@
     deny(no_unwrap_or_else_panic)
 )]
 
+#[cfg(not(windows))]
 use rstest::rstest;
 
+#[cfg(not(windows))]
 #[rstest]
 #[case(1)]
-#[expect(
-    clippy::unwrap_used,
-    reason = "fixture must exercise the lint's unwrap allowance"
-)]
 fn pass_unwrap_in_rstest_harness(#[case] value: i32) {
-    let parsed = Some(value).unwrap();
+    let parsed = Some(value).unwrap_or_else(|| panic!("case-driven rstest value was {value}"));
     assert_eq!(parsed, 1);
 }
 
-// This fixture covers the current `#[rstest]` + `#[case]` lowering shape.
+#[cfg(windows)]
+fn pass_unwrap_in_rstest_harness(value: i32) {
+    let parsed = Some(value).unwrap_or_else(|| panic!("case-driven rstest value was {value}"));
+    assert_eq!(parsed, 1);
+}
+
+// Windows CI has hung while expanding `rstest` through the Dylint compiletest
+// driver. Use the equivalent post-expansion companion-module shape there.
+#[cfg(all(test, windows))]
+mod pass_unwrap_in_rstest_harness {
+    #[test]
+    fn case_1() {
+        super::pass_unwrap_in_rstest_harness(1);
+    }
+}
 
 fn main() {}
