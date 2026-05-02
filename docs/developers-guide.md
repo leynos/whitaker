@@ -226,6 +226,48 @@ Whitaker now ships repository-managed proof tooling for the formal verification
 work introduced around decomposition advice and the clone-detector pipeline.
 Run these commands from the workspace root.
 
+### Clone-detector index structure
+
+The clone-detector index code is grouped under
+`crates/whitaker_clones_core/src/index/` by the candidate-generation feature it
+serves. The module split keeps the public constructor contracts small enough to
+test and verify directly:
+
+- `fragment_id.rs` owns the `FragmentId` newtype. It is intentionally separate
+  from the LSH and pair types because its lexical ordering is a contract that
+  unit tests, BDD scenarios, and the Verus sidecar all rely on.
+- `types.rs` owns `CandidatePair`, `LshConfig`, and the fixed MinHash
+  signature types. `CandidatePair::new` consumes already validated `FragmentId`
+  values, suppresses self-pairs, and canonicalizes distinct pairs by the
+  ordering supplied by `FragmentId`.
+- `lsh.rs` and `minhash.rs` own the indexing and sketching algorithms that use
+  those small domain types, while `error.rs` keeps the index error contract out
+  of the algorithm modules.
+- `mod.rs` re-exports the public index surface so callers import
+  `FragmentId`, `CandidatePair`, `LshConfig`, `LshIndex`, and `MinHasher`
+  through `whitaker_clones_core` rather than depending on the internal module
+  layout.
+
+The `FragmentId` reorganization was done to remove a type-ownership tangle in
+`types.rs`. Keeping the identifier newtype in its own module makes the trusted
+ordering bridge in `verus/clone_detector_candidate_pair.rs` easy to audit:
+Verus trusts the derived production ordering for `FragmentId`, while ordinary
+tests pin the concrete string-backed behaviour.
+
+The direct `CandidatePair::new` coverage lives in the clone-core crate:
+
+- Unit tests in `crates/whitaker_clones_core/src/index/tests.rs` cover
+  self-pair suppression, already ordered inputs, reversed inputs, and the
+  lexical edge case `fragment-10 < fragment-2`.
+- The BDD harness in
+  `crates/whitaker_clones_core/tests/candidate_pair_behaviour.rs` exercises the
+  same public constructor through `rstest-bdd` steps.
+- The feature file is
+  `crates/whitaker_clones_core/tests/features/candidate_pair.feature`.
+- The test dependencies are declared in
+  `crates/whitaker_clones_core/Cargo.toml` as `rstest`, `rstest-bdd`, and
+  `rstest-bdd-macros`.
+
 ### Make targets
 
 Use the Makefile targets for normal proof runs:
@@ -256,14 +298,15 @@ honour an existing environment value if set before invoking make, allowing
 per-developer overrides without modifying the Makefile.
 
 `make verus` currently runs both decomposition-advice proofs and the
-clone-detector `LshConfig::new` proof. `make kani` runs the decomposition
-adjacency harnesses and the clone-detector harness group in one pass.
+clone-detector proofs for `LshConfig::new` and `CandidatePair::new`.
+`make kani` runs the decomposition adjacency harnesses and the clone-detector
+harness group in one pass.
 
 ### Verus scope and trust boundary
 
-The clone-detector Verus file is intentionally an implementation-shaped model
-of `LshConfig::new` and `validate_product`, not a direct proof of the compiled
-Rust body in `crates/whitaker_clones_core`.
+The clone-detector Verus files are intentionally implementation-shaped models
+of `LshConfig::new`, `validate_product`, and `CandidatePair::new`, not direct
+proofs of the compiled Rust bodies in `crates/whitaker_clones_core`.
 
 This distinction matters. In the current sidecar setup, Verus can describe the
 contract of an external Rust function with mechanisms such as
@@ -273,14 +316,23 @@ implementation itself. The repository therefore keeps the Verus proof honest:
 it mirrors the real branch order and `checked_mul` overflow behaviour, while
 Kani calls the actual constructor and checks its runtime behaviour directly.
 
-For `LshConfig::new`, the split is:
+For the current clone-detector constructors, the split is:
 
-- Verus proves the constructor model rejects zero bands, rejects zero rows,
-  accepts only exact products of `MINHASH_SIZE`, and rejects overflowing
-  products via the same `checked_mul` semantics as the runtime code.
+- Verus proves the `LshConfig::new` constructor model rejects zero bands,
+  rejects zero rows, accepts only exact products of `MINHASH_SIZE`, and rejects
+  overflowing products via the same `checked_mul` semantics as the runtime code.
+- Verus proves the `CandidatePair::new` constructor model suppresses equal
+  inputs, preserves already ordered distinct inputs, and swaps reversed
+  distinct inputs into canonical order. The sidecar now formulates that proof
+  over a trusted `FragmentId` bridge lemma: `FragmentId::partial_cmp` is
+  modelled as a strict total order via a ghost `nat` ranking, rather than being
+  left as an implicit assumption.
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
+- Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
+  `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
+  trusts rather than proving from `String` internals.
 
 ### Tooling scripts
 
