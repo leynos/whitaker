@@ -118,7 +118,8 @@ Relevant skills for the implementation turn:
   and all requested quality gates succeed.
 - Run long validation commands through `tee` with `set -o pipefail`, because
   the environment truncates direct output.
-- Keep this plan in `DRAFT` status until approval is received.
+- Keep this plan in `COMPLETE` status unless later review reopens roadmap item
+  7.2.6 with new implementation work.
 
 ## Tolerances
 

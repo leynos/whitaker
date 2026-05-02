@@ -262,6 +262,7 @@ proof fn lemma_reversed_inputs_are_swapped(left: FragmentId, right: FragmentId)
 
 proof fn lemma_distinct_ordered_inputs_yield_canonical_pair(left: FragmentId, right: FragmentId)
     requires
+        fragment_id_strict_total_order_axioms(),
         !left.eq_spec(&right),
         left.partial_cmp_spec(&right) == Some(Ordering::Less),
     ensures
@@ -278,6 +279,7 @@ proof fn lemma_distinct_ordered_inputs_yield_canonical_pair(left: FragmentId, ri
 
 proof fn lemma_distinct_reversed_inputs_yield_canonical_pair(left: FragmentId, right: FragmentId)
     requires
+        fragment_id_strict_total_order_axioms(),
         !left.eq_spec(&right),
         left.partial_cmp_spec(&right) == Some(Ordering::Greater),
     ensures
