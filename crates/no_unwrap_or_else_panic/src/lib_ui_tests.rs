@@ -24,6 +24,27 @@ struct ExampleHarnessRun<'a> {
     rustc_flags: &'a [&'a str],
 }
 
+impl<'a> ExampleHarnessRun<'a> {
+    /// Creates a run spec using the default `--test` harness flag.
+    fn new(name: &'a str, label: &'a str) -> Self {
+        Self {
+            name,
+            label,
+            rustc_flags: &["--test"],
+        }
+    }
+
+    /// Creates a run spec with caller-supplied rustc flags (no defaults
+    /// applied).
+    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+        Self {
+            name,
+            label,
+            rustc_flags,
+        }
+    }
+}
+
 #[test]
 fn ui() {
     let crate_name = env!("CARGO_PKG_NAME");
@@ -46,7 +67,21 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_example_under_test_harness_inner(crate_name, spec)
+        run_test_runner(spec.name, || {
+            let _guard = env_test_guard();
+            with_vars_unset(
+                [
+                    "RUSTC_WRAPPER",
+                    "RUSTC_WORKSPACE_WRAPPER",
+                    "CARGO_BUILD_RUSTC_WRAPPER",
+                ],
+                || {
+                    let mut test = Test::example(crate_name, spec.name);
+                    test.rustc_flags(spec.rustc_flags);
+                    test.run();
+                },
+            );
+        })
     })
     .unwrap_or_else(|error| {
         panic!(
@@ -54,29 +89,6 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
             spec.label
         )
     });
-}
-
-/// Runs a single example target inside the runner closure supplied by
-/// `run_with_runner`.
-fn run_example_under_test_harness_inner(
-    crate_name: &str,
-    spec: &ExampleHarnessRun<'_>,
-) -> Result<(), String> {
-    run_test_runner(spec.name, || {
-        let _guard = env_test_guard();
-        with_vars_unset(
-            [
-                "RUSTC_WRAPPER",
-                "RUSTC_WORKSPACE_WRAPPER",
-                "CARGO_BUILD_RUSTC_WRAPPER",
-            ],
-            || {
-                let mut test = Test::example(crate_name, spec.name);
-                test.rustc_flags(spec.rustc_flags);
-                test.run();
-            },
-        );
-    })
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
@@ -149,9 +161,14 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
 #[rstest]
 #[case("pass_unwrap_in_rstest_harness", "rstest")]
 fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) {
-    run_example_under_test_harness(&ExampleHarnessRun {
-        name,
-        label,
-        rustc_flags: &["--test"],
-    });
+    run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
+}
+
+#[test]
+fn rstest_unwrap_outside_tests_still_fails_in_non_harness_code() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_rstest_non_test_module",
+        "rstest non-harness",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
 }

@@ -1086,6 +1086,18 @@ The implementation follows three steps:
 That split lets the lint treat rstest companion modules as an extension of the
 existing `--test` harness model instead of a separate policy path.
 
+#### Known complexity limitation
+
+`collect_companion_in_group()` and `module_has_harness_descriptor()` in
+`src/hir/mod.rs` use nested iteration, giving O(n²) complexity within each
+module scope. This is acceptable in practice because module item counts are
+bounded at compile time and the functions execute during lint analysis, not at
+runtime.
+
+Issue [#225](https://github.com/leynos/whitaker/issues/225) tracks adding
+complexity docstrings to those functions and evaluating a lookup-map
+optimisation.
+
 ### UI test harness helpers (`lib_ui_tests.rs`)
 
 `crates/no_expect_outside_tests/src/lib_ui_tests.rs` provides the
