@@ -12,14 +12,20 @@
     allow(unknown_lints),
     deny(no_unwrap_or_else_panic)
 )]
+// Negative fixture: intentional panicking `unwrap` inside the `unwrap_or_else`
+// closure for UI coverage. Workspace Clippy denies would otherwise reject this
+// shape.
+#![allow(clippy::unnecessary_literal_unwrap, clippy::unwrap_used)]
 
 use rstest::rstest;
 
 #[allow(dead_code)]
 fn parse() {
     let parsed = std::iter::once("value").next();
-    let _ =
-        parsed.unwrap_or_else(|| panic!("ordinary code must not inherit rstest harness status"));
+    let _ = parsed.unwrap_or_else(|| {
+        let ordinary: Option<&str> = None;
+        ordinary.unwrap()
+    });
 }
 
 #[allow(dead_code)]

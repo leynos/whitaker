@@ -1,14 +1,18 @@
 error: Replace unwrap_or_else on `std::option::Option<&str>` with a non-panicking fallback.
-  --> $DIR/fail_unwrap_in_rstest_non_test_module.rs:22:9
+  --> $DIR/fail_unwrap_in_rstest_non_test_module.rs:25:13
    |
-LL |         parsed.unwrap_or_else(|| panic!("ordinary code must not inherit rstest harness status"));
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+LL |       let _ = parsed.unwrap_or_else(|| {
+   |  _____________^
+LL | |         let ordinary: Option<&str> = None;
+LL | |         ordinary.unwrap()
+LL | |     });
+   | |______^
    |
 note: The closure supplied to unwrap_or_else triggers a panic.
-  --> $DIR/fail_unwrap_in_rstest_non_test_module.rs:22:9
+  --> $DIR/fail_unwrap_in_rstest_non_test_module.rs:25:13
    |
-LL |         parsed.unwrap_or_else(|| panic!("ordinary code must not inherit rstest harness status"));
-   |         ^^^^^^
+LL |     let _ = parsed.unwrap_or_else(|| {
+   |             ^^^^^^
    = help: Propagate the error or use expect with a descriptive message instead of panicking.
 note: the lint level is defined here
   --> $DIR/fail_unwrap_in_rstest_non_test_module.rs:13:10

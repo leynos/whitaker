@@ -70,11 +70,7 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
         run_test_runner(spec.name, || {
             let _guard = env_test_guard();
             with_vars_unset(
-                [
-                    "RUSTC_WRAPPER",
-                    "RUSTC_WORKSPACE_WRAPPER",
-                    "CARGO_BUILD_RUSTC_WRAPPER",
-                ],
+                ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"],
                 || {
                     let mut test = Test::example(crate_name, spec.name);
                     test.rustc_flags(spec.rustc_flags);
