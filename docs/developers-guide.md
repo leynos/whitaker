@@ -1075,7 +1075,7 @@ This helper is architecturally significant for two reasons:
 
 The implementation follows three steps:
 
-1. Walk each module group recursively so nested `mod tests` blocks and inline
+1. Walk each module group recursively, so nested `mod tests` blocks and inline
    modules are considered alongside crate-root items.
 2. For each function item, look for a same-named sibling module in the same
    parent module.
