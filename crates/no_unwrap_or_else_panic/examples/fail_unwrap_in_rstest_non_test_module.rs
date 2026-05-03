@@ -12,23 +12,27 @@
     allow(unknown_lints),
     deny(no_unwrap_or_else_panic)
 )]
-// Negative fixture: intentional panicking `unwrap` inside the `unwrap_or_else`
-// closure for UI coverage. Workspace Clippy denies would otherwise reject this
-// shape.
-#![allow(clippy::unnecessary_literal_unwrap, clippy::unwrap_used)]
 
 use rstest::rstest;
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "example fixture not used at runtime")]
 fn parse() {
     let parsed = std::iter::once("value").next();
     let _ = parsed.unwrap_or_else(|| {
         let ordinary: Option<&str> = None;
+        #[expect(
+            clippy::unnecessary_literal_unwrap,
+            reason = "fixture uses literal Option unwrap in test scenario"
+        )]
+        #[expect(
+            clippy::unwrap_used,
+            reason = "intentional panic to test unwrap detection in fixture"
+        )]
         ordinary.unwrap()
     });
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "example fixture not used at runtime")]
 mod parse {
     pub const VERSION: &str = "1";
 }

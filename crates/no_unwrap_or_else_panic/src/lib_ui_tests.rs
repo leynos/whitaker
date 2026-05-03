@@ -63,7 +63,7 @@ fn ui() {
 ///
 /// Applies `spec.rustc_flags` to the compilation and formats any failure
 /// message using `spec.label`.
-fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
+fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) -> Result<(), String> {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
     whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
@@ -79,12 +79,12 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
             );
         })
     })
-    .unwrap_or_else(|error| {
-        panic!(
+    .map_err(|error| {
+        format!(
             "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
-    });
+    })
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {
@@ -157,7 +157,8 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
 #[rstest]
 #[case("pass_unwrap_in_rstest_harness", "rstest")]
 fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) {
-    run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
+    run_example_under_test_harness(&ExampleHarnessRun::new(name, label))
+        .expect("rstest example regression should execute without diffs");
 }
 
 #[test]
@@ -166,5 +167,6 @@ fn rstest_unwrap_outside_tests_still_fails_in_non_harness_code() {
         "fail_unwrap_in_rstest_non_test_module",
         "rstest non-harness",
         &["--test", "-D", "no_unwrap_or_else_panic"],
-    ));
+    ))
+    .expect("rstest non-harness example regression should execute without diffs");
 }
