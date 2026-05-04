@@ -485,10 +485,10 @@ The implementation is complete only when all of the following are true:
   provider-versus-fixture classification.
 
 > **Companion-module detection follow-on (PR `#221`):** After 8.1.1 shipped, a
-> further step centralised rstest compiler-lowering knowledge in
+> further step centralized rstest compiler-lowering knowledge in
 > `src/hir/mod.rs` by adding `collect_rstest_companion_test_functions()`.  This
 > helper detects the parent-module / sibling-module layout that `rustc`
-> synthesises when it lowers `#[rstest]` case-driven tests, and extends
+> synthesizes when it lowers `#[rstest]` case-driven tests, and extends
 > `collect_harness_test_functions()` accordingly.  Documentation of the helper
 > and its known O(n²) complexity (tracked in issue
 > [`#225`](https://github.com/leynos/whitaker/issues/225)) lives in
