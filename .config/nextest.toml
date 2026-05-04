@@ -32,11 +32,12 @@ serial-toolchain-installs = { max-threads = 1 }
 # name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
 #
-# `ui::example_compiles_under_test_harness` also builds lint libraries through
-# the Dylint UI harness, but its rstest-generated name is not matched by the
-# `ui::ui` clauses.  Keep it in the same serial group so it cannot contend with
-# another UI build on Windows.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | (binary(ui) & test(=ui))"
+# `ui::example_compiles_under_test_harness`, `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`,
+# and rstest-expanded `example_compiles_under_test_harness` cases also build lint
+# libraries through the Dylint UI harness, but their test names are not always
+# matched by the `ui::ui` clauses alone.  Keep them in the same serial group so
+# they cannot contend with another UI build on Windows.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "10m", terminate-after = 1 }

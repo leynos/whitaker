@@ -32,6 +32,13 @@ fn parse() {
     });
 }
 
+/// Const-only sibling module used as a fixture.
+///
+/// Verifies that `collect_rstest_companion_test_functions` does not mistake an
+/// arbitrary `const`-only module for a synthesised rstest harness descriptor.
+/// A genuine rstest companion module contains `#[test]` functions generated
+/// by the proc-macro; a module containing only `pub const` items must never
+/// be treated as one.
 #[expect(dead_code, reason = "example fixture not used at runtime")]
 mod parse {
     pub const VERSION: &str = "1";
