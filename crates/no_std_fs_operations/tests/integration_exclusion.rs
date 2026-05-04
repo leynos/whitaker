@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
+use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
 use rstest::rstest;
 use serial_test::serial;
@@ -27,28 +28,28 @@ use tempfile::TempDir;
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 
 /// Builds the lint library and returns the path to the release directory.
-fn build_lint_library() -> PathBuf {
+fn build_lint_library() -> anyhow::Result<PathBuf> {
     let metadata = MetadataCommand::new()
         .no_deps()
         .exec()
-        .expect("failed to fetch cargo metadata");
+        .context("failed to fetch cargo metadata")?;
 
-    let output = run_lint_crate_build(metadata.workspace_root.as_std_path());
-    let package_id = find_package_id(&metadata, LINT_CRATE_NAME);
-    let cdylib_path = find_cdylib_in_artifacts(&output, &package_id);
+    let output = run_lint_crate_build(metadata.workspace_root.as_std_path())?;
+    let package_id = find_package_id(&metadata, LINT_CRATE_NAME)?;
+    let cdylib_path = find_cdylib_in_artifacts(&output, &package_id)?;
 
     let release_dir = cdylib_path
         .parent()
-        .expect("cdylib should have a parent directory")
+        .context("cdylib should have a parent directory")?
         .to_path_buf();
 
-    stage_toolchain_qualified_library(&cdylib_path, &release_dir);
+    stage_toolchain_qualified_library(&cdylib_path, &release_dir)?;
 
-    release_dir
+    Ok(release_dir)
 }
 
 /// Executes `cargo build` for the lint crate and returns the build output.
-fn run_lint_crate_build(workspace_root: &Path) -> Vec<u8> {
+fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
     let output = Command::new("cargo")
         .arg("build")
         .arg("--lib")
@@ -60,19 +61,20 @@ fn run_lint_crate_build(workspace_root: &Path) -> Vec<u8> {
         .arg("dylint-driver")
         .current_dir(workspace_root)
         .output()
-        .expect("failed to execute cargo build");
+        .context("failed to execute cargo build")?;
 
-    assert!(
-        output.status.success(),
-        "lint library build failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    if !output.status.success() {
+        anyhow::bail!(
+            "lint library build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
-    output.stdout
+    Ok(output.stdout)
 }
 
 /// Copies the built library to a toolchain-qualified filename for Dylint discovery.
-fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
+fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) -> anyhow::Result<()> {
     let toolchain = env::var("RUSTUP_TOOLCHAIN")
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
@@ -80,7 +82,7 @@ fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
 
     let file_name = cdylib_path
         .file_name()
-        .expect("cdylib should have a filename")
+        .context("cdylib should have a filename")?
         .to_string_lossy();
 
     let suffix = env::consts::DLL_SUFFIX;
@@ -90,11 +92,16 @@ fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
     );
 
     let target_path = release_dir.join(&target_name);
-    std::fs::copy(cdylib_path, &target_path).expect("failed to copy lint library");
+    std::fs::copy(cdylib_path, &target_path)
+        .with_context(|| format!("failed to copy lint library to {}", target_path.display()))?;
+    Ok(())
 }
 
 /// Locates the package ID for a workspace member by crate name.
-fn find_package_id(metadata: &Metadata, crate_name: &str) -> cargo_metadata::PackageId {
+fn find_package_id(
+    metadata: &Metadata,
+    crate_name: &str,
+) -> anyhow::Result<cargo_metadata::PackageId> {
     metadata
         .packages
         .iter()
@@ -106,11 +113,14 @@ fn find_package_id(metadata: &Metadata, crate_name: &str) -> cargo_metadata::Pac
                     .any(|member| member == &package.id)
         })
         .map(|package| package.id.clone())
-        .expect("lint crate not found in workspace")
+        .with_context(|| format!("lint crate `{crate_name}` not found in workspace"))
 }
 
 /// Extracts the cdylib path from cargo build JSON output for a given package.
-fn find_cdylib_in_artifacts(stdout: &[u8], package_id: &cargo_metadata::PackageId) -> PathBuf {
+fn find_cdylib_in_artifacts(
+    stdout: &[u8],
+    package_id: &cargo_metadata::PackageId,
+) -> anyhow::Result<PathBuf> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
         let Ok(Message::CompilerArtifact(artifact)) = message else {
             continue;
@@ -129,11 +139,11 @@ fn find_cdylib_in_artifacts(stdout: &[u8], package_id: &cargo_metadata::PackageI
             .iter()
             .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
         {
-            return path.clone().into_std_path_buf();
+            return Ok(path.clone().into_std_path_buf());
         }
     }
 
-    panic!("cdylib artifact not found in build output");
+    anyhow::bail!("cdylib artifact not found in build output for package `{package_id}`")
 }
 
 /// Result of invoking `cargo dylint` against a fixture crate.
@@ -156,8 +166,8 @@ impl FixtureProject {
 }
 
 /// Creates a temporary fixture project for verifying exclusion behaviour.
-fn create_fixture_project(crate_name: &str, is_excluded: bool) -> FixtureProject {
-    let temp_dir = TempDir::new().expect("failed to create temporary fixture directory");
+fn create_fixture_project(crate_name: &str, is_excluded: bool) -> anyhow::Result<FixtureProject> {
+    let temp_dir = TempDir::new().context("failed to create temporary fixture directory")?;
     let root = temp_dir.path().to_path_buf();
 
     fs::write(
@@ -174,23 +184,23 @@ fn create_fixture_project(crate_name: &str, is_excluded: bool) -> FixtureProject
             crate_name = crate_name
         ),
     )
-    .expect("failed to write fixture Cargo.toml");
+    .context("failed to write fixture Cargo.toml")?;
 
     fs::write(
         root.join("dylint.toml"),
         fixture_dylint_config(crate_name, is_excluded),
     )
-    .expect("failed to write fixture dylint.toml");
+    .context("failed to write fixture dylint.toml")?;
 
     let source_dir = root.join("src");
-    fs::create_dir(&source_dir).expect("failed to create fixture src directory");
+    fs::create_dir(&source_dir).context("failed to create fixture src directory")?;
     fs::write(source_dir.join("lib.rs"), fixture_source(crate_name))
-        .expect("failed to write fixture source");
+        .context("failed to write fixture source")?;
 
-    FixtureProject {
+    Ok(FixtureProject {
         _temp_dir: temp_dir,
         root,
-    }
+    })
 }
 
 fn fixture_dylint_config(crate_name: &str, is_excluded: bool) -> String {
@@ -290,10 +300,13 @@ fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
         .count())
 }
 
-fn lint_library_path() -> PathBuf {
-    static LINT_LIBRARY_PATH: OnceLock<PathBuf> = OnceLock::new();
+fn lint_library_path() -> anyhow::Result<PathBuf> {
+    static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
 
-    LINT_LIBRARY_PATH.get_or_init(build_lint_library).clone()
+    match LINT_LIBRARY_PATH.get_or_init(build_lint_library) {
+        Ok(path) => Ok(path.clone()),
+        Err(e) => Err(anyhow::anyhow!("{e:#}")),
+    }
 }
 
 struct Expectation {
@@ -303,8 +316,9 @@ struct Expectation {
 
 /// Shared driver for exclusion integration tests.
 fn run_exclusion_test(crate_name: &str, is_excluded: bool, expectation: Expectation) {
-    let lint_library_path = lint_library_path();
-    let fixture = create_fixture_project(crate_name, is_excluded);
+    let lint_library_path = lint_library_path().expect("failed to build lint library");
+    let fixture =
+        create_fixture_project(crate_name, is_excluded).expect("failed to create fixture project");
     assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation);
 }
 
@@ -335,6 +349,27 @@ fn exclusion_crates_behaviour_test(
     run_exclusion_test(crate_name, is_excluded, expected);
 }
 
+/// Runs `cargo dylint` against the fixture and counts diagnostics.
+///
+/// This function is not called directly by `exclusion_crates_behaviour_test` but is exposed
+/// as a reusable fallible evaluation primitive for test code that needs to inspect results
+/// programmatically.
+#[allow(dead_code)]
+fn evaluate_fixture(
+    fixture_dir: &Path,
+    lint_library_path: &Path,
+    crate_name: &str,
+) -> anyhow::Result<(bool, usize)> {
+    let result = run_cargo_dylint(fixture_dir, lint_library_path);
+    let count = diagnostic_count(&result.stdout).with_context(|| {
+        format!(
+            "crate `{crate_name}` produced malformed cargo output\nstderr:\n{}",
+            result.stderr
+        )
+    })?;
+    Ok((result.is_success, count))
+}
+
 fn assert_fixture_behaviour(
     fixture_dir: &Path,
     lint_library_path: &Path,
@@ -344,7 +379,7 @@ fn assert_fixture_behaviour(
     let result = run_cargo_dylint(fixture_dir, lint_library_path);
     let count = diagnostic_count(&result.stdout).unwrap_or_else(|e| {
         panic!(
-            "crate `{crate_name}` produced malformed cargo output: {e}\nstderr:\n{}",
+            "crate `{crate_name}` produced malformed cargo output: {e:#}\nstderr:\n{}",
             result.stderr
         )
     });
@@ -359,13 +394,15 @@ fn assert_fixture_behaviour(
     if expectation.should_emit_diagnostics {
         assert!(
             count > 0,
-            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics, but stderr was:\n{}",
+            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics, \
+             but stderr was:\n{}",
             result.stderr
         );
     } else {
         assert!(
             count == 0,
-            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics, but stderr was:\n{}",
+            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics, \
+             but stderr was:\n{}",
             result.stderr
         );
     }
