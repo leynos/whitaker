@@ -248,7 +248,7 @@ fn fixture_source(crate_name: &str) -> String {
 }
 
 /// Runs `cargo dylint` on the given fixture project directory.
-fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResult {
+fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<CargoDylintResult> {
     let output = Command::new("cargo")
         .arg("dylint")
         .arg("--all")
@@ -259,15 +259,15 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResul
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
         .output()
-        .expect("failed to execute cargo dylint");
+        .context("failed to execute cargo dylint")?;
 
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    CargoDylintResult {
+    Ok(CargoDylintResult {
         is_success: output.status.success(),
         stdout: output.stdout,
         stderr,
-    }
+    })
 }
 
 /// Counts diagnostics emitted by the `no_std_fs_operations` lint from cargo JSON output.
@@ -300,13 +300,17 @@ fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
         .count())
 }
 
+// anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary
+// to convert &Result<PathBuf, Error> into Result<PathBuf, Error>.
+#[allow(clippy::useless_asref, clippy::redundant_closure)]
 fn lint_library_path() -> anyhow::Result<PathBuf> {
     static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
 
-    match LINT_LIBRARY_PATH.get_or_init(build_lint_library) {
-        Ok(path) => Ok(path.clone()),
-        Err(e) => Err(anyhow::anyhow!("{e:#}")),
-    }
+    LINT_LIBRARY_PATH
+        .get_or_init(|| build_lint_library())
+        .as_ref()
+        .map(Clone::clone)
+        .map_err(|e| anyhow::anyhow!("{e:#}"))
 }
 
 struct Expectation {
@@ -360,7 +364,7 @@ fn evaluate_fixture(
     lint_library_path: &Path,
     crate_name: &str,
 ) -> anyhow::Result<(bool, usize)> {
-    let result = run_cargo_dylint(fixture_dir, lint_library_path);
+    let result = run_cargo_dylint(fixture_dir, lint_library_path)?;
     let count = diagnostic_count(&result.stdout).with_context(|| {
         format!(
             "crate `{crate_name}` produced malformed cargo output\nstderr:\n{}",
@@ -376,7 +380,8 @@ fn assert_fixture_behaviour(
     crate_name: &str,
     expectation: Expectation,
 ) {
-    let result = run_cargo_dylint(fixture_dir, lint_library_path);
+    let result = run_cargo_dylint(fixture_dir, lint_library_path)
+        .unwrap_or_else(|e| panic!("crate `{crate_name}`: failed to run cargo dylint: {e:#}"));
     let count = diagnostic_count(&result.stdout).unwrap_or_else(|e| {
         panic!(
             "crate `{crate_name}` produced malformed cargo output: {e:#}\nstderr:\n{}",
