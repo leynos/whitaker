@@ -1732,6 +1732,7 @@ dependencies = [
 name = "no_std_fs_operations"
 version = "0.2.5"
 dependencies = [
+ "anyhow",
  "cargo_metadata",
  "dylint_linting",
  "dylint_testing",

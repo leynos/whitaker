@@ -35,6 +35,7 @@ serde = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+anyhow = "1.0"
 cargo_metadata = { workspace = true }
 mockall = { workspace = true }
 rstest = { workspace = true }

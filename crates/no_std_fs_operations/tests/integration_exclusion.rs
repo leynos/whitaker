@@ -261,9 +261,22 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResul
 }
 
 /// Counts diagnostics emitted by the `no_std_fs_operations` lint from cargo JSON output.
-fn diagnostic_count(output: &[u8]) -> usize {
-    Message::parse_stream(Cursor::new(output))
-        .map(|message| message.expect("cargo dylint should emit valid JSON messages"))
+///
+/// Propagates parse errors rather than panicking, including context from the raw stdout
+/// so callers can inspect malformed cargo output.
+fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
+    let messages: Vec<Message> = Message::parse_stream(Cursor::new(output))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "failed to parse cargo JSON messages: {}\nstdout:\n{}",
+                e,
+                String::from_utf8_lossy(output)
+            )
+        })?;
+
+    Ok(messages
+        .into_iter()
         .filter_map(|message| match message {
             Message::CompilerMessage(message) => Some(message.message),
             _ => None,
@@ -274,7 +287,7 @@ fn diagnostic_count(output: &[u8]) -> usize {
                 .as_ref()
                 .is_some_and(|code| code.code == LINT_CRATE_NAME)
         })
-        .count()
+        .count())
 }
 
 fn lint_library_path() -> PathBuf {
@@ -329,7 +342,12 @@ fn assert_fixture_behaviour(
     expectation: Expectation,
 ) {
     let result = run_cargo_dylint(fixture_dir, lint_library_path);
-    let count = diagnostic_count(&result.stdout);
+    let count = diagnostic_count(&result.stdout).unwrap_or_else(|e| {
+        panic!(
+            "crate `{crate_name}` produced malformed cargo output: {e}\nstderr:\n{}",
+            result.stderr
+        )
+    });
 
     assert!(
         result.is_success == expectation.should_succeed,
