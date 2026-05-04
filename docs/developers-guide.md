@@ -1088,7 +1088,8 @@ existing `--test` harness model instead of a separate policy path.
 
 #### Known complexity limitation
 
-`collect_companion_in_group()` and `module_has_harness_descriptor()` in
+`collect_companion_in_group()` and `module_qualifies_as_rstest_companion_module()`
+in
 `src/hir/mod.rs` use nested iteration, giving O(n²) complexity within each
 module scope. This is acceptable in practice because module item counts are
 bounded at compile time and the functions execute during lint analysis, not at

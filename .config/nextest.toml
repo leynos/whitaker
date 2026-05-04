@@ -36,7 +36,10 @@ serial-toolchain-installs = { max-threads = 1 }
 # and rstest-expanded `example_compiles_under_test_harness` cases also build lint
 # libraries through the Dylint UI harness, but their test names are not always
 # matched by the `ui::ui` clauses alone.  Keep them in the same serial group so
-# they cannot contend with another UI build on Windows.
+# they cannot contend with another UI build on Windows.  On Windows CI the
+# rstest harness fixture is skipped (only the companion-module case runs); the
+# `test(ui::example_compiles_under_test_harness)` clause still matches that
+# single case on Windows while both parameterized cases run elsewhere.
 filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
