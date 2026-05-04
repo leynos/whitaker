@@ -118,7 +118,7 @@ Success is observable when:
 - BDD ergonomics risk: the repository has already hit `rstest-bdd` gotchas
   around `And` keyword binding and workspace-wide Clippy denials in tests.
   Mitigation: keep the BDD world small, prefer explicit `Given`/`When`/`Then`
-  transitions, and avoid `.expect()` in test code.
+  transitions, and use `.expect()` messages deliberately in tests.
 
 ## Progress
 
@@ -334,7 +334,7 @@ pub struct ArgFingerprint {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LocalSlot(u16);
+pub struct LocalSlot(u32);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CalleeShape {
