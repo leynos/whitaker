@@ -20,6 +20,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use cargo_metadata::{Message, Metadata, MetadataCommand};
+use rstest::rstest;
 use serial_test::serial;
 use tempfile::TempDir;
 
@@ -294,32 +295,31 @@ fn run_exclusion_test(crate_name: &str, is_excluded: bool, expectation: Expectat
     assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation);
 }
 
-#[test]
+#[rstest]
+#[case(
+    "excluded_test_crate",
+    true,
+    Expectation {
+        should_emit_diagnostics: false,
+        should_succeed: true,
+    }
+)]
+#[case(
+    "non_excluded_crate",
+    false,
+    Expectation {
+        should_emit_diagnostics: true,
+        should_succeed: false,
+    }
+)]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
-fn excluded_crate_suppresses_diagnostics() {
-    run_exclusion_test(
-        "excluded_test_crate",
-        true,
-        Expectation {
-            should_emit_diagnostics: false,
-            should_succeed: true,
-        },
-    );
-}
-
-#[test]
-#[ignore = "requires cargo-dylint and built lint library"]
-#[serial]
-fn non_excluded_crate_emits_diagnostics() {
-    run_exclusion_test(
-        "non_excluded_crate",
-        false,
-        Expectation {
-            should_emit_diagnostics: true,
-            should_succeed: false,
-        },
-    );
+fn exclusion_crates_behaviour_test(
+    #[case] crate_name: &str,
+    #[case] is_excluded: bool,
+    #[case] expected: Expectation,
+) {
+    run_exclusion_test(crate_name, is_excluded, expected);
 }
 
 fn assert_fixture_behaviour(
