@@ -2,19 +2,22 @@
 
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
+#[cfg(not(windows))]
 use rstest::rstest;
 use std::path::Path;
 use std::{fs, io};
+#[cfg(not(windows))]
 use temp_env::with_vars_unset;
-use whitaker_common::test_support::{
-    env_test_guard, prepare_fixture, run_fixtures_with, run_test_runner,
-};
+#[cfg(not(windows))]
+use whitaker_common::test_support::env_test_guard;
+use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 /// Describes a single example-based regression to run under the test harness.
 ///
 /// `name` is the example target name, `label` is the human-readable case name
 /// used in panic messages, and `rustc_flags` supplies the extra harness flags
 /// passed to `dylint_testing`.
+#[cfg(not(windows))]
 struct ExampleHarnessRun<'a> {
     /// Example target name passed to `Test::example`.
     name: &'a str,
@@ -24,6 +27,7 @@ struct ExampleHarnessRun<'a> {
     rustc_flags: &'a [&'a str],
 }
 
+#[cfg(not(windows))]
 impl<'a> ExampleHarnessRun<'a> {
     /// Creates a run spec using the default `--test` harness flag.
     fn new(name: &'a str, label: &'a str) -> Self {
@@ -63,6 +67,7 @@ fn ui() {
 ///
 /// Applies `spec.rustc_flags` to the compilation and formats any failure
 /// message using `spec.label`.
+#[cfg(not(windows))]
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
