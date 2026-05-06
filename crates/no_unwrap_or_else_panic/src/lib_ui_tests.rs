@@ -161,7 +161,12 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
     Ok(Some(flags))
 }
 
-// Non-Windows: also test real rstest proc-macro expansion.
+// Dylint example compilation is skipped on Windows. When `test.run()` spawns
+// a cargo subprocess to compile any example in this crate, cargo resolves the
+// full dev-dependency graph including `rstest-bdd-macros` (a proc-macro
+// crate). Proc-macro compilation hangs on Windows CI regardless of whether the
+// example source code uses rstest. Companion-module detection is a pure HIR
+// analysis; non-Windows coverage is sufficient to guard against regressions.
 #[cfg(not(windows))]
 #[rstest]
 #[case("pass_unwrap_in_rstest_harness", "rstest")]
@@ -175,21 +180,7 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
 }
 
-// Windows: rstest proc-macro compilation hangs through the Dylint compiletest
-// driver (see pass_unwrap_in_rstest_harness.rs); validate companion-module
-// detection via the manually-lowered example instead.
-#[cfg(windows)]
-#[rstest]
-#[case("pass_unwrap_in_rstest_companion_module", "rstest companion module")]
-#[case("pass_unwrap_in_rstest_empty_companion", "rstest empty companion")]
-#[case(
-    "pass_unwrap_in_rstest_descriptor_only_companion",
-    "rstest descriptor-only companion"
-)]
-fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) {
-    run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
-}
-
+#[cfg(not(windows))]
 #[test]
 fn rstest_unwrap_outside_tests_still_fails_in_non_harness_code() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(

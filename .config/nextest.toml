@@ -32,14 +32,13 @@ serial-toolchain-installs = { max-threads = 1 }
 # name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
 #
-# `ui::example_compiles_under_test_harness`, `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`,
-# and rstest-expanded `example_compiles_under_test_harness` cases also build lint
-# libraries through the Dylint UI harness, but their test names are not always
-# matched by the `ui::ui` clauses alone.  Keep them in the same serial group so
-# they cannot contend with another UI build on Windows.  On Windows CI the
-# rstest harness fixture is skipped (only the companion-module case runs); the
-# `test(ui::example_compiles_under_test_harness)` clause still matches that
-# single case on Windows while both parameterized cases run elsewhere.
+# `ui::example_compiles_under_test_harness` and
+# `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code` are gated
+# on `#[cfg(not(windows))]` in `no_unwrap_or_else_panic`; on Windows these
+# filter clauses match nothing.  The `rstest-bdd-macros` dev-dependency
+# proc-macro hangs during cargo's dev-dependency resolution on Windows CI
+# regardless of whether any example source uses rstest, so all Dylint example
+# compilation for that crate is skipped on Windows.
 filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
