@@ -165,8 +165,8 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
 // a cargo subprocess to compile any example in this crate, cargo resolves the
 // full dev-dependency graph including `rstest-bdd-macros` (a proc-macro
 // crate). Proc-macro compilation hangs on Windows CI regardless of whether the
-// example source code uses rstest. Companion-module detection is a pure HIR
-// analysis; non-Windows coverage is sufficient to guard against regressions.
+// example source uses rstest. Companion-module detection is a pure HIR analysis;
+// non-Windows coverage is sufficient to guard against regressions.
 #[cfg(not(windows))]
 #[rstest]
 #[case("pass_unwrap_in_rstest_harness", "rstest")]
