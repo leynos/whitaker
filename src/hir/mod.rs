@@ -193,9 +193,9 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
 /// The shared [`collect_harness_test_functions`] catches direct const-descriptor
 /// siblings. This helper additionally finds functions with a same-named sibling
 /// *module* in the shape `rustc` emits for case-driven `#[rstest]` (including
-/// an empty companion module, a module that only exposes
-/// `RSTEST_HARNESS_DESCRIPTOR`, or the full in-module harness-descriptor
-/// pattern). Companions are matched only within the same module scope.
+/// a module that exposes `RSTEST_HARNESS_DESCRIPTOR`, or the full in-module
+/// harness-descriptor pattern). Companions are matched only within the same
+/// module scope.
 #[must_use]
 pub fn collect_rstest_companion_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
     let mut marked = HashSet::new();
@@ -264,9 +264,10 @@ fn has_companion_test_module<'tcx>(
 /// Returns `true` when `module_item` is an rstest-style companion module for a
 /// same-named parent function.
 ///
-/// Qualifying modules are: empty, contain `RSTEST_HARNESS_DESCRIPTOR`, or
-/// contain the inner `fn`/`const` sibling pattern emitted by the `rustc --test`
-/// harness inside generated modules.
+/// Qualifying modules contain `RSTEST_HARNESS_DESCRIPTOR` or carry the inner
+/// `fn`/`const` sibling pattern emitted by the `rustc --test` harness inside
+/// generated modules. Empty modules and modules containing only unrelated
+/// items are not treated as companions.
 fn module_qualifies_as_rstest_companion_module<'tcx>(
     cx: &LateContext<'tcx>,
     module_item: &'tcx hir::Item<'tcx>,
@@ -280,10 +281,6 @@ fn module_qualifies_as_rstest_companion_module<'tcx>(
         .iter()
         .map(|item_id| cx.tcx.hir_item(*item_id))
         .collect();
-
-    if items.is_empty() {
-        return true;
-    }
 
     let harness_desc = rustc_span::Symbol::intern("RSTEST_HARNESS_DESCRIPTOR");
     if items.iter().any(|item| {

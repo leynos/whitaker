@@ -171,7 +171,6 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
 #[rstest]
 #[case("pass_unwrap_in_rstest_harness", "rstest")]
 #[case("pass_unwrap_in_rstest_companion_module", "rstest companion module")]
-#[case("pass_unwrap_in_rstest_empty_companion", "rstest empty companion")]
 #[case(
     "pass_unwrap_in_rstest_descriptor_only_companion",
     "rstest descriptor-only companion"
@@ -186,6 +185,16 @@ fn rstest_unwrap_outside_tests_still_fails_in_non_harness_code() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(
         "fail_unwrap_in_rstest_non_test_module",
         "rstest non-harness",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn rstest_empty_companion_does_not_exempt_parent_function() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_rstest_empty_companion",
+        "rstest empty companion (negative)",
         &["--test", "-D", "no_unwrap_or_else_panic"],
     ));
 }

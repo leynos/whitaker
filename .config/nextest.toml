@@ -39,7 +39,7 @@ serial-toolchain-installs = { max-threads = 1 }
 # proc-macro hangs during cargo's dev-dependency resolution on Windows CI
 # regardless of whether any example source uses rstest, so all Dylint example
 # compilation for that crate is skipped on Windows.
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | (binary(ui) & test(=ui))"
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 slow-timeout = { period = "10m", terminate-after = 1 }

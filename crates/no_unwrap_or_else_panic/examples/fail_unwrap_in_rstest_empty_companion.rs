@@ -1,7 +1,8 @@
-//! Edge-case fixture: companion module present but empty.
+//! Negative edge-case fixture: empty companion module must not exempt parent.
 //!
-//! `collect_rstest_companion_test_functions` must not trip the lint on the
-//! parent function even when the sibling module carries no harness items.
+//! An empty same-named sibling module contains no rstest synthesis evidence.
+//! `collect_rstest_companion_test_functions` must not mark the parent function
+//! as test-context, so the lint fires on `unwrap_or_else(|| panic!(…))`.
 
 #![cfg_attr(
     test,
