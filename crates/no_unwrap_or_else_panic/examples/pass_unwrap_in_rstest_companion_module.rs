@@ -19,6 +19,12 @@ fn rstest_companion_subject(value: i32) {
     let _ = parsed.unwrap_or_else(|| panic!("rstest companion subject value was {value}"));
 }
 
+/// Manually-lowered rstest companion module mirroring proc-macro expansion.
+///
+/// Contains the `RSTEST_HARNESS_DESCRIPTOR` const and a `#[test]` function
+/// that invoke the parent `rstest_companion_subject`.  Validates that
+/// `collect_rstest_companion_test_functions` recognises the sibling-module
+/// layout without requiring the real `rstest` proc-macro.
 #[cfg(test)]
 mod rstest_companion_subject {
     pub const RSTEST_HARNESS_DESCRIPTOR: &str = "case_1";

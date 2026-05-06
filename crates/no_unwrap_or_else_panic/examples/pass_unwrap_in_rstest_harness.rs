@@ -30,6 +30,12 @@ fn pass_unwrap_in_rstest_harness(value: i32) {
 
 // Windows CI has hung while expanding `rstest` through the Dylint compiletest
 // driver. Use the equivalent post-expansion companion-module shape there.
+/// Manually-lowered companion module used on Windows CI.
+///
+/// Replicates the sibling-module shape that the `rstest` proc-macro would
+/// synthesise for the `#[case(1)]` expansion.  Present only on Windows,
+/// where the rstest proc-macro compilation hangs through the Dylint
+/// compiletest driver.
 #[cfg(all(test, windows))]
 mod pass_unwrap_in_rstest_harness {
     #[test]

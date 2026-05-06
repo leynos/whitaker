@@ -20,6 +20,11 @@ fn rstest_empty_companion_subject(value: i32) {
     let _ = Some(value).unwrap_or_else(|| panic!("empty companion {value}"));
 }
 
+/// Empty sibling module used as a negative fixture.
+///
+/// An empty module contains no rstest synthesis evidence; it must not be
+/// treated as a companion by `collect_rstest_companion_test_functions`.
+/// The parent function remains outside test-context, so the lint fires.
 #[cfg(test)]
 mod rstest_empty_companion_subject {}
 
