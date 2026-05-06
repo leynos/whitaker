@@ -1070,8 +1070,9 @@ This helper is architecturally significant for two reasons:
   lint-specific ancestry logic, so other lints can reuse the same test-harness
   discovery rules if they need them later.
 - It only marks a function when a same-named sibling module in the same module
-  scope contains a real harness descriptor, which prevents arbitrary const-only
-  companion modules from inheriting test status accidentally.
+  scope contains rstest synthesis evidence (`RSTEST_HARNESS_DESCRIPTOR` or a
+  `fn`/`const` harness-descriptor pair), which prevents both empty modules and
+  arbitrary const-only sibling modules from inheriting test status accidentally.
 
 The implementation follows three steps:
 
@@ -1079,9 +1080,13 @@ The implementation follows three steps:
    modules are considered alongside crate-root items.
 2. For each function item, look for a same-named sibling module in the same
    parent module.
-3. Inspect that sibling module for the usual synthesized function plus `const`
-   harness descriptor pairing before marking the original function as a test
-   context.
+3. Inspect that sibling module for rstest synthesis evidence before marking the
+   original function as a test context. A module qualifies as a companion when
+   it either exposes a `RSTEST_HARNESS_DESCRIPTOR` const (the descriptor-only
+   shape emitted for minimal rstest expansions) or contains the in-module `fn`
+   / same-span `const` descriptor pair synthesised by `rustc --test` inside
+   generated modules. Empty modules and modules containing only unrelated items
+   are never treated as companions.
 
 That split lets the lint treat rstest companion modules as an extension of the
 existing `--test` harness model instead of a separate policy path.
