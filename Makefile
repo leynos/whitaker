@@ -3,7 +3,7 @@
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
 # aligned with the caller's PATH.
-TOOL_PATH_SUFFIX := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(HOME)/.local/bin
+TOOL_PATH_SUFFIX = $$HOME/.cargo/bin:$$HOME/.bun/bin:$$HOME/.local/bin
 
 APP ?= whitaker-installer
 CARGO ?= cargo
@@ -35,14 +35,14 @@ clean: ## Remove build artifacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
 	@# Prefer dynamic linking during local `cargo test` runs to avoid rustc_private
 	@# linkage pitfalls when building cdylib-based lints; `publish-check` omits
 	@# this flag to exercise production-like linking behaviour.
 	@# Run tests with backup/restore safeguard in a single shell with trap
 	@# to ensure cleanup runs even when tests fail.
 	@set -eu; \
-	export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; \
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	WHITAKER_BACKUP=""; \
 	HAD_WHITAKER=false; \
 	cleanup() { \
@@ -83,8 +83,8 @@ test: ## Run tests with warnings treated as errors
 	fi
 
 workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with act + pytest
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v act >/dev/null || { echo "Install act to run workflow tests"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
 	@test -x "$(WORKFLOW_TEST_VENV)/bin/python" || { \
 		echo "workflow-test virtualenv is missing or invalid:"; \
 		echo "  expected: $(WORKFLOW_TEST_VENV)/bin/python"; \
@@ -94,9 +94,9 @@ workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with
 	@ACT_WORKFLOW_TESTS=1 $(WORKFLOW_TEST_VENV)/bin/python -m pytest tests/workflows
 
 workflow-test-deps: ## Install Python dependencies for workflow tests
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; $(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; $(UV) pip install --python $(WORKFLOW_TEST_VENV)/bin/python -r tests/workflows/requirements.txt
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) venv --allow-existing $(WORKFLOW_TEST_VENV)
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) pip install --python $(WORKFLOW_TEST_VENV)/bin/python -r tests/workflows/requirements.txt
 
 target/%/$(APP): ## Build binary in debug or release mode
 	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
@@ -108,18 +108,18 @@ lint: ## Run Clippy with warnings denied
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
-	export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; mdformat-all
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; mdformat-all
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
 markdownlint: ## Lint Markdown files
-	export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md'
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md'
 
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
-	export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; $(NIXIE) --no-sandbox
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(NIXIE) --no-sandbox
 
 typecheck:
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS)
@@ -151,8 +151,8 @@ install-smoke: ## Install whitaker-installer and verify basic functionality
 	whitaker-installer --version >/dev/null
 
 publish-check: ## Build, test, and validate packages before publishing
-	@export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
-	export PATH="$(PATH):$(TOOL_PATH_SUFFIX)"; \
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
 	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
 	ORIG_DIR="$(CURDIR)"; \

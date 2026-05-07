@@ -11,8 +11,8 @@ This document must be maintained in accordance with `AGENTS.md`. The canonical
 plan file is
 `docs/execplans/8-1-3-argument-and-paragraph-fingerprint-data-models.md`.
 
-This plan was approved for implementation on 2026-05-01. Code changes for
-roadmap item 8.1.3 may proceed within the tolerances below.
+This plan was approved and implemented on 2026-05-01; roadmap item 8.1.3 is now
+complete.
 
 ## Purpose / big picture
 
@@ -183,9 +183,11 @@ Success is observable when:
   `.markdownlint-cli2.jsonc`, so it reported table and heading line-length
   failures that `make markdownlint` correctly ignored.
 - Post-turn hooks run `make` in an environment where user-local binary
-  directories are not guaranteed to be on `PATH`. The Makefile now prepends the
-  repository's expected user-local tool directories so `cargo`,
-  `markdownlint-cli2`, and related developer tools resolve consistently.
+  directories are not guaranteed to be on `PATH`. Makefile recipes now
+  temporarily extend `PATH` for target commands with the repository's expected
+  user-local tool directories, so `cargo`, `markdownlint-cli2`, and related
+  developer tools resolve consistently during post-turn hooks without changing
+  the caller's global `PATH`.
 
 ## Decision Log
 
@@ -215,11 +217,12 @@ Success is observable when:
   `mdformat-all`, while `make markdownlint` uses `markdownlint-cli2`; both
   entry points now share the same table, heading, and line-length policy.
   Date/Author: 2026-05-01 / implementation.
-- Decision: export a Makefile-local `PATH` containing `$(HOME)/.cargo/bin`,
-  `$(HOME)/.bun/bin`, and `$(HOME)/.local/bin`. Rationale: hook runs may not
-  inherit an interactive shell path, but the repository already documents and
-  uses tools installed in those user-local locations. Date/Author: 2026-05-01 /
-  implementation.
+- Decision: use target-scoped Makefile recipe `PATH` extensions containing
+  `$$HOME/.cargo/bin`, `$$HOME/.bun/bin`, and `$$HOME/.local/bin`. Rationale:
+  hook runs may not inherit an interactive shell path, but the repository
+  already documents and uses tools installed in those user-local locations;
+  shell-time expansion avoids freezing `HOME` or `PATH` when Make parses the
+  file. Date/Author: 2026-05-01 / implementation.
 
 ## Context and orientation
 
