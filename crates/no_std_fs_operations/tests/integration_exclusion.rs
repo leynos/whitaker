@@ -21,6 +21,7 @@ use std::sync::OnceLock;
 
 use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
+use insta::assert_json_snapshot;
 use rstest::rstest;
 use serial_test::serial;
 use tempfile::TempDir;
@@ -300,6 +301,27 @@ fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
         .count())
 }
 
+/// Replaces all occurrences of `prefix` in `value` with the fixed
+/// placeholder `[FIXTURE_ROOT]` so snapshot output is stable across runs.
+fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => {
+            serde_json::Value::String(s.replace(prefix, "[FIXTURE_ROOT]"))
+        }
+        serde_json::Value::Array(arr) => serde_json::Value::Array(
+            arr.into_iter()
+                .map(|value| redact_path_prefix(value, prefix))
+                .collect(),
+        ),
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, redact_path_prefix(value, prefix)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 // anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary
 // to convert &Result<PathBuf, Error> into Result<PathBuf, Error>.
 #[allow(clippy::useless_asref, clippy::redundant_closure)]
@@ -411,4 +433,49 @@ fn assert_fixture_behaviour(
             result.stderr
         );
     }
+}
+
+/// Snapshot test: verifies the structured JSON diagnostic output emitted by
+/// `cargo dylint` for a non-excluded crate.
+///
+/// Non-deterministic fields (absolute fixture paths) are redacted to
+/// `[FIXTURE_ROOT]` before the snapshot is taken.
+#[test]
+#[ignore = "requires cargo-dylint and built lint library"]
+#[serial]
+fn non_excluded_crate_diagnostics_match_snapshot() {
+    let lint_library_path = lint_library_path().expect("failed to build lint library");
+    let fixture = create_fixture_project("non_excluded_crate_snap", false)
+        .expect("failed to create fixture project");
+
+    let result =
+        run_cargo_dylint(fixture.root(), &lint_library_path).expect("failed to run cargo dylint");
+
+    let diagnostics: Vec<serde_json::Value> = Message::parse_stream(Cursor::new(&result.stdout))
+        .filter_map(Result::ok)
+        .filter_map(|message| match message {
+            Message::CompilerMessage(message)
+                if message
+                    .message
+                    .code
+                    .as_ref()
+                    .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
+            {
+                serde_json::to_value(message.message).ok()
+            }
+            _ => None,
+        })
+        .collect();
+
+    let prefix = fixture
+        .root()
+        .to_str()
+        .expect("fixture root should be valid UTF-8");
+
+    let redacted: Vec<serde_json::Value> = diagnostics
+        .into_iter()
+        .map(|value| redact_path_prefix(value, prefix))
+        .collect();
+
+    assert_json_snapshot!("non_excluded_crate_diagnostics", redacted);
 }
