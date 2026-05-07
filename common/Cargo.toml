@@ -30,6 +30,7 @@ unic-langid = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
+proptest = "1"
 regex = "1.10.4"
 logtest = "2.0.0"
 

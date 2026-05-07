@@ -94,6 +94,62 @@ fn paragraph_normalization_is_deterministic_across_runs() {
     );
 }
 
+#[rstest]
+fn empty_argument_fingerprint_equals_another_empty() {
+    let first = ArgFingerprint::new([]);
+    let second = ArgFingerprint::new([]);
+    assert_eq!(first, second);
+    assert!(first.atoms().is_empty());
+}
+
+#[rstest]
+fn empty_paragraph_fingerprint_equals_another_empty() {
+    let first = ParagraphFingerprint::new([]);
+    let second = ParagraphFingerprint::new([]);
+    assert_eq!(first, second);
+    assert!(first.shapes().is_empty());
+}
+
+#[rstest]
+fn arg_atom_constructors_accept_empty_string() {
+    let fl = ArgAtom::fixture_local("");
+    let cl = ArgAtom::const_lit("");
+    let cp = ArgAtom::const_path("");
+    assert_eq!(fl, ArgAtom::fixture_local(""));
+    assert_eq!(cl, ArgAtom::const_lit(""));
+    assert_eq!(cp, ArgAtom::const_path(""));
+}
+
+#[rstest]
+fn arg_atom_constructors_accept_long_string() {
+    let long: String = "x".repeat(4096);
+    let atom = ArgAtom::fixture_local(&long);
+    assert_eq!(atom, ArgAtom::fixture_local(long));
+}
+
+#[rstest]
+fn local_slot_new_roundtrips_index() {
+    assert_eq!(LocalSlot::new(0).index(), 0);
+    assert_eq!(LocalSlot::new(u32::MAX).index(), u32::MAX);
+}
+
+#[rstest]
+fn paragraph_normalizer_returns_same_slot_for_repeated_name() {
+    let mut norm = ParagraphNormalizer::new();
+    let first = norm.local_slot("foo");
+    let second = norm.local_slot("foo");
+    assert_eq!(first, second);
+}
+
+#[rstest]
+fn paragraph_normalizer_assigns_slots_in_first_appearance_order() {
+    let mut norm = ParagraphNormalizer::new();
+    let zeta = norm.local_slot("zeta");
+    let alpha = norm.local_slot("alpha");
+    assert_eq!(zeta.index(), 0);
+    assert_eq!(alpha.index(), 1);
+}
+
 fn paragraph_for_renamed_locals(first_name: &str, second_name: &str) -> ParagraphFingerprint {
     let mut normalizer = ParagraphNormalizer::new();
     ParagraphFingerprint::new([
