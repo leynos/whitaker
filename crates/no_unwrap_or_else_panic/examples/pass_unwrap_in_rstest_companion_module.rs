@@ -23,7 +23,7 @@ fn rstest_companion_subject(value: i32) {
 ///
 /// Contains the `RSTEST_HARNESS_DESCRIPTOR` const and a `#[test]` function
 /// that invoke the parent `rstest_companion_subject`.  Validates that
-/// `collect_rstest_companion_test_functions` recognises the sibling-module
+/// `collect_rstest_companion_test_functions` recognizes the sibling-module
 /// layout without requiring the real `rstest` proc-macro.
 #[cfg(test)]
 mod rstest_companion_subject {

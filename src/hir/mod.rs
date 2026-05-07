@@ -1,6 +1,7 @@
 //! Helpers for working with HIR constructs shared across Whitaker lints.
 
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
@@ -8,6 +9,9 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
+
+static HARNESS_DESCRIPTOR_SYMBOL: LazyLock<rustc_span::Symbol> =
+    LazyLock::new(|| rustc_span::Symbol::intern("RSTEST_HARNESS_DESCRIPTOR"));
 
 /// Returns the body span for an inline or file-backed module.
 ///
@@ -282,13 +286,12 @@ fn module_qualifies_as_rstest_companion_module<'tcx>(
         .map(|item_id| cx.tcx.hir_item(*item_id))
         .collect();
 
-    let harness_desc = rustc_span::Symbol::intern("RSTEST_HARNESS_DESCRIPTOR");
     if items.iter().any(|item| {
         matches!(item.kind, hir::ItemKind::Const(..))
             && item
                 .kind
                 .ident()
-                .is_some_and(|ident| ident.name == harness_desc)
+                .is_some_and(|ident| ident.name == *HARNESS_DESCRIPTOR_SYMBOL)
     }) {
         return true;
     }

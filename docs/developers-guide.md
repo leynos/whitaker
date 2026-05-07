@@ -1084,7 +1084,7 @@ The implementation follows three steps:
    original function as a test context. A module qualifies as a companion when
    it either exposes a `RSTEST_HARNESS_DESCRIPTOR` const (the descriptor-only
    shape emitted for minimal rstest expansions) or contains the in-module `fn`
-   / same-span `const` descriptor pair synthesised by `rustc --test` inside
+   / same-span `const` descriptor pair synthesized by `rustc --test` inside
    generated modules. Empty modules and modules containing only unrelated items
    are never treated as companions.
 
