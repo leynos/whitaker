@@ -2,9 +2,52 @@
 
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
+#[cfg(not(windows))]
+use rstest::rstest;
 use std::path::Path;
 use std::{fs, io};
+#[cfg(not(windows))]
+use temp_env::with_vars_unset;
+#[cfg(not(windows))]
+use whitaker_common::test_support::env_test_guard;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
+
+/// Describes a single example-based regression to run under the test harness.
+///
+/// `name` is the example target name, `label` is the human-readable case name
+/// used in panic messages, and `rustc_flags` supplies the extra harness flags
+/// passed to `dylint_testing`.
+#[cfg(not(windows))]
+struct ExampleHarnessRun<'a> {
+    /// Example target name passed to `Test::example`.
+    name: &'a str,
+    /// Human-readable label used when a regression runner fails.
+    label: &'a str,
+    /// Extra `rustc` flags used for the harness invocation.
+    rustc_flags: &'a [&'a str],
+}
+
+#[cfg(not(windows))]
+impl<'a> ExampleHarnessRun<'a> {
+    /// Creates a run spec using the default `--test` harness flag.
+    fn new(name: &'a str, label: &'a str) -> Self {
+        Self {
+            name,
+            label,
+            rustc_flags: &["--test"],
+        }
+    }
+
+    /// Creates a run spec with caller-supplied rustc flags (no defaults
+    /// applied).
+    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+        Self {
+            name,
+            label,
+            rustc_flags,
+        }
+    }
+}
 
 #[test]
 fn ui() {
@@ -16,6 +59,42 @@ fn ui() {
     .unwrap_or_else(|error| {
         panic!(
             "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+        )
+    });
+}
+
+/// Runs an example-based regression under the dylint UI test harness.
+///
+/// Applies `spec.rustc_flags` to the compilation and formats any failure
+/// message using `spec.label`.
+#[cfg(not(windows))]
+fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
+    let crate_name = env!("CARGO_PKG_NAME");
+    let directory = "examples";
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+        run_test_runner(spec.name, || {
+            let _guard = env_test_guard();
+            with_vars_unset(
+                [
+                    "RUSTC_WRAPPER",
+                    "RUSTC_WORKSPACE_WRAPPER",
+                    "CARGO_BUILD_RUSTC_WRAPPER",
+                    "SCCACHE_GHA_ENABLED",
+                    "SCCACHE_PATH",
+                    "SCCACHE_ERROR_LOG",
+                ],
+                || {
+                    let mut test = Test::example(crate_name, spec.name);
+                    test.rustc_flags(spec.rustc_flags);
+                    test.run();
+                },
+            );
+        })
+    })
+    .unwrap_or_else(|error| {
+        panic!(
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            spec.label
         )
     });
 }
@@ -85,4 +164,42 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
     }
 
     Ok(Some(flags))
+}
+
+// Dylint example compilation is skipped on Windows. When `test.run()` spawns
+// a cargo subprocess to compile any example in this crate, cargo resolves the
+// full dev-dependency graph including `rstest-bdd-macros` (a proc-macro
+// crate). Proc-macro compilation hangs on Windows CI regardless of whether the
+// example source uses rstest. Companion-module detection is a pure HIR analysis;
+// non-Windows coverage is sufficient to guard against regressions.
+#[cfg(not(windows))]
+#[rstest]
+#[case("pass_unwrap_in_rstest_harness", "rstest")]
+#[case("pass_unwrap_in_rstest_companion_module", "rstest companion module")]
+#[case(
+    "pass_unwrap_in_rstest_descriptor_only_companion",
+    "rstest descriptor-only companion"
+)]
+fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) {
+    run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn rstest_unwrap_outside_tests_still_fails_in_non_harness_code() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_rstest_non_test_module",
+        "rstest non-harness",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn rstest_empty_companion_does_not_exempt_parent_function() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_rstest_empty_companion",
+        "rstest empty companion (negative)",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
 }

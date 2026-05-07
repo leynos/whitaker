@@ -13,7 +13,7 @@
 //! expansion output:
 //! - `crates/no_expect_outside_tests/examples/pass_expect_in_rstest_harness.rs`
 //! - `crates/no_expect_outside_tests/src/lib_ui_tests.rs`
-//!   (`rstest_example_compiles_under_test_harness`)
+//!   (`example_compiles_under_test_harness`)
 
 use super::{recover_user_editable_hir_span, span_recovery_frames};
 use rstest::{fixture, rstest};

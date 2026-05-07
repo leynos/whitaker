@@ -8,7 +8,6 @@ license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-test = false
 
 [features]
 default = []
@@ -45,6 +44,7 @@ dylint_testing = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
+temp-env = { workspace = true }
 
 [lints.clippy]
 expect_used = "deny"

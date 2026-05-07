@@ -1770,6 +1770,7 @@ dependencies = [
  "rustc_middle",
  "rustc_span",
  "serde",
+ "temp-env",
  "whitaker",
  "whitaker-common",
 ]

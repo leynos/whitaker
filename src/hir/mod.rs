@@ -1,6 +1,7 @@
 //! Helpers for working with HIR constructs shared across Whitaker lints.
 
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
@@ -8,6 +9,9 @@ use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::Span;
 use whitaker_common::{Attribute, AttributeKind, AttributePath, SpanRecoveryFrame};
+
+static HARNESS_DESCRIPTOR_SYMBOL: LazyLock<rustc_span::Symbol> =
+    LazyLock::new(|| rustc_span::Symbol::intern("RSTEST_HARNESS_DESCRIPTOR"));
 
 /// Returns the body span for an inline or file-backed module.
 ///
@@ -188,13 +192,14 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         .collect()
 }
 
-/// Collects functions whose rstest companion module contains a harness
-/// descriptor.
+/// Collects functions whose rstest lowering uses a same-named sibling module.
 ///
 /// The shared [`collect_harness_test_functions`] catches direct const-descriptor
 /// siblings. This helper additionally finds functions with a same-named sibling
-/// *module* that itself contains a harness descriptor (the pattern rstest case
-/// expansions produce). Companions are matched only within the same module scope.
+/// *module* in the shape `rustc` emits for case-driven `#[rstest]` (including
+/// a module that exposes `RSTEST_HARNESS_DESCRIPTOR`, or the full in-module
+/// harness-descriptor pattern). Companions are matched only within the same
+/// module scope.
 #[must_use]
 pub fn collect_rstest_companion_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
     let mut marked = HashSet::new();
@@ -257,10 +262,17 @@ fn has_companion_test_module<'tcx>(
             .ident()
             .is_some_and(|ident| ident.name == function_name)
         && matches!(sibling.kind, hir::ItemKind::Mod(..))
-        && module_has_harness_descriptor(cx, sibling)
+        && module_qualifies_as_rstest_companion_module(cx, sibling)
 }
 
-fn module_has_harness_descriptor<'tcx>(
+/// Returns `true` when `module_item` is an rstest-style companion module for a
+/// same-named parent function.
+///
+/// Qualifying modules contain `RSTEST_HARNESS_DESCRIPTOR` or carry the inner
+/// `fn`/`const` sibling pattern emitted by the `rustc --test` harness inside
+/// generated modules. Empty modules and modules containing only unrelated
+/// items are not treated as companions.
+fn module_qualifies_as_rstest_companion_module<'tcx>(
     cx: &LateContext<'tcx>,
     module_item: &'tcx hir::Item<'tcx>,
 ) -> bool {
@@ -274,6 +286,25 @@ fn module_has_harness_descriptor<'tcx>(
         .map(|item_id| cx.tcx.hir_item(*item_id))
         .collect();
 
+    if items.iter().any(|item| {
+        matches!(item.kind, hir::ItemKind::Const(..))
+            && item
+                .kind
+                .ident()
+                .is_some_and(|ident| ident.name == *HARNESS_DESCRIPTOR_SYMBOL)
+    }) {
+        return true;
+    }
+
+    module_has_inner_harness_descriptor_pairs(cx, &items)
+}
+
+/// Whether `items` lists at least one `fn` with a same-span sibling `const` of
+/// the same name (the `rustc --test` harness marker pattern inside a module).
+fn module_has_inner_harness_descriptor_pairs<'tcx>(
+    cx: &LateContext<'tcx>,
+    items: &[&'tcx hir::Item<'tcx>],
+) -> bool {
     items
         .iter()
         .copied()

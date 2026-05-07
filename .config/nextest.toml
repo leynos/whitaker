@@ -20,7 +20,7 @@ serial-dylint-ui = { max-threads = 1 }
 serial-toolchain-installs = { max-threads = 1 }
 
 [[profile.default.overrides]]
-# Include crate-local `ui::ui` entrypoints that wrap dylint UI fixtures.
+# Include crate-local UI entrypoints that wrap dylint UI fixtures.
 # On Windows, `dylint::driver_builder::get` persists a temporary file via
 # `tempfile::NamedTempFile::persist()`.  Windows Defender or indexing services
 # can briefly hold a handle on the file, causing the rename to fail with
@@ -31,9 +31,19 @@ serial-toolchain-installs = { max-threads = 1 }
 # integration binary is `tests/ui.rs` with a top-level `fn ui()` — the test
 # name reported to nextest is plain `ui`, not `ui::ui`, so the substring
 # match `test(ui::ui)` does not capture them (e.g. bumpy_road_function).
-filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & test(=ui))"
+#
+# `ui::example_compiles_under_test_harness`,
+# `ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code`, and
+# `ui::rstest_empty_companion_does_not_exempt_parent_function` are gated on
+# `#[cfg(not(windows))]` in `no_unwrap_or_else_panic`; on Windows these filter
+# clauses match nothing.  The `rstest-bdd-macros` dev-dependency proc-macro
+# hangs during cargo's dev-dependency resolution on Windows CI regardless of
+# whether any example source uses rstest, so all Dylint example compilation for
+# that crate is compiled away on Windows.
+filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | test(ui::example_compiles_under_test_harness) | test(ui::rstest_unwrap_outside_tests_still_fails_in_non_harness_code) | test(ui::rstest_empty_companion_does_not_exempt_parent_function) | (binary(ui) & test(=ui))"
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
+slow-timeout = { period = "10m", terminate-after = 1 }
 
 # Extend the timeout for toolchain auto-install behavioural tests, since the
 # isolated rustup setup may need to download and install a full nightly toolchain.

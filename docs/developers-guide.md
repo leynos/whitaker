@@ -1082,6 +1082,80 @@ not just the immediately enclosing function.
 - `summarise_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
 
+Real `rstest` case expansion adds a second `--test` harness shape that the
+attribute and direct sibling-descriptor paths do not see. For parameterized
+cases, `rustc` lowers the user-written function into ordinary HIR and emits a
+same-named sibling module that contains the synthesized harness functions plus
+their `const` descriptors. In `src/hir/mod.rs`,
+`collect_rstest_companion_test_functions()` extends the existing
+`collect_harness_test_functions()` pass to catch that shape before
+`no_expect_outside_tests` evaluates call-site context.
+
+For example, this user-written test:
+
+```rust
+#[rstest]
+#[case(Some("value"))]
+fn accepts_rstest_case(#[case] input: Option<&str>) {
+    input.expect("rstest case setup may use expect");
+}
+```
+
+is represented as a module group shaped like this in the test harness:
+
+```text
+parent module
+|-- fn accepts_rstest_case(...)
+`-- mod accepts_rstest_case
+    |-- fn case_1()
+    `-- const case_1: test::TestDescAndFn
+```
+
+The important relationship is that the original function and the synthesized
+module are siblings under the same parent module and share the same name. That
+sibling module is the companion module; the parent module contents form the
+module group that the helper scans.
+
+This helper is architecturally significant for two reasons:
+
+- It keeps compiler-lowering knowledge in the shared HIR module rather than in
+  lint-specific ancestry logic, so other lints can reuse the same test-harness
+  discovery rules if they need them later.
+- It only marks a function when a same-named sibling module in the same module
+  scope contains rstest synthesis evidence (`RSTEST_HARNESS_DESCRIPTOR` or a
+  `fn`/`const` harness-descriptor pair), which prevents both empty modules and
+  arbitrary const-only sibling modules from inheriting test status accidentally.
+
+The implementation follows three steps:
+
+1. Walk each module group recursively, so nested `mod tests` blocks and inline
+   modules are considered alongside crate-root items.
+2. For each function item, look for a same-named sibling module in the same
+   parent module.
+3. Inspect that sibling module for rstest synthesis evidence before marking the
+   original function as a test context. A module qualifies as a companion when
+   it either exposes a `RSTEST_HARNESS_DESCRIPTOR` const (the descriptor-only
+   shape emitted for minimal rstest expansions) or contains the in-module `fn`
+   / same-span `const` descriptor pair synthesized by `rustc --test` inside
+   generated modules. Empty modules and modules containing only unrelated items
+   are never treated as companions.
+
+That split lets the lint treat rstest companion modules as an extension of the
+existing `--test` harness model instead of a separate policy path.
+
+#### Known complexity limitation
+
+`collect_companion_in_group()` and `module_qualifies_as_rstest_companion_module()`
+in
+`src/hir/mod.rs` use nested iteration, giving O(n²) complexity within each
+module scope. This is acceptable in practice because module item counts are
+bounded at compile time and the functions execute during lint analysis, not at
+runtime.
+
+Issue [#225](https://github.com/leynos/whitaker/issues/225) tracks adding
+complexity docstrings to those functions and evaluating a lookup-map
+optimization.
+
 ### UI test harness helpers (`lib_ui_tests.rs`)
 
 `crates/no_expect_outside_tests/src/lib_ui_tests.rs` provides the
