@@ -13,40 +13,44 @@
 //! dependencies. Run with `--ignored` to execute.
 
 use std::env;
+use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
+use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
-use rstest::{fixture, rstest};
+use insta::assert_json_snapshot;
+use rstest::rstest;
 use serial_test::serial;
+use tempfile::TempDir;
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 
 /// Builds the lint library and returns the path to the release directory.
-fn build_lint_library() -> PathBuf {
+fn build_lint_library() -> anyhow::Result<PathBuf> {
     let metadata = MetadataCommand::new()
         .no_deps()
         .exec()
-        .expect("failed to fetch cargo metadata");
+        .context("failed to fetch cargo metadata")?;
 
-    let output = run_lint_crate_build(metadata.workspace_root.as_std_path());
-    let package_id = find_package_id(&metadata, LINT_CRATE_NAME);
-    let cdylib_path = find_cdylib_in_artifacts(&output, &package_id);
+    let output = run_lint_crate_build(metadata.workspace_root.as_std_path())?;
+    let package_id = find_package_id(&metadata, LINT_CRATE_NAME)?;
+    let cdylib_path = find_cdylib_in_artifacts(&output, &package_id)?;
 
     let release_dir = cdylib_path
         .parent()
-        .expect("cdylib should have a parent directory")
+        .context("cdylib should have a parent directory")?
         .to_path_buf();
 
-    stage_toolchain_qualified_library(&cdylib_path, &release_dir);
+    stage_toolchain_qualified_library(&cdylib_path, &release_dir)?;
 
-    release_dir
+    Ok(release_dir)
 }
 
 /// Executes `cargo build` for the lint crate and returns the build output.
-fn run_lint_crate_build(workspace_root: &Path) -> Vec<u8> {
+fn run_lint_crate_build(workspace_root: &Path) -> anyhow::Result<Vec<u8>> {
     let output = Command::new("cargo")
         .arg("build")
         .arg("--lib")
@@ -58,19 +62,20 @@ fn run_lint_crate_build(workspace_root: &Path) -> Vec<u8> {
         .arg("dylint-driver")
         .current_dir(workspace_root)
         .output()
-        .expect("failed to execute cargo build");
+        .context("failed to execute cargo build")?;
 
-    assert!(
-        output.status.success(),
-        "lint library build failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    if !output.status.success() {
+        anyhow::bail!(
+            "lint library build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
-    output.stdout
+    Ok(output.stdout)
 }
 
 /// Copies the built library to a toolchain-qualified filename for Dylint discovery.
-fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
+fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) -> anyhow::Result<()> {
     let toolchain = env::var("RUSTUP_TOOLCHAIN")
         .ok()
         .or_else(|| option_env!("RUSTUP_TOOLCHAIN").map(String::from))
@@ -78,7 +83,7 @@ fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
 
     let file_name = cdylib_path
         .file_name()
-        .expect("cdylib should have a filename")
+        .context("cdylib should have a filename")?
         .to_string_lossy();
 
     let suffix = env::consts::DLL_SUFFIX;
@@ -88,11 +93,16 @@ fn stage_toolchain_qualified_library(cdylib_path: &Path, release_dir: &Path) {
     );
 
     let target_path = release_dir.join(&target_name);
-    std::fs::copy(cdylib_path, &target_path).expect("failed to copy lint library");
+    std::fs::copy(cdylib_path, &target_path)
+        .with_context(|| format!("failed to copy lint library to {}", target_path.display()))?;
+    Ok(())
 }
 
 /// Locates the package ID for a workspace member by crate name.
-fn find_package_id(metadata: &Metadata, crate_name: &str) -> cargo_metadata::PackageId {
+fn find_package_id(
+    metadata: &Metadata,
+    crate_name: &str,
+) -> anyhow::Result<cargo_metadata::PackageId> {
     metadata
         .packages
         .iter()
@@ -104,11 +114,14 @@ fn find_package_id(metadata: &Metadata, crate_name: &str) -> cargo_metadata::Pac
                     .any(|member| member == &package.id)
         })
         .map(|package| package.id.clone())
-        .expect("lint crate not found in workspace")
+        .with_context(|| format!("lint crate `{crate_name}` not found in workspace"))
 }
 
 /// Extracts the cdylib path from cargo build JSON output for a given package.
-fn find_cdylib_in_artifacts(stdout: &[u8], package_id: &cargo_metadata::PackageId) -> PathBuf {
+fn find_cdylib_in_artifacts(
+    stdout: &[u8],
+    package_id: &cargo_metadata::PackageId,
+) -> anyhow::Result<PathBuf> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
         let Ok(Message::CompilerArtifact(artifact)) = message else {
             continue;
@@ -127,11 +140,11 @@ fn find_cdylib_in_artifacts(stdout: &[u8], package_id: &cargo_metadata::PackageI
             .iter()
             .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
         {
-            return path.clone().into_std_path_buf();
+            return Ok(path.clone().into_std_path_buf());
         }
     }
 
-    panic!("cdylib artifact not found in build output");
+    anyhow::bail!("cdylib artifact not found in build output for package `{package_id}`")
 }
 
 /// Result of invoking `cargo dylint` against a fixture crate.
@@ -141,8 +154,102 @@ struct CargoDylintResult {
     stderr: String,
 }
 
+/// Standalone project fixture created in a temporary directory for integration tests.
+struct FixtureProject {
+    _temp_dir: TempDir,
+    root: PathBuf,
+}
+
+impl FixtureProject {
+    fn root(&self) -> &Path {
+        &self.root
+    }
+}
+
+/// Creates a temporary fixture project for verifying exclusion behaviour.
+fn create_fixture_project(crate_name: &str, is_excluded: bool) -> anyhow::Result<FixtureProject> {
+    let temp_dir = TempDir::new().context("failed to create temporary fixture directory")?;
+    let root = temp_dir.path().to_path_buf();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        format!(
+            concat!(
+                "[package]\n",
+                "name = \"{crate_name}\"\n",
+                "version = \"0.1.0\"\n",
+                "edition = \"2024\"\n",
+                "\n",
+                "[dependencies]\n",
+            ),
+            crate_name = crate_name
+        ),
+    )
+    .context("failed to write fixture Cargo.toml")?;
+
+    fs::write(
+        root.join("dylint.toml"),
+        fixture_dylint_config(crate_name, is_excluded),
+    )
+    .context("failed to write fixture dylint.toml")?;
+
+    let source_dir = root.join("src");
+    fs::create_dir(&source_dir).context("failed to create fixture src directory")?;
+    fs::write(source_dir.join("lib.rs"), fixture_source(crate_name))
+        .context("failed to write fixture source")?;
+
+    Ok(FixtureProject {
+        _temp_dir: temp_dir,
+        root,
+    })
+}
+
+fn fixture_dylint_config(crate_name: &str, is_excluded: bool) -> String {
+    let excluded_crates = if is_excluded {
+        format!("[\"{crate_name}\"]")
+    } else {
+        "[]".to_owned()
+    };
+
+    format!(
+        concat!(
+            "[no_std_fs_operations]\n",
+            "excluded_crates = {excluded_crates}\n",
+        ),
+        excluded_crates = excluded_crates
+    )
+}
+
+fn fixture_source(crate_name: &str) -> String {
+    format!(
+        concat!(
+            "//! Temporary fixture crate for `no_std_fs_operations` integration tests.\n",
+            "\n",
+            "use std::fs::File;\n",
+            "use std::path::Path;\n",
+            "\n",
+            "/// Opens a file for reading.\n",
+            "///\n",
+            "/// # Examples\n",
+            "///\n",
+            "/// ```no_run\n",
+            "/// use {crate_name}::open_file;\n",
+            "///\n",
+            "/// let file = open_file(\"Cargo.toml\").expect(\"file should exist\");\n",
+            "/// let result = open_file(\"nonexistent.txt\");\n",
+            "/// assert!(result.is_err());\n",
+            "/// # drop(file);\n",
+            "/// ```\n",
+            "pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {{\n",
+            "    File::open(path)\n",
+            "}}\n",
+        ),
+        crate_name = crate_name
+    )
+}
+
 /// Runs `cargo dylint` on the given fixture project directory.
-fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResult {
+fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> anyhow::Result<CargoDylintResult> {
     let output = Command::new("cargo")
         .arg("dylint")
         .arg("--all")
@@ -153,21 +260,34 @@ fn run_cargo_dylint(fixture_dir: &Path, library_path: &Path) -> CargoDylintResul
         .env("DYLINT_LIBRARY_PATH", library_path)
         .env("DYLINT_RUSTFLAGS", "-D warnings")
         .output()
-        .expect("failed to execute cargo dylint");
+        .context("failed to execute cargo dylint")?;
 
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    CargoDylintResult {
+    Ok(CargoDylintResult {
         is_success: output.status.success(),
         stdout: output.stdout,
         stderr,
-    }
+    })
 }
 
 /// Counts diagnostics emitted by the `no_std_fs_operations` lint from cargo JSON output.
-fn diagnostic_count(output: &[u8]) -> usize {
-    Message::parse_stream(Cursor::new(output))
-        .map(|message| message.expect("cargo dylint should emit valid JSON messages"))
+///
+/// Propagates parse errors rather than panicking, including context from the raw stdout
+/// so callers can inspect malformed cargo output.
+fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
+    let messages: Vec<Message> = Message::parse_stream(Cursor::new(output))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "failed to parse cargo JSON messages: {}\nstdout:\n{}",
+                e,
+                String::from_utf8_lossy(output)
+            )
+        })?;
+
+    Ok(messages
+        .into_iter()
         .filter_map(|message| match message {
             Message::CompilerMessage(message) => Some(message.message),
             _ => None,
@@ -178,22 +298,41 @@ fn diagnostic_count(output: &[u8]) -> usize {
                 .as_ref()
                 .is_some_and(|code| code.code == LINT_CRATE_NAME)
         })
-        .count()
+        .count())
 }
 
-/// Returns the path to a named fixture project under `tests/fixtures/`.
-fn fixture_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name)
+/// Replaces all occurrences of `prefix` in `value` with the fixed
+/// placeholder `[FIXTURE_ROOT]` so snapshot output is stable across runs.
+fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => {
+            serde_json::Value::String(s.replace(prefix, "[FIXTURE_ROOT]"))
+        }
+        serde_json::Value::Array(arr) => serde_json::Value::Array(
+            arr.into_iter()
+                .map(|value| redact_path_prefix(value, prefix))
+                .collect(),
+        ),
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, redact_path_prefix(value, prefix)))
+                .collect(),
+        ),
+        other => other,
+    }
 }
 
-#[fixture]
-fn lint_library_path() -> PathBuf {
-    static LINT_LIBRARY_PATH: OnceLock<PathBuf> = OnceLock::new();
+// anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary
+// to convert &Result<PathBuf, Error> into Result<PathBuf, Error>.
+#[allow(clippy::useless_asref, clippy::redundant_closure)]
+fn lint_library_path() -> anyhow::Result<PathBuf> {
+    static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
 
-    LINT_LIBRARY_PATH.get_or_init(build_lint_library).clone()
+    LINT_LIBRARY_PATH
+        .get_or_init(|| build_lint_library())
+        .as_ref()
+        .map(Clone::clone)
+        .map_err(|e| anyhow::anyhow!("{e:#}"))
 }
 
 struct Expectation {
@@ -201,16 +340,26 @@ struct Expectation {
     should_succeed: bool,
 }
 
+/// Shared driver for exclusion integration tests.
+fn run_exclusion_test(crate_name: &str, is_excluded: bool, expectation: Expectation) {
+    let lint_library_path = lint_library_path().expect("failed to build lint library");
+    let fixture =
+        create_fixture_project(crate_name, is_excluded).expect("failed to create fixture project");
+    assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation);
+}
+
 #[rstest]
 #[case(
-    "excluded_project",
+    "excluded_test_crate",
+    true,
     Expectation {
         should_emit_diagnostics: false,
         should_succeed: true,
     }
 )]
 #[case(
-    "non_excluded_project",
+    "non_excluded_crate",
+    false,
     Expectation {
         should_emit_diagnostics: true,
         should_succeed: false,
@@ -218,35 +367,115 @@ struct Expectation {
 )]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
-fn exclusion_behaviour_matches_fixture_configuration(
-    lint_library_path: PathBuf,
-    #[case] fixture: &str,
-    #[case] expectation: Expectation,
+fn exclusion_crates_behaviour_test(
+    #[case] crate_name: &str,
+    #[case] is_excluded: bool,
+    #[case] expected: Expectation,
 ) {
-    let should_emit_diagnostics = expectation.should_emit_diagnostics;
-    let should_succeed = expectation.should_succeed;
-    let fixture_dir = fixture_path(fixture);
+    run_exclusion_test(crate_name, is_excluded, expected);
+}
 
-    let result = run_cargo_dylint(&fixture_dir, &lint_library_path);
-    let count = diagnostic_count(&result.stdout);
+/// Runs `cargo dylint` against the fixture and counts diagnostics.
+///
+/// This function is not called directly by `exclusion_crates_behaviour_test` but is exposed
+/// as a reusable fallible evaluation primitive for test code that needs to inspect results
+/// programmatically.
+#[allow(dead_code)]
+fn evaluate_fixture(
+    fixture_dir: &Path,
+    lint_library_path: &Path,
+    crate_name: &str,
+) -> anyhow::Result<(bool, usize)> {
+    let result = run_cargo_dylint(fixture_dir, lint_library_path)?;
+    let count = diagnostic_count(&result.stdout).with_context(|| {
+        format!(
+            "crate `{crate_name}` produced malformed cargo output\nstderr:\n{}",
+            result.stderr
+        )
+    })?;
+    Ok((result.is_success, count))
+}
+
+fn assert_fixture_behaviour(
+    fixture_dir: &Path,
+    lint_library_path: &Path,
+    crate_name: &str,
+    expectation: Expectation,
+) {
+    let result = run_cargo_dylint(fixture_dir, lint_library_path)
+        .unwrap_or_else(|e| panic!("crate `{crate_name}`: failed to run cargo dylint: {e:#}"));
+    let count = diagnostic_count(&result.stdout).unwrap_or_else(|e| {
+        panic!(
+            "crate `{crate_name}` produced malformed cargo output: {e:#}\nstderr:\n{}",
+            result.stderr
+        )
+    });
 
     assert!(
-        result.is_success == should_succeed,
-        "fixture `{fixture}` should return success={should_succeed}, but stderr was:\n{}",
+        result.is_success == expectation.should_succeed,
+        "crate `{crate_name}` should return success={}, but stderr was:\n{}",
+        expectation.should_succeed,
         result.stderr
     );
 
-    if should_emit_diagnostics {
+    if expectation.should_emit_diagnostics {
         assert!(
             count > 0,
-            "fixture `{fixture}` should emit `no_std_fs_operations` diagnostics, but stderr was:\n{}",
+            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics, \
+             but stderr was:\n{}",
             result.stderr
         );
     } else {
         assert!(
             count == 0,
-            "fixture `{fixture}` should emit zero `no_std_fs_operations` diagnostics, but stderr was:\n{}",
+            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics, \
+             but stderr was:\n{}",
             result.stderr
         );
     }
+}
+
+/// Snapshot test: verifies the structured JSON diagnostic output emitted by
+/// `cargo dylint` for a non-excluded crate.
+///
+/// Non-deterministic fields (absolute fixture paths) are redacted to
+/// `[FIXTURE_ROOT]` before the snapshot is taken.
+#[test]
+#[ignore = "requires cargo-dylint and built lint library"]
+#[serial]
+fn non_excluded_crate_diagnostics_match_snapshot() {
+    let lint_library_path = lint_library_path().expect("failed to build lint library");
+    let fixture = create_fixture_project("non_excluded_crate_snap", false)
+        .expect("failed to create fixture project");
+
+    let result =
+        run_cargo_dylint(fixture.root(), &lint_library_path).expect("failed to run cargo dylint");
+
+    let diagnostics: Vec<serde_json::Value> = Message::parse_stream(Cursor::new(&result.stdout))
+        .filter_map(Result::ok)
+        .filter_map(|message| match message {
+            Message::CompilerMessage(message)
+                if message
+                    .message
+                    .code
+                    .as_ref()
+                    .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
+            {
+                serde_json::to_value(message.message).ok()
+            }
+            _ => None,
+        })
+        .collect();
+
+    let prefix = fixture
+        .root()
+        .to_str()
+        .expect("fixture root should be valid UTF-8");
+
+    let redacted: Vec<serde_json::Value> = diagnostics
+        .into_iter()
+        .map(|value| redact_path_prefix(value, prefix))
+        .collect();
+
+    assert_json_snapshot!("non_excluded_crate_diagnostics", redacted);
 }

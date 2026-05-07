@@ -1,0 +1,214 @@
+---
+source: crates/no_std_fs_operations/tests/integration_exclusion.rs
+expression: redacted
+---
+[
+  {
+    "children": [
+      {
+        "children": [],
+        "code": null,
+        "level": "note",
+        "message": "std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.",
+        "rendered": null,
+        "spans": []
+      },
+      {
+        "children": [],
+        "code": null,
+        "level": "help",
+        "message": "Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.",
+        "rendered": null,
+        "spans": []
+      },
+      {
+        "children": [],
+        "code": null,
+        "level": "note",
+        "message": "`#[deny(no_std_fs_operations)]` on by default",
+        "rendered": null,
+        "spans": []
+      }
+    ],
+    "code": {
+      "code": "no_std_fs_operations",
+      "explanation": null
+    },
+    "level": "error",
+    "message": "std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.",
+    "rendered": "error: std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.\n --> src/lib.rs:3:5\n  |\n3 | use std::fs::File;\n  |     ^^^^^^^^^^^^^\n  |\n  = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.\n  = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.\n  = note: `#[deny(no_std_fs_operations)]` on by default\n\n",
+    "spans": [
+      {
+        "byte_end": 92,
+        "byte_start": 79,
+        "column_end": 18,
+        "column_start": 5,
+        "expansion": null,
+        "file_name": "src/lib.rs",
+        "is_primary": true,
+        "label": null,
+        "line_end": 3,
+        "line_start": 3,
+        "suggested_replacement": null,
+        "suggestion_applicability": null,
+        "text": [
+          {
+            "highlight_end": 18,
+            "highlight_start": 5,
+            "text": "use std::fs::File;"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "children": [
+      {
+        "children": [],
+        "code": null,
+        "level": "note",
+        "message": "std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.",
+        "rendered": null,
+        "spans": []
+      },
+      {
+        "children": [],
+        "code": null,
+        "level": "help",
+        "message": "Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.",
+        "rendered": null,
+        "spans": []
+      }
+    ],
+    "code": {
+      "code": "no_std_fs_operations",
+      "explanation": null
+    },
+    "level": "error",
+    "message": "std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.",
+    "rendered": "error: std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.\n  --> src/lib.rs:18:62\n   |\n18 | pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {\n   |                                                              ^^^^\n   |\n   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.\n   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.\n\n",
+    "spans": [
+      {
+        "byte_end": 467,
+        "byte_start": 463,
+        "column_end": 66,
+        "column_start": 62,
+        "expansion": null,
+        "file_name": "src/lib.rs",
+        "is_primary": true,
+        "label": null,
+        "line_end": 18,
+        "line_start": 18,
+        "suggested_replacement": null,
+        "suggestion_applicability": null,
+        "text": [
+          {
+            "highlight_end": 66,
+            "highlight_start": 62,
+            "text": "pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "children": [
+      {
+        "children": [],
+        "code": null,
+        "level": "note",
+        "message": "std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.",
+        "rendered": null,
+        "spans": []
+      },
+      {
+        "children": [],
+        "code": null,
+        "level": "help",
+        "message": "Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.",
+        "rendered": null,
+        "spans": []
+      }
+    ],
+    "code": {
+      "code": "no_std_fs_operations",
+      "explanation": null
+    },
+    "level": "error",
+    "message": "std::fs operation `std::fs::File::open` bypasses the capability-based filesystem policy.",
+    "rendered": "error: std::fs operation `std::fs::File::open` bypasses the capability-based filesystem policy.\n  --> src/lib.rs:19:5\n   |\n19 |     File::open(path)\n   |     ^^^^^^^^^^\n   |\n   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.\n   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.\n\n",
+    "spans": [
+      {
+        "byte_end": 485,
+        "byte_start": 475,
+        "column_end": 15,
+        "column_start": 5,
+        "expansion": null,
+        "file_name": "src/lib.rs",
+        "is_primary": true,
+        "label": null,
+        "line_end": 19,
+        "line_start": 19,
+        "suggested_replacement": null,
+        "suggestion_applicability": null,
+        "text": [
+          {
+            "highlight_end": 15,
+            "highlight_start": 5,
+            "text": "    File::open(path)"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "children": [
+      {
+        "children": [],
+        "code": null,
+        "level": "note",
+        "message": "std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.",
+        "rendered": null,
+        "spans": []
+      },
+      {
+        "children": [],
+        "code": null,
+        "level": "help",
+        "message": "Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.",
+        "rendered": null,
+        "spans": []
+      }
+    ],
+    "code": {
+      "code": "no_std_fs_operations",
+      "explanation": null
+    },
+    "level": "error",
+    "message": "std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.",
+    "rendered": "error: std::fs operation `std::fs::File` bypasses the capability-based filesystem policy.\n  --> src/lib.rs:19:5\n   |\n19 |     File::open(path)\n   |     ^^^^\n   |\n   = note: std::fs touches the ambient working directory; accept `cap_std::fs::Dir` handles and camino paths instead so callers choose the capability surface.\n   = help: Pass `cap_std::fs::Dir` plus `camino::Utf8Path`/`Utf8PathBuf` parameters through your APIs instead of calling std::fs directly.\n\n",
+    "spans": [
+      {
+        "byte_end": 479,
+        "byte_start": 475,
+        "column_end": 9,
+        "column_start": 5,
+        "expansion": null,
+        "file_name": "src/lib.rs",
+        "is_primary": true,
+        "label": null,
+        "line_end": 19,
+        "line_start": 19,
+        "suggested_replacement": null,
+        "suggestion_applicability": null,
+        "text": [
+          {
+            "highlight_end": 9,
+            "highlight_start": 5,
+            "text": "    File::open(path)"
+          }
+        ]
+      }
+    ]
+  }
+]

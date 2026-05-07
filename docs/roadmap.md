@@ -231,6 +231,10 @@
   pipeline.
 - [ ] 4.1.3. Enforce lint-level deny rules and fail builds on warnings across
   the workspace.
+- [x] 4.1.4. Add end-to-end behavioural integration tests for `excluded_crates`
+  in `no_std_fs_operations` using runtime-generated `TempDir` fixture projects
+  and `cargo dylint` subprocess invocation. Closes
+  [`#111`](https://github.com/leynos/whitaker/issues/111).
 
 ### 4.2. Release metadata
 
@@ -321,8 +325,8 @@
   advice. Requires 6.4.1.
 - [x] 6.4.6. Use Kani to verify `propagate_labels` preserves valid label
   indices, returns one label per input vector, and terminates within the
-  supplied iteration bound. Verification harnesses are complete modulo the
-  CBMC state-explosion blocker documented in the design notes. See
+  supplied iteration bound. Verification harnesses are complete modulo the CBMC
+  state-explosion blocker documented in the design notes. See
   [brain trust lints design](brain-trust-lints-design.md) §Decomposition
   advice. Requires 6.4.1.
 
