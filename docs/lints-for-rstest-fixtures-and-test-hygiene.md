@@ -257,6 +257,31 @@ Local identifiers should be normalized to deterministic slots by
 first-appearance order. Deep Abstract Syntax Tree (AST) canonicalization is
 intentionally out of scope.
 
+### Implementation decisions for 8.1.3
+
+Roadmap item 8.1.3 implements the shared fingerprint model layer in
+`common::rstest`. The argument models live in
+`common/src/rstest/argument_fingerprint.rs`, and the paragraph models live in
+`common/src/rstest/paragraph_fingerprint.rs`. The public API is re-exported
+from both `whitaker_common::rstest` and the crate root so later lint crates can
+construct fingerprints without depending on compiler-private types.
+
+Argument fingerprints are represented by `ArgFingerprint` and `ArgAtom`.
+`ArgAtom::Unsupported` remains an explicit atom in the positional sequence
+rather than being dropped, so later lint passes can distinguish an unsupported
+argument from a shorter, groupable argument list.
+
+Paragraph fingerprints are represented by `ParagraphFingerprint`, `StmtShape`,
+`ExprShape`, `CalleeShape`, and `LocalSlot`. Local-name normalization is
+builder-driven through `ParagraphNormalizer`, which assigns `LocalSlot` values
+by first appearance order within a paragraph. This means two paragraphs with
+the same statement structure and renamed locals compare equal when those locals
+appear in the same order.
+
+The draft design used a `u16` slot ordinal. The implementation uses a `u32`
+ordinal to avoid a panic or fallible constructor in the normalizer while
+preserving deterministic equality and ordering semantics.
+
 ### Emission strategy
 
 Collect candidates during block/body checks, then emit during

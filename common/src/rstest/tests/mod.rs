@@ -1,4 +1,7 @@
-//! Unit tests for strict `rstest` detection helpers.
+//! Unit tests for shared `rstest` helpers.
+
+mod fingerprint;
+mod fingerprint_props;
 
 use super::{
     ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,

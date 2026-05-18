@@ -1020,6 +1020,68 @@ To handle a new `T` (e.g., a custom span type in a test harness):
 
 No adapter code is needed unless `T` is `rustc_span::Span`.
 
+## Shared fingerprint helpers
+
+`common::rstest` exposes two families of pure data model for deterministic
+grouping of `rstest` call sites.
+
+### Argument fingerprints
+
+`ArgFingerprint` stores a positional sequence of `ArgAtom` values in call-site
+order. Use it to group helper calls that have the same argument shape
+regardless of which fixtures are bound at the call site.
+
+```rust
+use whitaker_common::{ArgAtom, ArgFingerprint};
+
+let fp = ArgFingerprint::new([
+    ArgAtom::fixture_local("db"),
+    ArgAtom::const_lit("42"),
+    ArgAtom::const_path("crate::defaults::TIMEOUT"),
+    ArgAtom::unsupported(), // retained explicitly; never silently dropped
+]);
+
+assert_eq!(fp.atoms().len(), 4);
+```
+
+`ArgAtom` variants:
+
+| Variant        | Constructor                     | Meaning                         |
+| -------------- | ------------------------------- | ------------------------------- |
+| `FixtureLocal` | `ArgAtom::fixture_local(name)`  | Fixture-local parameter         |
+| `ConstLit`     | `ArgAtom::const_lit(text)`      | Stable literal value            |
+| `ConstPath`    | `ArgAtom::const_path(def_path)` | Stable constant path            |
+| `Unsupported`  | `ArgAtom::unsupported()`        | Explicit positional placeholder |
+
+### Paragraph fingerprints
+
+`ParagraphFingerprint` stores an ordered sequence of `StmtShape` values. Use
+`ParagraphNormalizer` to assign deterministic `LocalSlot` indices (by
+first-appearance order) before constructing the fingerprint, so paragraphs with
+renamed locals compare equal when they are structurally equivalent.
+
+```rust
+use whitaker_common::{
+    CalleeShape, ExprShape, LocalSlot, ParagraphFingerprint,
+    ParagraphNormalizer, StmtShape,
+};
+
+let mut norm = ParagraphNormalizer::new();
+let fp = ParagraphFingerprint::new([
+    StmtShape::let_binding(ExprShape::call(
+        CalleeShape::def_path("crate::load"),
+        0,
+    )),
+    StmtShape::mutable_call(
+        Some(norm.local_slot("result")),
+        CalleeShape::def_path("crate::prepare"),
+    ),
+]);
+```
+
+`LocalSlot` indices are assigned in first-appearance order and are
+deterministic across repeated normalization runs over the same name sequence.
+
 ### Test coverage
 
 - **Unit tests** for the pure policy live in `common/src/rstest/tests.rs`.

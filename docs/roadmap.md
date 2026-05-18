@@ -462,7 +462,7 @@
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Integration constraints and §Lint A: call-site fixture extraction. Requires
   1.1.1.
-- [ ] 8.1.3. Add shared argument and paragraph fingerprint data models for
+- [x] 8.1.3. Add shared argument and paragraph fingerprint data models for
   deterministic grouping across tests. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction and §Lint C: repeated fixture
