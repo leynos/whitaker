@@ -137,6 +137,16 @@ The implementation began after explicit user approval on 2026-05-18.
   clone-detector harnesses verified successfully.
 - [x] 2026-05-18: Ran `coderabbit review --agent` after the baseline and
   mode-fix milestone; it reported zero findings.
+- [x] 2026-05-18: Strengthened ordinary `rstest` unit coverage for
+  deterministic sketches, duplicate-hash insensitivity, empty input and
+  reordered set semantics.
+- [x] 2026-05-18: Added an `rstest-bdd` candidate-generation scenario showing
+  that duplicate retained hashes use set semantics.
+- [x] 2026-05-18: Validated the ordinary coverage milestone with
+  `make check-fmt`, `make lint`, and `make test`; the suite reported 1400
+  passed and 2 skipped.
+- [x] 2026-05-18: Ran `coderabbit review --agent` after the ordinary coverage
+  milestone; it reported zero findings.
 - [ ] Implement the bounded Kani harnesses and tests.
 - [ ] After implementation, update documentation and mark roadmap item 7.2.7
   done.
@@ -161,6 +171,13 @@ The implementation began after explicit user approval on 2026-05-18.
 - Baseline `make kani-clone-detector` failed before implementation with
   `Permission denied` because `scripts/run-kani.sh` is tracked as mode `100644`
   while the Makefile invokes it directly as `./scripts/run-kani.sh`.
+- The BDD layer can observe duplicate-hash insensitivity through candidate
+  generation by comparing a fragment with unique retained hashes against a
+  fragment with the same hashes plus repeated values.
+- `make fmt` successfully applied Rust formatting for the new tests but still
+  fails on pre-existing repository-wide Markdown MD013 line-length violations.
+  Unrelated Markdown formatter churn was reverted, and `make check-fmt` passed
+  afterwards.
 
 ## Decision Log
 
@@ -192,12 +209,11 @@ The implementation began after explicit user approval on 2026-05-18.
 
 ## Outcomes & Retrospective
 
-Implementation is in progress. The expected outcome is a set of Kani
-harnesses, tests, and documentation updates that demonstrate
-`MinHasher::sketch` behaves deterministically, ignores duplicate hashes under
-set semantics, and rejects empty inputs. This section must be updated after
-implementation with validation logs, CodeRabbit results, and any deviations
-from the plan.
+Implementation is in progress. The expected outcome is a set of Kani harnesses,
+tests, and documentation updates that demonstrate `MinHasher::sketch` behaves
+deterministically, ignores duplicate hashes under set semantics, and rejects
+empty inputs. This section must be updated after implementation with validation
+logs, CodeRabbit results, and any deviations from the plan.
 
 ## Orientation
 
