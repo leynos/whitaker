@@ -137,8 +137,9 @@ This plan must be approved before implementation starts.
   milestone and cleared Markdown wrapping concerns.
 - [x] (2026-05-18T18:36:20Z) Reran `coderabbit review --agent` and received
   0 findings.
-- [ ] Commit this plan once documentation validation passes.
-- [ ] Push the branch and create a draft PR for the ExecPlan.
+- [x] (2026-05-18T19:15:16Z) Committed this plan after validation passed.
+- [x] (2026-05-18T19:15:16Z) Pushed the branch and created draft PR
+  <https://github.com/leynos/whitaker/pull/231> for the ExecPlan.
 - [ ] Wait for explicit approval before implementing the lint crate.
 
 ## Surprises & discoveries
@@ -682,3 +683,7 @@ change with no effect on implementation scope.
 Fourth revision on 2026-05-18 after CodeRabbit review: recorded the clean
 `coderabbit review --agent` result. This adds review evidence only and does not
 change the implementation scope.
+
+Fifth revision on 2026-05-18 after draft PR creation: recorded the commit,
+push, and draft PR URL in `Progress`. This is a process-tracking update with
+no effect on implementation scope.
