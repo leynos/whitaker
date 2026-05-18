@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: BLOCKED
 
 ## Purpose / big picture
 
@@ -147,7 +147,15 @@ The implementation began after explicit user approval on 2026-05-18.
   passed and 2 skipped.
 - [x] 2026-05-18: Ran `coderabbit review --agent` after the ordinary coverage
   milestone; it reported zero findings.
-- [ ] Implement the bounded Kani harnesses and tests.
+- [x] 2026-05-18: Added bounded Kani harnesses for empty-input failure,
+  deterministic sketching and duplicate-hash insensitivity.
+- [x] 2026-05-18: Added the new MinHasher harness names to
+  `scripts/run-kani.sh` under the clone-detector harness group.
+- [ ] Obtain approval to raise the MinHasher proof unwind bound above 16 or to
+  introduce a Kani-only private constructor/proof seam that avoids
+  `MinHasher::new()` while still calling real `MinHasher::sketch`.
+- [ ] Validate the new MinHasher Kani harnesses after the proof-bound blocker
+  is resolved.
 - [ ] After implementation, update documentation and mark roadmap item 7.2.7
   done.
 
@@ -178,6 +186,14 @@ The implementation began after explicit user approval on 2026-05-18.
   fails on pre-existing repository-wide Markdown MD013 line-length violations.
   Unrelated Markdown formatter churn was reverted, and `make check-fmt` passed
   afterwards.
+- Fixed three-fingerprint and two-versus-four-fingerprint Kani inputs are
+  sufficient for item 7.2.7's bounded proof target because the invariants under
+  proof are deterministic output, empty-input failure, and duplicate hash set
+  semantics, not arbitrary-size MinHash quality.
+- The first MinHasher Kani run failed on the empty-input harness before
+  reaching `MinHasher::sketch` because `MinHasher::new()` builds the 128-wide
+  seed array with `std::array::from_fn`; Kani reported an unwinding failure in
+  the standard-library array loop at the current bound of 4.
 
 ## Decision Log
 
@@ -206,6 +222,21 @@ The implementation began after explicit user approval on 2026-05-18.
   the new harness names. Rationale: `make kani-clone-detector` is the supported
   proof entry point, and it cannot run the existing harnesses while the script
   is non-executable. Date/Author: 2026-05-18 / Codex.
+
+- Decision: use fixed small fingerprint arrays in the MinHasher Kani harnesses
+  rather than a symbolic active length. Rationale: the properties remain
+  bounded and substantive while avoiding proof complexity around symbolic slice
+  construction that is not part of the production contract. Date/Author:
+  2026-05-18 / Codex.
+
+- Decision pending: the approved plan's proof-bound tolerance says to stop if
+  any MinHasher harness needs an unwind value above 16. The real
+  `MinHasher::new()` and successful `MinHasher::sketch` paths iterate over the
+  fixed 128-slot MinHash signature, so verification appears to need either an
+  unwind bound around 129 or a Kani-only private construction seam that avoids
+  seed-generation unwinding for the empty-input harness. Rationale: continuing
+  without approval would exceed the plan's explicit tolerance. Date/Author:
+  2026-05-18 / Codex.
 
 ## Outcomes & Retrospective
 
