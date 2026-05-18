@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -25,7 +25,7 @@ collision probability, or unbounded set behaviour. It proves bounded
 implementation behaviour over the real Rust code, in line with
 `docs/adr-003-formal-proof-strategy-for-clone-detector-pipeline.md`.
 
-The implementation must not begin until this plan is explicitly approved.
+The implementation began after explicit user approval on 2026-05-18.
 
 ## Constraints
 
@@ -122,13 +122,22 @@ The implementation must not begin until this plan is explicitly approved.
 - [x] 2026-05-18: Used Firecrawl to check current Kani guidance on proof
   harnesses, `kani::assume`, and loop unwinding.
 - [x] 2026-05-18: Drafted this pre-implementation ExecPlan.
-- [ ] Await explicit plan approval before implementation.
-- [ ] Rename the working branch to
+- [x] 2026-05-18: Received explicit user approval to proceed with
+  implementation from this ExecPlan.
+- [x] 2026-05-18: Renamed the working branch to
   `7-2-7-kani-verification-of-bounded-min-hasher-sketch-invariants` and push it
   tracking
   `origin/7-2-7-kani-verification-of-bounded-min-hasher-sketch-invariants`.
-- [ ] Create a draft pull request for this plan.
-- [ ] After approval, implement the bounded Kani harnesses and tests.
+- [x] 2026-05-18: Created draft pull request #230 for the planning commit.
+- [x] 2026-05-18: Ran baseline `make check-fmt`, `make lint`, and
+  `make test`; all passed before implementation edits.
+- [x] 2026-05-18: Restored the executable mode on `scripts/run-kani.sh` so
+  the existing `make kani-clone-detector` entry point can run.
+- [x] 2026-05-18: Reran baseline `make kani-clone-detector`; all existing
+  clone-detector harnesses verified successfully.
+- [x] 2026-05-18: Ran `coderabbit review --agent` after the baseline and
+  mode-fix milestone; it reported zero findings.
+- [ ] Implement the bounded Kani harnesses and tests.
 - [ ] After implementation, update documentation and mark roadmap item 7.2.7
   done.
 
@@ -149,6 +158,9 @@ The implementation must not begin until this plan is explicitly approved.
 - Official Kani documentation confirms that bounded proofs require explicit
   finite input bounds, and that unwind bounds often need to be one greater than
   the maximum loop iteration count.
+- Baseline `make kani-clone-detector` failed before implementation with
+  `Permission denied` because `scripts/run-kani.sh` is tracked as mode `100644`
+  while the Makefile invokes it directly as `./scripts/run-kani.sh`.
 
 ## Decision Log
 
@@ -173,10 +185,15 @@ The implementation must not begin until this plan is explicitly approved.
   split and names `MinHasher::sketch` as a Kani target. Date/Author: 2026-05-18
   / Codex.
 
+- Decision: restore the executable bit on `scripts/run-kani.sh` before adding
+  the new harness names. Rationale: `make kani-clone-detector` is the supported
+  proof entry point, and it cannot run the existing harnesses while the script
+  is non-executable. Date/Author: 2026-05-18 / Codex.
+
 ## Outcomes & Retrospective
 
-No implementation has been performed yet. The expected outcome is a set
-of Kani harnesses, tests, and documentation updates that demonstrate
+Implementation is in progress. The expected outcome is a set of Kani
+harnesses, tests, and documentation updates that demonstrate
 `MinHasher::sketch` behaves deterministically, ignores duplicate hashes under
 set semantics, and rejects empty inputs. This section must be updated after
 implementation with validation logs, CodeRabbit results, and any deviations
