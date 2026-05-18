@@ -46,7 +46,10 @@ run_clone_detector_harnesses() {
     for harness in \
         verify_lsh_config_new_smoke \
         verify_lsh_config_new_symbolic \
-        verify_lsh_config_new_overflow_product
+        verify_lsh_config_new_overflow_product \
+        verify_min_hasher_sketch_rejects_empty_input \
+        verify_min_hasher_sketch_is_deterministic \
+        verify_min_hasher_sketch_ignores_duplicate_hashes
     do
         "${CARGO_KANI_BIN}" kani \
             --manifest-path "${CLONE_DETECTOR_MANIFEST}" \

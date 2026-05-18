@@ -125,16 +125,18 @@ fn config_accepts_valid_inputs(#[case] case: (usize, usize)) {
     );
 }
 
-#[test]
+#[rstest]
 fn sketch_rejects_empty_fingerprints() {
     let hasher = MinHasher::new();
 
     assert_eq!(hasher.sketch(&[]), Err(IndexError::EmptyFingerprintSet));
 }
 
-#[test]
-fn min_hasher_is_deterministic_across_instances() {
-    let fingerprints = fingerprints(&[3, 5, 8, 13]);
+#[rstest]
+#[case(&[3, 5, 8, 13])]
+#[case(&[13, 8, 5, 3])]
+fn min_hasher_is_deterministic_across_instances(#[case] hashes: &[u64]) {
+    let fingerprints = fingerprints(hashes);
     let left = MinHasher::new()
         .sketch(&fingerprints)
         .expect("left instance should sketch");
@@ -145,27 +147,37 @@ fn min_hasher_is_deterministic_across_instances() {
     assert_eq!(left, right);
 }
 
-#[test]
-fn duplicate_hashes_do_not_change_the_sketch() {
+#[rstest]
+#[case(&[11, 22, 33], &[11, 22, 33, 22, 11])]
+#[case(&[5], &[5, 5, 5])]
+fn duplicate_hashes_do_not_change_the_sketch(
+    #[case] unique_hashes: &[u64],
+    #[case] duplicated_hashes: &[u64],
+) {
     let hasher = MinHasher::new();
     let unique = hasher
-        .sketch(&fingerprints(&[11, 22, 33]))
+        .sketch(&fingerprints(unique_hashes))
         .expect("unique hashes should sketch");
     let duplicated = hasher
-        .sketch(&fingerprints(&[11, 22, 33, 22, 11]))
+        .sketch(&fingerprints(duplicated_hashes))
         .expect("duplicate hashes should sketch");
 
     assert_eq!(unique, duplicated);
 }
 
-#[test]
-fn identical_sets_yield_identical_signatures() {
+#[rstest]
+#[case(&[3, 5, 8, 13], &[13, 8, 5, 3])]
+#[case(&[1, 2, 2, 3], &[3, 2, 1])]
+fn identical_sets_yield_identical_signatures(
+    #[case] left_hashes: &[u64],
+    #[case] right_hashes: &[u64],
+) {
     let hasher = MinHasher::new();
     let left = hasher
-        .sketch(&fingerprints(&[3, 5, 8, 13]))
+        .sketch(&fingerprints(left_hashes))
         .expect("left sketch should succeed");
     let right = hasher
-        .sketch(&fingerprints(&[13, 8, 5, 3]))
+        .sketch(&fingerprints(right_hashes))
         .expect("right sketch should succeed");
 
     assert_eq!(left, right);
