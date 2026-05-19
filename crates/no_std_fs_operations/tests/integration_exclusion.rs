@@ -230,9 +230,11 @@ fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Val
     }
 }
 
-// anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary
-// to convert &Result<PathBuf, Error> into Result<PathBuf, Error>.
-#[allow(clippy::useless_asref, clippy::redundant_closure)]
+#[expect(
+    clippy::useless_asref,
+    clippy::redundant_closure,
+    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert &Result<PathBuf, Error> into Result<PathBuf, Error>"
+)]
 fn lint_library_path() -> anyhow::Result<PathBuf> {
     static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
 
