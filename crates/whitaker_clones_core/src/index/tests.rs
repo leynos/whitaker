@@ -125,7 +125,7 @@ fn config_accepts_valid_inputs(#[case] case: (usize, usize)) {
     );
 }
 
-#[rstest]
+#[test]
 fn sketch_rejects_empty_fingerprints() {
     let hasher = MinHasher::new();
 

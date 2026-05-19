@@ -85,15 +85,17 @@ The implementation began after explicit user approval on 2026-05-18.
 
 ## Risks
 
-- Risk: Kani state-space explosion from `BTreeSet` construction and
-  `array::from_fn` over the 128-wide signature. Severity: medium. Likelihood:
-  medium. Mitigation: keep symbolic inputs small, prove one property per
-  harness, and use fixed-size arrays with explicit active lengths where needed.
+- Risk: Kani state-space explosion from the Vec-backed set semantics and
+  128-wide signature construction. Severity: medium. Likelihood: medium.
+  Mitigation: keep symbolic inputs small, prove one property per harness, use
+  the shipped `cfg(kani)` seam, and keep the fixed-width signature path
+  explicit under Kani.
 
 - Risk: An over-broad proof proves a helper model rather than production code.
-  Severity: high. Likelihood: low. Mitigation: every harness must call
-  `MinHasher::new().sketch(...)` and inspect the returned `MinHashSignature` or
-  `IndexError`.
+  Severity: high. Likelihood: low. Mitigation: every harness must construct
+  the hasher through the shipped `MinHasher::from_seed_for_kani` seam, call the
+  Vec-backed `MinHasher::sketch(...)` entrypoint, and inspect the returned
+  `MinHashSignature` or `IndexError`.
 
 - Risk: Empty-input verification is trivial if it only checks `sketch(&[])`
   with no symbolic path. Severity: low. Likelihood: medium. Mitigation: include
@@ -392,10 +394,13 @@ behaviour, output formats, or user-facing workflows.
 
 The relevant implementation lives in the `whitaker_clones_core` crate.
 `crates/whitaker_clones_core/src/index/minhash.rs` defines `MinHasher`.
-`MinHasher::new` builds a deterministic 128-seed family from fixed SplitMix64
-constants. `MinHasher::sketch` accepts a slice of `Fingerprint` values,
-collapses the `Fingerprint.hash` values into a `BTreeSet<u64>`, mixes each
-unique hash with each seed, and returns a `MinHashSignature`.
+`MinHasher::sketch` accepts a slice of `Fingerprint` values, applies
+Vec-backed set semantics by sorting and deduplicating `Fingerprint.hash`
+values, mixes each unique hash with each seed, and returns a
+`MinHashSignature`. Kani harnesses construct proof fixtures through the shipped
+`MinHasher::from_seed_for_kani` seam and still call the real
+`MinHasher::sketch(...)` entrypoint, validating the returned
+`MinHashSignature` or `IndexError`.
 
 The surrounding index module is exposed through
 `crates/whitaker_clones_core/src/index/mod.rs` and re-exported from
