@@ -125,7 +125,8 @@ fn find_cdylib_in_artifacts(
     package_id: &cargo_metadata::PackageId,
 ) -> anyhow::Result<PathBuf> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
-        let Ok(Message::CompilerArtifact(artifact)) = message else {
+        let message = message.context("failed to parse cargo build JSON output")?;
+        let Message::CompilerArtifact(artifact) = message else {
             continue;
         };
 
@@ -351,7 +352,14 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
         .context("failed to run cargo dylint")?;
 
     let diagnostics: Vec<serde_json::Value> = Message::parse_stream(Cursor::new(&result.stdout))
-        .filter_map(Result::ok)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|e| {
+            panic!(
+                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo output: {e}\nstderr:\n{}",
+                result.stderr
+            )
+        })
+        .into_iter()
         .filter_map(|message| match message {
             Message::CompilerMessage(message)
                 if message
@@ -360,7 +368,10 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
                     .as_ref()
                     .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
             {
-                serde_json::to_value(message.message).ok()
+                Some(
+                    serde_json::to_value(message.message)
+                        .expect("failed to serialise diagnostic for snapshot"),
+                )
             }
             _ => None,
         })

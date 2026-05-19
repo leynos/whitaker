@@ -45,6 +45,8 @@ pub(super) fn create_fixture_project(
                 "version = \"0.1.0\"\n",
                 "edition = \"2024\"\n",
                 "\n",
+                "[workspace]\n",
+                "\n",
                 "[dependencies]\n",
             ),
             crate_name = toml::Value::String(crate_name.to_owned())
