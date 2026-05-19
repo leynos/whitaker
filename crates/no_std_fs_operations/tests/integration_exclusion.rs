@@ -351,31 +351,31 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
     let result = run_cargo_dylint(fixture.root(), &lint_library_path)
         .context("failed to run cargo dylint")?;
 
-    let diagnostics: Vec<serde_json::Value> = Message::parse_stream(Cursor::new(&result.stdout))
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_else(|e| {
-            panic!(
-                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo output: {e}\nstderr:\n{}",
-                result.stderr
-            )
-        })
-        .into_iter()
-        .filter_map(|message| match message {
-            Message::CompilerMessage(message)
-                if message
-                    .message
-                    .code
-                    .as_ref()
-                    .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
-            {
-                Some(
-                    serde_json::to_value(message.message)
-                        .expect("failed to serialise diagnostic for snapshot"),
+    let diagnostics: Vec<serde_json::Value> =
+        Message::parse_stream(Cursor::new(&result.stdout))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_else(|e| {
+                panic!(
+                    "non_excluded_crate_snap produced malformed cargo output: {e}\nstderr:\n{}",
+                    result.stderr
                 )
-            }
-            _ => None,
-        })
-        .collect();
+            })
+            .into_iter()
+            .filter_map(|message| match message {
+                Message::CompilerMessage(message)
+                    if message
+                        .message
+                        .code
+                        .as_ref()
+                        .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
+                {
+                    Some(serde_json::to_value(message.message).unwrap_or_else(|e| {
+                        panic!("failed to serialise diagnostic for snapshot: {e}")
+                    }))
+                }
+                _ => None,
+            })
+            .collect();
 
     let prefix = fixture
         .root()
