@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
  `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -172,7 +172,10 @@ This plan must be approved before implementation starts.
 - [x] (2026-05-20T00:00:00Z) Reran final gates after the Rustdoc review fix.
   `make check-fmt`, `make markdownlint`, `make lint`, and `make test` all
   passed; `make test` again reported 1428 passed and 2 skipped.
-- [ ] Commit, push, and update the draft PR.
+- [x] (2026-05-20T00:00:00Z) Committed the implementation as `813d2cc`,
+  pushed it to `origin/8-2-1-create-the-rstest-helper-lint-crate`, and updated
+  draft PR <https://github.com/leynos/whitaker/pull/231> for implementation
+  review.
 
 ## Surprises & discoveries
 
@@ -257,12 +260,13 @@ This plan must be approved before implementation starts.
 
 ## Outcomes & retrospective
 
-Implementation has landed in the working tree and is awaiting final review,
-commit, push, and PR update. The shipped behaviour is a bootstrap: the
-experimental Dylint crate exists, the lint declaration and configuration
-defaults are wired, suite and installer registration understand the
-experimental lint, and documentation states that diagnostics follow later
-roadmap items.
+Implementation has landed on branch
+`8-2-1-create-the-rstest-helper-lint-crate` and draft PR
+<https://github.com/leynos/whitaker/pull/231> is updated for review. The
+shipped behaviour is a bootstrap: the experimental Dylint crate exists, the
+lint declaration and configuration defaults are wired, suite and installer
+registration understand the experimental lint, and documentation states that
+diagnostics follow later roadmap items.
 
 The plan milestone has passed local validation:
 
@@ -272,9 +276,6 @@ The plan milestone has passed local validation:
 - `make test` succeeded with 1418 tests passed and 2 skipped under the default
   nextest profile.
 - `coderabbit review --agent` completed with 0 findings after review fixes.
-
-Once implementation starts, update this section after each major milestone with
-what landed, what changed, and what remains.
 
 The implementation milestone has passed local validation:
 
