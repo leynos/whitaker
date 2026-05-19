@@ -1,0 +1,114 @@
+//! Shared, test-only fixture helpers for `no_std_fs_operations` integration
+//! tests.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::Context as _;
+use tempfile::TempDir;
+
+/// Standalone project fixture created in a temporary directory.
+pub(super) struct FixtureProject {
+    _temp_dir: TempDir,
+    root: PathBuf,
+}
+
+impl FixtureProject {
+    /// Returns the fixture project root directory.
+    pub(super) fn root(&self) -> &Path {
+        &self.root
+    }
+}
+
+/// Creates a temporary fixture project for verifying exclusion behaviour.
+///
+/// # Examples
+///
+/// ```ignore
+/// let fixture = create_fixture_project("excluded_test_crate", true)?;
+/// assert!(fixture.root().join("dylint.toml").exists());
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub(super) fn create_fixture_project(
+    crate_name: &str,
+    is_excluded: bool,
+) -> anyhow::Result<FixtureProject> {
+    let temp_dir = TempDir::new().context("failed to create temporary fixture directory")?;
+    let root = temp_dir.path().to_path_buf();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        format!(
+            concat!(
+                "[package]\n",
+                "name = \"{crate_name}\"\n",
+                "version = \"0.1.0\"\n",
+                "edition = \"2024\"\n",
+                "\n",
+                "[dependencies]\n",
+            ),
+            crate_name = crate_name
+        ),
+    )
+    .context("failed to write fixture Cargo.toml")?;
+
+    fs::write(
+        root.join("dylint.toml"),
+        fixture_dylint_config(crate_name, is_excluded),
+    )
+    .context("failed to write fixture dylint.toml")?;
+
+    let source_dir = root.join("src");
+    fs::create_dir(&source_dir).context("failed to create fixture src directory")?;
+    fs::write(source_dir.join("lib.rs"), fixture_source(crate_name))
+        .context("failed to write fixture source")?;
+
+    Ok(FixtureProject {
+        _temp_dir: temp_dir,
+        root,
+    })
+}
+
+fn fixture_dylint_config(crate_name: &str, is_excluded: bool) -> String {
+    let excluded_crates = if is_excluded {
+        format!("[\"{crate_name}\"]")
+    } else {
+        "[]".to_owned()
+    };
+
+    format!(
+        concat!(
+            "[no_std_fs_operations]\n",
+            "excluded_crates = {excluded_crates}\n",
+        ),
+        excluded_crates = excluded_crates
+    )
+}
+
+fn fixture_source(crate_name: &str) -> String {
+    format!(
+        concat!(
+            "//! Temporary fixture crate for `no_std_fs_operations` integration tests.\n",
+            "\n",
+            "use std::fs::File;\n",
+            "use std::path::Path;\n",
+            "\n",
+            "/// Opens a file for reading.\n",
+            "///\n",
+            "/// # Examples\n",
+            "///\n",
+            "/// ```no_run\n",
+            "/// use {crate_name}::open_file;\n",
+            "///\n",
+            "/// let file = open_file(\"Cargo.toml\").expect(\"file should exist\");\n",
+            "/// let result = open_file(\"nonexistent.txt\");\n",
+            "/// assert!(result.is_err());\n",
+            "/// # drop(file);\n",
+            "/// ```\n",
+            "pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {{\n",
+            "    File::open(path)\n",
+            "}}\n",
+        ),
+        crate_name = crate_name
+    )
+}
