@@ -386,7 +386,7 @@
   ordering and suppresses self-pairs. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-- [ ] 7.2.7. Use Kani to verify bounded `MinHasher::sketch` invariants,
+- [x] 7.2.7. Use Kani to verify bounded `MinHasher::sketch` invariants,
   including deterministic output, duplicate-hash insensitivity, and empty-input
   failure. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and

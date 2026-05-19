@@ -268,6 +268,21 @@ The direct `CandidatePair::new` coverage lives in the clone-core crate:
   `crates/whitaker_clones_core/Cargo.toml` as `rstest`, `rstest-bdd`, and
   `rstest-bdd-macros`.
 
+The direct `MinHasher::sketch` invariant coverage is split between ordinary
+tests and Kani:
+
+- Unit tests in `crates/whitaker_clones_core/src/index/tests.rs` cover
+  deterministic sketches, duplicate-hash insensitivity, reordered set
+  semantics, empty input, and representative full-width `u64` hash values.
+- The BDD harness in
+  `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` includes a
+  duplicate-retained-hash candidate-generation scenario.
+- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` call
+  real `MinHasher::sketch` for the empty-input, deterministic-output, and
+  duplicate-hash properties. They use a private `cfg(kani)` seed fixture and
+  fixed-width signature builder so the proof focuses on sketch semantics
+  rather than seed-stream array construction.
+
 ### Make targets
 
 Use the Makefile targets for normal proof runs:
@@ -330,6 +345,12 @@ For the current clone-detector constructors, the split is:
 - Kani executes the real constructor with one concrete acceptance harness, one
   bounded symbolic harness over `[0, 128]²`, and one overflow harness that
   forces the `checked_mul(None)` branch.
+- Kani executes real `MinHasher::sketch` calls for empty input, deterministic
+  output, and duplicate retained hashes. The non-empty harnesses keep their
+  symbolic domains intentionally bounded: determinism proves equality at an
+  arbitrary signature lane for a fixed retained hash, while duplicate-hash
+  insensitivity proves a symbolic bounded retained hash at the first signature
+  lane.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals.
@@ -351,7 +372,7 @@ The proof targets are thin wrappers over repository scripts:
   decomposition/common harnesses through the existing workflow, and runs the
   clone-detector harnesses one harness per `cargo-kani` invocation so each
   proof appears explicitly in the output, including the overflow-specific
-  harness for `LshConfig::new`.
+  harness for `LshConfig::new` and the bounded `MinHasher::sketch` harnesses.
 
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -193,8 +193,11 @@ The implementation began after explicit user approval on 2026-05-18.
   proof-bound blocker; all clone-detector harnesses verified successfully,
   including the new MinHasher empty-input, deterministic, and duplicate-hash
   insensitivity proofs.
-- [ ] After implementation, update documentation and mark roadmap item 7.2.7
-  done.
+- [x] 2026-05-19: Updated the clone-detector design and developer guide with
+  the MinHasher proof seam, bounded Kani harness shape, and ordinary test
+  coverage split; `docs/users-guide.md` remains unchanged because the work
+  does not change user-visible behaviour.
+- [x] 2026-05-19: Marked roadmap item 7.2.7 done.
 
 ## Surprises & Discoveries
 
@@ -363,11 +366,27 @@ The implementation began after explicit user approval on 2026-05-18.
 
 ## Outcomes & Retrospective
 
-Implementation is in progress. The expected outcome is a set of Kani harnesses,
-tests, and documentation updates that demonstrate `MinHasher::sketch` behaves
-deterministically, ignores duplicate hashes under set semantics, and rejects
-empty inputs. This section must be updated after implementation with validation
-logs, CodeRabbit results, and any deviations from the plan.
+Implementation is complete. `make kani-clone-detector` verifies the
+clone-detector Kani harness group, including the new `MinHasher::sketch`
+empty-input, deterministic-output, and duplicate-hash insensitivity harnesses.
+The proof shape uses a private `cfg(kani)` seed fixture and fixed-width
+signature builder while still calling real `MinHasher::sketch`. Ordinary unit
+tests and `rstest-bdd` scenarios continue to cover the broader runtime
+regression surface, including full-signature duplicate equality and
+representative full-width `u64` hashes.
+
+Validation completed on 2026-05-19:
+
+- `make kani-clone-detector` passed.
+- `make check-fmt` passed.
+- `make lint` passed.
+- `make test` passed with 1400 passed and 2 skipped.
+- `coderabbit review --agent` reported zero findings after the Kani proof
+  milestone.
+
+`docs/users-guide.md` was not changed because item 7.2.7 adds maintainer-facing
+proof coverage and internal documentation only; it does not change CLI
+behaviour, output formats, or user-facing workflows.
 
 ## Orientation
 
