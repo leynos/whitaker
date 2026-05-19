@@ -35,6 +35,13 @@ filter = "test(driver::ui::) | test(tests::ui::) | test(ui::ui) | (binary(ui) & 
 test-group = "serial-dylint-ui"
 retries = { backoff = "exponential", count = 2, delay = "5s" }
 
+[[profile.default.overrides]]
+# Serialise ignored exclusion integration tests when they are explicitly run.
+# They build and stage the lint library before invoking `cargo dylint`, so they
+# share the same target-directory race risk as the UI harnesses above.
+filter = "binary(integration_exclusion)"
+test-group = "serial-dylint-ui"
+
 # Extend the timeout for toolchain auto-install behavioural tests, since the
 # isolated rustup setup may need to download and install a full nightly toolchain.
 [[profile.default.overrides]]

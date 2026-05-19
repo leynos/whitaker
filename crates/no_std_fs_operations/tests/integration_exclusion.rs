@@ -259,8 +259,7 @@ fn run_exclusion_test(
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
     let fixture = create_fixture_project(crate_name, is_excluded)
         .context("failed to create fixture project")?;
-    assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation);
-    Ok(())
+    assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation)
 }
 
 #[rstest]
@@ -311,9 +310,8 @@ fn assert_fixture_behaviour(
     lint_library_path: &Path,
     crate_name: &str,
     expectation: Expectation,
-) {
-    let (is_success, count) = evaluate_fixture(fixture_dir, lint_library_path, crate_name)
-        .unwrap_or_else(|e| panic!("crate `{crate_name}`: failed to evaluate fixture: {e:#}"));
+) -> anyhow::Result<()> {
+    let (is_success, count) = evaluate_fixture(fixture_dir, lint_library_path, crate_name)?;
 
     assert!(
         is_success == expectation.should_succeed,
@@ -332,6 +330,8 @@ fn assert_fixture_behaviour(
             "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics"
         );
     }
+
+    Ok(())
 }
 
 /// Snapshot test: verifies the structured JSON diagnostic output emitted by
@@ -342,13 +342,13 @@ fn assert_fixture_behaviour(
 #[test]
 #[ignore = "requires cargo-dylint and built lint library"]
 #[serial]
-fn non_excluded_crate_diagnostics_match_snapshot() {
-    let lint_library_path = lint_library_path().expect("failed to build lint library");
+fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
+    let lint_library_path = lint_library_path().context("failed to build lint library")?;
     let fixture = create_fixture_project("non_excluded_crate_snap", false)
-        .expect("failed to create fixture project");
+        .context("failed to create fixture project")?;
 
-    let result =
-        run_cargo_dylint(fixture.root(), &lint_library_path).expect("failed to run cargo dylint");
+    let result = run_cargo_dylint(fixture.root(), &lint_library_path)
+        .context("failed to run cargo dylint")?;
 
     let diagnostics: Vec<serde_json::Value> = Message::parse_stream(Cursor::new(&result.stdout))
         .filter_map(Result::ok)
@@ -369,7 +369,7 @@ fn non_excluded_crate_diagnostics_match_snapshot() {
     let prefix = fixture
         .root()
         .to_str()
-        .expect("fixture root should be valid UTF-8");
+        .context("fixture root should be valid UTF-8")?;
 
     let redacted: Vec<serde_json::Value> = diagnostics
         .into_iter()
@@ -377,4 +377,5 @@ fn non_excluded_crate_diagnostics_match_snapshot() {
         .collect();
 
     assert_json_snapshot!("non_excluded_crate_diagnostics", redacted);
+    Ok(())
 }

@@ -41,13 +41,13 @@ pub(super) fn create_fixture_project(
         format!(
             concat!(
                 "[package]\n",
-                "name = \"{crate_name}\"\n",
+                "name = {crate_name}\n",
                 "version = \"0.1.0\"\n",
                 "edition = \"2024\"\n",
                 "\n",
                 "[dependencies]\n",
             ),
-            crate_name = crate_name
+            crate_name = toml::Value::String(crate_name.to_owned())
         ),
     )
     .context("failed to write fixture Cargo.toml")?;
@@ -70,11 +70,11 @@ pub(super) fn create_fixture_project(
 }
 
 fn fixture_dylint_config(crate_name: &str, is_excluded: bool) -> String {
-    let excluded_crates = if is_excluded {
-        format!("[\"{crate_name}\"]")
+    let excluded_crates = toml::Value::Array(if is_excluded {
+        vec![toml::Value::String(crate_name.to_owned())]
     } else {
-        "[]".to_owned()
-    };
+        Vec::new()
+    });
 
     format!(
         concat!(
@@ -111,4 +111,47 @@ fn fixture_source(crate_name: &str) -> String {
         ),
         crate_name = crate_name
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{create_fixture_project, fixture_dylint_config};
+
+    #[test]
+    fn dylint_config_escapes_crate_names_as_toml_values() {
+        let crate_name = "crate\"]\ninjected = true\n[other";
+        let config = fixture_dylint_config(crate_name, true);
+        let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
+
+        assert_eq!(
+            parsed["no_std_fs_operations"]["excluded_crates"][0]
+                .as_str()
+                .expect("excluded crate should be a string"),
+            crate_name
+        );
+        assert!(parsed.get("other").is_none(), "config was:\n{config}");
+        assert!(parsed.get("injected").is_none(), "config was:\n{config}");
+    }
+
+    #[test]
+    fn fixture_manifest_escapes_crate_names_as_toml_values() -> anyhow::Result<()> {
+        let crate_name = "crate\"]\ninjected = true\n[other";
+        let fixture = create_fixture_project(crate_name, true)?;
+        let manifest = std::fs::read_to_string(fixture.root().join("Cargo.toml"))?;
+        let parsed: toml::Value = toml::from_str(&manifest)?;
+
+        assert_eq!(
+            parsed["package"]["name"]
+                .as_str()
+                .expect("package name should be a string"),
+            crate_name
+        );
+        assert!(parsed.get("other").is_none(), "manifest was:\n{manifest}");
+        assert!(
+            parsed.get("injected").is_none(),
+            "manifest was:\n{manifest}"
+        );
+
+        Ok(())
+    }
 }
