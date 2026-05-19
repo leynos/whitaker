@@ -376,11 +376,6 @@ fn exclusion_crates_behaviour_test(
 }
 
 /// Runs `cargo dylint` against the fixture and counts diagnostics.
-///
-/// This function is not called directly by `exclusion_crates_behaviour_test` but is exposed
-/// as a reusable fallible evaluation primitive for test code that needs to inspect results
-/// programmatically.
-#[allow(dead_code)]
 fn evaluate_fixture(
     fixture_dir: &Path,
     lint_library_path: &Path,
@@ -402,35 +397,24 @@ fn assert_fixture_behaviour(
     crate_name: &str,
     expectation: Expectation,
 ) {
-    let result = run_cargo_dylint(fixture_dir, lint_library_path)
-        .unwrap_or_else(|e| panic!("crate `{crate_name}`: failed to run cargo dylint: {e:#}"));
-    let count = diagnostic_count(&result.stdout).unwrap_or_else(|e| {
-        panic!(
-            "crate `{crate_name}` produced malformed cargo output: {e:#}\nstderr:\n{}",
-            result.stderr
-        )
-    });
+    let (is_success, count) = evaluate_fixture(fixture_dir, lint_library_path, crate_name)
+        .unwrap_or_else(|e| panic!("crate `{crate_name}`: failed to evaluate fixture: {e:#}"));
 
     assert!(
-        result.is_success == expectation.should_succeed,
-        "crate `{crate_name}` should return success={}, but stderr was:\n{}",
-        expectation.should_succeed,
-        result.stderr
+        is_success == expectation.should_succeed,
+        "crate `{crate_name}` should return success={}",
+        expectation.should_succeed
     );
 
     if expectation.should_emit_diagnostics {
         assert!(
             count > 0,
-            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics, \
-             but stderr was:\n{}",
-            result.stderr
+            "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics"
         );
     } else {
         assert!(
             count == 0,
-            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics, \
-             but stderr was:\n{}",
-            result.stderr
+            "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics"
         );
     }
 }
