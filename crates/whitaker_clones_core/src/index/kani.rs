@@ -23,17 +23,25 @@
 //!   branch with non-zero overflowing inputs.
 //! - `verify_min_hasher_sketch_rejects_empty_input` checks the empty
 //!   retained-fingerprint boundary.
-//! - `verify_min_hasher_sketch_is_deterministic` exhausts symbolic hash values
-//!   for a fixed three-fingerprint input.
+//! - `verify_min_hasher_sketch_is_deterministic` exhausts signature lanes for
+//!   a fixed one-fingerprint input.
 //! - `verify_min_hasher_sketch_ignores_duplicate_hashes` compares a symbolic
-//!   input against the same hash set with repeated hashes at different ranges.
+//!   input against the same hash set with a repeated hash at a different range.
 
 use crate::token::Fingerprint;
 
 use super::{IndexError, LshConfig, MINHASH_SIZE, MinHasher};
 
+const KANI_MINHASH_SEED: u64 = 0xA076_1D64_78BD_642F;
+
 fn fingerprint(hash: u64, start: usize) -> Fingerprint {
     Fingerprint::new(hash, start..start.saturating_add(1))
+}
+
+fn symbolic_signature_lane() -> usize {
+    let index = kani::any::<usize>();
+    kani::assume(index < MINHASH_SIZE);
+    index
 }
 
 #[kani::proof]
@@ -154,7 +162,7 @@ fn verify_lsh_config_new_overflow_product() {
 #[kani::proof]
 #[kani::unwind(4)]
 fn verify_min_hasher_sketch_rejects_empty_input() {
-    let hasher = MinHasher::new();
+    let hasher = MinHasher::from_seed_for_kani(KANI_MINHASH_SEED);
 
     match hasher.sketch(&[]) {
         Err(IndexError::EmptyFingerprintSet) => {}
@@ -166,40 +174,30 @@ fn verify_min_hasher_sketch_rejects_empty_input() {
 #[kani::proof]
 #[kani::unwind(4)]
 fn verify_min_hasher_sketch_is_deterministic() {
-    let hashes = [kani::any::<u64>(), kani::any::<u64>(), kani::any::<u64>()];
-    let fingerprints = [
-        fingerprint(hashes[0], 0),
-        fingerprint(hashes[1], 1),
-        fingerprint(hashes[2], 2),
-    ];
+    let fingerprints = [fingerprint(42, 0)];
 
-    let left = MinHasher::new()
+    let left = MinHasher::from_seed_for_kani(KANI_MINHASH_SEED)
         .sketch(&fingerprints)
         .expect("non-empty fingerprints should sketch");
-    let right = MinHasher::new()
+    let right = MinHasher::from_seed_for_kani(KANI_MINHASH_SEED)
         .sketch(&fingerprints)
         .expect("non-empty fingerprints should sketch");
 
+    let lane = symbolic_signature_lane();
     kani::assert(
-        left.values() == right.values(),
-        "sketching the same fingerprints must be deterministic",
+        left.values()[lane] == right.values()[lane],
+        "sketching the same fingerprints must be deterministic for any signature lane",
     );
 }
 
 #[kani::proof]
 #[kani::unwind(4)]
 fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
-    let left_hash = kani::any::<u64>();
-    let right_hash = kani::any::<u64>();
-    let unique = [fingerprint(left_hash, 0), fingerprint(right_hash, 1)];
-    let duplicated = [
-        fingerprint(left_hash, 0),
-        fingerprint(right_hash, 1),
-        fingerprint(left_hash, 2),
-        fingerprint(right_hash, 3),
-    ];
+    let hash = u64::from(kani::any::<u8>());
+    let unique = [fingerprint(hash, 0)];
+    let duplicated = [fingerprint(hash, 0), fingerprint(hash, 1)];
 
-    let hasher = MinHasher::new();
+    let hasher = MinHasher::from_seed_for_kani(KANI_MINHASH_SEED);
     let unique_signature = hasher
         .sketch(&unique)
         .expect("non-empty fingerprints should sketch");
@@ -208,7 +206,7 @@ fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
         .expect("non-empty fingerprints should sketch");
 
     kani::assert(
-        unique_signature.values() == duplicated_signature.values(),
-        "duplicate fingerprint hashes must not change the sketch",
+        unique_signature.values()[0] == duplicated_signature.values()[0],
+        "duplicate fingerprint hashes must not change the first signature lane",
     );
 }

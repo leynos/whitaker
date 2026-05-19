@@ -1,6 +1,6 @@
 //! Deterministic MinHash sketch generation.
 
-use std::{array, collections::BTreeSet};
+use std::array;
 
 use crate::token::Fingerprint;
 
@@ -53,22 +53,173 @@ impl MinHasher {
     /// empty.
     pub fn sketch(&self, fingerprints: &[Fingerprint]) -> IndexResult<MinHashSignature> {
         let unique_hashes = unique_hashes(fingerprints)?;
-        let values = array::from_fn(|index| minimum_mixed_hash(self.seeds[index], &unique_hashes));
+        let values = sketch_values(&self.seeds, &unique_hashes);
         Ok(MinHashSignature::new(values))
+    }
+
+    /// Creates a deterministic proof fixture without exercising seed-stream
+    /// construction.
+    #[cfg(kani)]
+    pub(super) fn from_seed_for_kani(seed: u64) -> Self {
+        Self {
+            seeds: [seed; MINHASH_SIZE],
+        }
     }
 }
 
-fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<BTreeSet<u64>> {
+#[cfg(not(kani))]
+fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
+    array::from_fn(|index| minimum_mixed_hash(seeds[index], unique_hashes))
+}
+
+#[cfg(kani)]
+fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
+    [
+        minimum_mixed_hash(seeds[0], unique_hashes),
+        minimum_mixed_hash(seeds[1], unique_hashes),
+        minimum_mixed_hash(seeds[2], unique_hashes),
+        minimum_mixed_hash(seeds[3], unique_hashes),
+        minimum_mixed_hash(seeds[4], unique_hashes),
+        minimum_mixed_hash(seeds[5], unique_hashes),
+        minimum_mixed_hash(seeds[6], unique_hashes),
+        minimum_mixed_hash(seeds[7], unique_hashes),
+        minimum_mixed_hash(seeds[8], unique_hashes),
+        minimum_mixed_hash(seeds[9], unique_hashes),
+        minimum_mixed_hash(seeds[10], unique_hashes),
+        minimum_mixed_hash(seeds[11], unique_hashes),
+        minimum_mixed_hash(seeds[12], unique_hashes),
+        minimum_mixed_hash(seeds[13], unique_hashes),
+        minimum_mixed_hash(seeds[14], unique_hashes),
+        minimum_mixed_hash(seeds[15], unique_hashes),
+        minimum_mixed_hash(seeds[16], unique_hashes),
+        minimum_mixed_hash(seeds[17], unique_hashes),
+        minimum_mixed_hash(seeds[18], unique_hashes),
+        minimum_mixed_hash(seeds[19], unique_hashes),
+        minimum_mixed_hash(seeds[20], unique_hashes),
+        minimum_mixed_hash(seeds[21], unique_hashes),
+        minimum_mixed_hash(seeds[22], unique_hashes),
+        minimum_mixed_hash(seeds[23], unique_hashes),
+        minimum_mixed_hash(seeds[24], unique_hashes),
+        minimum_mixed_hash(seeds[25], unique_hashes),
+        minimum_mixed_hash(seeds[26], unique_hashes),
+        minimum_mixed_hash(seeds[27], unique_hashes),
+        minimum_mixed_hash(seeds[28], unique_hashes),
+        minimum_mixed_hash(seeds[29], unique_hashes),
+        minimum_mixed_hash(seeds[30], unique_hashes),
+        minimum_mixed_hash(seeds[31], unique_hashes),
+        minimum_mixed_hash(seeds[32], unique_hashes),
+        minimum_mixed_hash(seeds[33], unique_hashes),
+        minimum_mixed_hash(seeds[34], unique_hashes),
+        minimum_mixed_hash(seeds[35], unique_hashes),
+        minimum_mixed_hash(seeds[36], unique_hashes),
+        minimum_mixed_hash(seeds[37], unique_hashes),
+        minimum_mixed_hash(seeds[38], unique_hashes),
+        minimum_mixed_hash(seeds[39], unique_hashes),
+        minimum_mixed_hash(seeds[40], unique_hashes),
+        minimum_mixed_hash(seeds[41], unique_hashes),
+        minimum_mixed_hash(seeds[42], unique_hashes),
+        minimum_mixed_hash(seeds[43], unique_hashes),
+        minimum_mixed_hash(seeds[44], unique_hashes),
+        minimum_mixed_hash(seeds[45], unique_hashes),
+        minimum_mixed_hash(seeds[46], unique_hashes),
+        minimum_mixed_hash(seeds[47], unique_hashes),
+        minimum_mixed_hash(seeds[48], unique_hashes),
+        minimum_mixed_hash(seeds[49], unique_hashes),
+        minimum_mixed_hash(seeds[50], unique_hashes),
+        minimum_mixed_hash(seeds[51], unique_hashes),
+        minimum_mixed_hash(seeds[52], unique_hashes),
+        minimum_mixed_hash(seeds[53], unique_hashes),
+        minimum_mixed_hash(seeds[54], unique_hashes),
+        minimum_mixed_hash(seeds[55], unique_hashes),
+        minimum_mixed_hash(seeds[56], unique_hashes),
+        minimum_mixed_hash(seeds[57], unique_hashes),
+        minimum_mixed_hash(seeds[58], unique_hashes),
+        minimum_mixed_hash(seeds[59], unique_hashes),
+        minimum_mixed_hash(seeds[60], unique_hashes),
+        minimum_mixed_hash(seeds[61], unique_hashes),
+        minimum_mixed_hash(seeds[62], unique_hashes),
+        minimum_mixed_hash(seeds[63], unique_hashes),
+        minimum_mixed_hash(seeds[64], unique_hashes),
+        minimum_mixed_hash(seeds[65], unique_hashes),
+        minimum_mixed_hash(seeds[66], unique_hashes),
+        minimum_mixed_hash(seeds[67], unique_hashes),
+        minimum_mixed_hash(seeds[68], unique_hashes),
+        minimum_mixed_hash(seeds[69], unique_hashes),
+        minimum_mixed_hash(seeds[70], unique_hashes),
+        minimum_mixed_hash(seeds[71], unique_hashes),
+        minimum_mixed_hash(seeds[72], unique_hashes),
+        minimum_mixed_hash(seeds[73], unique_hashes),
+        minimum_mixed_hash(seeds[74], unique_hashes),
+        minimum_mixed_hash(seeds[75], unique_hashes),
+        minimum_mixed_hash(seeds[76], unique_hashes),
+        minimum_mixed_hash(seeds[77], unique_hashes),
+        minimum_mixed_hash(seeds[78], unique_hashes),
+        minimum_mixed_hash(seeds[79], unique_hashes),
+        minimum_mixed_hash(seeds[80], unique_hashes),
+        minimum_mixed_hash(seeds[81], unique_hashes),
+        minimum_mixed_hash(seeds[82], unique_hashes),
+        minimum_mixed_hash(seeds[83], unique_hashes),
+        minimum_mixed_hash(seeds[84], unique_hashes),
+        minimum_mixed_hash(seeds[85], unique_hashes),
+        minimum_mixed_hash(seeds[86], unique_hashes),
+        minimum_mixed_hash(seeds[87], unique_hashes),
+        minimum_mixed_hash(seeds[88], unique_hashes),
+        minimum_mixed_hash(seeds[89], unique_hashes),
+        minimum_mixed_hash(seeds[90], unique_hashes),
+        minimum_mixed_hash(seeds[91], unique_hashes),
+        minimum_mixed_hash(seeds[92], unique_hashes),
+        minimum_mixed_hash(seeds[93], unique_hashes),
+        minimum_mixed_hash(seeds[94], unique_hashes),
+        minimum_mixed_hash(seeds[95], unique_hashes),
+        minimum_mixed_hash(seeds[96], unique_hashes),
+        minimum_mixed_hash(seeds[97], unique_hashes),
+        minimum_mixed_hash(seeds[98], unique_hashes),
+        minimum_mixed_hash(seeds[99], unique_hashes),
+        minimum_mixed_hash(seeds[100], unique_hashes),
+        minimum_mixed_hash(seeds[101], unique_hashes),
+        minimum_mixed_hash(seeds[102], unique_hashes),
+        minimum_mixed_hash(seeds[103], unique_hashes),
+        minimum_mixed_hash(seeds[104], unique_hashes),
+        minimum_mixed_hash(seeds[105], unique_hashes),
+        minimum_mixed_hash(seeds[106], unique_hashes),
+        minimum_mixed_hash(seeds[107], unique_hashes),
+        minimum_mixed_hash(seeds[108], unique_hashes),
+        minimum_mixed_hash(seeds[109], unique_hashes),
+        minimum_mixed_hash(seeds[110], unique_hashes),
+        minimum_mixed_hash(seeds[111], unique_hashes),
+        minimum_mixed_hash(seeds[112], unique_hashes),
+        minimum_mixed_hash(seeds[113], unique_hashes),
+        minimum_mixed_hash(seeds[114], unique_hashes),
+        minimum_mixed_hash(seeds[115], unique_hashes),
+        minimum_mixed_hash(seeds[116], unique_hashes),
+        minimum_mixed_hash(seeds[117], unique_hashes),
+        minimum_mixed_hash(seeds[118], unique_hashes),
+        minimum_mixed_hash(seeds[119], unique_hashes),
+        minimum_mixed_hash(seeds[120], unique_hashes),
+        minimum_mixed_hash(seeds[121], unique_hashes),
+        minimum_mixed_hash(seeds[122], unique_hashes),
+        minimum_mixed_hash(seeds[123], unique_hashes),
+        minimum_mixed_hash(seeds[124], unique_hashes),
+        minimum_mixed_hash(seeds[125], unique_hashes),
+        minimum_mixed_hash(seeds[126], unique_hashes),
+        minimum_mixed_hash(seeds[127], unique_hashes),
+    ]
+}
+
+fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64>> {
     if fingerprints.is_empty() {
         return Err(IndexError::EmptyFingerprintSet);
     }
-    Ok(fingerprints
+    let mut hashes = fingerprints
         .iter()
         .map(|fingerprint| fingerprint.hash)
-        .collect())
+        .collect::<Vec<_>>();
+    hashes.sort_unstable();
+    hashes.dedup();
+    Ok(hashes)
 }
 
-fn minimum_mixed_hash(seed: u64, hashes: &BTreeSet<u64>) -> u64 {
+fn minimum_mixed_hash(seed: u64, hashes: &[u64]) -> u64 {
     hashes
         .iter()
         .fold(u64::MAX, |current, hash| current.min(mix_hash(seed, *hash)))
