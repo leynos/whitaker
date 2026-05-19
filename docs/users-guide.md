@@ -155,9 +155,9 @@ Whitaker lints are divided into two categories:
   false positives or undergo breaking changes between releases. They must be
   explicitly enabled.
 
-The default `whitaker_suite` pattern includes only standard lints. At present,
-all shipped Whitaker lints are standard and there are no experimental lints in
-the release.
+The default `whitaker_suite` pattern includes only standard lints. Whitaker
+currently ships one experimental lint, `rstest_helper_should_be_fixture`, which
+is available only when experimental lints are enabled.
 
 ### Enabling experimental lints
 
@@ -167,7 +167,9 @@ the release.
 whitaker-installer --experimental
 ```
 
-This flag is retained for forward compatibility and currently has no effect.
+This enables experimental suite features when building `whitaker_suite`. To
+build experimental lints as individual libraries, combine it with
+`--individual-lints`.
 
 ## Lint Configuration
 
@@ -196,6 +198,14 @@ additional_test_attributes = ["actix_rt::test", "my_framework::test"]
 # Allow panics in main
 [no_unwrap_or_else_panic]
 allow_in_main = true
+
+# Experimental rstest fixture extraction lint
+[rstest_helper_should_be_fixture]
+min_calls = 2
+min_distinct_tests = 2
+require_identical_fixture_arg_names = false
+provider_param_attributes = ["case", "values", "files", "future", "context"]
+use_source_callee_fallback = false
 ```
 
 ## Localized Diagnostics
@@ -500,6 +510,42 @@ not in Whitaker's default list and is not listed in
   `#[rstest::case]` where appropriate
 - If the function is not test-only code, replace `.expect()` with explicit error
   handling such as `?` or `map_err`
+
+______________________________________________________________________
+
+### `rstest_helper_should_be_fixture`
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Purpose
+
+Bootstraps the experimental lint that will recommend converting repeated helper
+calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Scope and behaviour
+
+This lint is experimental. The current implementation registers the lint and
+loads configuration defaults so teams can opt into the forthcoming rule without
+yet receiving helper-call diagnostics. Call-site collection, cross-test
+aggregation, and actionable diagnostics are tracked by the later roadmap items
+8.2.2 through 8.2.4.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### Configuration
+
+```toml
+[rstest_helper_should_be_fixture]
+min_calls = 2
+min_distinct_tests = 2
+require_identical_fixture_arg_names = false
+provider_param_attributes = ["case", "values", "files", "future", "context"]
+use_source_callee_fallback = false
+```
+
+`provider_param_attributes` lists `rstest` parameter attributes that should be
+treated as data providers rather than fixture-local bindings. Entries may be
+written either as bare names such as `case` or qualified names such as
+`rstest::case`; Whitaker normalizes them to the shared detection policy.
 
 ______________________________________________________________________
 

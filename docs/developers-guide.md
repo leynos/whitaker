@@ -1445,7 +1445,9 @@ Whitaker data directory keyed by toolchain and target:
 - `-t, --target-dir DIR` — Staging directory for built libraries
 - `-l, --lint NAME` — Build specific lint (repeatable)
 - `--individual-lints` — Build individual crates instead of the suite
-- `--experimental` — Include experimental lints in the build (none currently)
+- `--experimental` — Include experimental lints in the build. In suite mode
+  this enables feature-gated experimental lints on `whitaker_suite`; in
+  `--individual-lints` mode it adds crates from `EXPERIMENTAL_LINT_CRATES`.
 - `--toolchain TOOLCHAIN` — Override the detected toolchain
 - `--cranelift` — Install `rustc-codegen-cranelift` for the selected toolchain
 - `-j, --jobs N` — Number of parallel build jobs
@@ -1553,7 +1555,10 @@ Whitaker categorizes lints into two tiers:
   false positives or undergo breaking changes. They require explicit opt-in via
   the `--experimental` flag.
 
-At present, all shipped Whitaker lints are standard.
+The current experimental set contains `rstest_helper_should_be_fixture`. It is
+feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
+and listed in `installer/src/resolution.rs` so the installer can derive the
+matching suite feature automatically.
 
 ### Adding a new lint
 
@@ -1564,6 +1569,8 @@ New lints should typically start as experimental. To add a lint:
 2. Add the crate name to `EXPERIMENTAL_LINT_CRATES` in
    `installer/src/resolution.rs`
 3. Add a feature flag for the lint in `suite/Cargo.toml` under `[features]`
+4. Add an optional suite dependency and gate its descriptor, lint declaration,
+   and combined pass entry behind that feature
 
 ### Promoting to standard
 

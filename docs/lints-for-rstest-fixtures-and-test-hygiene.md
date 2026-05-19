@@ -407,6 +407,20 @@ standard lints.
   pin rather than the stale 0.2.x comment. That was documentation hygiene, not
   a behavioural change.
 
+## Implementation decisions (8.2.1)
+
+- `rstest_helper_should_be_fixture` now exists as an experimental Dylint crate.
+  The first implementation declares `RSTEST_HELPER_SHOULD_BE_FIXTURE`, loads
+  and normalizes the Lint A configuration defaults, and builds the shared
+  `RstestDetectionOptions` policy.
+- The lint is intentionally diagnostic-silent in 8.2.1. Call-site collection,
+  aggregation, and user-facing suggestions remain assigned to 8.2.2 through
+  8.2.4 so this bootstrap does not claim analysis behaviour it does not yet
+  implement.
+- The suite exposes the lint only through the experimental feature
+  `experimental-rstest-helper-should-be-fixture`. The installer derives that
+  feature from `EXPERIMENTAL_LINT_CRATES` when `--experimental` is enabled.
+
 ## Implementation decisions (8.1.2)
 
 - Shared user-editable span recovery is now split between a pure

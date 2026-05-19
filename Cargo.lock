@@ -2309,6 +2309,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88f2ca584f7d9d359a09f616900be015302c959d58c2c2da6c075573352dfa0d"
 
 [[package]]
+name = "rstest_helper_should_be_fixture"
+version = "0.2.5"
+dependencies = [
+ "dylint_linting",
+ "log",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_lint",
+ "rustc_session",
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
+ "whitaker",
+ "whitaker-common",
+]
+
+[[package]]
 name = "rstest_macros"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3462,6 +3479,7 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "rstest_helper_should_be_fixture",
  "rustc_hir",
  "rustc_lint",
  "rustc_session",

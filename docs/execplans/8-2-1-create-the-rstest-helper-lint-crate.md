@@ -1,11 +1,10 @@
 # Create the `rstest_helper_should_be_fixture` lint crate
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -21,8 +20,8 @@ The observable result is structural rather than diagnostic-heavy: a maintainer
 can build the new lint crate, see the lint name in Whitaker's registration
 metadata, configure its defaults in `dylint.toml`, and run the unit,
 behavioural, lint, and formatting gates successfully. The later roadmap items
-8.2.2, 8.2.3, and 8.2.4 will add call-site collection, cross-test
-aggregation, diagnostic emission, and UI pass/fail coverage.
+8.2.2, 8.2.3, and 8.2.4 will add call-site collection, cross-test aggregation,
+diagnostic emission, and UI pass/fail coverage.
 
 This plan must be approved before implementation starts.
 
@@ -140,7 +139,40 @@ This plan must be approved before implementation starts.
 - [x] (2026-05-18T19:15:16Z) Committed this plan after validation passed.
 - [x] (2026-05-18T19:15:16Z) Pushed the branch and created draft PR
   <https://github.com/leynos/whitaker/pull/231> for the ExecPlan.
-- [ ] Wait for explicit approval before implementing the lint crate.
+- [x] (2026-05-20T00:00:00Z) Received explicit user approval to implement
+  the planned functionality.
+- [x] (2026-05-20T00:00:00Z) Created the experimental lint crate and driver
+  bootstrap with `RSTEST_HELPER_SHOULD_BE_FIXTURE`, configuration defaults,
+  normalization, and `RstestDetectionOptions` construction.
+- [x] (2026-05-20T00:00:00Z) Wired the crate into installer and suite
+  experimental registration via `EXPERIMENTAL_LINT_CRATES` and the suite feature
+  `experimental-rstest-helper-should-be-fixture`.
+- [x] (2026-05-20T00:00:00Z) Added unit coverage for configuration defaults,
+  TOML deserialization, unknown fields, numeric threshold normalization, and
+  provider-attribute normalization in the new crate.
+- [x] (2026-05-20T00:00:00Z) Confirmed behaviour coverage for experimental
+  registration through installer `rstest-bdd` scenarios and suite registration
+  scenarios. Targeted run
+  `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets
+  --all-features` passed 527 tests.
+- [x] (2026-05-20T00:00:00Z) Updated user, developer, design, roadmap, and
+  plan documentation. `docs/roadmap.md` now marks 8.2.1 done.
+- [x] (2026-05-20T00:00:00Z) Ran `coderabbit review --agent` after the
+  crate/bootstrap milestone and received 0 findings.
+- [x] (2026-05-20T00:00:00Z) Ran final `coderabbit review --agent`. It
+  reported two findings: clamp thresholds to at least 2 and avoid constructing
+  a full default config for provider fallback. Both findings were accepted and
+  fixed.
+- [x] (2026-05-20T00:00:00Z) Reran `coderabbit review --agent` after the
+  fixes. It reported one trivial Rustdoc concern for the private `Config`
+  type, which was accepted and fixed.
+- [x] (2026-05-20T00:00:00Z) Ran final local gates. `make check-fmt`,
+  `make markdownlint`, `make lint`, and `make test` all passed; `make test`
+  reported 1428 passed and 2 skipped.
+- [x] (2026-05-20T00:00:00Z) Reran final gates after the Rustdoc review fix.
+  `make check-fmt`, `make markdownlint`, `make lint`, and `make test` all
+  passed; `make test` again reported 1428 passed and 2 skipped.
+- [ ] Commit, push, and update the draft PR.
 
 ## Surprises & discoveries
 
@@ -162,6 +194,39 @@ This plan must be approved before implementation starts.
   `Cargo.toml` pins workspace dependency `dylint_linting = "5"`. Impact:
   implementation must follow the local workspace pin and existing macro usage,
   not upgrade Dylint as part of this task.
+
+- Observation: The first implementation slice compiles without adding a new
+  workspace dependency. Evidence:
+  `cargo check -p rstest_helper_should_be_fixture --all-targets --all-features`
+  and `cargo check -p whitaker_suite --all-targets --all-features` both exited
+  with status 0. Impact: the planned crate boundary and experimental feature
+  wiring fit the existing workspace structure.
+
+- Observation: `make fmt` can introduce Markdown reference-link breakage around
+  issue-style links and bracketed reference text. Evidence: the first
+  formatting run split `[#180][issue-180]` and a
+  ``[`FluentLanguageLoader`]`` reference across lines, causing Markdown lint
+  failures. Impact: those passages were rewritten to avoid the formatter edge
+  case before continuing.
+
+- Observation: CodeRabbit caught that normalizing `min_calls` and
+  `min_distinct_tests` to 1 would make a "repeated" lint meaningful for a
+  single occurrence. Evidence: final review finding on
+  `crates/rstest_helper_should_be_fixture/src/driver.rs`. Impact: thresholds
+  now normalize to at least 2, matching the design defaults and repeated-call
+  semantics.
+
+- Observation: Even private configuration types benefit from Rustdoc when they
+  are the boundary between user TOML and lint policy. Evidence: final
+  CodeRabbit finding on `Config`. Impact: `Config` now documents that it is
+  loaded from `dylint.toml` and normalized before use.
+
+- Observation: A final confirmation rerun of `coderabbit review --agent` was
+  blocked by CodeRabbit rate limiting after the Rustdoc fix. Evidence: two
+  retry attempts returned recoverable rate-limit errors. Impact: all reported
+  CodeRabbit findings were fixed and local gates were rerun, but the tool could
+  not provide a zero-finding confirmation after the last documentation-only
+  code comment change.
 
 ## Decision log
 
@@ -192,8 +257,12 @@ This plan must be approved before implementation starts.
 
 ## Outcomes & retrospective
 
-No implementation outcome exists yet. This draft records the intended scope,
-boundaries, validation, and review workflow for approval.
+Implementation has landed in the working tree and is awaiting final review,
+commit, push, and PR update. The shipped behaviour is a bootstrap: the
+experimental Dylint crate exists, the lint declaration and configuration
+defaults are wired, suite and installer registration understand the
+experimental lint, and documentation states that diagnostics follow later
+roadmap items.
 
 The plan milestone has passed local validation:
 
@@ -206,6 +275,26 @@ The plan milestone has passed local validation:
 
 Once implementation starts, update this section after each major milestone with
 what landed, what changed, and what remains.
+
+The implementation milestone has passed local validation:
+
+- `cargo check -p rstest_helper_should_be_fixture --all-targets --all-features`
+  succeeded.
+- `cargo check -p whitaker_suite --all-targets --all-features` succeeded.
+- `cargo nextest run -p rstest_helper_should_be_fixture --all-targets
+  --all-features` passed 9 tests.
+- `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets
+  --all-features` passed 527 tests.
+- `make check-fmt` succeeded.
+- `make markdownlint` succeeded with 0 Markdown errors.
+- `make lint` succeeded.
+- `make test` succeeded with 1428 tests passed and 2 skipped under the default
+  nextest profile.
+
+After addressing CodeRabbit's threshold, provider-fallback, and Rustdoc
+findings, the final gates were rerun with the same successful outcomes. A
+final CodeRabbit confirmation pass was attempted twice and was blocked by
+recoverable rate limits.
 
 ## Context and orientation
 
@@ -277,11 +366,10 @@ The user-facing documentation that may need updates is:
   decisions if runtime behaviour differs from the design,
 - `docs/roadmap.md` when implementation is complete.
 
-Useful skills for implementation are `leta`, `rust-router`,
-`arch-crate-design`, `rust-errors`, `hexagonal-architecture`,
-`en-gb-oxendict-style`, `commit-message`, and `pr-creation`. If later algorithm
-work introduces invariants, route again through `rust-router` and consider
-`kani` or `verus`.
+Useful skills for implementation are `leta`, `rust-router`, `arch-crate-design`,
+ `rust-errors`, `hexagonal-architecture`, `en-gb-oxendict-style`,
+`commit-message`, and `pr-creation`. If later algorithm work introduces
+invariants, route again through `rust-router` and consider `kani` or `verus`.
 
 External references checked during planning:
 
@@ -294,9 +382,9 @@ External references checked during planning:
   functions annotated with `#[fixture]` and injected as `#[rstest]` test
   parameters.
 - `rstest` test docs:
-  <https://docs.rs/rstest/latest/rstest/attr.rstest.html>.
-  `#[rstest]` supports fixture injection, cases, values, files, `future`, and
-  `context` parameter attributes.
+  <https://docs.rs/rstest/latest/rstest/attr.rstest.html>. `#[rstest]` supports
+  fixture injection, cases, values, files, `future`, and `context` parameter
+  attributes.
 
 ## Plan of work
 
@@ -306,8 +394,8 @@ obtain explicit approval. Do not edit production code before approval.
 
 Stage B creates the lint crate skeleton. Add
 `crates/rstest_helper_should_be_fixture/Cargo.toml`,
-`crates/rstest_helper_should_be_fixture/src/lib.rs`, and a driver module such
-as `src/driver.rs`. The manifest should follow existing lint crates:
+`crates/rstest_helper_should_be_fixture/src/lib.rs`, and a driver module such as
+ `src/driver.rs`. The manifest should follow existing lint crates:
 `crate-type = ["cdylib", "rlib"]`, `test = false`, a `dylint-driver` feature
 that enables `dylint_linting`, `rustc_*`, `serde`, `log`, `whitaker`, and
 `whitaker-common`, and a `constituent` feature that enables
@@ -340,7 +428,7 @@ use_source_callee_fallback = false
 
 Keep pure validation and normalization near the config type. The driver should
 load configuration in `check_crate`, clamp invalid numeric thresholds to at
-least `1` or reject them by falling back to defaults in the same manner as
+least `2` or reject them by falling back to defaults in the same manner as
 existing lints, and build `RstestDetectionOptions` from the provider
 attributes. If a value is invalid enough that clamping would hide a user
 mistake, use the existing "log and default" pattern rather than panic.
@@ -355,13 +443,12 @@ analysis.
 Stage E wires registration outside the crate. Add
 `rstest_helper_should_be_fixture` to `installer/src/resolution.rs`
 `EXPERIMENTAL_LINT_CRATES`, not to `LINT_CRATES`. Add the suite optional
-dependency and a feature named `experimental-rstest-helper-should-be-fixture`
-to `suite/Cargo.toml`, following the feature name that
-`installer/src/builder.rs` derives from the experimental crate list. Update
-`suite/src/lints.rs` and `suite/src/driver.rs` so the lint is included only
-when that experimental feature is enabled. Update suite and installer tests to
-expect the new experimental lint when experimental mode is on and to exclude it
-otherwise.
+dependency and a feature named `experimental-rstest-helper-should-be-fixture` to
+ `suite/Cargo.toml`, following the feature name that `installer/src/builder.rs`
+derives from the experimental crate list. Update `suite/src/lints.rs` and
+`suite/src/driver.rs` so the lint is included only when that experimental
+feature is enabled. Update suite and installer tests to expect the new
+experimental lint when experimental mode is on and to exclude it otherwise.
 
 Stage F adds tests. Unit tests should use `rstest` for `Config::default()`,
 valid TOML deserialization, unknown-field rejection, provider-attribute
@@ -685,5 +772,5 @@ Fourth revision on 2026-05-18 after CodeRabbit review: recorded the clean
 change the implementation scope.
 
 Fifth revision on 2026-05-18 after draft PR creation: recorded the commit,
-push, and draft PR URL in `Progress`. This is a process-tracking update with
-no effect on implementation scope.
+push, and draft PR URL in `Progress`. This is a process-tracking update with no
+effect on implementation scope.

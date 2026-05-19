@@ -470,7 +470,7 @@
 
 ### 8.2. `rstest_helper_should_be_fixture` lint
 
-- [ ] 8.2.1. Create the `rstest_helper_should_be_fixture` lint crate, register
+- [x] 8.2.1. Create the `rstest_helper_should_be_fixture` lint crate, register
   `RSTEST_HELPER_SHOULD_BE_FIXTURE`, and wire configuration loading defaults.
   See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)

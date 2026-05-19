@@ -142,6 +142,7 @@ fn given_valid_names(validation_world: &ValidationWorld) {
     validation_world.names.replace(vec![
         CrateName::from("module_max_lines"),
         CrateName::from("whitaker_suite"),
+        CrateName::from("rstest_helper_should_be_fixture"),
     ]);
 }
 
