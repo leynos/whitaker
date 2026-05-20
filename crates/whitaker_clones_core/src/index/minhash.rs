@@ -206,7 +206,7 @@ fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MI
     ]
 }
 
-fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64>> {
+pub(super) fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64>> {
     if fingerprints.is_empty() {
         return Err(IndexError::EmptyFingerprintSet);
     }

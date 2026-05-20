@@ -6,7 +6,7 @@ use crate::token::Fingerprint;
 
 use super::{
     CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
-    MinHasher,
+    MinHasher, minhash::unique_hashes,
 };
 
 fn fingerprints(values: &[u64]) -> Vec<Fingerprint> {
@@ -151,12 +151,17 @@ fn min_hasher_is_deterministic_across_instances(#[case] hashes: &[u64]) {
 #[case(&[11, 22, 33], &[11, 22, 33, 22, 11])]
 #[case(&[5], &[5, 5, 5])]
 fn duplicate_hashes_do_not_change_the_sketch(
-    #[case] unique_hashes: &[u64],
+    #[case] expected_hashes: &[u64],
     #[case] duplicated_hashes: &[u64],
 ) {
+    assert_eq!(
+        unique_hashes(&fingerprints(duplicated_hashes)).expect("duplicate hashes should normalize"),
+        expected_hashes
+    );
+
     let hasher = MinHasher::new();
     let unique = hasher
-        .sketch(&fingerprints(unique_hashes))
+        .sketch(&fingerprints(expected_hashes))
         .expect("unique hashes should sketch");
     let duplicated = hasher
         .sketch(&fingerprints(duplicated_hashes))
@@ -166,12 +171,22 @@ fn duplicate_hashes_do_not_change_the_sketch(
 }
 
 #[rstest]
-#[case(&[3, 5, 8, 13], &[13, 8, 5, 3])]
-#[case(&[1, 2, 2, 3], &[3, 2, 1])]
+#[case(&[3, 5, 8, 13], &[13, 8, 5, 3], &[3, 5, 8, 13])]
+#[case(&[1, 2, 2, 3], &[3, 2, 1], &[1, 2, 3])]
 fn identical_sets_yield_identical_signatures(
     #[case] left_hashes: &[u64],
     #[case] right_hashes: &[u64],
+    #[case] expected_hashes: &[u64],
 ) {
+    assert_eq!(
+        unique_hashes(&fingerprints(left_hashes)).expect("left hashes should normalize"),
+        expected_hashes
+    );
+    assert_eq!(
+        unique_hashes(&fingerprints(right_hashes)).expect("right hashes should normalize"),
+        expected_hashes
+    );
+
     let hasher = MinHasher::new();
     let left = hasher
         .sketch(&fingerprints(left_hashes))
