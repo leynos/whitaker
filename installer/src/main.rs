@@ -333,14 +333,14 @@ fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
         .map(|name| CrateName::from(name.as_str()))
         .collect();
 
-    if !lint_crates.is_empty() {
-        validate_crate_names(&lint_crates)?;
-    }
-
     let options = CrateResolutionOptions {
         individual_lints: args.individual_lints,
         experimental: args.experimental,
     };
+    if !lint_crates.is_empty() {
+        validate_crate_names(&lint_crates, &options)?;
+    }
+
     Ok(resolve_crates(&lint_crates, &options))
 }
 

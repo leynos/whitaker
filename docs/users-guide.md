@@ -169,7 +169,9 @@ whitaker-installer --experimental
 
 This enables experimental suite features when building `whitaker_suite`. To
 build experimental lints as individual libraries, combine it with
-`--individual-lints`.
+`--individual-lints`. Explicit `--lint` requests for experimental lints also
+require `--experimental`; without that opt-in the installer rejects the request
+before building anything.
 
 ## Lint Configuration
 

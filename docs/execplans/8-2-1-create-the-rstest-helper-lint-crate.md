@@ -178,6 +178,12 @@ This plan must be approved before implementation starts.
   review.
 - [x] (2026-05-20T00:00:00Z) Attempted one final CodeRabbit confirmation on
   the pushed branch. It was still blocked by a recoverable rate-limit error.
+- [x] (2026-05-20T00:00:00Z) Fixed the post-review installer policy issue
+  where explicit `--lint rstest_helper_should_be_fixture` requests could bypass
+  the documented `--experimental` opt-in gate.
+- [x] (2026-05-20T00:00:00Z) Validated the opt-in fix with focused
+  installer tests, the required repository gates, and `coderabbit review
+  --agent`, which completed with 0 findings.
 
 ## Surprises & discoveries
 
@@ -233,6 +239,13 @@ This plan must be approved before implementation starts.
   findings were fixed and local gates were rerun, but the tool could not
   provide a zero-finding confirmation after the last documentation-only code
   comment change.
+
+- Observation: `validate_crate_names` needs option context, not just catalogue
+  membership. Evidence: adding `rstest_helper_should_be_fixture` to
+  `EXPERIMENTAL_LINT_CRATES` made explicit
+  `--lint rstest_helper_should_be_fixture` valid without `--experimental`.
+  Impact: validation now receives `CrateResolutionOptions` and rejects
+  experimental explicit lint requests unless the opt-in flag is set.
 
 ## Decision log
 
@@ -299,6 +312,26 @@ After addressing CodeRabbit's threshold, provider-fallback, and Rustdoc
 findings, the final gates were rerun with the same successful outcomes. Final
 CodeRabbit confirmation passes were attempted before and after the final push,
 but were blocked by recoverable rate limits.
+
+Post-review installer policy feedback was addressed by requiring
+`--experimental` for explicit experimental lint builds. The resolution unit
+tests and installer BDD coverage now cover both the accepted opt-in path and
+the rejected non-opt-in path.
+
+The opt-in fix passed:
+
+- `cargo nextest run -p whitaker-installer --all-targets --all-features
+  resolution::tests:: validate_crate_names_variants
+  dry_run_rejects_experimental_lint_without_opt_in` with 10 selected tests.
+- `cargo nextest run -p whitaker-installer --all-targets --all-features -E
+  'binary(behaviour_cli) + binary(behaviour_core)'` with 12 selected core BDD
+  tests.
+- `cargo nextest run -p whitaker-installer --all-targets --all-features
+  --profile ci -E
+  'test(scenario_dry_run_rejects_experimental_lint_without_opt_in)'` with the
+  excluded CLI BDD scenario.
+- `make check-fmt`, `make markdownlint`, `make lint`, and `make test`.
+- `coderabbit review --agent` with 0 findings.
 
 ## Context and orientation
 

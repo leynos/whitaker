@@ -129,7 +129,9 @@ fn then_only_requested(crate_world: &CrateResolutionWorld) {
 #[derive(Default)]
 struct ValidationWorld {
     names: RefCell<Vec<CrateName>>,
+    experimental: Cell<bool>,
     result: Cell<Option<bool>>,
+    error_message: RefCell<Option<String>>,
 }
 
 #[fixture]
@@ -142,8 +144,19 @@ fn given_valid_names(validation_world: &ValidationWorld) {
     validation_world.names.replace(vec![
         CrateName::from("module_max_lines"),
         CrateName::from("whitaker_suite"),
-        CrateName::from("rstest_helper_should_be_fixture"),
     ]);
+}
+
+#[given("a list containing an experimental crate name")]
+fn given_experimental_name(validation_world: &ValidationWorld) {
+    validation_world
+        .names
+        .replace(vec![CrateName::from("rstest_helper_should_be_fixture")]);
+}
+
+#[given("experimental validation is enabled")]
+fn given_experimental_validation_enabled(validation_world: &ValidationWorld) {
+    validation_world.experimental.set(true);
 }
 
 #[given("a list containing an unknown crate name")]
@@ -156,8 +169,19 @@ fn given_unknown_name(validation_world: &ValidationWorld) {
 #[when("the names are validated")]
 fn when_names_validated(validation_world: &ValidationWorld) {
     let names = validation_world.names.borrow();
-    let result = validate_crate_names(&names).is_ok();
-    validation_world.result.set(Some(result));
+    let options = CrateResolutionOptions {
+        experimental: validation_world.experimental.get(),
+        ..CrateResolutionOptions::default()
+    };
+    match validate_crate_names(&names, &options) {
+        Ok(()) => validation_world.result.set(Some(true)),
+        Err(error) => {
+            validation_world
+                .error_message
+                .replace(Some(error.to_string()));
+            validation_world.result.set(Some(false));
+        }
+    }
 }
 
 #[then("validation succeeds")]
@@ -168,6 +192,19 @@ fn then_validation_succeeds(validation_world: &ValidationWorld) {
 #[then("validation fails with a lint not found error")]
 fn then_validation_fails(validation_world: &ValidationWorld) {
     assert_eq!(validation_world.result.get(), Some(false));
+}
+
+#[then("validation fails with an experimental opt-in error")]
+fn then_validation_fails_experimental_opt_in(validation_world: &ValidationWorld) {
+    assert_eq!(validation_world.result.get(), Some(false));
+    let error_message = validation_world.error_message.borrow();
+    let error_message = error_message.as_ref().expect("error message should be set");
+    assert!(
+        error_message.contains(
+            "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
+        ),
+        "unexpected validation error: {error_message}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,4 +379,14 @@ fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) {
 #[scenario(path = "tests/features/installer.feature", index = 9)]
 fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) {
     let _ = snippet_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 19)]
+fn scenario_validate_experimental_names_with_opt_in(validation_world: ValidationWorld) {
+    let _ = validation_world;
+}
+
+#[scenario(path = "tests/features/installer.feature", index = 20)]
+fn scenario_reject_experimental_names_without_opt_in(validation_world: ValidationWorld) {
+    let _ = validation_world;
 }

@@ -91,6 +91,13 @@ pub enum InstallerError {
         name: CrateName,
     },
 
+    /// An experimental lint crate was requested without explicit opt-in.
+    #[error("experimental lint crate {name} requires --experimental")]
+    ExperimentalLintRequiresFlag {
+        /// Name of the experimental lint crate.
+        name: CrateName,
+    },
+
     /// The workspace root could not be found.
     #[error("workspace not found: {reason}")]
     WorkspaceNotFound {
@@ -213,6 +220,9 @@ impl Clone for InstallerError {
             }
             InstallerError::LintCrateNotFound { name } => {
                 InstallerError::LintCrateNotFound { name: name.clone() }
+            }
+            InstallerError::ExperimentalLintRequiresFlag { name } => {
+                InstallerError::ExperimentalLintRequiresFlag { name: name.clone() }
             }
             InstallerError::WorkspaceNotFound { reason } => InstallerError::WorkspaceNotFound {
                 reason: reason.clone(),

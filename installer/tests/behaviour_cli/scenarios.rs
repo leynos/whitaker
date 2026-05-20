@@ -19,3 +19,8 @@ fn scenario_dry_run_rejects_unknown_lint(cli_world: CliWorld) {
 fn scenario_install_suite_to_temp_dir(cli_world: CliWorld) {
     let _ = cli_world;
 }
+
+#[scenario(path = "tests/features/installer.feature", index = 21)]
+fn scenario_dry_run_rejects_experimental_lint_without_opt_in(cli_world: CliWorld) {
+    let _ = cli_world;
+}
