@@ -586,11 +586,13 @@ Use explicit `#[kani::unwind(...)]` values. Start with the smallest practical
 bound that covers:
 
 - active-length construction,
-- `BTreeSet` insertion for at most three fingerprints,
+- Vec-backed dedup for the bounded retained fingerprints,
 - 128 signature slots, and
 - any helper loops used by the harness.
 
-If the unwind value needs to exceed 16, stop under the proof-bound tolerance.
+The approved proof-bound resolution allowed unwind 129 where the fixed
+128-slot signature construction required it; the shipped proof seam keeps the
+final MinHasher harnesses at unwind 4 while preserving that recorded approval.
 
 Update `scripts/run-kani.sh` so `run_clone_detector_harnesses` invokes the new
 MinHasher harness names after the existing `LshConfig` harnesses. This keeps
