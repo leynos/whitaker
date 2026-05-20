@@ -60,10 +60,11 @@ impl MinHasher {
     /// Creates a deterministic proof-only fixture for Kani harnesses.
     ///
     /// This `#[cfg(kani)]` proof seam fills all [`MINHASH_SIZE`] seeds with the
-    /// same value, avoiding seed-stream construction so bounded model checking
-    /// does not spend symbolic state on production seed generation. Production
-    /// code continues to use [`MinHasher::new`]; this constructor exists only to
-    /// provide deterministic, lightweight inputs for Kani proofs.
+    /// same value, avoiding seed-stream construction to drastically reduce
+    /// Kani's symbolic state space during bounded model checking. Production
+    /// code continues to use [`MinHasher::new`]; this constructor exists only
+    /// to provide deterministic, lightweight inputs for Kani proofs rather than
+    /// production logic.
     #[cfg(kani)]
     pub(super) fn from_seed_for_kani(seed: u64) -> Self {
         Self {
@@ -86,10 +87,12 @@ impl MinHasher {
 
 /// Computes the 128-lane MinHash signature in production builds.
 ///
-/// The production implementation uses idiomatic [`array::from_fn`] iteration.
-/// It is mechanically equivalent to the `#[cfg(kani)]` proof-seam variant:
-/// both call [`minimum_mixed_hash`] once per lane to produce the same
-/// 128-lane MinHash signature from the seeds and unique hashes.
+/// Two `cfg`-specific implementations exist to balance production idiom
+/// against proof tractability. This production variant uses idiomatic
+/// [`array::from_fn`] iteration. It is mechanically equivalent to the
+/// `#[cfg(kani)]` proof-seam variant: both call [`minimum_mixed_hash`] once per
+/// lane to produce the same 128-lane MinHash signature from the seeds and
+/// unique hashes.
 #[cfg(not(kani))]
 fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
     array::from_fn(|index| minimum_mixed_hash(seeds[index], unique_hashes))
@@ -97,9 +100,10 @@ fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MI
 
 /// Computes the 128-lane MinHash signature with explicit unrolling for Kani.
 ///
-/// This `#[cfg(kani)]` proof seam manually unrolls every
-/// [`minimum_mixed_hash`] call so Kani's bounded model checker does not spend
-/// proof budget on iterator or loop state expansion. The explicit array
+/// Two `cfg`-specific implementations exist to balance production idiom
+/// against proof tractability. This `#[cfg(kani)]` proof seam manually unrolls
+/// every [`minimum_mixed_hash`] call so Kani's bounded model checker does not
+/// spend proof budget on iterator or loop state expansion. The explicit array
 /// literal is mechanically equivalent to the production [`array::from_fn`]
 /// implementation: both compute the same 128-lane MinHash signature from the
 /// seeds and unique hashes.
