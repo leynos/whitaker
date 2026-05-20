@@ -70,6 +70,18 @@ impl MinHasher {
             seeds: [seed; MINHASH_SIZE],
         }
     }
+
+    #[cfg(kani)]
+    pub(super) fn from_checked_lane_seeds_for_kani(
+        first_seed: u64,
+        middle_seed: u64,
+        last_seed: u64,
+    ) -> Self {
+        let mut seeds = [first_seed; MINHASH_SIZE];
+        seeds[MINHASH_SIZE / 2] = middle_seed;
+        seeds[MINHASH_SIZE - 1] = last_seed;
+        Self { seeds }
+    }
 }
 
 /// Computes the 128-lane MinHash signature in production builds.
@@ -242,6 +254,11 @@ fn minimum_mixed_hash(seed: u64, hashes: &[u64]) -> u64 {
     hashes
         .iter()
         .fold(u64::MAX, |current, hash| current.min(mix_hash(seed, *hash)))
+}
+
+#[cfg(kani)]
+pub(super) fn expected_lane_for_kani(seed: u64, hashes: &[u64]) -> u64 {
+    minimum_mixed_hash(seed, hashes)
 }
 
 fn mix_hash(seed: u64, hash: u64) -> u64 {
