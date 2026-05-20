@@ -1,4 +1,27 @@
-//! Deterministic MinHash sketch generation.
+//! Deterministic MinHash sketch generation for token-pass clone candidates.
+//!
+//! This module turns retained token [`Fingerprint`] values into fixed-width
+//! [`MinHashSignature`] values for the clone-detector index API. [`MinHasher`]
+//! owns the deterministic seed family used to sketch a fingerprint set, while
+//! [`unique_hashes`] normalizes retained fingerprints into sorted,
+//! deduplicated hash values so sketching has set semantics rather than multiset
+//! semantics.
+//!
+//! Internally, [`Seed`] keeps MinHash seed values distinct from raw fingerprint
+//! hashes at the type level. The hashing core still accepts raw `u64` hash
+//! values because fingerprints and signature lanes are represented as hash
+//! words throughout the index API.
+//!
+//! The `#[cfg(kani)]` constructors and the unrolled `sketch_values`
+//! implementation are proof seams for bounded model checking. They keep Kani
+//! harnesses focused on [`MinHasher::sketch`] invariants without changing the
+//! production API or the production [`array::from_fn`] implementation.
+//!
+//! [`LshIndex`](super::LshIndex) in `lsh.rs` consumes the signatures produced
+//! here by partitioning them into configured bands and emitting candidate
+//! fragment pairs. The parent `index` module re-exports [`MinHasher`],
+//! [`MinHashSignature`], [`MINHASH_SIZE`], and related error/configuration
+//! types as the crate-facing clone-detector indexing API.
 
 use std::array;
 
