@@ -176,6 +176,8 @@ This plan must be approved before implementation starts.
   pushed it to `origin/8-2-1-create-the-rstest-helper-lint-crate`, and updated
   draft PR <https://github.com/leynos/whitaker/pull/231> for implementation
   review.
+- [x] (2026-05-20T00:00:00Z) Attempted one final CodeRabbit confirmation on
+  the pushed branch. It was still blocked by a recoverable rate-limit error.
 
 ## Surprises & discoveries
 
@@ -224,12 +226,13 @@ This plan must be approved before implementation starts.
   CodeRabbit finding on `Config`. Impact: `Config` now documents that it is
   loaded from `dylint.toml` and normalized before use.
 
-- Observation: A final confirmation rerun of `coderabbit review --agent` was
+- Observation: Final confirmation reruns of `coderabbit review --agent` were
   blocked by CodeRabbit rate limiting after the Rustdoc fix. Evidence: two
-  retry attempts returned recoverable rate-limit errors. Impact: all reported
-  CodeRabbit findings were fixed and local gates were rerun, but the tool could
-  not provide a zero-finding confirmation after the last documentation-only
-  code comment change.
+  retry attempts before the implementation commit and one retry after the final
+  push returned recoverable rate-limit errors. Impact: all reported CodeRabbit
+  findings were fixed and local gates were rerun, but the tool could not
+  provide a zero-finding confirmation after the last documentation-only code
+  comment change.
 
 ## Decision log
 
@@ -293,9 +296,9 @@ The implementation milestone has passed local validation:
   nextest profile.
 
 After addressing CodeRabbit's threshold, provider-fallback, and Rustdoc
-findings, the final gates were rerun with the same successful outcomes. A
-final CodeRabbit confirmation pass was attempted twice and was blocked by
-recoverable rate limits.
+findings, the final gates were rerun with the same successful outcomes. Final
+CodeRabbit confirmation passes were attempted before and after the final push,
+but were blocked by recoverable rate limits.
 
 ## Context and orientation
 
