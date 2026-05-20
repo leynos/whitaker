@@ -79,6 +79,18 @@ impl MinHasher {
         }
     }
 
+    /// Creates a deterministic proof-only fixture with selected lane seeds.
+    ///
+    /// This `pub(super)` `#[cfg(kani)]` helper is restricted to the parent
+    /// module and exists for Kani harnesses that need to observe the first,
+    /// middle, and last MinHash lanes with distinct seed values. The remaining
+    /// lanes reuse `first_seed`.
+    ///
+    /// `first_seed` initializes every lane, `middle_seed` replaces lane
+    /// [`MINHASH_SIZE`] / 2, and `last_seed` replaces lane [`MINHASH_SIZE`] -
+    /// 1. Callers provide raw `u64` seeds at this proof boundary; the function
+    /// wraps them as internal [`Seed`] values and returns a [`MinHasher`] ready
+    /// for [`MinHasher::sketch`]. There are no additional preconditions.
     #[cfg(kani)]
     pub(super) fn from_checked_lane_seeds_for_kani(
         first_seed: u64,
@@ -248,6 +260,15 @@ fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; M
     ]
 }
 
+/// Extracts sorted, deduplicated fingerprint hashes for MinHash set semantics.
+///
+/// This `pub(super)` helper is restricted to the parent module and converts
+/// retained [`Fingerprint`] values into the Vec-backed set representation used
+/// by [`MinHasher::sketch`]. Callers must pass the retained fingerprint slice
+/// they intend to sketch.
+///
+/// Returns the sorted unique hash values. If `fingerprints` is empty, returns
+/// [`IndexError::EmptyFingerprintSet`].
 pub(super) fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64>> {
     if fingerprints.is_empty() {
         return Err(IndexError::EmptyFingerprintSet);
@@ -267,6 +288,15 @@ fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     })
 }
 
+/// Computes the expected MinHash lane value for Kani harness assertions.
+///
+/// This `pub(super)` `#[cfg(kani)]` helper is restricted to the parent module
+/// and preserves a raw `u64` seed parameter at the proof boundary so harnesses
+/// can remain simple. It wraps `seed` as an internal [`Seed`] and delegates to
+/// the same [`minimum_mixed_hash`] implementation used by real sketches.
+///
+/// `hashes` is assumed to be the bounded hash slice selected by the harness.
+/// The return value is the minimum mixed hash for that lane.
 #[cfg(kani)]
 pub(super) fn expected_lane_for_kani(seed: u64, hashes: &[u64]) -> u64 {
     minimum_mixed_hash(Seed(seed), hashes)
