@@ -10,10 +10,17 @@ const SEED_STREAM_START: u64 = 0x243F_6A88_85A3_08D3;
 const SEED_STREAM_STEP: u64 = 0x9E37_79B9_7F4A_7C15;
 const HASH_MIX: u64 = 0x94D0_49BB_1331_11EB;
 
+/// A typed MinHash seed value.
+///
+/// Keeps seed values distinct from raw hash values at the type level,
+/// preventing accidental argument transposition inside the hashing core.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Seed(u64);
+
 /// Deterministic MinHash sketcher for retained token fingerprints.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinHasher {
-    seeds: [u64; MINHASH_SIZE],
+    seeds: [Seed; MINHASH_SIZE],
 }
 
 impl Default for MinHasher {
@@ -68,7 +75,7 @@ impl MinHasher {
     #[cfg(kani)]
     pub(super) fn from_seed_for_kani(seed: u64) -> Self {
         Self {
-            seeds: [seed; MINHASH_SIZE],
+            seeds: [Seed(seed); MINHASH_SIZE],
         }
     }
 
@@ -78,9 +85,9 @@ impl MinHasher {
         middle_seed: u64,
         last_seed: u64,
     ) -> Self {
-        let mut seeds = [first_seed; MINHASH_SIZE];
-        seeds[MINHASH_SIZE / 2] = middle_seed;
-        seeds[MINHASH_SIZE - 1] = last_seed;
+        let mut seeds = [Seed(first_seed); MINHASH_SIZE];
+        seeds[MINHASH_SIZE / 2] = Seed(middle_seed);
+        seeds[MINHASH_SIZE - 1] = Seed(last_seed);
         Self { seeds }
     }
 }
@@ -94,7 +101,7 @@ impl MinHasher {
 /// lane to produce the same 128-lane MinHash signature from the seeds and
 /// unique hashes.
 #[cfg(not(kani))]
-fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
+fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
     array::from_fn(|index| minimum_mixed_hash(seeds[index], unique_hashes))
 }
 
@@ -108,7 +115,7 @@ fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MI
 /// implementation: both compute the same 128-lane MinHash signature from the
 /// seeds and unique hashes.
 #[cfg(kani)]
-fn sketch_values(seeds: &[u64; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
+fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
     [
         minimum_mixed_hash(seeds[0], unique_hashes),
         minimum_mixed_hash(seeds[1], unique_hashes),
@@ -254,15 +261,15 @@ pub(super) fn unique_hashes(fingerprints: &[Fingerprint]) -> IndexResult<Vec<u64
     Ok(hashes)
 }
 
-fn minimum_mixed_hash(seed: u64, hashes: &[u64]) -> u64 {
-    hashes
-        .iter()
-        .fold(u64::MAX, |current, hash| current.min(mix_hash(seed, *hash)))
+fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
+    hashes.iter().fold(u64::MAX, |current, hash| {
+        current.min(mix_hash(seed.0, *hash))
+    })
 }
 
 #[cfg(kani)]
 pub(super) fn expected_lane_for_kani(seed: u64, hashes: &[u64]) -> u64 {
-    minimum_mixed_hash(seed, hashes)
+    minimum_mixed_hash(Seed(seed), hashes)
 }
 
 fn mix_hash(seed: u64, hash: u64) -> u64 {
@@ -274,9 +281,9 @@ fn mix_hash(seed: u64, hash: u64) -> u64 {
 /// Both `next_seed` and `splitmix64` intentionally add `SEED_STREAM_STEP` to
 /// create a non-overlapping, deterministic seed sequence compatible with the
 /// seed-streaming approach. This double-increment is deliberate, not a bug.
-fn next_seed(state: &mut u64) -> u64 {
+fn next_seed(state: &mut u64) -> Seed {
     *state = state.wrapping_add(SEED_STREAM_STEP);
-    splitmix64(*state)
+    Seed(splitmix64(*state))
 }
 
 /// SplitMix64 generator with deliberate `SEED_STREAM_STEP` addition.
