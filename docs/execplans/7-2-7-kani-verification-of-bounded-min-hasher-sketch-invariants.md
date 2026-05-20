@@ -590,9 +590,9 @@ bound that covers:
 - 128 signature slots, and
 - any helper loops used by the harness.
 
-The approved proof-bound resolution allowed unwind 129 where the fixed
-128-slot signature construction required it; the shipped proof seam keeps the
-final MinHasher harnesses at unwind 4 while preserving that recorded approval.
+The recorded proof-bound approval allowed unwind 129 for the fixed 128-slot
+signature-construction investigation; the shipped proof seam keeps the final
+MinHasher harnesses at unwind 4 while preserving that decision history.
 
 Update `scripts/run-kani.sh` so `run_clone_detector_harnesses` invokes the new
 MinHasher harness names after the existing `LshConfig` harnesses. This keeps
