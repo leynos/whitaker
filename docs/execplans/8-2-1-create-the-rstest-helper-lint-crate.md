@@ -184,6 +184,14 @@ This plan must be approved before implementation starts.
 - [x] (2026-05-20T00:00:00Z) Validated the opt-in fix with focused
   installer tests, the required repository gates, and `coderabbit review
   --agent`, which completed with 0 findings.
+- [x] (2026-05-20T00:00:00Z) Verified inline review comments with Wyvern and
+  Scribe agents, fixed the still-valid stub documentation, design-document
+  ordering, users-guide subsection, and builder expectation issues, and skipped
+  the stale historical ExecPlan count.
+- [x] (2026-05-20T00:00:00Z) Validated the inline-review follow-up with
+  focused tests, `make check-fmt`, `make markdownlint`, `make lint`,
+  `make test`, and `coderabbit review --agent`, which completed with
+  0 findings.
 
 ## Surprises & discoveries
 
@@ -246,6 +254,15 @@ This plan must be approved before implementation starts.
   `--lint rstest_helper_should_be_fixture` valid without `--experimental`.
   Impact: validation now receives `CrateResolutionOptions` and rejects
   experimental explicit lint requests unless the opt-in flag is set.
+
+- Observation: One inline review comment targeted a stale builder test name,
+  but the same hard-coded expectation still existed in the nearby suite
+  experimental feature test. Evidence: the Wyvern verification found
+  `experimental_features_derives_from_experimental_lint_crates` already derives
+  from `EXPERIMENTAL_LINT_CRATES`, while
+  `features_for_crate_handles_suite_experimental_mode` still used a literal
+  feature string. Impact: the latter test now derives its expected value from
+  `EXPERIMENTAL_LINT_CRATES`.
 
 ## Decision log
 

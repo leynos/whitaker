@@ -533,6 +533,37 @@ aggregation, and actionable diagnostics are tracked by the later roadmap items
 8.2.2 through 8.2.4.
 
 <!-- markdownlint-disable-next-line MD024 -->
+#### What is allowed
+
+- Single-use helper calls inside `#[rstest]` tests
+- Helper calls whose totals stay below `min_calls` or `min_distinct_tests`
+- Parameter-provider uses covered by `provider_param_attributes`, such as
+  `case`, `values`, `files`, `future`, and `context`
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### What is denied
+
+When diagnostic phases are implemented, `rstest_helper_should_be_fixture` will
+deny repeated non-provider helper invocations across `#[rstest]` tests when
+they meet or exceed both `min_calls` and `min_distinct_tests`. The
+`require_identical_fixture_arg_names` setting controls whether candidate
+fixture arguments must use the same names, and `use_source_callee_fallback`
+controls whether source-callsite recovery may be used for macro-expanded
+callee locations.
+
+<!-- markdownlint-disable-next-line MD024 -->
+#### How to fix
+
+- Replace repeated helper calls with a shared `#[fixture]` parameter.
+- If `require_identical_fixture_arg_names` is enabled, rename helper arguments
+  so repeated calls use the same fixture argument names.
+- Prefer provider attributes listed in `provider_param_attributes` for
+  parameterized data inputs rather than modelling them as fixture-local helper
+  calls.
+- Tune `min_calls`, `min_distinct_tests`, and `use_source_callee_fallback` when
+  repository conventions need stricter or looser matching.
+
+<!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 
 ```toml
