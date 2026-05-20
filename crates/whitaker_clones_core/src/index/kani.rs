@@ -30,10 +30,7 @@
 
 use crate::token::Fingerprint;
 
-use super::{
-    IndexError, LshConfig, MINHASH_SIZE, MinHashSignature, MinHasher,
-    minhash::expected_lane_for_kani,
-};
+use super::{IndexError, LshConfig, MINHASH_SIZE, MinHashSignature, MinHasher};
 
 const KANI_MINHASH_SEED: u64 = 0xA076_1D64_78BD_642F;
 const KANI_MINHASH_MIDDLE_SEED: u64 = 0xE703_7ED1_A0B4_28DB;
@@ -51,21 +48,42 @@ fn checked_lane_hasher() -> MinHasher {
     )
 }
 
-fn assert_checked_lanes_match_expected(signature: &MinHashSignature, hashes: &[u64]) {
+fn assert_lane_selects_singleton_min(
+    lane: usize,
+    signature: &MinHashSignature,
+    left_singleton: &MinHashSignature,
+    right_singleton: &MinHashSignature,
+) {
+    let actual = signature.values()[lane];
+    let left = left_singleton.values()[lane];
+    let right = right_singleton.values()[lane];
+
     kani::assert(
-        signature.values()[0] == expected_lane_for_kani(KANI_MINHASH_SEED, hashes),
-        "first signature lane must depend on the input hashes",
+        left != right,
+        "singleton lane values must distinguish the checked input hashes",
     );
     kani::assert(
-        signature.values()[MINHASH_SIZE / 2]
-            == expected_lane_for_kani(KANI_MINHASH_MIDDLE_SEED, hashes),
-        "middle signature lane must depend on the input hashes",
+        actual == left || actual == right,
+        "combined sketch lane must select a hash value present in a singleton sketch",
     );
     kani::assert(
-        signature.values()[MINHASH_SIZE - 1]
-            == expected_lane_for_kani(KANI_MINHASH_LAST_SEED, hashes),
-        "last signature lane must depend on the input hashes",
+        actual <= left && actual <= right,
+        "combined sketch lane must contain the minimum singleton hash value",
     );
+}
+
+fn assert_checked_lanes_select_singleton_min(
+    signature: &MinHashSignature,
+    left_singleton: &MinHashSignature,
+    right_singleton: &MinHashSignature,
+) {
+    kani::assert(
+        signature.values().len() == MINHASH_SIZE,
+        "signature must keep the fixed MinHash width",
+    );
+    assert_lane_selects_singleton_min(0, signature, left_singleton, right_singleton);
+    assert_lane_selects_singleton_min(MINHASH_SIZE / 2, signature, left_singleton, right_singleton);
+    assert_lane_selects_singleton_min(MINHASH_SIZE - 1, signature, left_singleton, right_singleton);
 }
 
 #[kani::proof]
@@ -207,6 +225,12 @@ fn verify_min_hasher_sketch_is_deterministic() {
     let right = checked_lane_hasher()
         .sketch(&fingerprints)
         .expect("non-empty fingerprints should sketch");
+    let first_singleton = checked_lane_hasher()
+        .sketch(&[fingerprints[0].clone()])
+        .expect("single fingerprint should sketch");
+    let second_singleton = checked_lane_hasher()
+        .sketch(&[fingerprints[1].clone()])
+        .expect("single fingerprint should sketch");
 
     kani::assert(
         left.values()[0] == right.values()[0],
@@ -220,7 +244,7 @@ fn verify_min_hasher_sketch_is_deterministic() {
         left.values()[MINHASH_SIZE - 1] == right.values()[MINHASH_SIZE - 1],
         "sketching the same fingerprints must be deterministic for the last lane",
     );
-    assert_checked_lanes_match_expected(&left, &hashes);
+    assert_checked_lanes_select_singleton_min(&left, &first_singleton, &second_singleton);
 }
 
 #[kani::proof]
@@ -242,6 +266,12 @@ fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
     let duplicated_signature = hasher
         .sketch(&duplicated)
         .expect("non-empty fingerprints should sketch");
+    let first_singleton = hasher
+        .sketch(&[unique[0].clone()])
+        .expect("single fingerprint should sketch");
+    let second_singleton = hasher
+        .sketch(&[unique[1].clone()])
+        .expect("single fingerprint should sketch");
 
     kani::assert(
         unique_signature.values()[0] == duplicated_signature.values()[0],
@@ -257,5 +287,9 @@ fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
             == duplicated_signature.values()[MINHASH_SIZE - 1],
         "duplicate fingerprint hashes must not change the last signature lane",
     );
-    assert_checked_lanes_match_expected(&unique_signature, &hashes);
+    assert_checked_lanes_select_singleton_min(
+        &unique_signature,
+        &first_singleton,
+        &second_singleton,
+    );
 }

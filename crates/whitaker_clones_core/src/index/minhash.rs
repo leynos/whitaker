@@ -288,20 +288,6 @@ fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     })
 }
 
-/// Computes the expected MinHash lane value for Kani harness assertions.
-///
-/// This `pub(super)` `#[cfg(kani)]` helper is restricted to the parent module
-/// and preserves a raw `u64` seed parameter at the proof boundary so harnesses
-/// can remain simple. It wraps `seed` as an internal [`Seed`] and delegates to
-/// the same [`minimum_mixed_hash`] implementation used by real sketches.
-///
-/// `hashes` is assumed to be the bounded hash slice selected by the harness.
-/// The return value is the minimum mixed hash for that lane.
-#[cfg(kani)]
-pub(super) fn expected_lane_for_kani(seed: u64, hashes: &[u64]) -> u64 {
-    minimum_mixed_hash(Seed(seed), hashes)
-}
-
 fn mix_hash(seed: u64, hash: u64) -> u64 {
     splitmix64(seed ^ hash.wrapping_mul(HASH_MIX))
 }
