@@ -192,6 +192,10 @@ This plan must be approved before implementation starts.
   focused tests, `make check-fmt`, `make markdownlint`, `make lint`,
   `make test`, and `coderabbit review --agent`, which completed with
   0 findings.
+- [x] (2026-05-21T00:00:00Z) Verified review comments about suite macro
+  definition and experimental lint CLI coverage. The macro redefinition concern
+  was stale because the two macro definitions already use complementary `cfg`
+  gates. The CLI success-path coverage request was valid and was implemented.
 
 ## Surprises & discoveries
 

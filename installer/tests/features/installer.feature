@@ -128,3 +128,9 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits with an error
     And an experimental lint opt-in message is shown
+
+  Scenario: Dry-run accepts experimental lint with opt-in
+    Given the installer is invoked with dry-run, an experimental lint, and experimental lints enabled
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And experimental lint dry-run output is shown

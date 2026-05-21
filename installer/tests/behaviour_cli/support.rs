@@ -160,6 +160,24 @@ pub(super) fn configure_dry_run_experimental_lint(cli_world: &CliWorld) {
     ]);
 }
 
+pub(super) fn configure_dry_run_experimental_lint_with_opt_in(cli_world: &CliWorld) {
+    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
+        return;
+    };
+
+    let target_dir = setup_temp_dir(cli_world);
+    cli_world.args.replace(vec![
+        "--dry-run".to_owned(),
+        "--experimental".to_owned(),
+        "--toolchain".to_owned(),
+        channel,
+        "--target-dir".to_owned(),
+        target_dir,
+        "--lint".to_owned(),
+        "rstest_helper_should_be_fixture".to_owned(),
+    ]);
+}
+
 pub(super) fn configure_suite_install(cli_world: &CliWorld) {
     let Some(_channel) = ensure_required_toolchain_available(cli_world) else {
         return;
@@ -291,6 +309,25 @@ pub(super) fn assert_experimental_lint_opt_in_message_is_shown(cli_world: &CliWo
             "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
         ),
         "unexpected stderr: {stderr}"
+    );
+}
+
+pub(super) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(stderr.contains("Dry run - no files will be modified"));
+    assert!(stderr.contains("Crates to build:"));
+    assert!(stderr.contains("rstest_helper_should_be_fixture"));
+    assert!(
+        !stderr.contains(
+            "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
+        ),
+        "experimental opt-in error should not be printed when --experimental is set, stderr: {stderr}"
     );
 }
 
