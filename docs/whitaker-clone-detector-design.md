@@ -584,6 +584,36 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    Runtime tests still pin the concrete lexical-string semantics; the proof
    does not verify Rust `String` internals directly.
 
+## Implementation decisions (7.2.7)
+
+1. **`MinHasher::sketch` now uses vector-backed set semantics.** The runtime
+   implementation collects retained `Fingerprint.hash` values into a
+   `Vec<u64>`, sorts them, and deduplicates them before sketching. This keeps
+   the public set-semantics contract from 7.2.2 while avoiding verifier-heavy
+   `BTreeSet` internals in the bounded Kani proof.
+
+2. **Kani verifies real `MinHasher::sketch` calls with a private proof seam.**
+   The harnesses use a `cfg(kani)`-only `MinHasher::from_seed_for_kani`
+   constructor so the proof does not spend its unwind bound constructing the
+   128-seed stream. Successful harnesses still call the production
+   `MinHasher::sketch` body; only the seed fixture and fixed-width signature
+   construction are specialized for Kani.
+
+3. **The bounded proof shape is deliberately split by invariant.** The empty
+   input harness checks that `MinHasher::sketch(&[])` returns
+   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the
+   same one-fingerprint set twice and proves equality for an arbitrary symbolic
+   signature lane. The duplicate-hash harness keeps the retained hash symbolic
+   over a bounded `u8` domain and proves that repeating that hash at a distinct
+   range does not change the first signature lane.
+
+4. **Ordinary tests carry the broader regression surface.** Unit tests and the
+   `rstest-bdd` MinHash/LSH scenario cover full-signature equality,
+   representative full-width `u64` hashes, reordered inputs, empty input, and
+   duplicate retained hashes. The Kani harnesses provide exhaustive bounded
+   verification for the proof-shaped state spaces rather than replacing those
+   runtime regression tests.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates

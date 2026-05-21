@@ -25,6 +25,14 @@ Feature: MinHash and LSH candidate generation
     Then candidate pair count is 1
     And the only candidate pair is alpha and beta
 
+  Scenario: Duplicate retained hashes use set semantics
+    Given LSH bands 1 and rows 128
+    And fragment alpha retains hashes 11 22 33
+    And fragment beta retains hashes 11 22 33 22 11
+    When candidate pairs are generated
+    Then candidate pair count is 1
+    And the only candidate pair is alpha and beta
+
   Scenario: Invalid LSH settings surface a typed error
     Given LSH bands 0 and rows 4
     When candidate pairs are generated

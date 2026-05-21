@@ -181,21 +181,26 @@ fn scenario_multiple_collisions_one_pair(world: MinHashLshWorld) {
 }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 3)]
-fn scenario_invalid_lsh_settings(world: MinHashLshWorld) {
+fn scenario_duplicate_hashes_use_set_semantics(world: MinHashLshWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 4)]
-fn scenario_empty_fingerprints(world: MinHashLshWorld) {
+fn scenario_invalid_lsh_settings(world: MinHashLshWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 5)]
-fn scenario_zero_rows(world: MinHashLshWorld) {
+fn scenario_empty_fingerprints(world: MinHashLshWorld) {
     let _ = world;
 }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 6)]
+fn scenario_zero_rows(world: MinHashLshWorld) {
+    let _ = world;
+}
+
+#[scenario(path = "tests/features/min_hash_lsh.feature", index = 7)]
 fn scenario_invalid_non_zero_product(world: MinHashLshWorld) {
     let _ = world;
 }
