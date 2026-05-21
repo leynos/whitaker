@@ -149,6 +149,7 @@ fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; M
 /// literal is mechanically equivalent to the production [`array::from_fn`]
 /// implementation: both compute the same 128-lane MinHash signature from the
 /// seeds and unique hashes.
+// `@codescene/suppress` Large Method proof-seam: keep manual unrolling for Kani tractability
 #[cfg(kani)]
 fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
     [
