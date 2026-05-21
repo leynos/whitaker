@@ -306,7 +306,7 @@ The plan milestone has passed local validation:
 - `make check-fmt` succeeded.
 - `make markdownlint` succeeded with 0 Markdown errors.
 - `make lint` succeeded.
-- `make test` succeeded with 1418 tests passed and 2 skipped under the default
+- `make test` succeeded with 1428 tests passed and 2 skipped under the default
   nextest profile.
 - `coderabbit review --agent` completed with 0 findings after review fixes.
 
