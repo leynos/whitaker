@@ -155,7 +155,7 @@ fn load_configuration() -> ConfigLoadResult {
 fn load_shared_config() -> SharedConfig {
     // SAFETY / NOTE: `SharedConfig::load` does not currently propagate I/O
     // errors, so this named boundary documents the infallible call site
-    // pending <link-to-follow-up-issue>.
+    // pending https://github.com/leynos/whitaker/issues/233.
     SharedConfig::load()
 }
 
@@ -176,7 +176,7 @@ mod tests {
     //! and `rstest` detection option construction.
     //!
     //! NOTE: `SharedConfig::load` is treated as infallible at the driver call
-    //! site pending <link-to-follow-up-issue>.
+    //! site pending https://github.com/leynos/whitaker/issues/233.
 
     use super::*;
     use proptest::prelude::*;
