@@ -165,94 +165,102 @@ pub enum InstallerError {
     },
 }
 
-impl Clone for InstallerError {
-    fn clone(&self) -> Self {
-        // Helper to clone io::Error by preserving ErrorKind and formatted message.
-        // This is lossy: the original source chain is discarded.
-        fn clone_io_error(source: &std::io::Error) -> std::io::Error {
-            std::io::Error::new(source.kind(), source.to_string())
-        }
+// Helper to clone io::Error by preserving ErrorKind and formatted message.
+// This is lossy: the original source chain is discarded.
+fn clone_io_error(source: &std::io::Error) -> std::io::Error {
+    std::io::Error::new(source.kind(), source.to_string())
+}
 
+impl InstallerError {
+    fn clone_toolchain_variant(&self) -> Option<Self> {
         match self {
-            InstallerError::ToolchainDetection { reason } => InstallerError::ToolchainDetection {
+            Self::ToolchainDetection { reason } => Some(Self::ToolchainDetection {
                 reason: reason.clone(),
-            },
-            InstallerError::ToolchainFileNotFound { path } => {
-                InstallerError::ToolchainFileNotFound { path: path.clone() }
+            }),
+            Self::ToolchainFileNotFound { path } => {
+                Some(Self::ToolchainFileNotFound { path: path.clone() })
             }
-            InstallerError::InvalidToolchainFile { reason } => {
-                InstallerError::InvalidToolchainFile {
-                    reason: reason.clone(),
-                }
-            }
-            InstallerError::ToolchainNotInstalled { toolchain } => {
-                InstallerError::ToolchainNotInstalled {
-                    toolchain: toolchain.clone(),
-                }
-            }
-            InstallerError::ToolchainInstallFailed { toolchain, message } => {
-                InstallerError::ToolchainInstallFailed {
+            Self::InvalidToolchainFile { reason } => Some(Self::InvalidToolchainFile {
+                reason: reason.clone(),
+            }),
+            Self::ToolchainNotInstalled { toolchain } => Some(Self::ToolchainNotInstalled {
+                toolchain: toolchain.clone(),
+            }),
+            Self::ToolchainInstallFailed { toolchain, message } => {
+                Some(Self::ToolchainInstallFailed {
                     toolchain: toolchain.clone(),
                     message: message.clone(),
-                }
+                })
             }
-            InstallerError::ToolchainComponentInstallFailed {
+            Self::ToolchainComponentInstallFailed {
                 toolchain,
                 components,
                 message,
-            } => InstallerError::ToolchainComponentInstallFailed {
+            } => Some(Self::ToolchainComponentInstallFailed {
                 toolchain: toolchain.clone(),
                 components: components.clone(),
                 message: message.clone(),
-            },
-            InstallerError::BuildFailed { crate_name, reason } => InstallerError::BuildFailed {
+            }),
+            _ => None,
+        }
+    }
+}
+
+impl Clone for InstallerError {
+    fn clone(&self) -> Self {
+        if let Some(value) = self.clone_toolchain_variant() {
+            return value;
+        }
+
+        match self {
+            Self::BuildFailed { crate_name, reason } => Self::BuildFailed {
                 crate_name: crate_name.clone(),
                 reason: reason.clone(),
             },
-            InstallerError::StagingFailed { reason } => InstallerError::StagingFailed {
+            Self::StagingFailed { reason } => Self::StagingFailed {
                 reason: reason.clone(),
             },
-            InstallerError::TargetNotWritable { path, reason } => {
-                InstallerError::TargetNotWritable {
-                    path: path.clone(),
-                    reason: reason.clone(),
-                }
-            }
-            InstallerError::LintCrateNotFound { name } => {
-                InstallerError::LintCrateNotFound { name: name.clone() }
-            }
-            InstallerError::ExperimentalLintRequiresFlag { name } => {
-                InstallerError::ExperimentalLintRequiresFlag { name: name.clone() }
-            }
-            InstallerError::WorkspaceNotFound { reason } => InstallerError::WorkspaceNotFound {
-                reason: reason.clone(),
-            },
-            InstallerError::InvalidCargoToml { path, reason } => InstallerError::InvalidCargoToml {
+            Self::TargetNotWritable { path, reason } => Self::TargetNotWritable {
                 path: path.clone(),
                 reason: reason.clone(),
             },
-            InstallerError::Io(source) => InstallerError::Io(clone_io_error(source)),
-            InstallerError::Git { operation, message } => InstallerError::Git {
+            Self::LintCrateNotFound { name } => Self::LintCrateNotFound { name: name.clone() },
+            Self::ExperimentalLintRequiresFlag { name } => {
+                Self::ExperimentalLintRequiresFlag { name: name.clone() }
+            }
+            Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
+                reason: reason.clone(),
+            },
+            Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
+                path: path.clone(),
+                reason: reason.clone(),
+            },
+            Self::Io(source) => Self::Io(clone_io_error(source)),
+            Self::Git { operation, message } => Self::Git {
                 operation,
                 message: message.clone(),
             },
-            InstallerError::DependencyInstall { tool, message } => {
-                InstallerError::DependencyInstall {
-                    tool,
-                    message: message.clone(),
-                }
-            }
-            InstallerError::WrapperGeneration(message) => {
-                InstallerError::WrapperGeneration(message.clone())
-            }
-            InstallerError::ScanFailed { source } => InstallerError::ScanFailed {
+            Self::DependencyInstall { tool, message } => Self::DependencyInstall {
+                tool,
+                message: message.clone(),
+            },
+            Self::WrapperGeneration(message) => Self::WrapperGeneration(message.clone()),
+            Self::ScanFailed { source } => Self::ScanFailed {
                 source: clone_io_error(source),
             },
-            InstallerError::WriteFailed { source } => InstallerError::WriteFailed {
+            Self::WriteFailed { source } => Self::WriteFailed {
                 source: clone_io_error(source),
             },
+            Self::ToolchainDetection { .. }
+            | Self::ToolchainFileNotFound { .. }
+            | Self::InvalidToolchainFile { .. }
+            | Self::ToolchainNotInstalled { .. }
+            | Self::ToolchainInstallFailed { .. }
+            | Self::ToolchainComponentInstallFailed { .. } => {
+                unreachable!("handled by clone_toolchain_variant")
+            }
             #[cfg(any(test, feature = "test-support"))]
-            InstallerError::StubMismatch { message } => InstallerError::StubMismatch {
+            Self::StubMismatch { message } => Self::StubMismatch {
                 message: message.clone(),
             },
         }
