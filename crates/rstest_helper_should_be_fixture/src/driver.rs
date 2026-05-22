@@ -123,7 +123,7 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
             }
         };
 
-        self.apply_crate_configuration(config, SharedConfig::load());
+        self.apply_crate_configuration(config, load_shared_config());
     }
 }
 
@@ -152,6 +152,13 @@ fn load_configuration() -> ConfigLoadResult {
     loaded_configuration(dylint_linting::config::<Config>(LINT_NAME))
 }
 
+fn load_shared_config() -> SharedConfig {
+    // SAFETY / NOTE: `SharedConfig::load` does not currently propagate I/O
+    // errors, so this named boundary documents the infallible call site
+    // pending <link-to-follow-up-issue>.
+    SharedConfig::load()
+}
+
 fn loaded_configuration<E>(loaded: Result<Option<Config>, E>) -> ConfigLoadResult
 where
     E: std::fmt::Display,
@@ -167,6 +174,9 @@ where
 mod tests {
     //! Unit tests for driver configuration normalization, loading boundaries,
     //! and `rstest` detection option construction.
+    //!
+    //! NOTE: `SharedConfig::load` is treated as infallible at the driver call
+    //! site pending <link-to-follow-up-issue>.
 
     use super::*;
     use proptest::prelude::*;
