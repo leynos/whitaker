@@ -17,6 +17,8 @@ const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 const DEFAULT_PROVIDER_PARAM_ATTRIBUTES: &[&str] =
     &["case", "values", "files", "future", "context"];
 
+type ConfigLoadResult = Result<Config, String>;
+
 dylint_linting::impl_late_lint! {
     pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
     Warn,
@@ -110,7 +112,18 @@ impl RstestHelperShouldBeFixture {
 
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
-        self.apply_crate_configuration(load_configuration(), SharedConfig::load());
+        let config = match load_configuration() {
+            Ok(config) => config,
+            Err(error) => {
+                debug!(
+                    target: LINT_NAME,
+                    "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
+                );
+                Config::default()
+            }
+        };
+
+        self.apply_crate_configuration(config, SharedConfig::load());
     }
 }
 
@@ -135,29 +148,26 @@ fn default_provider_param_attributes() -> Vec<String> {
         .collect()
 }
 
-fn load_configuration() -> Config {
-    loaded_configuration_or_default(dylint_linting::config::<Config>(LINT_NAME))
+fn load_configuration() -> ConfigLoadResult {
+    loaded_configuration(dylint_linting::config::<Config>(LINT_NAME))
 }
 
-fn loaded_configuration_or_default<E>(loaded: Result<Option<Config>, E>) -> Config
+fn loaded_configuration<E>(loaded: Result<Option<Config>, E>) -> ConfigLoadResult
 where
     E: std::fmt::Display,
 {
     match loaded {
-        Ok(Some(config)) => config.normalized(),
-        Ok(None) => Config::default(),
-        Err(error) => {
-            debug!(
-                target: LINT_NAME,
-                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
-            );
-            Config::default()
-        }
+        Ok(Some(config)) => Ok(config.normalized()),
+        Ok(None) => Ok(Config::default()),
+        Err(error) => Err(error.to_string()),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for driver configuration normalization, loading boundaries,
+    //! and `rstest` detection option construction.
+
     use super::*;
     use proptest::prelude::*;
     use rstest::rstest;
@@ -263,16 +273,16 @@ mod tests {
     #[rstest]
     fn loaded_configuration_uses_default_when_config_is_absent() {
         assert_eq!(
-            loaded_configuration_or_default::<String>(Ok(None)),
-            Config::default()
+            loaded_configuration::<String>(Ok(None)).expect("missing config should default"),
+            Config::default(),
         );
     }
 
     #[rstest]
-    fn loaded_configuration_uses_default_when_config_errors() {
+    fn loaded_configuration_returns_error_when_config_errors() {
         assert_eq!(
-            loaded_configuration_or_default(Err("invalid config")),
-            Config::default()
+            loaded_configuration(Err("invalid config")).expect_err("invalid config should error"),
+            "invalid config",
         );
     }
 
@@ -286,7 +296,9 @@ mod tests {
         };
 
         assert_eq!(
-            loaded_configuration_or_default::<String>(Ok(Some(config))).provider_param_attributes,
+            loaded_configuration::<String>(Ok(Some(config)))
+                .expect("present config should load")
+                .provider_param_attributes,
             ["case"]
         );
     }
