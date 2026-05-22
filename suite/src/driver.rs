@@ -20,9 +20,8 @@ use test_must_not_have_example::TestMustNotHaveExample;
 
 dylint_library!();
 
-#[cfg(not(feature = "experimental-rstest-helper-should-be-fixture"))]
 macro_rules! define_suite_pass {
-    () => {
+    ($($experimental_pass:tt)*) => {
         rustc_lint::late_lint_methods!(
             declare_combined_late_lint_pass,
             [SuitePass, [
@@ -35,27 +34,7 @@ macro_rules! define_suite_pass {
                 NoUnwrapOrElsePanic: no_unwrap_or_else_panic::NoUnwrapOrElsePanic::default(),
                 NoStdFsOperations: no_std_fs_operations::NoStdFsOperations::default(),
                 BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::default(),
-            ]]
-        );
-    };
-}
-
-#[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
-macro_rules! define_suite_pass {
-    () => {
-        rustc_lint::late_lint_methods!(
-            declare_combined_late_lint_pass,
-            [SuitePass, [
-                FunctionAttrsFollowDocs: function_attrs_follow_docs::FunctionAttrsFollowDocs::default(),
-                NoExpectOutsideTests: no_expect_outside_tests::NoExpectOutsideTests::default(),
-                TestMustNotHaveExample: test_must_not_have_example::TestMustNotHaveExample::default(),
-                ModuleMustHaveInnerDocs: module_must_have_inner_docs::ModuleMustHaveInnerDocs::default(),
-                ConditionalMaxNBranches: conditional_max_n_branches::ConditionalMaxNBranches::default(),
-                ModuleMaxLines: module_max_lines::ModuleMaxLines::default(),
-                NoUnwrapOrElsePanic: no_unwrap_or_else_panic::NoUnwrapOrElsePanic::default(),
-                NoStdFsOperations: no_std_fs_operations::NoStdFsOperations::default(),
-                BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::default(),
-                RstestHelperShouldBeFixture: rstest_helper_should_be_fixture::RstestHelperShouldBeFixture::default(),
+                $($experimental_pass)*
             ]]
         );
     };
@@ -65,7 +44,9 @@ macro_rules! define_suite_pass {
 define_suite_pass!();
 
 #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
-define_suite_pass!();
+define_suite_pass!(
+    RstestHelperShouldBeFixture: rstest_helper_should_be_fixture::RstestHelperShouldBeFixture::default(),
+);
 
 /// Registers the suite lints into the provided lint store.
 ///
