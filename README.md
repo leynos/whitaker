@@ -64,8 +64,8 @@ suite flows opt in with `--experimental` or the corresponding suite feature.
 
 ## Project Status
 
-Whitaker is under active development. One additional lint (
-`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
+Whitaker is under active development. One additional lint
+(`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
 details.
 
 ## Verifying Release Checksums

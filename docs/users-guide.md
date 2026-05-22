@@ -533,6 +533,23 @@ aggregation, and actionable diagnostics are tracked by the later roadmap items
 8.2.2 through 8.2.4.
 
 <!-- markdownlint-disable-next-line MD024 -->
+#### Configuration
+
+```toml
+[rstest_helper_should_be_fixture]
+min_calls = 2
+min_distinct_tests = 2
+require_identical_fixture_arg_names = false
+provider_param_attributes = ["case", "values", "files", "future", "context"]
+use_source_callee_fallback = false
+```
+
+`provider_param_attributes` lists `rstest` parameter attributes that should be
+treated as data providers rather than fixture-local bindings. Entries may be
+written either as bare names such as `case` or qualified names such as
+`rstest::case`; Whitaker normalizes them to the shared detection policy.
+
+<!-- markdownlint-disable-next-line MD024 -->
 #### What is allowed
 
 - Single-use helper calls inside `#[rstest]` tests
@@ -562,23 +579,6 @@ callee locations.
   calls.
 - Tune `min_calls`, `min_distinct_tests`, and `use_source_callee_fallback` when
   repository conventions need stricter or looser matching.
-
-<!-- markdownlint-disable-next-line MD024 -->
-#### Configuration
-
-```toml
-[rstest_helper_should_be_fixture]
-min_calls = 2
-min_distinct_tests = 2
-require_identical_fixture_arg_names = false
-provider_param_attributes = ["case", "values", "files", "future", "context"]
-use_source_callee_fallback = false
-```
-
-`provider_param_attributes` lists `rstest` parameter attributes that should be
-treated as data providers rather than fixture-local bindings. Entries may be
-written either as bare names such as `case` or qualified names such as
-`rstest::case`; Whitaker normalizes them to the shared detection policy.
 
 ______________________________________________________________________
 

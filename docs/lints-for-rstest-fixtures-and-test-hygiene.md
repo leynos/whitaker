@@ -438,7 +438,7 @@ standard lints.
   `RstestDetectionOptions` policy.
 - The lint is intentionally diagnostic-silent in 8.2.1. Call-site collection,
   aggregation, and user-facing suggestions remain assigned to 8.2.2 through
-  8.2.4 so this bootstrap does not claim analysis behaviour it does not yet
+  8.2.4, so this bootstrap does not claim analysis behaviour it does not yet
   implement.
 - The suite exposes the lint only through the experimental feature
   `experimental-rstest-helper-should-be-fixture`. The installer derives that
