@@ -34,7 +34,8 @@ For version pinning, installation details, and configuration options, see the
 
 ## The Lints
 
-Whitaker currently ships eight lints, with more on the way:
+Whitaker currently ships nine standard lints plus one experimental lint that
+requires explicit opt-in.
 
 | Lint                          | What it does                                                                                                           |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -48,6 +49,10 @@ Whitaker currently ships eight lints, with more on the way:
 | `no_unwrap_or_else_panic`     | Catches sneaky panics hidden inside `unwrap_or_else` closures. If you're going to panic, at least be upfront about it. |
 | `no_std_fs_operations`        | Forbids `std::fs` operations, nudging you toward capability-based filesystem access via `cap_std`.                     |
 
+Experimental lints are not enabled by default. The current experimental lint is
+`rstest_helper_should_be_fixture`, which is available only when installer and
+suite flows opt in with `--experimental` or the corresponding suite feature.
+
 ## Features
 
 - **Localised diagnostics** — Messages available in English, Welsh (Cymraeg),
@@ -59,8 +64,8 @@ Whitaker currently ships eight lints, with more on the way:
 
 ## Project Status
 
-Whitaker is under active development. One additional lint
-(`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
+Whitaker is under active development. One additional lint (
+`public_fn_must_have_docs`) is planned—see the [roadmap](docs/roadmap.md) for
 details.
 
 ## Verifying Release Checksums

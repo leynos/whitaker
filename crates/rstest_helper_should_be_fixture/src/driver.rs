@@ -100,12 +100,17 @@ impl Default for RstestHelperShouldBeFixture {
     }
 }
 
+impl RstestHelperShouldBeFixture {
+    fn apply_crate_configuration(&mut self, config: Config, shared_config: SharedConfig) {
+        self.config = config;
+        self.detection_options = self.config.detection_options();
+        self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
+    }
+}
+
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
-        self.config = load_configuration();
-        self.detection_options = self.config.detection_options();
-        let shared_config = SharedConfig::load();
-        self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
+        self.apply_crate_configuration(load_configuration(), SharedConfig::load());
     }
 }
 
@@ -131,7 +136,14 @@ fn default_provider_param_attributes() -> Vec<String> {
 }
 
 fn load_configuration() -> Config {
-    match dylint_linting::config::<Config>(LINT_NAME) {
+    loaded_configuration_or_default(dylint_linting::config::<Config>(LINT_NAME))
+}
+
+fn loaded_configuration_or_default<E>(loaded: Result<Option<Config>, E>) -> Config
+where
+    E: std::fmt::Display,
+{
+    match loaded {
         Ok(Some(config)) => config.normalized(),
         Ok(None) => Config::default(),
         Err(error) => {
@@ -147,6 +159,7 @@ fn load_configuration() -> Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use rstest::rstest;
 
     #[rstest]
@@ -245,5 +258,75 @@ mod tests {
             pass.detection_options.provider_param_attributes().len(),
             DEFAULT_PROVIDER_PARAM_ATTRIBUTES.len() * 2
         );
+    }
+
+    #[rstest]
+    fn loaded_configuration_uses_default_when_config_is_absent() {
+        assert_eq!(
+            loaded_configuration_or_default::<String>(Ok(None)),
+            Config::default()
+        );
+    }
+
+    #[rstest]
+    fn loaded_configuration_uses_default_when_config_errors() {
+        assert_eq!(
+            loaded_configuration_or_default(Err("invalid config")),
+            Config::default()
+        );
+    }
+
+    #[rstest]
+    fn loaded_configuration_normalizes_present_config() {
+        let config = Config {
+            min_calls: 1,
+            min_distinct_tests: 1,
+            provider_param_attributes: vec!["rstest::case".to_string()],
+            ..Config::default()
+        };
+
+        assert_eq!(
+            loaded_configuration_or_default::<String>(Ok(Some(config))).provider_param_attributes,
+            ["case"]
+        );
+    }
+
+    #[rstest]
+    fn applying_crate_configuration_initializes_pass_state() {
+        let mut pass = RstestHelperShouldBeFixture::default();
+        let config = Config {
+            provider_param_attributes: vec!["custom".to_string()],
+            use_source_callee_fallback: true,
+            ..Config::default()
+        };
+
+        pass.apply_crate_configuration(config.clone(), SharedConfig::default());
+
+        assert_eq!(pass.config, config);
+        assert!(pass.detection_options.use_expansion_trace_fallback());
+        assert_eq!(pass.detection_options.provider_param_attributes().len(), 2);
+    }
+
+    proptest! {
+        #[test]
+        fn normalized_configuration_is_idempotent(
+            min_calls in 0usize..8,
+            min_distinct_tests in 0usize..8,
+            require_identical_fixture_arg_names in any::<bool>(),
+            provider_param_attributes in prop::collection::vec("[ a-z:]{0,24}", 0..8),
+            use_source_callee_fallback in any::<bool>(),
+        ) {
+            let config = Config {
+                min_calls,
+                min_distinct_tests,
+                require_identical_fixture_arg_names,
+                provider_param_attributes,
+                use_source_callee_fallback,
+            };
+            let once = config.normalized();
+            let twice = once.clone().normalized();
+
+            prop_assert_eq!(once, twice);
+        }
     }
 }
