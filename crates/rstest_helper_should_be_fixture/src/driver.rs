@@ -103,6 +103,25 @@ impl Default for RstestHelperShouldBeFixture {
 }
 
 impl RstestHelperShouldBeFixture {
+    fn apply_loaded_crate_configuration(
+        &mut self,
+        config: ConfigLoadResult,
+        shared_config: SharedConfig,
+    ) {
+        let config = match config {
+            Ok(config) => config,
+            Err(error) => {
+                debug!(
+                    target: LINT_NAME,
+                    "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
+                );
+                Config::default()
+            }
+        };
+
+        self.apply_crate_configuration(config, shared_config);
+    }
+
     fn apply_crate_configuration(&mut self, config: Config, shared_config: SharedConfig) {
         debug!(
             target: LINT_NAME,
@@ -124,18 +143,7 @@ impl RstestHelperShouldBeFixture {
 
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
-        let config = match load_configuration() {
-            Ok(config) => config,
-            Err(error) => {
-                debug!(
-                    target: LINT_NAME,
-                    "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
-                );
-                Config::default()
-            }
-        };
-
-        self.apply_crate_configuration(config, load_shared_config());
+        self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
     }
 }
 
@@ -345,6 +353,29 @@ mod tests {
         pass.apply_crate_configuration(config.clone(), SharedConfig::default());
 
         assert_eq!(pass.config, config);
+        assert!(pass.detection_options.use_expansion_trace_fallback());
+        assert_eq!(pass.detection_options.provider_param_attributes().len(), 2);
+    }
+
+    #[rstest]
+    fn check_crate_configuration_loads_and_normalizes_config() {
+        let mut pass = RstestHelperShouldBeFixture::default();
+        let config = Config {
+            min_calls: 0,
+            min_distinct_tests: 1,
+            provider_param_attributes: vec!["rstest::case".to_string()],
+            use_source_callee_fallback: true,
+            ..Config::default()
+        };
+
+        pass.apply_loaded_crate_configuration(
+            loaded_configuration::<String>(Ok(Some(config))),
+            SharedConfig::default(),
+        );
+
+        assert_eq!(pass.config.min_calls, 2);
+        assert_eq!(pass.config.min_distinct_tests, 2);
+        assert_eq!(pass.config.provider_param_attributes, ["case"]);
         assert!(pass.detection_options.use_expansion_trace_fallback());
         assert_eq!(pass.detection_options.provider_param_attributes().len(), 2);
     }

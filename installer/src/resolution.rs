@@ -234,4 +234,21 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn validate_crate_names_returns_experimental_lint_requires_flag_error() {
+        let name = CrateName::from("rstest_helper_should_be_fixture");
+        let options = CrateResolutionOptions {
+            experimental: false,
+            ..CrateResolutionOptions::default()
+        };
+
+        let error = validate_crate_names(std::slice::from_ref(&name), &options)
+            .expect_err("experimental lint should require explicit opt-in");
+
+        assert!(
+            matches!(&error, InstallerError::ExperimentalLintRequiresFlag { name: error_name } if *error_name == name),
+            "expected ExperimentalLintRequiresFlag, got {error:?}"
+        );
+    }
 }
