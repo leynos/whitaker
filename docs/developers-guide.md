@@ -1545,6 +1545,26 @@ When `try_fast_path_installation` returns `Some`, `run_install` constructs a
 `FinishInstallContext` from the returned values and delegates to
 `finish_install_and_record_metrics`, skipping the full build pipeline.
 
+#### Crate resolution
+
+`installer/src/resolution.rs` is the boundary for deciding which lint crates
+the installer may build. `run_install` constructs `CrateResolutionOptions` from
+the CLI flags before validating or resolving crate names:
+
+- `individual_lints` switches resolution from the aggregated suite to the
+  individual lint crate list.
+- `experimental` is the explicit opt-in gate for experimental lints. In
+  individual-lint mode it allows crates from `EXPERIMENTAL_LINT_CRATES`; in
+  suite mode the build configuration maps it to suite feature flags.
+
+Call `validate_crate_names` before `resolve_crates` whenever names come from
+user input. Validation rejects unknown names and uses `is_experimental_crate`
+to detect explicit experimental lint requests. If a user asks for an
+experimental crate without `--experimental`, validation returns
+`InstallerError::ExperimentalLintRequiresFlag`; callers should surface that
+error unchanged so the CLI reports the missing opt-in rather than treating the
+crate as unknown or silently building it.
+
 ## Standard vs Experimental Lints
 
 Whitaker categorizes lints into two tiers:
