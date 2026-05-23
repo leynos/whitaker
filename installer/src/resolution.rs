@@ -5,6 +5,7 @@
 
 use crate::crate_name::CrateName;
 use crate::error::{InstallerError, Result};
+use log::debug;
 
 /// Static list of lint crates available for building.
 ///
@@ -65,18 +66,36 @@ pub fn resolve_crates(
 ) -> Vec<CrateName> {
     if !specific_lints.is_empty() {
         // Assumes names have been validated via validate_crate_names().
+        debug!(
+            target: "whitaker_installer::resolution",
+            "using explicit lint crate selection: {:?}",
+            specific_lints
+        );
         return specific_lints.to_vec();
     }
 
     if options.individual_lints {
         let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
         if options.experimental {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "including experimental lint crates because --experimental is enabled"
+            );
             crates.extend(EXPERIMENTAL_LINT_CRATES.iter().map(|&c| CrateName::from(c)));
+        } else {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "excluding experimental lint crates because --experimental is disabled"
+            );
         }
         return crates;
     }
 
     // Default: suite only (experimental feature is handled by BuildConfig)
+    debug!(
+        target: "whitaker_installer::resolution",
+        "using suite crate selection; experimental feature handling is deferred to build config"
+    );
     vec![CrateName::from(SUITE_CRATE)]
 }
 
@@ -102,11 +121,26 @@ pub fn is_experimental_crate(name: &CrateName) -> bool {
 pub fn validate_crate_names(names: &[CrateName], options: &CrateResolutionOptions) -> Result<()> {
     for name in names {
         if !is_known_crate(name) {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "rejecting unknown lint crate `{}`",
+                name.as_str()
+            );
             return Err(InstallerError::LintCrateNotFound { name: name.clone() });
         }
         if is_experimental_crate(name) && !options.experimental {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "rejecting experimental lint crate `{}` because --experimental is disabled",
+                name.as_str()
+            );
             return Err(InstallerError::ExperimentalLintRequiresFlag { name: name.clone() });
         }
+        debug!(
+            target: "whitaker_installer::resolution",
+            "accepted lint crate `{}` for resolution",
+            name.as_str()
+        );
     }
     Ok(())
 }

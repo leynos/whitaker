@@ -104,6 +104,18 @@ impl Default for RstestHelperShouldBeFixture {
 
 impl RstestHelperShouldBeFixture {
     fn apply_crate_configuration(&mut self, config: Config, shared_config: SharedConfig) {
+        debug!(
+            target: LINT_NAME,
+            "applying `{LINT_NAME}` configuration: min_calls={}, min_distinct_tests={}, \
+             require_identical_fixture_arg_names={}, provider_param_attributes={:?}, \
+             use_source_callee_fallback={}, locale={:?}",
+            config.min_calls,
+            config.min_distinct_tests,
+            config.require_identical_fixture_arg_names,
+            config.provider_param_attributes,
+            config.use_source_callee_fallback,
+            shared_config.locale(),
+        );
         self.config = config;
         self.detection_options = self.config.detection_options();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
@@ -149,6 +161,7 @@ fn default_provider_param_attributes() -> Vec<String> {
 }
 
 fn load_configuration() -> ConfigLoadResult {
+    debug!(target: LINT_NAME, "loading `{LINT_NAME}` configuration");
     loaded_configuration(dylint_linting::config::<Config>(LINT_NAME))
 }
 
@@ -156,6 +169,7 @@ fn load_shared_config() -> SharedConfig {
     // SAFETY / NOTE: `SharedConfig::load` does not currently propagate I/O
     // errors, so this named boundary documents the infallible call site
     // pending https://github.com/leynos/whitaker/issues/233.
+    debug!(target: LINT_NAME, "loading shared Whitaker configuration");
     SharedConfig::load()
 }
 
@@ -164,8 +178,14 @@ where
     E: std::fmt::Display,
 {
     match loaded {
-        Ok(Some(config)) => Ok(config.normalized()),
-        Ok(None) => Ok(Config::default()),
+        Ok(Some(config)) => {
+            debug!(target: LINT_NAME, "loaded explicit `{LINT_NAME}` configuration");
+            Ok(config.normalized())
+        }
+        Ok(None) => {
+            debug!(target: LINT_NAME, "no `{LINT_NAME}` configuration found; using defaults");
+            Ok(Config::default())
+        }
         Err(error) => Err(error.to_string()),
     }
 }
