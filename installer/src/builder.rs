@@ -281,9 +281,14 @@ mod tests {
     fn features_for_crate_handles_suite_experimental_mode(mut builder: Builder) {
         builder.config.experimental = true;
         let result = builder.features_for_crate(&CrateName::from("whitaker_suite"));
-        // At present EXPERIMENTAL_LINT_CRATES is empty, so suite features remain
-        // unchanged even when experimental mode is enabled.
-        assert_eq!(result, "dylint-driver");
+        let mut expected_features = vec!["dylint-driver".to_owned()];
+        expected_features.extend(
+            EXPERIMENTAL_LINT_CRATES
+                .iter()
+                .map(|&lint| format!("experimental-{}", lint.replace('_', "-"))),
+        );
+        let expected = expected_features.join(",");
+        assert_eq!(result, expected);
     }
 
     #[test]

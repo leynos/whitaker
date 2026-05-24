@@ -14,12 +14,14 @@ use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
 use no_expect_outside_tests::NoExpectOutsideTests;
 use no_std_fs_operations::NoStdFsOperations;
 use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
+#[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+use rstest_helper_should_be_fixture::RstestHelperShouldBeFixture;
 use test_must_not_have_example::TestMustNotHaveExample;
 
 dylint_library!();
 
 macro_rules! define_suite_pass {
-    () => {
+    ($($experimental_pass:tt)*) => {
         rustc_lint::late_lint_methods!(
             declare_combined_late_lint_pass,
             [SuitePass, [
@@ -32,12 +34,19 @@ macro_rules! define_suite_pass {
                 NoUnwrapOrElsePanic: no_unwrap_or_else_panic::NoUnwrapOrElsePanic::default(),
                 NoStdFsOperations: no_std_fs_operations::NoStdFsOperations::default(),
                 BumpyRoadFunction: bumpy_road_function::BumpyRoadFunction::default(),
+                $($experimental_pass)*
             ]]
         );
     };
 }
 
+#[cfg(not(feature = "experimental-rstest-helper-should-be-fixture"))]
 define_suite_pass!();
+
+#[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+define_suite_pass!(
+    RstestHelperShouldBeFixture: rstest_helper_should_be_fixture::RstestHelperShouldBeFixture::default(),
+);
 
 /// Registers the suite lints into the provided lint store.
 ///

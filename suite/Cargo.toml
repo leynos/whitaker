@@ -26,6 +26,10 @@ dylint-driver = [
     "dep:rustc_session",
     "dep:rustc_span",
 ]
+experimental-rstest-helper-should-be-fixture = [
+    "dylint-driver",
+    "dep:rstest_helper_should_be_fixture",
+]
 
 [dependencies]
 dylint_linting = { workspace = true, optional = true }
@@ -42,6 +46,7 @@ module_max_lines = { path = "../crates/module_max_lines", optional = true, featu
 no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic", optional = true, features = ["dylint-driver", "constituent"] }
 no_std_fs_operations = { path = "../crates/no_std_fs_operations", optional = true, features = ["dylint-driver", "constituent"] }
 bumpy_road_function = { path = "../crates/bumpy_road_function", optional = true, features = ["dylint-driver", "constituent"] }
+rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fixture", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
 rstest = { workspace = true }

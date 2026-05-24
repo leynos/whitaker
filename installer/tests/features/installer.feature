@@ -111,3 +111,26 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then installation succeeds or is skipped
     And output includes DYLINT_LIBRARY_PATH instructions
+
+  Scenario: Validate experimental crate names with opt-in
+    Given a list containing an experimental crate name
+    And experimental validation is enabled
+    When the names are validated
+    Then validation succeeds
+
+  Scenario: Reject experimental crate names without opt-in
+    Given a list containing an experimental crate name
+    When the names are validated
+    Then validation fails with an experimental opt-in error
+
+  Scenario: Dry-run rejects experimental lint without opt-in
+    Given the installer is invoked with dry-run and an experimental lint
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And an experimental lint opt-in message is shown
+
+  Scenario: Dry-run accepts experimental lint with opt-in
+    Given the installer is invoked with dry-run, an experimental lint, and experimental lints enabled
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And experimental lint dry-run output is shown

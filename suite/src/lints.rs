@@ -47,6 +47,11 @@ pub const SUITE_LINTS: &[LintDescriptor] = &[
         name: "bumpy_road_function",
         crate_name: "bumpy_road_function",
     },
+    #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+    LintDescriptor {
+        name: "rstest_helper_should_be_fixture",
+        crate_name: "rstest_helper_should_be_fixture",
+    },
 ];
 
 #[cfg(feature = "dylint-driver")]
@@ -64,6 +69,8 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
     no_unwrap_or_else_panic::NO_UNWRAP_OR_ELSE_PANIC,
     no_std_fs_operations::NO_STD_FS_OPERATIONS,
     bumpy_road_function::BUMPY_ROAD_FUNCTION,
+    #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+    rstest_helper_should_be_fixture::RSTEST_HELPER_SHOULD_BE_FIXTURE,
 ];
 
 /// Returns an iterator over the canonical lint names in suite order.
@@ -86,6 +93,8 @@ pub const SUITE_LINT_DECLS: &[&Lint] = &[
 /// ] {
 ///     assert!(names.contains(&expected));
 /// }
+/// #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
+/// assert!(names.contains(&"rstest_helper_should_be_fixture"));
 /// ```
 #[must_use = "Discarding the iterator hides suite wiring errors"]
 pub fn suite_lint_names() -> impl Iterator<Item = &'static str> {

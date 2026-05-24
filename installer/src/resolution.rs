@@ -5,6 +5,7 @@
 
 use crate::crate_name::CrateName;
 use crate::error::{InstallerError, Result};
+use log::debug;
 
 /// Static list of lint crates available for building.
 ///
@@ -25,8 +26,8 @@ pub const LINT_CRATES: &[&str] = &[
 /// Static list of experimental lint crates.
 ///
 /// These lints are not included in the default suite but can be enabled via
-/// the `--experimental` flag. The list is currently empty.
-pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &[];
+/// the `--experimental` flag.
+pub const EXPERIMENTAL_LINT_CRATES: &[&str] = &["rstest_helper_should_be_fixture"];
 
 /// The aggregated suite crate name.
 pub const SUITE_CRATE: &str = "whitaker_suite";
@@ -51,8 +52,9 @@ pub struct CrateResolutionOptions {
 ///   `EXPERIMENTAL_LINT_CRATES` are included in the returned crate list.
 /// - In suite mode (default), the `experimental` flag is used by `BuildConfig`
 ///   to enable experimental features when building the suite crate.
-/// - When `specific_lints` are provided, experimental crates are accepted if
-///   present, but the `experimental` flag does not affect the returned list.
+/// - When `specific_lints` are provided, the returned list is exactly the
+///   requested crate list after validation. Experimental crates still require
+///   the `experimental` flag during validation.
 ///
 /// Note: This function assumes that `specific_lints` have been validated via
 /// `validate_crate_names()` prior to calling. Callers must validate inputs
@@ -64,18 +66,36 @@ pub fn resolve_crates(
 ) -> Vec<CrateName> {
     if !specific_lints.is_empty() {
         // Assumes names have been validated via validate_crate_names().
+        debug!(
+            target: "whitaker_installer::resolution",
+            "using explicit lint crate selection: {:?}",
+            specific_lints
+        );
         return specific_lints.to_vec();
     }
 
     if options.individual_lints {
         let mut crates: Vec<CrateName> = LINT_CRATES.iter().map(|&c| CrateName::from(c)).collect();
         if options.experimental {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "including experimental lint crates because --experimental is enabled"
+            );
             crates.extend(EXPERIMENTAL_LINT_CRATES.iter().map(|&c| CrateName::from(c)));
+        } else {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "excluding experimental lint crates because --experimental is disabled"
+            );
         }
         return crates;
     }
 
     // Default: suite only (experimental feature is handled by BuildConfig)
+    debug!(
+        target: "whitaker_installer::resolution",
+        "using suite crate selection; experimental feature handling is deferred to build config"
+    );
     vec![CrateName::from(SUITE_CRATE)]
 }
 
@@ -86,16 +106,41 @@ pub fn is_known_crate(name: &CrateName) -> bool {
     LINT_CRATES.contains(&s) || EXPERIMENTAL_LINT_CRATES.contains(&s) || s == SUITE_CRATE
 }
 
+/// Check whether a crate name identifies an experimental lint crate.
+#[must_use]
+pub fn is_experimental_crate(name: &CrateName) -> bool {
+    EXPERIMENTAL_LINT_CRATES.contains(&name.as_str())
+}
+
 /// Validate that all specified crate names are known lint crates.
 ///
 /// # Errors
 ///
-/// Returns an error if any crate name is not recognised.
-pub fn validate_crate_names(names: &[CrateName]) -> Result<()> {
+/// Returns an error if any crate name is not recognised, or if an experimental
+/// crate is requested without `--experimental`.
+pub fn validate_crate_names(names: &[CrateName], options: &CrateResolutionOptions) -> Result<()> {
     for name in names {
         if !is_known_crate(name) {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "rejecting unknown lint crate `{}`",
+                name.as_str()
+            );
             return Err(InstallerError::LintCrateNotFound { name: name.clone() });
         }
+        if is_experimental_crate(name) && !options.experimental {
+            debug!(
+                target: "whitaker_installer::resolution",
+                "rejecting experimental lint crate `{}` because --experimental is disabled",
+                name.as_str()
+            );
+            return Err(InstallerError::ExperimentalLintRequiresFlag { name: name.clone() });
+        }
+        debug!(
+            target: "whitaker_installer::resolution",
+            "accepted lint crate `{}` for resolution",
+            name.as_str()
+        );
     }
     Ok(())
 }
@@ -112,14 +157,15 @@ mod tests {
         expect_lint: bool,
         expect_suite: bool,
         expect_bumpy_road: bool,
+        expect_experimental_lint: bool,
     }
 
     /// Parameterised tests for resolve_crates variants.
     #[rstest]
-    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_bumpy_road: false })]
-    #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_bumpy_road: true })]
-    #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_bumpy_road: true })]
-    #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_bumpy_road: false })]
+    #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_bumpy_road: false, expect_experimental_lint: false })]
+    #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_bumpy_road: true, expect_experimental_lint: false })]
+    #[case::individual_with_experimental(ResolveCratesCase { individual_lints: true, experimental: true, expect_lint: true, expect_suite: false, expect_bumpy_road: true, expect_experimental_lint: true })]
+    #[case::suite_with_experimental(ResolveCratesCase { individual_lints: false, experimental: true, expect_lint: false, expect_suite: true, expect_bumpy_road: false, expect_experimental_lint: false })]
     fn resolve_crates_variants(#[case] case: ResolveCratesCase) {
         let options = CrateResolutionOptions {
             individual_lints: case.individual_lints,
@@ -142,6 +188,11 @@ mod tests {
             case.expect_bumpy_road,
             "bumpy_road_function inclusion mismatch"
         );
+        assert_eq!(
+            crates.contains(&CrateName::from("rstest_helper_should_be_fixture")),
+            case.expect_experimental_lint,
+            "rstest_helper_should_be_fixture inclusion mismatch"
+        );
     }
 
     #[test]
@@ -152,20 +203,52 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valid(&["module_max_lines", "whitaker_suite"], true)]
-    #[case::bumpy_road_function(&["bumpy_road_function"], true)]
-    #[case::unknown(&["nonexistent_lint"], false)]
-    fn validate_crate_names_variants(#[case] names: &[&str], #[case] expect_ok: bool) {
+    #[case::valid(&["module_max_lines", "whitaker_suite"], false, true)]
+    #[case::bumpy_road_function(&["bumpy_road_function"], false, true)]
+    #[case::experimental_with_flag(&["rstest_helper_should_be_fixture"], true, true)]
+    #[case::experimental_without_flag(&["rstest_helper_should_be_fixture"], false, false)]
+    #[case::unknown(&["nonexistent_lint"], false, false)]
+    fn validate_crate_names_variants(
+        #[case] names: &[&str],
+        #[case] experimental: bool,
+        #[case] expect_ok: bool,
+    ) {
         let crate_names: Vec<CrateName> = names.iter().map(|&s| CrateName::from(s)).collect();
-        let res = validate_crate_names(&crate_names);
+        let options = CrateResolutionOptions {
+            experimental,
+            ..CrateResolutionOptions::default()
+        };
+        let res = validate_crate_names(&crate_names, &options);
         if expect_ok {
             assert!(res.is_ok());
         } else {
             let err = res.expect_err("expected validation failure");
             assert!(
-                matches!(&err, InstallerError::LintCrateNotFound { name } if *name == crate_names[0]),
+                matches!(
+                    &err,
+                    InstallerError::LintCrateNotFound { name }
+                        | InstallerError::ExperimentalLintRequiresFlag { name }
+                        if *name == crate_names[0]
+                ),
                 "unexpected error: {err:?}"
             );
         }
+    }
+
+    #[test]
+    fn validate_crate_names_returns_experimental_lint_requires_flag_error() {
+        let name = CrateName::from("rstest_helper_should_be_fixture");
+        let options = CrateResolutionOptions {
+            experimental: false,
+            ..CrateResolutionOptions::default()
+        };
+
+        let error = validate_crate_names(std::slice::from_ref(&name), &options)
+            .expect_err("experimental lint should require explicit opt-in");
+
+        assert!(
+            matches!(&error, InstallerError::ExperimentalLintRequiresFlag { name: error_name } if *error_name == name),
+            "expected ExperimentalLintRequiresFlag, got {error:?}"
+        );
     }
 }
