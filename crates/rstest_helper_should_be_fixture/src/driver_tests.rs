@@ -71,6 +71,10 @@ fn normalizes_numeric_thresholds_to_two() {
 #[rstest]
 #[case::plain(vec!["case".to_string()], vec!["case"])]
 #[case::qualified(vec!["rstest::values".to_string()], vec!["values"])]
+#[case::mixed_equivalent_spellings(
+    vec!["case".to_string(), "rstest::case".to_string()],
+    vec!["case"]
+)]
 #[case::blank(vec![" ".to_string()], vec!["case", "values", "files", "future", "context"])]
 fn normalizes_provider_attributes(#[case] input: Vec<String>, #[case] expected: Vec<&str>) {
     let normalized = normalize_provider_attributes(input);
@@ -152,7 +156,7 @@ fn applying_crate_configuration_initializes_pass_state() {
 
     pass.apply_crate_configuration(config.clone(), SharedConfig::default());
 
-    assert_eq!(pass.config, config);
+    assert_eq!(pass.config, config.normalized());
     assert!(pass.detection_options.use_expansion_trace_fallback());
     assert_eq!(pass.detection_options.provider_param_attributes().len(), 2);
 }

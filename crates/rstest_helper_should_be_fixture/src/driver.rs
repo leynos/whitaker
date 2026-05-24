@@ -148,11 +148,16 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
 }
 
 fn normalize_provider_attributes(attributes: Vec<String>) -> Vec<String> {
-    let normalized: Vec<String> = attributes
+    let mut normalized = Vec::new();
+    for attribute in attributes
         .into_iter()
         .map(|attribute| attribute.trim().trim_start_matches("rstest::").to_owned())
         .filter(|attribute| !attribute.is_empty())
-        .collect();
+    {
+        if !normalized.contains(&attribute) {
+            normalized.push(attribute);
+        }
+    }
 
     if normalized.is_empty() {
         return default_provider_param_attributes();

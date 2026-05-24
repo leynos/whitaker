@@ -22,6 +22,9 @@ mod stub {
     //! `rstest_helper_should_be_fixture_disabled_stub` as the inert public
     //! symbol for that build mode.
 
-    #[expect(dead_code, reason = "stub used when the driver feature is disabled")]
+    #[expect(
+        dead_code,
+        reason = "stub used when the driver feature is disabled; tracked in https://github.com/leynos/whitaker/issues/233"
+    )]
     pub fn rstest_helper_should_be_fixture_disabled_stub() {}
 }
