@@ -15,9 +15,9 @@ Whitaker itself. For using Whitaker lints in a project, see the
   cargo install cargo-dylint dylint-link
   ```
 
-CI also installs or provides job-specific tools such as `cargo-nextest`,
-`bun`, `uv`, Mermaid CLI, and Nixie before running the targets that need them.
-Local runs of those targets require the same tools on `PATH`.
+CI also installs or provides job-specific tools such as `cargo-nextest`, `bun`,
+`uv`, Mermaid CLI, and Nixie before running the targets that need them. Local
+runs of those targets require the same tools on `PATH`.
 
 ## Running Tests
 
@@ -37,12 +37,15 @@ the `excluded_crates` configuration. These integration tests invoke
 `cargo dylint` in a subprocess, so they exercise the full lint-loading and
 configuration path, rather than only unit-level helpers.
 
-The fixtures live under `crates/no_std_fs_operations/tests/fixtures/` as two
-small crates: `excluded_project`, which configures the exclusion, and
-`non_excluded_project`, which leaves the lint unexcluded. Each fixture
-`Cargo.toml` includes an empty `[workspace]` table so Cargo treats the fixture
-as its own workspace root. This prevents Cargo from resolving upwards to the
-enclosing Whitaker workspace and inheriting unrelated configuration.
+Fixture projects are generated at runtime using `create_fixture_project`, which
+writes a `Cargo.toml`, `dylint.toml`, and `src/lib.rs` into a `TempDir` and
+returns a `FixtureProject` handle. The `FixtureProject` owns the `TempDir` so
+the directory is cleaned up automatically when the handle is dropped. Passing
+`is_excluded: true` writes `excluded_crates = ["<crate_name>"]` into
+`dylint.toml`; `false` writes an empty list. Each fixture `Cargo.toml` contains
+an empty `[workspace]` table (omitted here for brevity) so Cargo treats the
+fixture as its own workspace root and does not resolve upwards to the enclosing
+Whitaker workspace.
 
 The harness centres on `run_cargo_dylint`, which executes
 `cargo dylint --all -- --message-format json` with `DYLINT_LIBRARY_PATH` set to
@@ -52,11 +55,17 @@ during the run. `diagnostic_count` then parses the JSON message stream with
 `code.code` is `no_std_fs_operations`, which keeps the assertions tied to the
 lint's structured diagnostics instead of brittle text matching.
 
+The shared helper `run_exclusion_test(crate_name, is_excluded, expectation)`
+resolves the lint library path via a `OnceLock`-cached `build_lint_library`
+call, creates the fixture project, and delegates to `assert_fixture_behaviour`.
+Both parametrised cases in `exclusion_crates_behaviour_test` delegate to this
+helper.
+
 The tests are annotated with `#[serial]` from `serial_test`, and the
 repository-level nextest contract also requires them to match the
 `serial-dylint-ui` test group in `.config/nextest.toml` when they are exercised
 through `make test`. Both the attribute and the repo-level group are required
-for correct serialized execution because nextest runs each test in a separate
+for correct serialised execution because nextest runs each test in a separate
 process, so the in-process `#[serial]` mutex alone is not sufficient. They are
 also marked `#[ignore]` by default because they depend on external tooling and
 a buildable workspace. Before running them, install `cargo-dylint` and
@@ -69,11 +78,11 @@ cargo test -p no_std_fs_operations --test integration_exclusion -- --ignored
 cargo nextest run -p no_std_fs_operations --test integration_exclusion --run-ignored ignored-only
 ```
 
-The parameterized `#[rstest]` case
-`exclusion_behaviour_matches_fixture_configuration` covers both fixtures. For
-each case, it asserts the subprocess exit status and the `no_std_fs_operations`
-diagnostic count, so the test verifies both the success path for excluded
-crates and the failure path for non-excluded crates.
+The parametrised `#[rstest]` case `exclusion_crates_behaviour_test` covers both
+fixture configurations. For each case it asserts the subprocess exit status and
+the `no_std_fs_operations` diagnostic count, so the test verifies both the
+success path for excluded crates (zero diagnostics, exit 0) and the failure
+path for non-excluded crates (one or more diagnostics, non-zero exit).
 
 ### Fixture-based harness regressions
 
@@ -134,16 +143,15 @@ packaging path stays valid. The release dry-run target is a POSIX-shell target;
 Windows CI runs it under Bash and requires the same command-line tools as local
 POSIX environments.
 
-Both lanes share the workflow-level environment contract:
-`BUILD_PROFILE=debug` narrows `sccache` keys to debug builds only, preventing
-cache pollution from release builds; `CARGO_INCREMENTAL=0` disables incremental
-compilation, which is incompatible with `sccache`; `RUSTC_WRAPPER=sccache`
-routes all `rustc` invocations through `sccache`; `SCCACHE_GHA_ENABLED=true`
-activates the GitHub Actions cache backend for `sccache`; and
-`RUSTFLAGS=-D warnings` and `RUSTDOCFLAGS=-D warnings` deny compiler and doc
-warnings as errors across both lanes. Together, these variables keep the cache
-scope narrow, ensure `sccache` is active for all compilation, and enforce a
-warnings-as-errors build contract.
+Both lanes share the workflow-level environment contract: `BUILD_PROFILE=debug`
+narrows `sccache` keys to debug builds only, preventing cache pollution from
+release builds; `CARGO_INCREMENTAL=0` disables incremental compilation, which
+is incompatible with `sccache`; `RUSTC_WRAPPER=sccache` routes all `rustc`
+invocations through `sccache`; `SCCACHE_GHA_ENABLED=true` activates the GitHub
+Actions cache backend for `sccache`; and `RUSTFLAGS=-D warnings` and
+`RUSTDOCFLAGS=-D warnings` deny compiler and doc warnings as errors across both
+lanes. Together, these variables keep the cache scope narrow, ensure `sccache`
+is active for all compilation, and enforce a warnings-as-errors build contract.
 
 ### CI build caching
 
