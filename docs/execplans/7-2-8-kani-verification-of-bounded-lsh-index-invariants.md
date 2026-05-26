@@ -175,8 +175,16 @@ contracts that are not already covered.
   `make nixie`; all passed.
 - [x] (2026-05-26T21:09:18Z) Ran `coderabbit review --agent` for the
   validated Kani harness milestone; CodeRabbit reported zero findings.
-- [ ] Update clone-detector design and roadmap documentation.
-- [ ] After implementation and validation, mark roadmap item 7.2.8 done.
+- [x] (2026-05-26T21:17:02Z) Updated the clone-detector design and developer
+  guide with the bounded `LshIndex` Kani proof shape. `docs/users-guide.md`
+  required no change because there is no user-visible behaviour or interface
+  change.
+- [x] (2026-05-26T21:17:02Z) Marked roadmap item 7.2.8 done after the Kani
+  harness milestone and deterministic gates passed.
+- [x] (2026-05-26T21:19:41Z) Validated the documentation milestone with
+  `make check-fmt`, `make markdownlint`, and `make nixie`; all passed.
+- [x] (2026-05-26T21:26:31Z) Ran `coderabbit review --agent` for the
+  validated documentation milestone; CodeRabbit reported zero findings.
 
 ## Surprises & discoveries
 
@@ -387,6 +395,17 @@ and insertion-order independence.
 
 The deterministic milestone gates also pass. CodeRabbit review can now be
 requested for this milestone without using it as a substitute for local checks.
+
+The documentation milestone records the bounded proof shape in both the clone
+detector design and the developer guide. The users guide remains unchanged
+because the work adds verification coverage only; it does not alter CLI
+behaviour, output format, configuration, persistence, or other user-facing
+semantics.
+
+The documentation milestone's local gates pass. CodeRabbit review can now be
+requested for this documentation slice.
+
+CodeRabbit also reported zero findings for the documentation milestone.
 
 ## Context and orientation
 

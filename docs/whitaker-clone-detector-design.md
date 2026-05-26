@@ -614,6 +614,32 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    verification for the proof-shaped state spaces rather than replacing those
    runtime regression tests.
 
+## Implementation decisions (7.2.8)
+
+1. **Bounded `LshIndex` invariants are verified with Kani.** The clone-detector
+   Kani harness set now checks four candidate-generation invariants: repeated
+   insertion of one fragment emits no self-pair, reversed lexical insertion
+   still emits the canonical pair, two fragments colliding in two bands emit
+   one deduplicated pair, and a bounded three-fragment scenario is independent
+   of insertion order.
+
+2. **Production candidate generation remains B-tree backed.** Normal builds
+   still store LSH buckets in `BTreeMap<BandBucketKey, BTreeSet<FragmentId>>`
+   and `candidate_pairs()` still returns canonical, deduplicated pairs through
+   the public runtime API. Existing unit tests and `rstest-bdd` scenarios keep
+   covering that public path.
+
+3. **The Kani proof uses a private fixed-size insertion log.** `#[cfg(kani)]`
+   builds compile out production B-tree storage and record inserted fragments
+   in a four-slot proof log with compact two-band keys. This keeps the proof
+   focused on the LSH transition and `CandidatePair::new` policy instead of
+   allocator, destructor, and tree-balancing internals in the standard library.
+
+4. **Unwind bounds are tied to the proof representation.** The new LSH
+   harnesses use `#[kani::unwind(5)]`, one greater than the four-slot proof log,
+   so Kani can unwind insertion-summary and teardown loops without weakening
+   the bounded state being checked.
+
 ## Minimal code skeletons (selected)
 
 ### Token to fingerprints to candidates

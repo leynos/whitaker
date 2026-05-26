@@ -283,6 +283,21 @@ tests and Kani:
   fixed-width signature builder so the proof focuses on sketch semantics
   rather than seed-stream array construction.
 
+The direct `LshIndex` invariant coverage is also split between ordinary tests
+and Kani:
+
+- Unit tests in `crates/whitaker_clones_core/src/index/tests.rs` cover no
+  self-pairs, canonical pair ordering, repeated-band deduplication, and
+  insertion-order independence through the public `candidate_pairs()` API.
+- The BDD harness in
+  `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` exercises LSH
+  candidate generation as part of the token-pass behaviour surface.
+- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` verify
+  bounded `LshIndex` states for the same invariants. Kani builds use a private
+  fixed-size insertion log and compact band keys so the proof checks the LSH
+  state transition and `CandidatePair::new` policy without modelling
+  `BTreeMap` and `BTreeSet` allocator internals.
+
 ### Make targets
 
 Use the Makefile targets for normal proof runs:
@@ -351,6 +366,11 @@ For the current clone-detector constructors, the split is:
   arbitrary signature lane for a fixed retained hash, while duplicate-hash
   insensitivity proves a symbolic bounded retained hash at the first signature
   lane.
+- Kani verifies bounded `LshIndex` states for no self-pairs, canonical pair
+  ordering, repeated-band deduplication, and insertion-order independence. In
+  `#[cfg(kani)]` builds, `LshIndex` records inserted fragments in a fixed
+  four-slot proof log with compact two-band keys; normal builds keep the
+  production `BTreeMap`/`BTreeSet` implementation and public API.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
   trusts rather than proving from `String` internals.
@@ -372,7 +392,8 @@ The proof targets are thin wrappers over repository scripts:
   decomposition/common harnesses through the existing workflow, and runs the
   clone-detector harnesses one harness per `cargo-kani` invocation so each
   proof appears explicitly in the output, including the overflow-specific
-  harness for `LshConfig::new` and the bounded `MinHasher::sketch` harnesses.
+  harness for `LshConfig::new`, the bounded `MinHasher::sketch` harnesses, and
+  the bounded `LshIndex` candidate-pair invariant harnesses.
 
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
