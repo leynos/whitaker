@@ -185,6 +185,9 @@ contracts that are not already covered.
   `make check-fmt`, `make markdownlint`, and `make nixie`; all passed.
 - [x] (2026-05-26T21:26:31Z) Ran `coderabbit review --agent` for the
   validated documentation milestone; CodeRabbit reported zero findings.
+- [x] (2026-05-26T21:33:45Z) Re-ran the final branch-tip gates:
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`; all passed.
 
 ## Surprises & discoveries
 
