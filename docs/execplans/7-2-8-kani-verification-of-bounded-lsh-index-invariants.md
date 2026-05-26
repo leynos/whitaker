@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
  `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -122,10 +122,60 @@ contracts that are not already covered.
 - [x] (2026-05-21T22:20:13Z) Used Firecrawl to verify current Kani
   documentation on proof harnesses, `#[kani::proof]`, and unwind bounds.
 - [x] (2026-05-21T22:20:13Z) Drafted this pre-implementation ExecPlan.
-- [ ] Submit the plan for review in a draft pull request.
-- [ ] Await explicit approval before beginning implementation.
-- [ ] After approval, implement bounded Kani `LshIndex` harnesses and
-  supporting regression coverage.
+- [x] (2026-05-21T22:20:13Z) Submitted the plan for review in draft pull
+  request #232.
+- [x] (2026-05-26T19:06:20Z) Received explicit implementation approval from
+  the user and moved this plan to `IN PROGRESS`.
+- [x] (2026-05-26T19:06:20Z) Established the existing index-test baseline with
+  `cargo nextest run -p whitaker_clones_core --all-targets --all-features
+  index::`; 31 tests passed and 60 were skipped by the filter.
+- [x] (2026-05-26T19:06:20Z) Added bounded `LshIndex` Kani harnesses for no
+  self-pairs, canonical pair ordering, repeated-band deduplication, and
+  insertion-order independence.
+- [x] (2026-05-26T19:06:20Z) Wired the new Kani harnesses into
+  `scripts/run-kani.sh`.
+- [x] (2026-05-26T19:32:45Z) Stopped the first direct
+  `make kani-clone-detector` attempt after it spent over twenty minutes in
+  `BTreeSet<CandidatePair>` and `FragmentId` comparison internals for the first
+  new harness without reaching a result.
+- [x] (2026-05-26T19:32:45Z) Added a private `#[cfg(kani)]`
+  `candidate_pair_summary_for_kani` seam beside `LshIndex` so the new
+  harnesses still exercise `LshIndex::insert` and bucket pair construction, but
+  avoid model-checking production `BTreeSet<CandidatePair>` insertion.
+- [x] (2026-05-26T19:48:41Z) Stopped the second
+  `make kani-clone-detector` attempt after it reached the first new LSH harness
+  and again spent verifier time inside `BTreeSet<FragmentId>` traversal.
+- [x] (2026-05-26T19:48:41Z) Tightened the Kani seam to maintain a private
+  insertion log during `LshIndex::insert` and summarize bounded collisions from
+  that log, avoiding both production B-tree traversal and production candidate
+  pair B-tree insertion in proof builds.
+- [x] (2026-05-26T20:04:22Z) Stopped the insertion-log
+  `make kani-clone-detector` attempt after the first new harness still spent
+  time in production B-tree insertion and drop paths populated by
+  `LshIndex::insert`.
+- [x] (2026-05-26T20:04:22Z) Converted `LshIndex::insert` to use proof-only
+  insertion-log storage in `#[cfg(kani)]` builds and production B-tree storage
+  in normal builds.
+- [x] (2026-05-26T20:08:10Z) Moved production B-tree storage itself behind
+  `#[cfg(not(kani))]` so Kani builds do not model B-tree drop paths for empty
+  proof states.
+- [x] (2026-05-26T20:25:16Z) Replaced heap-backed proof storage with fixed
+  arrays and compact Kani band keys, and shortened harness fragment IDs to
+  one-character values.
+- [x] (2026-05-26T20:42:03Z) Observed the fixed-array proof build reach the
+  new LSH harness and fail on the fixed insertion-array drop loop because the
+  explicit unwind bound was too low.
+- [x] (2026-05-26T20:42:03Z) Raised the new LSH harness unwind bound to five
+  and gated production-only `BandBucketKey` definitions out of Kani builds.
+- [x] (2026-05-26T20:59:55Z) Re-ran `make kani-clone-detector`; all existing
+  clone-detector harnesses and the four new bounded `LshIndex` harnesses
+  verified successfully.
+- [x] (2026-05-26T21:04:38Z) Ran the deterministic milestone gates:
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`; all passed.
+- [x] (2026-05-26T21:09:18Z) Ran `coderabbit review --agent` for the
+  validated Kani harness milestone; CodeRabbit reported zero findings.
+- [ ] Update clone-detector design and roadmap documentation.
 - [ ] After implementation and validation, mark roadmap item 7.2.8 done.
 
 ## Surprises & discoveries
@@ -151,6 +201,58 @@ contracts that are not already covered.
   <https://model-checking.github.io/kani/reference/attributes.html>. Impact:
   The plan should require tight, documented unwind bounds.
 
+- Discovery: Directly calling `LshIndex::candidate_pairs` from the new Kani
+  harnesses made the solver spend its budget inside standard-library
+  `BTreeSet<CandidatePair>` insertion, B-tree navigation, allocator paths, and
+  `FragmentId` string comparison before reaching the LSH invariant. Evidence:
+  `/tmp/kani-whitaker-7-2-8-clone-detector.out` shows repeated unwinding in
+  `alloc::collections::btree` and `memcmp` while checking
+  `verify_lsh_index_rejects_self_pairs`; the attempt was interrupted with exit
+  code 130 after more than twenty minutes. Impact: A narrow Kani-only summary
+  helper is justified by the plan's proof-seam constraint.
+
+- Discovery: The first summary helper still traversed production
+  `BTreeSet<FragmentId>` members and hit the same standard-library modelling
+  problem at a different point. Evidence:
+  `/tmp/kani-whitaker-7-2-8-clone-detector-seam.out` shows the run reached
+  `verify_lsh_index_rejects_self_pairs` and then repeatedly unwound
+  `alloc::collections::btree::navigate` for `FragmentId` keys before the run
+  was interrupted. Impact: The proof seam must avoid reading the production
+  B-tree storage altogether while still being populated by the real
+  `LshIndex::insert` transition.
+
+- Discovery: Recording an insertion log was not enough while `#[cfg(kani)]`
+  builds still populated the production `BTreeMap<BandBucketKey,
+  BTreeSet<FragmentId>>`. Evidence:
+  `/tmp/kani-whitaker-7-2-8-clone-detector-log.out` reached
+  `verify_lsh_index_rejects_self_pairs` and then unwound B-tree insertion and
+  deallocation paths for `FragmentId` keys. Impact: `LshIndex::insert` must use
+  proof-only storage in Kani builds; otherwise the proof remains about
+  standard-library tree allocation rather than the bounded LSH invariant.
+
+- Discovery: Even an empty production `BTreeMap` field in the Kani build can
+  pull B-tree deallocation paths into the proof. Evidence: the same log showed
+  `Dying` B-tree node traversal during harness teardown. Impact: the production
+  B-tree field and production `candidate_pairs()` implementation must be
+  absent from `#[cfg(kani)]` builds, not merely unused.
+
+- Discovery: After removing production B-tree storage, the first new harness
+  failed on Kani unwinding through proof-only `Vec` allocation/drop and `memcmp`
+  for long heap-backed keys. Evidence:
+  `/tmp/kani-whitaker-7-2-8-clone-detector-no-btree.out` reports an unwinding
+  failure in `memcmp` plus undetermined checks in `Vec<BandBucketKey>` and
+  proof-summary iteration. Impact: proof-only storage must be fixed-size and
+  use compact comparable values.
+
+- Discovery: Fixed-size proof storage removed the heap-backed key work, but
+  the first new harness failed because `#[kani::unwind(4)]` was too low for
+  dropping the four-slot insertion array. Evidence:
+  `/tmp/kani-whitaker-7-2-8-clone-detector-fixed-storage.out` reports
+  `std::ptr::drop_in_place::<[Option<InsertedFragmentForKani>; 4]>` as the
+  failed unwinding assertion. Impact: the LSH harnesses need
+  `#[kani::unwind(5)]`, matching Kani's documented "one greater than the
+  maximum loop iterations" rule for a four-slot proof array.
+
 ## Decision log
 
 - Decision: Keep 7.2.8 as Kani-focused implementation work, not Verus work.
@@ -175,11 +277,116 @@ contracts that are not already covered.
   item is complete only after harnesses, tests, documentation, and gates land.
   Date/Author: 2026-05-21T22:20:13Z / Codex.
 
+- Decision: Begin implementation under the approved ExecPlan.
+  Rationale: The user explicitly requested implementation on 2026-05-26, so
+  the approval gate is satisfied and the plan status can move from `DRAFT` to
+  `IN PROGRESS`.
+  Date/Author: 2026-05-26T19:06:20Z / Codex.
+
+- Decision: Use `cargo nextest run -p whitaker_clones_core --all-targets
+  --all-features index::` for the targeted baseline instead of the draft
+  `make test TEST_ARGS=...` command.
+  Rationale: The repository Makefile does not consume `TEST_ARGS`; direct
+  `cargo nextest` is the nearest supported command for the intended filtered
+  baseline.
+  Date/Author: 2026-05-26T19:06:20Z / Codex.
+
+- Decision: Keep the new LSH index harnesses concrete rather than symbolic.
+  Rationale: The invariant under test is the `LshIndex` state transition and
+  candidate emission path, while symbolic `BTreeMap`, `BTreeSet`, `Vec`, and
+  `String` states would add solver cost without improving this bounded
+  contract. Concrete one-band and two-band signatures still exercise real
+  `LshIndex::insert` and `LshIndex::candidate_pairs` behaviour.
+  Date/Author: 2026-05-26T19:06:20Z / Codex.
+
+- Decision: Replace direct Kani assertions over `candidate_pairs()` with a
+  private `#[cfg(kani)]` summary helper that uses the same inserted buckets and
+  `CandidatePair::new` policy, but deduplicates the bounded proof result
+  without constructing a production `BTreeSet<CandidatePair>`.
+  Rationale: Runtime `rstest` and `rstest-bdd` coverage already exercises the
+  public `candidate_pairs()` path. Kani should prove the bounded domain
+  invariant over `LshIndex` state, not exhaust allocator and tree-balancing
+  internals of the standard library.
+  Date/Author: 2026-05-26T19:32:45Z / Codex.
+
+- Decision: Back the Kani summary helper with a private insertion log recorded
+  by `LshIndex::insert` in `#[cfg(kani)]` builds.
+  Rationale: This keeps the proof tied to the production insertion transition
+  and the `CandidatePair::new` canonicalization policy, while avoiding symbolic
+  traversal of `BTreeMap` and `BTreeSet` internals that are not the subject of
+  roadmap item 7.2.8.
+  Date/Author: 2026-05-26T19:48:41Z / Codex.
+
+- Decision: In `#[cfg(kani)]` builds, make `LshIndex::insert` record only the
+  proof insertion log and skip production B-tree storage.
+  Rationale: Three focused proof attempts showed that any contact with the
+  production tree storage makes the bounded proof impractical. The runtime API
+  and production implementation remain unchanged, while the Kani build still
+  verifies band computation, repeated insertion, pair canonicalization, and
+  deduplication policy over bounded inserted states.
+  Date/Author: 2026-05-26T20:04:22Z / Codex.
+
+- Decision: Compile production B-tree storage and `candidate_pairs()` only for
+  non-Kani builds.
+  Rationale: `candidate_pairs()` remains the normal public runtime path and is
+  covered by existing unit and behavioural tests. Kani builds need a domain
+  proof representation without standard-library B-tree allocation and drop
+  machinery.
+  Date/Author: 2026-05-26T20:08:10Z / Codex.
+
+- Decision: Represent Kani inserted fragments with fixed arrays and compact
+  first-lane band keys.
+  Rationale: The bounded harnesses only use one-band and two-band repeated
+  signatures, so a compact band key preserves the collision cases being proved
+  while removing heap allocation, `Vec` drop, and long slice comparison from
+  the proof obligation.
+  Date/Author: 2026-05-26T20:25:16Z / Codex.
+
+- Decision: Set the four new LSH harnesses to `#[kani::unwind(5)]` and compile
+  `BandBucketKey` only for non-Kani builds.
+  Rationale: The Kani proof representation has a four-slot insertion array,
+  and Kani requires an unwind bound one greater than the maximum loop
+  iterations. `BandBucketKey` is production-only after the proof-storage split,
+  so leaving it in Kani builds only creates dead-code warnings.
+  Date/Author: 2026-05-26T20:42:03Z / Codex.
+
 ## Outcomes & retrospective
 
-This draft plan captures the intended implementation path and approval gate. No
-production code, test code, proof harness, or roadmap completion marker has
-been changed yet.
+This plan has moved from drafting into implementation. The first
+implementation step is to establish the existing regression baseline before
+adding Kani harnesses or modifying documentation.
+
+The targeted index baseline has passed. The first code milestone adds four
+bounded Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` and
+adds them to the `clone-detector` harness list in `scripts/run-kani.sh`.
+
+The first direct Kani attempt showed that proving through public
+`candidate_pairs()` is impractical for the bounded proof target because CBMC
+spends its time in `BTreeSet<CandidatePair>` implementation details. The
+implementation now uses a Kani-only summary seam next to `LshIndex`; this keeps
+the proof adjacent to the domain code and preserves the public runtime API.
+
+The first summary seam still traversed production `BTreeSet<FragmentId>` state,
+which remained impractical. The seam now records the bounded insertion facts as
+they pass through `LshIndex::insert` and proves collision pairing from that
+log.
+
+The insertion log also needs to be the only storage populated in `#[cfg(kani)]`
+builds. Otherwise the model checker still verifies B-tree insertion and drop
+internals before reaching the LSH assertions.
+
+The proof representation now uses fixed arrays and compact Kani-only band
+keys. The latest validation adjustment raises the LSH harness unwind bound to
+cover the four-slot proof array and removes production-only bucket-key code
+from Kani builds.
+
+The Kani milestone now passes. The wrapper verified the pre-existing
+`LshConfig` and `MinHasher` harnesses plus the four new bounded `LshIndex`
+harnesses for no self-pairs, canonical ordering, repeated-band deduplication,
+and insertion-order independence.
+
+The deterministic milestone gates also pass. CodeRabbit review can now be
+requested for this milestone without using it as a substitute for local checks.
 
 ## Context and orientation
 
@@ -477,3 +684,14 @@ Revision note: Initial draft created from the roadmap, ADR 003, clone-detector
 design, existing `LshIndex` code, nearby proof execplans, Wyvern planning
 reports, and current Kani documentation. This establishes the approval gate and
 implementation route; it does not authorize code implementation yet.
+
+Revision note: On 2026-05-26, the user explicitly approved implementation.
+The plan status changed to `IN PROGRESS`, progress now records the approval,
+and the remaining work begins with the baseline validation and Kani harness
+implementation stages.
+
+Revision note: The first implementation update records the targeted baseline
+command substitution, the concrete proof-shape decision, and the addition of
+four bounded `LshIndex` Kani harnesses plus runner wiring. Remaining work is
+to validate the harness milestone, run CodeRabbit, update documentation, and
+complete the final gates.

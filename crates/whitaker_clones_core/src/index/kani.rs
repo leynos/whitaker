@@ -27,10 +27,22 @@
 //!   signature lanes for wide boundary-hash inputs.
 //! - `verify_min_hasher_sketch_ignores_duplicate_hashes` compares a wide
 //!   boundary-hash set against the same set with repeated hashes.
+//! - `verify_lsh_index_rejects_self_pairs` checks that repeated insertion of
+//!   one fragment cannot produce a self-pair.
+//! - `verify_lsh_index_canonicalizes_pair_order` checks that reverse lexical
+//!   insertion still emits one canonical pair.
+//! - `verify_lsh_index_deduplicates_repeated_band_collisions` checks that two
+//!   fragments colliding in two bands still emit one candidate pair.
+//! - `verify_lsh_index_is_insertion_order_independent` checks that a bounded
+//!   three-fragment index produces the same candidates in forward and reverse
+//!   insertion order.
 
 use crate::token::Fingerprint;
 
-use super::{IndexError, LshConfig, MINHASH_SIZE, MinHashSignature, MinHasher};
+use super::{
+    CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
+    MinHasher,
+};
 
 const KANI_MINHASH_SEED: u64 = 0xA076_1D64_78BD_642F;
 const KANI_MINHASH_MIDDLE_SEED: u64 = 0xE703_7ED1_A0B4_28DB;
@@ -46,6 +58,38 @@ fn checked_lane_hasher() -> MinHasher {
         KANI_MINHASH_MIDDLE_SEED,
         KANI_MINHASH_LAST_SEED,
     )
+}
+
+fn fragment(id: &str) -> FragmentId {
+    FragmentId::from(id)
+}
+
+fn repeated_signature(value: u64) -> MinHashSignature {
+    MinHashSignature::new([value; MINHASH_SIZE])
+}
+
+fn two_band_config() -> LshConfig {
+    LshConfig::new(2, MINHASH_SIZE / 2).expect("two-band config should validate")
+}
+
+fn single_band_config() -> LshConfig {
+    LshConfig::new(1, MINHASH_SIZE).expect("single-band config should validate")
+}
+
+fn expected_pair(left: &str, right: &str) -> CandidatePair {
+    CandidatePair::new(fragment(left), fragment(right)).expect("distinct fragments should pair")
+}
+
+fn assert_lsh_summary_matches_single_pair(index: &LshIndex, expected: CandidatePair) {
+    let summary = index.candidate_pair_summary_for_kani();
+    kani::assert(
+        summary.unique_pair_count == 1,
+        "bounded LSH scenario must emit exactly one unique candidate pair",
+    );
+    kani::assert(
+        summary.first_pair == Some(expected),
+        "bounded LSH scenario must keep the expected canonical pair",
+    );
 }
 
 fn assert_lane_selects_singleton_min(
@@ -291,5 +335,89 @@ fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
         &unique_signature,
         &first_singleton,
         &second_singleton,
+    );
+}
+
+#[kani::proof]
+#[kani::unwind(5)]
+fn verify_lsh_index_rejects_self_pairs() {
+    let signature = repeated_signature(11);
+    let alpha = fragment("a");
+    let mut index = LshIndex::new(single_band_config());
+
+    index.insert(&alpha, &signature);
+    index.insert(&alpha, &signature);
+
+    let summary = index.candidate_pair_summary_for_kani();
+    kani::assert(
+        summary.unique_pair_count == 0,
+        "repeated insertion of one fragment must not emit self-pairs",
+    );
+    kani::assert(
+        summary.first_pair.is_none(),
+        "self-pair rejection must not retain a candidate pair",
+    );
+}
+
+#[kani::proof]
+#[kani::unwind(5)]
+fn verify_lsh_index_canonicalizes_pair_order() {
+    let signature = repeated_signature(13);
+    let alpha = fragment("a");
+    let beta = fragment("b");
+    let mut index = LshIndex::new(single_band_config());
+
+    index.insert(&beta, &signature);
+    index.insert(&alpha, &signature);
+
+    assert_lsh_summary_matches_single_pair(&index, expected_pair("a", "b"));
+}
+
+#[kani::proof]
+#[kani::unwind(5)]
+fn verify_lsh_index_deduplicates_repeated_band_collisions() {
+    let signature = repeated_signature(17);
+    let alpha = fragment("a");
+    let beta = fragment("b");
+    let mut index = LshIndex::new(two_band_config());
+
+    index.insert(&alpha, &signature);
+    index.insert(&beta, &signature);
+
+    assert_lsh_summary_matches_single_pair(&index, expected_pair("a", "b"));
+}
+
+#[kani::proof]
+#[kani::unwind(5)]
+fn verify_lsh_index_is_insertion_order_independent() {
+    let shared = repeated_signature(19);
+    let distinct = repeated_signature(23);
+    let alpha = fragment("a");
+    let beta = fragment("b");
+    let gamma = fragment("c");
+
+    let mut forward = LshIndex::new(single_band_config());
+    forward.insert(&alpha, &shared);
+    forward.insert(&beta, &shared);
+    forward.insert(&gamma, &distinct);
+
+    let mut reverse = LshIndex::new(single_band_config());
+    reverse.insert(&gamma, &distinct);
+    reverse.insert(&beta, &shared);
+    reverse.insert(&alpha, &shared);
+
+    let forward_candidates = forward.candidate_pair_summary_for_kani();
+    let reverse_candidates = reverse.candidate_pair_summary_for_kani();
+    kani::assert(
+        forward_candidates == reverse_candidates,
+        "candidate generation must be independent of fragment insertion order",
+    );
+    kani::assert(
+        forward_candidates.unique_pair_count == 1,
+        "bounded insertion-order scenario must emit one shared candidate",
+    );
+    kani::assert(
+        forward_candidates.first_pair == Some(expected_pair("a", "b")),
+        "insertion-order scenario must keep the expected canonical pair",
     );
 }
