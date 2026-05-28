@@ -1,0 +1,869 @@
+# Call-site collection in `#[rstest]` tests
+
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+
+Status: DRAFT
+
+## Purpose / big picture
+
+Roadmap item 8.2.2 grows the `rstest_helper_should_be_fixture` lint from the
+8.2.1 bootstrap into a passive, evidence-collecting late lint. After this
+ExecPlan is implemented, the lint will walk every `#[rstest]` test in the
+crate, recognise local helper calls inside those tests, classify each
+positional argument as either a fixture-local binding, a stable literal, a
+stable constant path, or unsupported, and record one
+`whitaker_common::rstest::ArgFingerprint` per call. The records are kept in
+per-callee, per-test maps inside the lint pass, ready for roadmap item 8.2.3 to
+apply thresholds and emit diagnostics.
+
+The observable outcome of 8.2.2 is therefore structural rather than diagnostic.
+A maintainer can:
+
+- inspect the collected call-site map at the end of a crate-post hook via
+  `debug!` logging targeted at the lint name,
+- run a new behavioural test under `rstest-bdd` that asserts the collector
+  records exactly the call sites a fixture-format Rust file declares, and
+- read property-based and snapshot tests proving that fingerprints are stable
+  across textually-equivalent helper calls, deterministic across HIR walk
+  order, and insensitive to macro-only call sites.
+
+The lint must remain diagnostic-silent. Aggregation thresholds, helper-class
+filtering by trigger conditions, and `span_lint_hir_and_then` calls all belong
+to roadmap item 8.2.3. UI pass/fail fixtures and the final `whitaker.toml`
+schema notes belong to 8.2.4. The roadmap tick for 8.2.2 only lands after 8.2.2
+has its own gates green and CodeRabbit clean.
+
+This plan must be approved before implementation starts.
+
+## Constraints
+
+- Implement only roadmap item 8.2.2. Do not advance into 8.2.3 threshold
+  evaluation, fingerprint-pattern filtering, or `span_lint_hir_and_then`
+  diagnostics. Do not author UI `ui/fail_*.rs` fixtures that depend on
+  diagnostic emission.
+- Preserve the public contract of `crates/rstest_helper_should_be_fixture/`:
+  keep `RSTEST_HELPER_SHOULD_BE_FIXTURE` exported as a `&'static Lint`, keep
+  `RstestHelperShouldBeFixture` as the registered pass type, and keep the
+  experimental suite feature `experimental-rstest-helper-should-be-fixture`
+  unchanged.
+- Reuse `whitaker_common::rstest` for detection, parameter classification,
+  argument fingerprints, and span-recovery policy. Reuse the `whitaker::hir`
+  adapter for any `rustc_span::Span` → recovery-frame conversion. Do not
+  duplicate those policies in the lint crate.
+- Argument lowering (HIR → `ArgAtom`) must live in a compiler-aware adapter
+  layer — either inside `crates/rstest_helper_should_be_fixture/src/` if it
+  stays single-use, or inside `src/hir/` if more than one downstream crate
+  (8.3.x, 8.4.x) is expected to consume it. The pure `ArgAtom`/`ArgFingerprint`
+  data model in `common/src/rstest/argument_fingerprint.rs` must not gain a
+  rustc dependency.
+- Conservative recall over precision: lower an argument to
+  `ArgAtom::Unsupported` whenever resolution is uncertain (closure call, block
+  expression, dereference, unknown path), and skip a whole call site whenever
+  `whitaker::hir::recover_user_editable_hir_span` returns `None`. Never emit
+  evidence based on a macro-only span.
+- Restrict callee resolution to local-crate function definitions for v1, as
+  required by the design document. External-crate or trait-method callees must
+  be ignored at collection time.
+- Keep every Rust source file at or below 400 lines. Each module must open
+  with a `//!` module-level purpose comment. Public APIs need Rustdoc with at
+  least one example.
+- Run `make check-fmt`, `make lint`, and `make test` after each major
+  milestone, sequentially (no parallel cargo invocations). Capture each run's
+  output through `tee` into
+  `/tmp/${ACTION}-whitaker-$(git branch --show-current).out`.
+- Use the shared default Cargo cache. Do not introduce per-job caches.
+- Localisation: do not add new English Fluent messages for diagnostics that
+  8.2.2 does not emit. Adding a placeholder fluent file in `common/locales/` is
+  acceptable only if it documents future keys without affecting any resolution
+  path.
+- British English (`-ise`, `-our`) is mandatory in prose. Identifiers,
+  external API names, and inline code may keep their existing American spelling.
+- Do not mark roadmap item 8.2.2 done in `docs/roadmap.md` until
+  implementation has landed, gates pass, CodeRabbit has no unresolved concerns,
+  and the implementation PR is ready for review.
+
+## Tolerances
+
+- Scope: if implementation requires more than 18 changed files or more than
+  900 net code lines (production plus tests), stop and ask whether the work
+  should be split.
+- Interface: if a public API in `whitaker_common`, `whitaker`, or
+  `whitaker_suite` must change in an incompatible way (signature, item
+  visibility, or trait bound), stop and present options.
+- Dependencies: if a new third-party dependency is required (in particular,
+  rustc-private crates beyond those already pinned in the workspace), stop and
+  justify it before adding it.
+- Test surface: if `rstest-bdd` cannot demonstrate the collector's behaviour
+  in user terms after one attempt, stop and choose between extending the
+  observability surface (for example, exposing a `pub(crate)` snapshot of the
+  collected state) and downgrading to a unit-only proof.
+- Iterations: if `make test` still fails after two targeted fix attempts on
+  the same milestone, stop and document the failing command, log path, and
+  remaining options.
+- Property test stability: if any `proptest` case in this work shrinks to a
+  non-reproducible failure after two re-runs at fixed seeds, stop and document
+  the seed and shrink trace before disabling the case.
+- Span recovery edge cases: if `recover_user_editable_hir_span` returns
+  `Some` for a call site that the design treats as macro-only, stop and decide
+  whether to refine the span-recovery policy in `common::rstest::span` or relax
+  the lint's filter.
+- Review: if `coderabbit review --agent` reports concerns after a major
+  milestone, address them or record why they are out of scope before moving on.
+  Re-run until 0 findings.
+- Documentation drift: if user-visible behaviour or configuration changes
+  during implementation, stop, update `docs/users-guide.md` and
+  `docs/developers-guide.md` in the same milestone, then resume.
+- Ambiguity: if any of the items below have more than one plausible
+  interpretation that materially affects test signals, stop and present the
+  options:
+  - what "fixture-local" means when the parameter is shadowed inside the test
+    body,
+  - how to attribute a call site that lies inside a `#[case]`-driven test
+    function generated by the `rstest` macro,
+  - whether `const`-vs-`static` paths should keep the same `ArgAtom::ConstPath`
+    variant in v1.
+
+## Risks
+
+- Risk: macro-expansion-only call sites can pollute the collected map and
+  inflate later thresholds. Severity: high. Likelihood: medium. Mitigation:
+  drop every record whose `recover_user_editable_hir_span` is `None`. Add at
+  least one regression test that constructs a macro-only call in source and
+  asserts the collector ignores it.
+
+- Risk: `#[case]`-driven `#[rstest]` expansion generates an outer module and
+  one inner `#[test] fn case_N()` per case. The same helper call therefore
+  appears `N` times even though the user wrote it once. Counting the generated
+  sites separately would distort 8.2.3 thresholds. Severity: high. Likelihood:
+  high. Mitigation: key the call-site map on the *source* `DefId` and the
+  user-editable span of the call, not on the generated function `DefId`.
+  Compare via the source span returned by recovery before deduplicating.
+
+- Risk: callee resolution returns no `DefId` when the call goes through a
+  trait method, a generic function whose instantiation is not yet known, or a
+  closure invocation. Recording these as helper calls would create
+  false-positive evidence at 8.2.3. Severity: medium. Likelihood: high.
+  Mitigation: drop the record when `type_dependent_def_id` returns `None` for a
+  method call and when `qpath_res` does not return `Res::Def(Fn | …, DefId)`
+  for a direct call. Limit collection to callees whose `DefId.krate` is
+  `LOCAL_CRATE` and whose `DefKind` is `Fn` or `AssocFn`.
+
+- Risk: argument lowering treats macro-injected literals as `ConstLit` even
+  though the user did not write them, producing spurious fingerprint collisions
+  across tests. Severity: medium. Likelihood: medium. Mitigation: lower an
+  argument to `ArgAtom::Unsupported` whenever its user-editable span is `None`
+  or its expansion call-site differs from the enclosing call's call-site. Cover
+  this with at least one regression test.
+
+- Risk: `const`-vs-`static` semantics differ in mutability under unsafe code.
+  Treating them with the same `ConstPath` atom understates risk. Severity: low.
+  Likelihood: medium. Mitigation: keep the `ConstPath` atom for both in v1,
+  document the decision under "Decision log", and flag follow-up refinement for
+  8.2.3.
+
+- Risk: collecting across the whole crate in a `&mut self` lint pass can
+  conflict with rustc's traversal contract if the pass is shared across threads
+  in the future. Severity: low. Likelihood: low. Mitigation: use plain owned
+  `BTreeMap`/`Vec` fields on the pass. Do not introduce `RefCell` or
+  `Arc<Mutex<_>>` unless rustc requires it. If future Dylint changes ever
+  require shared state, escalate.
+
+- Risk: full workspace gates are expensive and may surface unrelated
+  failures on the nightly toolchain. Severity: medium. Likelihood: low.
+  Mitigation: run focused `cargo nextest` first, then full `make test`
+  sequentially. Tee output to `/tmp` so unrelated failures can be cited.
+
+- Risk: documentation drift between
+  `docs/lints-for-rstest-fixtures-and-test-hygiene.md` and the in-tree
+  behaviour can confuse downstream consumers. Severity: medium. Likelihood:
+  medium. Mitigation: record any deviation under "Implementation decisions
+  (8.2.2)" in the design document and link the ExecPlan section number from the
+  design note.
+
+## Progress
+
+- [ ] Load `leta`, `rust-router`, `execplans`, and supporting skills, then
+  build the leta workspace for this checkout.
+- [ ] Use a Wyvern team plus Firecrawl to confirm Dylint late-pass hooks,
+  rustc HIR resolution helpers, and `rstest` 0.26 parameter-attribute semantics.
+- [ ] Draft this ExecPlan and obtain explicit user approval before any code
+  edits begin.
+- [ ] Add the HIR-to-`ArgAtom` adapter and call-site collector under
+  `crates/rstest_helper_should_be_fixture/src/collector.rs` (and any helper
+  modules), wired into the existing driver.
+- [ ] Add the `check_fn`/`check_crate_post` hooks to
+  `RstestHelperShouldBeFixture` so the collector populates state per test and
+  the crate-post hook drains it into a `debug!` log without emitting
+  diagnostics.
+- [ ] Add unit, property, snapshot, and `rstest-bdd` behavioural coverage for
+  the collector and adapter.
+- [ ] Add or expand a span-recovery regression test for macro-only call sites.
+- [ ] Validate the milestone with `make check-fmt`, `make lint`, `make test`
+  sequentially, capturing output through `tee`.
+- [ ] Run `coderabbit review --agent` and clear all relevant findings.
+- [ ] Update `docs/users-guide.md`, `docs/developers-guide.md`, and
+  `docs/lints-for-rstest-fixtures-and-test-hygiene.md` with any behaviour or
+  internal-practice changes.
+- [ ] Mark `docs/roadmap.md` 8.2.2 as `[x]` once gates and review are green.
+- [ ] Rename the branch to `8-2-2-call-site-collection-in-rstest-tests`,
+  push, and open or update the draft PR.
+
+Each completed item should be timestamped, e.g.,
+`- [x] (2026-05-28T12:30:00Z) Drafted this ExecPlan.`.
+
+## Surprises & discoveries
+
+(None yet. Record observations during implementation with evidence and impact.)
+
+## Decision log
+
+- Decision: Keep this ExecPlan to call-site collection and constant-aware
+  argument fingerprinting only. Diagnostics, threshold filtering, and UI
+  pass/fail cases stay assigned to 8.2.3 and 8.2.4 respectively. Rationale: the
+  roadmap entry explicitly separates 8.2.2 from 8.2.3/8.2.4, and the 8.2.1
+  bootstrap commits to a silent collector phase. Author/Date: Codex /
+  2026-05-28.
+
+- Decision: Place the HIR-to-`ArgAtom` adapter inside the lint crate
+  (`crates/rstest_helper_should_be_fixture/src/collector.rs`) for v1, with
+  small pure helpers tested independently. Rationale: only one lint consumes
+  this lowering in 8.2.2; promoting it to `src/hir/` or to `common/src/hir/`
+  adds an export surface that no other crate calls. If roadmap items 8.3.x or
+  8.4.x need the adapter later, promote it through a separate refactor commit.
+  Author/Date: Codex / 2026-05-28.
+
+- Decision: Use `cx.qpath_res` and `cx.typeck_results().type_dependent_def_id`
+  directly rather than wrapping them in a `clippy_utils`-style helper.
+  Rationale: the workspace's local `crates/clippy_utils` is a small panic-only
+  stub; pulling in upstream `clippy_utils::fn_def_id` would add a rustc-private
+  dependency only to fold two cases that already match the pattern used in
+  `no_std_fs_operations/src/driver.rs`. Author/Date: Codex / 2026-05-28.
+
+- Decision: Treat `const`, associated `const`, and `static` paths with the
+  same `ArgAtom::ConstPath` atom for v1. Rationale: matches the existing pure
+  model in `common/src/rstest/argument_fingerprint.rs`, keeps fingerprint
+  cardinality predictable, and defers the unsafe-mutability nuance to a
+  documented follow-up. Author/Date: Codex / 2026-05-28.
+
+- Decision: Do not introduce `check_crate_post` diagnostics in this milestone.
+  Instead, the crate-post hook logs collected evidence at `debug!` level
+  targeted at the lint name. Rationale: keeps the lint observable enough to
+  validate behaviourally without claiming 8.2.3 emission semantics. The
+  `debug!` line is gated by the existing logging setup, so it is invisible in
+  normal cargo builds. Author/Date: Codex / 2026-05-28.
+
+- Decision: Do not require Kani or Verus for 8.2.2. Rationale: the call-site
+  collector and fingerprint adapter introduce data-structure invariants
+  (determinism, deduplication) that fit within `proptest` coverage. Kani is
+  reserved for later milestones (such as 8.2.3's threshold semantics) that
+  might benefit from bounded state-space exploration. Author/Date: Codex /
+  2026-05-28.
+
+## Outcomes & retrospective
+
+(To be completed at the end of the milestone. Compare delivered behaviour
+against this section's purpose. Note what to change in 8.2.3 planning if any
+risk hit during implementation.)
+
+## Context and orientation
+
+Whitaker is a Rust Cargo workspace. The root `Cargo.toml` declares workspace
+members `common`, `crates/*`, `installer`, and `suite`. Each lint lives in its
+own Dylint cdylib crate under `crates/`. Shared pure helpers (no `rustc_*`
+dependency) live in `common/`. Shared compiler-aware adapters (gated behind the
+`dylint-driver` feature) live in `src/hir/`. The `suite/` crate aggregates lint
+constituents into a single Dylint library.
+
+The relevant roadmap entry is in `docs/roadmap.md`:
+
+```plaintext
+8.2.2. Implement call-site collection in `#[rstest]` tests, including
+fixture-local classification and constant-aware argument fingerprinting.
+```
+
+The design source of truth is
+`docs/lints-for-rstest-fixtures-and-test-hygiene.md`, especially "Lint A:
+call-site fixture extraction" (sections "Trigger conditions for lint A",
+"Fixture-local classification", and "Argument fingerprint model"). It specifies:
+
+- v1 fixture-local classification covers simple identifier bindings only;
+  destructured parameters are reported as `Unsupported`;
+- the default provider-driven parameter attributes are
+  `case`, `values`, `files`, `future`, and `context`;
+- the four `ArgAtom` variants are `FixtureLocal`, `ConstLit`, `ConstPath`, and
+  `Unsupported`;
+- `ConstLit` captures literal source text and `ConstPath` captures a stable
+  definition path for `const`, associated `const`, or `static`;
+- callee resolution must be conservative — default to local-crate function
+  definitions only.
+
+Roadmap prerequisite 8.2.1 already exists. The crate at
+`crates/rstest_helper_should_be_fixture/` is registered with the suite and
+installer, loads configuration through `dylint_linting::config`, and constructs
+`RstestDetectionOptions` in `check_crate`. It does not yet hook `check_expr` or
+`check_fn`. The lint is exposed through the suite feature
+`experimental-rstest-helper-should-be-fixture` and through
+`installer/src/resolution.rs` `EXPERIMENTAL_LINT_CRATES`.
+
+Roadmap prerequisites 8.1.1, 8.1.2, and 8.1.3 provide:
+
+- `whitaker_common::rstest::is_rstest_test` /
+  `is_rstest_test_with(attrs, trace, options)` for strict detection;
+- `whitaker_common::rstest::RstestDetectionOptions` /
+  `RstestParameter` / `classify_rstest_parameter` / `fixture_local_names`;
+- `whitaker_common::rstest::ArgAtom` /
+  `whitaker_common::rstest::ArgFingerprint`;
+- `whitaker_common::rstest::recover_user_editable_span` plus
+  `whitaker::hir::recover_user_editable_hir_span` and
+  `whitaker::hir::span_recovery_frames` as the compiler-aware adapters.
+
+Useful existing patterns to copy:
+
+- `crates/no_std_fs_operations/src/driver.rs` and `src/usage.rs` show
+  callee `DefId` resolution with `cx.qpath_res(qpath, hir_id)` /
+  `cx.typeck_results().type_dependent_def_id(hir_id)` and
+  `cx.tcx.def_path_str(def_id)`.
+- `crates/bumpy_road_function/src/driver.rs` shows per-function HIR walks
+  driven from `check_item`, `check_impl_item`, and `check_trait_item`.
+- `crates/no_expect_outside_tests/src/driver/mod.rs` shows
+  `cx.tcx.hir_parent_iter(hir_id)` for locating an enclosing `ItemKind::Fn`,
+  plus `whitaker::hir::collect_harness_test_functions` and
+  `collect_rstest_companion_test_functions` for `--test` harness recovery.
+- `crates/function_attrs_follow_docs/src/driver.rs` shows the existing call
+  site for `whitaker::hir::recover_user_editable_hir_span`.
+- `crates/clippy_utils/src/lib.rs` shows the small "either method-call
+  `type_dependent_def_id` or path `qpath_res(...).opt_def_id()`" idiom that
+  this work will reuse.
+
+Useful skills:
+
+- `leta` for navigation, `rust-router` for further routing.
+- `rust-async-and-concurrency` is not relevant; the lint runs synchronously
+  inside the late pass.
+- `rust-types-and-apis` and `arch-crate-design` are relevant when deciding
+  where to place the HIR adapter.
+- `rust-errors` is relevant when deciding whether the adapter should return
+  `Result<ArgAtom, _>` or always return an atom (it always returns an atom,
+  including `Unsupported`).
+- `hexagonal-architecture` is relevant for keeping pure policy in `common/`
+  and compiler-aware adapters out of it.
+- `kani` and `verus` are not required for 8.2.2 (see Decision log).
+- `nextest` and `en-gb-oxendict` are relevant operationally.
+
+Documentation surfaces that may need updates:
+
+- `docs/users-guide.md` `rstest_helper_should_be_fixture` section — add a
+  short note that collection is now active but diagnostics still belong to the
+  later milestones.
+- `docs/developers-guide.md` — document the in-crate "collector" pattern if
+  it differs from existing lint conventions.
+- `docs/lints-for-rstest-fixtures-and-test-hygiene.md` "Implementation
+  decisions" — append an "Implementation decisions (8.2.2)" subsection if the
+  implementation deviates from the design.
+
+## Plan of work
+
+The plan progresses through six stages. Each ends with validation. Do not
+advance to the next stage until the previous stage's gates pass.
+
+### Stage A — Pre-implementation review (no code changes)
+
+Read this ExecPlan, the roadmap entry, the Lint A design section, and the 8.2.1
+ExecPlan. Confirm the plan aligns with the design and with prior decisions.
+Obtain explicit user approval before editing production code.
+
+### Stage B — Argument lowering adapter
+
+Add `crates/rstest_helper_should_be_fixture/src/collector.rs` (new module,
+re-exported from `lib.rs` as `pub(crate) mod collector;`). The module owns two
+pure pieces and one adapter:
+
+1. `pub(crate) struct CallSiteRecord { fingerprint: ArgFingerprint, span:
+   rustc_span::Span, test_source_def_id: rustc_hir::def_id::DefId }
+   ` — the per-call evidence record.
+2. `pub(crate) struct CallSiteCollector { by_callee:
+   std::collections::BTreeMap<rustc_hir::def_id::DefId, Vec<CallSiteRecord>>,
+   seen: std::collections::BTreeSet<(rustc_hir::def_id::DefId,
+   (rustc_span::FileName, rustc_span::BytePos, rustc_span::BytePos))> }
+   ` — accepts records, deduplicates by (callee, source-file span) so that `#[
+   case]`-generated siblings collapse into one record.
+3. `pub(crate) fn lower_arg_atom<'tcx>(cx: &LateContext<'tcx>, expr:
+   &'tcx rustc_hir::Expr<'tcx>, fixture_locals: &BTreeSet<String>) -> ArgAtom
+   ` — the HIR-to-`ArgAtom` adapter.
+
+Adapter rules, applied in order:
+
+- if `recover_user_editable_hir_span(expr.span).is_none()`, return
+  `ArgAtom::Unsupported`;
+- if the expression is `ExprKind::Path(QPath::Resolved(None, path))` whose
+  resolution is `Res::Local(_)` for a binding whose first segment matches a
+  fixture-local name, return `ArgAtom::FixtureLocal { name }`;
+- if the expression is `ExprKind::Lit(lit)`, return
+  `ArgAtom::ConstLit { text: snippet }` where `snippet` is the user-editable
+  source slice of the literal taken via
+  `cx.tcx.sess.source_map().span_to_snippet` (fall back to
+  `lit.node.to_string()` when the snippet is unavailable);
+- if the expression is `ExprKind::Path(qpath)` and `cx.qpath_res(qpath,
+  expr.hir_id)` returns `Res::Def(DefKind::Const | AssocConst | Static, def_id)
+  `, return `ArgAtom::ConstPath { def_path: cx.tcx.def_path_str(def_id) }`;
+- otherwise, return `ArgAtom::Unsupported`.
+
+For the call-side, add `resolve_local_callee` with this signature:
+
+```rust
+pub(crate) fn resolve_local_callee<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &'tcx rustc_hir::Expr<'tcx>,
+) -> Option<rustc_hir::def_id::DefId>;
+```
+
+Resolution rules:
+
+- `ExprKind::Call(callee, _)` → `cx.qpath_res(&qpath, callee.hir_id)
+  .opt_def_id()` when the callee is `ExprKind::Path`, then keep only when `
+  def_id.krate == LOCAL_CRATE` and `matches!(cx.tcx.def_kind(def_id),
+  DefKind::Fn | DefKind::AssocFn)`;
+- `ExprKind::MethodCall(_, _, _, _)` →
+  `cx.typeck_results().type_dependent_def_id(expr.hir_id)` filtered by the same
+  `LOCAL_CRATE` and `DefKind` predicates;
+- otherwise, `None`.
+
+Unit tests in this stage cover pure helpers only:
+
+- `BTreeMap` ordering — inserting helpers in non-sorted `DefId` order still
+  yields a sorted iteration in `collector.iter()`;
+- deduplication — recording the same `(callee, source-span)` twice keeps a
+  single record and adds nothing on the second call;
+- `lower_arg_atom` mapping tests — drive the adapter from synthetic HIR
+  fixtures only where unavoidable, and prefer pure-function tests over
+  `LateContext`-backed harness tests.
+
+The `lower_arg_atom` and `resolve_local_callee` adapters need a `LateContext`
+to function, so they should be exercised by behavioural tests (Stage E) rather
+than by traditional pure unit tests. Add only the unit coverage that does not
+require `rustc` (the collector behaviour and any string helpers).
+
+### Stage C — Wiring into the late pass
+
+Extend `crates/rstest_helper_should_be_fixture/src/driver.rs`:
+
+- Add `collector: collector::CallSiteCollector` to
+  `RstestHelperShouldBeFixture` (and to `Default`).
+- Implement `fn check_fn<'tcx>(&mut self, cx: &LateContext<'tcx>, kind:
+  hir::intravisit::FnKind<'tcx>, _decl: &'tcx hir::FnDecl<'tcx>, body: &'tcx
+  hir::Body<'tcx>, _span: rustc_span::Span, _def_id: hir::HirId)`:
+  - early-return when the function is not a strict `#[rstest]` test under
+    the configured `RstestDetectionOptions` (use `whitaker::hir`-provided
+    attribute access to feed `is_rstest_test_with`);
+  - compute `fixture_locals = fixture_local_names(&parameters,
+    &self.detection_options)`, where `parameters` is built from the body's
+    parameter patterns and attributes;
+  - drive a HIR walk over `body.value` that visits each `Call` /
+    `MethodCall` expression once. Use a small `rustc_hir::intravisit::Visitor`
+    that does not descend into nested closures (record the closure expression
+    as unsupported instead) and that records each call into the collector.
+- Implement `fn check_crate_post(&mut self, _cx: &LateContext<'tcx>)`:
+  - emit a single `debug!(target: LINT_NAME, "rstest helper call-site
+    collection complete: {n} callees, {m} records", …)` line at the end
+    of the crate post-pass;
+  - do not call `span_lint*` from this hook.
+
+For test-harness recovery, reuse
+`whitaker::hir::collect_harness_test_functions` and
+`collect_rstest_companion_test_functions` only if attribute-based detection
+misses a generated `#[test]` companion. Behavioural evidence in Stage E will
+decide whether to enable this fallback for collection (the default detection
+options already mark this as `use_source_callee_fallback = false`).
+
+### Stage D — Dedup and span policy
+
+In the same module, implement the dedup key generation rule:
+
+- the source span used as the dedup key is
+  `recover_user_editable_hir_span(call_expr.span)`,
+- the dedup map keys on `(callee_def_id, source_file, span_lo, span_hi)`
+  where `source_file` is the `cx.tcx.sess.source_map().span_to_filename(span)`
+  return value cast to its `FileName` shape,
+- when recovery returns `None`, the record is dropped — not stored as
+  unsupported.
+
+Confirm with at least one behavioural test that two generated case functions
+(`#[rstest] #[case(0)] #[case(1)] fn t(#[case] n: usize) { helper(n) }`)
+produce one record, not two.
+
+### Stage E — Tests
+
+Test surfaces, in order of priority:
+
+1. **Unit tests** in
+   `crates/rstest_helper_should_be_fixture/src/collector_tests.rs`:
+   - `BTreeMap` ordering and deduplication of `CallSiteCollector` using
+     synthetic record values;
+   - `lower_arg_atom` covered through property tests where possible — for
+     example, generate sequences of pure `ArgAtom`s, build them through the
+     pure constructors, and assert the resulting `ArgFingerprint` round-trips.
+   - property tests should live in
+     `crates/rstest_helper_should_be_fixture/src/collector_proptests.rs`
+     gated on `cfg(test)`.
+2. **Behavioural tests** with `rstest-bdd`:
+   - new file
+     `crates/rstest_helper_should_be_fixture/tests/features/collection.feature`
+     describing scenarios in user terms — "Given a crate containing a single
+     `#[rstest]` test that calls a local helper once, the collector records
+     one call site keyed on the helper's `DefId`.";
+   - matching step definitions under
+     `crates/rstest_helper_should_be_fixture/tests/collection_steps.rs`,
+     using `dylint_testing` to drive a tiny synthetic crate through the
+     lint pass and then asserting on a `pub(crate)` snapshot accessor on
+     `RstestHelperShouldBeFixture` (introduce
+     `pub(crate) fn snapshot_collection(&self) -> CallSiteSnapshot` if
+     necessary; document that the accessor is test-only by gating it under
+     `#[cfg(any(test, feature = "test-snapshot"))]`).
+3. **Snapshot tests** with `insta` if a stable serialisation of the
+   collector snapshot is appropriate. Snapshot only the deduplicated
+   `(callee_def_path, fingerprint, span_lo, span_hi)` projection so the
+   snapshot is robust to incidental ordering.
+4. **End-to-end behavioural fixture** under
+   `crates/rstest_helper_should_be_fixture/examples/` mirroring
+   `no_unwrap_or_else_panic`'s `pass_unwrap_in_rstest_harness.rs` so the
+   harness exercises the full `cargo dylint` path. Mark it `#[ignore]` if it
+   needs external tooling, mirroring the existing pattern documented in
+   `docs/developers-guide.md` §"Integration tests for lint exclusion behaviour".
+
+Property tests should focus on these invariants:
+
+- **Determinism**: given two HIR walks of the same body, the collector
+  produces the same records (assert by re-running the same body twice).
+- **Idempotence of dedup**: feeding the same record twice does not grow the
+  collector beyond one entry.
+- **Order-independence**: feeding the same set of records in any
+  permutation produces the same `BTreeMap` ordering.
+
+Kani is not required (Decision log).
+
+### Stage F — Documentation, validation, review
+
+Update documentation:
+
+- `docs/lints-for-rstest-fixtures-and-test-hygiene.md`: append
+  "Implementation decisions (8.2.2)" subsection capturing dedup key, adapter
+  placement, and constant-vs-static handling;
+- `docs/users-guide.md` `rstest_helper_should_be_fixture` section: note that
+  collection is now active but the lint remains silent until 8.2.3;
+- `docs/developers-guide.md`: add a short subsection describing the
+  collector pattern if it differs from the per-expression model used elsewhere.
+  Cross-reference this ExecPlan section number.
+
+Validation order:
+
+1. `cargo check -p rstest_helper_should_be_fixture --all-targets --all-features`.
+2. `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`.
+3. `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets --all-features`.
+4. `make markdownlint`.
+5. `make check-fmt`.
+6. `make lint`.
+7. `make test`.
+
+Run `coderabbit review --agent` after each major milestone and again before
+final push. Address all relevant concerns until 0 findings.
+
+Mark `docs/roadmap.md` 8.2.2 done only after all of the above succeed.
+
+## Concrete steps
+
+From the repository root, confirm branch and worktree state:
+
+```sh
+git branch --show-current
+git status --short --branch
+```
+
+Expected branch after rename:
+
+```plaintext
+8-2-2-call-site-collection-in-rstest-tests
+```
+
+Inspect the existing patterns the implementation will reuse:
+
+```sh
+sed -n '1,160p' crates/no_std_fs_operations/src/driver.rs
+sed -n '1,210p' crates/no_std_fs_operations/src/usage.rs
+sed -n '1,210p' crates/rstest_helper_should_be_fixture/src/driver.rs
+sed -n '1,210p' common/src/rstest/parameter.rs
+sed -n '1,130p' src/hir/mod.rs
+```
+
+Run targeted checks after each milestone with `tee` for log capture:
+
+```sh
+ACTION=check-rstest-helper
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+cargo check -p rstest_helper_should_be_fixture --all-targets --all-features 2>&1 | tee "$LOG"
+
+ACTION=test-rstest-helper
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features 2>&1 | tee "$LOG"
+
+ACTION=test-registration
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets --all-features 2>&1 | tee "$LOG"
+
+ACTION=markdownlint
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+make markdownlint 2>&1 | tee "$LOG"
+```
+
+Final gates run sequentially:
+
+```sh
+ACTION=check-fmt
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+make check-fmt 2>&1 | tee "$LOG"
+
+ACTION=lint
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+make lint 2>&1 | tee "$LOG"
+
+ACTION=test
+LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
+make test 2>&1 | tee "$LOG"
+```
+
+CodeRabbit review:
+
+```sh
+coderabbit review --agent
+```
+
+Commit using a file-based message (required by the repository commit hooks):
+
+```sh
+git status --short
+git diff --stat
+git add <changed files>
+COMMIT_MSG_DIR=$(mktemp -d)
+cat > "$COMMIT_MSG_DIR/COMMIT_MSG.md" << 'ENDOFMSG'
+Implement call-site collection in rstest helper lint
+
+Add the HIR-to-ArgAtom adapter, a per-crate call-site collector, and a
+late-pass walker for #[rstest] tests inside the
+rstest_helper_should_be_fixture crate. Keep the lint diagnostic-silent;
+threshold evaluation and diagnostics remain assigned to roadmap items
+8.2.3 and 8.2.4.
+ENDOFMSG
+git commit -F "$COMMIT_MSG_DIR/COMMIT_MSG.md"
+rm -rf "$COMMIT_MSG_DIR"
+```
+
+Push and open or update the draft pull request only after validation succeeds:
+
+```sh
+git push -u origin 8-2-2-call-site-collection-in-rstest-tests
+echo "${LODY_SESSION_ID}"
+```
+
+The PR title must include `(8.2.2)`. The PR body must mention this ExecPlan and
+link to the Lody session URL
+`https://lody.ai/leynos/sessions/${LODY_SESSION_ID}` under `## References`.
+
+## Validation and acceptance
+
+The plan is accepted for implementation when the user explicitly approves it.
+Silence is not approval.
+
+The implementation is accepted when all of the following are true:
+
+- `crates/rstest_helper_should_be_fixture/src/collector.rs` exists with the
+  documented APIs and at least the documented unit tests pass.
+- `RstestHelperShouldBeFixture` accumulates a non-empty collection state
+  when a synthetic test crate contains a `#[rstest]` test calling a local
+  helper, demonstrated through `rstest-bdd` scenarios.
+- Calling the same helper twice from the same source location (whether
+  reached directly or via `#[case]`-generated companions) yields exactly one
+  collected record.
+- A call whose argument is a macro-expanded literal or whose call-site span
+  recovers to `None` is excluded from the collected state.
+- `cargo nextest run -p rstest_helper_should_be_fixture --all-targets
+  --all-features` passes.
+- `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets
+  --all-features
+  ` passes, including the existing suite and installer registration scenarios.
+- `make markdownlint`, `make check-fmt`, `make lint`, and `make test` all
+  succeed.
+- `coderabbit review --agent` has no unresolved relevant findings.
+- `docs/users-guide.md`, `docs/developers-guide.md`, and the rstest lint
+  design document are updated where behaviour or internal practice changed.
+- `docs/roadmap.md` marks 8.2.2 done.
+
+Expected final gate transcript shape:
+
+```plaintext
+$ make check-fmt
+...
+Finished
+
+$ make lint
+...
+Finished
+
+$ make test
+...
+test result: ok
+```
+
+The exact test count will change as new tests are added; success means each
+command exits with status 0.
+
+## Idempotence and recovery
+
+All edit stages are ordinary file edits and can be retried from `git status`.
+If a step fails part-way through, inspect `git diff` and either continue from
+the partially edited file or revert only the files changed for this task. Do
+not revert unrelated user changes.
+
+If the collector or adapter scaffold is wrong, delete only
+`crates/rstest_helper_should_be_fixture/src/collector*.rs` and the new
+behavioural files under `crates/rstest_helper_should_be_fixture/tests/` before
+they are committed, then recreate from the patterns named in Stage B and Stage
+E.
+
+After a commit, prefer a corrective follow-up commit over rewriting history
+unless the user explicitly asks for history cleanup.
+
+If validation fails, inspect the matching
+`/tmp/*-whitaker-8-2-2-call-site-collection-in-rstest-tests.out` log before
+changing code. Record persistent failures under "Surprises & discoveries" or
+"Decision log" with the command and log path.
+
+## Artifacts and notes
+
+Wyvern repository-pattern findings (summary):
+
+```plaintext
+- No existing Whitaker lint uses check_crate_post. The current lints
+  initialise per-crate config in check_crate and emit diagnostics
+  expression-locally through check_expr / check_fn / check_item /
+  check_impl_item.
+- Callee resolution is consistently done via cx.qpath_res for Call and
+  cx.typeck_results().type_dependent_def_id for MethodCall.
+- whitaker::hir::recover_user_editable_hir_span is the canonical macro-aware
+  span recovery used by lint drivers; span_recovery_frames is currently
+  only exercised by unit tests in src/hir/tests.rs.
+- span_lint_hir_and_then is referenced only in design documents — no lint
+  uses it yet.
+- UI tests live under crates/<lint>/ui/ and use dylint_testing::Test plus
+  the whitaker::testing::ui harness. Behavioural tests live under
+  crates/<lint>/tests/features/*.feature with rstest-bdd step defs.
+- The local crates/clippy_utils crate is a panic-detection stub and does
+  not expose fn_def_id; the small Call/MethodCall switch is best inlined.
+```
+
+Wyvern design-coherence findings (summary):
+
+```plaintext
+- 8.2.2 must deliver call-site collection plus fixture-local classification
+  plus constant-aware argument fingerprinting, without emission.
+- The fingerprint data model in common/src/rstest/argument_fingerprint.rs
+  is sufficient; only an HIR → ArgAtom adapter is missing.
+- Risks unique to 8.2.2 are macro-expanded glue, #[case] companion
+  duplication, trait-method callees with no DefId, and const-vs-static
+  semantics. Mitigations are documented in the Risks section.
+- No new public API in common/ is required if the adapter stays inside
+  the lint crate; promotion to src/hir/ becomes attractive only when
+  8.3.x or 8.4.x consume the same adapter.
+```
+
+Firecrawl findings (summary):
+
+```plaintext
+- rstest 0.26 provider-driven parameter attributes:
+  case, values, files, future, context. #[from] and #[with] are fixture-
+  rename / partial-injection markers, still fixture-backed. #[by_ref],
+  #[ignore], and #[notrace] are operational modifiers, not provider
+  drivers.
+- rstest macro expansion preserves the original function body as the inner
+  item visited by LateLintPass::check_fn; #[case]-driven tests are emitted
+  as siblings under an outer module named after the test function.
+- Dylint 5.x impl_late_lint! registers a LateLintPass. check_crate_post is
+  the canonical aggregation hook.
+- rustc HIR: cx.qpath_res(qpath, hir_id) for direct calls and constants;
+  cx.typeck_results().type_dependent_def_id(expr.hir_id) for method calls;
+  cx.tcx.def_path_str(def_id) for stable definition paths.
+- Prior art for "extract repeated helper as fixture" lints: nothing
+  comparable in pytest, Ruff, or Clippy. The Whitaker rule is novel.
+```
+
+External references checked during planning:
+
+- `docs.rs/rstest` — fixture and rstest attribute docs:
+  <https://docs.rs/rstest/latest/rstest/attr.rstest.html>
+  <https://docs.rs/rstest/latest/rstest/attr.fixture.html>
+- `docs.rs/dylint_linting/5` — Dylint late-lint macros.
+- rustc nightly docs for `LateLintPass` and `ExprKind`:
+  <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html>
+  <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.ExprKind.html>
+- Ruff/`flake8-pytest-style` fixture-style rules — none equivalent to the
+  proposed Whitaker rule (see Firecrawl findings).
+
+## Interfaces and dependencies
+
+The lint crate exposes no new public API. The new in-crate module surfaces the
+following `pub(crate)` items inside
+`crates/rstest_helper_should_be_fixture/src/collector.rs`:
+
+```rust
+pub(crate) struct CallSiteRecord {
+    pub(crate) callee_def_id: rustc_hir::def_id::DefId,
+    pub(crate) fingerprint: whitaker_common::rstest::ArgFingerprint,
+    pub(crate) test_source_def_id: rustc_hir::def_id::DefId,
+    pub(crate) span: rustc_span::Span,
+}
+
+pub(crate) struct CallSiteCollector {
+    by_callee: std::collections::BTreeMap<
+        rustc_hir::def_id::DefId,
+        Vec<CallSiteRecord>,
+    >,
+    seen: std::collections::BTreeSet<DedupKey>,
+}
+
+pub(crate) fn lower_arg_atom<'tcx>(
+    cx: &rustc_lint::LateContext<'tcx>,
+    expr: &'tcx rustc_hir::Expr<'tcx>,
+    fixture_locals: &std::collections::BTreeSet<String>,
+) -> whitaker_common::rstest::ArgAtom;
+
+pub(crate) fn resolve_local_callee<'tcx>(
+    cx: &rustc_lint::LateContext<'tcx>,
+    expr: &'tcx rustc_hir::Expr<'tcx>,
+) -> Option<rustc_hir::def_id::DefId>;
+```
+
+`DedupKey` is the `(callee_def_id, source_file_name, BytePos, BytePos)` tuple.
+Keep its fields private to the collector module.
+
+If `pub(crate)` test access is required by `rstest-bdd` steps, expose a
+`pub(crate) fn snapshot(&self) -> Vec<(rustc_hir::def_id::DefId, Vec<CallSiteRecord>)>`
+method on `CallSiteCollector` and a similar accessor on
+`RstestHelperShouldBeFixture`. Do not promote these to the crate's public API.
+
+Dependencies expected from existing workspace pins:
+
+- `rustc_hir`, `rustc_lint`, `rustc_session`, `rustc_span` (already used by
+  the bootstrap driver),
+- `dylint_linting` (already used),
+- `serde`, `log`, `whitaker`, `whitaker-common` (already used),
+- `rstest`, `rstest-bdd`, `rstest-bdd-macros`, `proptest`, `insta`,
+  `dylint_testing` (already in workspace dev-dependencies).
+
+No new third-party dependency is anticipated.
+
+## Revision note
+
+Initial draft created on 2026-05-28. The draft captures pre-implementation
+scope, repository orientation, external references, the in-crate adapter
+placement decision, validation commands, and the approval gate for roadmap item
+8.2.2.
