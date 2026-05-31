@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
  `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETED
 
 ## Purpose / big picture
 
@@ -198,6 +198,15 @@ contracts that are not already covered.
   `make kani-clone-detector`, `make check-fmt`, `make lint`, `make test`,
   `make markdownlint`, and `make nixie`; all passed. `coderabbit review
   --agent` completed with zero findings.
+- [x] (2026-05-31T12:39:08Z) Verified the follow-up inline comments against
+  current code. Updated the Kani candidate summary to deduplicate against all
+  emitted pairs using a bounded proof-local store, marked this execplan
+  completed, and corrected Stage C to name `candidate_pair_summary_for_kani`
+  as the bounded assertion seam.
+- [x] (2026-05-31T12:39:08Z) Initial validation found the new six-slot
+  emitted-pair store needed a matching Kani unwind bound for proof-only drop
+  paths. Raised the four LSH-index harness unwind bounds from 5 to 7 so the
+  bounded store can be fully dropped under unwinding assertions.
 
 ## Surprises & discoveries
 
@@ -507,11 +516,13 @@ fn assert_pairs_are_canonical(candidates: &[CandidatePair]) { /* ... */ }
 ```
 
 Harnesses must build real `LshIndex` values with `LshIndex::new`, populate them
-via `LshIndex::insert`, and assert over `LshIndex::candidate_pairs`. Prefer
-small fixed signatures such as one-band identical signatures, multi-band
-identical signatures, and a distinct non-colliding signature. If symbolic
-variation is used, constrain it to the smallest meaningful domain and state the
-production precondition represented by each `kani::assume`.
+via `LshIndex::insert`, and assert over `candidate_pair_summary_for_kani`.
+`candidate_pair_summary_for_kani` is the single source of truth for bounded
+Kani assertions over candidate-pair output. Prefer small fixed signatures such
+as one-band identical signatures, multi-band identical signatures, and a
+distinct non-colliding signature. If symbolic variation is used, constrain it
+to the smallest meaningful domain and state the production precondition
+represented by each `kani::assume`.
 
 At minimum, add harness coverage equivalent to:
 

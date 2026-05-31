@@ -141,10 +141,11 @@ fn add_bucket_pairs(pairs: &mut BTreeSet<CandidatePair>, members: &BTreeSet<Frag
 }
 
 #[cfg(kani)]
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct CandidatePairSummaryForKani {
     pub(super) first_pair: Option<CandidatePair>,
     pub(super) unique_pair_count: usize,
+    emitted_pairs: [Option<CandidatePair>; KANI_MAX_RECORDED_PAIRS],
 }
 
 #[cfg(kani)]
@@ -175,9 +176,17 @@ const KANI_MAX_INSERTED_FRAGMENTS: usize = 4;
 const KANI_MAX_RECORDED_BANDS: usize = 2;
 
 #[cfg(kani)]
+const KANI_MAX_RECORDED_PAIRS: usize = 6;
+
+#[cfg(kani)]
 const fn empty_inserted_fragments_for_kani()
 -> [Option<InsertedFragmentForKani>; KANI_MAX_INSERTED_FRAGMENTS] {
     [const { None }; KANI_MAX_INSERTED_FRAGMENTS]
+}
+
+#[cfg(kani)]
+const fn empty_recorded_pairs_for_kani() -> [Option<CandidatePair>; KANI_MAX_RECORDED_PAIRS] {
+    [const { None }; KANI_MAX_RECORDED_PAIRS]
 }
 
 #[cfg(kani)]
@@ -247,13 +256,34 @@ impl CandidatePairSummaryForKani {
 
 #[cfg(kani)]
 impl CandidatePairSummaryForKani {
+    fn contains_pair(&self, pair: &CandidatePair) -> bool {
+        self.emitted_pairs
+            .iter()
+            .flatten()
+            .any(|emitted_pair| emitted_pair == pair)
+    }
+
     fn add_unique_pair(&mut self, pair: CandidatePair) {
-        if self.first_pair.as_ref().is_some_and(|first| first == &pair) {
+        if self.contains_pair(&pair) {
             return;
+        }
+        if self.unique_pair_count < KANI_MAX_RECORDED_PAIRS {
+            self.emitted_pairs[self.unique_pair_count] = Some(pair.clone());
         }
         if self.first_pair.is_none() {
             self.first_pair = Some(pair);
         }
         self.unique_pair_count += 1;
+    }
+}
+
+#[cfg(kani)]
+impl Default for CandidatePairSummaryForKani {
+    fn default() -> Self {
+        Self {
+            first_pair: None,
+            unique_pair_count: 0,
+            emitted_pairs: empty_recorded_pairs_for_kani(),
+        }
     }
 }

@@ -339,7 +339,7 @@ fn verify_min_hasher_sketch_ignores_duplicate_hashes() {
 }
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(7)]
 fn verify_lsh_index_rejects_self_pairs() {
     let signature = repeated_signature(11);
     let alpha = fragment("a");
@@ -360,7 +360,7 @@ fn verify_lsh_index_rejects_self_pairs() {
 }
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(7)]
 fn verify_lsh_index_canonicalizes_pair_order() {
     let signature = repeated_signature(13);
     let alpha = fragment("a");
@@ -374,7 +374,7 @@ fn verify_lsh_index_canonicalizes_pair_order() {
 }
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(7)]
 fn verify_lsh_index_deduplicates_repeated_band_collisions() {
     let signature = repeated_signature(17);
     let alpha = fragment("a");
@@ -388,7 +388,7 @@ fn verify_lsh_index_deduplicates_repeated_band_collisions() {
 }
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(7)]
 fn verify_lsh_index_is_insertion_order_independent() {
     let shared = repeated_signature(19);
     let distinct = repeated_signature(23);
