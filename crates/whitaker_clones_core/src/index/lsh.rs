@@ -12,9 +12,7 @@ pub struct LshIndex {
     #[cfg(not(kani))]
     buckets: BTreeMap<BandBucketKey, BTreeSet<FragmentId>>,
     #[cfg(kani)]
-    inserted_fragments: [Option<InsertedFragmentForKani>; KANI_MAX_INSERTED_FRAGMENTS],
-    #[cfg(kani)]
-    inserted_len: usize,
+    inserted_fragments: InsertedFragmentsForKani,
 }
 
 #[cfg(not(kani))]
@@ -64,9 +62,7 @@ impl LshIndex {
             #[cfg(not(kani))]
             buckets: BTreeMap::new(),
             #[cfg(kani)]
-            inserted_fragments: [None, None, None, None],
-            #[cfg(kani)]
-            inserted_len: 0,
+            inserted_fragments: InsertedFragmentsForKani::new(),
         }
     }
 
@@ -82,7 +78,7 @@ impl LshIndex {
 
         #[cfg(kani)]
         {
-            let mut inserted_bands = [None, None];
+            let mut inserted_bands = empty_recorded_bands_for_kani();
             for (band_index, values) in signature.bands(self.config.rows()).enumerate() {
                 if band_index < KANI_MAX_RECORDED_BANDS {
                     inserted_bands[band_index] = values
@@ -90,13 +86,10 @@ impl LshIndex {
                         .map(|first_value| BandBucketKeyForKani::new(band_index, *first_value));
                 }
             }
-            if self.inserted_len < KANI_MAX_INSERTED_FRAGMENTS {
-                self.inserted_fragments[self.inserted_len] = Some(InsertedFragmentForKani {
-                    id: id.clone(),
-                    bands: inserted_bands,
-                });
-                self.inserted_len += 1;
-            }
+            self.inserted_fragments.push(InsertedFragmentForKani {
+                id: id.clone(),
+                bands: inserted_bands,
+            });
         }
     }
 
@@ -117,14 +110,16 @@ impl LshIndex {
     #[cfg(kani)]
     pub(super) fn candidate_pair_summary_for_kani(&self) -> CandidatePairSummaryForKani {
         let mut summary = CandidatePairSummaryForKani::default();
-        for left_index in 0..self.inserted_len {
-            let left = self.inserted_fragments[left_index]
-                .as_ref()
-                .expect("recorded insertion slot must be populated");
-            for right_index in (left_index + 1)..self.inserted_len {
-                let right = self.inserted_fragments[right_index]
-                    .as_ref()
-                    .expect("recorded insertion slot must be populated");
+        for left_index in 0..self.inserted_fragments.len() {
+            let Some(left) = self.inserted_fragments.get(left_index) else {
+                kani::assert(false, "inserted_len must reference populated left slots");
+                continue;
+            };
+            for right_index in (left_index + 1)..self.inserted_fragments.len() {
+                let Some(right) = self.inserted_fragments.get(right_index) else {
+                    kani::assert(false, "inserted_len must reference populated right slots");
+                    continue;
+                };
                 if fragments_share_band_for_kani(left, right) {
                     summary.add(left, right);
                 }
@@ -160,6 +155,13 @@ struct InsertedFragmentForKani {
 }
 
 #[cfg(kani)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct InsertedFragmentsForKani {
+    items: [Option<InsertedFragmentForKani>; KANI_MAX_INSERTED_FRAGMENTS],
+    len: usize,
+}
+
+#[cfg(kani)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct BandBucketKeyForKani {
     band_index: usize,
@@ -171,6 +173,43 @@ const KANI_MAX_INSERTED_FRAGMENTS: usize = 4;
 
 #[cfg(kani)]
 const KANI_MAX_RECORDED_BANDS: usize = 2;
+
+#[cfg(kani)]
+const fn empty_inserted_fragments_for_kani()
+-> [Option<InsertedFragmentForKani>; KANI_MAX_INSERTED_FRAGMENTS] {
+    [const { None }; KANI_MAX_INSERTED_FRAGMENTS]
+}
+
+#[cfg(kani)]
+const fn empty_recorded_bands_for_kani() -> [Option<BandBucketKeyForKani>; KANI_MAX_RECORDED_BANDS]
+{
+    [const { None }; KANI_MAX_RECORDED_BANDS]
+}
+
+#[cfg(kani)]
+impl InsertedFragmentsForKani {
+    const fn new() -> Self {
+        Self {
+            items: empty_inserted_fragments_for_kani(),
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, fragment: InsertedFragmentForKani) {
+        if self.len < KANI_MAX_INSERTED_FRAGMENTS {
+            self.items[self.len] = Some(fragment);
+            self.len += 1;
+        }
+    }
+
+    const fn len(&self) -> usize {
+        self.len
+    }
+
+    fn get(&self, index: usize) -> Option<&InsertedFragmentForKani> {
+        self.items.get(index).and_then(Option::as_ref)
+    }
+}
 
 #[cfg(kani)]
 impl BandBucketKeyForKani {

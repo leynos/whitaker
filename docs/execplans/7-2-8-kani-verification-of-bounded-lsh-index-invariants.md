@@ -23,9 +23,10 @@ plan is explicitly approved.
 ## Constraints
 
 This task covers roadmap item 7.2.8 only. It must not expand into later clone
-detector phases, statistical quality proofs, AST clone detection, or SARIF
-workflow changes except where regression tests already exercise the existing
-externally observable behaviour.
+detector phases, statistical quality proofs, abstract syntax tree (AST) clone
+detection, or Static Analysis Results Interchange Format (SARIF) workflow
+changes except where regression tests already exercise the existing externally
+observable behaviour.
 
 The implementation must use the existing Rust production code paths in
 `crates/whitaker_clones_core/src/index/lsh.rs` wherever possible. Kani
@@ -188,6 +189,15 @@ contracts that are not already covered.
 - [x] (2026-05-26T21:33:45Z) Re-ran the final branch-tip gates:
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie`; all passed.
+- [x] (2026-05-31T12:37:15Z) Addressed review feedback by replacing
+  hard-coded Kani proof array literals with constant-backed constructors,
+  encapsulating the bounded insertion log, replacing proof-summary `expect`
+  calls with explicit Kani invariant assertions, and expanding first-use AST
+  and SARIF acronyms in this execplan.
+- [x] (2026-05-31T12:37:15Z) Re-ran the review-follow-up gates:
+  `make kani-clone-detector`, `make check-fmt`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie`; all passed. `coderabbit review
+  --agent` completed with zero findings.
 
 ## Surprises & discoveries
 
@@ -360,6 +370,16 @@ contracts that are not already covered.
   iterations. `BandBucketKey` is production-only after the proof-storage split,
   so leaving it in Kani builds only creates dead-code warnings.
   Date/Author: 2026-05-26T20:42:03Z / Codex.
+
+- Decision: Do not reintroduce production `BTreeMap`/`BTreeSet` storage into
+  `#[cfg(kani)]` builds for 7.2.8.
+  Rationale: Earlier proof attempts recorded above repeatedly showed that
+  proving through production B-tree storage made Kani spend time in allocator,
+  traversal, comparison, and drop internals rather than the bounded LSH
+  invariant. The review follow-up therefore keeps the fixed proof
+  representation, but reduces bookkeeping risk by centralizing proof-array
+  construction and wrapping the insertion log.
+  Date/Author: 2026-05-31T12:37:15Z / Codex.
 
 ## Outcomes & retrospective
 
