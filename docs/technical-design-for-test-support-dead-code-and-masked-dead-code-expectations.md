@@ -12,9 +12,9 @@
 ## 1. Design summary
 
 Whitaker should treat this problem as a workspace-cleanup and refactoring
-problem, not as a style scold. Cargo compiles each integration-test target
-under `tests/` as its own executable crate, so `dead_code` remains target-local
-even when projects follow the Book’s shared-support pattern with
+problem, not as a style scold. Cargo compiles each integration-test target under
+`tests/` as its own executable crate, so `dead_code` remains target-local even
+when projects follow the Book’s shared-support pattern with
 `tests/common/mod.rs`. The Reference also makes `#[expect(...)]` meaningful
 only when that exact `expect` suppresses the lint; if some other lint-level
 attribute changes handling, the expectation goes stale and

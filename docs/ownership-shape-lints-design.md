@@ -55,8 +55,8 @@ structure, explicit documentation, bounded control-flow complexity, and panic
 avoidance. The project already ships shared Dylint infrastructure, per-lint
 `cdylib` crates, localized diagnostics, and UI-test harness helpers, and its
 roadmap has expanded into deeper maintainability analyses such as Bumpy Road,
-brain-type and brain-trait lints, the code-clone detector pipeline, and
-upcoming `rstest` hygiene work.[^1][^2][^3]
+brain-type and brain-trait lints, the code-clone detector pipeline, and upcoming
+`rstest` hygiene work.[^1][^2][^3]
 
 That leaves a conspicuous Rust-specific gap: **ownership shape**. In Rust,
 otherwise straightforward code often acquires unnecessary clones, `Rc` or
@@ -435,8 +435,8 @@ The suite should use a two-stage approach:
 
 This matches the problem domain. Late lints run after analysis with full type
 information, and Rust's lint infrastructure explicitly supports both late
-passes and MIR-based checks for cases where flow-sensitive facts
-matter.[^20][^22]
+passes and MIR-based checks for cases where flow-sensitive facts matter.[^20]
+[^22]
 
 ## 12. Lint 1: `clone_only_used_by_borrow`
 
@@ -607,8 +607,8 @@ Suppress by default when the callee is:
 - `async` in the initial release.
 
 The exported-API suppression mirrors Clippy's existing
-`avoid-breaking-exported-api` pattern for several ownership-related
-lints.[^6][^9]
+`avoid-breaking-exported-api` pattern for several ownership-related lints.[^6]
+[^9]
 
 ### 13.4. Exact borrow mappings
 

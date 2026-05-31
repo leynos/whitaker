@@ -88,8 +88,8 @@ if the metadata is removed or altered.
 - [x] (2026-02-27) Stage C: Create Gherkin feature file and BDD behaviour
   tests.
 - [x] (2026-02-27) Stage D: Update roadmap and design document.
-- [x] (2026-02-27) Stage E: Run quality gates (`make check-fmt && make lint
-  && make test`).
+- [x] (2026-02-27) Stage E: Run quality gates
+      (`make check-fmt && make lint && make test`).
 - [x] (2026-02-27) Stage F: Write execplan to `docs/execplans/` and commit.
 
 ## Surprises & discoveries
@@ -173,9 +173,9 @@ Cargo-binstall template placeholders:
 - `{archive-format}` — archive extension derived from `pkg-fmt` (`tgz`/`zip`)
 - `{bin}` — binary name (`whitaker-installer` or `whitaker-installer.exe`)
 
-Supported target triples (from the design document):
-`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`,
-`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+Supported target triples (from the design document): `x86_64-unknown-linux-gnu`,
+`aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`,
+`x86_64-pc-windows-msvc`.
 
 ## Plan of work
 
@@ -224,8 +224,8 @@ Create `installer/src/binstall_metadata_tests.rs` (~140 lines) containing
 
 Register the module in `installer/src/lib.rs`:
 
-- Add `//! - [\`binstall_metadata\`] - Cargo-binstall metadata constants and
-  template expansion` to the doc comment (between `artefact` and `builder`).
+- Add `//! - [\`binstall_metadata\`] - Cargo-binstall metadata constants and`
+  `template expansion` to the doc comment (between `artefact` and `builder`).
 - Add `pub mod binstall_metadata;` between `pub mod artefact;` and
   `pub mod builder;`.
 

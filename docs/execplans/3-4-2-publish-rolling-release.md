@@ -1,9 +1,8 @@
 # Publish prebuilt lint libraries to rolling release (3.4.2)
 
-This Execution Plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -260,22 +259,20 @@ Files modified:
 
 Created `installer/src/artefact/packaging.rs` implementing:
 
-1. `compute_sha256(path: &Path) -> Result<Sha256Digest,
-   PackagingError>
-   ` — reads a file in 8 KiB chunks and returns its SHA-256 digest.
+1. `compute_sha256(path: &Path) -> Result<Sha256Digest, PackagingError>`
+   reads a file in 8 KiB chunks and returns its SHA-256 digest.
 
-2. `create_archive(output_path: &Path,
-   files: &[(PathBuf, String)]) -> Result<(),
-   PackagingError>` — creates a `.tar.zst` archive at `output_path
-   ` containing the listed files with specified archive names.
+2. `create_archive(output_path: &Path, files: &[(PathBuf, String)])`
+   `-> Result<(), PackagingError>` creates a `.tar.zst` archive at
+   `output_path` containing the listed files with specified archive names.
 
-3. `generate_manifest_json(manifest: &Manifest) ->
-   Result<String,
-   PackagingError>` — serializes a `Manifest` to pretty-printed JSON.
+3. `generate_manifest_json(manifest: &Manifest)`
+   `-> Result<String, PackagingError>` serializes a `Manifest` to
+   pretty-printed JSON.
 
-4. `package_artefact(params: PackageParams) ->
-   Result<PackageOutput,
-   PackagingError>` — orchestrates the full packaging pipeline.
+4. `package_artefact(params: PackageParams)`
+   `-> Result<PackageOutput, PackagingError>` orchestrates the full packaging
+   pipeline.
 
 Created `installer/src/artefact/packaging_error.rs` with `PackagingError` enum
 (I/O, serialization, empty file list variants).

@@ -160,8 +160,8 @@ Relevant skills for the implementation turn:
   Mitigation: add direct constructor tests and a dedicated behaviour harness.
 - Workflow-wiring risk: `scripts/run-verus.sh` currently lists only
   `verus/clone_detector_lsh_config.rs` for the clone-detector group.
-  Mitigation: add the new proof file explicitly to both the `clone-detector`
-  and `all` groups, then validate both `make verus-clone-detector` and
+  Mitigation: add the new proof file explicitly to both the `clone-detector` and
+  `all` groups, then validate both `make verus-clone-detector` and
   `make verus`.
 - Documentation-scope risk: proof-only work often tempts unnecessary user-guide
   edits. Mitigation: check explicitly for user-visible behaviour changes before
@@ -269,8 +269,8 @@ pub fn new(left: FragmentId, right: FragmentId) -> Option<Self> {
 
 The clone-detector proof workflow already exists:
 
-- `make verus-clone-detector` delegates to `./scripts/run-verus.sh
-  clone-detector`.
+- `make verus-clone-detector` delegates to
+  `./scripts/run-verus.sh clone-detector`.
 - `scripts/run-verus.sh` currently includes only
   `verus/clone_detector_lsh_config.rs` for the clone-detector group.
 - `make verus` delegates to the same runner's `all` group.

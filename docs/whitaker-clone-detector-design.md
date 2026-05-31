@@ -284,8 +284,9 @@ pub fn map_bytes_to_node(file_text: &str, start: usize, end: usize) -> AstFragme
 
 ## Incrementality and caching
 
-- **Per-file cache:** `{ path, mtime, hash(file_text), token_fp, minhash,
-  ast_hashes }` in `target/whitaker/clones-cache.bin`.
+- **Per-file cache:**
+  `{ path, mtime, hash(file_text), token_fp, minhash, ast_hashes }` in
+  `target/whitaker/clones-cache.bin`.
 - **Dirtying:** path or mtime change, or config hash change, invalidates
   entries.
 - **Sharding:** index shards by the first 12 bits of the fingerprint to reduce
@@ -377,8 +378,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 4. **Level enum serialization.** The `Level` enum serializes as lowercase
    strings (`"none"`, `"note"`, `"warning"`, `"error"`) via
-   `#[serde(rename_all = "lowercase")]`, matching the SARIF 2.1.0
-   specification. `Warning` is the default variant.
+   `#[serde(rename_all = "lowercase")]`, matching the SARIF 2.1.0 specification.
+   `Warning` is the default variant.
 
 5. **Deduplication key composition.** Result deduplication uses a composite key
    of `(whitakerFragment fingerprint, file URI, region)`. Results lacking any
@@ -418,8 +419,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    values in the token kind alone. The shipped implementation therefore:
    preserves original identifier, lifetime, and literal text for `T1`; treats
    Rust keywords and punctuation as fixed atoms; and canonicalizes identifiers
-   and lifetimes by encounter order plus literals by category (`<NUM>`,
-   `<STR>`, `<CHAR>`, `<BYTE>`, `<BYTE_STR>`) for `T2`.
+   and lifetimes by encounter order plus literals by category (`<NUM>`, `<STR>`,
+   `<CHAR>`, `<BYTE>`, `<BYTE_STR>`) for `T2`.
 
 3. **Malformed source handling.** Normalization is fallible. Unsupported tokens
    and unterminated block comments or literals are reported as typed
@@ -601,8 +602,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 3. **The bounded proof shape is deliberately split by invariant.** The empty
    input harness checks that `MinHasher::sketch(&[])` returns
-   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the
-   same one-fingerprint set twice and proves equality for an arbitrary symbolic
+   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the same
+   one-fingerprint set twice and proves equality for an arbitrary symbolic
    signature lane. The duplicate-hash harness keeps the retained hash symbolic
    over a bounded `u8` domain and proves that repeating that hash at a distinct
    range does not change the first signature lane.

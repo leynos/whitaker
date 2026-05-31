@@ -1,9 +1,8 @@
 # Publish installer dependency binaries from repository releases
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -311,8 +310,8 @@ Acceptance for Stage A:
 
 ### Stage B: Introduce a Rust domain model for dependency binaries
 
-Add a small Rust module subtree under `installer/src/dependency_binaries/`.
-Keep `deps.rs` as the orchestration boundary, but move data modelling and
+Add a small Rust module subtree under `installer/src/dependency_binaries/`. Keep
+`deps.rs` as the orchestration boundary, but move data modelling and
 repository-install mechanics into this new subtree.
 
 Recommended responsibilities:
@@ -347,9 +346,9 @@ Acceptance for Stage B:
 
 ### Stage C: Extend release packaging for dependency binaries
 
-Reuse the `installer_packaging` pattern to build archives for `cargo-dylint`
-and `dylint-link`. Do not leave archive creation as ad hoc shell inside
-workflow YAML.
+Reuse the `installer_packaging` pattern to build archives for `cargo-dylint` and
+`dylint-link`. Do not leave archive creation as ad hoc shell inside workflow
+YAML.
 
 Recommended implementation:
 

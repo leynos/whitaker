@@ -192,8 +192,8 @@ This will allow reuse in future cohesion-aware lints.
   `MethodInfoBuilder` pattern from 6.1.2. The lint driver discovers methods
   incrementally during HIR traversal and calls `add_method()` for each. Brain
   method thresholds are provided at construction time so the builder identifies
-  brain methods during `build()`. LCOM4 and foreign reach are set separately
-  via `set_lcom4()` and `set_foreign_reach()`, defaulting to zero if not set.
+  brain methods during `build()`. LCOM4 and foreign reach are set separately via
+  `set_lcom4()` and `set_foreign_reach()`, defaulting to zero if not set.
 - **`ForeignReferenceSet` with macro-span filtering**: `ForeignReferenceSet`
   accumulates distinct external module or type references using `BTreeSet` for
   deterministic iteration. Its `record_reference()` method accepts
@@ -225,8 +225,8 @@ This will allow reuse in future cohesion-aware lints.
 - **Warn is AND-based, deny is OR-based**: the warn rule fires only when WMC,
   brain method presence, and LCOM4 all exceed their respective thresholds
   simultaneously. The deny rule fires when any single deny condition holds.
-  Deny supersedes warn. This directly reflects the design document
-  §`brain_type` rule set.
+  Deny supersedes warn. This directly reflects the design document §
+  `brain_type` rule set.
 - **`BrainTypeDiagnostic` carries all measured values**: the diagnostic struct
   carries type name, disposition, WMC, LCOM4, foreign reach, and full brain
   method metrics. Formatting functions produce primary, note, and help strings
@@ -272,8 +272,8 @@ This will allow reuse in future cohesion-aware lints.
   exactly the required-method count. Default methods and associated items do
   not increase burden.
 - **Macro filtering for default method CC**: `TraitMetricsBuilder` accepts
-  `add_default_method(name, cc, is_from_expansion)`. When `is_from_expansion`
-  is `true`, the entry is discarded and contributes to neither item counts nor
+  `add_default_method(name, cc, is_from_expansion)`. When `is_from_expansion` is
+  `true`, the entry is discarded and contributes to neither item counts nor
   complexity, matching existing macro-filtering semantics in `common`.
 - **Single item struct with optional CC**: `TraitItemMetrics` stores
   `default_method_cc: Option<usize>` rather than splitting default and
@@ -545,8 +545,8 @@ further decomposition analysis was omitted.
 - **Six separate proof harnesses for failure localization**: the six
   properties (correct length, edge preservation, in-bounds indices, symmetry,
   no spurious edges, sorted neighbours) each have a dedicated harness. This
-  simplifies root-cause analysis when a single property fails. The sixth
-  harness (`verify_build_adjacency_no_spurious_edges`) closes an exclusion gap:
+  simplifies root-cause analysis when a single property fails. The sixth harness
+  (`verify_build_adjacency_no_spurious_edges`) closes an exclusion gap:
   without it, a buggy implementation that injected extra symmetric, in-bounds
   edges would pass the other five proofs.
 - **Sort-coverage limitation is a conscious bound trade-off**: with

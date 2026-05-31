@@ -1,9 +1,8 @@
 # Verify bounded MinHasher sketch invariants
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -92,8 +91,8 @@ The implementation began after explicit user approval on 2026-05-18.
   explicit under Kani.
 
 - Risk: An over-broad proof proves a helper model rather than production code.
-  Severity: high. Likelihood: low. Mitigation: every harness must construct
-  the hasher through the shipped `MinHasher::from_seed_for_kani` seam, call the
+  Severity: high. Likelihood: low. Mitigation: every harness must construct the
+  hasher through the shipped `MinHasher::from_seed_for_kani` seam, call the
   Vec-backed `MinHasher::sketch(...)` entrypoint, and inspect the returned
   `MinHashSignature` or `IndexError`.
 
@@ -165,13 +164,13 @@ The implementation began after explicit user approval on 2026-05-18.
   symbolic fingerprint, and duplicate-hash insensitivity compares one symbolic
   hash against the same hash repeated at a different range.
 - [x] 2026-05-19: Stopped the reduced-cardinality 129-unwind attempt when it
-  repeated the same standard-library `BTreeSet` state-space pattern; the
-  high harness-level unwind remained the source of verifier cost.
+  repeated the same standard-library `BTreeSet` state-space pattern; the high
+  harness-level unwind remained the source of verifier cost.
 - [x] 2026-05-19: Introduced a private `cfg(kani)` MinHasher proof seam:
   harnesses use `MinHasher::from_seed_for_kani` to avoid seed-stream array
-  construction, and `MinHasher::sketch` uses an explicit 128-slot
-  `cfg(kani)` signature builder so harnesses can return to unwind 4 while
-  still calling production `sketch`.
+  construction, and `MinHasher::sketch` uses an explicit 128-slot `cfg(kani)`
+  signature builder so harnesses can return to unwind 4 while still calling
+  production `sketch`.
 - [x] 2026-05-19: Replaced the private `BTreeSet` dedup container in
   `MinHasher::sketch` with a sorted/deduped `Vec<u64>`, preserving hash-set
   semantics while avoiding verifier-heavy standard-library tree traversal.
@@ -197,8 +196,8 @@ The implementation began after explicit user approval on 2026-05-18.
   insensitivity proofs.
 - [x] 2026-05-19: Updated the clone-detector design and developer guide with
   the MinHasher proof seam, bounded Kani harness shape, and ordinary test
-  coverage split; `docs/users-guide.md` remains unchanged because the work
-  does not change user-visible behaviour.
+  coverage split; `docs/users-guide.md` remains unchanged because the work does
+  not change user-visible behaviour.
 - [x] 2026-05-19: Marked roadmap item 7.2.7 done.
 
 ## Surprises & Discoveries
@@ -272,9 +271,9 @@ The implementation began after explicit user approval on 2026-05-18.
   checks the first lane; ordinary unit and BDD tests keep full-signature
   regression coverage.
 - The final MinHasher Kani shape is tractable but not cheap: the deterministic
-  and duplicate-insensitivity harnesses verify through the sorted/deduped
-  `Vec` implementation, and the duplicate proof took several minutes because
-  Kani still checks standard-library slice sorting and dedup internals for the
+  and duplicate-insensitivity harnesses verify through the sorted/deduped `Vec`
+  implementation, and the duplicate proof took several minutes because Kani
+  still checks standard-library slice sorting and dedup internals for the
   bounded input.
 
 ## Decision Log
@@ -327,11 +326,12 @@ The implementation began after explicit user approval on 2026-05-18.
   unrelated collection-state explosion. Date/Author: 2026-05-19 / Codex.
 
 - Decision: use a private Kani-only constructor and Kani-only explicit
-  fixed-slot signature builder instead of a 129 harness-level unwind. Rationale:
-  the harnesses still call real `MinHasher::sketch`, but the verifier no longer
-  applies the 128-slot array bound to standard-library `BTreeSet` internals.
-  Production builds continue to use `array::from_fn`; the proof seam is
-  compiled only under `cfg(kani)`. Date/Author: 2026-05-19 / Codex.
+  fixed-slot signature builder instead of a 129 harness-level unwind.
+  Rationale: the harnesses still call real `MinHasher::sketch`, but the
+  verifier no longer applies the 128-slot array bound to standard-library
+  `BTreeSet` internals. Production builds continue to use `array::from_fn`; the
+  proof seam is compiled only under `cfg(kani)`. Date/Author: 2026-05-19 /
+  Codex.
 
 - Decision: implement hash-set semantics for `MinHasher::sketch` with a
   sorted/deduped private `Vec<u64>` rather than `BTreeSet<u64>`. Rationale:
@@ -394,13 +394,13 @@ behaviour, output formats, or user-facing workflows.
 
 The relevant implementation lives in the `whitaker_clones_core` crate.
 `crates/whitaker_clones_core/src/index/minhash.rs` defines `MinHasher`.
-`MinHasher::sketch` accepts a slice of `Fingerprint` values, applies
-Vec-backed set semantics by sorting and deduplicating `Fingerprint.hash`
-values, mixes each unique hash with each seed, and returns a
-`MinHashSignature`. Kani harnesses construct proof fixtures through the shipped
+`MinHasher::sketch` accepts a slice of `Fingerprint` values, applies Vec-backed
+set semantics by sorting and deduplicating `Fingerprint.hash` values, mixes
+each unique hash with each seed, and returns a `MinHashSignature`. Kani
+harnesses construct proof fixtures through the shipped
 `MinHasher::from_seed_for_kani` seam and still call the real
-`MinHasher::sketch(...)` entrypoint, validating the returned
-`MinHashSignature` or `IndexError`.
+`MinHasher::sketch(...)` entrypoint, validating the returned `MinHashSignature`
+or `IndexError`.
 
 The surrounding index module is exposed through
 `crates/whitaker_clones_core/src/index/mod.rs` and re-exported from
@@ -409,9 +409,9 @@ The surrounding index module is exposed through
 in `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs`, backed by
 `crates/whitaker_clones_core/tests/features/min_hash_lsh.feature`.
 
-Formal verification entry points already exist. `make kani-clone-detector`
-calls `scripts/run-kani.sh clone-detector`, which invokes the pinned
-`cargo-kani` binary against explicit harness names in
+Formal verification entry points already exist. `make kani-clone-detector` calls
+`scripts/run-kani.sh clone-detector`, which invokes the pinned `cargo-kani`
+binary against explicit harness names in
 `crates/whitaker_clones_core/src/index/kani.rs`.
 
 Relevant documents to keep open during implementation:

@@ -1,7 +1,7 @@
 # Create the `rstest_helper_should_be_fixture` lint crate
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
- `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
@@ -153,8 +153,8 @@ This plan must be approved before implementation starts.
 - [x] (2026-05-20T00:00:00Z) Confirmed behaviour coverage for experimental
   registration through installer `rstest-bdd` scenarios and suite registration
   scenarios. Targeted run
-  `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets
-  --all-features` passed 527 tests.
+  `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets --all-features`
+  passed 527 tests.
 - [x] (2026-05-20T00:00:00Z) Updated user, developer, design, roadmap, and
   plan documentation. `docs/roadmap.md` now marks 8.2.1 done.
 - [x] (2026-05-20T00:00:00Z) Ran `coderabbit review --agent` after the
@@ -164,8 +164,8 @@ This plan must be approved before implementation starts.
   a full default config for provider fallback. Both findings were accepted and
   fixed.
 - [x] (2026-05-20T00:00:00Z) Reran `coderabbit review --agent` after the
-  fixes. It reported one trivial Rustdoc concern for the private `Config`
-  type, which was accepted and fixed.
+  fixes. It reported one trivial Rustdoc concern for the private `Config` type,
+  which was accepted and fixed.
 - [x] (2026-05-20T00:00:00Z) Ran final local gates. `make check-fmt`,
   `make markdownlint`, `make lint`, and `make test` all passed; `make test`
   reported 1428 passed and 2 skipped.
@@ -182,16 +182,15 @@ This plan must be approved before implementation starts.
   where explicit `--lint rstest_helper_should_be_fixture` requests could bypass
   the documented `--experimental` opt-in gate.
 - [x] (2026-05-20T00:00:00Z) Validated the opt-in fix with focused
-  installer tests, the required repository gates, and `coderabbit review
-  --agent`, which completed with 0 findings.
+  installer tests, the required repository gates, and
+  `coderabbit review --agent`, which completed with 0 findings.
 - [x] (2026-05-20T00:00:00Z) Verified inline review comments with Wyvern and
   Scribe agents, fixed the still-valid stub documentation, design-document
   ordering, users-guide subsection, and builder expectation issues, and skipped
   the stale historical ExecPlan count.
 - [x] (2026-05-20T00:00:00Z) Validated the inline-review follow-up with
   focused tests, `make check-fmt`, `make markdownlint`, `make lint`,
-  `make test`, and `coderabbit review --agent`, which completed with
-  0 findings.
+  `make test`, and `coderabbit review --agent`, which completed with 0 findings.
 - [x] (2026-05-21T00:00:00Z) Verified review comments about suite macro
   definition and experimental lint CLI coverage. The macro redefinition concern
   was stale because the two macro definitions already use complementary `cfg`
@@ -227,10 +226,9 @@ This plan must be approved before implementation starts.
 
 - Observation: `make fmt` can introduce Markdown reference-link breakage around
   issue-style links and bracketed reference text. Evidence: the first
-  formatting run split `[#180][issue-180]` and a
-  ``[`FluentLanguageLoader`]`` reference across lines, causing Markdown lint
-  failures. Impact: those passages were rewritten to avoid the formatter edge
-  case before continuing.
+  formatting run split `[#180][issue-180]` and a ``[`FluentLanguageLoader`]``
+  reference across lines, causing Markdown lint failures. Impact: those
+  passages were rewritten to avoid the formatter edge case before continuing.
 
 - Observation: CodeRabbit caught that normalizing `min_calls` and
   `min_distinct_tests` to 1 would make a "repeated" lint meaningful for a
@@ -297,13 +295,12 @@ This plan must be approved before implementation starts.
 
 ## Outcomes & retrospective
 
-Implementation has landed on branch
-`8-2-1-create-the-rstest-helper-lint-crate` and draft PR
-<https://github.com/leynos/whitaker/pull/231> is updated for review. The
-shipped behaviour is a bootstrap: the experimental Dylint crate exists, the
-lint declaration and configuration defaults are wired, suite and installer
-registration understand the experimental lint, and documentation states that
-diagnostics follow later roadmap items.
+Implementation has landed on branch `8-2-1-create-the-rstest-helper-lint-crate`
+and draft PR <https://github.com/leynos/whitaker/pull/231> is updated for
+review. The shipped behaviour is a bootstrap: the experimental Dylint crate
+exists, the lint declaration and configuration defaults are wired, suite and
+installer registration understand the experimental lint, and documentation
+states that diagnostics follow later roadmap items.
 
 The plan milestone has passed local validation:
 
@@ -319,10 +316,10 @@ The implementation milestone has passed local validation:
 - `cargo check -p rstest_helper_should_be_fixture --all-targets --all-features`
   succeeded.
 - `cargo check -p whitaker_suite --all-targets --all-features` succeeded.
-- `cargo nextest run -p rstest_helper_should_be_fixture --all-targets
-  --all-features` passed 9 tests.
-- `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets
-  --all-features` passed 527 tests.
+- `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`
+  passed 9 tests.
+- `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets --all-features`
+  passed 527 tests.
 - `make check-fmt` succeeded.
 - `make markdownlint` succeeded with 0 Markdown errors.
 - `make lint` succeeded.
@@ -341,16 +338,16 @@ the rejected non-opt-in path.
 
 The opt-in fix passed:
 
-- `cargo nextest run -p whitaker-installer --all-targets --all-features
-  resolution::tests:: validate_crate_names_variants
-  dry_run_rejects_experimental_lint_without_opt_in` with 10 selected tests.
-- `cargo nextest run -p whitaker-installer --all-targets --all-features -E
-  'binary(behaviour_cli) + binary(behaviour_core)'` with 12 selected core BDD
-  tests.
-- `cargo nextest run -p whitaker-installer --all-targets --all-features
-  --profile ci -E
-  'test(scenario_dry_run_rejects_experimental_lint_without_opt_in)'` with the
-  excluded CLI BDD scenario.
+- `cargo nextest run -p whitaker-installer --all-targets --all-features`
+  `resolution::tests::validate_crate_names_variants`
+  `dry_run_rejects_experimental_lint_without_opt_in` with 10 selected tests.
+- `cargo nextest run -p whitaker-installer --all-targets --all-features`
+  `-E 'binary(behaviour_cli) + binary(behaviour_core)'` with 12 selected core
+  BDD tests.
+- `cargo nextest run -p whitaker-installer --all-targets --all-features`
+  `--profile ci`
+  `-E 'test(scenario_dry_run_rejects_experimental_lint_without_opt_in)'` with
+  the excluded CLI BDD scenario.
 - `make check-fmt`, `make markdownlint`, `make lint`, and `make test`.
 - `coderabbit review --agent` with 0 findings.
 
@@ -425,7 +422,7 @@ The user-facing documentation that may need updates is:
 - `docs/roadmap.md` when implementation is complete.
 
 Useful skills for implementation are `leta`, `rust-router`, `arch-crate-design`,
- `rust-errors`, `hexagonal-architecture`, `en-gb-oxendict-style`,
+`rust-errors`, `hexagonal-architecture`, `en-gb-oxendict-style`,
 `commit-message`, and `pr-creation`. If later algorithm work introduces
 invariants, route again through `rust-router` and consider `kani` or `verus`.
 
@@ -453,7 +450,7 @@ obtain explicit approval. Do not edit production code before approval.
 Stage B creates the lint crate skeleton. Add
 `crates/rstest_helper_should_be_fixture/Cargo.toml`,
 `crates/rstest_helper_should_be_fixture/src/lib.rs`, and a driver module such as
- `src/driver.rs`. The manifest should follow existing lint crates:
+`src/driver.rs`. The manifest should follow existing lint crates:
 `crate-type = ["cdylib", "rlib"]`, `test = false`, a `dylint-driver` feature
 that enables `dylint_linting`, `rustc_*`, `serde`, `log`, `whitaker`, and
 `whitaker-common`, and a `constituent` feature that enables
@@ -502,7 +499,7 @@ Stage E wires registration outside the crate. Add
 `rstest_helper_should_be_fixture` to `installer/src/resolution.rs`
 `EXPERIMENTAL_LINT_CRATES`, not to `LINT_CRATES`. Add the suite optional
 dependency and a feature named `experimental-rstest-helper-should-be-fixture` to
- `suite/Cargo.toml`, following the feature name that `installer/src/builder.rs`
+`suite/Cargo.toml`, following the feature name that `installer/src/builder.rs`
 derives from the experimental crate list. Update `suite/src/lints.rs` and
 `suite/src/driver.rs` so the lint is included only when that experimental
 feature is enabled. Update suite and installer tests to expect the new

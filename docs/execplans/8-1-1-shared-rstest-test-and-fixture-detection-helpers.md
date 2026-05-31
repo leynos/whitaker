@@ -472,8 +472,8 @@ The implementation is complete only when all of the following are true:
   and fallback-enabled trace detection.
 - Deviation from the draft plan:
   the behaviour harness computes `fixture_local_names` lazily inside the final
-  assertion instead of using a separate `When` step because `rstest-bdd`
-  carries `And` into the prior keyword family.
+  assertion instead of using a separate `When` step because `rstest-bdd` carries
+  `And` into the prior keyword family.
 - Final gate results:
   `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`,
   and `make test` all passed on 2026-03-28. `make test` finished with

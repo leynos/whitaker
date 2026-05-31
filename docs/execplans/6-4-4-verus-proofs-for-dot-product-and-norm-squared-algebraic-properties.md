@@ -1,9 +1,8 @@
 # Prove `dot_product` and `norm_squared` algebraic properties with Verus (roadmap 6.4.4)
 
-This Execution Plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -237,8 +236,8 @@ new proof effort into a sibling Verus file plus narrow tests.
 Start by making the missing work observable before writing the final proof.
 
 1. Update `scripts/run-verus.sh` so it runs an explicit ordered list of proof
-   files rather than a single default file. The list should include the
-   existing `verus/decomposition_cosine_threshold.rs` and the planned new file
+   files rather than a single default file. The list should include the existing
+   `verus/decomposition_cosine_threshold.rs` and the planned new file
    `verus/decomposition_vector_algebra.rs`.
 2. Add a skeletal `verus/decomposition_vector_algebra.rs` with theorem
    signatures for:

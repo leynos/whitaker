@@ -118,10 +118,11 @@ real proc-macro crates where needed.
 By default, `make test` excludes slow installer integration tests
 (`behaviour_toolchain` and `behaviour_cli`) via a nextest default-filter
 defined in `.config/nextest.toml`. These tests perform real `rustup` installs
-and `cargo` builds, so they can take upwards of fifteen minutes. Note that the
-exclusion relies on hardcoded binary names in `.config/nextest.toml`; renaming
-or splitting these test binaries requires updating the filter to match (see
-[#180][issue-180]).
+and `cargo` builds, so they can take upwards of fifteen minutes.
+
+Issue [#180][issue-180] tracks the hardcoded binary names in
+`.config/nextest.toml`; renaming or splitting these test binaries requires
+updating the filter to match.
 
 To run the full suite including installer tests, pass the `ci` profile:
 
@@ -288,8 +289,8 @@ tests and Kani:
 - The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` call
   real `MinHasher::sketch` for the empty-input, deterministic-output, and
   duplicate-hash properties. They use a private `cfg(kani)` seed fixture and
-  fixed-width signature builder so the proof focuses on sketch semantics
-  rather than seed-stream array construction.
+  fixed-width signature builder so the proof focuses on sketch semantics rather
+  than seed-stream array construction.
 
 The direct `LshIndex` invariant coverage is also split between ordinary tests
 and Kani:
@@ -342,8 +343,8 @@ harness group in one pass.
 
 ### Verus scope and trust boundary
 
-The clone-detector Verus files are intentionally implementation-shaped models
-of `LshConfig::new`, `validate_product`, and `CandidatePair::new`, not direct
+The clone-detector Verus files are intentionally implementation-shaped models of
+`LshConfig::new`, `validate_product`, and `CandidatePair::new`, not direct
 proofs of the compiled Rust bodies in `crates/whitaker_clones_core`.
 
 This distinction matters. In the current sidecar setup, Verus can describe the
@@ -556,7 +557,7 @@ providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
- for the complete design rationale and implementation decisions.
+for the complete design rationale and implementation decisions.
 
 ### Test-support APIs for label-propagation testing
 
@@ -586,7 +587,7 @@ crate-internal while providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-6-kani-verification-propagate-labels-preserves-indices.md`](./execplans/6-4-6-kani-verification-propagate-labels-preserves-indices.md)
- for the complete design rationale and implementation decisions.
+for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
 
@@ -796,8 +797,8 @@ the generic Cargo fallback path.
 `should_install_tool()` to skip any tool already present in `remaining_status`,
 then calls `install_tool()` and feeds the returned `InstallOutcome` into
 `update_status_after_install()`. This keeps `remaining_status` accurate for
-later iterations so a successful `cargo-dylint` install can suppress a
-redundant `dylint-link` install.
+later iterations so a successful `cargo-dylint` install can suppress a redundant
+`dylint-link` install.
 
 After resolving the dependency metadata entry, `install_tool()` copies
 `dependency.version()` into `CargoInstallPlan` before attempting the
@@ -1017,11 +1018,11 @@ two layers.
 The following table lists the reusable policy symbols exported from
 `whitaker_common::rstest`.
 
-| Symbol                                                        | Description                                                                                                                                                 |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SpanRecoveryFrame<T>`                                        | A single frame in an ordered span chain, carrying the frame value and a `from_expansion: bool` flag.                                                        |
-| `UserEditableSpan<T>`                                         | Enum result: `Direct(T)` — first frame is user-editable; `Recovered(T)` — a later frame is user-editable; `MacroOnly` — no user-editable frame found.       |
-| `recover_user_editable_span(frames: &[SpanRecoveryFrame<T>])` | Scans the ordered frame chain and returns the first non-expansion frame as `Direct` or `Recovered`.                                                         |
+| Symbol                                                        | Description                                                                                                                                           |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SpanRecoveryFrame<T>`                                        | A single frame in an ordered span chain, carrying the frame value and a `from_expansion: bool` flag.                                                  |
+| `UserEditableSpan<T>`                                         | Enum result: `Direct(T)` — first frame is user-editable; `Recovered(T)` — a later frame is user-editable; `MacroOnly` — no user-editable frame found. |
+| `recover_user_editable_span(frames: &[SpanRecoveryFrame<T>])` | Scans the ordered frame chain and returns the first non-expansion frame as `Direct` or `Recovered`.                                                   |
 
 The policy layer has no dependency on `rustc_span` and can be unit-tested with
 any `Clone + PartialEq` span type (e.g., `miette::SourceSpan`).
@@ -1030,8 +1031,8 @@ any `Clone + PartialEq` span type (e.g., `miette::SourceSpan`).
 
 `whitaker::hir` provides a thin adapter over `rustc_span::Span`:
 
-The following table lists the `whitaker::hir` adapter functions that bridge
-from `rustc_span::Span` into the shared recovery policy.
+The following table lists the `whitaker::hir` adapter functions that bridge from
+`rustc_span::Span` into the shared recovery policy.
 
 | Symbol                                                             | Description                                                                                                                                                   |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1257,12 +1258,11 @@ existing `--test` harness model instead of a separate policy path.
 
 #### Known complexity limitation
 
-`collect_companion_in_group()` and `module_qualifies_as_rstest_companion_module()`
-in
-`src/hir/mod.rs` use nested iteration, giving O(n²) complexity within each
-module scope. This is acceptable in practice because module item counts are
-bounded at compile time and the functions execute during lint analysis, not at
-runtime.
+`collect_companion_in_group()` and
+`module_qualifies_as_rstest_companion_module()` in `src/hir/mod.rs` use nested
+iteration, giving O(n²) complexity within each module scope. This is acceptable
+in practice because module item counts are bounded at compile time and the
+functions execute during lint analysis, not at runtime.
 
 Issue [#225](https://github.com/leynos/whitaker/issues/225) tracks adding
 complexity docstrings to those functions and evaluating a lookup-map
@@ -1588,8 +1588,8 @@ either succeeds, or `None` if `run_install` should proceed to a full build:
 1. **Prebuilt download** (`InstallMode::Download`) — delegates to
    `try_prebuilt_installation` inside `install_flow`.
 2. **Staged-suite shortcut** (`InstallMode::Build`) — delegates to
-   `staged_suite::try_test_staged_suite_installation`, which is only active
-   when `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1` is set (debug builds only).
+   `staged_suite::try_test_staged_suite_installation`, which is only active when
+   `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1` is set (debug builds only).
 
 When `try_fast_path_installation` returns `Some`, `run_install` constructs a
 `FinishInstallContext` from the returned values and delegates to
