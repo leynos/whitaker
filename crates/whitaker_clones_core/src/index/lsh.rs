@@ -3,6 +3,8 @@
 #[cfg(not(kani))]
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(kani)]
+use super::MINHASH_SIZE;
 use super::{CandidatePair, FragmentId, LshConfig, MinHashSignature};
 
 /// Bucketed LSH index that emits canonical candidate fragment pairs.
@@ -81,9 +83,8 @@ impl LshIndex {
             let mut inserted_bands = empty_recorded_bands_for_kani();
             for (band_index, values) in signature.bands(self.config.rows()).enumerate() {
                 if band_index < KANI_MAX_RECORDED_BANDS {
-                    inserted_bands[band_index] = values
-                        .first()
-                        .map(|first_value| BandBucketKeyForKani::new(band_index, *first_value));
+                    inserted_bands[band_index] =
+                        Some(BandBucketKeyForKani::new(band_index, values));
                 }
             }
             self.inserted_fragments.push(InsertedFragmentForKani {
@@ -163,10 +164,18 @@ struct InsertedFragmentsForKani {
 }
 
 #[cfg(kani)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 struct BandBucketKeyForKani {
     band_index: usize,
-    first_value: u64,
+    values: [u64; KANI_MAX_ROWS_PER_BAND],
+    rows_len: usize,
+}
+
+#[cfg(kani)]
+macro_rules! rows_equal_for_kani {
+    ($left:expr, $right:expr, $rows_len:expr, [$($index:expr),* $(,)?]) => {
+        true $(&& ($rows_len <= $index || $left[$index] == $right[$index]))*
+    };
 }
 
 #[cfg(kani)]
@@ -177,6 +186,9 @@ const KANI_MAX_RECORDED_BANDS: usize = 2;
 
 #[cfg(kani)]
 const KANI_MAX_RECORDED_PAIRS: usize = 6;
+
+#[cfg(kani)]
+const KANI_MAX_ROWS_PER_BAND: usize = MINHASH_SIZE;
 
 #[cfg(kani)]
 const fn empty_inserted_fragments_for_kani()
@@ -222,13 +234,42 @@ impl InsertedFragmentsForKani {
 
 #[cfg(kani)]
 impl BandBucketKeyForKani {
-    const fn new(band_index: usize, first_value: u64) -> Self {
+    fn new(band_index: usize, values: &[u64]) -> Self {
+        let mut arr = [0u64; KANI_MAX_ROWS_PER_BAND];
+        let rows_len = values.len().min(KANI_MAX_ROWS_PER_BAND);
+        arr[..rows_len].copy_from_slice(&values[..rows_len]);
         Self {
             band_index,
-            first_value,
+            values: arr,
+            rows_len,
         }
     }
 }
+
+#[cfg(kani)]
+impl PartialEq for BandBucketKeyForKani {
+    fn eq(&self, other: &Self) -> bool {
+        self.band_index == other.band_index
+            && self.rows_len == other.rows_len
+            && rows_equal_for_kani!(
+                self.values,
+                other.values,
+                self.rows_len,
+                [
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+                    42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
+                    62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+                    82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
+                    101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+                    117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
+                ]
+            )
+    }
+}
+
+#[cfg(kani)]
+impl Eq for BandBucketKeyForKani {}
 
 #[cfg(kani)]
 fn fragments_share_band_for_kani(
