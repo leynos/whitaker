@@ -1,4 +1,12 @@
 //! Locality-sensitive hashing over fixed-width MinHash signatures.
+//!
+//! This module contains [`LshIndex`], the token-pass index that groups
+//! [`MinHashSignature`] band slices into locality-sensitive hashing (LSH)
+//! buckets and emits canonical [`CandidatePair`] values for fragments that
+//! collide in at least one band. [`MinHasher`](super::MinHasher) produces the
+//! signatures consumed here, [`LshConfig`] defines the band and row layout, and
+//! the parent `index` module re-exports the public types used by the clone
+//! detector pipeline.
 
 #[cfg(not(kani))]
 use std::collections::{BTreeMap, BTreeSet};
