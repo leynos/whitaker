@@ -629,16 +629,17 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    the public runtime API. Existing unit tests and `rstest-bdd` scenarios keep
    covering that public path.
 
-3. **The Kani proof uses a private fixed-size insertion log.** `#[cfg(kani)]`
-   builds compile out production B-tree storage and record inserted fragments
-   in a four-slot proof log with compact two-band keys. This keeps the proof
-   focused on the LSH transition and `CandidatePair::new` policy instead of
-   allocator, destructor, and tree-balancing internals in the standard library.
+3. **The Kani proof uses private fixed-size logs.** `#[cfg(kani)]` builds
+   compile out production B-tree storage and record inserted fragments in a
+   four-slot insertion log with compact two-band keys, plus a six-slot bounded
+   pair log. This keeps the proof focused on the LSH transition and
+   `CandidatePair::new` policy instead of allocator, destructor, and
+   tree-balancing internals in the standard library.
 
 4. **Unwind bounds are tied to the proof representation.** The new LSH
-   harnesses use `#[kani::unwind(5)]`, one greater than the four-slot proof log,
-   so Kani can unwind insertion-summary and teardown loops without weakening
-   the bounded state being checked.
+   harnesses use `#[kani::unwind(7)]`, one greater than the six-slot bounded
+   pair log, so Kani can unwind insertion-summary and teardown loops without
+   weakening the bounded state being checked.
 
 ## Minimal code skeletons (selected)
 

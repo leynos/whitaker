@@ -188,6 +188,11 @@ const KANI_MAX_RECORDED_BANDS: usize = 2;
 const KANI_MAX_RECORDED_PAIRS: usize = 6;
 
 #[cfg(kani)]
+const _: () = assert!(
+    KANI_MAX_RECORDED_PAIRS >= KANI_MAX_INSERTED_FRAGMENTS * (KANI_MAX_INSERTED_FRAGMENTS - 1) / 2
+);
+
+#[cfg(kani)]
 const KANI_MAX_ROWS_PER_BAND: usize = MINHASH_SIZE;
 
 #[cfg(kani)]

@@ -17,8 +17,8 @@ preserve the candidate-pair invariants already promised by the design: no
 self-pairs, canonical pair ordering, repeated-band deduplication, and
 insertion-order independence.
 
-This plan is pre-implementation only. Implementation must not begin until this
-plan is explicitly approved.
+This plan is complete. Roadmap item 7.2.8 moved from approval and execution
+through proof milestones to completion.
 
 ## Constraints
 
@@ -279,9 +279,9 @@ contracts that are not already covered.
   dropping the four-slot insertion array. Evidence:
   `/tmp/kani-whitaker-7-2-8-clone-detector-fixed-storage.out` reports
   `std::ptr::drop_in_place::<[Option<InsertedFragmentForKani>; 4]>` as the
-  failed unwinding assertion. Impact: the LSH harnesses need
-  `#[kani::unwind(5)]`, matching Kani's documented "one greater than the
-  maximum loop iterations" rule for a four-slot proof array.
+  failed unwinding assertion. Impact: the LSH harnesses ultimately use
+  `#[kani::unwind(7)]`, matching Kani's documented "one greater than the
+  maximum loop iterations" rule for the six-slot bounded pair summary.
 
 ## Decision log
 
@@ -372,7 +372,7 @@ contracts that are not already covered.
   the proof obligation.
   Date/Author: 2026-05-26T20:25:16Z / Codex.
 
-- Decision: Set the four new LSH harnesses to `#[kani::unwind(5)]` and compile
+- Decision: Set the four new LSH harnesses to `#[kani::unwind(7)]` and compile
   `BandBucketKey` only for non-Kani builds.
   Rationale: The Kani proof representation has a four-slot insertion array,
   and Kani requires an unwind bound one greater than the maximum loop
@@ -490,16 +490,15 @@ Relevant documentation to keep open while implementing:
 
 ## Plan of work
 
-Stage A is the approval gate. Review this plan, revise it if requested, and do
-not begin code implementation until the user explicitly approves it. The draft
-pull request for this stage should contain only this execplan and any review
-fixes to the plan itself.
+Stage A was the approval gate. This plan was reviewed and approved before
+implementation; the draft pull request for that stage contained only this
+execplan plus plan revision fixes.
 
 Stage B establishes the red/green regression baseline. Inspect the existing
 unit tests in `crates/whitaker_clones_core/src/index/tests.rs` and BDD
 scenarios in `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs`. If
 the four target behaviours are already covered, keep them and add only missing
-edge cases, using `rstest` parameterisation rather than duplicated test
+edge cases, using `rstest` parameterization rather than duplicated test
 functions. If any externally observable candidate-generation behaviour is
 missing from BDD, add the smallest feature scenario and step code needed. Run
 the targeted crate tests before and after the change so the implementation can
@@ -735,8 +734,8 @@ proof tooling is an external validation adapter around the domain crate.
 
 Revision note: Initial draft created from the roadmap, ADR 003, clone-detector
 design, existing `LshIndex` code, nearby proof execplans, Wyvern planning
-reports, and current Kani documentation. This establishes the approval gate and
-implementation route; it does not authorize code implementation yet.
+reports, and current Kani documentation. This established the approval gate
+and recorded the implementation route.
 
 Revision note: On 2026-05-26, the user explicitly approved implementation.
 The plan status changed to `IN PROGRESS`, progress now records the approval,
