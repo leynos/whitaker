@@ -8,4 +8,5 @@
 fn bootstrap_fixtures_compile_without_diagnostics() {
     let cases = trybuild::TestCases::new();
     cases.pass("tests/ui/bootstrap_zero_diagnostic.rs");
+    cases.pass("tests/ui/collection_zero_diagnostic.rs");
 }
