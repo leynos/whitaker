@@ -257,10 +257,19 @@ This plan must be approved before implementation starts.
   `coderabbit review --agent --dir crates/rstest_helper_should_be_fixture`
   after the static-path rationale and all deterministic gates; CodeRabbit
   completed with 0 findings for the test-coverage milestone.
-- [ ] Update `docs/users-guide.md`, `docs/developers-guide.md`, and
-  `docs/lints-for-rstest-fixtures-and-test-hygiene.md` with any behaviour or
-  internal-practice changes.
-- [ ] Mark `docs/roadmap.md` 8.2.2 as `[x]` once gates and review are green.
+- [x] (2026-06-04T05:21:45Z) Updated `docs/users-guide.md`,
+  `docs/developers-guide.md`, and
+  `docs/lints-for-rstest-fixtures-and-test-hygiene.md` to describe passive
+  collection, diagnostic silence, the in-crate collector pattern, and 8.2.2
+  implementation decisions.
+- [x] (2026-06-04T05:21:45Z) Marked `docs/roadmap.md` 8.2.2 as complete after
+  implementation, gates, and CodeRabbit review for the implementation and
+  regression milestones were green.
+- [x] (2026-06-04T05:25:13Z) Validated the documentation milestone with
+  `make markdownlint` and `make nixie`. A scoped
+  `coderabbit review --agent --dir docs` request stalled after sandbox
+  preparation; after terminating only this worktree's PID,
+  `coderabbit review findings --plain` reported no stored findings.
 - [ ] Rename the branch to `8-2-2-call-site-collection-in-rstest-tests`,
   push, and open or update the draft PR.
 

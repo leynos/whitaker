@@ -479,7 +479,7 @@
   See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction. Requires 8.1.1 and 8.1.3.
-- [ ] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
+- [x] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
   fixture-local classification and constant-aware argument fingerprinting. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction. Requires 8.2.1.

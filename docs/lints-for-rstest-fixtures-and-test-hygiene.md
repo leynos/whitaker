@@ -443,3 +443,26 @@ standard lints.
 - The suite exposes the lint only through the experimental feature
   `experimental-rstest-helper-should-be-fixture`. The installer derives that
   feature from `EXPERIMENTAL_LINT_CRATES` when `--experimental` is enabled.
+
+## Implementation decisions (8.2.2)
+
+- The lint now walks strict `#[rstest]` test bodies in `check_fn` and passively
+  collects local helper calls. It remains diagnostic-silent; threshold
+  evaluation, helper grouping, and `span_lint_hir_and_then` emission stay
+  assigned to 8.2.3 and 8.2.4.
+- The HIR-to-`ArgAtom` adapter lives inside
+  `crates/rstest_helper_should_be_fixture/src/collector.rs` for this milestone.
+  That keeps compiler-private HIR logic out of `whitaker_common::rstest`, while
+  avoiding a shared adapter surface before another lint needs it.
+- Collected records are keyed by the callee definition path string rather than
+  raw `DefId` because the pinned rustc `DefId` does not implement ordering. The
+  raw `DefId` is still stored on each record so later diagnostics can use
+  compiler identity when they aggregate and emit.
+- Collection is intentionally conservative. It records only local functions and
+  associated functions, drops call sites whose spans cannot recover to
+  user-editable source, and lowers uncertain argument expressions to
+  `ArgAtom::Unsupported`.
+- `const`, associated `const`, and `static` paths all use
+  `ArgAtom::ConstPath` in this version. That keeps the fingerprint model stable
+  for 8.2.2; any distinction between immutable constants and statics can be
+  evaluated when 8.2.3 defines threshold semantics.

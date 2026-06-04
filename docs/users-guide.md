@@ -527,10 +527,12 @@ calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
 #### Scope and behaviour
 
 This lint is experimental. The current implementation registers the lint and
-loads configuration defaults so teams can opt into the forthcoming rule without
-yet receiving helper-call diagnostics. Call-site collection, cross-test
-aggregation, and actionable diagnostics are tracked by the later roadmap items
-8.2.2 through 8.2.4.
+loads configuration defaults so teams can opt into the forthcoming rule. It
+now passively collects local helper calls inside strict `#[rstest]` tests and
+fingerprints fixture-local, literal, `const`, and `static` arguments for later
+aggregation. The lint remains diagnostic-silent: cross-test threshold
+evaluation and actionable diagnostics are tracked by roadmap items 8.2.3 and
+8.2.4.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
