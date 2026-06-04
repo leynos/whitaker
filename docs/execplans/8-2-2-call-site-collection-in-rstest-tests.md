@@ -208,7 +208,20 @@ This plan must be approved before implementation starts.
   insertion-order invariant for collector determinism, and a trybuild pass
   fixture proving collection remains diagnostic-silent for fixture, literal,
   `const`, and `static` arguments.
-- [ ] Add or expand a span-recovery regression test for macro-only call sites.
+- [x] (2026-06-04T04:44:51Z) Expanded the shared HIR span-recovery regression
+  with an explicit `macro_only_hir_span_has_no_user_editable_recovery` test,
+  covering the helper the collector uses to drop call sites whose spans cannot
+  recover to user-editable source.
+- [x] (2026-06-04T04:46:57Z) Validated the macro-only span regression with
+  library-only `cargo nextest run` for
+  `macro_only_hir_span_has_no_user_editable_recovery`, `make check-fmt`,
+  `make lint`, `make test`, and `make markdownlint`; the full workspace test
+  run executed 1459 tests with 1459 passed and 3 skipped.
+- [x] (2026-06-04T05:20:01Z) Requested a full CodeRabbit review for the
+  shared-source milestone; the full-scope CLI stalled after sandbox
+  preparation, so it was terminated after verifying the PID belonged to this
+  worktree. A scoped `coderabbit review --agent --dir src` then completed with
+  0 findings after one rate-limit backoff.
 - [x] (2026-06-04T01:56:56Z) Validated the first implementation milestone with
   `cargo check -p rstest_helper_should_be_fixture --all-targets --all-features`,
   `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
@@ -280,6 +293,20 @@ Each completed item should be timestamped, e.g.,
   target fail even when `cargo fmt --all` succeeds. Impact: unrelated formatter
   churn from that command was restored, and this milestone continues to use
   `make check-fmt` plus `make markdownlint` as the deterministic gates.
+
+- Discovery: the macro-only call-site drop is enforced through
+  `whitaker::hir::recover_user_editable_hir_span` before the collector records
+  evidence. Impact: the most direct deterministic regression lives in
+  `src/hir/tests.rs`, where the test can construct a macro-only `Span` without
+  synthesizing a `rustc_lint::LateContext`; the lint crate continues to cover
+  end-to-end silence through trybuild fixtures.
+
+- Discovery: `cargo nextest run -p whitaker --all-targets --all-features` tries
+  to link rustc-private integration-test binaries outside the Makefile wrapper
+  and fails with duplicate `std`/`core` linkage errors. Impact: focused
+  validation for the span regression uses the library-only target
+  (`cargo nextest run -p whitaker --lib ... --all-features`), while full
+  validation remains the standard `make test` target.
 
 ## Decision log
 
