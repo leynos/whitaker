@@ -270,8 +270,10 @@ This plan must be approved before implementation starts.
   `coderabbit review --agent --dir docs` request stalled after sandbox
   preparation; after terminating only this worktree's PID,
   `coderabbit review findings --plain` reported no stored findings.
-- [ ] Rename the branch to `8-2-2-call-site-collection-in-rstest-tests`,
-  push, and open or update the draft PR.
+- [x] (2026-06-04T05:27:51Z) Confirmed the branch was already named
+  `8-2-2-call-site-collection-in-rstest-tests`, pushed the implementation
+  commits to origin, and updated draft PR
+  [#235](https://github.com/leynos/whitaker/pull/235).
 
 Each completed item should be timestamped, e.g.,
 `- [x] (2026-05-28T12:30:00Z) Drafted this ExecPlan.`.
