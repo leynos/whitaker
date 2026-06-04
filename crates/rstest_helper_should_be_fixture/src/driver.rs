@@ -4,13 +4,25 @@
 //! configuration normalization stays in small helper methods so it can be
 //! tested without constructing rustc contexts.
 
+use crate::collector::{
+    CallSiteCollector, CallSiteLocation, CallSiteRecord, lower_arg_atom, resolve_local_callee,
+};
 use log::debug;
+use rustc_ast::AttrStyle;
+use rustc_hir as hir;
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
+use rustc_hir::def_id::{DefId, LocalDefId};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_lint::{LateContext, LateLintPass};
+use rustc_span::Span;
 use serde::Deserialize;
 use whitaker::SharedConfig;
-use whitaker_common::attributes::AttributePath;
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
-use whitaker_common::rstest::RstestDetectionOptions;
+use whitaker_common::rstest::{
+    ArgFingerprint, ParameterBinding, RstestDetectionOptions, RstestParameter, fixture_local_names,
+    is_rstest_test_with,
+};
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 
@@ -87,6 +99,7 @@ impl Config {
 pub struct RstestHelperShouldBeFixture {
     config: Config,
     detection_options: RstestDetectionOptions,
+    collector: CallSiteCollector,
     localizer: Localizer,
 }
 
@@ -97,6 +110,7 @@ impl Default for RstestHelperShouldBeFixture {
         Self {
             config,
             detection_options,
+            collector: CallSiteCollector::default(),
             localizer: Localizer::new(None),
         }
     }
@@ -137,6 +151,7 @@ impl RstestHelperShouldBeFixture {
         );
         self.config = config;
         self.detection_options = self.config.detection_options();
+        self.collector.clear();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
 }
@@ -144,6 +159,173 @@ impl RstestHelperShouldBeFixture {
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
         self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
+    }
+
+    fn check_fn(
+        &mut self,
+        cx: &LateContext<'tcx>,
+        _kind: hir::intravisit::FnKind<'tcx>,
+        _decl: &'tcx hir::FnDecl<'tcx>,
+        body: &'tcx hir::Body<'tcx>,
+        _span: Span,
+        def_id: LocalDefId,
+    ) {
+        let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
+        let attrs = cx
+            .tcx
+            .hir_attrs(hir_id)
+            .iter()
+            .filter_map(attribute_from_hir)
+            .collect::<Vec<_>>();
+        if !is_rstest_test_with(&attrs, None, &self.detection_options) {
+            return;
+        }
+
+        let parameters = rstest_parameters(cx, body);
+        let fixture_locals = fixture_local_names(&parameters, &self.detection_options);
+        let mut visitor =
+            CallSiteVisitor::new(cx, &mut self.collector, def_id.to_def_id(), &fixture_locals);
+        visitor.visit_expr(body.value);
+    }
+
+    fn check_crate_post(&mut self, _cx: &LateContext<'tcx>) {
+        for (callee, records) in self.collector.iter() {
+            for record in records {
+                debug!(
+                    target: LINT_NAME,
+                    "collected rstest helper call: callee={}, callee_def_id={:?}, \
+                     test_source_def_id={:?}, span={:?}, fingerprint={:?}",
+                    callee,
+                    record.callee_def_id,
+                    record.test_source_def_id,
+                    record.span,
+                    record.fingerprint,
+                );
+            }
+        }
+        debug!(
+            target: LINT_NAME,
+            "rstest helper call-site collection complete: {} callees, {} records",
+            self.collector.callee_count(),
+            self.collector.record_count(),
+        );
+    }
+}
+
+struct CallSiteVisitor<'a, 'tcx> {
+    cx: &'a LateContext<'tcx>,
+    collector: &'a mut CallSiteCollector,
+    test_source_def_id: DefId,
+    fixture_locals: &'a std::collections::BTreeSet<String>,
+}
+
+impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
+    fn new(
+        cx: &'a LateContext<'tcx>,
+        collector: &'a mut CallSiteCollector,
+        test_source_def_id: DefId,
+        fixture_locals: &'a std::collections::BTreeSet<String>,
+    ) -> Self {
+        Self {
+            cx,
+            collector,
+            test_source_def_id,
+            fixture_locals,
+        }
+    }
+
+    fn collect_call(&mut self, expr: &'tcx hir::Expr<'tcx>, args: &'tcx [hir::Expr<'tcx>]) {
+        let Some(span) = whitaker::hir::recover_user_editable_hir_span(expr.span) else {
+            return;
+        };
+        let Some(callee_def_id) = resolve_local_callee(self.cx, expr) else {
+            return;
+        };
+
+        let fingerprint = ArgFingerprint::new(
+            args.iter()
+                .map(|arg| lower_arg_atom(self.cx, arg, self.fixture_locals)),
+        );
+        let record = CallSiteRecord::new(callee_def_id, fingerprint, self.test_source_def_id, span);
+        let source_map = self.cx.tcx.sess.source_map();
+        self.collector.record(
+            record,
+            CallSiteLocation::new(
+                self.cx.tcx.def_path_str(callee_def_id),
+                source_map.span_to_filename(span),
+                span.lo(),
+                span.hi(),
+            ),
+        );
+    }
+}
+
+impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        match expr.kind {
+            hir::ExprKind::Call(_, args) => self.collect_call(expr, args),
+            hir::ExprKind::MethodCall(_, _, args, _) => self.collect_call(expr, args),
+            hir::ExprKind::Closure(..) => return,
+            _ => {}
+        }
+
+        intravisit::walk_expr(self, expr);
+    }
+}
+
+fn rstest_parameters(cx: &LateContext<'_>, body: &hir::Body<'_>) -> Vec<RstestParameter> {
+    body.params
+        .iter()
+        .map(|param| {
+            RstestParameter::new(
+                parameter_binding(param.pat),
+                parameter_attributes(cx, param.pat.hir_id),
+            )
+        })
+        .collect()
+}
+
+fn parameter_binding(pat: &hir::Pat<'_>) -> ParameterBinding {
+    match pat.kind {
+        hir::PatKind::Binding(_, _, ident, None) => ParameterBinding::Ident(ident.to_string()),
+        _ => ParameterBinding::Unsupported,
+    }
+}
+
+fn parameter_attributes(cx: &LateContext<'_>, hir_id: hir::HirId) -> Vec<Attribute> {
+    cx.tcx
+        .hir_attrs(hir_id)
+        .iter()
+        .filter_map(attribute_from_hir)
+        .collect()
+}
+
+fn attribute_from_hir(attr: &hir::Attribute) -> Option<Attribute> {
+    Some(Attribute::new(attribute_path(attr)?, attribute_kind(attr)))
+}
+
+fn attribute_path(attr: &hir::Attribute) -> Option<AttributePath> {
+    let hir::Attribute::Unparsed(_) = attr else {
+        return None;
+    };
+
+    let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
+    let first = names.next()?;
+    Some(AttributePath::new(std::iter::once(first).chain(names)))
+}
+
+fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
+    match attribute_style(attr) {
+        AttrStyle::Inner => AttributeKind::Inner,
+        AttrStyle::Outer => AttributeKind::Outer,
+    }
+}
+
+fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
+    match attr {
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
