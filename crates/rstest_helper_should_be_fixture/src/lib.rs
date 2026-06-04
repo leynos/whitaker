@@ -8,6 +8,8 @@
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 #[cfg(feature = "dylint-driver")]
+mod collector;
+#[cfg(feature = "dylint-driver")]
 mod driver;
 
 #[cfg(feature = "dylint-driver")]

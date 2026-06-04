@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -184,25 +184,38 @@ This plan must be approved before implementation starts.
 
 ## Progress
 
-- [ ] Load `leta`, `rust-router`, `execplans`, and supporting skills, then
-  build the leta workspace for this checkout.
+- [x] (2026-06-04T01:44:41Z) Loaded `leta`, `rust-router`,
+  `rust-types-and-apis`, `arch-crate-design`, `execplans`, and
+  `commit-message`, then confirmed the leta workspace was already registered
+  for this checkout.
 - [ ] Use a Wyvern team plus Firecrawl to confirm Dylint late-pass hooks,
   rustc HIR resolution helpers, and `rstest` 0.26 parameter-attribute semantics.
-- [ ] Draft this ExecPlan and obtain explicit user approval before any code
-  edits begin.
-- [ ] Add the HIR-to-`ArgAtom` adapter and call-site collector under
+- [x] (2026-06-04T01:44:41Z) Treated the user's explicit request to
+  "proceed with implementation" as approval to execute the existing ExecPlan.
+- [x] (2026-06-04T01:51:51Z) Added the HIR-to-`ArgAtom` adapter and
+  call-site collector under
   `crates/rstest_helper_should_be_fixture/src/collector.rs` (and any helper
   modules), wired into the existing driver.
-- [ ] Add the `check_fn`/`check_crate_post` hooks to
+- [x] (2026-06-04T01:51:51Z) Added the `check_fn`/`check_crate_post` hooks to
   `RstestHelperShouldBeFixture` so the collector populates state per test and
   the crate-post hook drains it into a `debug!` log without emitting
   diagnostics.
+- [x] (2026-06-04T01:56:56Z) Added focused unit coverage for deterministic
+  collector ordering and source-span deduplication. Property, snapshot, and
+  behavioural coverage remain to be added in the next stage.
 - [ ] Add unit, property, snapshot, and `rstest-bdd` behavioural coverage for
   the collector and adapter.
 - [ ] Add or expand a span-recovery regression test for macro-only call sites.
-- [ ] Validate the milestone with `make check-fmt`, `make lint`, `make test`
-  sequentially, capturing output through `tee`.
-- [ ] Run `coderabbit review --agent` and clear all relevant findings.
+- [x] (2026-06-04T01:56:56Z) Validated the first implementation milestone with
+  `cargo check -p rstest_helper_should_be_fixture --all-targets
+  --all-features`, `cargo nextest run -p rstest_helper_should_be_fixture
+  --all-targets --all-features`, `make check-fmt`, `make lint`, and
+  `make test`, each captured through `tee`.
+- [x] (2026-06-04T02:41:31Z) Ran `coderabbit review --agent`; two full-scope
+  attempts reached `tools_completed` and then hung in the CLI without stored
+  findings, with one intervening rate-limit wait handled by `vsleep`. A scoped
+  `coderabbit review --agent --dir crates/rstest_helper_should_be_fixture`
+  completed with 0 findings for the implemented lint-crate milestone.
 - [ ] Update `docs/users-guide.md`, `docs/developers-guide.md`, and
   `docs/lints-for-rstest-fixtures-and-test-hygiene.md` with any behaviour or
   internal-practice changes.
@@ -215,7 +228,18 @@ Each completed item should be timestamped, e.g.,
 
 ## Surprises & discoveries
 
-(None yet. Record observations during implementation with evidence and impact.)
+- Discovery: `rustc_span::def_id::DefId` is not `Ord` on the pinned rustc
+  toolchain, so it cannot be used directly as a `BTreeMap` or `BTreeSet` key.
+  Impact: `CallSiteCollector` now keys deterministic maps and deduplication on
+  `cx.tcx.def_path_str(callee_def_id)` while preserving the raw callee
+  `DefId` inside each `CallSiteRecord`.
+
+- Discovery: full-scope `coderabbit review --agent` can reach
+  `tools_completed` and then hang in CodeRabbit CLI v0.5.3 without writing
+  stored findings. Impact: the first milestone used the same agent-mode review
+  scoped to `crates/rstest_helper_should_be_fixture`, which completed with 0
+  findings. Future milestones should retry full-scope review after documentation
+  and roadmap changes land.
 
 ## Decision log
 
@@ -260,6 +284,13 @@ Each completed item should be timestamped, e.g.,
   reserved for later milestones (such as 8.2.3's threshold semantics) that
   might benefit from bounded state-space exploration. Author/Date: Codex /
   2026-05-28.
+
+- Decision: Use `tcx.def_path_str(callee_def_id)` as the ordered collection
+  key and keep `DefId` on `CallSiteRecord`. Rationale: the pinned rustc
+  `DefId` implements equality and hashing but not ordering, while the roadmap
+  requires deterministic per-callee collection. Definition paths provide the
+  stable ordering surface already used elsewhere in Whitaker. Author/Date:
+  Codex / 2026-06-04.
 
 ## Outcomes & retrospective
 
@@ -380,18 +411,16 @@ Add `crates/rstest_helper_should_be_fixture/src/collector.rs` (new module,
 re-exported from `lib.rs` as `pub(crate) mod collector;`). The module owns two
 pure pieces and one adapter:
 
-1. `pub(crate) struct CallSiteRecord { fingerprint: ArgFingerprint, span:
-   rustc_span::Span, test_source_def_id: rustc_hir::def_id::DefId }
-   ` — the per-call evidence record.
-2. `pub(crate) struct CallSiteCollector { by_callee:
-   std::collections::BTreeMap<rustc_hir::def_id::DefId, Vec<CallSiteRecord>>,
-   seen: std::collections::BTreeSet<(rustc_hir::def_id::DefId,
-   (rustc_span::FileName, rustc_span::BytePos, rustc_span::BytePos))> }
-   ` — accepts records, deduplicates by (callee, source-file span) so that `#[
-   case]`-generated siblings collapse into one record.
-3. `pub(crate) fn lower_arg_atom<'tcx>(cx: &LateContext<'tcx>, expr:
-   &'tcx rustc_hir::Expr<'tcx>, fixture_locals: &BTreeSet<String>) -> ArgAtom
-   ` — the HIR-to-`ArgAtom` adapter.
+1. `pub(crate) struct CallSiteRecord` stores the callee `DefId`, the
+   `ArgFingerprint`, the source test `DefId`, and the recovered user-editable
+   call span.
+2. `pub(crate) struct CallSiteCollector` stores records in a
+   `BTreeMap<String, Vec<CallSiteRecord>>`, where the string key is
+   `tcx.def_path_str(callee_def_id)`. It deduplicates with a private
+   `BTreeSet` over `(callee path, source file, span lo, span hi)` so that
+   `#[case]`-generated siblings collapse into one record.
+3. `pub(crate) fn lower_arg_atom<'tcx>(...) -> ArgAtom` is the HIR-to-`ArgAtom`
+   adapter.
 
 Adapter rules, applied in order:
 
@@ -405,9 +434,10 @@ Adapter rules, applied in order:
   source slice of the literal taken via
   `cx.tcx.sess.source_map().span_to_snippet` (fall back to
   `lit.node.to_string()` when the snippet is unavailable);
-- if the expression is `ExprKind::Path(qpath)` and `cx.qpath_res(qpath,
-  expr.hir_id)` returns `Res::Def(DefKind::Const | AssocConst | Static, def_id)
-  `, return `ArgAtom::ConstPath { def_path: cx.tcx.def_path_str(def_id) }`;
+- if the expression is `ExprKind::Path(qpath)` and
+  `cx.qpath_res(qpath, expr.hir_id)` returns a `const`, associated `const`, or
+  `static` definition, return
+  `ArgAtom::ConstPath { def_path: cx.tcx.def_path_str(def_id) }`;
 - otherwise, return `ArgAtom::Unsupported`.
 
 For the call-side, add `resolve_local_callee` with this signature:
@@ -421,13 +451,13 @@ pub(crate) fn resolve_local_callee<'tcx>(
 
 Resolution rules:
 
-- `ExprKind::Call(callee, _)` → `cx.qpath_res(&qpath, callee.hir_id)
-  .opt_def_id()` when the callee is `ExprKind::Path`, then keep only when `
-  def_id.krate == LOCAL_CRATE` and `matches!(cx.tcx.def_kind(def_id),
-  DefKind::Fn | DefKind::AssocFn)`;
+- `ExprKind::Call(callee, _)` resolves with
+  `cx.qpath_res(&qpath, callee.hir_id).opt_def_id()` when the callee is
+  `ExprKind::Path`, then keeps only local function or associated-function
+  definitions;
 - `ExprKind::MethodCall(_, _, _, _)` →
-  `cx.typeck_results().type_dependent_def_id(expr.hir_id)` filtered by the same
-  `LOCAL_CRATE` and `DefKind` predicates;
+  `cx.typeck_results().type_dependent_def_id(expr.hir_id)` filtered by the
+  same local function or associated-function predicates;
 - otherwise, `None`.
 
 Unit tests in this stage cover pure helpers only:
