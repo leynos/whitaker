@@ -6,6 +6,8 @@ use whitaker_common::rstest::ArgFingerprint;
 
 use super::{CallSiteCollector, CallSiteLocation, CallSiteRecord};
 
+use proptest::prelude::*;
+
 #[test]
 fn collector_iterates_callees_in_definition_path_order() {
     let mut collector = CallSiteCollector::default();
@@ -84,4 +86,38 @@ fn location(callee: &str, lo: BytePos, hi: BytePos) -> CallSiteLocation {
 
 fn source_file() -> FileName {
     FileName::Custom("src/lib.rs".to_string())
+}
+
+proptest! {
+    #[test]
+    fn collector_order_is_independent_of_insertion_order(mut spans in span_specs()) {
+        spans.sort_unstable();
+        spans.dedup();
+        let reversed = spans.iter().copied().rev().collect::<Vec<_>>();
+
+        let forward = collect_spans(&spans);
+        let backward = collect_spans(&reversed);
+
+        prop_assert_eq!(forward, backward);
+    }
+}
+
+fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, usize)> {
+    let mut collector = CallSiteCollector::default();
+    for (callee_index, lo, hi) in spans.iter().copied() {
+        let callee = format!("crate::helper_{callee_index}");
+        collector.record(
+            record(def_id(callee_index)),
+            location(&callee, BytePos(lo), BytePos(hi)),
+        );
+    }
+
+    collector
+        .iter()
+        .map(|(callee, records)| (callee.to_string(), records.len()))
+        .collect()
+}
+
+fn span_specs() -> impl Strategy<Value = Vec<(u32, u32, u32)>> {
+    proptest::collection::vec((1_u32..5, 1_u32..100, 101_u32..200), 1..24)
 }

@@ -203,19 +203,47 @@ This plan must be approved before implementation starts.
 - [x] (2026-06-04T01:56:56Z) Added focused unit coverage for deterministic
   collector ordering and source-span deduplication. Property, snapshot, and
   behavioural coverage remain to be added in the next stage.
-- [ ] Add unit, property, snapshot, and `rstest-bdd` behavioural coverage for
-  the collector and adapter.
+- [x] (2026-06-04T02:46:39Z) Added `rstest-bdd` behavioural coverage for
+  generated-case deduplication and distinct-source span retention, a `proptest`
+  insertion-order invariant for collector determinism, and a trybuild pass
+  fixture proving collection remains diagnostic-silent for fixture, literal,
+  `const`, and `static` arguments.
 - [ ] Add or expand a span-recovery regression test for macro-only call sites.
 - [x] (2026-06-04T01:56:56Z) Validated the first implementation milestone with
-  `cargo check -p rstest_helper_should_be_fixture --all-targets
-  --all-features`, `cargo nextest run -p rstest_helper_should_be_fixture
-  --all-targets --all-features`, `make check-fmt`, `make lint`, and
-  `make test`, each captured through `tee`.
+  `cargo check -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  `make check-fmt`, `make lint`, and `make test`, each captured through `tee`.
 - [x] (2026-06-04T02:41:31Z) Ran `coderabbit review --agent`; two full-scope
   attempts reached `tools_completed` and then hung in the CLI without stored
   findings, with one intervening rate-limit wait handled by `vsleep`. A scoped
   `coderabbit review --agent --dir crates/rstest_helper_should_be_fixture`
   completed with 0 findings for the implemented lint-crate milestone.
+- [x] (2026-06-04T02:46:39Z) Validated the second test-coverage milestone with
+  `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  `make check-fmt`, `make lint`, and `make test`; the full workspace test run
+  executed 1459 tests with 1459 passed and 3 skipped.
+- [x] (2026-06-04T03:37:16Z) Addressed two CodeRabbit findings from the
+  second milestone by exercising helper symbols from the zero-diagnostic UI
+  fixture's `main` function and replacing BDD scenario `let _ = world`
+  appeasement with scoped `#[expect(unused_variables)]` attributes.
+- [x] (2026-06-04T03:37:16Z) Revalidated after the CodeRabbit fixes with
+  `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  `make check-fmt`, `make lint`, `make test`, and `make markdownlint`; the full
+  workspace test run again executed 1459 tests with 1459 passed and 3 skipped.
+- [x] (2026-06-04T04:09:23Z) Addressed the valid trivial CodeRabbit style
+  finding by collapsing the trybuild fixture function to a single-line simple
+  return, rejected the equivalent `rstest-bdd` fixture suggestion because it
+  produces an `unused_braces` compiler warning under the macro expansion, and
+  revalidated with focused nextest, `make check-fmt`, `make lint`, and
+  `make test`.
+- [x] (2026-06-04T04:12:23Z) Documented the intentional `static` argument path
+  in the zero-diagnostic UI fixture after CodeRabbit suggested normalizing it
+  to `const`; the fixture keeps both forms so the collector exercises constant
+  and static definition paths in one pass case.
+- [x] (2026-06-04T04:43:04Z) Re-ran
+  `coderabbit review --agent --dir crates/rstest_helper_should_be_fixture`
+  after the static-path rationale and all deterministic gates; CodeRabbit
+  completed with 0 findings for the test-coverage milestone.
 - [ ] Update `docs/users-guide.md`, `docs/developers-guide.md`, and
   `docs/lints-for-rstest-fixtures-and-test-hygiene.md` with any behaviour or
   internal-practice changes.
@@ -231,15 +259,27 @@ Each completed item should be timestamped, e.g.,
 - Discovery: `rustc_span::def_id::DefId` is not `Ord` on the pinned rustc
   toolchain, so it cannot be used directly as a `BTreeMap` or `BTreeSet` key.
   Impact: `CallSiteCollector` now keys deterministic maps and deduplication on
-  `cx.tcx.def_path_str(callee_def_id)` while preserving the raw callee
-  `DefId` inside each `CallSiteRecord`.
+  `cx.tcx.def_path_str(callee_def_id)` while preserving the raw callee `DefId`
+  inside each `CallSiteRecord`.
 
 - Discovery: full-scope `coderabbit review --agent` can reach
   `tools_completed` and then hang in CodeRabbit CLI v0.5.3 without writing
   stored findings. Impact: the first milestone used the same agent-mode review
   scoped to `crates/rstest_helper_should_be_fixture`, which completed with 0
-  findings. Future milestones should retry full-scope review after documentation
-  and roadmap changes land.
+  findings. Future milestones should retry full-scope review after
+  documentation and roadmap changes land.
+
+- Discovery: `rstest-bdd` step fixture injection matches parameter names
+  literally; naming a step parameter `_world` does not bind the `world`
+  fixture. Impact: the "When collector stores evidence" step became a no-op
+  step because the "Given" step already builds the world state, avoiding a
+  misleading unused fixture binding while preserving the behavioural scenario.
+
+- Discovery: `make fmt` runs Markdown formatting and then Markdown lint across
+  the whole repository; existing unrelated Markdown lint errors can make the
+  target fail even when `cargo fmt --all` succeeds. Impact: unrelated formatter
+  churn from that command was restored, and this milestone continues to use
+  `make check-fmt` plus `make markdownlint` as the deterministic gates.
 
 ## Decision log
 
@@ -286,11 +326,11 @@ Each completed item should be timestamped, e.g.,
   2026-05-28.
 
 - Decision: Use `tcx.def_path_str(callee_def_id)` as the ordered collection
-  key and keep `DefId` on `CallSiteRecord`. Rationale: the pinned rustc
-  `DefId` implements equality and hashing but not ordering, while the roadmap
-  requires deterministic per-callee collection. Definition paths provide the
-  stable ordering surface already used elsewhere in Whitaker. Author/Date:
-  Codex / 2026-06-04.
+  key and keep `DefId` on `CallSiteRecord`. Rationale: the pinned rustc `DefId`
+  implements equality and hashing but not ordering, while the roadmap requires
+  deterministic per-callee collection. Definition paths provide the stable
+  ordering surface already used elsewhere in Whitaker. Author/Date: Codex /
+  2026-06-04.
 
 ## Outcomes & retrospective
 
@@ -416,8 +456,8 @@ pure pieces and one adapter:
    call span.
 2. `pub(crate) struct CallSiteCollector` stores records in a
    `BTreeMap<String, Vec<CallSiteRecord>>`, where the string key is
-   `tcx.def_path_str(callee_def_id)`. It deduplicates with a private
-   `BTreeSet` over `(callee path, source file, span lo, span hi)` so that
+   `tcx.def_path_str(callee_def_id)`. It deduplicates with a private `BTreeSet`
+   over `(callee path, source file, span lo, span hi)` so that
    `#[case]`-generated siblings collapse into one record.
 3. `pub(crate) fn lower_arg_atom<'tcx>(...) -> ArgAtom` is the HIR-to-`ArgAtom`
    adapter.
@@ -456,8 +496,8 @@ Resolution rules:
   `ExprKind::Path`, then keeps only local function or associated-function
   definitions;
 - `ExprKind::MethodCall(_, _, _, _)` →
-  `cx.typeck_results().type_dependent_def_id(expr.hir_id)` filtered by the
-  same local function or associated-function predicates;
+  `cx.typeck_results().type_dependent_def_id(expr.hir_id)` filtered by the same
+  local function or associated-function predicates;
 - otherwise, `None`.
 
 Unit tests in this stage cover pure helpers only:
@@ -481,9 +521,20 @@ Extend `crates/rstest_helper_should_be_fixture/src/driver.rs`:
 
 - Add `collector: collector::CallSiteCollector` to
   `RstestHelperShouldBeFixture` (and to `Default`).
-- Implement `fn check_fn<'tcx>(&mut self, cx: &LateContext<'tcx>, kind:
-  hir::intravisit::FnKind<'tcx>, _decl: &'tcx hir::FnDecl<'tcx>, body: &'tcx
-  hir::Body<'tcx>, _span: rustc_span::Span, _def_id: hir::HirId)`:
+- Implement `check_fn` with the late-pass signature:
+
+  ```rust
+  fn check_fn<'tcx>(
+      &mut self,
+      cx: &LateContext<'tcx>,
+      kind: hir::intravisit::FnKind<'tcx>,
+      _decl: &'tcx hir::FnDecl<'tcx>,
+      body: &'tcx hir::Body<'tcx>,
+      _span: rustc_span::Span,
+      _def_id: hir::HirId,
+  )
+  ```
+
   - early-return when the function is not a strict `#[rstest]` test under
     the configured `RstestDetectionOptions` (use `whitaker::hir`-provided
     attribute access to feed `is_rstest_test_with`);
@@ -716,11 +767,10 @@ The implementation is accepted when all of the following are true:
   collected record.
 - A call whose argument is a macro-expanded literal or whose call-site span
   recovers to `None` is excluded from the collected state.
-- `cargo nextest run -p rstest_helper_should_be_fixture --all-targets
-  --all-features` passes.
-- `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets
-  --all-features
-  ` passes, including the existing suite and installer registration scenarios.
+- `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`
+  passes.
+- `cargo nextest run -p whitaker_suite -p whitaker-installer --all-targets --all-features`
+  passes, including the existing suite and installer registration scenarios.
 - `make markdownlint`, `make check-fmt`, `make lint`, and `make test` all
   succeed.
 - `coderabbit review --agent` has no unresolved relevant findings.
