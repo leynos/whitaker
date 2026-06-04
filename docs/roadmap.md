@@ -90,6 +90,22 @@
   002](adr-002-dylint-expect-attribute-macro.md) §Migration plan.
   Requires 1.3.3.
 
+
+### 2.3. Localization enablement
+
+- [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
+  dependencies and expose a shared `common::i18n` loader.
+  Requires 1.1.1.
+- [x] 2.3.2. Create the `locales/` resource tree with an `en-GB` fallback and
+  secondary `cy`/`gd` language samples covering every lint slug.
+  Requires 2.3.1.
+- [x] 2.3.3. Refactor lint diagnostics to source primary messages, notes, and
+  help text from Fluent bundles with structured arguments.
+  Requires 2.3.2.
+- [x] 2.3.4. Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and
+  add UI smoke tests that run under at least one non-English locale.
+  Requires 2.3.3.
+
 ### 2.3. Localization enablement
 
 - [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
@@ -556,26 +572,21 @@
 
 - [x] 8.2.1. Create the `rstest_helper_should_be_fixture` lint crate, register
   `RSTEST_HELPER_SHOULD_BE_FIXTURE`, and wire configuration loading defaults.
-  See [rstest fixture and test hygiene
-  lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint A: call-site
-  fixture extraction.
-  Requires 1.1.2 and 8.1.1.
-- [ ] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
+  See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.1.1 and 8.1.3.
+- [x] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
   fixture-local classification and constant-aware argument fingerprinting. See
-  [rstest fixture and test hygiene
-  lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint A: call-site
-  fixture extraction.
-  Requires 8.1.3 and 8.2.1.
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.1.
 - [ ] 8.2.3. Implement crate-post aggregation thresholds and actionable
-  diagnostics with `span_lint_hir_and_then`. See [rstest fixture and test
-  hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint A:
-  call-site fixture extraction.
-  Requires 8.1.2 and 8.2.2.
-- [ ] 8.2.4. Add UI pass/fail coverage for repeated no-arg helpers, repeated
-  fixture/constant argument helpers, and non-trigger cases. See [rstest fixture
-  and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint
-  A: call-site fixture extraction.
-  Requires 1.2.1 and 8.2.3.
+  diagnostics with `span_lint_hir_and_then`. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.2 and 8.1.2.
+- [ ] 8.2.4. Add UI pass/fail coverage for repeated no-arg helpers,
+  repeated fixture/constant argument helpers, and non-trigger cases. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.3 and 1.2.1.
 
 ### 8.3. `single_binding_paragraph` lint
 

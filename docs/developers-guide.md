@@ -1719,6 +1719,21 @@ feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
 and listed in `installer/src/resolution.rs` so the installer can derive the
 matching suite feature automatically.
 
+`rstest_helper_should_be_fixture` currently uses an in-crate collector rather
+than a shared adapter. The collector stores passive call-site evidence in
+deterministic `BTreeMap` order keyed by `tcx.def_path_str(callee_def_id)`,
+while preserving the raw `DefId` in each record for later diagnostics. The late
+pass only records local function or associated-function callees inside strict
+`#[rstest]` tests, drops call sites whose spans cannot recover to
+user-editable source, and lowers arguments conservatively to fixture-local,
+literal, constant path, or unsupported atoms.
+
+Future rstest lints should promote this adapter out of
+`crates/rstest_helper_should_be_fixture/src/collector.rs` only when another
+crate consumes the same HIR lowering policy. Until then, keep compiler-aware
+HIR logic in the lint crate and keep the pure `ArgAtom`/`ArgFingerprint` model
+in `whitaker_common::rstest`.
+
 ### Adding a new lint
 
 New lints should typically start as experimental. To add a lint:
