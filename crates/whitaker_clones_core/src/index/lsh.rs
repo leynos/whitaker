@@ -193,7 +193,7 @@ const KANI_MAX_INSERTED_FRAGMENTS: usize = 4;
 const KANI_MAX_RECORDED_BANDS: usize = 2;
 
 #[cfg(kani)]
-const KANI_MAX_RECORDED_PAIRS: usize = 6;
+pub(super) const KANI_MAX_RECORDED_PAIRS: usize = 6;
 
 #[cfg(kani)]
 const _: () = assert!(
@@ -202,6 +202,12 @@ const _: () = assert!(
 
 #[cfg(kani)]
 const KANI_MAX_ROWS_PER_BAND: usize = MINHASH_SIZE;
+
+#[cfg(kani)]
+const KANI_ROWS_EQUAL_INDEX_COUNT: usize = 128;
+
+#[cfg(kani)]
+const _: () = assert!(KANI_MAX_ROWS_PER_BAND == KANI_ROWS_EQUAL_INDEX_COUNT);
 
 #[cfg(kani)]
 const fn empty_inserted_fragments_for_kani()
@@ -233,6 +239,11 @@ impl InsertedFragmentsForKani {
         if self.len < KANI_MAX_INSERTED_FRAGMENTS {
             self.items[self.len] = Some(fragment);
             self.len += 1;
+        } else {
+            kani::assert(
+                self.len < KANI_MAX_INSERTED_FRAGMENTS,
+                "exceeded KANI_MAX_INSERTED_FRAGMENTS; adjust the bound or reduce inserts",
+            );
         }
     }
 

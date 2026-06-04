@@ -47,6 +47,8 @@ use super::{
 const KANI_MINHASH_SEED: u64 = 0xA076_1D64_78BD_642F;
 const KANI_MINHASH_MIDDLE_SEED: u64 = 0xE703_7ED1_A0B4_28DB;
 const KANI_MINHASH_LAST_SEED: u64 = 0x8EBC_6AF0_9C88_C6E3;
+const KANI_LSH_UNWIND: usize = 7;
+const _: () = assert!(KANI_LSH_UNWIND == super::lsh::KANI_MAX_RECORDED_PAIRS + 1);
 
 fn fingerprint(hash: u64, start: usize) -> Fingerprint {
     Fingerprint::new(hash, start..start.saturating_add(1))

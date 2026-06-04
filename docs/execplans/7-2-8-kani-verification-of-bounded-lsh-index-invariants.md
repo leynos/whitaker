@@ -8,10 +8,10 @@ Status: COMPLETED
 
 ## Purpose / big picture
 
-Roadmap item 7.2.8 adds bounded Kani verification for the token-pass locality
-sensitive hashing index. Locality-sensitive hashing, or LSH, groups fixed-width
-MinHash signatures into bands and emits candidate fragment pairs when two
-fragments collide in a band. After this work, maintainers can run the
+Roadmap item 7.2.8 adds bounded Kani verification for the token-pass
+locality-sensitive hashing index. Locality-sensitive hashing, or LSH, groups
+fixed-width MinHash signatures into bands and emits candidate fragment pairs
+when two fragments collide in a band. After this work, maintainers can run the
 clone-detector Kani proof target and see that small bounded `LshIndex` states
 preserve the candidate-pair invariants already promised by the design: no
 self-pairs, canonical pair ordering, repeated-band deduplication, and
@@ -38,7 +38,8 @@ The existing domain boundary must remain intact. `LshIndex`, `CandidatePair`,
 `FragmentId`, `LshConfig`, and `MinHashSignature` are clone-detector domain
 types in `whitaker_clones_core`; proof tooling and wrapper scripts are
 infrastructure around that domain. The domain must not learn about command-line
-wrappers, filesystem paths, CI layout, or adapter details.
+wrappers, filesystem paths, continuous integration (CI) layout, or adapter
+details.
 
 No new external crate dependency may be added without escalation. Kani is
 already integrated through `scripts/install-kani.sh`, `scripts/run-kani.sh`,
@@ -401,10 +402,11 @@ bounded Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` and
 adds them to the `clone-detector` harness list in `scripts/run-kani.sh`.
 
 The first direct Kani attempt showed that proving through public
-`candidate_pairs()` is impractical for the bounded proof target because CBMC
-spends its time in `BTreeSet<CandidatePair>` implementation details. The
-implementation now uses a Kani-only summary seam next to `LshIndex`; this keeps
-the proof adjacent to the domain code and preserves the public runtime API.
+`candidate_pairs()` is impractical for the bounded proof target because C
+Bounded Model Checker (CBMC) spends its time in `BTreeSet<CandidatePair>`
+implementation details. The implementation now uses a Kani-only summary seam
+next to `LshIndex`; this keeps the proof adjacent to the domain code and
+preserves the public runtime API.
 
 The first summary seam still traversed production `BTreeSet<FragmentId>` state,
 which remained impractical. The seam now records the bounded insertion facts as
@@ -747,3 +749,14 @@ command substitution, the concrete proof-shape decision, and the addition of
 four bounded `LshIndex` Kani harnesses plus runner wiring. Remaining work is
 to validate the harness milestone, run CodeRabbit, update documentation, and
 complete the final gates.
+
+Revision note: On 2026-06-04, review follow-up tied the Kani LSH unwind bound
+to `KANI_MAX_RECORDED_PAIRS + 1` with a compile-time assertion because Kani
+requires literal `#[kani::unwind]` values, made proof-log overflow explicit,
+recorded the fixed row-count assumption beside the Kani row comparator, and
+corrected documentation acronym and hyphenation issues.
+
+Revision note: The review follow-up passed `make check-fmt`,
+`make markdownlint`, `make nixie`, `make lint`, `make test`, and
+`make kani-clone-detector`. `coderabbit review --agent` then completed with
+zero findings.
