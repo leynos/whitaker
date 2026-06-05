@@ -1,5 +1,6 @@
 //! Unit tests for passive rstest helper call-site collection.
 
+use rstest::rstest;
 use rustc_hir::def_id::{DefId, DefIndex};
 use rustc_span::{BytePos, DUMMY_SP, FileName};
 use whitaker_common::rstest::ArgFingerprint;
@@ -29,8 +30,15 @@ fn collector_iterates_callees_in_definition_path_order() {
     assert_eq!(keys, ["crate::a_helper", "crate::z_helper"]);
 }
 
-#[test]
-fn collector_deduplicates_identical_callee_and_source_span() {
+#[rstest]
+#[case(BytePos(10), BytePos(18), false, 1)]
+#[case(BytePos(20), BytePos(28), true, 2)]
+fn collector_handles_second_call_for_same_callee(
+    #[case] second_lo: BytePos,
+    #[case] second_hi: BytePos,
+    #[case] second_inserted: bool,
+    #[case] expected_record_count: usize,
+) {
     let mut collector = CallSiteCollector::default();
     let callee = def_id(1);
 
@@ -40,31 +48,13 @@ fn collector_deduplicates_identical_callee_and_source_span() {
     );
     let second = collector.record(
         record(callee),
-        location("crate::helper", BytePos(10), BytePos(18)),
+        location("crate::helper", second_lo, second_hi),
     );
 
     assert!(first);
-    assert!(!second);
+    assert_eq!(second, second_inserted);
     assert_eq!(collector.callee_count(), 1);
-    assert_eq!(collector.record_count(), 1);
-}
-
-#[test]
-fn collector_keeps_distinct_source_spans_for_same_callee() {
-    let mut collector = CallSiteCollector::default();
-    let callee = def_id(1);
-
-    collector.record(
-        record(callee),
-        location("crate::helper", BytePos(10), BytePos(18)),
-    );
-    collector.record(
-        record(callee),
-        location("crate::helper", BytePos(20), BytePos(28)),
-    );
-
-    assert_eq!(collector.callee_count(), 1);
-    assert_eq!(collector.record_count(), 2);
+    assert_eq!(collector.record_count(), expected_record_count);
 }
 
 fn record(callee_def_id: DefId) -> CallSiteRecord {

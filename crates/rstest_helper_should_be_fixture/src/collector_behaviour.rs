@@ -21,25 +21,22 @@ fn world() -> CollectorWorld {
 
 #[given("two generated rstest cases share the same source helper call")]
 fn given_same_source_call(world: &mut CollectorWorld) {
-    world.inserted.push(world.collector.record(
-        record(def_id(1), ArgAtom::fixture_local("fixture")),
-        location("crate::helper", 10, 18),
-    ));
-    world.inserted.push(world.collector.record(
-        record(def_id(1), ArgAtom::fixture_local("fixture")),
-        location("crate::helper", 10, 18),
-    ));
+    push_two_helper_calls(world, 10, 18);
 }
 
 #[given("two helper calls use different source spans")]
 fn given_distinct_source_calls(world: &mut CollectorWorld) {
+    push_two_helper_calls(world, 20, 28);
+}
+
+fn push_two_helper_calls(world: &mut CollectorWorld, second_lo: u32, second_hi: u32) {
     world.inserted.push(world.collector.record(
         record(def_id(1), ArgAtom::fixture_local("fixture")),
         location("crate::helper", 10, 18),
     ));
     world.inserted.push(world.collector.record(
         record(def_id(1), ArgAtom::fixture_local("fixture")),
-        location("crate::helper", 20, 28),
+        location("crate::helper", second_lo, second_hi),
     ));
 }
 
