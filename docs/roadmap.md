@@ -395,7 +395,7 @@
   failure. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
   [clone detector design](whitaker-clone-detector-design.md) §MinHash and LSH.
-- [ ] 7.2.8. Use Kani to verify bounded `LshIndex` invariants, including no
+- [x] 7.2.8. Use Kani to verify bounded `LshIndex` invariants, including no
   self-pairs, canonical pair ordering, repeated-band deduplication, and
   insertion-order independence. Requires 7.2.4. See
   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md) and
