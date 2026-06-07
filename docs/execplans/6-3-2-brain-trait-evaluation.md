@@ -150,8 +150,8 @@ Observable outcome:
    `brain_trait_metrics` would collide with identically named functions already
    re-exported from `brain_type_metrics` at the `common::` root level. Callers
    must use the fully qualified path
-   `brain_trait_metrics::evaluation::format_help` (or the module-level re-export
-   `brain_trait_metrics::format_help`).
+   `brain_trait_metrics::evaluation::format_help` (or the module-level
+   re-export `brain_trait_metrics::format_help`).
 
 3. **`DiagnosticInput` parameter struct in tests.** Introduced to stay within
    the workspace `too_many_arguments` threshold of 4. All `build_diagnostic`

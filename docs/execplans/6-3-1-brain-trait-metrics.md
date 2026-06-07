@@ -12,8 +12,8 @@ This document must be maintained in accordance with `AGENTS.md`.
 
 Roadmap item 6.3.1 delivers the metric-collection layer for `brain_trait`. This
 is the trait analogue of roadmap 6.2.1 (`brain_type` metrics), but scoped
-strictly to the three signals specified by `docs/brain-trust-lints-design.md` §
-`brain_trait` signals:
+strictly to the three signals specified by `docs/brain-trust-lints-design.md`
+§`brain_trait` signals:
 
 1. Interface size (trait item counting, with focus on required methods).
 2. Default method complexity (sum cognitive complexity across default bodies).

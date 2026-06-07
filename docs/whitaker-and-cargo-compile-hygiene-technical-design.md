@@ -31,8 +31,8 @@ optionally `dylint.toml`/`whitaker.toml`-style tables for Dylint), enabling a
 single policy source of truth (layer definitions, forbidden dependencies,
 feature “islands”, thresholds). Cargo explicitly supports third-party tooling
 via (a) `cargo metadata`, (b) stable JSON message formats, and (c) custom
-subcommands, and it also supports manifest metadata intended for external tools.
-[^2]
+subcommands, and it also supports manifest metadata intended for external
+tools. [^2]
 
 The design is driven by the concrete failures seen in Axinite and Gauss:
 repeated link/compile work due to many integration test crates, always-compiled
@@ -52,8 +52,8 @@ toolchains) stay always-on; dependency resolution drags in parallel HTTP/TLS
 stacks; and architectural layering decays until a change in one corner forces
 costly recompilation everywhere. Axinite’s investigation quantified these
 effects: hundreds of crates in the graph, many integration test binaries, and
-heavy dependencies contributing significant compile-time and link-time overhead.
-[^4]
+heavy dependencies contributing significant compile-time and link-time
+overhead. [^4]
 
 Cargo’s own documentation highlights one of the major mechanisms: **each file
 under `tests/` is compiled as a separate crate**, and Cargo explicitly notes
@@ -293,8 +293,8 @@ False-positive risks:
 
 - Lexical path scanning (as Wildside currently does via `syn`) can misclassify
   local modules named like external crates or fail to resolve renamed imports.
-  Whitaker should prefer rustc name resolution (HIR `Res`) where possible. [^4]
-  [^3]
+  Whitaker should prefer rustc name resolution (HIR `Res`) where possible.
+  [^4][^3]
 - Re-exports: a layer might legitimately depend on a local façade crate that
   re-exports a forbidden crate; policy must decide whether to forbid the façade
   or the underlying crate.
@@ -703,8 +703,8 @@ ignore_traits = ["Tool", "Database"]  # known dyn-backed traits
 
 Diagnostics/messages:
 
-- `async-trait appears migratable: trait '{TraitName}' is not used as dyn`
-  `Trait in this crate`
+- `async-trait appears migratable: trait '{TraitName}' is not used as dyn
+  Trait in this crate`
 - Notes:
   - remind about `Send` semantics and object safety (link to internal migration
     guidance)
@@ -917,8 +917,8 @@ Outputs:
 What it checks:
 
 - Whether both major TLS backend stacks are present in the build graph at once
-  (heuristic: presence of both `rustls`-family packages and `native-tls`/
-  `openssl-sys`).
+  (heuristic: presence of both `rustls`-family packages and
+  `native-tls`/`openssl-sys`).
 
 Why it matters:
 
@@ -1102,20 +1102,20 @@ boundary violations often hide. [^2][^3]
 
 ### 6.3 Comparison table: what belongs where
 
-| Check / policy                                        | Whitaker (Dylint) | cargo-compile-hygiene | Repo-specific checker | Rationale                                                                                             |
-| ----------------------------------------------------- | ----------------- | --------------------- | --------------------- | ----------------------------------------------------------------------------------------------------- |
-| `forbidden_external_crate_in_layer`                   | Yes               | No                    | No                    | Needs per-use resolution and file/layer mapping inside rustc; best expressed as a lint. [^3]          |
-| `public_api_leaks_optional_dep`                       | Yes               | No                    | No                    | Requires type-level inspection of exported signatures; late lint. [^3]                                |
-| `feature_island_breach`                               | Yes               | No                    | No                    | Needs source location + cfg context; best enforced in lint passes. [^1]                               |
-| `ui_test_macro_outside_app`                           | Yes               | No                    | No                    | Detects attribute macro usage; requires pre-expansion linting. [^1]                                   |
-| `hexagonal_layer_boundary`                            | Yes               | No                    | No                    | Architectural boundary rule-set; Dylint improves Wildside’s lexical approach via resolution. [^4][^3] |
-| `async_trait_clear_misuse` (advisory)                 | Yes               | No                    | No                    | Code-level advisory; whole-workspace audit excluded. [^4]                                             |
-| `integration_target_budget`                           | No                | Yes                   | No                    | Depends on targets and package graph; Cargo metadata. [^2]                                            |
-| `heavy_dependency_not_optional`                       | No                | Yes                   | No                    | Depends on resolved dependency graph + optionality. [^2]                                              |
-| `duplicate_major_version_hotspots`                    | No                | Yes                   | No                    | Graph-level duplicate analysis; matches `cargo tree --duplicates` intent. [^2]                        |
-| `tls_backend_multiplicity`                            | No                | Yes                   | No                    | Graph-level presence of TLS stacks; depends on resolved deps per feature config. [^4]                 |
-| `package_boundary_purity`                             | No                | Yes                   | No                    | Package dependency purity is a Cargo graph property; complements Whitaker. [^4]                       |
-| Redundant `make` pipelines (e.g., `check` + `clippy`) | No                | No                    | Yes                   | Not a Rust/Cargo semantic issue; a repo build orchestration issue. [^4]                               |
+| Check / policy                                        | Whitaker (Dylint) | cargo-compile-hygiene | Repo-specific checker | Rationale                                                                                               |
+| ----------------------------------------------------- | ----------------- | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------- |
+| `forbidden_external_crate_in_layer`                   | Yes               | No                    | No                    | Needs per-use resolution and file/layer mapping inside rustc; best expressed as a lint. [^3]            |
+| `public_api_leaks_optional_dep`                       | Yes               | No                    | No                    | Requires type-level inspection of exported signatures; late lint. [^3]                                  |
+| `feature_island_breach`                               | Yes               | No                    | No                    | Needs source location + cfg context; best enforced in lint passes. [^1]                                 |
+| `ui_test_macro_outside_app`                           | Yes               | No                    | No                    | Detects attribute macro usage; requires pre-expansion linting. [^1]                                     |
+| `hexagonal_layer_boundary`                            | Yes               | No                    | No                    | Architectural boundary rule-set; Dylint improves Wildside’s lexical approach via resolution. [^4][^3]   |
+| `async_trait_clear_misuse` (advisory)                 | Yes               | No                    | No                    | Code-level advisory; whole-workspace audit excluded. [^4]                                               |
+| `integration_target_budget`                           | No                | Yes                   | No                    | Depends on targets and package graph; Cargo metadata. [^2]                                              |
+| `heavy_dependency_not_optional`                       | No                | Yes                   | No                    | Depends on resolved dependency graph + optionality. [^2]                                                |
+| `duplicate_major_version_hotspots`                    | No                | Yes                   | No                    | Graph-level duplicate analysis; matches `cargo tree --duplicates` intent. [^2]                          |
+| `tls_backend_multiplicity`                            | No                | Yes                   | No                    | Graph-level presence of TLS stacks; depends on resolved deps per feature config. [^4]                   |
+| `package_boundary_purity`                             | No                | Yes                   | No                    | Package dependency purity is a Cargo graph property; complements Whitaker. [^4]                         |
+| Redundant `make` pipelines (e.g., `check` + `clippy`) | No                | No                    | Yes                   | Not a Rust/Cargo semantic issue; a repo build orchestration issue. [^4]                                 |
 
 *Table: Ownership split between Whitaker lints and `cargo-compile-hygiene`
 checks.*

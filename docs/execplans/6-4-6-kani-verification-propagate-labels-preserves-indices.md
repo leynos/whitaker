@@ -1,8 +1,9 @@
 # Verify `propagate_labels` with Kani (roadmap 6.4.6)
 
-This ExecPlan (execution plan) is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
-and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: IN PROGRESS
 
@@ -193,9 +194,9 @@ Observable success after implementation:
   `for _ in 0..max_iterations` loop. The proof work is therefore about bounded
   execution under symbolic inputs, not liveness or eventual convergence.
 - The shipped 6.4.5 and 6.4.6 Kani harnesses now live in
-  `common/src/decomposition_advice/community_kani/` as `mod.rs`, `adjacency.rs`,
-  `shared.rs`, and `propagate_labels.rs`, so each proof family stays easy to
-  navigate and under the file-size limit.
+  `common/src/decomposition_advice/community_kani/` as `mod.rs`,
+  `adjacency.rs`, `shared.rs`, and `propagate_labels.rs`, so each proof family
+  stays easy to navigate and under the file-size limit.
 - The repository already has a narrow decomposition test-support export via
   `common::test_support::decomposition`. 6.4.6 should keep label propagation
   helpers in `common/src/test_support/decomposition_label_propagation.rs`
@@ -339,8 +340,8 @@ builder rather than many-argument helper functions.
 
 ### Stage C: Add a narrow integration-test seam
 
-Extend `common/src/test_support/decomposition_label_propagation.rs` with a small
-`label_propagation_report(...)` helper that returns
+Extend `common/src/test_support/decomposition_label_propagation.rs` with a
+small `label_propagation_report(...)` helper that returns
 `Result<LabelPropagationReport, LabelPropagationError>`. The public
 test-support report should wrap the crate-visible
 `community::LabelPropagationReport` rather than moving runtime report types into
@@ -487,7 +488,8 @@ Current state:
    `make lint` all passed for this change set.
 4. `make test` still fails outside the 6.4.6 scope in the pre-existing
    installer cases `ensure_dylint_tools_propagates_install_failures`,
-   `ensure_dylint_tools_installs_missing_tools::case_1_logs_when_not_quiet`, and
+   `ensure_dylint_tools_installs_missing_tools::case_1_logs_when_not_quiet`,
+   and
    `ensure_dylint_tools_installs_missing_tools::case_2_quiet_suppresses_output`.
 5. Targeted `whitaker-common` unit and BDD coverage for label propagation
    passes, so the 6.4.6 runtime seam is verified at the crate level even though

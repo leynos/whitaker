@@ -1,8 +1,9 @@
 # Emit decomposition diagnostic notes for brain-trust lints (roadmap 6.4.2)
 
-This ExecPlan (execution plan) is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
-and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETED
 
@@ -165,8 +166,8 @@ Observable outcome:
   both lints consume the same `DecompositionSuggestion` data model and should
   stay textually consistent. Date/Author: 2026-03-13 / Codex.
 - Decision: cap note output by showing at most 3 communities and at most 3
-  method names per community, then append omitted counts such as "
-  `+2 more methods`" and "`2 more areas omitted`". Rationale: this keeps the
+  method names per community, then append omitted counts such as
+  "`+2 more methods`" and "`2 more areas omitted`". Rationale: this keeps the
   note concise for very large subjects while still exposing the most important
   decomposition signals. Record the final wording in the design doc during
   implementation. Date/Author: 2026-03-13 / Codex.

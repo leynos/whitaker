@@ -322,8 +322,8 @@ In `common/src/brain_type_metrics/foreign_reach.rs`:
 Methods:
 
 - `new() -> Self` — empty set.
-- `record_reference(&mut self, path: impl Into<String>,`
-  `is_from_expansion: bool)` inserts path unless `is_from_expansion` is true.
+- `record_reference(&mut self, path: impl Into<String>,
+  is_from_expansion: bool)` — inserts path unless `is_from_expansion` is true.
 - `count(&self) -> usize` — distinct reference count.
 - `is_empty(&self) -> bool`.
 - `references(&self) -> &BTreeSet<String>` — for diagnostic display.

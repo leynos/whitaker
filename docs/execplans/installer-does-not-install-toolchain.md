@@ -1,8 +1,9 @@
 # Install pinned toolchain automatically
 
-This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
-and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -93,8 +94,8 @@ installed for detected toolchains.
 
 ## Context and Orientation
 
-The installer binary is in `installer/src/main.rs`. Toolchain detection lives in
-`installer/src/toolchain.rs`, which currently reads `rust-toolchain.toml`,
+The installer binary is in `installer/src/main.rs`. Toolchain detection lives
+in `installer/src/toolchain.rs`, which currently reads `rust-toolchain.toml`,
 extracts only the `channel`, and verifies the toolchain via
 `rustup run <channel> rustc --version`. Missing toolchains currently return
 `InstallerError::ToolchainNotInstalled` from `installer/src/error.rs`, which

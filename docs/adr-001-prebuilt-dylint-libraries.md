@@ -213,8 +213,8 @@ module.
 
 The `whitaker-package-lints` binary now supports a `--release-dir` flag that
 auto-discovers compiled library files using `TargetTriple::library_extension()`
-and `TargetTriple::library_prefix()` combined with the canonical crate list from
-`resolution.rs`. This eliminated the brittle `LIB_EXT` case statements and
+and `TargetTriple::library_prefix()` combined with the canonical crate list
+from `resolution.rs`. This eliminated the brittle `LIB_EXT` case statements and
 `LIB_FILES` loops from both the Makefile and the CI workflow. The `lib_ext`
 matrix field was removed from `rolling-release.yml`. Positional library file
 arguments remain supported for backwards compatibility.
@@ -231,8 +231,8 @@ and install flow:
   tree, matching the installer's blocking execution model.
 
 - **`artefact::extraction`** — Trait-based archive extraction
-  (`ArtefactExtractor`) with a production implementation (`ZstdExtractor`) using
-  `tar` and `zstd`. Includes path traversal (zip-slip) protection that
+  (`ArtefactExtractor`) with a production implementation (`ZstdExtractor`)
+  using `tar` and `zstd`. Includes path traversal (zip-slip) protection that
   validates each entry path before extraction.
 
 - **`artefact::manifest_parser`** — Deserializes manifest JSON into the
@@ -257,9 +257,9 @@ collisions across the five-target build matrix.
 
 Custom `Deserialize` implementations were added to all artefact newtypes
 (`GitSha`, `ToolchainChannel`, `TargetTriple`, `Sha256Digest`, `SchemaVersion`)
-rather than using `#[derive(Deserialize)]` because the derived implementation on
-`#[serde(transparent)]` newtypes bypasses the `TryFrom` validation, accepting
-invalid values.
+rather than using `#[derive(Deserialize)]` because the derived implementation
+on `#[serde(transparent)]` newtypes bypasses the `TryFrom` validation,
+accepting invalid values.
 
 ## Architectural rationale
 

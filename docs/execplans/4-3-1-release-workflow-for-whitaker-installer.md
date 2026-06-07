@@ -1,8 +1,9 @@
 # Implement installer release workflow (roadmap 4.3.1)
 
-This ExecPlan (execution plan) is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
-and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -312,8 +313,8 @@ Create `installer/src/installer_packaging.rs` (~180 lines) with:
 - An `InstallerPackagingError` enum (derive `thiserror::Error`):
   `Io(#[from] std::io::Error)`, `BinaryNotFound(PathBuf)`,
   `Zip(#[from] zip::result::ZipError)`.
-- `package_installer(params) -> Result<InstallerPackageOutput, InstallerPackagingError>`
-  that:
+- `package_installer(params) -> Result<InstallerPackageOutput,
+  InstallerPackagingError>` that:
   1. Validates the binary file exists.
   2. Computes archive name and inner directory name.
   3. Delegates to `create_tgz_archive()` or `create_zip_archive()` based on
