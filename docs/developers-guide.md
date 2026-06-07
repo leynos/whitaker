@@ -306,21 +306,6 @@ and Kani:
   state transition and `CandidatePair::new` policy without modelling
   `BTreeMap` and `BTreeSet` allocator internals.
 
-The direct `LshIndex` invariant coverage is also split between ordinary tests
-and Kani:
-
-- Unit tests in `crates/whitaker_clones_core/src/index/tests.rs` cover no
-  self-pairs, canonical pair ordering, repeated-band deduplication, and
-  insertion-order independence through the public `candidate_pairs()` API.
-- The BDD harness in
-  `crates/whitaker_clones_core/tests/min_hash_lsh_behaviour.rs` exercises LSH
-  candidate generation as part of the token-pass behaviour surface.
-- The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` verify
-  bounded `LshIndex` states for the same invariants. Kani builds use a private
-  fixed-size insertion log and compact band keys so the proof checks the LSH
-  state transition and `CandidatePair::new` policy without modelling
-  `BTreeMap` and `BTreeSet` allocator internals.
-
 ### Make targets
 
 Use the Makefile targets for normal proof runs:
