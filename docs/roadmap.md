@@ -884,8 +884,8 @@
   CLI-facing workflow documentation with shared policy examples, report
   interpretation guidance, and migration sequencing for downstream adopters. See
   [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
-  §Comparison table: what belongs where and §Migration guidance for Axinite
-  and Gauss. Requires 12.2.3 and 12.3.4.
+  §Comparison table: what belongs where and §Migration guidance for Axinite and
+  Gauss. Requires 12.2.3 and 12.3.4.
 - [ ] 12.4.3. Define staged rollout criteria for promoting selected
   architecture and compile-hygiene findings from report-only or `warn` status
   to CI-failing policy. See

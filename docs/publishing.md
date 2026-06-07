@@ -2,8 +2,8 @@
 
 This guide explains how to publish the Whitaker installer to
 [crates.io](https://crates.io). The installer is published under the crate name
-[whitaker-installer](https://crates.io/crates/whitaker-installer) and depends
-on the shared support crate
+[whitaker-installer](https://crates.io/crates/whitaker-installer)
+and depends on the shared support crate
 [whitaker-common](https://crates.io/crates/whitaker-common).
 
 ## Preconditions

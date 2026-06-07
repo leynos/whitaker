@@ -862,13 +862,24 @@ dylint_testing = { workspace = true }
 
 ### UI tests
 
-```text
-bad_unwrap_or_else_panic.rs   # warns on inline panic ok_map_err.rs
-# ok: propagates errors via map_err/Result bad_in_test.rs
-# warns inside #[test] ok_in_test.rs                 # ok: safe
-fallback inside #[test] bad_indirect_panic.rs         # document limitation:
-helper fn panics indirectly
-```
+<!-- markdownlint-disable MD033 -->
+<pre><code>bad_unwrap_or_else_panic.rs
+ok_map_err.rs
+bad_in_test.rs
+ok_in_test.rs
+bad_indirect_panic.rs
+</code></pre>
+<!-- markdownlint-enable MD033 -->
+
+| Fixture                       | Coverage                                            |
+| ----------------------------- | --------------------------------------------------- |
+| `bad_unwrap_or_else_panic.rs` | Warns on inline panic.                              |
+| `ok_map_err.rs`               | Accepts errors propagated via `map_err`/`Result`.   |
+| `bad_in_test.rs`              | Warns inside `#[test]`.                             |
+| `ok_in_test.rs`               | Accepts safe fallback inside `#[test]`.             |
+| `bad_indirect_panic.rs`       | Documents the helper-function indirect panic limit. |
+
+*Table 10: `no_unwrap_or_else_panic` UI fixture coverage.*
 
 Pair each `.rs` with a `.stderr` expectation using `dylint_testing::ui_test`.
 
