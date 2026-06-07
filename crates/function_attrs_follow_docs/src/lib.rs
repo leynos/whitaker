@@ -8,6 +8,6 @@ pub use driver::*;
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "stub when dylint-driver is disabled")]
     pub fn function_attrs_follow_docs_disabled_stub() {}
 }
