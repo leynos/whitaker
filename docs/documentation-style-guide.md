@@ -660,7 +660,6 @@ This hierarchy should align with the GIST framework:
   - Define role hierarchy. See design-doc.md §4.3.
   - Add RBAC middleware to API endpoints.
   - Write integration tests for permission boundaries.
-
 ```
 
 ### Writing GIST-aligned steps

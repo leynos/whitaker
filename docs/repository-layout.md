@@ -15,8 +15,6 @@ formal verification helpers.
 
 ## Top-level directories
 
-Table: Top-level repository layout.
-
 | Path         | Purpose                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `.cargo/`    | Cargo configuration shared across the workspace.                                                                                      |
@@ -31,6 +29,8 @@ Table: Top-level repository layout.
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                   |
 | `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                               |
 | `verus/`     | Verus proof sidecars and formal verification experiments.                                                                             |
+
+_Table 1: Top-level repository layout._
 
 ## Shared repository files
 
@@ -62,7 +62,8 @@ small set of support crates:
   `conditional_max_n_branches/`, `function_attrs_follow_docs/`,
   `module_max_lines/`, `module_must_have_inner_docs/`,
   `no_expect_outside_tests/`, `no_std_fs_operations/`,
-  `no_unwrap_or_else_panic/`, and `test_must_not_have_example/`.
+  `no_unwrap_or_else_panic/`, `rstest_helper_should_be_fixture/`, and
+  `test_must_not_have_example/`.
 - Support crates such as `whitaker_clones_core/` and `whitaker_sarif/`.
 - Vendored compatibility crates such as `rustc_ast/`, `rustc_hir/`, and other
   `rustc_*` crates used to align with the Rust compiler interfaces Whitaker

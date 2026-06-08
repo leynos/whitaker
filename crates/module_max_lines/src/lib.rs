@@ -8,6 +8,6 @@ pub use driver::*;
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "stub when dylint-driver is disabled")]
     pub fn module_max_lines_disabled_stub() {}
 }
