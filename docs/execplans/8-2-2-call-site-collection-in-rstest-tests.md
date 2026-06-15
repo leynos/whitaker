@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -274,6 +274,29 @@ This plan must be approved before implementation starts.
   `8-2-2-call-site-collection-in-rstest-tests`, pushed the implementation
   commits to origin, and updated draft PR
   [#235](https://github.com/leynos/whitaker/pull/235).
+- [x] (2026-06-16T00:00:00Z) Refactored the collector unit and behavioural
+  tests to share the duplicate-call setup through `collect_two_calls` and
+  `insert_two_calls`, preserving the existing deduplication and distinct-span
+  semantics.
+- [x] (2026-06-16T00:00:00Z) Moved the `check_fn` call-site collection body
+  into the private `collect_call_sites` helper so the `LateLintPass`
+  implementation now delegates with one statement and the collection boundary
+  is explicit in the driver.
+- [x] (2026-06-16T00:00:00Z) Revalidated the focused lint crate after the
+  refactor with
+  `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  which ran 23 tests with 23 passed. `make check-fmt` also passed before the
+  refactor commit.
+- [x] (2026-06-16T00:00:00Z) Fixed a Mermaid parser failure in
+  `docs/whitaker-dylint-suite-design.md` by flattening wrapped node labels in
+  the consumer adoption flow; `make --no-print-directory markdownlint nixie`
+  then passed with all diagrams validated.
+- [x] (2026-06-16T00:00:00Z) Updated `docs/roadmap.md` item 8.2.2 with the
+  completed collector behaviour, final refactor note, validation coverage, and
+  the explicit boundary that diagnostics remain 8.2.3 work.
+- [x] (2026-06-16T00:00:00Z) Pushed the completed implementation, refactor,
+  Mermaid fix, and roadmap update to
+  `origin/8-2-2-call-site-collection-in-rstest-tests`.
 
 Each completed item should be timestamped, e.g.,
 `- [x] (2026-05-28T12:30:00Z) Drafted this ExecPlan.`.
@@ -370,11 +393,37 @@ Each completed item should be timestamped, e.g.,
   ordering surface already used elsewhere in Whitaker. Author/Date: Codex /
   2026-06-04.
 
+- Decision: Keep the final refactor private to the lint crate and avoid public
+  API changes. Rationale: the duplicated setup lived entirely in collector
+  unit and behaviour tests, and moving `check_fn` logic into
+  `collect_call_sites` improves the internal driver shape without changing
+  lint registration, configuration, or observable diagnostics. Author/Date:
+  Codex / 2026-06-16.
+
 ## Outcomes & retrospective
 
-(To be completed at the end of the milestone. Compare delivered behaviour
-against this section's purpose. Note what to change in 8.2.3 planning if any
-risk hit during implementation.)
+Roadmap item 8.2.2 is complete. The lint now passively collects local helper
+call evidence from `#[rstest]` tests, classifies fixture-local, literal,
+`const`, `static`, and unsupported argument atoms, deduplicates generated
+`#[case]` siblings by recovered source span, and reports the collected evidence
+only through `debug!` logging at crate-post time. It remains diagnostic-silent,
+so threshold evaluation, user-facing suggestions, and `span_lint_hir_and_then`
+emission remain cleanly scoped to roadmap item 8.2.3.
+
+The main design choices held: compiler-aware lowering stayed inside
+`crates/rstest_helper_should_be_fixture`, the pure fingerprint model in
+`whitaker_common::rstest` did not gain rustc dependencies, and conservative
+unsupported handling avoids recording uncertain helper evidence. The final
+test refactor reduced duplicated setup in the unit and BDD coverage without
+altering semantics, and the driver now exposes a private collection helper
+that 8.2.3 can extend without growing `check_fn`.
+
+Validation covered the focused lint crate, full workspace gates during the
+implementation milestones, documentation linting, Mermaid diagram validation,
+and scoped CodeRabbit reviews with 0 unresolved findings. The one follow-up
+for 8.2.3 is to keep using the existing collector records as passive evidence
+and add aggregation thresholds and diagnostics without changing the 8.2.2
+fingerprint or source-span deduplication semantics.
 
 ## Context and orientation
 
