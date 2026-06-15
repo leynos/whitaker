@@ -121,6 +121,21 @@
   add UI smoke tests that run under at least one non-English locale.
   Requires 2.3.3.
 
+### 2.3. Localization enablement
+
+- [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
+  dependencies and expose a shared `common::i18n` loader.
+  Requires 1.1.1.
+- [x] 2.3.2. Create the `locales/` resource tree with an `en-GB` fallback and
+  secondary `cy`/`gd` language samples covering every lint slug.
+  Requires 2.3.1.
+- [x] 2.3.3. Refactor lint diagnostics to source primary messages, notes, and
+  help text from Fluent bundles with structured arguments.
+  Requires 2.3.2.
+- [x] 2.3.4. Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and
+  add UI smoke tests that run under at least one non-English locale.
+  Requires 2.3.3.
+
 ## 3. Aggregated packaging, installer, and unified CLI
 
 ### 3.1. Suite assembly
@@ -579,6 +594,16 @@
   fixture-local classification and constant-aware argument fingerprinting. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction. Requires 8.2.1.
+  Status: the lint now passively collects local helper call evidence from
+  `#[rstest]` bodies, deduplicates generated cases by callee and recovered
+  source span, records fixture-local, literal, `const`, and `static` argument
+  fingerprints, and keeps diagnostics disabled until 8.2.3. The collector test
+  and behaviour scenarios now share duplicate-call helpers, and `check_fn`
+  delegates to a private `collect_call_sites` method so the driver keeps the
+  collection boundary explicit. Validation has passed for
+  `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`.
 - [ ] 8.2.3. Implement crate-post aggregation thresholds and actionable
   diagnostics with `span_lint_hir_and_then`. See
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
