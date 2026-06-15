@@ -32,6 +32,10 @@ produces the pure, well-tested building blocks 7.3.2 will consume.
 
 What a reader can observe after this change:
 
+- The workspace builds on `nightly-2026-05-28`: `rust-toolchain.toml` names the
+  new channel, and the whole Dylint suite (lint crates, `clippy_utils`, vendored
+  shims, installer, UI tests) builds and passes its gates on it — an overdue
+  maintenance bump that also unblocks a clean `ra_ap_syntax` pin for Pass B.
 - A new `whitaker_clones_core::ast` module exists with a single adapter entry
   point, `lower_span(file_text, span) -> Result<NormalisedTree, AstError>`, and
   three pure feature functions, `kind_histogram`, `production_multiset`, and
@@ -80,10 +84,17 @@ escalation, not a workaround.
   upstream `min_nodes`/node-count bound from the Pass A config governs subtree
   size. 7.3.1 does not lower whole files; the smallest-covering selection climbs
   only to the tightest covering ancestor.
-- **Toolchain pin.** The workspace is pinned to `nightly-2025-09-18`
-  (rustc 1.92.0-nightly) via `rust-toolchain.toml`. The selected `ra_ap_syntax`
-  version must compile cleanly on that channel under `-D warnings`. Do not bump
-  the toolchain.
+- **Toolchain bump (Stage 0).** This item bumps `rust-toolchain.toml` from
+  `nightly-2025-09-18` (rustc 1.92.0-nightly) to **`nightly-2026-05-28`**
+  (rustc ≈ 1.9x-nightly, comfortably ≥ 1.95) as a prerequisite Stage 0, landing
+  as its own atomic commit before the AST work. The bump is suite-wide: after
+  it, the *entire* workspace — every Dylint lint crate, `clippy_utils`, the
+  vendored `rustc_*` shims, the installer, and all UI `.stderr` fixtures — must
+  build and pass `make check-fmt`/`make lint`/`make test` on the new channel.
+  The selected `ra_ap_syntax` version is then a *contemporaneous* snapshot
+  (matching the new nightly), not a backwards-bisected one, and must compile
+  cleanly under `-D warnings`. Do not regress any other crate's behaviour while
+  bumping; UI-diagnostic drift is re-baselined, not suppressed.
 - **No silenced lints.** `cargo clippy --workspace --all-targets --all-features
   -- -D warnings` must pass with no new `#[allow(...)]` except as a tightly
   scoped last resort with a written reason.
@@ -105,11 +116,19 @@ escalation, not a workaround.
 
 Thresholds that trigger escalation rather than autonomous continuation.
 
-- **Dependency.** Introducing `ra_ap_syntax` is a new external dependency. It is
-  *mandated by the design document* and therefore pre-approved, but: if the
-  spike in Stage B cannot find any `ra_ap_syntax` `0.0.x` snapshot that compiles
-  on `nightly-2025-09-18` under `-D warnings`, **stop and escalate** with the
-  build evidence. Do not bump the toolchain or vendor the parser to force it.
+- **Stage 0 toolchain bump.** If, after the bump to `nightly-2026-05-28`, the
+  Dylint suite cannot be made to build and pass `make lint`/`make test` because
+  (a) `dylint` v5 cannot drive the new nightly and no compatible
+  `dylint_linting`/`dylint_testing` release exists, or (b) lint-crate/
+  `clippy_utils` `rustc_private` breakage requires rustc-internal API archaeology
+  beyond a focused effort, **stop and escalate** with the build evidence rather
+  than suppressing errors or partially reverting. Re-baselining `.stderr`
+  fixtures is expected and is *not* an escalation; masking a genuine behaviour
+  change behind a re-bless is forbidden.
+- **Dependency.** Introducing `ra_ap_syntax` is a new external dependency,
+  *mandated by the design document* and therefore pre-approved. Post-bump it is
+  a contemporaneous snapshot; if no snapshot near `nightly-2026-05-28` compiles
+  under `-D warnings`, **stop and escalate** with the build evidence.
 - **Transitive surface.** If pinning `ra_ap_syntax` requires pinning more than
   three additional transitive crates with `--precise` to build, stop and
   escalate (it suggests a deeper toolchain mismatch).
@@ -120,12 +139,17 @@ Thresholds that trigger escalation rather than autonomous continuation.
   and is an escalation, not a silent downgrade.
 - **Kani.** If a bounded harness still times out after trying a tightened unwind
   bound and a `kissat`/`cadical` solver swap, stop and escalate.
-- **Scope.** If implementation appears to require changes to more than ~16 files
-  (net) or touches any crate other than `whitaker_clones_core` plus the two
-  proof scripts and the docs, stop and escalate. One budgeted intra-crate touch
-  is expected: promoting the FNV-1a constants from `token/fingerprint.rs` into a
-  new `pub(crate)` `crate::hashing` module and updating `token` to use it (see
-  Decision Log 🔴-E). That touch must keep `token`'s tests green.
+- **Scope (Stage 0 excepted).** Stage 0's toolchain bump is *expected* to be a
+  large, mostly-mechanical diff (re-baselined `.stderr` fixtures, ~105 string
+  updates, any lint-crate `rustc_private` fixes); it is a single atomic commit
+  and is exempt from the per-feature file-count budget. For the AST work
+  (Stages A–G), if implementation appears to require changes to more than ~16
+  files (net) or touches any crate other than `whitaker_clones_core` plus the
+  two proof scripts and the docs, stop and escalate. One budgeted intra-crate
+  touch is expected there: promoting the FNV-1a constants from
+  `token/fingerprint.rs` into a new `pub(crate)` `crate::hashing` module and
+  updating `token` to use it (see Decision Log 🔴-E). That touch must keep
+  `token`'s tests green.
 - **Iterations.** If `make lint` or `make test` still fails after 4 focused
   fix attempts on the same milestone, stop and escalate.
 - **Ambiguity.** The open questions in the Decision Log have proposed defaults.
@@ -143,11 +167,49 @@ Thresholds that trigger escalation rather than autonomous continuation.
   every `ra_ap_syntax` symbol to `ast/lowering.rs`; lower into an owned,
   parser-agnostic `NormalisedTree` so a future bump recompiles one file and
   leaves all domain logic and proofs untouched.
-- Risk: **MSRV incompatibility.** The latest `ra_ap_syntax` (0.0.336+, MSRV
-  1.95) does not build on the pinned 1.92-nightly.
-  Severity: high. Likelihood: high (already observed).
-  Mitigation: the Stage B spike bisects to the newest snapshot with MSRV ≤ 1.92;
-  exact-pin the result; record it. Escalate if none exists (see Tolerances).
+- Risk: **MSRV incompatibility (resolved by the Stage 0 bump).** Under the old
+  `nightly-2025-09-18` pin (rustc 1.92), current `ra_ap_syntax` (MSRV 1.95) did
+  not build, forcing a backwards bisect. The Stage 0 bump to `nightly-2026-05-28`
+  (≈ rustc 1.9x-nightly, ≥ 1.95) removes this: a contemporaneous `ra_ap_syntax`
+  snapshot now builds directly.
+  Severity: low (post-bump). Likelihood: low.
+  Mitigation: select the `ra_ap_syntax` snapshot dated near the new nightly and
+  confirm a clean build; exact-pin and record it.
+- Risk: **Lint-crate `rustc_private` breakage on the bump.** The vendored
+  `rustc_*` shims are thin re-export wrappers (no edit needed), but
+  `clippy_utils` and the lint crates call the nightly's internal rustc API
+  directly; an ~8-month jump (rustc 1.92 → ≈ 1.9x) is likely to break some
+  call sites.
+  Severity: high. Likelihood: medium-high.
+  Mitigation: Stage 0 treats a clean `cargo build`/`make lint` of the whole
+  suite as the go/no-go; fix breakage in the affected crate (not by suppression);
+  if breakage is widespread or needs API archaeology beyond the Stage 0 budget,
+  stop and escalate (see Tolerances).
+- Risk: **`dylint` v5 incompatible with the new nightly.** `dylint_linting` /
+  `dylint_testing` v5 build a driver against the pinned toolchain; a newer
+  nightly may need a newer `dylint` release.
+  Severity: high. Likelihood: medium.
+  Mitigation: Stage 0 verifies the UI-test harness builds and runs on the new
+  channel before any AST work; if v5 cannot drive `nightly-2026-05-28`, bump
+  `dylint_linting`/`dylint_testing` to a compatible release (recorded as a
+  Decision), or escalate if no compatible release exists.
+- Risk: **UI `.stderr` fixture drift.** ~34 `.stderr` expectation files across
+  the lint crates encode rustc diagnostic text that commonly shifts between
+  nightlies.
+  Severity: medium. Likelihood: high.
+  Mitigation: re-baseline via the Dylint/`trybuild` blessing flow as part of
+  Stage 0, reviewing each diff so a genuine behaviour change is not masked by a
+  cosmetic re-bless.
+- Risk: **Stale toolchain-string references.** ~105 occurrences of
+  `nightly-2025-09-18` exist in installer source, tests, ADR-001, and docs;
+  some are load-bearing test fixtures (the installer's `ToolchainChannel`
+  parsing tests), most are doc/example strings.
+  Severity: medium. Likelihood: high.
+  Mitigation: Stage 0 updates the load-bearing ones and the artefact/manifest
+  examples; CI (`rolling-release.yml`) reads the channel dynamically from
+  `rust-toolchain.toml`, so artefact naming propagates automatically — but the
+  installer unit/behaviour tests that hardcode the date must be updated and
+  kept green.
 - Risk: **`SyntaxKind` discriminant is not a stable public contract.** There is
   no guaranteed variant-count constant, and discriminants can move between
   snapshots.
@@ -186,6 +248,8 @@ Thresholds that trigger escalation rather than autonomous continuation.
 
 ## Progress
 
+- [ ] Stage 0 — Bump `rust-toolchain.toml` to `nightly-2026-05-28` suite-wide
+      (own atomic commit; go/no-go); all gates green before Stage A.
 - [ ] Stage A — Orientation, boundary guard (`tests/ast_boundary.rs`), and red
       skeleton (no production logic).
 - [ ] Stage B — `ra_ap_syntax` version spike and dependency wiring
@@ -209,6 +273,21 @@ done/remaining if interrupted.
 
 Decisions already taken while drafting this plan:
 
+- Decision: **Bump `rust-toolchain.toml` to `nightly-2026-05-28` as a
+  prerequisite Stage 0 of this item, landing as its own atomic commit before the
+  AST work.** Rationale: the bump is *both* an overdue maintenance step (the pin
+  had sat on `nightly-2025-09-18` since 2025) *and* the cleanest unblock for
+  Pass B — under rustc 1.92 the current `ra_ap_syntax` (MSRV 1.95) would not
+  build, forcing a fragile backwards bisect; on `nightly-2026-05-28` (≈ rustc
+  1.9x, ≥ 1.95) a contemporaneous `ra_ap_syntax` snapshot builds directly,
+  matching rust-analyzer's own nightly cadence. Structuring it as a Stage 0
+  atomic commit (rather than a separate roadmap item) keeps the enabling change
+  and its consumer in one reviewable history while still isolating the bump in
+  its own commit. The bump is suite-wide and its blast radius (lint-crate
+  `rustc_private` API, ~34 `.stderr` fixtures, `dylint` v5 compat, ~105 string
+  refs) is carried in Risks and gated by the Stage 0 go/no-go. Chosen by the
+  user (2026-06-09): folded-in Stage 0, both maintenance and 7.3.1 enabler.
+  Date/Author: 2026-06-09, user direction.
 - Decision: **Use a lowered intermediate representation (`NormalisedTree`),
   not a `trait SyntaxTreeNode` port over live `ra_ap_syntax` nodes.**
   Rationale: a borrowed-tree port forces the domain to be generic over an
@@ -334,9 +413,10 @@ the default unless Stage findings contradict it, then escalate):
   per-node spans for 7.3.1** (the three feature outputs do not need them) and
   add them in 7.3.2 only if the edit-distance refinement is implemented; decide
   explicitly in Stage C and record. (Review finding 💡-1.)
-- OQ2: **Exact pinned `ra_ap_syntax` version.** Determined empirically in
-  Stage B; recorded here on first green build. Carried as the token
-  `0.0.PINNED` until then.
+- OQ2: **Exact pinned `ra_ap_syntax` version.** Post-bump this is the
+  *contemporaneous* snapshot dated near `nightly-2026-05-28` (around v0.0.336
+  per the firecrawl research), confirmed to build cleanly in Stage B and
+  recorded here. Carried as the token `0.0.PINNED` until then.
 - OQ3: **`Edition::CURRENT` vs per-fragment edition.** Proposed default:
   `Edition::CURRENT` (feature extraction is structural, not semantic). Revisit
   only if edition-specific syntax causes spurious parse failures.
@@ -646,10 +726,11 @@ pub use ast::{
 
 Dependency declarations:
 
+- `rust-toolchain.toml`: `channel = "nightly-2026-05-28"` (Stage 0).
 - Root `Cargo.toml` `[workspace.dependencies]`: add
   `ra_ap_syntax = "=0.0.PINNED"` with a comment recording the documented reason
-  for the exact pin (date-stamped unstable API, moving MSRV, only specific
-  snapshots build on `nightly-2025-09-18`).
+  for the exact pin (date-stamped unstable API; pin the snapshot contemporaneous
+  with `nightly-2026-05-28`; revisit on the next toolchain bump).
 - `crates/whitaker_clones_core/Cargo.toml` `[dependencies]`:
   `ra_ap_syntax = { workspace = true }`.
 - `crates/whitaker_clones_core/Cargo.toml` `[dev-dependencies]`:
@@ -665,6 +746,37 @@ Proof wiring:
 ## Plan of work
 
 Stages end with validation; do not proceed past a failing stage.
+
+### Stage 0 — Toolchain bump to `nightly-2026-05-28` (prerequisite; go/no-go)
+
+A suite-wide prerequisite, landed as **its own atomic commit** before any AST
+work. Edit `rust-toolchain.toml` `channel` to `nightly-2026-05-28`. Install the
+channel with the pinned components (`rustfmt`, `clippy`, `rustc-dev`,
+`llvm-tools-preview`, `rust-src`) and record the resolved `rustc --version` in
+Surprises & Discoveries.
+
+Verify, in order (each is a go/no-go; escalate per Tolerances rather than
+suppressing): (1) the whole workspace builds — `cargo build --workspace`,
+fixing any `clippy_utils`/lint-crate `rustc_private` breakage in the affected
+crate; (2) `dylint_testing` can drive the new nightly — build one lint crate's
+UI harness; if `dylint` v5 cannot drive it, bump `dylint_linting`/
+`dylint_testing` to a compatible release and record the decision; (3)
+`make check-fmt`, `make lint`, then `make test` pass — re-baseline the ~34
+`.stderr` UI fixtures through the Dylint/`trybuild` blessing flow, **reviewing
+each diff** so a genuine behaviour change is never masked by a cosmetic
+re-bless; (4) update the load-bearing toolchain-string references (installer
+`ToolchainChannel`/manifest tests and ADR-001 examples) from
+`nightly-2025-09-18` to the new channel — CI's `rolling-release.yml` reads the
+channel dynamically, so artefact naming propagates automatically, but the
+installer unit/behaviour tests that hardcode the date must be updated and kept
+green.
+
+Commit the bump (toolchain, lockfile, re-baselined fixtures, string updates) as
+one atomic commit. The Verus/Kani sidecar toolchains are pinned independently in
+`scripts/` and are out of scope for this bump unless their proofs fail to run.
+Validation: `make check-fmt`, `make lint`, `make test` all pass on
+`nightly-2026-05-28` across the whole workspace, with the AST module not yet
+present.
 
 ### Stage A — Orientation, boundary guard, and red skeleton
 
@@ -688,23 +800,25 @@ smallest-covering-node red test is explicitly a Stage D artifact. Validation:
 `cargo build -p whitaker_clones_core` compiles the skeleton; `tests/ast_boundary.rs`
 passes (the skeleton has no violations yet).
 
-### Stage B — `ra_ap_syntax` version spike (prototyping milestone, go/no-go)
+### Stage B — `ra_ap_syntax` contemporaneous pin (go/no-go)
 
-Determine the newest `ra_ap_syntax` `0.0.x` whose declared MSRV is ≤ 1.92 and
-whose dependency tree builds on `nightly-2025-09-18` under `-D warnings`.
-Procedure: query candidate MSRVs from the crates.io index, start from a
-mid-2025 snapshot band, add it exact-pinned, run `cargo +nightly-2025-09-18
-build -p whitaker_clones_core`, and bisect down on MSRV gate failures / up on
-genuine API errors, pinning at most three offending transitive crates with
-`--precise` (escalate if more are needed). Stop at the highest cleanly building
-snapshot. Replace `0.0.PINNED` in both manifests and OQ2 with the concrete
-version, commit `Cargo.toml` and `Cargo.lock` together, and record the resolved
-transitive set in Surprises & Discoveries.
+On the `nightly-2026-05-28` channel (rustc ≥ 1.95), select the `ra_ap_syntax`
+snapshot dated near the new nightly — start from the latest at planning time
+(≈ v0.0.336, MSRV 1.95, per the firecrawl research) and step *down* only if a
+genuine build/API error appears. Add it exact-pinned (`=0.0.x`) to
+`[workspace.dependencies]` with the documented-reason comment, and
+`{ workspace = true }` to `whitaker_clones_core`. Run `cargo build -p
+whitaker_clones_core` under `-D warnings`, pinning at most three offending
+transitive crates with `--precise` (escalate if more are needed). Replace
+`0.0.PINNED` in both manifests, OQ2, and `crate::hashing::PARSER_SCHEMA_VERSION`
+with the concrete version; commit `Cargo.toml` and `Cargo.lock` together; record
+the resolved transitive set (including exact `rowan`/`ra_ap_parser` versions) in
+Surprises & Discoveries.
 
-Go/no-go: if no snapshot builds, **stop and escalate** (Tolerances). Otherwise
-proceed. Validation: a throwaway `lowering.rs` line calling
-`SourceFile::parse("fn f(){}", Edition::CURRENT).tree()` compiles and the crate
-builds clean.
+Go/no-go: if no contemporaneous snapshot builds cleanly, **stop and escalate**
+(Tolerances). Otherwise proceed. Validation: a throwaway `lowering.rs` line
+calling `SourceFile::parse("fn f(){}", Edition::CURRENT).tree()` compiles and the
+crate builds clean.
 
 ### Stage C — Domain IR and pure feature math (red-green-refactor)
 
@@ -829,12 +943,17 @@ Record the realised design decisions in
 `docs/whitaker-clone-detector-design.md` under a new “Implementation decisions
 (7.3.1)” subsection (mirroring the existing 7.2.x subsections), and document the
 `ast` module's hexagonal boundary, the count-substrate histogram, and the
-`ra_ap_syntax` pin in `docs/developers-guide.md`. Add a short
-**“`ra_ap_syntax` re-pinning runbook”** to `docs/developers-guide.md` (review
-finding 🟡-7): the Stage B bisect procedure, the ≤ 3 transitive `--precise` pin
-budget, the escalation trigger, and the note that `PARSER_SCHEMA_VERSION` and any
+`ra_ap_syntax` pin in `docs/developers-guide.md`. Add two short runbooks to
+`docs/developers-guide.md` (the repo currently documents neither): a
+**“toolchain bump runbook”** capturing the Stage 0 procedure (set the channel;
+rebuild the whole suite; fix `clippy_utils`/lint-crate `rustc_private` breakage;
+verify `dylint` drives the new nightly; re-baseline `.stderr` fixtures with diff
+review; update the load-bearing installer/ADR-001 toolchain strings), and a
+**“`ra_ap_syntax` re-pinning runbook”** (review finding 🟡-7) covering the
+contemporaneous-snapshot selection, the ≤ 3 transitive `--precise` pin budget,
+the escalation trigger, and the note that `PARSER_SCHEMA_VERSION` and any
 `ast_hashes` cache must be invalidated on a re-pin — so the next toolchain-bump
-author does not re-derive Stage B from scratch. Confirm `Cargo.lock` is
+author does not re-derive Stages 0/B from scratch. Confirm `Cargo.lock` is
 committed and that the CI build uses `--locked`. Assess whether the lowered-IR
 boundary or the proof strategy warrants a new ADR; if so, author
 `docs/adr-004-*.md` per the style guide and reference it from the design doc
@@ -852,6 +971,12 @@ Follow `AGENTS.md`: run gates sequentially (not in parallel) to benefit from the
 build cache, and `tee` long outputs to a log under `/tmp`.
 
 ```bash,ignore
+# Stage 0 toolchain bump: set channel then install + verify the whole suite.
+# (edit rust-toolchain.toml channel -> nightly-2026-05-28 first)
+rustc --version 2>&1 | tee /tmp/rustc-version.out   # record the resolved version
+cargo build --workspace 2>&1 | tee /tmp/bump-build-whitaker.out
+# Re-baseline UI fixtures through the Dylint/trybuild blessing flow, reviewing each diff.
+
 # Per-gate logging template (ACTION in {fmt,lint,test,kani,verus}):
 make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-$(git branch --show-current).out
 make lint      2>&1 | tee /tmp/lint-whitaker-$(git branch --show-current).out
@@ -859,8 +984,9 @@ make test      2>&1 | tee /tmp/test-whitaker-$(git branch --show-current).out
 make kani-clone-detector  2>&1 | tee /tmp/kani-whitaker-$(git branch --show-current).out
 make verus-clone-detector 2>&1 | tee /tmp/verus-whitaker-$(git branch --show-current).out
 
-# Stage B version spike (illustrative; replace 0.0.X during bisect):
-cargo +nightly-2025-09-18 build -p whitaker_clones_core 2>&1 | tee /tmp/raap-build.out
+# Stage B contemporaneous ra_ap_syntax pin (illustrative; replace 0.0.X):
+# (toolchain is now nightly-2026-05-28, so no +toolchain override is needed)
+cargo build -p whitaker_clones_core 2>&1 | tee /tmp/raap-build.out
 # Focused test runs during red-green-refactor:
 cargo test -p whitaker_clones_core ast:: 2>&1 | tee /tmp/ast-test.out
 cargo insta test -p whitaker_clones_core 2>&1 | tee /tmp/insta.out   # then `cargo insta review`
@@ -888,6 +1014,10 @@ Acceptance is behavioural and observable.
   hashes (identifier normalisation); call it on `a + b` vs `a - b` and observe
   **different** hashes (kind sensitivity).
 - **Quality criteria (definition of done):**
+  - Toolchain (Stage 0): `rust-toolchain.toml` names `nightly-2026-05-28`, and
+    `make check-fmt`/`make lint`/`make test` pass across the *whole workspace*
+    on it (the bump commit is green on its own, before the AST module exists);
+    re-baselined `.stderr` diffs were reviewed, not blindly blessed.
   - Tests: `make test` passes; new `ast::` unit tests, the
     `ast_feature_extraction` BDD scenarios, the `insta` snapshot, and the
     `proptest` invariants all pass.
@@ -905,9 +1035,15 @@ Acceptance is behavioural and observable.
 
 ## Idempotence and recovery
 
-- All edits are additive within `whitaker_clones_core` plus two proof scripts
-  and docs; re-running any `make` target is safe.
-- The Stage B spike is reversible: if a candidate version fails, `git checkout
+- Apart from Stage 0, all edits are additive within `whitaker_clones_core` plus
+  two proof scripts and docs; re-running any `make` target is safe.
+- **Stage 0 is a single atomic commit and is fully revertible** with `git revert`
+  of that commit (restoring the channel, lockfile, fixtures, and string updates
+  together). Because it lands first and on its own, a later AST-stage problem
+  never entangles the toolchain bump, and a bump problem never entangles the AST
+  work. Keep the channel install reproducible via `rust-toolchain.toml` (rustup
+  auto-installs on first `cargo` invocation).
+- The Stage B pin is reversible: if a candidate version fails, `git checkout
   -- Cargo.toml Cargo.lock` and retry a different pin. Commit the manifest and
   lockfile together only once a green build is achieved.
 - `insta` snapshots: regenerate with `cargo insta test` and review with `cargo
@@ -920,7 +1056,10 @@ Acceptance is behavioural and observable.
 
 ## Artifacts and notes
 
-Record here, as work proceeds: the resolved `ra_ap_syntax` version and full
+Record here, as work proceeds: the resolved `nightly-2026-05-28` `rustc
+--version`; any `dylint_linting`/`dylint_testing` version change needed to drive
+it; the list of `.stderr` fixtures re-baselined (with a one-line note on each
+non-cosmetic diff); the resolved `ra_ap_syntax` version and full
 pinned transitive set (including exact `rowan`/`ra_ap_parser` versions); the
 chosen representable weight family, `SCALE`, and the max-depth assumption; the
 `PARSER_SCHEMA_VERSION` value; the red failure transcripts; the Kani harness tree
@@ -930,6 +1069,19 @@ assumes versus proves). Keep transcripts concise and focused on what proves
 success.
 
 ## Revision note
+
+Revision 3 (2026-06-09) — added a prerequisite **Stage 0 toolchain bump** to
+`nightly-2026-05-28` at the user's direction (folded into this item as its own
+atomic commit; motivated as both overdue maintenance and the cleanest unblock
+for Pass B). This inverts the former “do not bump the toolchain” constraint.
+Consequences threaded through the plan: the bump is suite-wide (lint crates,
+`clippy_utils`, vendored shims, installer, ~34 `.stderr` fixtures, ~105
+toolchain-string references) with `dylint` v5 compatibility and `rustc_private`
+breakage as explicit go/no-go gates and escalation tolerances; Stage B changes
+from a backwards MSRV bisect to selecting a *contemporaneous* `ra_ap_syntax`
+snapshot (the MSRV risk is now largely resolved); the scope tolerance exempts
+Stage 0's mechanical churn; and Stage G now also delivers a toolchain-bump
+runbook in the developers' guide.
 
 Revision 2 (2026-06-09) — folded in the community-of-experts (Logisphere)
 design-review verdict (“Proceed with conditions”). Changes versus revision 1:
