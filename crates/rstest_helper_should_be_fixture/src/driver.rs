@@ -154,20 +154,11 @@ impl RstestHelperShouldBeFixture {
         self.collector.clear();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
-}
 
-impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
-    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
-        self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
-    }
-
-    fn check_fn(
+    fn collect_call_sites<'tcx>(
         &mut self,
         cx: &LateContext<'tcx>,
-        _kind: hir::intravisit::FnKind<'tcx>,
-        _decl: &'tcx hir::FnDecl<'tcx>,
         body: &'tcx hir::Body<'tcx>,
-        _span: Span,
         def_id: LocalDefId,
     ) {
         let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
@@ -186,6 +177,24 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
         let mut visitor =
             CallSiteVisitor::new(cx, &mut self.collector, def_id.to_def_id(), &fixture_locals);
         visitor.visit_expr(body.value);
+    }
+}
+
+impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
+    fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
+        self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
+    }
+
+    fn check_fn(
+        &mut self,
+        cx: &LateContext<'tcx>,
+        _kind: hir::intravisit::FnKind<'tcx>,
+        _decl: &'tcx hir::FnDecl<'tcx>,
+        body: &'tcx hir::Body<'tcx>,
+        _span: Span,
+        def_id: LocalDefId,
+    ) {
+        self.collect_call_sites(cx, body, def_id);
     }
 
     fn check_crate_post(&mut self, _cx: &LateContext<'tcx>) {
