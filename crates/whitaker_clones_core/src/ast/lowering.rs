@@ -135,13 +135,15 @@ fn kind_name(kind: KindId) -> String {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_json_snapshot;
     use rstest::rstest;
+    use serde_json::json;
 
     use super::{kind_id, kind_name};
     use crate::{
-        AstError, ByteSpan,
-        ast::{KindId, LeafClass, NormalisedNode, NormalisedTree},
-        lower_span,
+        AstError, ByteSpan, Production,
+        ast::{KindId, LeafClass, NormalisedNode, NormalisedTree, PARSER_SCHEMA_VERSION},
+        canonical_hash, kind_counts, lower_span, production_multiset,
     };
 
     #[rstest]
@@ -283,5 +285,65 @@ mod tests {
     #[rstest]
     fn kind_names_are_available_for_adapter_snapshots() {
         assert_eq!(kind_name(KindId::new(0)), "TOMBSTONE");
+    }
+
+    #[rstest]
+    fn ast_feature_vector_snapshot() -> Result<(), AstError> {
+        let source = "fn add(a: i32, b: i32) -> i32 { a + b }";
+        let span = ByteSpan::new(source, 0, source.len() as u32)?;
+        let tree = lower_span(source, span)?;
+        let counts = kind_counts(&tree)
+            .iter()
+            .map(|(kind, depth, count)| {
+                json!({
+                    "kind": kind_name(kind),
+                    "depth": depth.get(),
+                    "count": count,
+                })
+            })
+            .collect::<Vec<_>>();
+        let productions = production_multiset(&tree)
+            .iter()
+            .map(|(production, count)| {
+                json!({
+                    "production": production_name(production),
+                    "count": count,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        assert_json_snapshot!(
+            "ast_feature_vector_add_function",
+            json!({
+                "schema": PARSER_SCHEMA_VERSION,
+                "span": { "start": span.start(), "end": span.end() },
+                "kind_counts": counts,
+                "productions": productions,
+                "canonical_hash": canonical_hash(&tree).to_hex(),
+            })
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn parser_schema_version_snapshot() {
+        assert_json_snapshot!(
+            "ast_parser_schema_version",
+            json!({ "parser_schema_version": PARSER_SCHEMA_VERSION })
+        );
+    }
+
+    fn production_name(production: Production) -> String {
+        match production {
+            Production::Bigram(parent, child) => {
+                format!("{} -> {}", kind_name(parent), kind_name(child))
+            }
+            Production::Trigram(grandparent, parent, child) => format!(
+                "{} -> {} -> {}",
+                kind_name(grandparent),
+                kind_name(parent),
+                kind_name(child)
+            ),
+        }
     }
 }

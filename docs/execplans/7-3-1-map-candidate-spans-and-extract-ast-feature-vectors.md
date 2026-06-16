@@ -257,7 +257,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - [x] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
       red-green-refactor.
 - [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
-- [ ] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
+- [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
 - [ ] Stage F — Verus lemma and Kani harnesses; proof-script wiring.
 - [ ] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
@@ -315,6 +315,19 @@ Stage D completed on 2026-06-16. Green gates:
 - `make check-fmt`
 - `make lint`
 - `make test` (`1486` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent --type uncommitted --fast` (`0` findings)
+
+Stage E completed on 2026-06-16. Green gates:
+
+- `INSTA_UPDATE=always cargo test -p whitaker_clones_core ast`
+- `cargo test -p whitaker_clones_core --test ast_feature_extraction_behaviour`
+- `cargo test -p whitaker_clones_core ast`
+- `cargo insta test -p whitaker_clones_core -- ast`
+- `cargo test -p whitaker_clones_core`
+- `make check-fmt`
+- `make lint`
+- `make test` (`1494` passed, `3` skipped)
 - `make markdownlint`
 - `coderabbit review --agent --type uncommitted --fast` (`0` findings)
 
@@ -444,6 +457,29 @@ Stage D completed on 2026-06-16. Green gates:
 - Observation: the Stage D CodeRabbit milestone review completed with
   `0` findings after all deterministic gates were green. The review log is
   `/tmp/coderabbit-stage-d-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
+- Observation: Stage E added `rstest-bdd` coverage for smallest-covering
+  expression selection, identifier-renamed canonical-hash stability, and
+  structural hash divergence. The direct
+  `cargo test -p whitaker_clones_core --test ast_feature_extraction_behaviour`
+  target is required in addition to the filtered `ast` run because one
+  scenario name intentionally describes hash behaviour without the word
+  “ast”.
+- Observation: the `insta` snapshots live beside the adapter tests in
+  `ast/lowering.rs`, where parser-kind rendering is already local to the
+  `ra_ap_syntax` boundary. The snapshots pin the named feature vector for the
+  add-function fixture and the generated `PARSER_SCHEMA_VERSION` sentinel.
+- Observation: the correct reviewed snapshot command shape is
+  `cargo insta test -p whitaker_clones_core -- ast`; earlier local attempts
+  without the package/argument placement were corrected before recording the
+  Stage E gate.
+- Observation: Stage E proptest invariants over synthetic `NormalisedTree`
+  values cover deterministic feature extraction and order-insensitive
+  count/production surfaces. The canonical hash is intentionally excluded from
+  the sibling-order invariant because ordered child hashes are part of its
+  contract.
+- Observation: the Stage E CodeRabbit milestone review completed with
+  `0` findings after all deterministic gates were green. The review log is
+  `/tmp/coderabbit-stage-e-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
 
 ## Decision log
 

@@ -3,7 +3,9 @@
 use super::{
     AstResult, ByteSpan, Depth, KindId, KindWeight, LeafClass, NormalisedNode, NormalisedTree,
     Production, canonical_hash, kind_counts, kind_histogram, production_multiset,
+    weighted_histogram,
 };
+use proptest::prelude::*;
 use rstest::rstest;
 
 #[rstest]
@@ -142,4 +144,73 @@ fn ident(kind: KindId) -> NormalisedNode {
 
 fn literal(kind: KindId) -> NormalisedNode {
     NormalisedNode::new(kind, Some(LeafClass::Literal), Vec::new())
+}
+
+proptest! {
+    #[test]
+    fn feature_functions_are_deterministic(root in normalised_node_strategy()) {
+        let tree = tree_with_root(root).expect("static test span should be valid");
+
+        prop_assert_eq!(kind_counts(&tree), kind_counts(&tree));
+        prop_assert_eq!(kind_histogram(&tree), kind_histogram(&tree));
+        prop_assert_eq!(production_multiset(&tree), production_multiset(&tree));
+        prop_assert_eq!(canonical_hash(&tree), canonical_hash(&tree));
+    }
+
+    #[test]
+    fn count_and_production_features_ignore_sibling_visit_order(
+        root in normalised_node_strategy()
+    ) {
+        let tree = tree_with_root(root.clone()).expect("static test span should be valid");
+        let reversed = tree_with_root(reverse_siblings(&root))
+            .expect("static test span should be valid");
+
+        prop_assert_eq!(kind_counts(&tree), kind_counts(&reversed));
+        prop_assert_eq!(
+            weighted_histogram(&kind_counts(&tree)),
+            weighted_histogram(&kind_counts(&reversed))
+        );
+        prop_assert_eq!(production_multiset(&tree), production_multiset(&reversed));
+    }
+
+    #[test]
+    fn equal_normalised_leaves_have_equal_hashes(
+        kind in 0_u16..32,
+        leaf in leaf_class_strategy()
+    ) {
+        let left = tree_with_root(NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
+            .expect("static test span should be valid");
+        let right = tree_with_root(NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
+            .expect("static test span should be valid");
+
+        prop_assert_eq!(canonical_hash(&left), canonical_hash(&right));
+    }
+}
+
+fn normalised_node_strategy() -> impl Strategy<Value = NormalisedNode> {
+    (0_u16..32, leaf_class_strategy())
+        .prop_map(|(kind, leaf)| NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
+        .prop_recursive(3, 32, 3, |inner| {
+            (0_u16..32, prop::collection::vec(inner, 0..3))
+                .prop_map(|(kind, children)| NormalisedNode::new(KindId::new(kind), None, children))
+        })
+}
+
+fn leaf_class_strategy() -> impl Strategy<Value = Option<LeafClass>> {
+    prop_oneof![
+        Just(None),
+        Just(Some(LeafClass::Ident)),
+        Just(Some(LeafClass::Literal)),
+        Just(Some(LeafClass::Other)),
+    ]
+}
+
+fn reverse_siblings(node: &NormalisedNode) -> NormalisedNode {
+    let mut children = node
+        .children()
+        .iter()
+        .map(reverse_siblings)
+        .collect::<Vec<_>>();
+    children.reverse();
+    NormalisedNode::new(node.kind(), node.leaf(), children)
 }

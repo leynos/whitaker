@@ -3521,6 +3521,7 @@ dependencies = [
  "rstest-bdd",
  "rstest-bdd-macros",
  "rustc_lexer",
+ "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "whitaker_sarif",
