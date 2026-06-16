@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 rustc_lexer = { workspace = true }
 ra_ap_syntax = { workspace = true }
 sha2 = { workspace = true }
+tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
 
 [dev-dependencies]

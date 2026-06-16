@@ -256,7 +256,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
       (prototyping milestone; go/no-go).
 - [x] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
       red-green-refactor.
-- [ ] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
+- [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
 - [ ] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
 - [ ] Stage F — Verus lemma and Kani harnesses; proof-script wiring.
@@ -306,6 +306,17 @@ Stage C completed on 2026-06-16. Green gates:
 - `make markdownlint`
 - `coderabbit review --agent --type uncommitted --fast` (`0` findings after
   follow-up fixes)
+
+Stage D completed on 2026-06-16. Green gates:
+
+- `cargo test -p whitaker_clones_core ast` (`23` AST unit tests plus the
+  parser-boundary guard)
+- `cargo test -p whitaker_clones_core --doc` (`32` doctests)
+- `make check-fmt`
+- `make lint`
+- `make test` (`1486` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent --type uncommitted --fast` (`0` findings)
 
 ## Surprises & discoveries
 
@@ -414,6 +425,25 @@ Stage C completed on 2026-06-16. Green gates:
 - Observation: the final Stage C CodeRabbit follow-up completed with
   `0` findings after the deterministic gates were green. The follow-up log is
   `/tmp/coderabbit-stage-c-followup2-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
+- Observation: Stage D confirmed the parser can report recoverable parse errors
+  without placing an `ERROR` node in the selected subtree. The adapter therefore
+  follows the OQ1 split: it rejects selected subtrees that actually contain
+  `SyntaxKind::ERROR`, but it proceeds and emits a `tracing::warn` when parser
+  recovery errors exist elsewhere or are not represented as ERROR nodes in the
+  selected subtree.
+- Observation: Stage D adds `tracing` as a direct `whitaker_clones_core`
+  dependency because the library now emits recovery warnings itself. The
+  workspace dependency disables default features and enables only `std`; the
+  adapter does not need `tracing-attributes`.
+- Observation: lowering non-trivia tokens as leaf `NormalisedNode` values keeps
+  operator and punctuation tokens visible to canonical hashes and production
+  multisets. Identifier-like tokens (`IDENT`, keywords accepted by
+  `SyntaxKind::is_any_identifier`, and `LIFETIME_IDENT`) lower as
+  `LeafClass::Ident`; parser literal tokens lower as `LeafClass::Literal`; all
+  other non-trivia tokens lower as `LeafClass::Other`.
+- Observation: the Stage D CodeRabbit milestone review completed with
+  `0` findings after all deterministic gates were green. The review log is
+  `/tmp/coderabbit-stage-d-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
 
 ## Decision log
 
@@ -590,10 +620,11 @@ the default unless Stage findings contradict it, then escalate):
   `Edition::CURRENT` (feature extraction is structural, not semantic). Revisit
   only if edition-specific syntax causes spurious parse failures.
 - OQ4: **Whether token (leaf) kinds enter the histogram/productions, or only
-  non-trivia `SyntaxNode`s.** Proposed default: walk `descendants()` (nodes)
-  for the histogram and productions, skipping whitespace/comment trivia; map
-  tokens to a `LeafClass` only for the Merkle hash. This makes
-  trivia-invariance structural rather than a post-filter.
+  non-trivia `SyntaxNode`s.** Resolved in Stage D: lower non-trivia tokens as
+  leaf `NormalisedNode` values so operators and punctuation remain part of the
+  AST feature vector. Trivia is skipped at lowering time. Identifier-like and
+  literal token payloads are erased through `LeafClass`; other token kinds keep
+  their opaque parser `KindId` and use `LeafClass::Other`.
 - OQ5: **64-bit FNV-1a vs `sha2` for the subtree hash.** Default FNV-1a `u64`
   (matches the design signature); flagged for 7.3.2 review if a wider digest is
   needed for the `astHash` partial fingerprint.
