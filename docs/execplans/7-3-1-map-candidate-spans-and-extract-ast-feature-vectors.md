@@ -1,9 +1,8 @@
 # Map candidate spans to `ra_ap_syntax` nodes and extract AST feature vectors (7.3.1)
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
@@ -18,24 +17,25 @@ clones, but it is blind to *near-miss* (Type-3) clones because tokens alone
 cannot see structure.
 
 Pass B (the AST engine) refines those candidates using a real Rust parse tree.
-This ExecPlan delivers the **first half** of Pass B, roadmap item 7.3.1: given a
-candidate's byte span, map it to the smallest covering syntax node from the
+This ExecPlan delivers the **first half** of Pass B, roadmap item 7.3.1: given
+a candidate's byte span, map it to the smallest covering syntax node from the
 `ra_ap_syntax` parser, and extract a deterministic **AST feature vector** from
 that subtree. The feature vector has three components described in the design
 document: a depth-weighted **node-kind histogram**, a **production multiset**
 of parent→child (bigram) and parent→child→grandchild (trigram) edges, and a
 **canonical Merkle-style subtree hash** with normalised leaves.
 
-Scoring those features into a Type-3 similarity, and writing SARIF Run 1, is the
-**next** roadmap item (7.3.2) and is explicitly out of scope here. This item
-produces the pure, well-tested building blocks 7.3.2 will consume.
+Scoring those features into a Type-3 similarity, and writing SARIF Run 1, is
+the **next** roadmap item (7.3.2) and is explicitly out of scope here. This
+item produces the pure, well-tested building blocks 7.3.2 will consume.
 
 What a reader can observe after this change:
 
 - The workspace builds on `nightly-2026-05-28`: `rust-toolchain.toml` names the
-  new channel, and the whole Dylint suite (lint crates, `clippy_utils`, vendored
-  shims, installer, UI tests) builds and passes its gates on it — an overdue
-  maintenance bump that also unblocks a clean `ra_ap_syntax` pin for Pass B.
+  new channel, and the whole Dylint suite (lint crates, `clippy_utils`,
+  vendored shims, installer, UI tests) builds and passes its gates on it — an
+  overdue maintenance bump that also unblocks a clean `ra_ap_syntax` pin for
+  Pass B.
 - A new `whitaker_clones_core::ast` module exists with a single adapter entry
   point, `lower_span(file_text, span) -> Result<NormalisedTree, AstError>`, and
   three pure feature functions, `kind_histogram`, `production_multiset`, and
@@ -48,10 +48,10 @@ What a reader can observe after this change:
   selection and structural-bound harnesses; `make verus-clone-detector`
   discharges a histogram-accumulation order-independence lemma.
 
-This plan does **not** change any user-facing behaviour or command-line surface;
-no `docs/users-guide.md` change is required for 7.3.1 (recorded in the Decision
-Log). It does add internal interface documentation to the clone-detector design
-document and the developers' guide.
+This plan does **not** change any user-facing behaviour or command-line
+surface; no `docs/users-guide.md` change is required for 7.3.1 (recorded in the
+Decision Log). It does add internal interface documentation to the
+clone-detector design document and the developers' guide.
 
 ## Constraints
 
@@ -77,13 +77,13 @@ escalation, not a workaround.
   bare `ra_ap_syntax::`/`rowan::` path appears outside comments, with the
   forbidden-crate list as a `const`.
 - **No persisted `KindId` from 7.3.1.** Only `AstHash` (which is seeded with
-  `PARSER_SCHEMA_VERSION`) is hashable/serialisable in this item. `KindId` is an
-  in-memory opaque token and must not be persisted, so a future cache (7.6.x)
-  cannot accidentally compare raw discriminants across parser pins.
+  `PARSER_SCHEMA_VERSION`) is hashable/serialisable in this item. `KindId` is
+  an in-memory opaque token and must not be persisted, so a future cache
+  (7.6.x) cannot accidentally compare raw discriminants across parser pins.
 - **Bounded per-candidate cost.** Lowering touches one candidate subtree; the
   upstream `min_nodes`/node-count bound from the Pass A config governs subtree
-  size. 7.3.1 does not lower whole files; the smallest-covering selection climbs
-  only to the tightest covering ancestor.
+  size. 7.3.1 does not lower whole files; the smallest-covering selection
+  climbs only to the tightest covering ancestor.
 - **Toolchain bump (Stage 0).** This item bumps `rust-toolchain.toml` from
   `nightly-2025-09-18` (rustc 1.92.0-nightly) to **`nightly-2026-05-28`**
   (rustc ≈ 1.9x-nightly, comfortably ≥ 1.95) as a prerequisite Stage 0, landing
@@ -95,8 +95,9 @@ escalation, not a workaround.
   (matching the new nightly), not a backwards-bisected one, and must compile
   cleanly under `-D warnings`. Do not regress any other crate's behaviour while
   bumping; UI-diagnostic drift is re-baselined, not suppressed.
-- **No silenced lints.** `cargo clippy --workspace --all-targets --all-features
-  -- -D warnings` must pass with no new `#[allow(...)]` except as a tightly
+- **No silenced lints.**
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` must
+  pass with no new `#[allow(...)]` except as a tightly
   scoped last resort with a written reason.
 - **No `expect()`/`unwrap()` outside tests.** The design document's Pass B
   sketch uses `SourceFile::parse(...).ok().expect("parse")`; this is forbidden
@@ -120,11 +121,11 @@ Thresholds that trigger escalation rather than autonomous continuation.
   Dylint suite cannot be made to build and pass `make lint`/`make test` because
   (a) `dylint` v5 cannot drive the new nightly and no compatible
   `dylint_linting`/`dylint_testing` release exists, or (b) lint-crate/
-  `clippy_utils` `rustc_private` breakage requires rustc-internal API archaeology
-  beyond a focused effort, **stop and escalate** with the build evidence rather
-  than suppressing errors or partially reverting. Re-baselining `.stderr`
-  fixtures is expected and is *not* an escalation; masking a genuine behaviour
-  change behind a re-bless is forbidden.
+  `clippy_utils` `rustc_private` breakage requires rustc-internal API
+  archaeology beyond a focused effort, **stop and escalate** with the build
+  evidence rather than suppressing errors or partially reverting. Re-baselining
+  `.stderr` fixtures is expected and is *not* an escalation; masking a genuine
+  behaviour change behind a re-bless is forbidden.
 - **Dependency.** Introducing `ra_ap_syntax` is a new external dependency,
   *mandated by the design document* and therefore pre-approved. Post-bump it is
   a contemporaneous snapshot; if no snapshot near `nightly-2026-05-28` compiles
@@ -161,90 +162,79 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - Risk: **`ra_ap_syntax` API drift across `0.0.x` snapshots.** The parser API is
   unstable and date-stamped; `SourceFile::parse` already changed from the
   one-argument form in the design sketch to the two-argument
-  `parse(text, Edition::CURRENT)` form.
-  Severity: medium. Likelihood: high.
-  Mitigation: exact-pin the version (`=0.0.x`) with a documented reason; confine
-  every `ra_ap_syntax` symbol to `ast/lowering.rs`; lower into an owned,
-  parser-agnostic `NormalisedTree` so a future bump recompiles one file and
-  leaves all domain logic and proofs untouched.
+  `parse(text, Edition::CURRENT)` form. Severity: medium. Likelihood: high.
+  Mitigation: exact-pin the version (`=0.0.x`) with a documented reason;
+  confine every `ra_ap_syntax` symbol to `ast/lowering.rs`; lower into an
+  owned, parser-agnostic `NormalisedTree` so a future bump recompiles one file
+  and leaves all domain logic and proofs untouched.
 - Risk: **MSRV incompatibility (resolved by the Stage 0 bump).** Under the old
   `nightly-2025-09-18` pin (rustc 1.92), current `ra_ap_syntax` (MSRV 1.95) did
-  not build, forcing a backwards bisect. The Stage 0 bump to `nightly-2026-05-28`
-  (≈ rustc 1.9x-nightly, ≥ 1.95) removes this: a contemporaneous `ra_ap_syntax`
-  snapshot now builds directly.
-  Severity: low (post-bump). Likelihood: low.
-  Mitigation: select the `ra_ap_syntax` snapshot dated near the new nightly and
-  confirm a clean build; exact-pin and record it.
+  not build, forcing a backwards bisect. The Stage 0 bump to
+  `nightly-2026-05-28` (≈ rustc 1.9x-nightly, ≥ 1.95) removes this: a
+  contemporaneous `ra_ap_syntax` snapshot now builds directly. Severity: low
+  (post-bump). Likelihood: low. Mitigation: select the `ra_ap_syntax` snapshot
+  dated near the new nightly and confirm a clean build; exact-pin and record it.
 - Risk: **Lint-crate `rustc_private` breakage on the bump.** The vendored
   `rustc_*` shims are thin re-export wrappers (no edit needed), but
   `clippy_utils` and the lint crates call the nightly's internal rustc API
-  directly; an ~8-month jump (rustc 1.92 → ≈ 1.9x) is likely to break some
-  call sites.
-  Severity: high. Likelihood: medium-high.
-  Mitigation: Stage 0 treats a clean `cargo build`/`make lint` of the whole
-  suite as the go/no-go; fix breakage in the affected crate (not by suppression);
-  if breakage is widespread or needs API archaeology beyond the Stage 0 budget,
-  stop and escalate (see Tolerances).
+  directly; an ~8-month jump (rustc 1.92 → ≈ 1.9x) is likely to break some call
+  sites. Severity: high. Likelihood: medium-high. Mitigation: Stage 0 treats a
+  clean `cargo build`/`make lint` of the whole suite as the go/no-go; fix
+  breakage in the affected crate (not by suppression); if breakage is
+  widespread or needs API archaeology beyond the Stage 0 budget, stop and
+  escalate (see Tolerances).
 - Risk: **`dylint` v5 incompatible with the new nightly.** `dylint_linting` /
   `dylint_testing` v5 build a driver against the pinned toolchain; a newer
-  nightly may need a newer `dylint` release.
-  Severity: high. Likelihood: medium.
-  Mitigation: Stage 0 verifies the UI-test harness builds and runs on the new
-  channel before any AST work; if v5 cannot drive `nightly-2026-05-28`, bump
-  `dylint_linting`/`dylint_testing` to a compatible release (recorded as a
+  nightly may need a newer `dylint` release. Severity: high. Likelihood:
+  medium. Mitigation: Stage 0 verifies the UI-test harness builds and runs on
+  the new channel before any AST work; if v5 cannot drive `nightly-2026-05-28`,
+  bump `dylint_linting`/`dylint_testing` to a compatible release (recorded as a
   Decision), or escalate if no compatible release exists.
 - Risk: **UI `.stderr` fixture drift.** ~34 `.stderr` expectation files across
   the lint crates encode rustc diagnostic text that commonly shifts between
-  nightlies.
-  Severity: medium. Likelihood: high.
-  Mitigation: re-baseline via the Dylint/`trybuild` blessing flow as part of
-  Stage 0, reviewing each diff so a genuine behaviour change is not masked by a
-  cosmetic re-bless.
+  nightlies. Severity: medium. Likelihood: high. Mitigation: re-baseline via
+  the Dylint/`trybuild` blessing flow as part of Stage 0, reviewing each diff
+  so a genuine behaviour change is not masked by a cosmetic re-bless.
 - Risk: **Stale toolchain-string references.** ~105 occurrences of
   `nightly-2025-09-18` exist in installer source, tests, ADR-001, and docs;
   some are load-bearing test fixtures (the installer's `ToolchainChannel`
-  parsing tests), most are doc/example strings.
-  Severity: medium. Likelihood: high.
-  Mitigation: Stage 0 updates the load-bearing ones and the artefact/manifest
-  examples; CI (`rolling-release.yml`) reads the channel dynamically from
-  `rust-toolchain.toml`, so artefact naming propagates automatically — but the
-  installer unit/behaviour tests that hardcode the date must be updated and
-  kept green.
+  parsing tests), most are doc/example strings. Severity: medium. Likelihood:
+  high. Mitigation: Stage 0 updates the load-bearing ones and the
+  artefact/manifest examples; CI (`rolling-release.yml`) reads the channel
+  dynamically from `rust-toolchain.toml`, so artefact naming propagates
+  automatically — but the installer unit/behaviour tests that hardcode the date
+  must be updated and kept green.
 - Risk: **`SyntaxKind` discriminant is not a stable public contract.** There is
   no guaranteed variant-count constant, and discriminants can move between
-  snapshots.
-  Severity: medium. Likelihood: medium.
-  Mitigation: treat `KindId(u16)` as an opaque, possibly-unstable token used
-  only for equality and bucketing, never matched against named variants in the
-  domain; the cache (future 7.6.x) must key on the pinned parser version.
+  snapshots. Severity: medium. Likelihood: medium. Mitigation: treat
+  `KindId(u16)` as an opaque, possibly-unstable token used only for equality
+  and bucketing, never matched against named variants in the domain; the cache
+  (future 7.6.x) must key on the pinned parser version.
 - Risk: **Float weights defeat verification and snapshots.** The design's
   `w(depth) = 1/(1 + depth)` is a float; `f64` is hostile to Verus/Kani and to
-  deterministic snapshots.
-  Severity: medium. Likelihood: high.
-  Mitigation: represent histogram weights as exact fixed-point scaled integers
-  (see Decision Log); keep `f64` out of the stored feature vector.
+  deterministic snapshots. Severity: medium. Likelihood: high. Mitigation:
+  represent histogram weights as exact fixed-point scaled integers (see
+  Decision Log); keep `f64` out of the stored feature vector.
 - Risk: **Kani parses nothing.** Running `ra_ap_syntax` under Kani is
-  intractable.
-  Severity: low (by design). Likelihood: low.
-  Mitigation: the lowered-IR boundary means Kani harnesses build small owned
-  `NormalisedTree` values directly and never invoke the parser.
+  intractable. Severity: low (by design). Likelihood: low. Mitigation: the
+  lowered-IR boundary means Kani harnesses build small owned `NormalisedTree`
+  values directly and never invoke the parser.
 - Risk: **Dev-test dependency surface.** Correcting an earlier draft: `insta`
   and `proptest` are *already* `[workspace.dependencies]`; this item only adds
   `{ workspace = true }` dev-dep lines, not new crates. `googletest` and
-  `pretty_assertions` *are* absent from the workspace.
-  Severity: low. Likelihood: low.
-  Mitigation: per the Decision Log, follow the established in-repo
-  `assert_eq!`-with-`insta` idiom and do **not** add
-  `googletest`/`pretty_assertions` for this scope-limited item. The only
-  genuinely new runtime dependency is `ra_ap_syntax` and its transitives.
+  `pretty_assertions` *are* absent from the workspace. Severity: low.
+  Likelihood: low. Mitigation: per the Decision Log, follow the established
+  in-repo `assert_eq!`-with-`insta` idiom and do **not** add `googletest`/
+  `pretty_assertions` for this scope-limited item. The only genuinely new
+  runtime dependency is `ra_ap_syntax` and its transitives.
 - Risk: **Silent cache poisoning across a parser bump.** A future
   `ra_ap_syntax` bump shifts `SyntaxKind` discriminants; without protection, a
   cache (future 7.6.x) persisting `ast_hashes` would silently match stale
   buckets that now mean something different — wrong Type-3 results, no crash.
-  Severity: high. Likelihood: medium.
-  Mitigation: seed `canonical_hash` with `PARSER_SCHEMA_VERSION` so every hash
-  changes on a bump and cross-pin compares fail closed; snapshot the sentinel;
-  do not persist `KindId` from 7.3.1 (see Constraints).
+  Severity: high. Likelihood: medium. Mitigation: seed `canonical_hash` with
+  `PARSER_SCHEMA_VERSION` so every hash changes on a bump and cross-pin
+  compares fail closed; snapshot the sentinel; do not persist `KindId` from
+  7.3.1 (see Constraints).
 
 ## Progress
 
@@ -259,7 +249,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - [x] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
 - [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
-- [ ] Stage F — Verus lemma and Kani harnesses; proof-script wiring.
+- [x] Stage F — Verus lemma and Kani harnesses; proof-script wiring.
 - [ ] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
 
 Each stage records a timestamp here when complete and splits into
@@ -331,17 +321,33 @@ Stage E completed on 2026-06-16. Green gates:
 - `make markdownlint`
 - `coderabbit review --agent --type uncommitted --fast` (`0` findings)
 
+Stage F implementation and deterministic validation completed on 2026-06-16.
+Green gates:
+
+- `cargo test -p whitaker_clones_core ast` (`28` AST unit tests plus the
+  parser-boundary guard and AST behavioural scenarios)
+- `cargo test -p whitaker_clones_core --doc` (`32` doctests)
+- `cargo check -p whitaker_clones_core --no-default-features`
+- `make verus-clone-detector` (`9`, `10`, and `5` verified obligations across
+  clone-detector proof files)
+- `make kani-clone-detector`
+- `make check-fmt`
+- `make lint`
+- `make test` (`1494` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent --type uncommitted --fast` (`0` findings)
+
 ## Surprises & discoveries
 
 - Observation: implementation began on 2026-06-16 after explicit user
-  direction to proceed from the draft plan. The branch was already
-  task-specific (`7-3-1-map-candidate-spans-and-extract-ast-feature-vectors`)
-  and the worktree was clean before Stage 0 edits.
+  direction to proceed from the draft plan. The branch was already task-specific
+  (`7-3-1-map-candidate-spans-and-extract-ast-feature-vectors`) and the
+  worktree was clean before Stage 0 edits.
 - Observation: `nightly-2026-05-28` resolves locally to
   `rustc 1.98.0-nightly (57d06900f 2026-05-27)`.
 - Observation: `cargo build --workspace` passed on the new nightly without
-  local `rustc_private` or `clippy_utils` edits. The Dylint UI smoke failed
-  with `dylint_linting` 5.0.0 because `ParseSess::env_depinfo` and
+  local `rustc_private` or `clippy_utils` edits. The Dylint UI smoke failed with
+  `dylint_linting` 5.0.0 because `ParseSess::env_depinfo` and
   `ParseSess::file_depinfo` no longer exist, so Stage 0 upgraded
   `dylint_linting`, `dylint_testing`, `cargo-dylint`, and `dylint-link` to
   6.0.1.
@@ -358,11 +364,11 @@ Stage E completed on 2026-06-16. Green gates:
   `no_unwrap_or_else_panic`, not fixture churn. First, newer HIR parent
   iteration no longer walks from an expression to its owner item, so harness
   detection now checks the current owner `HirId` directly in both
-  `no_unwrap_or_else_panic` and `no_expect_outside_tests`. Second,
-  `rstest`/rustc generated companion modules now combine a `test` crate import
-  with same-named descriptor const/function items whose expansion contexts do
-  not compare equal by span; the companion matcher keeps the old strict
-  same-span rule and adds this narrow generated-harness fallback.
+  `no_unwrap_or_else_panic` and `no_expect_outside_tests`. Second, `rstest`
+  /rustc generated companion modules now combine a `test` crate import with
+  same-named descriptor const/function items whose expansion contexts do not
+  compare equal by span; the companion matcher keeps the old strict same-span
+  rule and adds this narrow generated-harness fallback.
 - Observation: interpolated `panic!` expansion now constructs
   `core::fmt::Arguments::new` rather than the older `new_v1` /
   `new_v1_formatted` names. The panic classifier now accepts all three names
@@ -382,8 +388,8 @@ Stage E completed on 2026-06-16. Green gates:
 - Observation: the plan's “red skeleton” step was treated as local TDD intent,
   not as a committed failing state. Repository policy requires every commit to
   pass gates, so the committed Stage A skeleton returns typed placeholder
-  values/errors and includes a neutral hash regression that Stage C will replace
-  with real feature logic.
+  values/errors and includes a neutral hash regression that Stage C will
+  replace with real feature logic.
 - Observation: the crates.io API reports `ra_ap_syntax` `0.0.334` was published
   on 2026-05-25 and declares `rust_version = "1.95"`. It is the closest
   published parser snapshot before the `nightly-2026-05-28` toolchain selected
@@ -392,13 +398,12 @@ Stage E completed on 2026-06-16. Green gates:
 - Observation: `cargo build -p whitaker_clones_core` resolved the parser
   boundary without additional `--precise` pins. The key locked parser
   transitives are `ra_ap_parser 0.0.334`, `ra_ap_stdx 0.0.334`, and
-  `rowan 0.15.18`; `ra_ap_syntax` itself also depends on
-  `rustc-hash 2.1.2`, `rustc-literal-escaper 0.0.4`, `smol_str 0.3.6`, and
-  `triomphe 0.1.15`.
+  `rowan 0.15.18`; `ra_ap_syntax` itself also depends on `rustc-hash 2.1.2`,
+  `rustc-literal-escaper 0.0.4`, `smol_str 0.3.6`, and `triomphe 0.1.15`.
 - Observation: the Stage B parser smoke test exposed that
-  `SourceFile::syntax()` is provided by the `ra_ap_syntax::AstNode` trait in the
-  pinned snapshot. The adapter test imports `AstNode`; this keeps the API drift
-  discovery local to `ast/lowering.rs`.
+  `SourceFile::syntax()` is provided by the `ra_ap_syntax::AstNode` trait in
+  the pinned snapshot. The adapter test imports `AstNode`; this keeps the API
+  drift discovery local to `ast/lowering.rs`.
 - Observation: two full-branch Stage B CodeRabbit reviews reached or approached
   summarization but did not complete after extended waits, likely because they
   reprocessed the already-reviewed Stage 0 and Stage A branch history. The
@@ -406,9 +411,9 @@ Stage E completed on 2026-06-16. Green gates:
   mode, `coderabbit review --agent --type uncommitted --fast`, which returned
   `0` findings for the Stage B diff.
 - Observation: Stage C promoted the FNV-style byte-mixing constants and helper
-  operations into `crate::hashing`, keeping the old token behaviour intact while
-  allowing `ast/hash.rs` to seed Merkle-style subtree hashes without depending
-  on the token module.
+  operations into `crate::hashing`, keeping the old token behaviour intact
+  while allowing `ast/hash.rs` to seed Merkle-style subtree hashes without
+  depending on the token module.
 - Observation: token tests previously imported hash constants from
   `token::fingerprint`; after the promotion they import from `crate::hashing`
   directly. This keeps the production `fingerprint.rs` imports private and
@@ -422,10 +427,19 @@ Stage E completed on 2026-06-16. Green gates:
   tests for them, and avoid duplicating the parser schema version string by
   hand. Stage C addressed all three before commit.
 - Observation: `PARSER_SCHEMA_VERSION` now comes from the exact
-  `ra_ap_syntax` workspace dependency via `crates/whitaker_clones_core/build.rs`.
-  The build script parses the workspace manifest, requires the dependency to
-  remain exact-pinned, and emits `WHITAKER_RA_AP_SYNTAX_VERSION` for the private
-  hashing module to compose into `ra_ap_syntax=...`.
+  `ra_ap_syntax` workspace dependency via
+  `crates/whitaker_clones_core/build.rs`. The build script parses the workspace
+  manifest, requires the dependency to remain exact-pinned, and emits
+  `WHITAKER_RA_AP_SYNTAX_VERSION` for the private hashing module to compose into
+  `ra_ap_syntax=...`.
+- Observation: Kani 0.67.0 uses its own pinned Rust toolchain
+  (`nightly-2025-11-21`, rustc 1.93), which cannot compile
+  `ra_ap_syntax 0.0.334` because that parser snapshot requires rustc 1.95.
+  Stage F therefore made the parser adapter optional behind the default
+  `parser` feature and runs clone-detector Kani harnesses with
+  `--no-default-features`. Normal library builds keep the parser feature on by
+  default; Kani verifies only parser-independent AST domain code and bounded
+  synthetic `NormalisedTree` values.
 - Observation: an intermediate Stage C CodeRabbit follow-up raised two
   documentation concerns about the build-script module purpose and the
   test-only visibility of `FNV_PRIME`. The next completed review raised five
@@ -439,11 +453,11 @@ Stage E completed on 2026-06-16. Green gates:
   `0` findings after the deterministic gates were green. The follow-up log is
   `/tmp/coderabbit-stage-c-followup2-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
 - Observation: Stage D confirmed the parser can report recoverable parse errors
-  without placing an `ERROR` node in the selected subtree. The adapter therefore
-  follows the OQ1 split: it rejects selected subtrees that actually contain
-  `SyntaxKind::ERROR`, but it proceeds and emits a `tracing::warn` when parser
-  recovery errors exist elsewhere or are not represented as ERROR nodes in the
-  selected subtree.
+  without placing an `ERROR` node in the selected subtree. The adapter
+  therefore follows the OQ1 split: it rejects selected subtrees that actually
+  contain `SyntaxKind::ERROR`, but it proceeds and emits a `tracing::warn` when
+  parser recovery errors exist elsewhere or are not represented as ERROR nodes
+  in the selected subtree.
 - Observation: Stage D adds `tracing` as a direct `whitaker_clones_core`
   dependency because the library now emits recovery warnings itself. The
   workspace dependency disables default features and enables only `std`; the
@@ -461,9 +475,8 @@ Stage E completed on 2026-06-16. Green gates:
   expression selection, identifier-renamed canonical-hash stability, and
   structural hash divergence. The direct
   `cargo test -p whitaker_clones_core --test ast_feature_extraction_behaviour`
-  target is required in addition to the filtered `ast` run because one
-  scenario name intentionally describes hash behaviour without the word
-  “ast”.
+  target is required in addition to the filtered `ast` run because one scenario
+  name intentionally describes hash behaviour without the word “ast”.
 - Observation: the `insta` snapshots live beside the adapter tests in
   `ast/lowering.rs`, where parser-kind rendering is already local to the
   `ra_ap_syntax` boundary. The snapshots pin the named feature vector for the
@@ -486,20 +499,20 @@ Stage E completed on 2026-06-16. Green gates:
 Decisions already taken while drafting this plan:
 
 - Decision: **Bump `rust-toolchain.toml` to `nightly-2026-05-28` as a
-  prerequisite Stage 0 of this item, landing as its own atomic commit before the
-  AST work.** Rationale: the bump is *both* an overdue maintenance step (the pin
-  had sat on `nightly-2025-09-18` since 2025) *and* the cleanest unblock for
-  Pass B — under rustc 1.92 the current `ra_ap_syntax` (MSRV 1.95) would not
-  build, forcing a fragile backwards bisect; on `nightly-2026-05-28` (≈ rustc
-  1.9x, ≥ 1.95) a contemporaneous `ra_ap_syntax` snapshot builds directly,
-  matching rust-analyzer's own nightly cadence. Structuring it as a Stage 0
-  atomic commit (rather than a separate roadmap item) keeps the enabling change
-  and its consumer in one reviewable history while still isolating the bump in
-  its own commit. The bump is suite-wide and its blast radius (lint-crate
-  `rustc_private` API, ~34 `.stderr` fixtures, `dylint` v5 compat, ~105 string
-  refs) is carried in Risks and gated by the Stage 0 go/no-go. Chosen by the
-  user (2026-06-09): folded-in Stage 0, both maintenance and 7.3.1 enabler.
-  Date/Author: 2026-06-09, user direction.
+  prerequisite Stage 0 of this item, landing as its own atomic commit before
+  the AST work.** Rationale: the bump is *both* an overdue maintenance step
+  (the pin had sat on `nightly-2025-09-18` since 2025) *and* the cleanest
+  unblock for Pass B — under rustc 1.92 the current `ra_ap_syntax` (MSRV 1.95)
+  would not build, forcing a fragile backwards bisect; on `nightly-2026-05-28`
+  (≈ rustc 1.9x, ≥ 1.95) a contemporaneous `ra_ap_syntax` snapshot builds
+  directly, matching rust-analyzer's own nightly cadence. Structuring it as a
+  Stage 0 atomic commit (rather than a separate roadmap item) keeps the
+  enabling change and its consumer in one reviewable history while still
+  isolating the bump in its own commit. The bump is suite-wide and its blast
+  radius (lint-crate `rustc_private` API, ~34 `.stderr` fixtures, `dylint` v5
+  compat, ~105 string refs) is carried in Risks and gated by the Stage 0
+  go/no-go. Chosen by the user (2026-06-09): folded-in Stage 0, both
+  maintenance and 7.3.1 enabler. Date/Author: 2026-06-09, user direction.
 - Decision: **Use a lowered intermediate representation (`NormalisedTree`),
   not a `trait SyntaxTreeNode` port over live `ra_ap_syntax` nodes.**
   Rationale: a borrowed-tree port forces the domain to be generic over an
@@ -517,8 +530,8 @@ Decisions already taken while drafting this plan:
   Rationale (the count-substrate hybrid, adopted from the design-review panel,
   dissolving the unsatisfiable “exact fixed-point for all depths” trap): the
   design's `1/(1 + depth)` float makes snapshots platform-fragile and makes the
-  Verus lemma and Kani bounds undecidable, so `f64` is rejected. But *scaling at
-  extraction* is also wrong: `SCALE / (1 + depth)` cannot be exact for every
+  Verus lemma and Kani bounds undecidable, so `f64` is rejected. But *scaling
+  at extraction* is also wrong: `SCALE / (1 + depth)` cannot be exact for every
   depth with any finite `SCALE` (that would need `lcm` of all `1 + depth`). The
   resolution: the stored feature substrate is `KindCounts`, an exact
   `BTreeMap<(KindId, Depth), u32>` of per-(kind, depth) node counts; a separate
@@ -529,25 +542,25 @@ Decisions already taken while drafting this plan:
   permutation-invariance statement with no overflow/rounding obligation); and
   keeps the `insta` snapshot of the substrate fully exact. The fixed-point
   `KindWeight` representation and its documented `SCALE` are pinned in the
-  Interfaces section, not deferred. The design document specifies the *weighted*
-  histogram as the deliverable, so both `KindCounts` and the weighting seam are
-  delivered; the weighted result remains the public `KindHistogram`.
-  Date/Author: 2026-06-09, planning team + design-review panel.
+  Interfaces section, not deferred. The design document specifies the
+  *weighted* histogram as the deliverable, so both `KindCounts` and the
+  weighting seam are delivered; the weighted result remains the public
+  `KindHistogram`. Date/Author: 2026-06-09, planning team + design-review panel.
 - Decision: **Reject the borrowed-tree `trait SyntaxTreeNode` port** in favour
   of the lowered owned IR (above). Rationale recorded for posterity: a port
   trait over live rowan nodes is not symbolically constructible by Kani and not
   `Arbitrary`-derivable by proptest, so its test and proof doubles would
   recreate an owned tree anyway — without the strict drift insulation the IR
-  gives. Endorsed 6/6 by the review panel.
-  Date/Author: 2026-06-09.
-- Decision: **`AstHash` is an opaque type; its public contract is `to_hex()
-  -> String`, `Display`, and `Eq`/`Ord` only — never `AstHash(pub u64)` or a
+  gives. Endorsed 6/6 by the review panel. Date/Author: 2026-06-09.
+- Decision: **`AstHash` is an opaque type; its public contract is
+  `to_hex() -> String`, `Display`, and `Eq`/`Ord` only — never
+  `AstHash(pub u64)` or a
   `get() -> u64`.** Rationale: the shipped `run0` code already overrides the
   design doc's `"astHash": u64` schema (`tokenHash` is a SHA-256 hex `String`,
-  `emit.rs`), so a public `u64` both contradicts precedent and forces a breaking
-  change if 7.3.2 widens the digest to `sha2`. Keeping the backing store private
-  (FNV-1a `u64` for now) lets 7.3.2 swap to `sha2` without touching the surface.
-  Date/Author: 2026-06-09, Telefono (review panel).
+  `emit.rs`), so a public `u64` both contradicts precedent and forces a
+  breaking change if 7.3.2 widens the digest to `sha2`. Keeping the backing
+  store private (FNV-1a `u64` for now) lets 7.3.2 swap to `sha2` without
+  touching the surface. Date/Author: 2026-06-09, Telefono (review panel).
 - Decision: **Seed `canonical_hash` with a compile-time `PARSER_SCHEMA_VERSION`
   constant** (derived from the pinned `ra_ap_syntax` version), absorbed at the
   hash root. Rationale: 7.6.x will cache `ast_hashes`; a future parser bump
@@ -557,8 +570,8 @@ Decisions already taken while drafting this plan:
   cross-pin cache compare fails closed. An `insta` snapshot of
   `PARSER_SCHEMA_VERSION` forces any bump to be reviewed. `KindId` itself is
   **not** persisted by 7.3.1 (only `AstHash` is hashable/serialisable here);
-  this is stated as a Constraint so 7.6.x inherits the rule.
-  Date/Author: 2026-06-09, Doggylump (review panel).
+  this is stated as a Constraint so 7.6.x inherits the rule. Date/Author:
+  2026-06-09, Doggylump (review panel).
 - Decision: **Promote the FNV-1a constants and byte-mixing step from
   `token/fingerprint.rs` (currently `pub(super)`) into a `pub(crate)` shared
   hashing helper** (e.g. `crate::hashing`), and reuse it from both `token` and
@@ -571,8 +584,7 @@ Decisions already taken while drafting this plan:
   `thiserror` errors (`AstError`).** Rationale: `AGENTS.md` forbids `expect()`
   outside tests; `SourceFile::parse` is error-tolerant and returns a tree even
   for malformed input, so the real failure modes are span-out-of-bounds and
-  inverted/empty spans, which deserve typed errors.
-  Date/Author: 2026-06-09.
+  inverted/empty spans, which deserve typed errors. Date/Author: 2026-06-09.
 - Decision: **Canonical subtree hash uses the crate's existing FNV-1a-style
   64-bit stable mixing**, returning a `u64`, matching the design document's
   `ast_hash(node) -> u64` signature and the existing `token` module idiom.
@@ -581,8 +593,7 @@ Decisions already taken while drafting this plan:
   construction suited to folding `(kind, arity, ordered child hashes)`, and is
   the established stable-hash idiom in this crate. `sha2` (used by `run0` for
   SARIF partial fingerprints) is the alternative if 7.3.2 needs a wider digest;
-  recorded as an open question.
-  Date/Author: 2026-06-09.
+  recorded as an open question. Date/Author: 2026-06-09.
 - Decision: **Follow the in-repo `assert_eq!` + `insta` assertion idiom; do not
   add `googletest`/`pretty_assertions` for this item.** Rationale: those two
   crates are genuinely absent from the workspace, and adding them widens
@@ -593,8 +604,7 @@ Decisions already taken while drafting this plan:
   `proptest` are **already** `[workspace.dependencies]`; using them needs only
   `{ workspace = true }` dev-dep lines and is *not* a new dependency — the only
   genuinely new runtime dependency in this item is `ra_ap_syntax` and its
-  transitives.
-  Date/Author: 2026-06-09.
+  transitives. Date/Author: 2026-06-09.
 - Decision: **No `docs/users-guide.md` change for 7.3.1.** Rationale: this item
   adds no user-facing behaviour or command-line surface; the CLI (7.4.x) and the
   `clone_detected` lint (7.5.x) are separate items. Internal interface docs go
@@ -606,8 +616,15 @@ Decisions already taken while drafting this plan:
   under the Stage 0 toolchain, needs no additional precise transitive pins, and
   keeps `PARSER_SCHEMA_VERSION` concrete as `ra_ap_syntax=0.0.334`. Stage C now
   derives this value from the exact workspace dependency in a build script
-  rather than duplicating the literal in Rust source.
-  Date/Author: 2026-06-16, implementation.
+  rather than duplicating the literal in Rust source. Date/Author: 2026-06-16,
+  implementation.
+- Decision: **Gate the parser adapter behind the default `parser` feature.**
+  Rationale: the public API remains unchanged for normal builds, while
+  `cargo kani --no-default-features` can verify the parser-free clone-detector
+  harnesses on Kani's older pinned rustc. The no-parser `lower_span` stub
+  returns `AstError::UnparsableSpan`; it exists only to keep the public module
+  shape available when the parser dependency is disabled. Date/Author:
+  2026-06-16, implementation.
 - Decision: **Represent AST kind weights as dyadic fixed point with
   `KindWeight::SCALE = 1 << 63` and `w(depth) = SCALE >> depth`.** Rationale:
   this is the simplest exact-integer option listed for Stage C: no float
@@ -620,8 +637,8 @@ Decisions already taken while drafting this plan:
   Rationale: the delivered feature vector components need only node kind, leaf
   class, child order, and root `ByteSpan`. Adding per-node provenance now would
   widen the pure IR and proof surface for no current consumer; 7.3.2 can add it
-  deliberately if bounded tree-edit distance needs provenance.
-  Date/Author: 2026-06-16, implementation.
+  deliberately if bounded tree-edit distance needs provenance. Date/Author:
+  2026-06-16, implementation.
 
 Open questions carried into implementation (each has a proposed default; encode
 the default unless Stage findings contradict it, then escalate):
@@ -630,23 +647,23 @@ the default unless Stage findings contradict it, then escalate):
   recovered tree even when `parse.errors()` is non-empty. Two distinct
   questions, both decided here (per review finding 🟡-2): (a) *parse-call
   policy* — **proceed on recoverable errors** (Pass A only feeds real source),
-  reserving `AstError` for span/offset problems; (b) *selected-subtree policy* —
-  if the smallest covering node **is** a `SyntaxKind::ERROR` node (or its subtree
-  is dominated by error nodes), return `AstError::UnparsableSpan { start, end }`
-  rather than lowering garbage, and emit a `tracing::warn` (with the span and
-  error count) whenever a lowered span had non-empty `parse.errors()`. This
-  prevents two unrelated files with the same parse-error shape from producing a
-  spurious matching hash. The Stage D malformed-source test asserts this
-  *specific* behaviour, not merely “does not crash”. Revisit the error-ratio
-  threshold if it proves too strict/lax.
+  reserving `AstError` for span/offset problems; (b) *selected-subtree policy*
+  — if the smallest covering node **is** a `SyntaxKind::ERROR` node (or its
+  subtree is dominated by error nodes), return
+  `AstError::UnparsableSpan { start, end }` rather than lowering garbage, and
+  emit a `tracing::warn` (with the span and error count) whenever a lowered
+  span had non-empty `parse.errors()`. This prevents two unrelated files with
+  the same parse-error shape from producing a spurious matching hash. The Stage
+  D malformed-source test asserts this *specific* behaviour, not merely “does
+  not crash”. Revisit the error-ratio threshold if it proves too strict/lax.
 - OQ6: **Per-node byte-span provenance in the IR.** `NormalisedNode` currently
   carries no per-node byte offset; only the root `NormalisedTree` carries the
   candidate `ByteSpan`. 7.3.2's optional bounded tree-edit-distance refinement
   may want per-node provenance, which is cheap to add at lowering time but
-  expensive to retrofit through the proofs later. Resolved in Stage C:
-  **omit per-node spans for 7.3.1** because the three feature outputs do not
-  need them; add them in 7.3.2 only if the edit-distance refinement is
-  implemented. (Review finding 💡-1.)
+  expensive to retrofit through the proofs later. Resolved in Stage C: **omit
+  per-node spans for 7.3.1** because the three feature outputs do not need
+  them; add them in 7.3.2 only if the edit-distance refinement is implemented.
+  (Review finding 💡-1.)
 - OQ2: **Exact pinned `ra_ap_syntax` version.** Resolved in Stage B:
   `ra_ap_syntax = "=0.0.334"` with `PARSER_SCHEMA_VERSION` generated as
   `ra_ap_syntax=0.0.334` from the exact workspace dependency. The snapshot was
@@ -679,8 +696,8 @@ This section assumes no prior knowledge of the repository.
 The clone detector lives in `crates/whitaker_clones_core` (pure algorithms) and
 `crates/whitaker_sarif` (SARIF 2.1.0 models). The CLI and Dylint consumer are
 later roadmap sections. The authoritative design is
-`docs/whitaker-clone-detector-design.md`; the relevant section is **“Pass B: AST
-engine (`ra_ap_syntax`)”**, covering parsing and region mapping, feature
+`docs/whitaker-clone-detector-design.md`; the relevant section is **“Pass B:
+AST engine (`ra_ap_syntax`)”**, covering parsing and region mapping, feature
 extraction (node-kind histogram, production multiset, canonical subtree hash),
 and — for 7.3.2, not here — scoring and SARIF Run 1.
 
@@ -690,8 +707,8 @@ The existing crate is organised by feature, each as a directory module:
   winnowing. The stable FNV-1a-style hashing idiom this plan reuses for the
   subtree hash lives here.
 - `src/index/` — MinHash sketches, LSH candidate generation, `FragmentId`,
-  `CandidatePair`. Note `src/index/kani.rs` for the established
-  `#[cfg(kani)]` harness style.
+  `CandidatePair`. Note `src/index/kani.rs` for the established `#[cfg(kani)]`
+  harness style.
 - `src/run0/` — token-pass acceptance and SARIF Run 0 emission.
   `src/run0/span.rs` shows the existing byte-range→SARIF-region conversion and
   its validation (`validate_range` rejects `start >= end` and non-char-boundary
@@ -700,8 +717,9 @@ The existing crate is organised by feature, each as a directory module:
   and a focused set of `ast` re-exports.
 
 Existing public types this item interoperates with: `FragmentId` (string-backed
-newtype, lexical ordering), `CandidatePair`, and the `Fingerprint { hash: u64,
-range: Range<usize> }` type. 7.3.1 does not modify them.
+newtype, lexical ordering), `CandidatePair`, and the
+`Fingerprint { hash: u64, range: Range<usize> }` type. 7.3.1 does not modify
+them.
 
 ### The `ra_ap_syntax` parser (external dependency, new to the repo)
 
@@ -943,8 +961,8 @@ pub type AstResult<T> = Result<T, AstError>;
 boundary offsets; `ByteSpan::new` rejects both *before* any `TextRange` is
 built. `UnparsableSpan` realises the OQ1 selected-subtree policy.
 
-Public re-exports added to `src/lib.rs` (minimal, forward-compatible with
-7.3.2; `ra_ap_syntax` types are deliberately **not** re-exported). The list is
+Public re-exports added to `src/lib.rs` (minimal, forward-compatible with 7.3.2;
+`ra_ap_syntax` types are deliberately **not** re-exported). The list is
 trimmed to what 7.3.2 and external callers provably consume: `NormalisedNode`,
 `KindId`, and `LeafClass` stay `pub` *within* the `ast` module but are **not**
 root re-exported (no identified cross-module consumer; `canonical_hash` now
@@ -965,10 +983,13 @@ Dependency declarations:
 - `rust-toolchain.toml`: `channel = "nightly-2026-05-28"` (Stage 0).
 - Root `Cargo.toml` `[workspace.dependencies]`: add
   `ra_ap_syntax = "=0.0.PINNED"` with a comment recording the documented reason
-  for the exact pin (date-stamped unstable API; pin the snapshot contemporaneous
-  with `nightly-2026-05-28`; revisit on the next toolchain bump).
+  for the exact pin (date-stamped unstable API; pin the snapshot
+  contemporaneous with `nightly-2026-05-28`; revisit on the next toolchain
+  bump).
+- `crates/whitaker_clones_core/Cargo.toml` `[features]`:
+  `default = ["parser"]`, `parser = ["dep:ra_ap_syntax"]`.
 - `crates/whitaker_clones_core/Cargo.toml` `[dependencies]`:
-  `ra_ap_syntax = { workspace = true }`.
+  `ra_ap_syntax = { workspace = true, optional = true }`.
 - `crates/whitaker_clones_core/Cargo.toml` `[dev-dependencies]`:
   `insta = { workspace = true }`, `proptest = { workspace = true }`.
 
@@ -1017,43 +1038,45 @@ present.
 ### Stage A — Orientation, boundary guard, and red skeleton
 
 No production logic. Create `src/ast/mod.rs` with `//!` docs stating the
-dependency-rule invariant verbatim, declare the submodules, and add `pub mod
-ast;` to `src/lib.rs`. Add `error.rs`, `tree.rs`, `cover.rs`, `features.rs`,
-`hash.rs`, `lowering.rs` with module docs and `todo!()`-free stubs that return
-typed errors or empty values so the crate compiles.
+dependency-rule invariant verbatim, declare the submodules, and add
+`pub mod ast;` to `src/lib.rs`. Add `error.rs`, `tree.rs`, `cover.rs`,
+`features.rs`, `hash.rs`, `lowering.rs` with module docs and `todo!()`-free
+stubs that return typed errors or empty values so the crate compiles.
 
-Deliver the **boundary guard** now (review finding 🔴-A): `tests/ast_boundary.rs`
-asserting that no domain file (`ast/{error,tree,cover,features,hash,mod}.rs`)
-contains a `use ra_ap_*`/`use rowan` line or a bare `ra_ap_syntax::`/`rowan::`
-path outside comments, and that no domain file `use`s `ast::lowering`. Keep the
-forbidden-crate list as a `const`.
+Deliver the **boundary guard** now (review finding 🔴-A):
+`tests/ast_boundary.rs` asserting that no domain file
+(`ast/{error,tree,cover,features,hash,mod}.rs`) contains a `use ra_ap_*`/
+`use rowan` line or a bare `ra_ap_syntax::`/`rowan::` path outside comments,
+and that no domain file `use`s `ast::lowering`. Keep the forbidden-crate list
+as a `const`.
 
 Add the first **red** unit test against a *pure* feature function (e.g.
-`canonical_hash` over a hand-built `NormalisedTree`), which is buildable without
-the parser, so the red stage does not depend on the Stage D adapter. The
-smallest-covering-node red test is explicitly a Stage D artifact. Validation:
-`cargo test -p whitaker_clones_core ast::` fails red for the expected reason;
-`cargo build -p whitaker_clones_core` compiles the skeleton; `tests/ast_boundary.rs`
-passes (the skeleton has no violations yet).
+`canonical_hash` over a hand-built `NormalisedTree`), which is buildable
+without the parser, so the red stage does not depend on the Stage D adapter.
+The smallest-covering-node red test is explicitly a Stage D artifact.
+Validation: `cargo test -p whitaker_clones_core ast::` fails red for the
+expected reason; `cargo build -p whitaker_clones_core` compiles the skeleton;
+`tests/ast_boundary.rs` passes (the skeleton has no violations yet).
 
 ### Stage B — `ra_ap_syntax` contemporaneous pin (go/no-go)
 
 On the `nightly-2026-05-28` channel (rustc ≥ 1.95), select the `ra_ap_syntax`
-snapshot dated near the new nightly — start from the latest at planning time
-(≈ v0.0.336, MSRV 1.95, per the firecrawl research) and step *down* only if a
+snapshot dated near the new nightly — start from the latest at planning time (≈
+v0.0.336, MSRV 1.95, per the firecrawl research) and step *down* only if a
 genuine build/API error appears. Add it exact-pinned (`=0.0.x`) to
 `[workspace.dependencies]` with the documented-reason comment, and
-`{ workspace = true }` to `whitaker_clones_core`. Run `cargo build -p
-whitaker_clones_core` under `-D warnings`, pinning at most three offending
-transitive crates with `--precise` (escalate if more are needed). Replace
-`0.0.PINNED` in both manifests and OQ2 with the concrete version; commit
-`Cargo.toml` and `Cargo.lock` together; record the resolved transitive set
-(including exact `rowan`/`ra_ap_parser` versions) in Surprises & Discoveries.
+`{ workspace = true }` to `whitaker_clones_core`. Run
+`cargo build -p whitaker_clones_core` under `-D warnings`, pinning at most
+three offending transitive crates with `--precise` (escalate if more are
+needed). Replace `0.0.PINNED` in both manifests and OQ2 with the concrete
+version; commit `Cargo.toml` and `Cargo.lock` together; record the resolved
+transitive set (including exact `rowan`/`ra_ap_parser` versions) in Surprises &
+Discoveries.
 
 Go/no-go: if no contemporaneous snapshot builds cleanly, **stop and escalate**
 (Tolerances). Otherwise proceed. Validation: a throwaway `lowering.rs` line
-calling `SourceFile::parse("fn f(){}", Edition::CURRENT).tree()` compiles and the
-crate builds clean.
+calling `SourceFile::parse("fn f(){}", Edition::CURRENT).tree()` compiles and
+the crate builds clean.
 
 ### Stage C — Domain IR and pure feature math (red-green-refactor)
 
@@ -1061,76 +1084,77 @@ First, promote the FNV-1a constants and mixing step from `token/fingerprint.rs`
 into a new `pub(crate)` `src/hashing.rs`, update `token` to use it, and confirm
 `token`'s tests stay green (review finding 🔴-E).
 
-Implement `tree.rs` (the IR, `Depth`, and `ByteSpan::new` rejecting `start >=
-end` and non-char-boundary offsets per `run0/span.rs`), then `cover.rs`,
-`features.rs`, and `hash.rs`. The histogram follows the count-substrate hybrid
-(Decision Log): `kind_counts` builds the exact `BTreeMap<(KindId, Depth), u32>`;
-`weighted_histogram` applies `w(depth)` as a fixed-point `KindWeight`. Stage C
-resolved that representation as `KindWeight::SCALE = 1 << 63` with
-`w(depth) = SCALE >> depth` and records the zero-after-depth-63 behaviour in the
-Decision Log. Stage C also resolved OQ6 by omitting per-node spans from the pure
-IR. Keep `canonical_hash` order-sensitive (kind + arity + ordered child
-hashes), leaf-normalising (`Ident`/`Literal` erase payload → equal hashes;
-different kind or arity → different hashes), and seed it with
-`PARSER_SCHEMA_VERSION`. To respect the dependency rule,
+Implement `tree.rs` (the IR, `Depth`, and `ByteSpan::new` rejecting
+`start >= end` and non-char-boundary offsets per `run0/span.rs`), then
+`cover.rs`, `features.rs`, and `hash.rs`. The histogram follows the
+count-substrate hybrid (Decision Log): `kind_counts` builds the exact
+`BTreeMap<(KindId, Depth), u32>`; `weighted_histogram` applies `w(depth)` as a
+fixed-point `KindWeight`. Stage C resolved that representation as
+`KindWeight::SCALE = 1 << 63` with `w(depth) = SCALE >> depth` and records the
+zero-after-depth-63 behaviour in the Decision Log. Stage C also resolved OQ6 by
+omitting per-node spans from the pure IR. Keep `canonical_hash` order-sensitive
+(kind + arity + ordered child hashes), leaf-normalising (`Ident`/`Literal`
+erase payload → equal hashes; different kind or arity → different hashes), and
+seed it with `PARSER_SCHEMA_VERSION`. To respect the dependency rule,
 `PARSER_SCHEMA_VERSION` lives in the neutral `crate::hashing` module and is
 derived by `crates/whitaker_clones_core/build.rs` from the exact workspace
-`ra_ap_syntax` dependency. Drive each function with red `rstest` unit tests over
-hand-built `NormalisedTree` values first. Validation:
+`ra_ap_syntax` dependency. Drive each function with red `rstest` unit tests
+over hand-built `NormalisedTree` values first. Validation:
 `cargo test -p whitaker_clones_core ast::` and `token::` green; refactor within
 the 400-line file budget; re-run.
 
 ### Stage D — Adapter and span→node mapping
 
 Implement `lowering.rs`: parse with `Edition::CURRENT`; validate the `ByteSpan`
-against the root range; build
-`TextRange`; call the domain `cover::select_smallest_covering` over the
-`descendants()` ranges (the pure index math lives in `cover.rs` so Kani can
-verify it without parsing); lower the chosen subtree via a private recursive
-`lower_node` that maps `kind() as u16 → KindId`, classifies leaf tokens via a
-single private `leaf_class` function (the only place encoding which
-`SyntaxKind`s are `<ID>`/`<LIT>`), recurses over children in document order
-skipping trivia per OQ4, and applies the OQ1 `ERROR`-node policy (return
-`AstError::UnparsableSpan` when the covering node is/contains an `ERROR` subtree;
-`tracing::warn` when a lowered span had parse errors).
+against the root range; build `TextRange`; call the domain
+`cover::select_smallest_covering` over the `descendants()` ranges (the pure
+index math lives in `cover.rs` so Kani can verify it without parsing); lower
+the chosen subtree via a private recursive `lower_node` that maps
+`kind() as u16 → KindId`, classifies leaf tokens via a single private
+`leaf_class` function (the only place encoding which `SyntaxKind`s are `<ID>`/
+`<LIT>`), recurses over children in document order skipping trivia per OQ4, and
+applies the OQ1 `ERROR`-node policy (return `AstError::UnparsableSpan` when the
+covering node is/contains an `ERROR` subtree; `tracing::warn` when a lowered
+span had parse errors).
 
 Drive with red `rstest` mapping tests: exact node, smallest covering inner
 expression, two-sibling common ancestor, whole-file root, and the unhappy paths
-the enriched `AstError` now names — out-of-bounds, inverted, **empty (`start ==
-end`)**, **non-char-boundary** (a span around an identifier following a
-multi-byte comment such as `// café`), and **`ERROR`-node** subtrees (assert the
-*specific* `UnparsableSpan`/recovery behaviour, not merely “does not crash”).
-Validation: `cargo test -p whitaker_clones_core ast::` green; the
-`tests/ast_boundary.rs` guard from Stage A still passes (only `lowering.rs`
-names `ra_ap_`).
+the enriched `AstError` now names — out-of-bounds, inverted, **empty
+(`start == end`)**, **non-char-boundary** (a span around an identifier
+following a multi-byte comment such as `// café`), and **`ERROR`-node**
+subtrees (assert the *specific* `UnparsableSpan`/recovery behaviour, not merely
+“does not crash”). Validation: `cargo test -p whitaker_clones_core ast::`
+green; the `tests/ast_boundary.rs` guard from Stage A still passes (only
+`lowering.rs` names `ra_ap_`).
 
 ### Stage E — Behavioural, snapshot, and property coverage
 
 Add `tests/features/ast_feature_extraction.feature` and
-`tests/ast_feature_extraction_behaviour.rs` (mirror `candidate_pair_behaviour.rs`
-/ `SarifWorld`) with scenarios: smallest-covering-node selection;
-identifier-renamed fragments share a subtree hash; structurally different
-fragments differ. Add an `insta` JSON snapshot of the **exact `KindCounts`
-substrate** (not weighted floats) plus the production multiset and subtree hash
-for a fixed fixture (`fn add(a: i32, b: i32) -> i32 { a + b }`), and a separate
-snapshot of `PARSER_SCHEMA_VERSION` so any parser bump produces a reviewable
-diff that forces the bumper to confront cache invalidation. Render `KindId` as
-its **named** `SyntaxKind` string so a bump yields a reviewable, not noisy, diff
-— but the `KindId → "BIN_EXPR"` renderer is a `#[cfg(test)]` helper in the
-adapter (`lowering.rs`), **not** a `Display` impl on the domain `KindId` (which
-would re-couple the domain to parser vocabulary). Add `proptest` invariants over
-an `Arbitrary` `NormalisedTree` strategy: determinism;
-`kind_counts`/`production_multiset` accumulation order-independence
-(sibling-visit permutation); leaf-normalisation hash equality. State explicitly
-that the order-independence property excludes `canonical_hash`, which is
-deliberately order-*sensitive*; proptest uses the opaque `KindId(u16)`, never
-the rendered name. Keep a checked-in `proptest-regressions/` file. Validation:
+`tests/ast_feature_extraction_behaviour.rs` (mirror
+`candidate_pair_behaviour.rs` / `SarifWorld`) with scenarios:
+smallest-covering-node selection; identifier-renamed fragments share a subtree
+hash; structurally different fragments differ. Add an `insta` JSON snapshot of
+the **exact `KindCounts` substrate** (not weighted floats) plus the production
+multiset and subtree hash for a fixed fixture
+(`fn add(a: i32, b: i32) -> i32 { a + b }`), and a separate snapshot of
+`PARSER_SCHEMA_VERSION` so any parser bump produces a reviewable diff that
+forces the bumper to confront cache invalidation. Render `KindId` as its
+**named** `SyntaxKind` string so a bump yields a reviewable, not noisy, diff —
+but the `KindId → "BIN_EXPR"` renderer is a `#[cfg(test)]` helper in the adapter
+(`lowering.rs`), **not** a `Display` impl on the domain `KindId` (which would
+re-couple the domain to parser vocabulary). Add `proptest` invariants over an
+`Arbitrary` `NormalisedTree` strategy: determinism; `kind_counts`/
+`production_multiset` accumulation order-independence (sibling-visit
+permutation); leaf-normalisation hash equality. State explicitly that the
+order-independence property excludes `canonical_hash`, which is deliberately
+order-*sensitive*; proptest uses the opaque `KindId(u16)`, never the rendered
+name. Keep a checked-in `proptest-regressions/` file. Validation:
 `cargo test -p whitaker_clones_core` green; `cargo insta` review accepted.
 
 ### Stage F — Verus lemma and Kani harnesses
 
-Verus (`verus/clone_detector_ast_features.rs`): prove that count accumulation is
-a permutation-invariant fold over the multiset of per-node `(kind, depth)`
+Verus (`verus/clone_detector_ast_features.rs`): prove that count accumulation
+is a permutation-invariant fold over the multiset of per-node `(kind, depth)`
 contributions — folding **exact `u32` counts**, not scaled rationals (the
 count-substrate hybrid makes this a clean, decidable statement with no
 overflow/rounding obligation). State, in one falsifiable sentence in Artifacts,
@@ -1140,11 +1164,11 @@ operationally — sibling visit order in the feature walk — is carried by
 **proptest**, and Verus proves only the algebraic fold over a given multiset,
 then say so plainly and do **not** claim Verus is “the unbounded root proptest
 samples”; the two check different things. Register the file in both the
-`clone-detector` and `all` groups of `scripts/run-verus.sh`. If the lemma cannot
-be made substantive (not a restatement) and well-founded in two attempts,
-escalate (Tolerances) — the fallback is Kani + proptest only, with a Decision
-Log entry, and the bounded Kani order-independence harness must then stand alone
-as the order-independence evidence (not a coverage hole).
+`clone-detector` and `all` groups of `scripts/run-verus.sh`. If the lemma
+cannot be made substantive (not a restatement) and well-founded in two
+attempts, escalate (Tolerances) — the fallback is Kani + proptest only, with a
+Decision Log entry, and the bounded Kani order-independence harness must then
+stand alone as the order-independence evidence (not a coverage hole).
 
 Kani (`src/ast/kani.rs`, `#[cfg(kani)]`): harnesses over a bounded synthetic
 `NormalisedTree`/candidate set, never the parser. Pin the bounded tree shape
@@ -1153,20 +1177,21 @@ it — note the recursive state space is `branching^depth`, unlike the existing
 flat `LshIndex` harnesses, so confirm `--default-unwind 4` suffices or add
 per-harness `#[kani::unwind(N)]`. Harnesses:
 `verify_smallest_covering_node_selects_minimal_range` (over the factored
-`cover::select_smallest_covering`, with `kani::assume(n >= 2)` so the minimality
-postcondition has something to bite on: result covers the target and no covering
-candidate is strictly smaller); a **separate**
+`cover::select_smallest_covering`, with `kani::assume(n >= 2)` so the
+minimality postcondition has something to bite on: result covers the target and
+no covering candidate is strictly smaller); a **separate**
 `verify_smallest_covering_root_fallback` for the `n == 0`/no-cover path (do not
 fold it into the minimality harness, where it would be vacuous);
 `verify_kind_index_is_bounded`; and a cheap
 `verify_count_accumulation_is_order_independent_bounded`. Register the harness
 names in `run_clone_detector_harnesses` in `scripts/run-kani.sh`.
-**Mutation-validate as a matrix** (review finding 🟡-3): each deliberate mutation
-— `<=`→`<` in the minimality compare, *and* dropping the covering check — must
-be shown to fail **at least one named harness**, recording which mutation each
-harness catches in Artifacts; a single pass/fail bit is insufficient. Restore
-the production code before committing. Validation: `make verus-clone-detector`
-and `make kani-clone-detector` pass; the mutation matrix is recorded.
+**Mutation-validate as a matrix** (review finding 🟡-3): each deliberate
+mutation — `<=`→`<` in the minimality compare, *and* dropping the covering
+check — must be shown to fail **at least one named harness**, recording which
+mutation each harness catches in Artifacts; a single pass/fail bit is
+insufficient. Restore the production code before committing. Validation:
+`make verus-clone-detector` and `make kani-clone-detector` pass; the mutation
+matrix is recorded.
 
 ### Stage G — Documentation, gates, review, roadmap
 
@@ -1177,29 +1202,29 @@ Record the realised design decisions in
 `ra_ap_syntax` pin in `docs/developers-guide.md`. Add two short runbooks to
 `docs/developers-guide.md` (the repo currently documents neither): a
 **“toolchain bump runbook”** capturing the Stage 0 procedure (set the channel;
-rebuild the whole suite; fix `clippy_utils`/lint-crate `rustc_private` breakage;
-verify `dylint` drives the new nightly; re-baseline `.stderr` fixtures with diff
-review; update the load-bearing installer/ADR-001 toolchain strings), and a
-**“`ra_ap_syntax` re-pinning runbook”** (review finding 🟡-7) covering the
-contemporaneous-snapshot selection, the ≤ 3 transitive `--precise` pin budget,
-the escalation trigger, and the note that `PARSER_SCHEMA_VERSION` and any
-`ast_hashes` cache must be invalidated on a re-pin — so the next toolchain-bump
-author does not re-derive Stages 0/B from scratch. Confirm `Cargo.lock` is
-committed and that the CI build uses `--locked`. Assess whether the lowered-IR
-boundary or the proof strategy warrants a new ADR; if so, author
+rebuild the whole suite; fix `clippy_utils`/lint-crate `rustc_private`
+breakage; verify `dylint` drives the new nightly; re-baseline `.stderr`
+fixtures with diff review; update the load-bearing installer/ADR-001 toolchain
+strings), and a **“`ra_ap_syntax` re-pinning runbook”** (review finding 🟡-7)
+covering the contemporaneous-snapshot selection, the ≤ 3 transitive `--precise`
+pin budget, the escalation trigger, and the note that `PARSER_SCHEMA_VERSION`
+and any `ast_hashes` cache must be invalidated on a re-pin — so the next
+toolchain-bump author does not re-derive Stages 0/B from scratch. Confirm
+`Cargo.lock` is committed and that the CI build uses `--locked`. Assess whether
+the lowered-IR boundary or the proof strategy warrants a new ADR; if so, author
 `docs/adr-004-*.md` per the style guide and reference it from the design doc
-(record the decision either way). Run `make check-fmt`, `make lint`, `make
-test`, then the proof targets, then `make markdownlint` for the docs. Request
-`coderabbit review --agent` only after all deterministic gates pass; clear every
-concern. Tick roadmap item 7.3.1 to done. Commit, push, and ensure the draft PR
-references this ExecPlan.
+(record the decision either way). Run `make check-fmt`, `make lint`,
+`make test`, then the proof targets, then `make markdownlint` for the docs.
+Request `coderabbit review --agent` only after all deterministic gates pass;
+clear every concern. Tick roadmap item 7.3.1 to done. Commit, push, and ensure
+the draft PR references this ExecPlan.
 
 ## Concrete steps
 
 Run all commands from the worktree root
 `/home/leynos/.lody/repos/github---leynos---whitaker/worktrees/9fcb15ba-ebe1-4826-b124-ac54785b9705`.
-Follow `AGENTS.md`: run gates sequentially (not in parallel) to benefit from the
-build cache, and `tee` long outputs to a log under `/tmp`.
+Follow `AGENTS.md`: run gates sequentially (not in parallel) to benefit from
+the build cache, and `tee` long outputs to a log under `/tmp`.
 
 ```bash,ignore
 # Stage 0 toolchain bump: set channel then install + verify the whole suite.
@@ -1224,9 +1249,9 @@ cargo insta test -p whitaker_clones_core 2>&1 | tee /tmp/insta.out   # then `car
 ```
 
 Expected transcripts (illustrative): the Stage A red test fails with a message
-naming the unimplemented behaviour; after Stage D, `cargo test -p
-whitaker_clones_core ast::` reports all `ast::` tests passing; `make lint`
-prints no warnings.
+naming the unimplemented behaviour; after Stage D,
+`cargo test -p whitaker_clones_core ast::` reports all `ast::` tests passing;
+`make lint` prints no warnings.
 
 ## Validation and acceptance
 
@@ -1261,45 +1286,68 @@ Acceptance is behavioural and observable.
     `ra_ap_`.
   - Review: `coderabbit review --agent` run after gates are green, with all
     concerns cleared.
-- **Quality method:** the `make` targets above, run sequentially, plus CodeRabbit
+- **Quality method:** the `make` targets above, run sequentially, plus
+  CodeRabbit
   after they pass.
 
 ## Idempotence and recovery
 
 - Apart from Stage 0, all edits are additive within `whitaker_clones_core` plus
   two proof scripts and docs; re-running any `make` target is safe.
-- **Stage 0 is a single atomic commit and is fully revertible** with `git revert`
+- **Stage 0 is a single atomic commit and is fully revertible** with
+  `git revert`
   of that commit (restoring the channel, lockfile, fixtures, and string updates
   together). Because it lands first and on its own, a later AST-stage problem
-  never entangles the toolchain bump, and a bump problem never entangles the AST
-  work. Keep the channel install reproducible via `rust-toolchain.toml` (rustup
-  auto-installs on first `cargo` invocation).
-- The Stage B pin is reversible: if a candidate version fails, `git checkout
-  -- Cargo.toml Cargo.lock` and retry a different pin. Commit the manifest and
+  never entangles the toolchain bump, and a bump problem never entangles the
+  AST work. Keep the channel install reproducible via `rust-toolchain.toml`
+  (rustup auto-installs on first `cargo` invocation).
+- The Stage B pin is reversible: if a candidate version fails,
+  `git checkout -- Cargo.toml Cargo.lock` and retry a different pin. Commit the
+  manifest and
   lockfile together only once a green build is achieved.
-- `insta` snapshots: regenerate with `cargo insta test` and review with `cargo
-  insta review`; never hand-edit `.snap` files.
+- `insta` snapshots: regenerate with `cargo insta test` and review with
+  `cargo insta review`; never hand-edit `.snap` files.
 - Kani mutation validation must be **reverted** before committing (restore the
   original `select_smallest_covering`); the deliberate break is a check, not a
   change.
-- Each stage is committed separately so any stage can be rolled back with `git
-  revert` without losing earlier stages.
+- Each stage is committed separately so any stage can be rolled back with
+  `git revert` without losing earlier stages.
 
 ## Artifacts and notes
 
-Record here, as work proceeds: the resolved `nightly-2026-05-28` `rustc
---version`; any `dylint_linting`/`dylint_testing` version change needed to drive
-it; the list of `.stderr` fixtures re-baselined (with a one-line note on each
-non-cosmetic diff); the resolved `ra_ap_syntax` version and full
-pinned transitive set (including exact `rowan`/`ra_ap_parser` versions); the
-chosen representable weight family, `SCALE`, and the max-depth assumption; the
-`PARSER_SCHEMA_VERSION` value; the red failure transcripts; the Kani harness tree
-shape and unwind bounds; the **mutation matrix** (which mutation each harness
-catches); and the Verus lemma's one-sentence trust-bridge statement (what it
-assumes versus proves). Keep transcripts concise and focused on what proves
-success.
+Record here, as work proceeds: the resolved `nightly-2026-05-28`
+`rustc --version`; any `dylint_linting`/`dylint_testing` version change needed
+to drive it; the list of `.stderr` fixtures re-baselined (with a one-line note
+on each non-cosmetic diff); the resolved `ra_ap_syntax` version and full pinned
+transitive set (including exact `rowan`/`ra_ap_parser` versions); the chosen
+representable weight family, `SCALE`, and the max-depth assumption; the
+`PARSER_SCHEMA_VERSION` value; the red failure transcripts; the Kani harness
+tree shape and unwind bounds; the **mutation matrix** (which mutation each
+harness catches); and the Verus lemma's one-sentence trust-bridge statement
+(what it assumes versus proves). Keep transcripts concise and focused on what
+proves success.
 
 - Stage 0 rustc: `rustc 1.98.0-nightly (57d06900f 2026-05-27)`.
+- Stage F Kani bounds: the AST harnesses use a synthetic tree with
+  `KANI_AST_MAX_DEPTH = 3`, `KANI_AST_MAX_CHILDREN = 2`, and
+  `KANI_AST_UNWIND = 5`; a `const _` assertion ties the unwind bound to
+  `KANI_AST_MAX_DEPTH + 2`.
+- Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
+  the exact count accumulator algebra for a supplied multiset of
+  `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
+  production `NormalisedTree` traversal that produces those contributions.
+- Stage F mutation matrix:
+  - `<=` -> `<` in the covering lower-bound predicate failed
+    `verify_smallest_covering_node_selects_minimal_range` with
+    `covering candidate must be selected` and
+    `no covering candidate may be strictly smaller than the selected candidate`
+    (captured in `/tmp/kani-mutation-start-bound-*.out`).
+  - Dropping the covering predicate failed
+    `verify_smallest_covering_root_fallback` with
+    `non-covering candidate sets must fall back to the parser root`
+    (captured in `/tmp/kani-mutation-drop-cover-*.out`).
+  - After restoring `select_smallest_covering`, both affected harnesses passed
+    (captured in `/tmp/kani-restored-cover-*.out`).
 
 ## Revision note
 
@@ -1318,11 +1366,11 @@ runbook in the developers' guide.
 
 Revision 2 (2026-06-09) — folded in the community-of-experts (Logisphere)
 design-review verdict (“Proceed with conditions”). Changes versus revision 1:
-adopted Wafflecat's count-substrate hybrid (store exact `(KindId, depth)` counts;
-weight in a pure seam) to dissolve the unsatisfiable “exact fixed-point for all
-depths” trap and let the Verus lemma fold exact `u32` counts; made `AstHash`
-opaque (`to_hex`) rather than `pub u64`; pinned the 7.3.2-facing read APIs
-(`KindWeight`, concrete `Production` enum, `KindHistogram::get`/`iter`,
+adopted Wafflecat's count-substrate hybrid (store exact `(KindId, depth)`
+counts; weight in a pure seam) to dissolve the unsatisfiable “exact fixed-point
+for all depths” trap and let the Verus lemma fold exact `u32` counts; made
+`AstHash` opaque (`to_hex`) rather than `pub u64`; pinned the 7.3.2-facing read
+APIs (`KindWeight`, concrete `Production` enum, `KindHistogram::get`/`iter`,
 `ProductionMultiset::count`/`bigrams`/`trigrams`); made `canonical_hash` take
 `&NormalisedTree` and seeded it with a neutral `PARSER_SCHEMA_VERSION` to fail
 caches closed across parser bumps; enriched `AstError` (empty-span,

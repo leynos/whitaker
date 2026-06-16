@@ -53,10 +53,15 @@ run_clone_detector_harnesses() {
         verify_lsh_index_rejects_self_pairs \
         verify_lsh_index_canonicalizes_pair_order \
         verify_lsh_index_deduplicates_repeated_band_collisions \
-        verify_lsh_index_is_insertion_order_independent
+        verify_lsh_index_is_insertion_order_independent \
+        verify_smallest_covering_node_selects_minimal_range \
+        verify_smallest_covering_root_fallback \
+        verify_kind_index_is_bounded \
+        verify_count_accumulation_is_order_independent_bounded
     do
         "${CARGO_KANI_BIN}" kani \
             --manifest-path "${CLONE_DETECTOR_MANIFEST}" \
+            --no-default-features \
             --default-unwind 4 \
             --harness "${harness}" \
             "$@"

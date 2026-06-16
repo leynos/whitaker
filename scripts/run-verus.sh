@@ -16,14 +16,16 @@ proof_files_for_group() {
         clone-detector)
             printf '%s\n' \
                 "${REPO_ROOT}/verus/clone_detector_lsh_config.rs" \
-                "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs"
+                "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
+                "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
             ;;
         all)
             printf '%s\n' \
                 "${REPO_ROOT}/verus/decomposition_cosine_threshold.rs" \
                 "${REPO_ROOT}/verus/decomposition_vector_algebra.rs" \
                 "${REPO_ROOT}/verus/clone_detector_lsh_config.rs" \
-                "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs"
+                "${REPO_ROOT}/verus/clone_detector_candidate_pair.rs" \
+                "${REPO_ROOT}/verus/clone_detector_ast_features.rs"
             ;;
         *)
             printf 'unknown Verus proof group: %s\n' "$1" >&2
