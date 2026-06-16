@@ -119,6 +119,11 @@ fn is_inside_harness_test_function<'tcx>(
     hir_id: hir::HirId,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> bool {
+    let owner_hir_id: hir::HirId = hir_id.owner.into();
+    if harness_test_functions.contains(&owner_hir_id) {
+        return true;
+    }
+
     cx.tcx.hir_parent_iter(hir_id).any(|(_, node)| match node {
         hir::Node::Item(item) if matches!(item.kind, hir::ItemKind::Fn { .. }) => {
             harness_test_functions.contains(&item.hir_id())

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -248,7 +248,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
 
 ## Progress
 
-- [ ] Stage 0 — Bump `rust-toolchain.toml` to `nightly-2026-05-28` suite-wide
+- [x] Stage 0 — Bump `rust-toolchain.toml` to `nightly-2026-05-28` suite-wide
       (own atomic commit; go/no-go); all gates green before Stage A.
 - [ ] Stage A — Orientation, boundary guard (`tests/ast_boundary.rs`), and red
       skeleton (no production logic).
@@ -265,9 +265,55 @@ Thresholds that trigger escalation rather than autonomous continuation.
 Each stage records a timestamp here when complete and splits into
 done/remaining if interrupted.
 
+Stage 0 completed on 2026-06-16. Green gates:
+
+- `make check-fmt`
+- `make lint`
+- `make test` (`1453` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent` (`0` findings)
+
 ## Surprises & discoveries
 
-- Observation: none yet (draft).
+- Observation: implementation began on 2026-06-16 after explicit user
+  direction to proceed from the draft plan. The branch was already
+  task-specific (`7-3-1-map-candidate-spans-and-extract-ast-feature-vectors`)
+  and the worktree was clean before Stage 0 edits.
+- Observation: `nightly-2026-05-28` resolves locally to
+  `rustc 1.98.0-nightly (57d06900f 2026-05-27)`.
+- Observation: `cargo build --workspace` passed on the new nightly without
+  local `rustc_private` or `clippy_utils` edits. The Dylint UI smoke failed
+  with `dylint_linting` 5.0.0 because `ParseSess::env_depinfo` and
+  `ParseSess::file_depinfo` no longer exist, so Stage 0 upgraded
+  `dylint_linting`, `dylint_testing`, `cargo-dylint`, and `dylint-link` to
+  6.0.1.
+- Observation: after the Dylint 6.0.1 bump, local lint code needed the rustc
+  diagnostic API migration from `span_lint` to `emit_span_lint` plus
+  `DiagDecorator`. The existing `rustc_lint` shim now re-exports
+  `DiagDecorator`, keeping that rustc-private surface centralised. The
+  `bumpy_road_function` UI smoke passed after this migration.
+- Observation: rustc 1.98 moved several APIs used by tests and lints:
+  `StableHashCtxt` now lives under `rustc_data_structures::stable_hash`,
+  `hir::AttrPath` segments are `Box<[Symbol]>`, and type normalisation now uses
+  `ty::TypingEnv` plus `ty::Unnormalized::new_wip`.
+- Observation: the full Stage 0 gates exposed two real compatibility drifts in
+  `no_unwrap_or_else_panic`, not fixture churn. First, newer HIR parent
+  iteration no longer walks from an expression to its owner item, so harness
+  detection now checks the current owner `HirId` directly in both
+  `no_unwrap_or_else_panic` and `no_expect_outside_tests`. Second,
+  `rstest`/rustc generated companion modules now combine a `test` crate import
+  with same-named descriptor const/function items whose expansion contexts do
+  not compare equal by span; the companion matcher keeps the old strict
+  same-span rule and adds this narrow generated-harness fallback.
+- Observation: interpolated `panic!` expansion now constructs
+  `core::fmt::Arguments::new` rather than the older `new_v1` /
+  `new_v1_formatted` names. The panic classifier now accepts all three names
+  after verifying the receiver type is `core::fmt::Arguments`.
+- Observation: `make fmt` would currently touch unrelated Markdown files
+  because of pre-existing markdownlint/formatting drift outside this Stage 0
+  change. To keep the atomic commit scoped, Stage 0 used `cargo fmt --all` and
+  the required `make check-fmt` Rust formatting gate; broad Markdown formatting
+  remains out of scope for this compatibility commit.
 
 ## Decision log
 
@@ -1067,6 +1113,8 @@ shape and unwind bounds; the **mutation matrix** (which mutation each harness
 catches); and the Verus lemma's one-sentence trust-bridge statement (what it
 assumes versus proves). Keep transcripts concise and focused on what proves
 success.
+
+- Stage 0 rustc: `rustc 1.98.0-nightly (57d06900f 2026-05-27)`.
 
 ## Revision note
 

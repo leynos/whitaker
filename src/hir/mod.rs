@@ -192,14 +192,15 @@ pub fn collect_harness_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirI
         .collect()
 }
 
-/// Collects functions whose rstest lowering uses a same-named sibling module.
+/// Collects functions whose rstest lowering marks them as harness tests.
 ///
 /// The shared [`collect_harness_test_functions`] catches direct const-descriptor
-/// siblings. This helper additionally finds functions with a same-named sibling
-/// *module* in the shape `rustc` emits for case-driven `#[rstest]` (including
-/// a module that exposes `RSTEST_HARNESS_DESCRIPTOR`, or the full in-module
-/// harness-descriptor pattern). Companions are matched only within the same
-/// module scope.
+/// siblings. This helper additionally finds functions that still carry
+/// test-like HIR attributes after macro expansion, plus functions with a
+/// same-named sibling *module* in the shape `rustc` emits for case-driven
+/// `#[rstest]` (including a module that exposes `RSTEST_HARNESS_DESCRIPTOR`, or
+/// the full in-module harness-descriptor pattern). Companions are matched only
+/// within the same module scope.
 #[must_use]
 pub fn collect_rstest_companion_test_functions(cx: &LateContext<'_>) -> HashSet<hir::HirId> {
     let mut marked = HashSet::new();
@@ -223,6 +224,11 @@ fn collect_companion_in_group<'tcx>(
         .copied()
         .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
     {
+        if has_test_like_hir_attributes(cx.tcx.hir_attrs(item.hir_id()), &[]) {
+            marked.insert(item.hir_id());
+            continue;
+        }
+
         let Some(ident) = item.kind.ident() else {
             continue;
         };
@@ -270,8 +276,10 @@ fn has_companion_test_module<'tcx>(
 ///
 /// Qualifying modules contain `RSTEST_HARNESS_DESCRIPTOR` or carry the inner
 /// `fn`/`const` sibling pattern emitted by the `rustc --test` harness inside
-/// generated modules. Empty modules and modules containing only unrelated
-/// items are not treated as companions.
+/// generated modules. Newer `rstest`/`rustc` combinations give the descriptor
+/// const and generated function different expansion contexts, so modules that
+/// also import the `test` crate may match on names alone. Empty modules and
+/// modules containing only unrelated items are not treated as companions.
 fn module_qualifies_as_rstest_companion_module<'tcx>(
     cx: &LateContext<'tcx>,
     module_item: &'tcx hir::Item<'tcx>,
@@ -305,6 +313,8 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
     cx: &LateContext<'tcx>,
     items: &[&'tcx hir::Item<'tcx>],
 ) -> bool {
+    let imports_test_crate = module_imports_test_crate(items);
+
     items
         .iter()
         .copied()
@@ -318,11 +328,23 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
             items.iter().copied().any(|sibling| {
                 item_components(cx, sibling, |k| matches!(k, hir::ItemKind::Const(..))).is_some_and(
                     |(s_id, s_name, _, s_span)| {
-                        s_id != fn_id && s_name == fn_name && s_span.source_equal(fn_span)
+                        s_id != fn_id
+                            && s_name == fn_name
+                            && (s_span.source_equal(fn_span) || imports_test_crate)
                     },
                 )
             })
         })
+}
+
+fn module_imports_test_crate(items: &[&hir::Item<'_>]) -> bool {
+    items.iter().any(|item| {
+        matches!(item.kind, hir::ItemKind::ExternCrate(..))
+            && item
+                .kind
+                .ident()
+                .is_some_and(|ident| ident.name.as_str() == "test")
+    })
 }
 
 #[cfg(test)]

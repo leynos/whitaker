@@ -11,6 +11,7 @@ extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_lint as upstream;
 
+pub use rustc_errors::DiagDecorator;
 pub use upstream::*;
 
 pub mod errors {
