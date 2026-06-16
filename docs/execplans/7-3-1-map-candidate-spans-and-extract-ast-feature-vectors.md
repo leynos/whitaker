@@ -97,8 +97,8 @@ escalation, not a workaround.
   bumping; UI-diagnostic drift is re-baselined, not suppressed.
 - **No silenced lints.**
   `cargo clippy --workspace --all-targets --all-features -- -D warnings` must
-  pass with no new `#[allow(...)]` except as a tightly
-  scoped last resort with a written reason.
+  pass with no new `#[allow(...)]` except as a tightly scoped last resort with
+  a written reason.
 - **No `expect()`/`unwrap()` outside tests.** The design document's Pass B
   sketch uses `SourceFile::parse(...).ok().expect("parse")`; this is forbidden
   by `AGENTS.md` outside `#[cfg(test)]`. Replace it with typed `thiserror`
@@ -250,7 +250,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
 - [x] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
       (`proptest`) coverage.
 - [x] Stage F — Verus lemma and Kani harnesses; proof-script wiring.
-- [ ] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
+- [x] Stage G — Documentation, final gates, CodeRabbit review, roadmap tick.
 
 Each stage records a timestamp here when complete and splits into
 done/remaining if interrupted.
@@ -334,6 +334,34 @@ Green gates:
 - `make check-fmt`
 - `make lint`
 - `make test` (`1494` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent --type uncommitted --fast` (`0` findings)
+
+Stage G deterministic validation completed on 2026-06-16. Green gates before
+the final CodeRabbit review:
+
+- `mbake validate Makefile`
+- `make check-fmt`
+- `env CARGO_LOCKED=--locked make lint`
+- `env CARGO_LOCKED=--locked make test` (`1494` passed, `3` skipped)
+- `make verus-clone-detector` (`9`, `10`, and `5` verified obligations across
+  clone-detector proof files)
+- `make kani-clone-detector`
+- `make markdownlint`
+
+Stage G CodeRabbit follow-up completed on 2026-06-16. The first Stage G review
+returned three valid findings: document the shared hash mix helpers with fixed
+vectors, narrow the Verus sidecar's proof-scope wording, and strengthen the AST
+count proof beyond a two-contribution swap. The follow-up implementation added
+the hash examples and a `same_contribution_multiset` Verus lemma for fold-count
+invariance over equal contribution multisets. Green follow-up gates:
+
+- `make verus-clone-detector` (`9`, `10`, and `8` verified obligations across
+  clone-detector proof files)
+- `make check-fmt`
+- `env CARGO_LOCKED=--locked make lint`
+- `env CARGO_LOCKED=--locked make test` (`1494` passed, `3` skipped)
+- `make kani-clone-detector`
 - `make markdownlint`
 - `coderabbit review --agent --type uncommitted --fast` (`0` findings)
 
@@ -493,6 +521,20 @@ Green gates:
 - Observation: the Stage E CodeRabbit milestone review completed with
   `0` findings after all deterministic gates were green. The review log is
   `/tmp/coderabbit-stage-e-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
+- Observation: Stage G found that the GitHub CI workflow invoked Makefile
+  targets without a lockfile flag. Stage G therefore added a `CARGO_LOCKED`
+  Makefile variable and set `CARGO_LOCKED=--locked` in CI, so build, lint,
+  nextest, publish-check, package, and release-dry-run Cargo invocations use
+  the committed lockfile when CI runs them.
+- Observation: Stage G confirmed `Cargo.lock` is tracked in the repository
+  root and remains part of the branch diff history through the parser pin.
+- Observation: Stage G attempted the required broad `make fmt` documentation
+  formatting pass. It still fails on pre-existing Markdown issues in unrelated
+  execplans, so unrelated formatter churn was reverted and the final scoped tree
+  is guarded by `make markdownlint`.
+- Observation: the Stage G CodeRabbit follow-up widened the Verus AST sidecar
+  from `5` to `8` verified obligations by adding `matching_count`,
+  `same_contribution_multiset`, and the general fold-count invariance lemma.
 
 ## Decision log
 
@@ -554,13 +596,13 @@ Decisions already taken while drafting this plan:
   gives. Endorsed 6/6 by the review panel. Date/Author: 2026-06-09.
 - Decision: **`AstHash` is an opaque type; its public contract is
   `to_hex() -> String`, `Display`, and `Eq`/`Ord` only — never
-  `AstHash(pub u64)` or a
-  `get() -> u64`.** Rationale: the shipped `run0` code already overrides the
-  design doc's `"astHash": u64` schema (`tokenHash` is a SHA-256 hex `String`,
-  `emit.rs`), so a public `u64` both contradicts precedent and forces a
-  breaking change if 7.3.2 widens the digest to `sha2`. Keeping the backing
-  store private (FNV-1a `u64` for now) lets 7.3.2 swap to `sha2` without
-  touching the surface. Date/Author: 2026-06-09, Telefono (review panel).
+  `AstHash(pub u64)` or a `get() -> u64`.** Rationale: the shipped `run0` code
+  already overrides the design doc's `"astHash": u64` schema (`tokenHash` is a
+  SHA-256 hex `String`, `emit.rs`), so a public `u64` both contradicts
+  precedent and forces a breaking change if 7.3.2 widens the digest to `sha2`.
+  Keeping the backing store private (FNV-1a `u64` for now) lets 7.3.2 swap to
+  `sha2` without touching the surface. Date/Author: 2026-06-09, Telefono
+  (review panel).
 - Decision: **Seed `canonical_hash` with a compile-time `PARSER_SCHEMA_VERSION`
   constant** (derived from the pinned `ra_ap_syntax` version), absorbed at the
   hash root. Rationale: 7.6.x will cache `ast_hashes`; a future parser bump
@@ -625,6 +667,17 @@ Decisions already taken while drafting this plan:
   returns `AstError::UnparsableSpan`; it exists only to keep the public module
   shape available when the parser dependency is disabled. Date/Author:
   2026-06-16, implementation.
+- Decision: **Do not add a new ADR for 7.3.1.** Rationale: the lowered-IR
+  boundary is a local adapter decision already captured in the clone-detector
+  design document, while the proof strategy directly applies ADR-003's existing
+  split between tests, bounded Kani execution, and Verus sidecars with explicit
+  trust boundaries. Date/Author: 2026-06-16, implementation.
+- Decision: **Make CI Cargo lockfile enforcement explicit with
+  `CARGO_LOCKED=--locked`.** Rationale: Stage G needed to confirm that CI uses
+  the committed lockfile, but the existing workflow only called Make targets. A
+  variable keeps local developer defaults unchanged while allowing CI to pass
+  `--locked` through the Makefile's Cargo build, lint, test, package, and dry
+  run paths. Date/Author: 2026-06-16, implementation.
 - Decision: **Represent AST kind weights as dyadic fixed point with
   `KindWeight::SCALE = 1 << 63` and `w(depth) = SCALE >> depth`.** Rationale:
   this is the simplest exact-integer option listed for Stage C: no float
@@ -1287,24 +1340,21 @@ Acceptance is behavioural and observable.
   - Review: `coderabbit review --agent` run after gates are green, with all
     concerns cleared.
 - **Quality method:** the `make` targets above, run sequentially, plus
-  CodeRabbit
-  after they pass.
+  CodeRabbit after they pass.
 
 ## Idempotence and recovery
 
 - Apart from Stage 0, all edits are additive within `whitaker_clones_core` plus
   two proof scripts and docs; re-running any `make` target is safe.
 - **Stage 0 is a single atomic commit and is fully revertible** with
-  `git revert`
-  of that commit (restoring the channel, lockfile, fixtures, and string updates
-  together). Because it lands first and on its own, a later AST-stage problem
-  never entangles the toolchain bump, and a bump problem never entangles the
-  AST work. Keep the channel install reproducible via `rust-toolchain.toml`
-  (rustup auto-installs on first `cargo` invocation).
+  `git revert` of that commit (restoring the channel, lockfile, fixtures, and
+  string updates together). Because it lands first and on its own, a later
+  AST-stage problem never entangles the toolchain bump, and a bump problem
+  never entangles the AST work. Keep the channel install reproducible via
+  `rust-toolchain.toml` (rustup auto-installs on first `cargo` invocation).
 - The Stage B pin is reversible: if a candidate version fails,
   `git checkout -- Cargo.toml Cargo.lock` and retry a different pin. Commit the
-  manifest and
-  lockfile together only once a green build is achieved.
+  manifest and lockfile together only once a green build is achieved.
 - `insta` snapshots: regenerate with `cargo insta test` and review with
   `cargo insta review`; never hand-edit `.snap` files.
 - Kani mutation validation must be **reverted** before committing (restore the

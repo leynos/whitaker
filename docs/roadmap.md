@@ -90,6 +90,7 @@
   002](adr-002-dylint-expect-attribute-macro.md) §Migration plan.
   Requires 1.3.3.
 
+
 ### 2.3. Localization enablement
 
 - [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
@@ -470,7 +471,7 @@
 
 ### 7.3. AST refinement (Type-3)
 
-- [ ] 7.3.1. Map candidate spans to `ra_ap_syntax` nodes and extract AST
+- [x] 7.3.1. Map candidate spans to `ra_ap_syntax` nodes and extract AST
   feature vectors. See [clone detector
   design](whitaker-clone-detector-design.md) §Pass B: AST engine
   (ra_ap_syntax).

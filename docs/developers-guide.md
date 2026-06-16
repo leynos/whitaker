@@ -327,8 +327,8 @@ tests and Kani:
 - The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` call
   real `MinHasher::sketch` for the empty-input, deterministic-output, and
   duplicate-hash properties. They use a private `cfg(kani)` seed fixture and
-  fixed-width signature builder so the proof focuses on sketch semantics
-  rather than seed-stream array construction.
+  fixed-width signature builder so the proof focuses on sketch semantics rather
+  than seed-stream array construction.
 
 The direct `LshIndex` invariant coverage is also split between ordinary tests
 and Kani:
@@ -342,8 +342,47 @@ and Kani:
 - The Kani harnesses in `crates/whitaker_clones_core/src/index/kani.rs` verify
   bounded `LshIndex` states for the same invariants. Kani builds use a private
   fixed-size insertion log and compact band keys so the proof checks the LSH
-  state transition and `CandidatePair::new` policy without modelling
-  `BTreeMap` and `BTreeSet` allocator internals.
+  state transition and `CandidatePair::new` policy without modelling `BTreeMap`
+  and `BTreeSet` allocator internals.
+
+
+### Clone-detector AST structure
+
+The clone-detector AST code is grouped under
+`crates/whitaker_clones_core/src/ast/`. It is deliberately split into one
+parser adapter and several parser-agnostic domain modules:
+
+- `lowering.rs` is the only AST source file that may import `ra_ap_syntax`,
+  `ra_ap_parser`, or `rowan`. It parses a Rust file, maps byte spans to the
+  smallest covering syntax node, and lowers that node into the owned
+  `NormalisedTree` representation.
+- `tree.rs` owns the lowered domain types: `NormalisedTree`,
+  `NormalisedNode`, `KindId`, `Depth`, `LeafClass`, `AstHash`, and `ByteSpan`.
+  `KindId` is an in-memory token and must not be persisted.
+- `features.rs`, `hash.rs`, and `cover.rs` operate only on the lowered domain
+  types. They must not depend on parser crates or import the adapter module.
+- `tests.rs` and the `tests/ast_*` behavioural suites cover feature math,
+  parser lowering, snapshots, property tests, and the module-boundary guard.
+
+The `tests/ast_boundary.rs` guard enforces this boundary. If it fails, fix the
+module ownership problem rather than relaxing the guard: parser vocabulary
+belongs in `lowering.rs`, and reusable AST algorithms belong in the lowered
+domain.
+
+AST feature vectors use an exact count substrate. `kind_counts` records exact
+`(KindId, Depth) -> u32` counts, `kind_histogram` derives dyadic fixed-point
+weights from those counts, `production_multiset` records deterministic
+parent-child and parent-child-grandchild production counts, and
+`canonical_hash` emits an `AstHash` seeded with `PARSER_SCHEMA_VERSION`.
+Changing the parser pin, normalisation rules, hash algorithm, or schema string
+must produce a reviewable snapshot change.
+
+`ra_ap_syntax` is exact-pinned in `Cargo.toml` because its parser vocabulary
+and MSRV move with `0.0.x` snapshots. The dependency is behind the default
+`parser` feature of `whitaker_clones_core`: normal builds compile the real
+adapter, while Kani runs pass `--no-default-features` and compile the
+parser-free adapter stub. Keep that split unless Kani's pinned toolchain can
+compile the parser snapshot directly.
 
 ### Make targets
 
@@ -375,9 +414,9 @@ honour an existing environment value if set before invoking make, allowing
 per-developer overrides without modifying the Makefile.
 
 `make verus` currently runs both decomposition-advice proofs and the
-clone-detector proofs for `LshConfig::new` and `CandidatePair::new`.
-`make kani` runs the decomposition adjacency harnesses and the clone-detector
-harness group in one pass.
+clone-detector sidecars for `LshConfig::new`, `CandidatePair::new`, and AST
+feature-count accumulation. `make kani` runs the decomposition adjacency
+harnesses and the clone-detector harness group in one pass.
 
 ### Spelling gate
 
@@ -405,8 +444,8 @@ documentation leg.
 ### Verus scope and trust boundary
 
 The clone-detector Verus files are intentionally implementation-shaped models
-of `LshConfig::new`, `validate_product`, and `CandidatePair::new`, not direct
-proofs of the compiled Rust bodies in `crates/whitaker_clones_core`.
+or algebraic sidecars, not direct proofs of the compiled Rust bodies in
+`crates/whitaker_clones_core`.
 
 This distinction matters. In the current sidecar setup, Verus can describe the
 contract of an external Rust function with mechanisms such as
@@ -441,9 +480,20 @@ For the current clone-detector constructors, the split is:
   `#[cfg(kani)]` builds, `LshIndex` records inserted fragments in a fixed
   four-slot proof log with compact two-band keys; normal builds keep the
   production `BTreeMap`/`BTreeSet` implementation and public API.
+- Kani verifies AST span-cover selection and bounded AST feature invariants
+  over synthetic `NormalisedTree` values. It calls the production
+  `select_smallest_covering` helper for covering-node minimality and root
+  fallback, and uses compact bounded tree fixtures for feature invariants so
+  the proof does not compile or model `ra_ap_syntax`.
+- Verus proves the AST feature-count accumulator algebra for supplied
+  `(kind, depth)` contributions. The proof establishes adjacent two-item order
+  independence for exact counts; ordinary tests and proptest remain responsible
+  for proving that production traversal supplies the intended contribution
+  multiset.
 - Ordinary unit tests and `rstest-bdd` scenarios pin the concrete lexical
   `FragmentId` ordering contract that the `CandidatePair` proof's bridge still
-  trusts rather than proving from `String` internals.
+  trusts rather than proving from `String` internals, and they pin the AST
+  adapter's parser-facing behaviour.
 
 ### Tooling scripts
 
@@ -453,7 +503,8 @@ The proof targets are thin wrappers over repository scripts:
   `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/verus`, makes the binaries
   executable, and installs the Rust toolchain that Verus requests.
 - `scripts/run-verus.sh` selects proof groups and executes each `.rs` proof
-  file in turn.
+  file in turn, including `verus/clone_detector_ast_features.rs` for the
+  clone-detector group.
 - `scripts/install-kani.sh` downloads the pinned pre-built Kani release into
   `${XDG_CACHE_HOME:-$HOME/.cache}/whitaker/kani`, installs the matching
   nightly Rust toolchain via `rustup`, and symlinks that toolchain into the
@@ -463,7 +514,9 @@ The proof targets are thin wrappers over repository scripts:
   clone-detector harnesses one harness per `cargo-kani` invocation so each
   proof appears explicitly in the output, including the overflow-specific
   harness for `LshConfig::new`, the bounded `MinHasher::sketch` harnesses, and
-  the bounded `LshIndex` candidate-pair invariant harnesses.
+  the bounded `LshIndex` candidate-pair invariant harnesses. Clone-detector
+  Kani invocations use `--no-default-features` so parser-independent proofs do
+  not compile `ra_ap_syntax`.
 
 The installer scripts are idempotent. The first proof run may take longer while
 toolchains and verifier binaries are downloaded; later runs reuse the cached
@@ -493,6 +546,62 @@ group directly:
 ./scripts/run-kani.sh verify_build_adjacency_preserves_edges
 ./scripts/run-kani.sh clone-detector
 ```
+
+
+## Toolchain and parser maintenance runbooks
+
+Use these runbooks when the Rust nightly or `ra_ap_syntax` parser snapshot must
+move. They are intentionally procedural because both changes affect Dylint,
+parser APIs, snapshots, and proof tooling.
+
+
+### Rust toolchain bump runbook
+
+1. Change `rust-toolchain.toml` to the target nightly channel.
+2. Install or refresh the required components:
+   `rustup component add rust-src rustc-dev llvm-tools-preview`.
+3. Rebuild the whole workspace with the new channel before making feature
+   changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API drift in
+   the production code rather than suppressing warnings.
+4. Confirm `cargo-dylint` and `dylint-link` can drive the new nightly. If no
+   compatible Dylint release exists, stop and record the blocker.
+5. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
+   diagnostic drift. Treat changed spans, wording, and suggestions as evidence
+   to review, not as an automatic blessing.
+6. Update load-bearing toolchain references, including installer package
+   scripts, release workflow strings, ADR-001 notes, and any design or roadmap
+   text that names the old channel.
+7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
+   and `make markdownlint`. Run relevant proof targets if the bump touches
+   clone-detector or decomposition proof surfaces.
+8. Confirm CI invokes Cargo through a locked dependency path. The CI workflow
+   sets `CARGO_LOCKED=--locked`, and Makefile Cargo recipes must preserve that
+   variable when adding new build, lint, package, or test commands.
+
+
+### `ra_ap_syntax` re-pinning runbook
+
+1. Choose a `ra_ap_syntax` snapshot contemporaneous with the pinned Rust
+   nightly rather than backwards-bisecting to an older parser unless the plan
+   explicitly requires that trade-off.
+2. Exact-pin the parser dependency in
+   `crates/whitaker_clones_core/Cargo.toml`. If more than three transitive
+   crates require manual `cargo update --precise` pins, stop and record the
+   mismatch.
+3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
+   change tempts domain code to import `ra_ap_syntax`, update the lowered
+   `NormalisedTree` boundary instead.
+4. Update `PARSER_SCHEMA_VERSION` for every parser re-pin or normalisation
+   change. Any future `ast_hashes` cache must be invalidated when this string
+   changes.
+5. Refresh and review the AST snapshots, especially the parser schema snapshot
+   and named-kind feature-vector snapshot, so syntax-kind drift is visible.
+6. Run `cargo build -p whitaker_clones_core`, the AST-focused tests,
+   `make check-fmt`, `make lint`, `make test`, `make verus-clone-detector`,
+   `make kani-clone-detector`, and `make markdownlint`.
+7. Preserve the default `parser` feature and the Kani `--no-default-features`
+   proof path unless the Kani-pinned toolchain can compile the parser snapshot
+   directly.
 
 ## Kani bounded model checking
 
@@ -618,7 +727,7 @@ providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md`](./execplans/6-4-5-use-kani-to-verify-build-adjacency-preserves-similarity-edges.md)
- for the complete design rationale and implementation decisions.
+for the complete design rationale and implementation decisions.
 
 ### Test-support APIs for label-propagation testing
 
@@ -648,7 +757,7 @@ crate-internal while providing a clean testing interface.
 
 See
 [`docs/execplans/6-4-6-kani-verification-propagate-labels-preserves-indices.md`](./execplans/6-4-6-kani-verification-propagate-labels-preserves-indices.md)
- for the complete design rationale and implementation decisions.
+for the complete design rationale and implementation decisions.
 
 ## Installer release helper binaries
 
@@ -856,8 +965,8 @@ the generic Cargo fallback path.
 `should_install_tool()` to skip any tool already present in `remaining_status`,
 then calls `install_tool()` and feeds the returned `InstallOutcome` into
 `update_status_after_install()`. This keeps `remaining_status` accurate for
-later iterations so a successful `cargo-dylint` install can suppress a
-redundant `dylint-link` install.
+later iterations so a successful `cargo-dylint` install can suppress a redundant
+`dylint-link` install.
 
 After resolving the dependency metadata entry, `install_tool()` copies
 `dependency.version()` into `CargoInstallPlan` before attempting the
@@ -1095,11 +1204,11 @@ two layers.
 The following table lists the reusable policy symbols exported from
 `whitaker_common::rstest`.
 
-| Symbol                                                        | Description                                                                                                                                                 |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SpanRecoveryFrame<T>`                                        | A single frame in an ordered span chain, carrying the frame value and a `from_expansion: bool` flag.                                                        |
-| `UserEditableSpan<T>`                                         | Enum result: `Direct(T)` — first frame is user-editable; `Recovered(T)` — a later frame is user-editable; `MacroOnly` — no user-editable frame found.       |
-| `recover_user_editable_span(frames: &[SpanRecoveryFrame<T>])` | Scans the ordered frame chain and returns the first non-expansion frame as `Direct` or `Recovered`.                                                         |
+| Symbol                                                        | Description                                                                                                                                           |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SpanRecoveryFrame<T>`                                        | A single frame in an ordered span chain, carrying the frame value and a `from_expansion: bool` flag.                                                  |
+| `UserEditableSpan<T>`                                         | Enum result: `Direct(T)` — first frame is user-editable; `Recovered(T)` — a later frame is user-editable; `MacroOnly` — no user-editable frame found. |
+| `recover_user_editable_span(frames: &[SpanRecoveryFrame<T>])` | Scans the ordered frame chain and returns the first non-expansion frame as `Direct` or `Recovered`.                                                   |
 
 The policy layer has no dependency on `rustc_span` and can be unit-tested with
 any `Clone + PartialEq` span type (e.g., `miette::SourceSpan`).
@@ -1108,8 +1217,8 @@ any `Clone + PartialEq` span type (e.g., `miette::SourceSpan`).
 
 `whitaker::hir` provides a thin adapter over `rustc_span::Span`:
 
-The following table lists the `whitaker::hir` adapter functions that bridge
-from `rustc_span::Span` into the shared recovery policy.
+The following table lists the `whitaker::hir` adapter functions that bridge from
+`rustc_span::Span` into the shared recovery policy.
 
 | Symbol                                                             | Description                                                                                                                                                   |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1362,12 +1471,11 @@ existing `--test` harness model instead of a separate policy path.
 
 #### Known complexity limitation
 
-`collect_companion_in_group()` and `module_qualifies_as_rstest_companion_module()`
-in
-`src/hir/mod.rs` use nested iteration, giving O(n²) complexity within each
-module scope. This is acceptable in practice because module item counts are
-bounded at compile time and the functions execute during lint analysis, not at
-runtime.
+`collect_companion_in_group()` and
+`module_qualifies_as_rstest_companion_module()` in `src/hir/mod.rs` use nested
+iteration, giving O(n²) complexity within each module scope. This is acceptable
+in practice because module item counts are bounded at compile time and the
+functions execute during lint analysis, not at runtime.
 
 Issue [#225](https://github.com/leynos/whitaker/issues/225) tracks adding
 complexity docstrings to those functions and evaluating a lookup-map
@@ -1724,8 +1832,8 @@ either succeeds, or `None` if `run_install` should proceed to a full build:
 1. **Prebuilt download** (`InstallMode::Download`) — delegates to
    `try_prebuilt_installation` inside `install_flow`.
 2. **Staged-suite shortcut** (`InstallMode::Build`) — delegates to
-   `staged_suite::try_test_staged_suite_installation`, which is only active
-   when `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1` is set (debug builds only).
+   `staged_suite::try_test_staged_suite_installation`, which is only active when
+   `WHITAKER_INSTALLER_TEST_STAGE_SUITE=1` is set (debug builds only).
 
 When `try_fast_path_installation` returns `Some`, `run_install` constructs a
 `FinishInstallContext` from the returned values and delegates to

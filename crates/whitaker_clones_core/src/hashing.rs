@@ -30,6 +30,12 @@ pub const PARSER_SCHEMA_VERSION: &str =
 /// All token and AST hashes go through this primitive so the byte folding rule
 /// is shared. The function is intentionally tiny and wrapping: stability across
 /// platforms matters more here than detecting arithmetic overflow.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(mix_byte(FNV_OFFSET_BASIS, b'a'), 0xaf63_bd4c_8601_b7be);
+/// ```
 pub(crate) fn mix_byte(current: u64, byte: u8) -> u64 {
     current.wrapping_mul(FNV_PRIME) ^ u64::from(byte)
 }
@@ -39,6 +45,12 @@ pub(crate) fn mix_byte(current: u64, byte: u8) -> u64 {
 /// Callers are responsible for serialising higher-level values into canonical
 /// bytes before calling this helper. Keeping the loop here avoids each feature
 /// extractor inventing its own traversal order or overflow behaviour.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(mix_bytes(FNV_OFFSET_BASIS, b"ab"), 0x0832_6707_b4eb_37b8);
+/// ```
 pub(crate) fn mix_bytes(mut current: u64, bytes: &[u8]) -> u64 {
     for byte in bytes {
         current = mix_byte(current, *byte);
@@ -51,6 +63,12 @@ pub(crate) fn mix_bytes(mut current: u64, bytes: &[u8]) -> u64 {
 /// AST kind identifiers are lowered as opaque `u16` values. Little-endian
 /// serialisation makes that representation explicit so hashes do not depend on
 /// the host CPU's byte order.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(mix_u16(FNV_OFFSET_BASIS, 0x1234), 0x0832_9407_b4eb_8443);
+/// ```
 pub(crate) fn mix_u16(current: u64, value: u16) -> u64 {
     mix_bytes(current, &value.to_le_bytes())
 }
@@ -60,6 +78,15 @@ pub(crate) fn mix_u16(current: u64, value: u16) -> u64 {
 /// Merkle-style AST hashes fold child counts and child hashes through this
 /// helper. The fixed byte order is the cross-platform contract; callers choose
 /// where a numeric boundary belongs in the stream.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(
+///     mix_u64(FNV_OFFSET_BASIS, 0x0102_0304_0506_0708),
+///     0x999a_7071_7b39_65dd
+/// );
+/// ```
 pub(crate) fn mix_u64(current: u64, value: u64) -> u64 {
     mix_bytes(current, &value.to_le_bytes())
 }
