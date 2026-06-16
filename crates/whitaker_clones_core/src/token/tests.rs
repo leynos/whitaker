@@ -2,11 +2,11 @@
 
 use rstest::rstest;
 
+use crate::hashing::{FNV_OFFSET_BASIS, FNV_PRIME, RABIN_KARP_BASE};
+
 use super::{
     Fingerprint, IdentifierSymbol, LiteralSymbol, NormProfile, NormalizedTokenKind, ShingleSize,
-    TokenPassError, WinnowWindow,
-    fingerprint::{FNV_OFFSET_BASIS, FNV_PRIME, RABIN_KARP_BASE},
-    hash_shingles, normalize, winnow,
+    TokenPassError, WinnowWindow, hash_shingles, normalize, winnow,
 };
 
 fn labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassError> {

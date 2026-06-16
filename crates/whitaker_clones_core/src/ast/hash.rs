@@ -2,7 +2,10 @@
 
 use std::fmt;
 
-use super::NormalisedTree;
+use super::{LeafClass, NormalisedNode, NormalisedTree};
+use crate::hashing::{
+    FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION, mix_byte, mix_bytes, mix_u16, mix_u64,
+};
 
 /// Opaque canonical AST subtree hash.
 ///
@@ -14,7 +17,7 @@ use super::NormalisedTree;
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
 /// let tree = NormalisedTree::new(NormalisedNode::new(KindId::new(1), None, Vec::new()), span);
-/// assert_eq!(canonical_hash(&tree).to_hex(), "0000000000000000");
+/// assert_eq!(canonical_hash(&tree).to_hex().len(), 16);
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -35,9 +38,35 @@ impl fmt::Display for AstHash {
 }
 
 /// Computes the canonical hash for `tree`.
-///
-/// Stage C replaces the neutral skeleton value with Merkle-style folding.
 #[must_use]
-pub fn canonical_hash(_tree: &NormalisedTree) -> AstHash {
-    AstHash(0)
+pub fn canonical_hash(tree: &NormalisedTree) -> AstHash {
+    AstHash(hash_node(seed_hash(), tree.root()))
+}
+
+fn seed_hash() -> u64 {
+    mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes())
+}
+
+fn hash_node(mut hash: u64, node: &NormalisedNode) -> u64 {
+    hash = mix_byte(hash, b'n');
+    hash = mix_u16(hash, node.kind().get());
+    hash = mix_byte(hash, leaf_tag(node.leaf()));
+    hash = mix_u64(hash, child_count(node));
+    for child in node.children() {
+        hash = mix_u64(hash, hash_node(seed_hash(), child));
+    }
+    hash
+}
+
+fn child_count(node: &NormalisedNode) -> u64 {
+    u64::try_from(node.children().len()).unwrap_or(u64::MAX)
+}
+
+fn leaf_tag(leaf: Option<LeafClass>) -> u8 {
+    match leaf {
+        Some(LeafClass::Ident) => b'i',
+        Some(LeafClass::Literal) => b'l',
+        Some(LeafClass::Other) => b'o',
+        None => b'n',
+    }
 }

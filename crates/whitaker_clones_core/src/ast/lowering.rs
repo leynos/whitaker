@@ -2,10 +2,7 @@
 
 use super::{AstError, AstResult, ByteSpan, NormalisedTree};
 
-/// Parser schema version mixed into AST hashes.
-///
-/// This value must match the exact `ra_ap_syntax` workspace dependency pin.
-pub const PARSER_SCHEMA_VERSION: &str = "ra_ap_syntax=0.0.334";
+pub use crate::hashing::PARSER_SCHEMA_VERSION;
 
 /// Parses `file_text`, maps `span` to the smallest covering syntax node, and
 /// lowers that subtree into a [`NormalisedTree`].

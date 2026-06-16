@@ -12,6 +12,7 @@
 //! - Token-pass acceptance and SARIF Run 0 emission for accepted pairs.
 
 pub mod ast;
+mod hashing;
 pub mod index;
 pub mod run0;
 pub mod token;

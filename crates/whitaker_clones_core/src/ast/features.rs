@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{Depth, KindId, NormalisedTree};
+use super::{Depth, KindId, NormalisedNode, NormalisedTree};
 
 /// Exact, depth-resolved syntax-kind counts.
 ///
@@ -30,6 +30,13 @@ impl KindCounts {
             .iter()
             .map(|((kind, depth), count)| (*kind, *depth, *count))
     }
+
+    fn increment(&mut self, kind: KindId, depth: Depth) {
+        self.0
+            .entry((kind, depth))
+            .and_modify(|count| *count = count.saturating_add(1))
+            .or_insert(1);
+    }
 }
 
 /// Fixed-point depth weight.
@@ -45,10 +52,10 @@ impl KindCounts {
 pub struct KindWeight(u64);
 
 impl KindWeight {
-    /// Fixed-point scale. Stage C defines the non-zero weighting curve.
-    pub const SCALE: u64 = 0;
+    /// Fixed-point scale for `w(depth) = 2^-depth`.
+    pub const SCALE: u64 = 1_u64 << 63;
 
-    /// Returns a zero weight for Stage A skeleton outputs.
+    /// Returns a zero weight.
     #[must_use]
     pub const fn zero() -> Self {
         Self(0)
@@ -58,6 +65,10 @@ impl KindWeight {
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
+    }
+
+    const fn from_raw(value: u64) -> Self {
+        Self(value)
     }
 }
 
@@ -142,22 +153,38 @@ impl ProductionMultiset {
             .iter()
             .map(|(production, count)| (*production, *count))
     }
+
+    fn increment(&mut self, production: Production) {
+        self.0
+            .entry(production)
+            .and_modify(|count| *count = count.saturating_add(1))
+            .or_insert(1);
+    }
 }
 
 /// Extracts exact kind counts from `tree`.
 ///
-/// Stage C replaces the empty skeleton with real accumulation logic.
 #[must_use]
-pub fn kind_counts(_tree: &NormalisedTree) -> KindCounts {
-    KindCounts::default()
+pub fn kind_counts(tree: &NormalisedTree) -> KindCounts {
+    let mut counts = KindCounts::default();
+    count_node_kinds(tree.root(), Depth::root(), &mut counts);
+    counts
 }
 
 /// Applies depth weighting to exact kind counts.
-///
-/// Stage C defines the fixed-point weighting curve.
 #[must_use]
-pub fn weighted_histogram(_counts: &KindCounts) -> KindHistogram {
-    KindHistogram::default()
+pub fn weighted_histogram(counts: &KindCounts) -> KindHistogram {
+    let mut histogram = BTreeMap::new();
+    for (kind, depth, count) in counts.iter() {
+        let contribution = depth_weight(depth).saturating_mul(u64::from(count));
+        histogram
+            .entry(kind)
+            .and_modify(|weight: &mut KindWeight| {
+                *weight = KindWeight::from_raw(weight.get().saturating_add(contribution));
+            })
+            .or_insert_with(|| KindWeight::from_raw(contribution));
+    }
+    KindHistogram(histogram)
 }
 
 /// Extracts a weighted kind histogram from `tree`.
@@ -167,9 +194,48 @@ pub fn kind_histogram(tree: &NormalisedTree) -> KindHistogram {
 }
 
 /// Extracts AST production counts from `tree`.
-///
-/// Stage C replaces the empty skeleton with real edge accumulation logic.
 #[must_use]
-pub fn production_multiset(_tree: &NormalisedTree) -> ProductionMultiset {
-    ProductionMultiset::default()
+pub fn production_multiset(tree: &NormalisedTree) -> ProductionMultiset {
+    let mut productions = ProductionMultiset::default();
+    collect_productions(tree.root(), &mut productions);
+    productions
+}
+
+fn count_node_kinds(node: &NormalisedNode, depth: Depth, counts: &mut KindCounts) {
+    counts.increment(node.kind(), depth);
+    for child in node.children() {
+        count_node_kinds(child, next_depth(depth), counts);
+    }
+}
+
+fn next_depth(depth: Depth) -> Depth {
+    Depth::new(depth.get().saturating_add(1))
+}
+
+fn depth_weight(depth: Depth) -> u64 {
+    KindWeight::SCALE
+        .checked_shr(u32::from(depth.get()))
+        .unwrap_or_default()
+}
+
+fn collect_productions(node: &NormalisedNode, productions: &mut ProductionMultiset) {
+    for child in node.children() {
+        productions.increment(Production::Bigram(node.kind(), child.kind()));
+        collect_trigrams(node, child, productions);
+        collect_productions(child, productions);
+    }
+}
+
+fn collect_trigrams(
+    grandparent: &NormalisedNode,
+    parent: &NormalisedNode,
+    productions: &mut ProductionMultiset,
+) {
+    for child in parent.children() {
+        productions.increment(Production::Trigram(
+            grandparent.kind(),
+            parent.kind(),
+            child.kind(),
+        ));
+    }
 }

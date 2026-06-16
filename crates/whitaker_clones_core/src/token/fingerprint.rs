@@ -4,10 +4,9 @@ use super::types::{
     Fingerprint, IdentifierSymbol, LiteralSymbol, NormalizedToken, NormalizedTokenKind,
     ShingleSize, WinnowWindow,
 };
-
-pub(super) const RABIN_KARP_BASE: u64 = 1_000_003;
-pub(super) const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-pub(super) const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+use crate::hashing::{
+    FNV_OFFSET_BASIS, RABIN_KARP_BASE, mix_byte as hash_byte, mix_bytes as hash_bytes,
+};
 
 /// Builds Rabin-Karp fingerprints for all `k`-sized normalized token windows.
 ///
@@ -216,13 +215,6 @@ fn hash_usize_bytes(mut hash: u64, value: usize) -> u64 {
     hash
 }
 
-fn hash_bytes(mut hash: u64, bytes: &[u8]) -> u64 {
-    for byte in bytes {
-        hash = hash_byte(hash, *byte);
-    }
-    hash
-}
-
 fn token_kind_tag(token: &NormalizedToken) -> u8 {
     match token.kind {
         super::types::NormalizedTokenKind::Atom(_) => b'a',
@@ -230,10 +222,6 @@ fn token_kind_tag(token: &NormalizedToken) -> u8 {
         super::types::NormalizedTokenKind::Lifetime(_) => b'l',
         super::types::NormalizedTokenKind::Literal(_) => b'v',
     }
-}
-
-fn hash_byte(current: u64, byte: u8) -> u64 {
-    current.wrapping_mul(FNV_PRIME) ^ u64::from(byte)
 }
 
 /// Returns the index of the rightmost minimum hash in the window.

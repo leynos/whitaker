@@ -254,7 +254,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
       skeleton (no production logic).
 - [x] Stage B — `ra_ap_syntax` version spike and dependency wiring
       (prototyping milestone; go/no-go).
-- [ ] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
+- [x] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
       red-green-refactor.
 - [ ] Stage D — `ra_ap_syntax` adapter (`lowering.rs`) and span→node mapping.
 - [ ] Stage E — Behavioural (`rstest-bdd`), snapshot (`insta`), and property
@@ -293,6 +293,19 @@ Stage B completed on 2026-06-16. Green gates:
 - `make test` (`1456` passed, `3` skipped)
 - `make markdownlint`
 - `coderabbit review --agent --type uncommitted --fast` (`0` findings)
+
+Stage C completed on 2026-06-16. Green gates:
+
+- `cargo test -p whitaker_clones_core hashing`
+- `cargo test -p whitaker_clones_core ast`
+- `cargo test -p whitaker_clones_core token`
+- `cargo test -p whitaker_clones_core --doc`
+- `make check-fmt`
+- `make lint`
+- `make test` (`1470` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent --type uncommitted --fast` (`0` findings after
+  follow-up fixes)
 
 ## Surprises & discoveries
 
@@ -368,6 +381,39 @@ Stage B completed on 2026-06-16. Green gates:
   milestone review completed by using CodeRabbit's documented uncommitted-diff
   mode, `coderabbit review --agent --type uncommitted --fast`, which returned
   `0` findings for the Stage B diff.
+- Observation: Stage C promoted the FNV-style byte-mixing constants and helper
+  operations into `crate::hashing`, keeping the old token behaviour intact while
+  allowing `ast/hash.rs` to seed Merkle-style subtree hashes without depending
+  on the token module.
+- Observation: token tests previously imported hash constants from
+  `token::fingerprint`; after the promotion they import from `crate::hashing`
+  directly. This keeps the production `fingerprint.rs` imports private and
+  avoids a stale re-export that would warn under `-D warnings`.
+- Observation: the pure AST feature functions now operate entirely over
+  hand-built `NormalisedTree` values. Stage C added `rstest` unit coverage for
+  depth-resolved kind counts, dyadic weighted histograms, production
+  bigrams/trigrams, and canonical-hash equality/inequality behaviour.
+- Observation: the first Stage C CodeRabbit review returned three valid
+  findings: document the shared hash helpers, add fixed-vector/determinism
+  tests for them, and avoid duplicating the parser schema version string by
+  hand. Stage C addressed all three before commit.
+- Observation: `PARSER_SCHEMA_VERSION` now comes from the exact
+  `ra_ap_syntax` workspace dependency via `crates/whitaker_clones_core/build.rs`.
+  The build script parses the workspace manifest, requires the dependency to
+  remain exact-pinned, and emits `WHITAKER_RA_AP_SYNTAX_VERSION` for the private
+  hashing module to compose into `ra_ap_syntax=...`.
+- Observation: an intermediate Stage C CodeRabbit follow-up raised two
+  documentation concerns about the build-script module purpose and the
+  test-only visibility of `FNV_PRIME`. The next completed review raised five
+  valid remaining concerns: expand `hashing.rs` module docs, clarify that the
+  test and production `FNV_PRIME` constants intentionally share a value but not
+  visibility, discover the workspace manifest by walking parent directories
+  instead of assuming `../../Cargo.toml`, remove the trivial cargo-directive
+  wrapper, and replace lazy fallback version extraction with direct
+  `Option::or` composition.
+- Observation: the final Stage C CodeRabbit follow-up completed with
+  `0` findings after the deterministic gates were green. The follow-up log is
+  `/tmp/coderabbit-stage-c-followup2-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
 
 ## Decision log
 
@@ -492,7 +538,23 @@ Decisions already taken while drafting this plan:
   metadata places this release on 2026-05-25 with MSRV 1.95, making it the
   contemporaneous snapshot closest to `nightly-2026-05-28`. It compiles cleanly
   under the Stage 0 toolchain, needs no additional precise transitive pins, and
-  keeps `PARSER_SCHEMA_VERSION` concrete as `ra_ap_syntax=0.0.334`.
+  keeps `PARSER_SCHEMA_VERSION` concrete as `ra_ap_syntax=0.0.334`. Stage C now
+  derives this value from the exact workspace dependency in a build script
+  rather than duplicating the literal in Rust source.
+  Date/Author: 2026-06-16, implementation.
+- Decision: **Represent AST kind weights as dyadic fixed point with
+  `KindWeight::SCALE = 1 << 63` and `w(depth) = SCALE >> depth`.** Rationale:
+  this is the simplest exact-integer option listed for Stage C: no float
+  arithmetic, no per-depth division, and no least-common-multiple cap. Depths
+  beyond 63 contribute zero in this representation; the upstream candidate-size
+  bound and the later Stage F structural harness cover the practical bound
+  rather than encoding an artificial per-node span or depth cap in the IR.
+  Date/Author: 2026-06-16, implementation.
+- Decision: **Omit per-node byte spans from `NormalisedNode` for 7.3.1.**
+  Rationale: the delivered feature vector components need only node kind, leaf
+  class, child order, and root `ByteSpan`. Adding per-node provenance now would
+  widen the pure IR and proof surface for no current consumer; 7.3.2 can add it
+  deliberately if bounded tree-edit distance needs provenance.
   Date/Author: 2026-06-16, implementation.
 
 Open questions carried into implementation (each has a proposed default; encode
@@ -515,15 +577,15 @@ the default unless Stage findings contradict it, then escalate):
   carries no per-node byte offset; only the root `NormalisedTree` carries the
   candidate `ByteSpan`. 7.3.2's optional bounded tree-edit-distance refinement
   may want per-node provenance, which is cheap to add at lowering time but
-  expensive to retrofit through the proofs later. Proposed default: **omit
-  per-node spans for 7.3.1** (the three feature outputs do not need them) and
-  add them in 7.3.2 only if the edit-distance refinement is implemented; decide
-  explicitly in Stage C and record. (Review finding 💡-1.)
+  expensive to retrofit through the proofs later. Resolved in Stage C:
+  **omit per-node spans for 7.3.1** because the three feature outputs do not
+  need them; add them in 7.3.2 only if the edit-distance refinement is
+  implemented. (Review finding 💡-1.)
 - OQ2: **Exact pinned `ra_ap_syntax` version.** Resolved in Stage B:
-  `ra_ap_syntax = "=0.0.334"` with `PARSER_SCHEMA_VERSION =
-  "ra_ap_syntax=0.0.334"`. The snapshot was published on 2026-05-25, declares
-  MSRV 1.95, and is the nearest pre-toolchain-release parser crate to
-  `nightly-2026-05-28`.
+  `ra_ap_syntax = "=0.0.334"` with `PARSER_SCHEMA_VERSION` generated as
+  `ra_ap_syntax=0.0.334` from the exact workspace dependency. The snapshot was
+  published on 2026-05-25, declares MSRV 1.95, and is the nearest
+  pre-toolchain-release parser crate to `nightly-2026-05-28`.
 - OQ3: **`Edition::CURRENT` vs per-fragment edition.** Proposed default:
   `Edition::CURRENT` (feature extraction is structural, not semantic). Revisit
   only if edition-specific syntax causes spurious parse failures.
@@ -917,10 +979,9 @@ genuine build/API error appears. Add it exact-pinned (`=0.0.x`) to
 `{ workspace = true }` to `whitaker_clones_core`. Run `cargo build -p
 whitaker_clones_core` under `-D warnings`, pinning at most three offending
 transitive crates with `--precise` (escalate if more are needed). Replace
-`0.0.PINNED` in both manifests, OQ2, and `crate::hashing::PARSER_SCHEMA_VERSION`
-with the concrete version; commit `Cargo.toml` and `Cargo.lock` together; record
-the resolved transitive set (including exact `rowan`/`ra_ap_parser` versions) in
-Surprises & Discoveries.
+`0.0.PINNED` in both manifests and OQ2 with the concrete version; commit
+`Cargo.toml` and `Cargo.lock` together; record the resolved transitive set
+(including exact `rowan`/`ra_ap_parser` versions) in Surprises & Discoveries.
 
 Go/no-go: if no contemporaneous snapshot builds cleanly, **stop and escalate**
 (Tolerances). Otherwise proceed. Validation: a throwaway `lowering.rs` line
@@ -937,29 +998,25 @@ Implement `tree.rs` (the IR, `Depth`, and `ByteSpan::new` rejecting `start >=
 end` and non-char-boundary offsets per `run0/span.rs`), then `cover.rs`,
 `features.rs`, and `hash.rs`. The histogram follows the count-substrate hybrid
 (Decision Log): `kind_counts` builds the exact `BTreeMap<(KindId, Depth), u32>`;
-`weighted_histogram` applies `w(depth)` as a fixed-point `KindWeight`. Choose and
-record in the Decision Log the concrete representable weight family and `SCALE`
-— the unsatisfiable “exact for all depths” target is already rejected, so use
-one of: depth-capped `SCALE = lcm(1..=D+1)` (with the cap proved by the Stage F
-Kani structural-bound harness), `w(depth) = 2^-depth` (exact in fixed-point, no
-cap), or reduced rationals. Record the max-depth assumption alongside `SCALE` in
-Artifacts. Decide OQ6 (per-node spans) here and record. Keep `canonical_hash`
-order-sensitive (kind + arity + ordered child hashes), leaf-normalising
-(`Ident`/`Literal` erase payload → equal hashes; different kind or arity →
-different hashes), and seed it with `PARSER_SCHEMA_VERSION`. To respect the
-dependency rule, define `PARSER_SCHEMA_VERSION` as a plain `&str` const in the
-neutral `crate::hashing` module (kept equal to the pinned `ra_ap_syntax`
-version), **not** in the adapter — so the domain hash reads it without depending
-on `lowering.rs`. Drive each
-function with red `rstest` unit tests over hand-built `NormalisedTree` values
-first. Validation: `cargo test -p whitaker_clones_core ast::` and `token::`
-green; refactor within the 400-line file budget; re-run.
+`weighted_histogram` applies `w(depth)` as a fixed-point `KindWeight`. Stage C
+resolved that representation as `KindWeight::SCALE = 1 << 63` with
+`w(depth) = SCALE >> depth` and records the zero-after-depth-63 behaviour in the
+Decision Log. Stage C also resolved OQ6 by omitting per-node spans from the pure
+IR. Keep `canonical_hash` order-sensitive (kind + arity + ordered child
+hashes), leaf-normalising (`Ident`/`Literal` erase payload → equal hashes;
+different kind or arity → different hashes), and seed it with
+`PARSER_SCHEMA_VERSION`. To respect the dependency rule,
+`PARSER_SCHEMA_VERSION` lives in the neutral `crate::hashing` module and is
+derived by `crates/whitaker_clones_core/build.rs` from the exact workspace
+`ra_ap_syntax` dependency. Drive each function with red `rstest` unit tests over
+hand-built `NormalisedTree` values first. Validation:
+`cargo test -p whitaker_clones_core ast::` and `token::` green; refactor within
+the 400-line file budget; re-run.
 
 ### Stage D — Adapter and span→node mapping
 
-Implement `lowering.rs`: define `PARSER_SCHEMA_VERSION` sync (a test asserts the
-`crate::hashing` const equals the manifest-pinned version string); parse with
-`Edition::CURRENT`; validate the `ByteSpan` against the root range; build
+Implement `lowering.rs`: parse with `Edition::CURRENT`; validate the `ByteSpan`
+against the root range; build
 `TextRange`; call the domain `cover::select_smallest_covering` over the
 `descendants()` ranges (the pure index math lives in `cover.rs` so Kani can
 verify it without parsing); lower the chosen subtree via a private recursive

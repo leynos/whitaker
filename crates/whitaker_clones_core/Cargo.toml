@@ -23,5 +23,7 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 
+[build-dependencies]
+toml = { workspace = true }
 [lints]
 workspace = true
