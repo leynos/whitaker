@@ -252,7 +252,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
       (own atomic commit; go/no-go); all gates green before Stage A.
 - [x] Stage A — Orientation, boundary guard (`tests/ast_boundary.rs`), and red
       skeleton (no production logic).
-- [ ] Stage B — `ra_ap_syntax` version spike and dependency wiring
+- [x] Stage B — `ra_ap_syntax` version spike and dependency wiring
       (prototyping milestone; go/no-go).
 - [ ] Stage C — Domain IR and pure feature math (`tree`, `features`, `hash`),
       red-green-refactor.
@@ -282,6 +282,17 @@ Stage A completed on 2026-06-16. Green gates:
 - `make test` (`1455` passed, `3` skipped)
 - `make markdownlint`
 - `coderabbit review --agent` (`0` findings)
+
+Stage B completed on 2026-06-16. Green gates:
+
+- `cargo build -p whitaker_clones_core`
+- `cargo test -p whitaker_clones_core ast`
+- `cargo test -p whitaker_clones_core --doc`
+- `make check-fmt`
+- `make lint`
+- `make test` (`1456` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent --type uncommitted --fast` (`0` findings)
 
 ## Surprises & discoveries
 
@@ -336,6 +347,27 @@ Stage A completed on 2026-06-16. Green gates:
   pass gates, so the committed Stage A skeleton returns typed placeholder
   values/errors and includes a neutral hash regression that Stage C will replace
   with real feature logic.
+- Observation: the crates.io API reports `ra_ap_syntax` `0.0.334` was published
+  on 2026-05-25 and declares `rust_version = "1.95"`. It is the closest
+  published parser snapshot before the `nightly-2026-05-28` toolchain selected
+  in Stage 0, so Stage B exact-pinned that version rather than the newer
+  2026-06 releases.
+- Observation: `cargo build -p whitaker_clones_core` resolved the parser
+  boundary without additional `--precise` pins. The key locked parser
+  transitives are `ra_ap_parser 0.0.334`, `ra_ap_stdx 0.0.334`, and
+  `rowan 0.15.18`; `ra_ap_syntax` itself also depends on
+  `rustc-hash 2.1.2`, `rustc-literal-escaper 0.0.4`, `smol_str 0.3.6`, and
+  `triomphe 0.1.15`.
+- Observation: the Stage B parser smoke test exposed that
+  `SourceFile::syntax()` is provided by the `ra_ap_syntax::AstNode` trait in the
+  pinned snapshot. The adapter test imports `AstNode`; this keeps the API drift
+  discovery local to `ast/lowering.rs`.
+- Observation: two full-branch Stage B CodeRabbit reviews reached or approached
+  summarization but did not complete after extended waits, likely because they
+  reprocessed the already-reviewed Stage 0 and Stage A branch history. The
+  milestone review completed by using CodeRabbit's documented uncommitted-diff
+  mode, `coderabbit review --agent --type uncommitted --fast`, which returned
+  `0` findings for the Stage B diff.
 
 ## Decision log
 
@@ -456,6 +488,12 @@ Decisions already taken while drafting this plan:
   `clone_detected` lint (7.5.x) are separate items. Internal interface docs go
   to `docs/whitaker-clone-detector-design.md` and `docs/developers-guide.md`.
   Date/Author: 2026-06-09.
+- Decision: **Pin `ra_ap_syntax` to `=0.0.334` for 7.3.1.** Rationale: crates.io
+  metadata places this release on 2026-05-25 with MSRV 1.95, making it the
+  contemporaneous snapshot closest to `nightly-2026-05-28`. It compiles cleanly
+  under the Stage 0 toolchain, needs no additional precise transitive pins, and
+  keeps `PARSER_SCHEMA_VERSION` concrete as `ra_ap_syntax=0.0.334`.
+  Date/Author: 2026-06-16, implementation.
 
 Open questions carried into implementation (each has a proposed default; encode
 the default unless Stage findings contradict it, then escalate):
@@ -481,10 +519,11 @@ the default unless Stage findings contradict it, then escalate):
   per-node spans for 7.3.1** (the three feature outputs do not need them) and
   add them in 7.3.2 only if the edit-distance refinement is implemented; decide
   explicitly in Stage C and record. (Review finding 💡-1.)
-- OQ2: **Exact pinned `ra_ap_syntax` version.** Post-bump this is the
-  *contemporaneous* snapshot dated near `nightly-2026-05-28` (around v0.0.336
-  per the firecrawl research), confirmed to build cleanly in Stage B and
-  recorded here. Carried as the token `0.0.PINNED` until then.
+- OQ2: **Exact pinned `ra_ap_syntax` version.** Resolved in Stage B:
+  `ra_ap_syntax = "=0.0.334"` with `PARSER_SCHEMA_VERSION =
+  "ra_ap_syntax=0.0.334"`. The snapshot was published on 2026-05-25, declares
+  MSRV 1.95, and is the nearest pre-toolchain-release parser crate to
+  `nightly-2026-05-28`.
 - OQ3: **`Edition::CURRENT` vs per-fragment edition.** Proposed default:
   `Edition::CURRENT` (feature extraction is structural, not semantic). Revisit
   only if edition-specific syntax causes spurious parse failures.

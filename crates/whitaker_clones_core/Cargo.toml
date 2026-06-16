@@ -12,10 +12,13 @@ documentation.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 rustc_lexer = { workspace = true }
+ra_ap_syntax = { workspace = true }
 sha2 = { workspace = true }
 whitaker_sarif = { workspace = true }
 
 [dev-dependencies]
+insta = { workspace = true }
+proptest = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

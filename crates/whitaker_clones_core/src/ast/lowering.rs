@@ -4,8 +4,8 @@ use super::{AstError, AstResult, ByteSpan, NormalisedTree};
 
 /// Parser schema version mixed into AST hashes.
 ///
-/// Stage B replaces this neutral skeleton value with the exact parser pin.
-pub const PARSER_SCHEMA_VERSION: &str = "0.0.PINNED";
+/// This value must match the exact `ra_ap_syntax` workspace dependency pin.
+pub const PARSER_SCHEMA_VERSION: &str = "ra_ap_syntax=0.0.334";
 
 /// Parses `file_text`, maps `span` to the smallest covering syntax node, and
 /// lowers that subtree into a [`NormalisedTree`].
@@ -30,4 +30,17 @@ pub fn lower_span(_file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree>
         start: span.start(),
         end: span.end(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use ra_ap_syntax::{AstNode, Edition, SourceFile};
+
+    #[test]
+    fn pinned_parser_snapshot_parses_current_edition_source() {
+        let parse = SourceFile::parse("fn f() {}", Edition::CURRENT);
+
+        assert!(parse.errors().is_empty(), "{:?}", parse.errors());
+        assert!(!parse.tree().syntax().text_range().is_empty());
+    }
 }
