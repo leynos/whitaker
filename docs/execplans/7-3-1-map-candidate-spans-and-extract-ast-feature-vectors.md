@@ -250,7 +250,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
 
 - [x] Stage 0 — Bump `rust-toolchain.toml` to `nightly-2026-05-28` suite-wide
       (own atomic commit; go/no-go); all gates green before Stage A.
-- [ ] Stage A — Orientation, boundary guard (`tests/ast_boundary.rs`), and red
+- [x] Stage A — Orientation, boundary guard (`tests/ast_boundary.rs`), and red
       skeleton (no production logic).
 - [ ] Stage B — `ra_ap_syntax` version spike and dependency wiring
       (prototyping milestone; go/no-go).
@@ -270,6 +270,16 @@ Stage 0 completed on 2026-06-16. Green gates:
 - `make check-fmt`
 - `make lint`
 - `make test` (`1453` passed, `3` skipped)
+- `make markdownlint`
+- `coderabbit review --agent` (`0` findings)
+
+Stage A completed on 2026-06-16. Green gates:
+
+- `cargo test -p whitaker_clones_core ast`
+- `cargo test -p whitaker_clones_core --doc`
+- `make check-fmt`
+- `make lint`
+- `make test` (`1455` passed, `3` skipped)
 - `make markdownlint`
 - `coderabbit review --agent` (`0` findings)
 
@@ -314,6 +324,18 @@ Stage 0 completed on 2026-06-16. Green gates:
   change. To keep the atomic commit scoped, Stage 0 used `cargo fmt --all` and
   the required `make check-fmt` Rust formatting gate; broad Markdown formatting
   remains out of scope for this compatibility commit.
+- Observation: Stage A added the `ast` module skeleton, root re-exports,
+  parser-boundary guard, and a neutral `#[cfg(kani)]` placeholder module. The
+  placeholder exists because `rustfmt` resolves the module graph even when the
+  `kani` cfg is not active.
+- Observation: the new public AST skeleton carries doctest examples. The
+  Makefile's `make test` target uses `cargo nextest`, so Stage A also ran
+  `cargo test -p whitaker_clones_core --doc` explicitly.
+- Observation: the plan's “red skeleton” step was treated as local TDD intent,
+  not as a committed failing state. Repository policy requires every commit to
+  pass gates, so the committed Stage A skeleton returns typed placeholder
+  values/errors and includes a neutral hash regression that Stage C will replace
+  with real feature logic.
 
 ## Decision log
 
