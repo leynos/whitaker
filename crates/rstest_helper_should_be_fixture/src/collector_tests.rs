@@ -1,4 +1,10 @@
 //! Unit tests for passive rstest helper call-site collection.
+//!
+//! This module focuses on the pure storage contract in `collector`: stable
+//! callee ordering, source-span deduplication, and insertion-order
+//! independence. Compiler-facing HIR lowering remains in the production
+//! collector module, while these tests keep the record store cheap to exercise
+//! without constructing a rustc lint context.
 
 use rustc_hir::def_id::{DefId, DefIndex};
 use rustc_span::{BytePos, DUMMY_SP, FileName};

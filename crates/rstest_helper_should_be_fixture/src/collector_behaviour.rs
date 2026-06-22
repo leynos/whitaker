@@ -1,4 +1,10 @@
 //! Behaviour-driven tests for call-site collector state transitions.
+//!
+//! These scenarios describe how the `collector` module behaves when macro
+//! expansion generates duplicate source call sites versus genuinely distinct
+//! helper invocations. They complement the lower-level unit and property tests
+//! by naming the externally useful behaviour that later thresholding code will
+//! consume from the passive evidence store.
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};

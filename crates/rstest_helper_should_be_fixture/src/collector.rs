@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use log::debug;
 use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LOCAL_CRATE};
@@ -94,10 +95,6 @@ impl CallSiteLocation {
             hi,
         }
     }
-
-    fn callee_key(&self) -> &str {
-        &self.callee_key
-    }
 }
 
 impl CallSiteCollector {
@@ -113,15 +110,25 @@ impl CallSiteCollector {
     /// # }
     /// ```
     pub(crate) fn record(&mut self, record: CallSiteRecord, location: CallSiteLocation) -> bool {
-        let key = DedupKey::from_location(&location);
+        let CallSiteLocation {
+            callee_key,
+            file_name,
+            lo,
+            hi,
+        } = location;
+        let key = DedupKey::new(callee_key.clone(), file_name, lo, hi);
         if !self.seen.insert(key) {
+            debug!(
+                target: "rstest_helper_should_be_fixture",
+                "dropping duplicate rstest helper call-site evidence: callee={}, lo={:?}, hi={:?}",
+                callee_key,
+                lo,
+                hi,
+            );
             return false;
         }
 
-        self.by_callee
-            .entry(location.callee_key().to_string())
-            .or_default()
-            .push(record);
+        self.by_callee.entry(callee_key).or_default().push(record);
         true
     }
 
@@ -158,12 +165,12 @@ struct DedupKey {
 }
 
 impl DedupKey {
-    fn from_location(location: &CallSiteLocation) -> Self {
+    fn new(callee_key: String, file_name: FileName, lo: BytePos, hi: BytePos) -> Self {
         Self {
-            callee_key: location.callee_key.clone(),
-            file_name: location.file_name.clone(),
-            lo: location.lo,
-            hi: location.hi,
+            callee_key,
+            file_name,
+            lo,
+            hi,
         }
     }
 }
@@ -176,13 +183,25 @@ pub(crate) fn lower_arg_atom<'tcx>(
     fixture_locals: &BTreeSet<String>,
 ) -> ArgAtom {
     if whitaker::hir::recover_user_editable_hir_span(expr.span).is_none() {
+        debug!(
+            target: "rstest_helper_should_be_fixture",
+            "lowering unsupported argument: user-editable span recovery failed for {:?}",
+            expr.span,
+        );
         return ArgAtom::unsupported();
     }
 
     match &expr.kind {
         hir::ExprKind::Path(qpath) => lower_path_arg(cx, expr, qpath, fixture_locals),
         hir::ExprKind::Lit(lit) => literal_atom(cx, expr.span, lit),
-        _ => ArgAtom::unsupported(),
+        _ => {
+            debug!(
+                target: "rstest_helper_should_be_fixture",
+                "lowering unsupported argument expression at {:?}",
+                expr.span,
+            );
+            ArgAtom::unsupported()
+        }
     }
 }
 
@@ -197,21 +216,41 @@ fn lower_path_arg<'tcx>(
         Res::Def(DefKind::Const | DefKind::AssocConst | DefKind::Static { .. }, def_id) => {
             ArgAtom::const_path(cx.tcx.def_path_str(def_id))
         }
-        _ => ArgAtom::unsupported(),
+        _ => {
+            debug!(
+                target: "rstest_helper_should_be_fixture",
+                "lowering unsupported path argument at {:?}",
+                expr.span,
+            );
+            ArgAtom::unsupported()
+        }
     }
 }
 
 fn local_fixture_atom(qpath: &hir::QPath<'_>, fixture_locals: &BTreeSet<String>) -> ArgAtom {
     let hir::QPath::Resolved(None, path) = qpath else {
+        debug!(
+            target: "rstest_helper_should_be_fixture",
+            "lowering unsupported local argument: qualified path is not a plain resolved path",
+        );
         return ArgAtom::unsupported();
     };
     let Some(segment) = path.segments.first() else {
+        debug!(
+            target: "rstest_helper_should_be_fixture",
+            "lowering unsupported local argument: resolved path has no first segment",
+        );
         return ArgAtom::unsupported();
     };
     let name = segment.ident.as_str();
     if fixture_locals.contains(name) {
         ArgAtom::fixture_local(name)
     } else {
+        debug!(
+            target: "rstest_helper_should_be_fixture",
+            "lowering unsupported local argument: `{}` is not an rstest fixture local",
+            name,
+        );
         ArgAtom::unsupported()
     }
 }
@@ -235,10 +274,26 @@ pub(crate) fn resolve_local_callee<'tcx>(
     let def_id = match &expr.kind {
         hir::ExprKind::Call(callee, _) => resolve_direct_call(cx, callee),
         hir::ExprKind::MethodCall(..) => cx.typeck_results().type_dependent_def_id(expr.hir_id),
-        _ => None,
+        _ => {
+            debug!(
+                target: "rstest_helper_should_be_fixture",
+                "callee resolution skipped for non-call expression at {:?}",
+                expr.span,
+            );
+            None
+        }
     }?;
 
-    is_local_function(cx, def_id).then_some(def_id)
+    if is_local_function(cx, def_id) {
+        Some(def_id)
+    } else {
+        debug!(
+            target: "rstest_helper_should_be_fixture",
+            "callee resolution skipped non-local or non-function callee: {:?}",
+            def_id,
+        );
+        None
+    }
 }
 
 fn resolve_direct_call<'tcx>(
@@ -246,6 +301,11 @@ fn resolve_direct_call<'tcx>(
     callee: &'tcx hir::Expr<'tcx>,
 ) -> Option<DefId> {
     let hir::ExprKind::Path(qpath) = &callee.kind else {
+        debug!(
+            target: "rstest_helper_should_be_fixture",
+            "direct call callee resolution failed: callee expression is not a path at {:?}",
+            callee.span,
+        );
         return None;
     };
     cx.qpath_res(qpath, callee.hir_id).opt_def_id()

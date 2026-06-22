@@ -169,6 +169,11 @@ impl RstestHelperShouldBeFixture {
             .filter_map(attribute_from_hir)
             .collect::<Vec<_>>();
         if !is_rstest_test_with(&attrs, None, &self.detection_options) {
+            debug!(
+                target: LINT_NAME,
+                "skipping helper call-site collection for non-rstest function: def_id={:?}",
+                def_id,
+            );
             return;
         }
 
@@ -243,16 +248,29 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
         }
     }
 
-    fn collect_call(&mut self, expr: &'tcx hir::Expr<'tcx>, args: &'tcx [hir::Expr<'tcx>]) {
+    fn collect_call<I>(&mut self, expr: &'tcx hir::Expr<'tcx>, args: I)
+    where
+        I: IntoIterator<Item = &'tcx hir::Expr<'tcx>>,
+    {
         let Some(span) = whitaker::hir::recover_user_editable_hir_span(expr.span) else {
+            debug!(
+                target: LINT_NAME,
+                "skipping helper call-site collection: user-editable span recovery failed for {:?}",
+                expr.span,
+            );
             return;
         };
         let Some(callee_def_id) = resolve_local_callee(self.cx, expr) else {
+            debug!(
+                target: LINT_NAME,
+                "skipping helper call-site collection: local callee resolution failed for {:?}",
+                expr.span,
+            );
             return;
         };
 
         let fingerprint = ArgFingerprint::new(
-            args.iter()
+            args.into_iter()
                 .map(|arg| lower_arg_atom(self.cx, arg, self.fixture_locals)),
         );
         let record = CallSiteRecord::new(callee_def_id, fingerprint, self.test_source_def_id, span);
@@ -273,7 +291,9 @@ impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         match expr.kind {
             hir::ExprKind::Call(_, args) => self.collect_call(expr, args),
-            hir::ExprKind::MethodCall(_, _, args, _) => self.collect_call(expr, args),
+            hir::ExprKind::MethodCall(_, receiver, args, _) => {
+                self.collect_call(expr, std::iter::once(receiver).chain(args))
+            }
             hir::ExprKind::Closure(..) => return,
             _ => {}
         }
@@ -288,7 +308,7 @@ fn rstest_parameters(cx: &LateContext<'_>, body: &hir::Body<'_>) -> Vec<RstestPa
         .map(|param| {
             RstestParameter::new(
                 parameter_binding(param.pat),
-                parameter_attributes(cx, param.pat.hir_id),
+                parameter_attributes(cx, param.hir_id),
             )
         })
         .collect()
