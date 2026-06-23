@@ -56,7 +56,7 @@ impl CallSiteRecord {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CallSiteCollector {
     by_callee: BTreeMap<String, Vec<CallSiteRecord>>,
-    seen: BTreeSet<DedupKey>,
+    seen: BTreeSet<CallSiteLocation>,
 }
 
 /// Source location used to key deduplicated call-site evidence.
@@ -110,14 +110,10 @@ impl CallSiteCollector {
     /// # }
     /// ```
     pub(crate) fn record(&mut self, record: CallSiteRecord, location: CallSiteLocation) -> bool {
-        let CallSiteLocation {
-            callee_key,
-            file_name,
-            lo,
-            hi,
-        } = location;
-        let key = DedupKey::new(callee_key.clone(), file_name, lo, hi);
-        if !self.seen.insert(key) {
+        let callee_key = location.callee_key.clone();
+        let lo = location.lo;
+        let hi = location.hi;
+        if !self.seen.insert(location) {
             debug!(
                 target: "rstest_helper_should_be_fixture",
                 "dropping duplicate rstest helper call-site evidence: callee={}, lo={:?}, hi={:?}",
@@ -153,25 +149,6 @@ impl CallSiteCollector {
     pub(crate) fn clear(&mut self) {
         self.by_callee.clear();
         self.seen.clear();
-    }
-}
-
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct DedupKey {
-    callee_key: String,
-    file_name: FileName,
-    lo: BytePos,
-    hi: BytePos,
-}
-
-impl DedupKey {
-    fn new(callee_key: String, file_name: FileName, lo: BytePos, hi: BytePos) -> Self {
-        Self {
-            callee_key,
-            file_name,
-            lo,
-            hi,
-        }
     }
 }
 
