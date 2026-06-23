@@ -34,18 +34,21 @@ fn branch(kind: KindId, children: Vec<NormalisedNode>) -> NormalisedNode {
     NormalisedNode::new(kind, None, children)
 }
 
+struct BranchSpec {
+    kind: KindId,
+    leaf_kind: KindId,
+}
+
 fn bounded_tree(
     root_kind: KindId,
-    left_branch_kind: KindId,
-    right_branch_kind: KindId,
-    left_leaf_kind: KindId,
-    right_leaf_kind: KindId,
+    left: BranchSpec,
+    right: BranchSpec,
     left_first: bool,
 ) -> NormalisedTree {
-    let left_leaf = leaf(left_leaf_kind, LeafClass::Ident);
-    let right_leaf = leaf(right_leaf_kind, LeafClass::Literal);
-    let left_branch = branch(left_branch_kind, vec![left_leaf]);
-    let right_branch = branch(right_branch_kind, vec![right_leaf]);
+    let left_leaf = leaf(left.leaf_kind, LeafClass::Ident);
+    let right_leaf = leaf(right.leaf_kind, LeafClass::Literal);
+    let left_branch = branch(left.kind, vec![left_leaf]);
+    let right_branch = branch(right.kind, vec![right_leaf]);
     let children = if left_first {
         vec![left_branch, right_branch]
     } else {
@@ -177,18 +180,26 @@ fn verify_count_accumulation_is_order_independent_bounded() {
     let right_leaf_kind = symbolic_kind();
     let forward = bounded_tree(
         root_kind,
-        left_branch_kind,
-        right_branch_kind,
-        left_leaf_kind,
-        right_leaf_kind,
+        BranchSpec {
+            kind: left_branch_kind,
+            leaf_kind: left_leaf_kind,
+        },
+        BranchSpec {
+            kind: right_branch_kind,
+            leaf_kind: right_leaf_kind,
+        },
         true,
     );
     let reverse = bounded_tree(
         root_kind,
-        left_branch_kind,
-        right_branch_kind,
-        left_leaf_kind,
-        right_leaf_kind,
+        BranchSpec {
+            kind: left_branch_kind,
+            leaf_kind: left_leaf_kind,
+        },
+        BranchSpec {
+            kind: right_branch_kind,
+            leaf_kind: right_leaf_kind,
+        },
         false,
     );
     let query_kind = symbolic_kind();

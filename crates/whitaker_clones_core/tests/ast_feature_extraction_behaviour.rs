@@ -12,6 +12,63 @@ use whitaker_clones_core::{
     AstError, AstHash, ByteSpan, NormalisedTree, canonical_hash, lower_span,
 };
 
+#[derive(Debug, Clone, Copy)]
+enum SnippetName {
+    AddFunction,
+    AddExpression,
+    RenamedFunctionA,
+    RenamedFunctionB,
+    DifferentStructure,
+}
+
+impl SnippetName {
+    fn parse(s: &str) -> Self {
+        match s {
+            "add_function" => Self::AddFunction,
+            "add_expression" => Self::AddExpression,
+            "renamed_function_a" => Self::RenamedFunctionA,
+            "renamed_function_b" => Self::RenamedFunctionB,
+            "different_structure" => Self::DifferentStructure,
+            other => panic!("unknown AST feature snippet: {other}"),
+        }
+    }
+
+    fn source(self) -> &'static str {
+        match self {
+            Self::AddFunction => "fn add(a: i32, b: i32) -> i32 { a + b }",
+            Self::AddExpression => "a + b",
+            Self::RenamedFunctionA => "fn alpha(total: i32) -> i32 { total + 1 }",
+            Self::RenamedFunctionB => "fn beta(count: i32) -> i32 { count + 1 }",
+            Self::DifferentStructure => {
+                "fn beta(count: i32) -> i32 { if count > 0 { count } else { 0 } }"
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ExpectedKind {
+    BinExpr,
+    SourceFile,
+}
+
+impl ExpectedKind {
+    fn parse(s: &str) -> Self {
+        match s {
+            "BIN_EXPR" => Self::BinExpr,
+            "SOURCE_FILE" => Self::SourceFile,
+            other => panic!("unknown syntax kind: {other}"),
+        }
+    }
+
+    fn syntax_kind(self) -> SyntaxKind {
+        match self {
+            Self::BinExpr => SyntaxKind::BIN_EXPR,
+            Self::SourceFile => SyntaxKind::SOURCE_FILE,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct AstFeatureWorld {
     source: RefCell<String>,
@@ -29,25 +86,6 @@ fn world() -> AstFeatureWorld {
     AstFeatureWorld::default()
 }
 
-fn snippet_for_name(name: &str) -> &'static str {
-    match name {
-        "add_function" => "fn add(a: i32, b: i32) -> i32 { a + b }",
-        "add_expression" => "a + b",
-        "renamed_function_a" => "fn alpha(total: i32) -> i32 { total + 1 }",
-        "renamed_function_b" => "fn beta(count: i32) -> i32 { count + 1 }",
-        "different_structure" => "fn beta(count: i32) -> i32 { if count > 0 { count } else { 0 } }",
-        other => panic!("unknown AST feature snippet: {other}"),
-    }
-}
-
-fn syntax_kind_for_name(name: &str) -> SyntaxKind {
-    match name {
-        "BIN_EXPR" => SyntaxKind::BIN_EXPR,
-        "SOURCE_FILE" => SyntaxKind::SOURCE_FILE,
-        other => panic!("unknown syntax kind: {other}"),
-    }
-}
-
 fn whole_source_hash(source: &str) -> Result<AstHash, AstError> {
     let span = ByteSpan::new(source, 0, source.len() as u32)?;
     Ok(canonical_hash(&lower_span(source, span)?))
@@ -55,22 +93,22 @@ fn whole_source_hash(source: &str) -> Result<AstHash, AstError> {
 
 #[given("the source snippet {name}")]
 fn given_source(world: &AstFeatureWorld, name: String) {
-    *world.source.borrow_mut() = snippet_for_name(&name).to_owned();
+    *world.source.borrow_mut() = SnippetName::parse(&name).source().to_owned();
 }
 
 #[given("the candidate span snippet {name}")]
 fn given_candidate_span(world: &AstFeatureWorld, name: String) {
-    *world.span_needle.borrow_mut() = snippet_for_name(&name).to_owned();
+    *world.span_needle.borrow_mut() = SnippetName::parse(&name).source().to_owned();
 }
 
 #[given("the left source snippet {name}")]
 fn given_left_source(world: &AstFeatureWorld, name: String) {
-    *world.left_source.borrow_mut() = snippet_for_name(&name).to_owned();
+    *world.left_source.borrow_mut() = SnippetName::parse(&name).source().to_owned();
 }
 
 #[given("the right source snippet {name}")]
 fn given_right_source(world: &AstFeatureWorld, name: String) {
-    *world.right_source.borrow_mut() = snippet_for_name(&name).to_owned();
+    *world.right_source.borrow_mut() = SnippetName::parse(&name).source().to_owned();
 }
 
 #[when("the candidate span is lowered")]
@@ -111,7 +149,7 @@ fn then_lowered_root_kind_is(world: &AstFeatureWorld, kind: String) {
         None,
         "lowering should not fail"
     );
-    let expected = u16::from(syntax_kind_for_name(&kind));
+    let expected = u16::from(ExpectedKind::parse(&kind).syntax_kind());
     let lowered = world.lowered.borrow();
     let tree = lowered
         .as_ref()
