@@ -147,7 +147,7 @@ pub fn run_with_runner(
     runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
 ) -> Result<(), HarnessError> {
     let directory: Utf8PathBuf = ui_directory.into();
-    let _vcpkg_root_guard = windows_vcpkg_root_guard();
+    let _windows_env_guard = windows_env_guard();
 
     if directory.as_str().trim().is_empty() {
         return Err(HarnessError::EmptyDirectory);
@@ -177,49 +177,91 @@ pub fn run_with_runner(
     }
 }
 
+/// Serializes Windows-specific environment mutations required by `run_with_runner`.
+///
+/// On Windows, two environment variables need temporary adjustment:
+///
+/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
+///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+/// - `RUSTC_WRAPPER`: must be cleared when set (for example to `sccache`), because
+///   `dylint_testing::Test::example` scans `cargo build --message-format=json`
+///   output for bare `rustc` invocations. When a wrapper is active, `cargo`
+///   invokes `<wrapper> rustc ...` instead, and `dylint_testing` finds zero
+///   invocations, causing a panic.
+///
+/// Both mutations share a single `env_test_guard()` acquisition to avoid
+/// deadlocking on the non-re-entrant `std::Mutex` used by that guard.
 #[cfg(windows)]
-struct VcpkgRootGuard {
+struct WindowsEnvGuard {
+    vcpkg_root_was_absent: bool,
+    rustc_wrapper_previous: Option<std::ffi::OsString>,
     _env_guard: std::sync::MutexGuard<'static, ()>,
 }
 
 #[cfg(windows)]
-impl Drop for VcpkgRootGuard {
+impl Drop for WindowsEnvGuard {
     fn drop(&mut self) {
-        // SAFETY: The mutex guard guarantees this removal is not racing with
-        // another environment mutation in the process.
-        unsafe {
-            env::remove_var("VCPKG_ROOT");
+        // SAFETY: `env_test_guard` is still held for the lifetime of this
+        // guard, serializing all environment mutations on drop.
+        if self.vcpkg_root_was_absent {
+            unsafe {
+                env::remove_var("VCPKG_ROOT");
+            }
+        }
+        if let Some(prev) = &self.rustc_wrapper_previous {
+            unsafe {
+                env::set_var("RUSTC_WRAPPER", prev);
+            }
         }
     }
 }
 
 #[cfg(windows)]
-fn windows_vcpkg_root_guard() -> Option<VcpkgRootGuard> {
-    let candidate = Path::new(r"C:\vcpkg");
+fn windows_env_guard() -> Option<WindowsEnvGuard> {
+    let vcpkg_candidate = Path::new(r"C:\vcpkg");
+    let vcpkg_applicable = vcpkg_candidate.is_dir();
+    // Non-authoritative pre-check; re-confirmed under the mutex below.
+    let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
 
-    if !candidate.is_dir() {
+    if !vcpkg_applicable && !has_rustc_wrapper {
         return None;
     }
 
     let env_guard = env_test_guard();
 
-    if env::var_os("VCPKG_ROOT").is_some() {
+    // All environment reads and writes below are serialized by `env_guard`.
+    let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
+        // SAFETY: `env_guard` serializes concurrent environment mutations.
+        unsafe {
+            env::set_var("VCPKG_ROOT", vcpkg_candidate);
+        }
+        true
+    } else {
+        false
+    };
+
+    let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").map(|wrapper| {
+        // SAFETY: `env_guard` serializes concurrent environment mutations.
+        unsafe {
+            env::remove_var("RUSTC_WRAPPER");
+        }
+        wrapper
+    });
+
+    if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
+        // Nothing was mutated; release the guard early.
         return None;
     }
 
-    // SAFETY: The mutex guard serializes environment access for the lifetime
-    // of the returned guard, so setting the process environment is race-free.
-    unsafe {
-        env::set_var("VCPKG_ROOT", candidate);
-    }
-
-    Some(VcpkgRootGuard {
+    Some(WindowsEnvGuard {
+        vcpkg_root_was_absent,
+        rustc_wrapper_previous,
         _env_guard: env_guard,
     })
 }
 
 #[cfg(not(windows))]
-const fn windows_vcpkg_root_guard() -> Option<()> {
+const fn windows_env_guard() -> Option<()> {
     None
 }
 

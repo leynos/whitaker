@@ -155,6 +155,8 @@ jobs:
 
       - name: Test
         run: make test NEXTEST_PROFILE=ci
+        env:
+          RUSTC_WRAPPER: ""
 
       - name: Installer smoke test
         run: make install-smoke
