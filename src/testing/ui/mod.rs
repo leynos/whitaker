@@ -147,7 +147,6 @@ pub fn run_with_runner(
     runner: impl Fn(&str, &Utf8Path) -> Result<(), String>,
 ) -> Result<(), HarnessError> {
     let directory: Utf8PathBuf = ui_directory.into();
-    let _windows_env_guard = windows_env_guard();
 
     if directory.as_str().trim().is_empty() {
         return Err(HarnessError::EmptyDirectory);
@@ -165,6 +164,7 @@ pub fn run_with_runner(
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
+    let _windows_env_guard = windows_env_guard();
     ensure_toolchain_library(&crate_name_owned)?;
 
     match runner(crate_name_str, directory.as_ref()) {
@@ -189,20 +189,22 @@ pub fn run_with_runner(
 ///   invokes `<wrapper> rustc ...` instead, and `dylint_testing` finds zero
 ///   invocations, causing a panic.
 ///
-/// Both mutations share a single `env_test_guard()` acquisition to avoid
-/// deadlocking on the non-re-entrant `std::Mutex` used by that guard.
+/// Each mutation and restoration step acquires `env_test_guard()` only for the
+/// environment write itself. The guard deliberately does not hold that mutex
+/// across the UI runner callback, because runner closures can perform their
+/// own environment-guarded setup.
 #[cfg(windows)]
 struct WindowsEnvGuard {
     vcpkg_root_was_absent: bool,
     rustc_wrapper_previous: Option<std::ffi::OsString>,
-    _env_guard: std::sync::MutexGuard<'static, ()>,
 }
 
 #[cfg(windows)]
 impl Drop for WindowsEnvGuard {
     fn drop(&mut self) {
-        // SAFETY: `env_test_guard` is still held for the lifetime of this
-        // guard, serializing all environment mutations on drop.
+        let _env_guard = env_test_guard();
+
+        // SAFETY: `env_test_guard` serializes the restoration writes below.
         if self.vcpkg_root_was_absent {
             unsafe {
                 env::remove_var("VCPKG_ROOT");
@@ -227,11 +229,11 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
         return None;
     }
 
-    let env_guard = env_test_guard();
+    let _env_guard = env_test_guard();
 
-    // All environment reads and writes below are serialized by `env_guard`.
+    // All environment reads and writes below are serialized by `_env_guard`.
     let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
-        // SAFETY: `env_guard` serializes concurrent environment mutations.
+        // SAFETY: `_env_guard` serializes concurrent environment mutations.
         unsafe {
             env::set_var("VCPKG_ROOT", vcpkg_candidate);
         }
@@ -241,7 +243,7 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
     };
 
     let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").map(|wrapper| {
-        // SAFETY: `env_guard` serializes concurrent environment mutations.
+        // SAFETY: `_env_guard` serializes concurrent environment mutations.
         unsafe {
             env::remove_var("RUSTC_WRAPPER");
         }
@@ -256,7 +258,6 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
     Some(WindowsEnvGuard {
         vcpkg_root_was_absent,
         rustc_wrapper_previous,
-        _env_guard: env_guard,
     })
 }
 
