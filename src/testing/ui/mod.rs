@@ -222,14 +222,13 @@ impl Drop for WindowsEnvGuard {
 fn windows_env_guard() -> Option<WindowsEnvGuard> {
     let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
     let vcpkg_applicable = vcpkg_candidate.is_dir();
-    // Non-authoritative pre-check; re-confirmed under the mutex below.
+
+    let _env_guard = env_test_guard();
     let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
 
     if !vcpkg_applicable && !has_rustc_wrapper {
         return None;
     }
-
-    let _env_guard = env_test_guard();
 
     // All environment reads and writes below are serialized by `_env_guard`.
     let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
