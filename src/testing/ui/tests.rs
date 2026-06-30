@@ -4,6 +4,10 @@ use super::{HarnessError, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
+#[cfg(windows)]
+use std::ffi::OsString;
+#[cfg(windows)]
+use whitaker_common::test_support::env_test_guard;
 
 #[rstest]
 #[case(
@@ -88,4 +92,61 @@ fn propagates_runner_failures() {
             message: String::from("diff mismatch"),
         },
     );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_env_guard_clears_and_restores_rustc_wrapper() {
+    let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
+
+    run_with_runner("lint", "ui", |_, _| {
+        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        Ok(())
+    })
+    .expect("runner should execute with RUSTC_WRAPPER cleared");
+
+    assert_eq!(
+        env::var_os("RUSTC_WRAPPER"),
+        Some(OsString::from("sccache"))
+    );
+}
+
+#[cfg(windows)]
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+#[cfg(windows)]
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let _env_guard = env_test_guard();
+        let previous = env::var_os(key);
+        // SAFETY: `env_test_guard` serializes this environment mutation.
+        unsafe {
+            env::set_var(key, value);
+        }
+        Self { key, previous }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        let _env_guard = env_test_guard();
+        match &self.previous {
+            Some(previous) => {
+                // SAFETY: `env_test_guard` serializes this environment mutation.
+                unsafe {
+                    env::set_var(self.key, previous);
+                }
+            }
+            None => {
+                // SAFETY: `env_test_guard` serializes this environment mutation.
+                unsafe {
+                    env::remove_var(self.key);
+                }
+            }
+        }
+    }
 }
