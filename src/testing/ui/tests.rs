@@ -7,7 +7,7 @@ use std::env;
 #[cfg(windows)]
 use std::ffi::OsString;
 #[cfg(windows)]
-use whitaker_common::test_support::env_test_guard;
+use whitaker_common::test_support::EnvVarGuard;
 
 #[rstest]
 #[case(
@@ -109,44 +109,4 @@ fn windows_env_guard_clears_and_restores_rustc_wrapper() {
         env::var_os("RUSTC_WRAPPER"),
         Some(OsString::from("sccache"))
     );
-}
-
-#[cfg(windows)]
-struct EnvVarGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-#[cfg(windows)]
-impl EnvVarGuard {
-    fn set(key: &'static str, value: &str) -> Self {
-        let _env_guard = env_test_guard();
-        let previous = env::var_os(key);
-        // SAFETY: `env_test_guard` serializes this environment mutation.
-        unsafe {
-            env::set_var(key, value);
-        }
-        Self { key, previous }
-    }
-}
-
-#[cfg(windows)]
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        let _env_guard = env_test_guard();
-        match &self.previous {
-            Some(previous) => {
-                // SAFETY: `env_test_guard` serializes this environment mutation.
-                unsafe {
-                    env::set_var(self.key, previous);
-                }
-            }
-            None => {
-                // SAFETY: `env_test_guard` serializes this environment mutation.
-                unsafe {
-                    env::remove_var(self.key);
-                }
-            }
-        }
-    }
 }

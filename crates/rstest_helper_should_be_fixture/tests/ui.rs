@@ -12,14 +12,14 @@ extern crate rustc_driver;
 
 use dylint_testing::ui::Test;
 use rstest::rstest;
-use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use whitaker_common::test_support::{env_test_guard, run_test_runner};
+use whitaker_common::test_support::{EnvVarGuard, run_test_runner};
 
 // Internal test-only hook mirrored in the lint driver. It asks
-// `check_crate_post` to append passive collection summaries for harness
-// assertions without making the lint user-visible.
+// `check_crate_post` to append redacted, shape-only passive collection
+// summaries for harness assertions without making the lint user-visible.
 const COLLECTION_SUMMARY_ENV: &str = "WHITAKER_RSTEST_HELPER_COLLECTION_SUMMARY";
 
 #[rstest]
@@ -42,8 +42,25 @@ fn example_harness_collects_call_site_evidence() {
 
     assert!(summary.contains("callee_count=2"), "{summary}");
     assert!(summary.contains("record_count=2"), "{summary}");
-    assert!(summary.contains("callee=Builder::<'_>::build;records=1"));
-    assert!(summary.contains("callee=helper;records=1"));
+    assert!(
+        summary.contains("callee=Builder::<'_>::build;records=1"),
+        "{summary}"
+    );
+    assert!(summary.contains("callee=helper;records=1"), "{summary}");
+    assert!(
+        summary.contains("fingerprint=unsupported,fixture-local"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("fingerprint=fixture-local,fixture-local,const-path,const-path"),
+        "{summary}"
+    );
+    assert!(!summary.contains("literal"), "{summary}");
+}
+
+#[test]
+fn collection_summary_paths_are_fresh_per_call() {
+    assert_ne!(unique_summary_path(), unique_summary_path());
 }
 
 #[test]
@@ -100,46 +117,12 @@ impl Drop for ExampleHarnessLock {
 }
 
 fn unique_summary_path() -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
+
     std::env::temp_dir().join(format!(
         "rstest-helper-collection-{}-{}.txt",
         std::process::id(),
-        unique_summary_path as usize,
+        suffix,
     ))
-}
-
-struct EnvVarGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl EnvVarGuard {
-    fn set(key: &'static str, value: &OsStr) -> Self {
-        let _env_guard = env_test_guard();
-        let previous = std::env::var_os(key);
-        // SAFETY: `env_test_guard` serializes this environment mutation.
-        unsafe {
-            std::env::set_var(key, value);
-        }
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        let _env_guard = env_test_guard();
-        match &self.previous {
-            Some(previous) => {
-                // SAFETY: `env_test_guard` serializes this environment mutation.
-                unsafe {
-                    std::env::set_var(self.key, previous);
-                }
-            }
-            None => {
-                // SAFETY: `env_test_guard` serializes this environment mutation.
-                unsafe {
-                    std::env::remove_var(self.key);
-                }
-            }
-        }
-    }
 }

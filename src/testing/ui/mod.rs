@@ -177,7 +177,7 @@ pub fn run_with_runner(
     }
 }
 
-/// Serializes Windows-specific environment mutations required by `run_with_runner`.
+/// Serialises Windows-specific environment mutations required by `run_with_runner`.
 ///
 /// On Windows, two environment variables need temporary adjustment:
 ///
@@ -204,16 +204,19 @@ impl Drop for WindowsEnvGuard {
     fn drop(&mut self) {
         let _env_guard = env_test_guard();
 
-        // SAFETY: `env_test_guard` serializes the restoration writes below.
+        // SAFETY: `env_test_guard` serialises the restoration writes below.
         if self.vcpkg_root_was_absent {
             unsafe {
                 env::remove_var("VCPKG_ROOT");
             }
         }
-        if let Some(prev) = &self.rustc_wrapper_previous {
-            unsafe {
+        match &self.rustc_wrapper_previous {
+            Some(prev) => unsafe {
                 env::set_var("RUSTC_WRAPPER", prev);
-            }
+            },
+            None => unsafe {
+                env::remove_var("RUSTC_WRAPPER");
+            },
         }
     }
 }
@@ -230,9 +233,9 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
         return None;
     }
 
-    // All environment reads and writes below are serialized by `_env_guard`.
+    // All environment reads and writes below are serialised by `_env_guard`.
     let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
+        // SAFETY: `_env_guard` serialises concurrent environment mutations.
         unsafe {
             env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
         }
@@ -242,7 +245,7 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
     };
 
     let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").map(|wrapper| {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
+        // SAFETY: `_env_guard` serialises concurrent environment mutations.
         unsafe {
             env::remove_var("RUSTC_WRAPPER");
         }

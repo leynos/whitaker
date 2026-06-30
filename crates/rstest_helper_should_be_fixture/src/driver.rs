@@ -22,8 +22,8 @@ use whitaker::SharedConfig;
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 use whitaker_common::rstest::{
-    ArgFingerprint, ParameterBinding, RstestDetectionOptions, RstestParameter, fixture_local_names,
-    is_rstest_test_with,
+    ArgAtom, ArgFingerprint, ParameterBinding, RstestDetectionOptions, RstestParameter,
+    fixture_local_names, is_rstest_test_with,
 };
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
@@ -31,7 +31,9 @@ const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 ///
 /// The lint remains diagnostic-silent for users. When this variable is set by
 /// tests, crate-post writes an append-only summary so the harness can verify
-/// that the pass-owned collector observed real rustc call-site evidence.
+/// that the pass-owned collector observed real rustc call-site evidence. The
+/// summary includes callee and record counts, plus redacted fingerprint shape
+/// tokens such as `fixture-local`, `const-lit`, `const-path`, and `unsupported`.
 const COLLECTION_SUMMARY_ENV: &str = "WHITAKER_RSTEST_HELPER_COLLECTION_SUMMARY";
 
 const DEFAULT_PROVIDER_PARAM_ATTRIBUTES: &[&str] =
@@ -109,6 +111,7 @@ pub struct RstestHelperShouldBeFixture {
     detection_options: RstestDetectionOptions,
     collector: CallSiteCollector,
     rstest_companion_tests: HashSet<hir::HirId>,
+    rstest_collection_roots: HashSet<hir::HirId>,
     localizer: Localizer,
 }
 
@@ -121,6 +124,7 @@ impl Default for RstestHelperShouldBeFixture {
             detection_options,
             collector: CallSiteCollector::default(),
             rstest_companion_tests: HashSet::new(),
+            rstest_collection_roots: HashSet::new(),
             localizer: Localizer::new(None),
         }
     }
@@ -163,6 +167,7 @@ impl RstestHelperShouldBeFixture {
         self.detection_options = self.config.detection_options();
         self.collector.clear();
         self.rstest_companion_tests.clear();
+        self.rstest_collection_roots.clear();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
 
@@ -173,6 +178,15 @@ impl RstestHelperShouldBeFixture {
         def_id: LocalDefId,
     ) {
         let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
+        if self.rstest_companion_tests.contains(&hir_id) {
+            debug!(
+                target: LINT_NAME,
+                "skipping helper call-site collection for non-rstest function: def_id={:?}",
+                def_id,
+            );
+            return;
+        }
+
         let attrs = cx
             .tcx
             .hir_attrs(hir_id)
@@ -180,7 +194,7 @@ impl RstestHelperShouldBeFixture {
             .filter_map(attribute_from_hir)
             .collect::<Vec<_>>();
         if !is_rstest_test_with(&attrs, None, &self.detection_options)
-            && !self.rstest_companion_tests.contains(&hir_id)
+            && !self.rstest_collection_roots.contains(&hir_id)
         {
             debug!(
                 target: LINT_NAME,
@@ -201,7 +215,7 @@ impl RstestHelperShouldBeFixture {
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
-        self.rstest_companion_tests = whitaker::hir::collect_rstest_companion_test_functions(cx);
+        self.rstest_collection_roots = whitaker::hir::collect_rstest_companion_test_functions(cx);
     }
 
     fn check_fn(
@@ -222,12 +236,12 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
                 debug!(
                     target: LINT_NAME,
                     "collected rstest helper call: callee={}, callee_def_id={:?}, \
-                     test_source_def_id={:?}, span={:?}, fingerprint={:?}",
+                     test_source_def_id={:?}, span={:?}, fingerprint_shape={}",
                     callee,
                     record.callee_def_id,
                     record.test_source_def_id,
                     record.span,
-                    record.fingerprint,
+                    redacted_fingerprint_shape(&record.fingerprint),
                 );
             }
         }
@@ -250,6 +264,12 @@ impl RstestHelperShouldBeFixture {
         );
         for (callee, records) in self.collector.iter() {
             summary.push_str(&format!("callee={callee};records={}\n", records.len()));
+            for record in records {
+                summary.push_str(&format!(
+                    "fingerprint={}\n",
+                    redacted_fingerprint_shape(&record.fingerprint)
+                ));
+            }
         }
         summary
     }
@@ -273,6 +293,26 @@ impl RstestHelperShouldBeFixture {
                 error,
             );
         }
+    }
+}
+
+fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String {
+    // Keep observability useful for tests and debugging without writing
+    // literal values or source snippets to logs.
+    fingerprint
+        .atoms()
+        .iter()
+        .map(redacted_atom_shape)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
+    match atom {
+        ArgAtom::FixtureLocal { .. } => "fixture-local",
+        ArgAtom::ConstLit { .. } => "const-lit",
+        ArgAtom::ConstPath { .. } => "const-path",
+        ArgAtom::Unsupported => "unsupported",
     }
 }
 
