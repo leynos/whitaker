@@ -14,7 +14,7 @@ mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
 #[cfg(windows)]
-use std::{env, path::Path};
+use std::env;
 #[cfg(windows)]
 use whitaker_common::test_support::env_test_guard;
 
@@ -220,7 +220,7 @@ impl Drop for WindowsEnvGuard {
 
 #[cfg(windows)]
 fn windows_env_guard() -> Option<WindowsEnvGuard> {
-    let vcpkg_candidate = Path::new(r"C:\vcpkg");
+    let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
     let vcpkg_applicable = vcpkg_candidate.is_dir();
     // Non-authoritative pre-check; re-confirmed under the mutex below.
     let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
@@ -235,7 +235,7 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
     let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
         // SAFETY: `_env_guard` serializes concurrent environment mutations.
         unsafe {
-            env::set_var("VCPKG_ROOT", vcpkg_candidate);
+            env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
         }
         true
     } else {
