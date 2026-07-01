@@ -159,7 +159,7 @@ pub(crate) fn lower_arg_atom<'tcx>(
     expr: &'tcx hir::Expr<'tcx>,
     fixture_locals: &BTreeSet<String>,
 ) -> ArgAtom {
-    if whitaker::hir::recover_user_editable_hir_span(expr.span).is_none() {
+    if should_skip_arg_for_unrecoverable_span(expr.span) {
         debug!(
             target: "rstest_helper_should_be_fixture",
             "lowering unsupported argument: user-editable span recovery failed for {:?}",
@@ -180,6 +180,10 @@ pub(crate) fn lower_arg_atom<'tcx>(
             ArgAtom::unsupported()
         }
     }
+}
+
+fn should_skip_arg_for_unrecoverable_span(span: Span) -> bool {
+    whitaker::hir::recover_user_editable_hir_span(span).is_none()
 }
 
 fn lower_path_arg<'tcx>(
@@ -239,6 +243,10 @@ fn literal_atom(cx: &LateContext<'_>, span: Span, lit: &hir::Lit) -> ArgAtom {
         .source_map()
         .span_to_snippet(span)
         .unwrap_or_else(|_| lit.node.to_string());
+    literal_text_atom(text)
+}
+
+fn literal_text_atom(text: String) -> ArgAtom {
     ArgAtom::const_lit(text)
 }
 

@@ -8,9 +8,12 @@
 
 use rustc_hir::def_id::{DefId, DefIndex};
 use rustc_span::{BytePos, DUMMY_SP, FileName};
-use whitaker_common::rstest::ArgFingerprint;
+use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
 
-use super::{CallSiteCollector, CallSiteLocation, CallSiteRecord};
+use super::{
+    CallSiteCollector, CallSiteLocation, CallSiteRecord, literal_text_atom,
+    should_skip_arg_for_unrecoverable_span,
+};
 
 use proptest::prelude::*;
 
@@ -51,6 +54,19 @@ fn collector_keeps_distinct_source_spans_for_same_callee() {
 
     assert_eq!(collector.callee_count(), 1);
     assert_eq!(collector.record_count(), 2);
+}
+
+#[test]
+fn literal_lowering_records_const_lit_atom() {
+    assert_eq!(
+        literal_text_atom("\"literal\"".to_string()),
+        ArgAtom::const_lit("\"literal\""),
+    );
+}
+
+#[test]
+fn unrecoverable_argument_span_is_unsupported() {
+    assert!(should_skip_arg_for_unrecoverable_span(DUMMY_SP));
 }
 
 fn collect_two_calls(lo2: u32, hi2: u32) -> (CallSiteCollector, [bool; 2]) {

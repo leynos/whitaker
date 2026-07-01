@@ -110,3 +110,18 @@ fn windows_env_guard_clears_and_restores_rustc_wrapper() {
         Some(OsString::from("sccache"))
     );
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
+    let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
+    let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
+
+    run_with_runner("lint", "ui", |_, _| {
+        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        Ok(())
+    })
+    .expect("runner should execute without installing RUSTC_WRAPPER");
+
+    assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+}

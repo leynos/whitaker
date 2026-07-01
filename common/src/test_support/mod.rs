@@ -78,6 +78,28 @@ impl EnvVarGuard {
         }
         Self { key, previous }
     }
+
+    /// Removes `key`, returning a guard that restores the previous value when
+    /// dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use whitaker_common::test_support::EnvVarGuard;
+    ///
+    /// let _guard = EnvVarGuard::remove("WHITAKER_REMOVED_TEST_ENV_VAR");
+    /// assert!(std::env::var_os("WHITAKER_REMOVED_TEST_ENV_VAR").is_none());
+    /// ```
+    #[must_use]
+    pub fn remove(key: &'static str) -> Self {
+        let _env_guard = env_test_guard();
+        let previous = std::env::var_os(key);
+        // SAFETY: `env_test_guard` serialises this environment mutation.
+        unsafe {
+            std::env::remove_var(key);
+        }
+        Self { key, previous }
+    }
 }
 
 impl Drop for EnvVarGuard {

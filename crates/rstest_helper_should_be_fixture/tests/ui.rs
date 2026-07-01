@@ -14,13 +14,17 @@ use dylint_testing::ui::Test;
 use rstest::rstest;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use whitaker_common::test_support::{EnvVarGuard, run_test_runner};
 
 // Internal test-only hook mirrored in the lint driver. It asks
 // `check_crate_post` to append redacted, shape-only passive collection
 // summaries for harness assertions without making the lint user-visible.
 const COLLECTION_SUMMARY_ENV: &str = "WHITAKER_RSTEST_HELPER_COLLECTION_SUMMARY";
+// The example harness lock coordinates separate nextest processes. Windows CI
+// can legitimately hold it for several minutes, so only remove directories
+// old enough to be abandoned by a crashed process.
+const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
 
 #[rstest]
 #[case("bootstrap_zero_diagnostic")]
@@ -100,6 +104,7 @@ impl ExampleHarnessLock {
             match std::fs::create_dir(&path) {
                 Ok(()) => return Self { path },
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    recover_stale_example_harness_lock(&path);
                     std::thread::sleep(Duration::from_millis(100));
                 }
                 Err(error) => panic!("create example harness lock: {error}"),
@@ -114,6 +119,24 @@ impl Drop for ExampleHarnessLock {
     }
 }
 
+fn recover_stale_example_harness_lock(path: &std::path::Path) {
+    let metadata = std::fs::metadata(path)
+        .unwrap_or_else(|error| panic!("inspect example harness lock: {error}"));
+    let modified = metadata
+        .modified()
+        .unwrap_or_else(|error| panic!("read example harness lock modification time: {error}"));
+
+    if example_harness_lock_is_stale(modified, SystemTime::now()) {
+        std::fs::remove_dir(path)
+            .unwrap_or_else(|error| panic!("remove stale example harness lock: {error}"));
+    }
+}
+
+fn example_harness_lock_is_stale(modified: SystemTime, now: SystemTime) -> bool {
+    now.duration_since(modified)
+        .is_ok_and(|age| age > EXAMPLE_HARNESS_LOCK_STALE_AFTER)
+}
+
 fn unique_summary_path() -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -123,4 +146,18 @@ fn unique_summary_path() -> PathBuf {
         std::process::id(),
         suffix,
     ))
+}
+
+#[test]
+fn example_harness_lock_stale_policy_keeps_recent_locks() {
+    let recent = SystemTime::now() - Duration::from_secs(60);
+
+    assert!(!example_harness_lock_is_stale(recent, SystemTime::now()));
+}
+
+#[test]
+fn example_harness_lock_stale_policy_rejects_abandoned_locks() {
+    let old = SystemTime::now() - (EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1));
+
+    assert!(example_harness_lock_is_stale(old, SystemTime::now()));
 }
