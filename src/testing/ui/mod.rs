@@ -210,13 +210,10 @@ impl Drop for WindowsEnvGuard {
                 env::remove_var("VCPKG_ROOT");
             }
         }
-        match &self.rustc_wrapper_previous {
-            Some(prev) => unsafe {
+        if let Some(prev) = &self.rustc_wrapper_previous {
+            unsafe {
                 env::set_var("RUSTC_WRAPPER", prev);
-            },
-            None => unsafe {
-                env::remove_var("RUSTC_WRAPPER");
-            },
+            }
         }
     }
 }

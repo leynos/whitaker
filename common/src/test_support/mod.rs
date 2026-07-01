@@ -59,6 +59,15 @@ pub struct EnvVarGuard {
 impl EnvVarGuard {
     /// Sets `key` to `value`, returning a guard that restores the previous
     /// value or removes the variable when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use whitaker_common::test_support::EnvVarGuard;
+    ///
+    /// let _guard = EnvVarGuard::set("WHITAKER_TEST_ENV_VAR", "enabled");
+    /// assert_eq!(std::env::var("WHITAKER_TEST_ENV_VAR").unwrap(), "enabled");
+    /// ```
     #[must_use]
     pub fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
         let _env_guard = env_test_guard();
