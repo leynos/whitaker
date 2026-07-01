@@ -96,7 +96,7 @@ struct ExampleHarnessLock {
 impl ExampleHarnessLock {
     fn acquire() -> Self {
         let path = std::env::temp_dir().join("rstest-helper-example-harness.lock");
-        for _ in 0..300 {
+        loop {
             match std::fs::create_dir(&path) {
                 Ok(()) => return Self { path },
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -105,8 +105,6 @@ impl ExampleHarnessLock {
                 Err(error) => panic!("create example harness lock: {error}"),
             }
         }
-
-        panic!("timed out waiting for example harness lock");
     }
 }
 
