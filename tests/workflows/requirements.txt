@@ -1,2 +1,2 @@
 pytest>=9.1.1,<10
-ruamel.yaml>=0.18,<0.19
+ruamel.yaml>=0.19.1,<0.20
