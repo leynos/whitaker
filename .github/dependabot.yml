@@ -9,6 +9,9 @@ updates:
       - "github-actions"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
 
   # Enable version updates for Cargo
   - package-ecosystem: "cargo"
@@ -19,3 +22,19 @@ updates:
       - "cargo"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+
+  # Enable version updates for workflow test tooling (pip)
+  - package-ecosystem: "pip"
+    directory: "/tests/workflows"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
