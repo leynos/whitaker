@@ -18,7 +18,7 @@ cargo_metadata = "0.23.0"
 clap = "4.5.38"
 directories-next = "2.0.0"
 dylint_linting = "5"
-dylint_testing = "5"
+dylint_testing = "6"
 libc = "0.2"
 fluent-templates = "^0.14.0"
 insta = { version = "1", features = ["json"] }
