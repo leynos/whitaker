@@ -5,6 +5,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
 #[cfg(windows)]
+use std::sync::{Mutex, MutexGuard, OnceLock};
+#[cfg(windows)]
 use whitaker_common::test_support::EnvVarGuard;
 
 #[rstest]
@@ -95,6 +97,7 @@ fn propagates_runner_failures() {
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_clears_and_restores_rustc_wrapper() {
+    let _serial_guard = windows_env_guard_test_lock();
     let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
 
     run_with_runner("lint", "ui", |_, _| {
@@ -107,6 +110,7 @@ fn windows_env_guard_clears_and_restores_rustc_wrapper() {
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
+    let _serial_guard = windows_env_guard_test_lock();
     let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
     let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
 
@@ -115,4 +119,14 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
         Ok(())
     })
     .expect("runner should execute without installing RUSTC_WRAPPER");
+}
+
+#[cfg(windows)]
+fn windows_env_guard_test_lock() -> MutexGuard<'static, ()> {
+    // These tests inspect process-global environment state after callbacks,
+    // so their whole bodies must run serially rather than only each mutation.
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|error| panic!("expected Windows env guard test lock: {error}"))
 }

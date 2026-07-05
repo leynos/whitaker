@@ -189,18 +189,14 @@ fn unique_summary_path() -> PathBuf {
     ))
 }
 
-#[test]
-fn example_harness_lock_stale_policy_keeps_recent_locks() {
-    let recent = SystemTime::now() - Duration::from_secs(60);
+#[rstest]
+#[case(Duration::from_secs(60), false)]
+#[case(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1), true)]
+fn example_harness_lock_stale_policy(#[case] age: Duration, #[case] expected: bool) {
+    let now = SystemTime::now();
+    let modified = now - age;
 
-    assert!(!example_harness_lock_is_stale(recent, SystemTime::now()));
-}
-
-#[test]
-fn example_harness_lock_stale_policy_rejects_abandoned_locks() {
-    let old = SystemTime::now() - (EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1));
-
-    assert!(example_harness_lock_is_stale(old, SystemTime::now()));
+    assert_eq!(example_harness_lock_is_stale(modified, now), expected);
 }
 
 #[test]

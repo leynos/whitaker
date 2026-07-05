@@ -103,9 +103,15 @@ impl CallSiteCollector {
     /// # Examples
     ///
     /// ```ignore
-    /// # use crate::collector::{CallSiteCollector, CallSiteRecord};
+    /// # use crate::collector::{CallSiteCollector, CallSiteLocation, CallSiteRecord};
     /// # fn example(mut collector: CallSiteCollector, record: CallSiteRecord) {
-    /// let inserted = collector.record(record, "src/lib.rs".into(), 0.into(), 4.into());
+    /// let location = CallSiteLocation::new(
+    ///     record.callee_key.clone(),
+    ///     rustc_span::FileName::Custom("src/lib.rs".to_string()),
+    ///     rustc_span::BytePos(0),
+    ///     rustc_span::BytePos(4),
+    /// );
+    /// let inserted = collector.record(record, location);
     /// assert!(inserted);
     /// # }
     /// ```
