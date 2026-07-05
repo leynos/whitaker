@@ -1452,6 +1452,33 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
+
+#### Shared UI harness environment guards
+
+Workspace-level UI harness tests that mutate process-wide environment variables
+must use `whitaker_common::test_support::EnvVarGuard`. Use
+`EnvVarGuard::set` to install a temporary value and `EnvVarGuard::remove` to
+make a variable absent for the duration of a test. The guard acquires
+`env_test_guard()` only while it captures, mutates, or restores the variable;
+it must not hold that mutex while a runner callback executes, because the
+callback may need its own guarded environment setup.
+
+On Windows, `whitaker::testing::ui::run_with_runner` applies a specialised
+guard before invoking the Dylint UI runner. It sets `VCPKG_ROOT` to `C:\vcpkg`
+when that directory exists and the variable is otherwise absent, and it clears
+`RUSTC_WRAPPER` only while the runner needs bare `rustc` invocations for
+`dylint_testing::Test::example`. Restoration uses the same shared environment
+mutex, but the runner callback itself executes without holding that mutex to
+avoid nested-lock deadlocks.
+
+Example-based UI tests in `rstest_helper_should_be_fixture` also use a
+cross-process directory lock under the system temporary directory. `nextest`
+can run test binaries in separate processes, so a plain in-process `Mutex` is
+not sufficient for those examples. The lock acquisition path reaps directories
+that are old enough to be considered abandoned, treats `NotFound` during stale
+cleanup as another process already releasing the lock, and returns a timeout
+error if a live lock remains stuck beyond the configured wait limit.
+
 ### Configuration constant patterns
 
 Lint crates that expose configurable thresholds or defaults should centralize

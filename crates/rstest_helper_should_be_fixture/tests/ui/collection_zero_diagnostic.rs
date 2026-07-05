@@ -22,6 +22,9 @@ fn helper(fixture: &str, literal: &str, prefix: &str, suffix: &str) -> String {
 fn rstest_helper_call_collection_stays_silent(fixture: &str) {
     let value = helper(fixture, "literal", PREFIX, SUFFIX);
     assert_eq!(value, "prefix-fixture-literal-suffix");
+
+    let deferred = || helper(fixture, "literal", PREFIX, SUFFIX);
+    assert_eq!(deferred(), "prefix-fixture-literal-suffix");
 }
 
 #[rstest]

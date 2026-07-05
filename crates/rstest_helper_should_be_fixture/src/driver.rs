@@ -245,7 +245,13 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
                 );
             }
         }
-        self.write_collection_summary();
+        if let Err(error) = self.write_collection_summary() {
+            debug!(
+                target: LINT_NAME,
+                "failed to write rstest helper call-site collection summary: {}",
+                error,
+            );
+        }
         debug!(
             target: LINT_NAME,
             "rstest helper call-site collection complete: {} callees, {} records",
@@ -274,25 +280,16 @@ impl RstestHelperShouldBeFixture {
         summary
     }
 
-    fn write_collection_summary(&self) {
+    fn write_collection_summary(&self) -> std::io::Result<()> {
         let Some(path) = std::env::var_os(COLLECTION_SUMMARY_ENV) else {
-            return;
+            return Ok(());
         };
 
-        let result = std::fs::OpenOptions::new()
+        let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&path)
-            .and_then(|mut file| writeln!(file, "{}", self.collection_summary()));
-
-        if let Err(error) = result {
-            debug!(
-                target: LINT_NAME,
-                "failed to write rstest helper call-site collection summary to {:?}: {}",
-                path,
-                error,
-            );
-        }
+            .open(path)?;
+        writeln!(file, "{}", self.collection_summary())
     }
 }
 
@@ -321,6 +318,7 @@ struct CallSiteVisitor<'a, 'tcx> {
     collector: &'a mut CallSiteCollector,
     test_source_def_id: DefId,
     fixture_locals: &'a std::collections::BTreeSet<String>,
+    closure_span_fallbacks: Vec<Span>,
 }
 
 impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
@@ -335,6 +333,7 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
             collector,
             test_source_def_id,
             fixture_locals,
+            closure_span_fallbacks: Vec::new(),
         }
     }
 
@@ -342,7 +341,7 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
     where
         I: IntoIterator<Item = &'tcx hir::Expr<'tcx>>,
     {
-        let Some(span) = whitaker::hir::recover_user_editable_hir_span(expr.span) else {
+        let Some(span) = self.recover_call_span(expr.span) else {
             debug!(
                 target: LINT_NAME,
                 "skipping helper call-site collection: user-editable span recovery failed for {:?}",
@@ -384,11 +383,25 @@ impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
             hir::ExprKind::MethodCall(_, receiver, args, _) => {
                 self.collect_call(expr, std::iter::once(receiver).chain(args))
             }
-            hir::ExprKind::Closure(..) => return,
+            hir::ExprKind::Closure(hir::Closure { body, .. }) => {
+                self.closure_span_fallbacks.push(expr.span);
+                self.visit_body(self.cx.tcx.hir_body(*body));
+                self.closure_span_fallbacks.pop();
+            }
             _ => {}
         }
 
         intravisit::walk_expr(self, expr);
+    }
+}
+
+impl CallSiteVisitor<'_, '_> {
+    fn recover_call_span(&self, span: Span) -> Option<Span> {
+        whitaker::hir::recover_user_editable_hir_span(span).or_else(|| {
+            self.closure_span_fallbacks
+                .last()
+                .and_then(|span| whitaker::hir::recover_user_editable_hir_span(*span))
+        })
     }
 }
 
