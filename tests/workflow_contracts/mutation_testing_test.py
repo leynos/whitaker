@@ -21,10 +21,9 @@ WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "mutation-testing.yml"
 )
 
-#: The commit SHA of the estate-wide shared-workflow pin (the merge
-#: commit of leynos/shared-actions PR #319). Bump the workflow and this
-#: test together.
-PINNED_SHA = "47aea18960d24f33aedc4782ec6b73e365418313"
+#: The commit SHA of the estate-wide shared-workflow pin. Bump the
+#: workflow and this test together.
+PINNED_SHA = "2b09d10192627fd6e1034e7c12625dd266b45503"
 
 EXPECTED_USES = (
     "leynos/shared-actions/.github/workflows/mutation-cargo.yml@" + PINNED_SHA
