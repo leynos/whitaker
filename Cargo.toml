@@ -46,7 +46,7 @@ whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.5" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
-mockall = "0.13.1"
+mockall = "0.15.0"
 clippy_utils = { path = "crates/clippy_utils", version = "0.2.5" }
 rustc_ast = { path = "crates/rustc_ast", version = "0.2.5" }
 rustc_attr_data_structures = { path = "crates/rustc_attr_data_structures", version = "0.2.5" }
