@@ -31,7 +31,7 @@ rustc_span = { workspace = true, optional = true }
 whitaker-common = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
-newt-hype = "0.1"
+newt-hype = "0.2"
 
 [dev-dependencies]
 rstest = { workspace = true }
