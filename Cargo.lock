@@ -1762,7 +1762,7 @@ dependencies = [
  "dylint_linting",
  "dylint_testing",
  "log",
- "newt-hype 0.1.4",
+ "newt-hype",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
@@ -1775,12 +1775,6 @@ dependencies = [
  "whitaker",
  "whitaker-common",
 ]
-
-[[package]]
-name = "newt-hype"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37329a7df757a0072bb50a6fac3ae2d07e72928f5a08fed381a650dc240c5b6f"
 
 [[package]]
 name = "newt-hype"
@@ -2345,7 +2339,7 @@ dependencies = [
  "cfg-if",
  "convert_case 0.6.0",
  "gherkin",
- "newt-hype 0.2.0",
+ "newt-hype",
  "proc-macro-crate",
  "proc-macro-error",
  "proc-macro2",
