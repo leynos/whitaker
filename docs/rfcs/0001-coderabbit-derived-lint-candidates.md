@@ -13,7 +13,7 @@ Rust source files. Recurring finding patterns that are mechanical enough to
 detect, not already covered by Clippy or rustc, and not already scheduled in
 `docs/roadmap.md` were distilled into seven candidate lints. Three candidates
 are recommended for immediate scheduling: `test_helper_must_return_result`,
-`assertion_missing_message`, and `no_direct_env_in_tests`. Two further
+`assertion_missing_message`, and `no_std_env_operations`. Two further
 candidates are recommended as follow-ups, and two are recorded but deferred.
 
 ## Problem
@@ -57,7 +57,7 @@ them; the sections that follow specify the candidates.
 | ---------------------------------------------------------- | -------- | ----------------- | --------------------------------- |
 | Test steps and helpers panic instead of returning `Result` | 7        | all major         | `test_helper_must_return_result`  |
 | Assertions and mismatch arms omit diagnostic context       | 5        | minor and trivial | `assertion_missing_message`       |
-| Direct process-environment access or mutation in tests     | 4        | major and trivial | `no_direct_env_in_tests`          |
+| Direct process-environment access or mutation              | 4        | major and trivial | `no_std_env_operations`           |
 | Error type or context erased at propagation sites          | 5        | mixed             | `error_context_discarded`         |
 | `drop()` used to silence unused-variable warnings          | 2        | major and trivial | `no_drop_to_silence_unused`       |
 | Fallible calls between resource acquisition and guard      | 3        | all major         | `fallible_gap_before_guard`       |
@@ -134,25 +134,36 @@ Configuration: severity per arm, and a threshold for what counts as a trivial
 operand. The macro-expansion span helpers from roadmap 8.1.2 apply here to
 avoid firing inside third-party assertion macros.
 
-#### `no_direct_env_in_tests`
+#### `no_std_env_operations`
 
-Four findings concern direct process-environment access in tests and benches:
-local `ENV_LOCK` mutexes duplicating a shared guard, `std::env::set_var`/
-`remove_var` calls mutating global state, and helpers reading `std::env::var`
-directly instead of through an injectable reader. Process-environment mutation
-is process-wide and races across threads, which is why the repositories
-concerned adopted a shared-guard policy; the lint mechanises that policy.
+Four findings concern direct process-environment access: local `ENV_LOCK`
+mutexes duplicating a shared guard, `std::env::set_var`/`remove_var` calls
+mutating global state in tests, and helpers reading `std::env::var` directly
+instead of through an injectable reader (one finding asks explicitly for
+"mockable or an injected environment reader"). The test-side symptoms are
+downstream of a production-side design gap: code that reads the environment
+ambiently forces its tests to mutate process-global state, which races across
+threads. The lint therefore targets the mechanism in all contexts, not only in
+tests, mirroring how `no_std_fs_operations` pushes filesystem access behind
+injectable handles.
 
-Detection sketch: in test and bench contexts, flag resolved calls to
-`std::env::set_var`, `std::env::remove_var`, and (configurably) `std::env::var`/
-`var_os`, using the resolved-path classifier pattern established by
-`no_std_fs_operations`. An allowlist names the sanctioned wrapper module (for
-example `test_helpers::env_guard`) whose internals may touch the real
-environment.
+Detection sketch: flag resolved calls to `std::env::var`, `var_os`, `vars`,
+`vars_os`, `set_var`, and `remove_var`, using the resolved-path classifier
+pattern established by `no_std_fs_operations` (`def_path_str` plus parsed
+segments, so aliased imports are still caught). The compile-time `env!` and
+`option_env!` macros are out of scope. The remedy differs by context, and the
+diagnostic help text should too: in production code, accept an environment
+handle (for example `&dyn mockable::Env`, with `DefaultEnv` supplied at the
+composition root); in test code, construct a stub such as `MockEnv` rather
+than mutating the process environment.
 
-Configuration: `allowed_paths` (module prefixes exempt from the lint),
-`check_reads` (default off; reads are flagged only when the stricter policy is
-wanted), and the existing `excluded_crates` convention.
+Configuration: `allowed_paths` (module prefixes exempt from the lint — the
+composition root, binary `main`, the module implementing the handle against
+the real environment, and any sanctioned test guard such as
+`test_helpers::env_guard`), a per-operation severity split (mutation via
+`set_var`/`remove_var` is process-global and racy, so deny by default; reads
+via `var`/`var_os` warn by default), and the existing `excluded_crates`
+convention.
 
 ### Tier 2: recommended as follow-ups
 
@@ -213,8 +224,9 @@ tuning against real repositories before default enablement.
 
 `test_helper_must_return_result` must be sequenced after the shared `rstest`
 detection helpers (roadmap 8.1.1), which it reuses for step-attribute
-recognition. `no_direct_env_in_tests` reuses the resolved-path classifier
-approach from `no_std_fs_operations` and has no new infrastructure dependencies.
+recognition. `no_std_env_operations` reuses the resolved-path classifier
+approach from `no_std_fs_operations` — which serves as its implementation
+template — and has no new infrastructure dependencies.
 
 ## Alternatives considered
 
@@ -223,7 +235,8 @@ approach from `no_std_fs_operations` and has no new infrastructure dependencies.
 Clippy offers adjacent lints (`missing_errors_doc`, `drop_non_drop`,
 `unwrap_used`). None covers the Tier 1 clusters: Clippy has no notion of BDD
 step functions, no assertion-message requirement scoped to helpers, and no
-test-scoped environment-access restriction with a sanctioned-wrapper allowlist.
+environment-access restriction that steers towards an injectable handle with a
+sanctioned-boundary allowlist.
 Where Clippy does cover a cluster, this RFC excludes it rather than duplicating
 it.
 
@@ -251,13 +264,16 @@ one-crate-per-lint; the candidates stay separate.
 - What operand-triviality heuristic keeps `assertion_missing_message` quiet
   on idiomatic short unit tests without missing the helper-function cases the
   corpus exhibits?
-- Does `no_direct_env_in_tests` need a companion suggestion pointing at a
-  canonical guard crate, and if so, which crate does the suite bless?
+- Should `no_std_env_operations` name `mockable::Env` in its help text as the
+  blessed handle, or keep the suggestion crate-neutral and let configuration
+  supply the preferred trait path?
 
 ## Recommendation
 
-Schedule the three Tier 1 lints as a new roadmap step under the test-hygiene
-theme, sequenced after the shared helpers in roadmap 8.1. Take
+Schedule the three Tier 1 lints as a new roadmap step, sequenced after the
+shared helpers in roadmap 8.1. Two are test-hygiene lints;
+`no_std_env_operations` is broader, enforcing the injectable-environment
+pattern across production and test code alike. Take
 `error_context_discarded` and `no_drop_to_silence_unused` as Tier 2 follow-ups
 once the Tier 1 lints have shipped and their noise characteristics are
 understood. Record the two deferred candidates against their blocking
