@@ -80,6 +80,13 @@
   records the formal verification direction for the clone detector pipeline and
   its proof boundaries.
 
+## Requests for comments
+
+- [RFC 0001: lint candidates derived from CodeRabbit review
+  findings](rfcs/0001-coderabbit-derived-lint-candidates.md) proposes new
+  Whitaker lints distilled from recurring CodeRabbit review findings in Rust
+  code.
+
 ## Planning material
 
 - [docs/execplans/](execplans/) stores execution plans for branch-scoped
