@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps verus kani verus-clone-detector kani-clone-detector
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -93,6 +93,10 @@ workflow-test: workflow-test-deps ## Run opt-in GitHub workflow smoke tests with
 		exit 1; \
 	}
 	@ACT_WORKFLOW_TESTS=1 $(WORKFLOW_TEST_VENV)/bin/python -m pytest tests/workflows
+
+test-workflow-contracts: ## Validate the mutation-testing caller contract
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow contract tests"; exit 1; }
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
 workflow-test-deps: ## Install Python dependencies for workflow tests
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v $(UV) >/dev/null || { echo "uv is required for workflow tests"; exit 1; }

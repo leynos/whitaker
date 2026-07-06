@@ -71,6 +71,9 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Workflow contract tests
+        run: make test-workflow-contracts
+
       - name: Publish dry run
         run: make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"
 

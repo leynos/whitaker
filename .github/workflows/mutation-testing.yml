@@ -1,0 +1,43 @@
+name: Mutation testing
+
+# Thin caller of the shared mutation-testing reusable workflow; caller
+# guide: leynos/shared-actions docs/mutation-cargo-workflow.md.
+# Scheduled runs mutate only files changed within the detection window;
+# manual dispatch runs mutate everything, fanned out across shards. To
+# test a branch, select it in the Actions "Run workflow" control.
+
+on:
+  schedule:
+    - cron: "50 4 * * *" # Daily, 04:50 UTC
+  workflow_dispatch:
+
+# Default the token to no scopes; the job opts in explicitly.
+permissions: {}
+
+# Serialize runs per ref: a dispatch during a scheduled run (or vice
+# versa) queues rather than racing. Runs are informational, so queued
+# runs wait instead of cancelling.
+concurrency:
+  group: mutation-testing-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutation:
+    permissions:
+      contents: read
+      id-token: write # OIDC workflow-source resolution
+    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@47aea18960d24f33aedc4782ec6b73e365418313
+    with:
+      # Workspace members live under common/, crates/, installer/, and
+      # suite/ alongside the root crate's src/; there are no repo-root
+      # examples/ or benches/ directories.
+      paths: "src/,common/,crates/,installer/,suite/"
+      # Scaffolding whose survivors are noise: the rustc_* proxy shims
+      # and the clippy_utils stub re-export compiler internals, the
+      # per-lint ui/ and examples/ directories hold dylint UI fixtures,
+      # and src/testing plus common/src/test_support are shared test
+      # infrastructure.
+      exclude-globs: "crates/rustc_*/**,crates/clippy_utils/**,crates/*/ui/**,crates/*/examples/**,src/testing/**,common/src/test_support/**"
+      # Match the CI baseline (Makefile CARGO_FLAGS uses --all-features)
+      # so feature-gated tests run against mutants.
+      extra-args: "--all-features"
