@@ -6,7 +6,7 @@ use ra_ap_syntax::{
     AstNode, Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
     TextSize,
 };
-use tracing::warn;
+use tracing::{debug, error, warn};
 
 use super::{
     AstError, AstResult, ByteSpan, KindId, LeafClass, NormalisedNode, NormalisedTree,
@@ -15,8 +15,20 @@ use super::{
 
 pub use crate::hashing::PARSER_SCHEMA_VERSION;
 
+const MAX_EXPECTED_NODES: usize = 100_000;
+
 /// Parses `file_text`, maps `span` to the smallest covering syntax node, and
 /// lowers that subtree into a [`NormalisedTree`].
+///
+/// The [`ByteSpan`] is deliberately re-validated against `file_text` even
+/// though callers pass an already constructed span. A `ByteSpan` proves only
+/// that the offsets were valid for the text used to construct it; callers can
+/// reuse a span across calls or accidentally pair it with different source
+/// text. This defence-in-depth check is not redundant and must remain in place
+/// even though it resembles double validation.
+///
+/// Latency metrics and feature-vector emission metrics are deferred to 7.3.2,
+/// where scoring and SARIF emission consume those observations.
 ///
 /// # Examples
 ///
@@ -29,22 +41,25 @@ pub use crate::hashing::PARSER_SCHEMA_VERSION;
 /// assert_eq!(tree.span(), span);
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
+#[tracing::instrument(skip(file_text), fields(start = span.start(), end = span.end()))]
 pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> {
-    let span = ByteSpan::new(file_text, span.start(), span.end())?;
+    let span = ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
+        if let AstError::SpanOutOfBounds { start, end, len } = error {
+            error!(
+                start,
+                end, len, "AST span lies outside the supplied source text"
+            );
+            AstError::SpanOutOfBounds { start, end, len }
+        } else {
+            error!(?error, "AST span validation failed");
+            error
+        }
+    })?;
     let parse = SourceFile::parse(file_text, Edition::CURRENT);
     let parse_errors = parse.errors();
-    let root = parse.tree().syntax().clone();
-    let target_range = text_range(span);
-    let selected = select_covering_node(&root, &(span.start()..span.end()))?;
-
-    if contains_error_element(&selected) {
-        return Err(AstError::UnparsableSpan {
-            start: span.start(),
-            end: span.end(),
-        });
-    }
-
     if !parse_errors.is_empty() {
+        // This is the designated logging boundary for parser recovery in this
+        // adapter; the lowered AST domain remains parser-agnostic.
         warn!(
             start = span.start(),
             end = span.end(),
@@ -52,13 +67,57 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
             "lowered AST span from source with parser recovery errors"
         );
     }
+    let root = parse.tree().syntax().clone();
+    let target_range = text_range(span);
+    let selected = select_covering_node(&root, &(span.start()..span.end())).map_err(|error| {
+        if let AstError::SpanOutOfBounds { start, end, len } = error {
+            error!(
+                start,
+                end, len, "no AST syntax node covers the requested span"
+            );
+            AstError::SpanOutOfBounds { start, end, len }
+        } else {
+            error!(?error, "AST covering-node selection failed");
+            error
+        }
+    })?;
+    debug!(
+        kind = ?selected.kind(),
+        span_width = u32::from(selected.text_range().len()),
+        "selected AST covering node"
+    );
+
+    if contains_error_element(&selected) {
+        error!(
+            start = span.start(),
+            end = span.end(),
+            "selected AST span contains parser error elements"
+        );
+        return Err(AstError::UnparsableSpan {
+            start: span.start(),
+            end: span.end(),
+        });
+    }
 
     debug_assert!(selected.text_range().contains_range(target_range));
     Ok(NormalisedTree::new(lower_node(&selected), span))
 }
 
+/// Selects the smallest parser syntax node covering `target`.
+///
+/// `root.descendants().collect::<Vec<_>>()` is O(n) in the number of syntax
+/// nodes in the parsed file, not just the candidate span. That cost is
+/// acceptable here because `ra_ap_syntax::SourceFile::parse` bounds `root` to a
+/// single source file (`min_nodes` upstream constraint), not an entire crate or
+/// workspace. Callers must not pass multi-megabyte source files without
+/// accepting this per-file traversal cost.
 fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
     let nodes = root.descendants().collect::<Vec<_>>();
+    debug_assert!(
+        nodes.len() < MAX_EXPECTED_NODES,
+        "unexpectedly large syntax tree ({} nodes); investigate candidate span sizing",
+        nodes.len()
+    );
     let ranges = nodes
         .iter()
         .map(|node| range_to_u32(node.text_range()))
@@ -184,6 +243,21 @@ mod tests {
         let source = "fn f() {}";
         let span = ByteSpan::new(source, 0, source.len() as u32)?;
         let tree = lower_span(source, span)?;
+
+        assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
+        Ok(())
+    }
+
+    #[rstest]
+    fn large_synthetic_source_still_lowers() -> Result<(), AstError> {
+        let statements = (0..600)
+            .map(|index| format!("let value_{index} = {index};"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let source = format!("fn generated() {{ {statements} }}");
+        let span = ByteSpan::new(&source, 0, source.len() as u32)?;
+
+        let tree = lower_span(&source, span)?;
 
         assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
         Ok(())
