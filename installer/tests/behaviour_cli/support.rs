@@ -144,6 +144,63 @@ pub(super) fn configure_dry_run_with_target_dir(cli_world: &CliWorld) {
     ]);
 }
 
+/// The ref used by the pinned-install CLI scenarios.
+pub(super) const SCENARIO_REF: &str = "v0.2.5";
+
+pub(super) fn configure_dry_run_with_pinned_ref(cli_world: &CliWorld) {
+    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
+        return;
+    };
+
+    let target_dir = setup_temp_dir(cli_world);
+    cli_world.args.replace(vec![
+        "--dry-run".to_owned(),
+        "--toolchain".to_owned(),
+        channel,
+        "--target-dir".to_owned(),
+        target_dir,
+        "--ref".to_owned(),
+        SCENARIO_REF.to_owned(),
+    ]);
+}
+
+pub(super) fn configure_ref_in_workspace(cli_world: &CliWorld) {
+    // The harness runs the installer from the whitaker workspace root, so a
+    // `--ref` must be refused. `--skip-deps` keeps the refusal ahead of any
+    // dependency installation, and no toolchain is required to reach it.
+    cli_world.args.replace(vec![
+        "--ref".to_owned(),
+        SCENARIO_REF.to_owned(),
+        "--skip-deps".to_owned(),
+    ]);
+}
+
+pub(super) fn assert_pinned_ref_output_is_shown(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!("Pinned ref: {SCENARIO_REF}")),
+        "expected dry-run output to report the pinned ref, stderr: {stderr}"
+    );
+}
+
+pub(super) fn assert_ref_unsupported_message_is_shown(cli_world: &CliWorld) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("the current directory is itself a Whitaker workspace"),
+        "expected a ref-unsupported refusal, stderr: {stderr}"
+    );
+}
+
 pub(super) fn configure_dry_run_unknown_lint(cli_world: &CliWorld) {
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
