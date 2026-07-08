@@ -105,6 +105,13 @@ pub enum InstallerError {
         reason: String,
     },
 
+    /// Pinning a ref is not supported for the current directory workspace.
+    #[error("{message}")]
+    RefUnsupported {
+        /// The refusal message, naming the requested ref.
+        message: String,
+    },
+
     /// A Cargo.toml file could not be parsed during workspace detection.
     #[error("invalid Cargo.toml at {path}: {reason}")]
     InvalidCargoToml {
@@ -230,6 +237,9 @@ impl Clone for InstallerError {
             }
             Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
                 reason: reason.clone(),
+            },
+            Self::RefUnsupported { message } => Self::RefUnsupported {
+                message: message.clone(),
             },
             Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
                 path: path.clone(),
