@@ -119,7 +119,7 @@ jobs:
           ls -lah dist || true
 
       - name: Upload artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.target }}
           path: dist/*
@@ -213,7 +213,7 @@ jobs:
           ls -lah dist || true
 
       - name: Upload dependency artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-binaries-${{ matrix.target }}
           path: |
