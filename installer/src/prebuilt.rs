@@ -52,6 +52,13 @@ pub struct PrebuiltConfig<'a> {
     pub destination_dir: &'a Utf8Path,
     /// When true, suppress progress output.
     pub quiet: bool,
+    /// When set, require the manifest git SHA to prefix this pinned commit.
+    ///
+    /// The rolling manifest records an abbreviated SHA, so a pinned install may
+    /// only reuse the prebuilt artefact when the resolved full commit SHA
+    /// begins with the manifest's abbreviated SHA; any mismatch falls back to a
+    /// source build of the pinned commit.
+    pub expected_git_sha: Option<&'a str>,
 }
 
 /// Internal error type for the prebuilt pipeline.
@@ -71,6 +78,9 @@ enum PrebuiltError {
 
     #[error("target mismatch: manifest has {manifest}, expected {expected}")]
     TargetMismatch { manifest: String, expected: String },
+
+    #[error("git SHA mismatch: manifest has {manifest}, pinned commit is {expected}")]
+    GitShaMismatch { manifest: String, expected: String },
 
     #[error("checksum mismatch: manifest={expected}, actual={actual}")]
     ChecksumMismatch { expected: String, actual: String },
@@ -138,6 +148,7 @@ fn run_pipeline(
     let manifest = parse_manifest(&manifest_json)?;
     validate_toolchain(&manifest, config.toolchain)?;
     validate_target(&manifest, config.target)?;
+    validate_git_sha(&manifest, config.expected_git_sha)?;
 
     // Step 3: Derive archive filename and download.
     let archive_filename = derive_archive_filename(&manifest);
@@ -197,6 +208,25 @@ fn validate_target(manifest: &Manifest, expected: &str) -> Result<(), PrebuiltEr
     Ok(())
 }
 
+/// Validate that the manifest git SHA prefixes the pinned commit, if pinned.
+///
+/// The rolling manifest records an abbreviated SHA, so a pinned install may
+/// reuse the prebuilt artefact only when the resolved full commit begins with
+/// the manifest's abbreviated SHA. When no commit is pinned this is a no-op,
+/// leaving the default rolling behaviour unchanged.
+fn validate_git_sha(manifest: &Manifest, expected: Option<&str>) -> Result<(), PrebuiltError> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let manifest_sha = manifest.git_sha().as_str();
+    if !expected.starts_with(manifest_sha) {
+        return Err(PrebuiltError::GitShaMismatch {
+            manifest: manifest_sha.to_owned(),
+            expected: expected.to_owned(),
+        });
+    }
+    Ok(())
+}
 /// Rename extracted files into the staged `lib<crate>@<toolchain>.<ext>` format.
 fn apply_staging_filenames(
     extracted_files: &[String],
