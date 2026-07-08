@@ -189,6 +189,7 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         suite_ref: args.suite_version.as_ref().map(SuiteRef::as_str),
         jobs: args.jobs,
         crates: &requested_crates,
+        git_ref: args.git_ref.as_deref(),
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
@@ -253,6 +254,10 @@ fn ensure_whitaker_workspace(
             if let Some(reference) = plan.suite_ref.as_ref() {
                 write_stderr_line(stderr, format!("Pinning lint suite to {reference}..."));
             }
+        }
+
+        if let Some(git_ref) = git_ref {
+            write_stderr_line(stderr, format!("Pinning Whitaker suite to {git_ref}..."));
         }
     }
 

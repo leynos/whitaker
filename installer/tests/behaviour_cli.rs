@@ -22,6 +22,13 @@ use support::{
     configure_dry_run_unknown_lint, configure_dry_run_with_pinned_suite,
     configure_dry_run_with_target_dir, configure_hostile_suite_ref, configure_suite_install,
     is_toolchain_installed, pinned_toolchain_channel, run_installer_cli, workspace_root,
+    assert_pinned_ref_output_is_shown, assert_ref_unsupported_message_is_shown,
+    configure_dry_run_with_target_dir, configure_ref_in_workspace, configure_suite_install,
+    configure_dry_run_unknown_lint, configure_dry_run_with_pinned_ref,
+};
+
+
+pub(crate) use support::{CliWorld, cli_world};
 };
 
 #[given("the installer is invoked with dry-run and a target directory")]
@@ -71,6 +78,15 @@ fn given_suite_install(cli_world: &CliWorld) {
     configure_suite_install(cli_world);
 }
 
+#[given("the installer is invoked with dry-run and a pinned ref")]
+fn given_dry_run_with_pinned_ref(cli_world: &CliWorld) {
+    configure_dry_run_with_pinned_ref(cli_world);
+}
+
+#[given("the installer is invoked with a ref from a Whitaker workspace")]
+fn given_ref_in_workspace(cli_world: &CliWorld) {
+    configure_ref_in_workspace(cli_world);
+}
 #[when("the installer CLI is run")]
 fn when_installer_cli_run(cli_world: &CliWorld) {
     run_installer_cli(cli_world);
@@ -116,6 +132,15 @@ fn then_suite_library_is_staged(cli_world: &CliWorld) {
     assert_suite_library_is_staged(cli_world);
 }
 
+#[then("dry-run output shows the pinned ref")]
+fn then_pinned_ref_output_is_shown(cli_world: &CliWorld) {
+    assert_pinned_ref_output_is_shown(cli_world);
+}
+
+#[then("a ref-unsupported message is shown")]
+fn then_ref_unsupported_message_is_shown(cli_world: &CliWorld) {
+    assert_ref_unsupported_message_is_shown(cli_world);
+}
 #[test]
 fn dry_run_reports_verbosity_levels() {
     let channel = pinned_toolchain_channel();
