@@ -114,9 +114,10 @@ clone recovers from the detached checkout).
   `artefact/download.rs`; mapped the install flow and identified the
   detached-HEAD recovery requirement.
 - [x] (2026-07-08 12:50Z) Drafted this ExecPlan.
-- [ ] Await user approval of the plan (approval gate).
-- [ ] Stage A: confirm manifest `git_sha` format and default-branch discovery
-  command; record findings here.
+- [x] (2026-07-08) User approved the plan; proceeding through all stages.
+- [x] (2026-07-08) Stage A: confirmed manifest `git_sha` is abbreviated
+  (`git rev-parse --short HEAD`) and default-branch discovery command
+  (`git rev-parse --abbrev-ref origin/HEAD`); findings recorded below.
 - [ ] Stage B: red tests (CLI parsing, git ref operations, workspace
   decision, prebuilt SHA validation, BDD scenarios).
 - [ ] Stage C: implementation (CLI field, git helpers, workspace plumbing,
@@ -127,7 +128,26 @@ clone recovers from the detached checkout).
 
 ## Surprises & discoveries
 
-- Observation: none yet (pre-implementation).
+- (2026-07-08, Stage A) The manifest `git_sha` is **abbreviated**, not a full
+  40-hex SHA. `.github/workflows/rolling-release.yml` line 142 writes it from
+  `git rev-parse --short HEAD` into the package tool's `--git-sha`. Git's
+  `--short` yields the shortest unambiguous prefix (7+ hex). The `GitSha`
+  newtype in `installer/src/artefact/git_sha.rs` accepts 7–40 hex chars,
+  consistent with this. **Comparison rule fixed:** a pinned install may use the
+  rolling prebuilt only when the resolved *full* commit SHA `starts_with` the
+  manifest's abbreviated `git_sha` (prefix-tolerant), not exact equality.
+- (2026-07-08, Stage A) Default-branch discovery: the platform clone carries
+  `refs/remotes/origin/HEAD` symbolic ref (`git symbolic-ref
+  refs/remotes/origin/HEAD` → `refs/remotes/origin/main`; `git rev-parse
+  --abbrev-ref origin/HEAD` → `origin/main`). `ensure_default_branch` uses
+  `git rev-parse --abbrev-ref origin/HEAD`, strips the `origin/` prefix to get
+  the branch name, and falls back to `git remote set-head origin --auto` once
+  when the symbolic ref is absent from an older clone. The repository default
+  branch is `main`.
+- (2026-07-08, Stage A) The shared test manifest helper
+  `test_utils::prebuilt_manifest_json` hardcodes `"git_sha":"abc1234"`. The
+  prebuilt SHA-match tests therefore key off that literal: a full SHA beginning
+  `abc1234…` matches; any other value is a mismatch.
 
 ## Decision log
 
