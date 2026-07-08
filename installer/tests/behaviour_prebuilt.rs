@@ -115,6 +115,7 @@ struct PrebuiltWorld {
     should_attempt_prebuilt: Option<bool>,
     force_destination_conflict: bool,
     attempted_destination: Option<Utf8PathBuf>,
+    expected_git_sha: Option<String>,
 }
 
 #[fixture]
@@ -204,7 +205,11 @@ fn given_destination_path_conflict(world: &mut PrebuiltWorld) {
     world.force_destination_conflict = true;
 }
 
-#[when("prebuilt download is attempted")]
+fn given_pinned_commit_mismatch(world: &mut PrebuiltWorld) {
+    // The shared test manifest records git_sha "abc1234"; this full SHA does
+    // not share that prefix, so the pinned install cannot reuse the artefact.
+    world.expected_git_sha = Some("deadbeef00000000000000000000000000000000".to_owned());
+}
 fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
     let toolchain = world
         .expected_toolchain
@@ -229,6 +234,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
         toolchain,
         destination_dir: &destination_dir,
         quiet: true,
+        expected_git_sha: world.expected_git_sha.as_deref(),
     };
 
     let manifest_behaviour = world
@@ -385,5 +391,9 @@ fn scenario_toolchain_mismatch(world: PrebuiltWorld) {
     name = "Build-only flag skips prebuilt"
 )]
 fn scenario_build_only(world: PrebuiltWorld) {
+    let _ = world;
+}
+
+fn scenario_pinned_ref_mismatch(world: PrebuiltWorld) {
     let _ = world;
 }

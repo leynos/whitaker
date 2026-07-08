@@ -76,6 +76,7 @@ fn try_fast_path_installation(
         dirs: context.dirs,
         requested_crates: context.requested_crates,
         toolchain_channel: context.toolchain.channel(),
+        expected_git_sha: context.expected_git_sha,
     };
     if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
         return Ok(Some((staging_path, InstallMode::Download)));
@@ -131,6 +132,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         requested_crates: &requested_crates,
         toolchain: &toolchain,
         target_dir: &target_dir,
+        expected_git_sha: workspace.pinned_commit.as_deref(),
     };
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
@@ -324,6 +326,7 @@ struct FastPathContext<'a> {
     requested_crates: &'a [CrateName],
     toolchain: &'a Toolchain,
     target_dir: &'a Utf8PathBuf,
+    expected_git_sha: Option<&'a str>,
 }
 
 /// Finalize installation and record aggregate installer metrics.

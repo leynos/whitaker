@@ -50,3 +50,11 @@ Feature: Prebuilt artefact download and verification
     Given the build-only flag is set
     When the install configuration is checked
     Then no prebuilt download is attempted
+
+  Scenario: Prebuilt is skipped when the pinned ref does not match
+    Given a valid manifest for target "x86_64-unknown-linux-gnu"
+    And a matching archive with correct checksum
+    And the pinned commit does not match the manifest git SHA
+    When prebuilt download is attempted
+    Then the prebuilt result is fallback
+    And the fallback reason mentions "SHA mismatch"

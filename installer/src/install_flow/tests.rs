@@ -173,6 +173,7 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
         dirs: &dirs,
         requested_crates: &requested_crates,
         toolchain_channel: "nightly-2026-05-28",
+        expected_git_sha: None,
     };
 
     let mut stderr = Vec::new();
