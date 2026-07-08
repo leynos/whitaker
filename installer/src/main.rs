@@ -189,6 +189,7 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         no_update: args.no_update,
         jobs: args.jobs,
         crates: &requested_crates,
+        git_ref: args.git_ref.as_deref(),
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
@@ -242,6 +243,10 @@ fn ensure_whitaker_workspace(
                 write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
             }
             WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
+        }
+
+        if let Some(git_ref) = git_ref {
+            write_stderr_line(stderr, format!("Pinning Whitaker suite to {git_ref}..."));
         }
     }
 

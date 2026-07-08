@@ -16,9 +16,11 @@ use support::{
     assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,
     assert_experimental_lint_dry_run_output_is_shown,
     assert_experimental_lint_opt_in_message_is_shown, assert_installation_succeeds_or_is_skipped,
+    assert_pinned_ref_output_is_shown, assert_ref_unsupported_message_is_shown,
     assert_suite_library_is_staged, assert_unknown_lint_message_is_shown,
     configure_dry_run_experimental_lint, configure_dry_run_experimental_lint_with_opt_in,
-    configure_dry_run_unknown_lint, configure_dry_run_with_target_dir, configure_suite_install,
+    configure_dry_run_unknown_lint, configure_dry_run_with_pinned_ref,
+    configure_dry_run_with_target_dir, configure_ref_in_workspace, configure_suite_install,
     is_toolchain_installed, pinned_toolchain_channel, run_installer_cli, workspace_root,
 };
 
@@ -47,6 +49,16 @@ fn given_dry_run_experimental_lint_with_opt_in(cli_world: &CliWorld) {
 #[given("the installer is invoked to a temporary directory")]
 fn given_suite_install(cli_world: &CliWorld) {
     configure_suite_install(cli_world);
+}
+
+#[given("the installer is invoked with dry-run and a pinned ref")]
+fn given_dry_run_with_pinned_ref(cli_world: &CliWorld) {
+    configure_dry_run_with_pinned_ref(cli_world);
+}
+
+#[given("the installer is invoked with a ref from a Whitaker workspace")]
+fn given_ref_in_workspace(cli_world: &CliWorld) {
+    configure_ref_in_workspace(cli_world);
 }
 
 #[when("the installer CLI is run")]
@@ -92,6 +104,16 @@ fn then_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
 #[then("the suite library is staged")]
 fn then_suite_library_is_staged(cli_world: &CliWorld) {
     assert_suite_library_is_staged(cli_world);
+}
+
+#[then("dry-run output shows the pinned ref")]
+fn then_pinned_ref_output_is_shown(cli_world: &CliWorld) {
+    assert_pinned_ref_output_is_shown(cli_world);
+}
+
+#[then("a ref-unsupported message is shown")]
+fn then_ref_unsupported_message_is_shown(cli_world: &CliWorld) {
+    assert_ref_unsupported_message_is_shown(cli_world);
 }
 
 #[test]
