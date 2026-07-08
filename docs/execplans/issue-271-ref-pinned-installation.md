@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IMPLEMENTED
 
 Issue: [leynos/whitaker#271](https://github.com/leynos/whitaker/issues/271)
 
@@ -118,13 +118,26 @@ clone recovers from the detached checkout).
 - [x] (2026-07-08) Stage A: confirmed manifest `git_sha` is abbreviated
   (`git rev-parse --short HEAD`) and default-branch discovery command
   (`git rev-parse --abbrev-ref origin/HEAD`); findings recorded below.
-- [ ] Stage B: red tests (CLI parsing, git ref operations, workspace
-  decision, prebuilt SHA validation, BDD scenarios).
-- [ ] Stage C: implementation (CLI field, git helpers, workspace plumbing,
-  prebuilt validation, dry-run output).
-- [ ] Stage D: docs (users-guide, README, `--help` text), refactor, full
-  gates, commit-by-commit delivery.
-- [ ] Manual end-to-end validation transcript recorded under `Artifacts`.
+- [x] (2026-07-08) Stage B/C slice 1: `--ref` CLI field. Red (E0609 no field
+  `git_ref`) → green (26 cli tests). Commit 6e36c2d.
+- [x] (2026-07-08) Stage B/C slice 2: git helpers `resolve_commit`,
+  `fetch_ref`, `checkout_detached`, `ensure_default_branch`. Red (E0425 missing
+  functions) → green (8 real-git TempDir tests). Commit a7de0ba.
+- [x] (2026-07-08) Stage B/C slice 3: workspace plumbing — `WorkspaceCheckout`,
+  `ensure_workspace(dirs, update, git_ref)`, `RefUnsupported`, pin-on-miss
+  fetch, `ensure_default_branch` before every update. Red (E0425/E0599) → green.
+  Commit ded3ac5.
+- [x] (2026-07-08) Stage B/C slice 4: prebuilt `expected_git_sha` validation
+  (prefix-tolerant) threaded through the fast path. Red (mismatch returned
+  Success) → green (3 unit + 1 BDD). Commit c65281c.
+- [x] (2026-07-08) Stage B/C slice 5: dry-run `git_ref` field, pinning progress
+  message, 2 CLI BDD scenarios (pinned dry-run, refuse in workspace). Red
+  (missing "Pinned ref:" line) → green. Commit 4caa7d6.
+- [x] (2026-07-08) Stage D: documented `--ref` in `docs/users-guide.md`
+  (new "Pinning the suite" subsection) and `README.md`; `--help` examples
+  refreshed in `cli.rs`. Full gates green.
+- [x] (2026-07-08) Manual end-to-end validation transcript recorded under
+  `Artifacts`; platform clone restored to `main` by the recovery run.
 
 ## Surprises & discoveries
 
@@ -184,10 +197,50 @@ clone recovers from the detached checkout).
   Rationale: checking out a ref in the user's own working tree could destroy
   uncommitted work; refusing is the only safe behaviour.
   Date/Author: 2026-07-08, agent.
+- Decision (implementation): the prebuilt SHA match is *prefix-tolerant in one
+  direction* — the resolved full commit must `starts_with` the manifest's
+  abbreviated `git_sha` (confirmed abbreviated in Stage A). Exact equality would
+  never match, since the manifest stores a short SHA and `resolve_commit`
+  returns the full one.
+  Date/Author: 2026-07-08, agent.
+- Decision (process): BDD scenarios were landed with their related
+  implementation slice (prebuilt-mismatch with slice 4; pinned dry-run and the
+  in-workspace refusal with slice 5) rather than as a separate Stage B pass, so
+  each commit stays self-consistent and green. Every new test still failed first
+  for the intended reason (recorded in Progress and Artifacts).
+  Date/Author: 2026-07-08, agent.
+- Decision (implementation): the user sees two messages when pinning — a
+  pre-checkout `Pinning Whitaker suite to REF...` progress line and, after the
+  detached checkout resolves, a `Pinned Whitaker suite to REF (SHORT_SHA).`
+  confirmation. The plan's single "Pinning ... (SHORT_SHA)" line was split
+  because the short SHA is only known after the pin resolves.
+  Date/Author: 2026-07-08, agent.
 
 ## Outcomes & retrospective
 
-To be completed at milestones and at the end.
+Delivered across six commits on `issue-271-ref-pinned-installation`: the CLI
+`--ref` field, four git helpers, workspace pinning plumbing
+(`WorkspaceCheckout` + `ensure_workspace(dirs, update, git_ref)`), prebuilt
+`expected_git_sha` gating, dry-run/progress messaging, and documentation. All
+gates (`check-fmt`, `lint`, `test`, `markdownlint`) passed before each commit;
+the final `make test` ran 1472 tests (1472 passed, 3 skipped). Every new test
+failed first for the intended reason (see `Artifacts`). The manual smoke test
+exercised the pin, the in-workspace refusal, the toolchain-embedded staged
+filename, and the detached-HEAD recovery end-to-end against tag `v0.2.4`.
+
+Scope stayed within tolerances: the implementation touched the CLI, git,
+workspace, prebuilt, install-flow, output, error, and main modules (well under
+the 12-file limit) with no new dependencies and only the one sanctioned public
+signature change (`ensure_workspace`). Rolling remains the default; only the
+explicit-pin part of issue #271 is implemented, and the version-matched default
+proposed there was deliberately not built (Decision Log).
+
+Lessons: (1) confirming the manifest SHA width in Stage A was load-bearing — the
+match is prefix-tolerant, and exact equality would have silently disabled the
+prebuilt fast path for every pin. (2) Adding a field to `PrebuiltConfig` and the
+context structs surfaced literal constructors in the binary's own test modules
+(`install_flow/tests.rs`, `tests/fast_path.rs`) that `cargo test --lib` did not
+compile; an early `cargo check --all-targets` sweep catches these.
 
 ## Context and orientation
 
@@ -429,8 +482,42 @@ a red gate.
 
 ## Artifacts and notes
 
-Red/Green transcripts and the manual smoke-test transcript will be added
-here as the work proceeds.
+Red/Green evidence (gate logs under `/tmp/*-whitaker-issue-271*.out`):
+
+- Slice 1 (CLI): red — `E0609: no field git_ref on InstallArgs`; green 26 cli
+  tests pass.
+- Slice 2 (git helpers): red — `E0425: cannot find function resolve_commit`
+  (and the other three helpers); green 8 tests pass against real git TempDir
+  repos.
+- Slice 3 (workspace): red — `E0425: cannot find function ensure_ref_allowed`
+  plus `E0599: no variant named RefUnsupported`; green 20 workspace tests pass.
+- Slice 4 (prebuilt): red — `expected_git_sha_mismatch_returns_fallback` got
+  `Success` when validation was absent; green 3 unit tests + the
+  `Prebuilt is skipped when the pinned ref does not match` BDD scenario pass.
+- Slice 5 (dry-run/messaging): red — `dry_run_display_includes_ref_when_pinned`
+  failed (no `Pinned ref:` line); green 2 output tests + the pinned dry-run and
+  in-workspace refusal CLI BDD scenarios pass.
+- Full suite green each slice: final `make test` reported 1472 tests run,
+  1472 passed, 3 skipped.
+
+Manual smoke test (Stage D), run against tag `v0.2.4`
+(commit `8512ee63a212abd175c31501a57e10a713881873`):
+
+- `whitaker-installer --dry-run --ref v0.2.4` (from the worktree) printed
+  `Pinned ref: v0.2.4` alongside the workspace root and toolchain.
+- `whitaker-installer --ref v0.2.4 --skip-deps` (from the worktree, itself a
+  Whitaker workspace) exited 1 with `cannot pin --ref v0.2.4: the current
+  directory is itself a Whitaker workspace...`.
+- `whitaker-installer --ref v0.2.4 --build-only --skip-deps --skip-wrapper
+  --target-dir /tmp/whitaker-ref-smoke` (run from `/tmp/smoke-cwd`, outside any
+  workspace) updated then pinned the platform clone to a detached HEAD at
+  `8512ee63a212`, built the suite under that commit's `nightly-2025-09-18`
+  toolchain, and staged `libwhitaker_suite@nightly-2025-09-18.so` (filename
+  embeds the pinned toolchain channel). Exit 0.
+- Recovery: a subsequent un-pinned `whitaker-installer --skip-deps
+  --skip-wrapper` reattached the detached clone to `refs/heads/main` before
+  pulling (no detached-HEAD error), then used the prebuilt fast path. Exit 0.
+  The platform clone at `~/.local/share/whitaker` is back on `main`.
 
 ## Interfaces and dependencies
 

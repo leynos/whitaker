@@ -74,6 +74,9 @@ environment-variable workaround.
 - `--skip-wrapper` — Skip wrapper script generation (prints
   `DYLINT_LIBRARY_PATH` instructions instead)
 - `--no-update` — Don't update existing repository clone
+- `--ref <SHA|tag>` — Build and stage the lint suite from a specific commit
+  of `leynos/whitaker` instead of the rolling default (see
+  [Pinning the suite](#pinning-the-suite))
 
 ### Adding Whitaker to a project
 
@@ -172,6 +175,47 @@ build experimental lints as individual libraries, combine it with
 `--individual-lints`. Explicit `--lint` requests for experimental lints also
 require `--experimental`; without that opt-in the installer rejects the request
 before building anything.
+
+
+### Pinning the suite
+
+By default the standalone installer tracks the moving `leynos/whitaker` default
+branch (and its rolling prebuilt artefacts), so a push to `main` can change
+lint behaviour on the next install. To hold the lint suite steady, pin it to an
+explicit commit with `--ref`:
+
+```sh
+whitaker-installer --ref v0.2.5      # a release tag
+whitaker-installer --ref 1a2b3c4d    # a commit SHA
+```
+
+`--ref` accepts any commit-ish that exists in the repository — a tag, a full or
+abbreviated commit SHA, or a branch name. Tags and commit SHAs give
+reproducible pins. A branch name is resolved to whatever commit it points at
+when the installer runs, so it is *not* a reproducible pin; prefer a tag or SHA
+for CI. Note that the installer version and the suite version are independent:
+`cargo binstall whitaker-installer@0.2.5` pins only the installer, whereas
+`--ref` pins the suite the installer builds. Tags exist for released versions,
+but any commit-ish the repository contains is accepted; an unknown ref fails
+with the underlying git error and stages nothing.
+
+The pin composes with the other flags:
+
+- **Prebuilt artefacts.** The rolling prebuilt archive only ever carries one
+  commit's libraries, so a pinned install reuses it only when the resolved
+  commit matches the archive's recorded commit; otherwise the installer builds
+  the pinned commit from source. Because the pinned commit supplies its own
+  `rust-toolchain.toml`, the staged libraries are named for that commit's
+  toolchain channel.
+- **`--no-update`.** With `--ref --no-update` the installer resolves the ref
+  against the existing clone without fetching, and only fetches when the ref
+  cannot be resolved locally. This keeps offline, pinned installs working.
+
+`--ref` is refused when the current directory is itself a Whitaker workspace,
+because checking out a commit there could destroy uncommitted work. Run the
+installer from outside a checkout to pin the suite. A pinned install leaves the
+managed clone on a detached commit; a later un-pinned `whitaker-installer` run
+reattaches it to the default branch automatically before updating.
 
 ## Lint Configuration
 
