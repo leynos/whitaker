@@ -31,6 +31,7 @@ use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::toolchain::Toolchain;
+use whitaker_installer::workspace::WorkspaceCheckout;
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 fn main() {
@@ -111,7 +112,8 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         ensure_dylint_tools(args.quiet, stderr)?;
     }
     // Step 2: Ensure workspace is available (clone if needed)
-    let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
+    let workspace = ensure_whitaker_workspace(args, &dirs, stderr)?;
+    let workspace_root = workspace.root;
     // Step 3: Resolve crates and toolchain
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
@@ -217,22 +219,19 @@ fn ensure_whitaker_workspace(
     args: &InstallArgs,
     dirs: &dyn BaseDirs,
     stderr: &mut dyn Write,
-) -> Result<Utf8PathBuf> {
+) -> Result<WorkspaceCheckout> {
     use whitaker_installer::workspace::{
         WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
     };
 
+    let git_ref = args.git_ref.as_deref();
+
     if !args.quiet
         && let Some(clone_dir) = clone_directory(dirs)
-    {
-        let cwd = std::env::current_dir()
+        && let Some(cwd) = std::env::current_dir()
             .ok()
-            .and_then(|p| Utf8PathBuf::try_from(p).ok());
-
-        let Some(cwd) = cwd else {
-            return ensure_workspace(dirs, !args.no_update);
-        };
-
+            .and_then(|p| Utf8PathBuf::try_from(p).ok())
+    {
         match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
             WorkspaceAction::CloneTo(dir) => {
                 write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
@@ -244,9 +243,27 @@ fn ensure_whitaker_workspace(
         }
     }
 
-    ensure_workspace(dirs, !args.no_update)
+    let checkout = ensure_workspace(dirs, !args.no_update, git_ref)?;
+    if !args.quiet
+        && let Some(commit) = &checkout.pinned_commit
+    {
+        write_stderr_line(
+            stderr,
+            format!(
+                "Pinned Whitaker suite to {} ({}).",
+                git_ref.unwrap_or(commit.as_str()),
+                short_commit(commit)
+            ),
+        );
+    }
+    Ok(checkout)
 }
 
+/// Abbreviates a commit SHA to its leading 12 characters for display.
+fn short_commit(commit: &str) -> &str {
+    let end = commit.len().min(12);
+    &commit[..end]
+}
 /// Detects or overrides the toolchain, then verifies it is installed.
 fn resolve_toolchain(
     workspace_root: &Utf8Path,

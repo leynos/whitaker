@@ -98,33 +98,117 @@ pub fn decide_workspace_action(
     }
 }
 
+/// The prepared workspace and, when a ref was pinned, its resolved commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceCheckout {
+    /// Path to the workspace root the install should build from.
+    pub root: Utf8PathBuf,
+    /// The full commit SHA a `--ref` pin resolved to, if any.
+    pub pinned_commit: Option<String>,
+}
+
 /// Ensures a Whitaker workspace is available, cloning if necessary.
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
 /// Otherwise, clones or updates the repository in the platform-specific data
 /// directory. Set `update` to `true` to run `git pull` on existing clones.
 ///
+/// When `git_ref` is `Some`, the managed clone is pinned to that commit-ish
+/// (SHA, tag, or branch): the ref is resolved locally, fetched once on a
+/// resolve-miss, and checked out as a detached HEAD. Pinning is refused when
+/// the current directory is itself a Whitaker workspace, since that would
+/// mutate the user's own working tree. The update path first reattaches a
+/// detached clone to its default branch, so a previous pin never breaks a
+/// later un-pinned install.
+///
 /// # Errors
 ///
-/// Returns an error if the clone directory cannot be determined or if
-/// cloning/updating fails.
-pub fn ensure_workspace(dirs: &dyn BaseDirs, update: bool) -> Result<Utf8PathBuf> {
+/// Returns an error if the clone directory cannot be determined, if
+/// cloning/updating fails, or if `git_ref` is requested for the current
+/// directory workspace.
+pub fn ensure_workspace(
+    dirs: &dyn BaseDirs,
+    update: bool,
+    git_ref: Option<&str>,
+) -> Result<WorkspaceCheckout> {
     let cwd = current_dir_utf8()?;
     let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine data directory for cloning".to_owned(),
     })?;
 
-    match decide_workspace_action(&cwd, &clone_dir, update) {
-        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => Ok(dir),
+    let action = decide_workspace_action(&cwd, &clone_dir, update);
+    ensure_ref_allowed(&action, git_ref)?;
+
+    match action {
+        WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => {
+            // UseCurrentDir is guaranteed refless by `ensure_ref_allowed`;
+            // UseExisting pins without pulling, per the `--no-update` contract.
+            let pinned_commit = pin_if_requested(&dir, git_ref)?;
+            Ok(WorkspaceCheckout {
+                root: dir,
+                pinned_commit,
+            })
+        }
         WorkspaceAction::CloneTo(dir) => {
             crate::git::clone_repository(&dir)?;
-            Ok(dir)
+            let pinned_commit = pin_if_requested(&dir, git_ref)?;
+            Ok(WorkspaceCheckout {
+                root: dir,
+                pinned_commit,
+            })
         }
         WorkspaceAction::UpdateAt(dir) => {
+            // Reattach before pulling so a prior detached pin cannot break the
+            // update, even when no new ref is requested.
+            crate::git::ensure_default_branch(&dir)?;
             crate::git::update_repository(&dir)?;
-            Ok(dir)
+            let pinned_commit = pin_if_requested(&dir, git_ref)?;
+            Ok(WorkspaceCheckout {
+                root: dir,
+                pinned_commit,
+            })
         }
     }
+}
+
+/// Refuses `--ref` when the current directory is itself a Whitaker workspace.
+///
+/// Pinning checks out a commit; doing so in the user's own working tree could
+/// destroy uncommitted work, so it is rejected rather than attempted.
+fn ensure_ref_allowed(action: &WorkspaceAction, git_ref: Option<&str>) -> Result<()> {
+    if let (WorkspaceAction::UseCurrentDir(_), Some(git_ref)) = (action, git_ref) {
+        return Err(InstallerError::RefUnsupported {
+            message: format!(
+                "cannot pin --ref {git_ref}: the current directory is itself a Whitaker \
+                 workspace; run the installer from outside a checkout to pin the suite"
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Pins the managed clone to `git_ref` when one is requested.
+///
+/// Returns the resolved commit SHA, or `None` when no ref was requested.
+fn pin_if_requested(repo: &Utf8Path, git_ref: Option<&str>) -> Result<Option<String>> {
+    match git_ref {
+        Some(git_ref) => Ok(Some(pin_to_ref(repo, git_ref)?)),
+        None => Ok(None),
+    }
+}
+
+/// Resolves and checks out `git_ref` as a detached HEAD, fetching on a miss.
+fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<String> {
+    let commit = match crate::git::resolve_commit(repo, git_ref) {
+        Ok(commit) => commit,
+        Err(_) => {
+            // The ref is not known locally; fetch it once, then resolve again.
+            crate::git::fetch_ref(repo, git_ref)?;
+            crate::git::resolve_commit(repo, git_ref)?
+        }
+    };
+    crate::git::checkout_detached(repo, &commit)?;
+    Ok(commit)
 }
 
 /// Returns the workspace path without performing any side effects.
@@ -293,6 +377,31 @@ mod tests {
         let action = decide_workspace_action(&temp_workspace.path, &clone_dir, false);
 
         assert_eq!(action, WorkspaceAction::UseExisting(clone_dir));
+    }
+
+    #[test]
+    fn ensure_ref_allowed_refuses_current_dir_workspace() {
+        let action = WorkspaceAction::UseCurrentDir(Utf8PathBuf::from("/some/whitaker"));
+        let err = ensure_ref_allowed(&action, Some("v0.2.5")).expect_err("expected refusal");
+        assert!(
+            matches!(err, InstallerError::RefUnsupported { .. }),
+            "expected RefUnsupported, got {err:?}"
+        );
+        assert!(err.to_string().contains("v0.2.5"));
+    }
+
+    #[test]
+    fn ensure_ref_allowed_permits_current_dir_without_ref() {
+        let action = WorkspaceAction::UseCurrentDir(Utf8PathBuf::from("/some/whitaker"));
+        assert!(ensure_ref_allowed(&action, None).is_ok());
+    }
+
+    #[rstest]
+    #[case::clone(WorkspaceAction::CloneTo(Utf8PathBuf::from("/clone")))]
+    #[case::update(WorkspaceAction::UpdateAt(Utf8PathBuf::from("/clone")))]
+    #[case::existing(WorkspaceAction::UseExisting(Utf8PathBuf::from("/clone")))]
+    fn ensure_ref_allowed_permits_ref_for_managed_clones(#[case] action: WorkspaceAction) {
+        assert!(ensure_ref_allowed(&action, Some("v0.2.5")).is_ok());
     }
 
     // -------------------------------------------------------------------------
