@@ -23,7 +23,7 @@ WORKFLOW_PATH = (
 
 #: The commit SHA of the estate-wide shared-workflow pin. Bump the
 #: workflow and this test together.
-PINNED_SHA = "2b09d10192627fd6e1034e7c12625dd266b45503"
+PINNED_SHA = "927edd45ae77be4251a8a18ca9eb5613a2e32cbd"
 
 EXPECTED_USES = (
     "leynos/shared-actions/.github/workflows/mutation-cargo.yml@" + PINNED_SHA
