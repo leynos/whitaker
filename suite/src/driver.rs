@@ -50,7 +50,7 @@ define_suite_pass!(
 
 /// Registers the suite lints into the provided lint store.
 ///
-/// Callers should initialise configuration with
+/// Callers should initialize configuration with
 /// `dylint_linting::init_config` when integrating with the Dylint driver.
 ///
 /// # Examples
@@ -84,11 +84,11 @@ pub fn suite_lint_decls() -> &'static [&'static Lint] {
     SUITE_LINT_DECLS
 }
 
-/// Dylint entrypoint that initialises configuration and registers lints.
+/// Dylint entrypoint that initializes configuration and registers lints.
 ///
 /// # Safety
 ///
-/// Callers must pass non-null, correctly initialised `Session` and
+/// Callers must pass non-null, correctly initialized `Session` and
 /// `LintStore` references from the host compiler context that remain valid on
 /// this thread for the duration of the call.
 #[unsafe(no_mangle)]

@@ -148,7 +148,7 @@ fn mixed_expansion_nesting() {
 // Composite scenarios modelling real code patterns
 // ---------------------------------------------------------------------------
 
-/// Parameterised composite scenarios. Each case simulates a code
+/// Parameterized composite scenarios. Each case simulates a code
 /// pattern and asserts the expected CC score.
 ///
 /// Parameters: `(label, expected_score)`

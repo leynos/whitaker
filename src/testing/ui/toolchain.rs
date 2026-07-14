@@ -129,7 +129,7 @@ fn build_and_locate_cdylib(
     needs_driver_feature: bool,
 ) -> Result<PathBuf, HarnessError> {
     let output = execute_build_command(crate_name, metadata, needs_driver_feature)?;
-    find_cdylib_in_artifacts(&output.stdout, package_id, crate_name)
+    find_cdylib_in_artefacts(&output.stdout, package_id, crate_name)
 }
 
 fn execute_build_command(
@@ -191,19 +191,19 @@ fn package_for_crate<'a>(
         })
 }
 
-fn find_cdylib_in_artifacts(
+fn find_cdylib_in_artefacts(
     stdout: &[u8],
     package_id: &cargo_metadata::PackageId,
     crate_name: &CrateName,
 ) -> Result<PathBuf, HarnessError> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
-        let Ok(Message::CompilerArtifact(artifact)) = message else {
+        let Ok(Message::CompilerArtifact(artefact)) = message else {
             // Ignore unrelated output and parse errors; the build succeeded so any
             // remaining noise should not block locating the compiled artefact.
             continue;
         };
 
-        if let Some(path) = extract_cdylib_path(&artifact, package_id) {
+        if let Some(path) = extract_cdylib_path(&artefact, package_id) {
             return Ok(path);
         }
     }
@@ -214,18 +214,18 @@ fn find_cdylib_in_artifacts(
 }
 
 fn extract_cdylib_path(
-    artifact: &cargo_metadata::Artifact,
+    artefact: &cargo_metadata::Artifact,
     package_id: &cargo_metadata::PackageId,
 ) -> Option<PathBuf> {
-    if artifact.package_id != *package_id {
+    if artefact.package_id != *package_id {
         return None;
     }
 
-    if !artifact.target.is_cdylib() {
+    if !artefact.target.is_cdylib() {
         return None;
     }
 
-    artifact
+    artefact
         .filenames
         .iter()
         .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))

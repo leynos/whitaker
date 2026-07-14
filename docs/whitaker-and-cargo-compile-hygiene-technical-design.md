@@ -85,7 +85,7 @@ The goals therefore separate cleanly into two enforcement planes:
 
 A critical design constraint: Dylint’s lints rely on `rustc` internal APIs (as
 Clippy does), so Whitaker must be versioned and maintained with the Rust
-toolchain; Dylint’s design amortises cost by grouping lints by compiler version
+toolchain; Dylint’s design amortizes cost by grouping lints by compiler version
 and sharing intermediate compilation results. [^1]
 
 ## 3. Configuration, taxonomy, and developer experience
@@ -427,7 +427,7 @@ Test plan:
 Purpose: enforce that “heavy optional” subsystems remain confined to configured
 **feature islands**: code that depends on a heavy crate (or its transitive
 surface) must live under specific paths/modules and be guarded by
-`#[cfg(feature="…")]` as required. This operationalises Axinite’s `wasm`
+`#[cfg(feature="…")]` as required. This operationalizes Axinite’s `wasm`
 (wasmtime) and `docker` (bollard) feature-gating plans. [^4]
 
 Scope:
@@ -803,7 +803,7 @@ Why it matters:
 - Axinite’s measured hot path was “re-links N test binaries,” and its
   consolidation plan reduces test binaries by grouping modules under fewer
   harnesses. [^4]
-- Gauss’s consolidation plan shows the organisational vs compile-time
+- Gauss’s consolidation plan shows the organizational vs compile-time
   trade-off: a naming convention improves discoverability but does not reduce
   target count, so this check should focus on target counts rather than file
   naming aesthetics. [^4]

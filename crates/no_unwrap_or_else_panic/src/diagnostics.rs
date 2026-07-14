@@ -1,4 +1,4 @@
-//! Diagnostic emission for the lint, including localisation fallbacks.
+//! Diagnostic emission for the lint, including localization fallbacks.
 
 use crate::{LINT_NAME, NO_UNWRAP_OR_ELSE_PANIC};
 use rustc_hir as hir;
@@ -11,7 +11,7 @@ use whitaker_common::i18n::{
 
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
-/// Emit the lint diagnostic using localised messages.
+/// Emit the lint diagnostic using localized messages.
 ///
 /// # Examples
 ///

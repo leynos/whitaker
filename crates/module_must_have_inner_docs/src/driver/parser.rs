@@ -6,7 +6,7 @@
 //! `#![doc = \"...\"]` style attributes) while ignoring commas inside nested
 //! parentheses when dissecting meta lists. Key helpers:
 //! - `skip_leading_whitespace`: advances a text cursor past Unicode whitespace.
-//! - `is_doc_comment`: recognises leading doc comments or doc attributes,
+//! - `is_doc_comment`: recognizes leading doc comments or doc attributes,
 //!   including those wrapped in `cfg_attr`.
 //!
 //! These utilities underpin the lint that determines whether a module has the
@@ -150,7 +150,7 @@ fn is_doc_ident(input: ParseInput<'_>) -> bool {
 }
 
 fn is_ident_start(ch: char) -> bool {
-    // Ident parsing is intentionally ASCII-only; we only need to recognise
+    // Ident parsing is intentionally ASCII-only; we only need to recognize
     // built-in attribute names such as `doc` and `cfg_attr`.
     ch == '_' || ch.is_ascii_alphabetic()
 }

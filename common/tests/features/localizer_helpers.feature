@@ -1,6 +1,6 @@
 Feature: Localiser helpers
   Lint helpers should resolve consistent locales and provide deterministic
-  fallbacks when localisation data is missing.
+  fallbacks when localization data is missing.
 
   Scenario: Fallback to the bundled locale
     Given DYLINT_LOCALE is not set
@@ -14,7 +14,7 @@ Feature: Localiser helpers
     When I request the localizer for "function_attrs_follow_docs"
     Then the resolved locale is "cy"
 
-  Scenario: Localisation fallback captures missing keys
+  Scenario: Localization fallback captures missing keys
     Given DYLINT_LOCALE is not set
     And no configuration locale is provided
     And I have requested the localizer for "no_expect_outside_tests"
@@ -24,7 +24,7 @@ Feature: Localiser helpers
     Then the fallback primary message contains "Fallback primary"
     And a delayed bug is recorded mentioning "missing-key"
 
-  Scenario: Localisation succeeds without falling back
+  Scenario: Localization succeeds without falling back
     Given DYLINT_LOCALE is not set
     And no configuration locale is provided
     And I have requested the localizer for "function_attrs_follow_docs"

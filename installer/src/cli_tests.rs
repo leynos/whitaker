@@ -126,7 +126,7 @@ fn should_attempt_prebuilt_true_for_stable_bumpy_road_requests() {
     assert!(args.should_attempt_prebuilt(&requested));
 }
 
-/// Parameterised tests for boolean CLI flags (backwards compatibility).
+/// Parameterized tests for boolean CLI flags (backwards compatibility).
 #[rstest]
 #[case::individual_lints(&["whitaker-installer", "--individual-lints"], |cli: &Cli| cli.install.individual_lints)]
 #[case::experimental(&["whitaker-installer", "--experimental"], |cli: &Cli| cli.install.experimental)]
@@ -143,7 +143,7 @@ fn cli_parses_boolean_flags(#[case] args: &[&str], #[case] check: fn(&Cli) -> bo
     assert!(check(&cli));
 }
 
-/// Parameterised tests for repeatable verbosity flags.
+/// Parameterized tests for repeatable verbosity flags.
 #[rstest]
 #[case::double_short(&["whitaker-installer", "-vv"], 2)]
 #[case::triple_short(&["whitaker-installer", "-vvv"], 3)]

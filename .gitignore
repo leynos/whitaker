@@ -6,3 +6,9 @@ __pycache__/
 *.py[cod]
 *.so
 *:Zone.Identifier
+.coverage
+.pytest_cache/
+.typos-oxendict-base.json
+.typos-oxendict-base.toml
+.uv-cache/
+.uv-tools/

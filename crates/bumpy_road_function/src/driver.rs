@@ -35,7 +35,7 @@ dylint_linting::impl_late_lint! {
     BumpyRoadFunction::default()
 }
 
-/// Lint pass that caches configuration and localisation for a crate.
+/// Lint pass that caches configuration and localization for a crate.
 pub struct BumpyRoadFunction {
     settings: Settings,
     localizer: Localizer,

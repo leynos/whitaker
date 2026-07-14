@@ -29,7 +29,7 @@ use rustc_lint::LateContext;
 #[cfg(feature = "dylint-driver")]
 use rustc_span::sym;
 
-/// Summarise the context for a given HIR node.
+/// Summarize the context for a given HIR node.
 #[cfg(feature = "dylint-driver")]
 pub(crate) fn summarise_context<'tcx>(
     cx: &LateContext<'tcx>,

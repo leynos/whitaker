@@ -176,7 +176,7 @@ impl AttrInfo {
 
     /// Returns a source-order key using callsite spans for macro expansions.
     ///
-    /// This normalises the locations so reordered HIR attributes sort by the
+    /// This normalizes the locations so reordered HIR attributes sort by the
     /// original source positions.
     fn source_order_key(&self) -> (rustc_span::BytePos, rustc_span::BytePos) {
         let span = self.user_editable_span.unwrap_or(self.span);
@@ -379,8 +379,8 @@ trait OrderedAttribute {
 }
 
 #[cfg(test)]
-#[path = "tests/localisation.rs"]
-mod localisation;
+#[path = "tests/localization.rs"]
+mod localization;
 
 #[cfg(test)]
 #[path = "tests/order_detection.rs"]

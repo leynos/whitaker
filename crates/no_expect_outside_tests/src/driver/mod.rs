@@ -6,7 +6,7 @@
 //! `Crate::is_doctest`, ensuring documentation examples remain ergonomic. When
 //! no test context is present, the lint emits a denial with a note describing
 //! the enclosing function and the receiver type to guide remediation. Teams can
-//! extend the recognised test attributes through `dylint.toml` when bespoke
+//! extend the recognized test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
 use std::collections::HashSet;

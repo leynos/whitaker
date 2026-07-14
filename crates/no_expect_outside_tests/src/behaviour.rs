@@ -1,4 +1,4 @@
-//! Behaviour-driven tests covering context summarisation for the lint's context
+//! Behaviour-driven tests covering context summarization for the lint's context
 //! world and BDD steps.
 
 use crate::context::{ContextSummary, summarise_context};

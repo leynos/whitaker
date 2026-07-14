@@ -173,7 +173,7 @@ Observable outcome:
   Date/Author: 2026-03-21 / Codex.
 - Decision: keep MinHash signatures fixed at 128 values for 7.2.2 and validate
   `bands * rows == 128`. Rationale: this matches the design document and keeps
-  the roadmap item focused on the explicitly requested configurables.
+  the roadmap item focused on the explicitly requested configurable.
   Date/Author: 2026-03-21 / Codex.
 - Decision: use an opaque, string-backed `FragmentId` newtype in the public
   candidate-generation API for 7.2.2. Rationale: this keeps the index layer

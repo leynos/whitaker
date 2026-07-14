@@ -240,7 +240,7 @@ fn cfg_simple(segments: PathSegments) -> MetaItem {
 }
 
 // ---------------------------------------------------------------------------
-// MetaItem builders for parameterised tests
+// MetaItem builders for parameterized tests
 // ---------------------------------------------------------------------------
 
 /// Builds `cfg(any(test, doctest))`.

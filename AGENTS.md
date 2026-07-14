@@ -318,6 +318,20 @@ project:
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
 
+## Spelling policy
+
+- `make markdownlint` also enforces en-GB-oxendict spelling with the pinned
+  `typos` release.
+- `typos.toml` is generated. Edit `typos.local.toml` for narrow repository
+  terminology, then run `make spelling-config-write`; never edit generated
+  entries by hand.
+- The configuration builder refreshes the untracked shared dictionary cache
+  only when the authoritative copy is newer. `make spelling-config` verifies
+  the tracked output without replacing it.
+- Preserve external APIs, identifiers, fixtures, snapshots, formal names and
+  serialized values. Put quoted prose and identifiers in backticks or fenced
+  blocks where possible rather than weakening the shared policy.
+
 ## Project documentation
 
 Record design decisions in the design document. Where a decision is

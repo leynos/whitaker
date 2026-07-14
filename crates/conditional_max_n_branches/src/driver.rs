@@ -2,7 +2,7 @@
 //!
 //! The lint counts boolean branches within `if`, `while`, and `match` guard
 //! predicates, flagging expressions that involve more than the configured
-//! number of short-circuit branches. Diagnostics are localised through the
+//! number of short-circuit branches. Diagnostics are localized through the
 //! shared Fluent bundles so helper text stays consistent with other lints.
 
 use std::borrow::Cow;

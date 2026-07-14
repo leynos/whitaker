@@ -1,7 +1,7 @@
 //! Build per-line complexity segments for bump detection.
 //!
 //! The lint converts nested control-flow and predicate branching into weighted
-//! line segments which are then rasterised into a per-line signal.
+//! line segments which are then rasterized into a per-line signal.
 
 use std::ops::RangeInclusive;
 

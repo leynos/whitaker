@@ -1,4 +1,4 @@
-//! Fluent smoke tests that exercise localisation bundle discovery and parsing
+//! Fluent smoke tests that exercise localization bundle discovery and parsing
 //! behaviour.
 //!
 //! Scenarios ensure each Fluent file is detected once, parser errors surface,

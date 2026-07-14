@@ -1,9 +1,9 @@
 Feature: Fluent resources remain parseable
-  The localisation bundles must parse cleanly so the loader never poisons
+  The localization bundles must parse cleanly so the loader never poisons
   its shared cache. These scenarios cover file discovery and representative
   parser outcomes so contributors can diagnose failures quickly.
 
-  Scenario: Collect all localisation bundles
+  Scenario: Collect all localization bundles
     When I collect all Fluent files
     Then each Fluent path is unique
     And the collection includes locales/en-GB/common.ftl

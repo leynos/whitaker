@@ -33,7 +33,7 @@ const PANIC_PATHS: &[&[&str]] = &[
     &["std", "rt", "begin_panic_fmt"],
 ];
 
-/// Summarises whether a closure contains panics and distinguishes between
+/// Summarizes whether a closure contains panics and distinguishes between
 /// plain (non-interpolated) and interpolated panic sites.
 ///
 /// A closure may contain multiple panic paths; tracking both kinds prevents

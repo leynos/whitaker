@@ -10,7 +10,7 @@
 //!   support directories) into isolated workspaces for dylint UI harnesses.
 //! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and
 //!   behaviour tests.
-//! - [`env_test_guard`]: Serialises tests that temporarily mutate process-wide
+//! - [`env_test_guard`]: Serializes tests that temporarily mutate process-wide
 //!   environment variables.
 //! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint
 //!   UI tests with consistent panic handling.
@@ -30,7 +30,7 @@ pub use ui::{
 use std::ffi::OsString;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-/// Serialises tests that mutate process-wide environment variables.
+/// Serializes tests that mutate process-wide environment variables.
 ///
 /// Use this guard around helpers such as `temp_env::with_var` or
 /// `temp_env::with_vars_unset` when the test would otherwise race with other
@@ -45,7 +45,7 @@ pub fn env_test_guard() -> MutexGuard<'static, ()> {
 /// Guard that overrides `DYLINT_LOCALE` for the lifetime of the instance.
 ///
 /// The guard captures any existing value and restores it when dropped. The
-/// mutation itself must be executed under a serialised test harness (for
+/// mutation itself must be executed under a serialized test harness (for
 /// example via the `serial_test::serial` attribute) to ensure the unsafe
 /// environment access remains race-free.
 ///
@@ -71,10 +71,10 @@ impl LocaleOverride {
     /// the prior value (if any) when dropped.
     pub fn set(locale: &str) -> Self {
         let previous = std::env::var_os("DYLINT_LOCALE");
-        // SAFETY: Callers must serialise the surrounding test using a
-        // synchronisation primitive such as the `serial_test::serial`
+        // SAFETY: Callers must serialize the surrounding test using a
+        // synchronization primitive such as the `serial_test::serial`
         // attribute. The guard is thread-local and dropped before another
-        // serialised test begins, so no two threads mutate the environment
+        // serialized test begins, so no two threads mutate the environment
         // concurrently.
         unsafe {
             std::env::set_var("DYLINT_LOCALE", locale);
@@ -110,8 +110,8 @@ impl LocaleOverride {
     /// ```
     pub fn clear() -> Self {
         let previous = std::env::var_os("DYLINT_LOCALE");
-        // SAFETY: Callers must serialise the surrounding test using a
-        // synchronisation primitive such as the `serial_test::serial`
+        // SAFETY: Callers must serialize the surrounding test using a
+        // synchronization primitive such as the `serial_test::serial`
         // attribute. Clearing the environment therefore cannot race with other
         // threads.
         unsafe {
@@ -124,14 +124,14 @@ impl LocaleOverride {
 impl Drop for LocaleOverride {
     fn drop(&mut self) {
         if let Some(value) = &self.previous {
-            // SAFETY: By construction the guard only lives within a serialised
+            // SAFETY: By construction the guard only lives within a serialized
             // test, so restoring the prior value cannot race with another
             // thread mutating the environment.
             unsafe {
                 std::env::set_var("DYLINT_LOCALE", value);
             }
         } else {
-            // SAFETY: Serialised execution also guarantees removal has no
+            // SAFETY: Serialized execution also guarantees removal has no
             // concurrent callers.
             unsafe {
                 std::env::remove_var("DYLINT_LOCALE");

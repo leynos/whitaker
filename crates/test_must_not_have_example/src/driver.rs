@@ -287,7 +287,7 @@ fn is_matching_harness_test_descriptor(
     function_span: Span,
     sibling: &hir::Item<'_>,
 ) -> bool {
-    // The `rustc --test` harness may synthesise a const descriptor that shares
+    // The `rustc --test` harness may synthesize a const descriptor that shares
     // the test function's name and span; matching this pair lets us recover
     // test context when the original marker attribute is unavailable.
     sibling.hir_id() != function_hir_id

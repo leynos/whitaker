@@ -1,4 +1,4 @@
-//! Localisation loader and helpers for Whitaker diagnostics.
+//! Localization loader and helpers for Whitaker diagnostics.
 //!
 //! The loader embeds Fluent resources under the crate-local `locales/`
 //! directory so lint crates can resolve translated strings without touching
@@ -67,7 +67,7 @@ mod locales;
 mod selection;
 pub mod testing;
 
-/// Diagnostic localisation helpers.
+/// Diagnostic localization helpers.
 /// See [`resolve_message_set`] for fetching primary, note, and help strings.
 pub use diagnostics::{
     AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,

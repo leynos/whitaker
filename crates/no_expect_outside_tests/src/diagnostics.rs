@@ -233,8 +233,8 @@ fn context_label(summary: &ContextSummary) -> ContextLabel {
 }
 
 #[cfg(test)]
-#[path = "tests/localisation.rs"]
-mod localisation;
+#[path = "tests/localization.rs"]
+mod localization;
 
 #[cfg(test)]
 #[path = "tests/receiver_type_edge_cases.rs"]

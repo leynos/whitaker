@@ -1,11 +1,11 @@
 //! Guards against the nextest filter for `serial-dylint-ui` silently missing
 //! new dylint UI test binaries.
 //!
-//! The `serial-dylint-ui` test-group in `.config/nextest.toml` serialises all
+//! The `serial-dylint-ui` test-group in `.config/nextest.toml` serializes all
 //! dylint UI tests so they do not race on the shared target directory or on
 //! Windows temporary-file handles.  If a lint crate adds a UI test whose
 //! fully-qualified name does not match the filter, the test will run without
-//! serialisation or retries, causing flaky Windows CI failures.
+//! serialization or retries, causing flaky Windows CI failures.
 //!
 //! This test scans for all lint crates that declare a `tests/ui.rs` integration
 //! test (which produces a binary named `ui` with a top-level test name of

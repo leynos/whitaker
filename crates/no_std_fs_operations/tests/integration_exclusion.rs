@@ -39,7 +39,7 @@ fn build_lint_library() -> anyhow::Result<PathBuf> {
 
     let output = run_lint_crate_build(metadata.workspace_root.as_std_path())?;
     let package_id = find_package_id(&metadata, LINT_CRATE_NAME)?;
-    let cdylib_path = find_cdylib_in_artifacts(&output, &package_id)?;
+    let cdylib_path = find_cdylib_in_artefacts(&output, &package_id)?;
 
     let release_dir = cdylib_path
         .parent()
@@ -120,25 +120,25 @@ fn find_package_id(
 }
 
 /// Extracts the cdylib path from cargo build JSON output for a given package.
-fn find_cdylib_in_artifacts(
+fn find_cdylib_in_artefacts(
     stdout: &[u8],
     package_id: &cargo_metadata::PackageId,
 ) -> anyhow::Result<PathBuf> {
     for message in Message::parse_stream(Cursor::new(stdout)) {
         let message = message.context("failed to parse cargo build JSON output")?;
-        let Message::CompilerArtifact(artifact) = message else {
+        let Message::CompilerArtifact(artefact) = message else {
             continue;
         };
 
-        if artifact.package_id != *package_id {
+        if artefact.package_id != *package_id {
             continue;
         }
 
-        if !artifact.target.is_cdylib() {
+        if !artefact.target.is_cdylib() {
             continue;
         }
 
-        if let Some(path) = artifact
+        if let Some(path) = artefact
             .filenames
             .iter()
             .find(|candidate| candidate.as_str().ends_with(env::consts::DLL_SUFFIX))
@@ -147,7 +147,7 @@ fn find_cdylib_in_artifacts(
         }
     }
 
-    anyhow::bail!("cdylib artifact not found in build output for package `{package_id}`")
+    anyhow::bail!("cdylib artefact not found in build output for package `{package_id}`")
 }
 
 /// Result of invoking `cargo dylint` against a fixture crate.

@@ -1,6 +1,6 @@
-//! Helper functions for localisation workflows.
+//! Helper functions for localization workflows.
 //!
-//! This module provides high-level conveniences for constructing localisers,
+//! This module provides high-level conveniences for constructing localizers,
 //! rendering locale-aware phrases, and safely resolving diagnostic message sets
 //! with fallback support.
 
@@ -38,8 +38,8 @@ pub fn get_localizer_for_lint(lint_name: &str, configuration_locale: Option<&str
 /// Render a locale-aware description of the number of predicate branches.
 ///
 /// Welsh and Scottish Gaelic require bespoke noun mutations, so the helper
-/// centralises those rules for reuse across diagnostics, UI tests, and
-/// localisation suites.
+/// centralizes those rules for reuse across diagnostics, UI tests, and
+/// localization suites.
 ///
 /// # Examples
 ///
@@ -89,11 +89,11 @@ fn welsh_branch_phrase(branches: usize) -> String {
     }
 }
 
-/// Report localisation failures by discarding the message.
+/// Report localization failures by discarding the message.
 ///
 /// Use this helper with [`safe_resolve_message_set`] when a lint only needs
 /// deterministic fallback strings and does not want to surface missing
-/// localisation details as bug reports.
+/// localization details as bug reports.
 ///
 /// # Examples
 ///
@@ -121,7 +121,7 @@ fn welsh_branch_phrase(branches: usize) -> String {
 /// ```
 pub fn noop_reporter(_message: String) {}
 
-/// Resolve a diagnostic message set while logging localisation failures.
+/// Resolve a diagnostic message set while logging localization failures.
 ///
 /// When lookups fail the helper invokes the supplied bug reporter, records the
 /// failure in the lint's debug log, and returns deterministic fallback
@@ -177,13 +177,13 @@ pub fn safe_resolve_message_set(
         Err(error) => {
             debug!(
                 target: resolution.lint_name,
-                "localisation error for key `{}` in locale `{}`: {error}; using fallback",
+                "localization error for key `{}` in locale `{}`: {error}; using fallback",
                 resolution.key,
                 localizer.locale(),
             );
 
             report_bug(format!(
-                "Localisation error for `{}` key `{}` in locale `{}`: {error}",
+                "Localization error for `{}` key `{}` in locale `{}`: {error}",
                 resolution.lint_name,
                 resolution.key,
                 localizer.locale(),

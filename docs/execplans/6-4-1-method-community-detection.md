@@ -44,7 +44,7 @@ Observable outcome:
 ## Constraints
 
 - Scope only roadmap item 6.4.1. Do not implement 6.4.2 diagnostic note
-  rendering, configuration loading, localisation wiring, or SARIF output in
+  rendering, configuration loading, localization wiring, or SARIF output in
   this change.
 - Keep the analysis engine in `common` and keep `common` free of
   `rustc_private` dependencies. The compiler-facing lint drivers remain

@@ -51,7 +51,7 @@ projects that may share the same name but operate in different ecosystems
 The `rstest` crate utilizes Rust's procedural macros, such as `#[rstest]` and
 `#[fixture]`, to achieve its declarative and expressive syntax. These macros
 allow developers to define fixtures and inject them into test functions simply
-by listing them as arguments. This compile-time mechanism analyzes test
+by listing them as arguments. This compile-time mechanism analyses test
 function signatures and fixture definitions to wire up dependencies
 automatically.
 

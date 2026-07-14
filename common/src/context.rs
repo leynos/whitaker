@@ -4,7 +4,7 @@ use crate::attributes::{
     Attribute, AttributePath, has_test_like_attribute, has_test_like_attribute_with,
 };
 
-/// Categorises a frame within the traversal stack.
+/// Categorizes a frame within the traversal stack.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContextKind {
     /// A free function (including methods lowered to free functions).

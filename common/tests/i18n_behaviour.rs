@@ -1,4 +1,4 @@
-//! Behaviour-driven coverage for the localisation loader.
+//! Behaviour-driven coverage for the localization loader.
 //!
 //! Scenarios exercise fallback resolution, secondary locale delivery, and
 //! missing message handling to ensure lint crates can rely on predictable
@@ -143,7 +143,7 @@ fn then_contains(fixture: &I18nFixture, snippet: String) {
     );
 }
 
-#[then("localisation fails with a missing message error")]
+#[then("localization fails with a missing message error")]
 fn then_missing(fixture: &I18nFixture) {
     match fixture.result() {
         Err(I18nError::MissingMessage { .. }) => {}

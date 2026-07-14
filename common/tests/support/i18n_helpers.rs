@@ -1,4 +1,4 @@
-//! Shared localisation helpers for behaviour and quality tests.
+//! Shared localization helpers for behaviour and quality tests.
 //! Provides argument builders and string post-processing utilities
 //! that keep suites aligned and readable.
 
@@ -29,7 +29,7 @@ pub fn strip_isolation_marks<'a>(text: &'a str) -> Cow<'a, str> {
     }
 }
 
-/// Build the canonical localisation arguments used across localisation tests.
+/// Build the canonical localization arguments used across localization tests.
 ///
 /// # Examples
 /// ```ignore

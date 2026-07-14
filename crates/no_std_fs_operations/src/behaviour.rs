@@ -8,14 +8,14 @@ use whitaker_common::i18n::testing::FailingLookup;
 use whitaker_common::i18n::{I18nError, Localizer};
 
 #[derive(Default)]
-struct LocalisationWorld {
+struct LocalizationWorld {
     localizer: Option<Localizer>,
     operation: String,
     failing: bool,
     result: Option<Result<StdFsMessages, I18nError>>,
 }
 
-impl LocalisationWorld {
+impl LocalizationWorld {
     fn select_locale(&mut self, locale: &str) {
         self.localizer = Some(Localizer::new(Some(locale)));
     }
@@ -42,27 +42,27 @@ impl LocalisationWorld {
     fn messages(&self) -> &StdFsMessages {
         self.result
             .as_ref()
-            .expect("localisation result should be recorded")
+            .expect("localization result should be recorded")
             .as_ref()
-            .expect("localisation should succeed")
+            .expect("localization should succeed")
     }
 
     fn error(&self) -> &I18nError {
         self.result
             .as_ref()
-            .expect("localisation result should be recorded")
+            .expect("localization result should be recorded")
             .as_ref()
-            .expect_err("localisation should fail")
+            .expect_err("localization should fail")
     }
 }
 
-type WorldCell = RefCell<LocalisationWorld>;
+type WorldCell = RefCell<LocalizationWorld>;
 
 #[fixture]
 fn world() -> WorldCell {
-    RefCell::new(LocalisationWorld {
+    RefCell::new(LocalizationWorld {
         operation: String::from("std::fs::read"),
-        ..LocalisationWorld::default()
+        ..LocalizationWorld::default()
     })
 }
 
@@ -78,7 +78,7 @@ fn given_operation(world: &WorldCell, operation: String) {
         .set_operation(operation.trim_matches('"'));
 }
 
-#[given("localisation fails")]
+#[given("localization fails")]
 fn given_failure(world: &WorldCell) {
     world.borrow_mut().mark_failure();
 }
@@ -109,7 +109,7 @@ fn then_help(world: &WorldCell, snippet: String) {
     assert!(borrow.messages().help().contains(needle));
 }
 
-#[then("localisation fails for {key}")]
+#[then("localization fails for {key}")]
 fn then_failure(world: &WorldCell, key: String) {
     let borrow = world.borrow();
     match borrow.error() {
@@ -119,27 +119,27 @@ fn then_failure(world: &WorldCell, key: String) {
     }
 }
 
-#[scenario(path = "tests/features/localisation.feature", index = 0)]
+#[scenario(path = "tests/features/localization.feature", index = 0)]
 fn scenario_english(world: WorldCell) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/localisation.feature", index = 1)]
+#[scenario(path = "tests/features/localization.feature", index = 1)]
 fn scenario_welsh(world: WorldCell) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/localisation.feature", index = 2)]
+#[scenario(path = "tests/features/localization.feature", index = 2)]
 fn scenario_gaelic(world: WorldCell) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/localisation.feature", index = 3)]
+#[scenario(path = "tests/features/localization.feature", index = 3)]
 fn scenario_fallback(world: WorldCell) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/localisation.feature", index = 4)]
+#[scenario(path = "tests/features/localization.feature", index = 4)]
 fn scenario_failure(world: WorldCell) {
     let _ = world;
 }

@@ -224,7 +224,7 @@ fn dependency_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf, String>
     matches
         .into_iter()
         .next()
-        .map(|artifact| artifact.path)
+        .map(|artefact| artefact.path)
         .ok_or_else(|| {
             format!(
                 "failed to locate `{crate_name}` rlib in dependency directory {}",
