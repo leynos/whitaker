@@ -177,6 +177,8 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Install bun",
             "Install Mermaid CLI",
             "Setup uv",
+            "Setup Rust for Merman",
+            "Install Merman CLI",
             "Install Nixie",
             "Nixie",
             "Markdown lint",
@@ -192,6 +194,10 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
     assert _find_step(linux_job, "Publish dry run").get("run") == (
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
     ), "linux-full must publish-check the release crates on Linux only"
+
+    assert _find_step(linux_job, "Install Merman CLI").get("run") == (
+        'cargo +1.95.0 install merman-cli --version "=0.7.0" --locked'
+    ), "linux-full must install Merman 0.7.0 with its pinned Rust 1.95 toolchain"
 
 
 def test_windows_compat_stays_limited_to_windows_compatibility_checks(
@@ -230,6 +236,8 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         "Install bun",
         "Install Mermaid CLI",
         "Setup uv",
+        "Setup Rust for Merman",
+        "Install Merman CLI",
         "Install Nixie",
         "Nixie",
         "Markdown lint",
