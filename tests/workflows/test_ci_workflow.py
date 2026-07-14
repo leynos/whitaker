@@ -199,6 +199,13 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         'cargo +1.95.0 install merman-cli --version "=0.7.0" --locked'
     ), "linux-full must install Merman 0.7.0 with its pinned Rust 1.95 toolchain"
 
+    markdown_globs = _find_step(linux_job, "Markdown lint").get("with", {}).get(
+        "globs",
+    )
+    assert markdown_globs == (
+        "**/*.md\n!**/.uv-cache/**\n!**/.uv-tools/**\n"
+    ), "Markdown lint must exclude rollout-owned uv cache and tool directories"
+
 
 def test_windows_compat_stays_limited_to_windows_compatibility_checks(
     workflow: Mapping[str, Any],
