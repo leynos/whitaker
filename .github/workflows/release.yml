@@ -46,7 +46,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/setup-rust@d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8
 
       - name: Install cross-compilation tools (aarch64-linux)
         if: matrix.cross
@@ -153,7 +153,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/setup-rust@d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8
 
       - name: Install cross-compilation tools (aarch64-linux)
         if: matrix.cross
@@ -237,7 +237,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/setup-rust@d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
