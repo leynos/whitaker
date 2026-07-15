@@ -1476,7 +1476,9 @@ can run test binaries in separate processes, so a plain in-process `Mutex` is
 not sufficient for those examples. The lock acquisition path reaps directories
 that are older than 30 minutes, treats `NotFound` during stale cleanup as
 another process already releasing the lock, and waits indefinitely for a live
-lock in production while keeping the bounded timeout in tests.
+lock in production while keeping the bounded timeout in tests. A sidecar
+advisory lock serializes ownership transitions, and the directory's owner token
+prevents an original holder from deleting a successor after stale recovery.
 
 ### Configuration constant patterns
 

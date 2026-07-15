@@ -13,6 +13,8 @@ fn main() {
 
     let built = Builder { fixture: fixture() }.build(SUFFIX);
     assert_eq!(built, "fixture-suffix");
+
+    assert_eq!(nested_helper(fixture()), "fixture");
 }
 
 #[fixture]
@@ -47,12 +49,22 @@ fn rstest_helper_call_collection_stays_silent(fixture: &str) {
     assert_eq!(built, "fixture-suffix");
 }
 
+fn nested_helper(fixture: &str) -> &str {
+    fixture
+}
+
 #[rstest]
 #[case("first")]
 #[case("second")]
 fn case_generated_collection_stays_silent(#[case] input: &str, fixture: &str) {
     let value = helper(fixture, input, PREFIX, SUFFIX);
     assert!(value.contains(input));
+
+    let outer = || {
+        let inner = || nested_helper(fixture);
+        inner()
+    };
+    assert_eq!(outer(), "fixture");
 
     let built = Builder { fixture }.build(input);
     assert!(built.ends_with(input));

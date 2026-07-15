@@ -10,8 +10,8 @@ Status: COMPLETE
 
 Roadmap item 8.2.2 grows the `rstest_helper_should_be_fixture` lint from the
 8.2.1 bootstrap into a passive, evidence-collecting late lint. After this
-ExecPlan is implemented, the lint will walk every `#[rstest]` test in the
-crate, recognize local helper calls inside those tests, classify each
+ExecPlan is implemented, the lint will walk every strict `#[rstest]` test in
+the crate, recognize local helper calls inside those tests, classify each
 positional argument as either a fixture-local binding, a stable literal, a
 stable constant path, or unsupported, and record one
 `whitaker_common::rstest::ArgFingerprint` per call. The records are kept in
@@ -78,8 +78,9 @@ This plan must be approved before implementation starts.
   8.2.2 does not emit. Adding a placeholder fluent file in `common/locales/` is
   acceptable only if it documents future keys without affecting any resolution
   path.
-- British English (`-ise`, `-our`) is mandatory in prose. Identifiers,
-  external API names, and inline code may keep their existing American spelling.
+- Use the repository's en-GB-oxendict spelling in prose: `-ize` (and `-yse`
+  where applicable) and `-our`. Identifiers, external API names, and inline
+  code may keep their existing American spelling.
 - Do not mark roadmap item 8.2.2 done in `docs/roadmap.md` until
   implementation has landed, gates pass, CodeRabbit has no unresolved concerns,
   and the implementation PR is ready for review.

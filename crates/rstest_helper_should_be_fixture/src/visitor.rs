@@ -82,16 +82,21 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
+    fn visit_nested_body(&mut self, body_id: hir::BodyId) {
+        self.visit_body(self.cx.tcx.hir_body(body_id));
+    }
+
     fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         match expr.kind {
             hir::ExprKind::Call(_, args) => self.collect_call(expr, args),
             hir::ExprKind::MethodCall(_, receiver, args, _) => {
                 self.collect_call(expr, std::iter::once(receiver).chain(args))
             }
-            hir::ExprKind::Closure(hir::Closure { body, .. }) => {
+            hir::ExprKind::Closure(hir::Closure { .. }) => {
                 self.closure_span_fallbacks.push(expr.span);
-                self.visit_body(self.cx.tcx.hir_body(*body));
+                intravisit::walk_expr(self, expr);
                 self.closure_span_fallbacks.pop();
+                return;
             }
             _ => {}
         }

@@ -43,6 +43,7 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
 dylint_testing = { workspace = true }
+fs2 = "0.4"
 proptest = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
