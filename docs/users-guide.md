@@ -67,8 +67,8 @@ environment-variable workaround.
 - `--cranelift` — Tell the installer to add the
   `rustc-codegen-cranelift` component via `rustup component add`. The
   `rustc-codegen-cranelift` component is not included in the standard nightly
-  toolchain, so enable `--cranelift` when your project or CI requires the
-  Cranelift back-end and you would otherwise need an explicit
+  toolchain, so enable `--cranelift` when a project or CI pipeline requires the
+  Cranelift back-end and would otherwise need an explicit
   `rustc-codegen-cranelift` component-add step before running the installer.
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation (prints
@@ -128,10 +128,10 @@ Stable releases differ from `rolling`: a stable tag is expected to contain the
 complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
-If you consume rolling-release archives from scripts or CI, verify that the
-required target archive exists before proceeding. Treat missing archives as an
-expected condition for rolling releases rather than assuming the artefact set
-is complete.
+Scripts or CI pipelines that consume rolling-release archives should verify
+that the required target archive exists before proceeding. Treat missing
+archives as an expected condition for rolling releases rather than assuming the
+artefact set is complete.
 
 ### Selecting individual lints
 
