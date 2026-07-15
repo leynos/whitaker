@@ -345,7 +345,6 @@ and Kani:
   state transition and `CandidatePair::new` policy without modelling `BTreeMap`
   and `BTreeSet` allocator internals.
 
-
 ### Clone-detector AST structure
 
 The clone-detector AST code is grouped under
@@ -551,13 +550,11 @@ group directly:
 ./scripts/run-kani.sh clone-detector
 ```
 
-
 ## Toolchain and parser maintenance runbooks
 
 Use these runbooks when the Rust nightly or `ra_ap_syntax` parser snapshot must
 move. They are intentionally procedural because both changes affect Dylint,
 parser APIs, snapshots, and proof tooling.
-
 
 ### Rust toolchain bump runbook
 
@@ -581,7 +578,6 @@ parser APIs, snapshots, and proof tooling.
 8. Confirm CI invokes Cargo through a locked dependency path. The CI workflow
    sets `CARGO_LOCKED=--locked`, and Makefile Cargo recipes must preserve that
    variable when adding new build, lint, package, or test commands.
-
 
 ### `ra_ap_syntax` re-pinning runbook
 
