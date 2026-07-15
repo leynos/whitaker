@@ -1452,7 +1452,6 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-
 #### Shared UI harness environment guards
 
 Workspace-level UI harness tests that mutate process-wide environment variables
