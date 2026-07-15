@@ -5,6 +5,7 @@
 //! collector records real call-site evidence, while the trybuild cases retain
 //! compile-time coverage for the same source shapes without depending on
 //! diagnostics that later roadmap tasks will introduce.
+#![cfg(feature = "dylint-driver")]
 #![cfg_attr(feature = "dylint-driver", feature(rustc_private))]
 
 #[cfg(feature = "dylint-driver")]
