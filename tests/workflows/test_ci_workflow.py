@@ -1,10 +1,10 @@
-"""Validate CI workflow contracts for Linux and Windows lanes.
+"""Validate CI workflow contracts for coverage, Linux, and Windows lanes.
 
 This module treats `.github/workflows/ci.yml` as a behavioural contract rather
 than a loose implementation detail. The tests ensure Linux remains the full
 validation lane, Windows remains focused on compatibility and installer smoke
 coverage, and shared workflow environment variables keep caching and warnings
-policy consistent across both jobs.
+policy consistent across all jobs.
 
 The tests expect `WORKFLOW_PATH` to point at a readable GitHub Actions workflow
 YAML file and return normal pytest pass/fail output. Run them directly with:
@@ -161,6 +161,104 @@ def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope(
     assert env.get("RUSTDOCFLAGS") == "-D warnings", (
         "CI must treat all rustdoc warnings as errors via RUSTDOCFLAGS"
     )
+
+
+def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
+    workflow: Mapping[str, Any],
+) -> None:
+    """Ensure the PR coverage gate preserves Whitaker's coverage constraints."""
+    permissions = _get_mapping_item(
+        workflow,
+        "permissions",
+        parent_name="CI workflow",
+    )
+    assert permissions.get("contents") == "read", (
+        "coverage checks require only read access to repository contents"
+    )
+
+    jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
+    coverage_job = _get_mapping_item(
+        jobs,
+        "coverage-check",
+        parent_name="CI workflow jobs",
+    )
+    assert coverage_job.get("if") == "github.event_name == 'pull_request'", (
+        "coverage-check must run only for pull requests"
+    )
+    assert coverage_job.get("runs-on") == "ubicloud-standard-4-ubuntu-2404", (
+        "coverage-check must use the dedicated Ubicloud Linux runner"
+    )
+    assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
+        "coverage-check must use Bash for Makefile targets"
+    )
+
+    _assert_steps_in_order(
+        _step_names(coverage_job),
+        [
+            "Checkout",
+            "Setup Rust",
+            "Install cargo-nextest",
+            "Install cargo-llvm-cov",
+            "Generate coverage",
+            "Check coverage against CodeScene gates",
+        ],
+        "coverage-check must prepare Rust, generate LCOV, then check CodeScene",
+    )
+
+    checkout_step = _find_step(coverage_job, "Checkout")
+    assert checkout_step.get("uses") == "actions/checkout@v7", (
+        "coverage-check must use the repository-approved checkout action"
+    )
+    assert checkout_step.get("with", {}).get("fetch-depth") == 0, (
+        "CodeScene requires full Git history for changed-line coverage"
+    )
+
+    setup_step = _find_step(coverage_job, "Setup Rust")
+    assert setup_step.get("uses") == (
+        "leynos/shared-actions/.github/actions/setup-rust@"
+        "d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8"
+    ), "coverage-check must reuse the current main-branch Rust setup pin"
+
+    nextest_step = _find_step(coverage_job, "Install cargo-nextest")
+    llvm_cov_step = _find_step(coverage_job, "Install cargo-llvm-cov")
+    installer_action = (
+        "taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10"
+    )
+    assert nextest_step.get("uses") == installer_action, (
+        "cargo-nextest must use the repository-approved installer action pin"
+    )
+    assert nextest_step.get("with", {}).get("tool") == "nextest@0.9.114", (
+        "coverage-check must install the approved cargo-nextest version"
+    )
+    assert llvm_cov_step.get("uses") == installer_action, (
+        "cargo-llvm-cov must use the repository-approved installer action pin"
+    )
+    assert llvm_cov_step.get("with", {}).get("tool") == "cargo-llvm-cov", (
+        "coverage-check must install cargo-llvm-cov"
+    )
+
+    assert _find_step(coverage_job, "Generate coverage").get("run") == (
+        "make coverage"
+    ), "coverage-check must preserve Whitaker's crate exclusions and RUSTFLAGS"
+
+    check_step = _find_step(coverage_job, "Check coverage against CodeScene gates")
+    assert check_step.get("env", {}).get("CS_ACCESS_TOKEN") == (
+        "${{ secrets.CS_ACCESS_TOKEN }}"
+    ), "the CodeScene token must remain scoped to the check step"
+    assert check_step.get("if") == (
+        "github.event_name == 'pull_request' && env.CS_ACCESS_TOKEN != ''"
+    ), "the CodeScene step must guard its pull-request secret"
+    assert check_step.get("uses") == (
+        "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
+        "927edd45ae77be4251a8a18ca9eb5613a2e32cbd"
+    ), "coverage-check must use the proven CodeScene action pin"
+    assert check_step.get("with") == {
+        "format": "lcov",
+        "mode": "check",
+        "project-url": "https://api.codescene.io/v2/projects/71836",
+        "access-token": "${{ env.CS_ACCESS_TOKEN }}",
+        "installer-checksum": "${{ vars.CODESCENE_CLI_SHA256 }}",
+    }, "coverage-check must pass the canonical project and check-mode inputs"
 
 
 def test_linux_full_keeps_the_full_linux_validation_stack(

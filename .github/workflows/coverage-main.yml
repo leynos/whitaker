@@ -1,10 +1,8 @@
 name: Coverage (main)
 
-# CodeScene accepts `cs-coverage upload` only for analysed branches, so
-# main-branch coverage is uploaded here on push to main. Pull requests do
-# not upload; the changed-line gate (`cs-coverage check`) is deferred
-# until CodeScene enables the coverage gate for this project (see the note
-# in ci.yml). `workflow_dispatch` allows a manual re-run: automerge merges
+# Main uploads full LCOV coverage on pushes to main, while pull-request CI
+# enforces CodeScene changed-line gates in `check` mode. `workflow_dispatch`
+# allows a manual re-run: automerge merges
 # performed with GITHUB_TOKEN do not fire push-event workflows, so
 # dispatch is the fallback path for uploading coverage from main.
 #
