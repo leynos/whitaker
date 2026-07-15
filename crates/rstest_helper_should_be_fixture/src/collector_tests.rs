@@ -6,6 +6,7 @@
 //! collector module, while these tests keep the record store cheap to exercise
 //! without constructing a rustc lint context.
 
+use rstest::rstest;
 use rustc_hir::def_id::{DefId, DefIndex};
 use rustc_span::{BytePos, DUMMY_SP, FileName};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
@@ -38,22 +39,21 @@ fn collector_iterates_callees_in_definition_path_order() {
     assert_eq!(keys, ["crate::a_helper", "crate::z_helper"]);
 }
 
-#[test]
-fn collector_deduplicates_identical_callee_and_source_span() {
-    let (collector, inserted) = collect_two_calls(10, 18);
+#[rstest]
+#[case(10, 18, [true, false], 1)]
+#[case(20, 28, [true, true], 2)]
+fn collector_records_calls_by_source_span(
+    #[case] lo2: u32,
+    #[case] hi2: u32,
+    #[case] expected_inserted: [bool; 2],
+    #[case] expected_record_count: usize,
+) {
+    let (collector, inserted) = collect_two_calls(lo2, hi2);
 
-    assert!(inserted[0]);
-    assert!(!inserted[1]);
+    assert_eq!(inserted[0], expected_inserted[0]);
+    assert_eq!(inserted[1], expected_inserted[1]);
     assert_eq!(collector.callee_count(), 1);
-    assert_eq!(collector.record_count(), 1);
-}
-
-#[test]
-fn collector_keeps_distinct_source_spans_for_same_callee() {
-    let (collector, _) = collect_two_calls(20, 28);
-
-    assert_eq!(collector.callee_count(), 1);
-    assert_eq!(collector.record_count(), 2);
+    assert_eq!(collector.record_count(), expected_record_count);
 }
 
 #[test]
