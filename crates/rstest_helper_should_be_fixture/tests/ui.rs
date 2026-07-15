@@ -26,7 +26,6 @@ const COLLECTION_SUMMARY_ENV: &str = "WHITAKER_RSTEST_HELPER_COLLECTION_SUMMARY"
 // can legitimately hold it for several minutes, so only remove directories
 // old enough to be abandoned by a crashed process.
 const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
-const EXAMPLE_HARNESS_LOCK_WAIT_LIMIT: Duration = Duration::from_secs(35 * 60);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[rstest]
@@ -103,10 +102,10 @@ struct ExampleHarnessLock {
 impl ExampleHarnessLock {
     fn acquire() -> io::Result<Self> {
         let path = std::env::temp_dir().join("rstest-helper-example-harness.lock");
-        Self::acquire_at(path, EXAMPLE_HARNESS_LOCK_WAIT_LIMIT)
+        Self::acquire_at(path, None)
     }
 
-    fn acquire_at(path: PathBuf, wait_limit: Duration) -> io::Result<Self> {
+    fn acquire_at(path: PathBuf, wait_limit: Option<Duration>) -> io::Result<Self> {
         let started_at = Instant::now();
 
         loop {
@@ -130,10 +129,10 @@ impl Drop for ExampleHarnessLock {
 fn wait_for_example_harness_lock_release(
     path: &std::path::Path,
     started_at: Instant,
-    wait_limit: Duration,
+    wait_limit: Option<Duration>,
 ) -> io::Result<()> {
     recover_stale_example_harness_lock(path)?;
-    if started_at.elapsed() >= wait_limit {
+    if wait_limit.is_some_and(|wait_limit| started_at.elapsed() >= wait_limit) {
         return Err(example_harness_lock_timeout(path));
     }
     std::thread::sleep(EXAMPLE_HARNESS_LOCK_POLL_INTERVAL);
@@ -212,7 +211,7 @@ fn example_harness_lock_reports_active_contention_timeout() {
     let path = unique_summary_path();
     std::fs::create_dir(&path).expect("test lock directory should be created");
 
-    let Err(error) = ExampleHarnessLock::acquire_at(path.clone(), Duration::ZERO) else {
+    let Err(error) = ExampleHarnessLock::acquire_at(path.clone(), Some(Duration::ZERO)) else {
         panic!("active lock contention should time out");
     };
     let _ = std::fs::remove_dir(&path);

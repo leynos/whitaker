@@ -1474,9 +1474,9 @@ Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
 can run test binaries in separate processes, so a plain in-process `Mutex` is
 not sufficient for those examples. The lock acquisition path reaps directories
-that are old enough to be considered abandoned, treats `NotFound` during stale
-cleanup as another process already releasing the lock, and returns a timeout
-error if a live lock remains stuck beyond the configured wait limit.
+that are older than 30 minutes, treats `NotFound` during stale cleanup as
+another process already releasing the lock, and waits indefinitely for a live
+lock in production while keeping the bounded timeout in tests.
 
 ### Configuration constant patterns
 
@@ -1748,11 +1748,12 @@ matching suite feature automatically.
 `rstest_helper_should_be_fixture` currently uses an in-crate collector rather
 than a shared adapter. The collector stores passive call-site evidence in
 deterministic `BTreeMap` order keyed by `tcx.def_path_str(callee_def_id)`,
-while preserving the raw `DefId` in each record for later diagnostics. The late
-pass only records local function or associated-function callees inside strict
-`#[rstest]` tests, drops call sites whose spans cannot recover to
-user-editable source, and lowers arguments conservatively to fixture-local,
-literal, constant path, or unsupported atoms.
+deduplicates entries with a private `CallSiteLocation`, and preserves the raw
+`DefId` in each record for later diagnostics. The late pass only records local
+function or associated-function callees inside strict `#[rstest]` tests,
+drops call sites whose spans cannot recover to user-editable source, and
+lowers arguments conservatively to fixture-local, literal, constant path, or
+unsupported atoms.
 
 Future rstest lints should promote this adapter out of
 `crates/rstest_helper_should_be_fixture/src/collector.rs` only when another

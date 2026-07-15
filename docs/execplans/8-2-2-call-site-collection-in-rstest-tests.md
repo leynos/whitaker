@@ -11,7 +11,7 @@ Status: COMPLETE
 Roadmap item 8.2.2 grows the `rstest_helper_should_be_fixture` lint from the
 8.2.1 bootstrap into a passive, evidence-collecting late lint. After this
 ExecPlan is implemented, the lint will walk every `#[rstest]` test in the
-crate, recognise local helper calls inside those tests, classify each
+crate, recognize local helper calls inside those tests, classify each
 positional argument as either a fixture-local binding, a stable literal, a
 stable constant path, or unsupported, and record one
 `whitaker_common::rstest::ArgFingerprint` per call. The records are kept in
@@ -74,7 +74,7 @@ This plan must be approved before implementation starts.
   output through `tee` into
   `/tmp/${ACTION}-whitaker-$(git branch --show-current).out`.
 - Use the shared default Cargo cache. Do not introduce per-job caches.
-- Localisation: do not add new English Fluent messages for diagnostics that
+- Localization: do not add new English Fluent messages for diagnostics that
   8.2.2 does not emit. Adding a placeholder fluent file in `common/locales/` is
   acceptable only if it documents future keys without affecting any resolution
   path.
@@ -188,8 +188,9 @@ This plan must be approved before implementation starts.
   `rust-types-and-apis`, `arch-crate-design`, `execplans`, and
   `commit-message`, then confirmed the leta workspace was already registered
   for this checkout.
-- [ ] Use a Wyvern team plus Firecrawl to confirm Dylint late-pass hooks,
-  rustc HIR resolution helpers, and `rstest` 0.26 parameter-attribute semantics.
+- [x] (2026-07-15T00:00:00Z) Resolved the remaining verification note by
+  checking the implemented collector and harness docs directly with Wyvern
+  agents; no Firecrawl pass was performed for this completed plan.
 - [x] (2026-06-04T01:44:41Z) Treated the user's explicit request to
   "proceed with implementation" as approval to execute the existing ExecPlan.
 - [x] (2026-06-04T01:51:51Z) Added the HIR-to-`ArgAtom` adapter and
@@ -542,9 +543,9 @@ pure pieces and one adapter:
    `ArgFingerprint`, the source test `DefId`, and the recovered user-editable
    call span.
 2. `pub(crate) struct CallSiteCollector` stores records in a
-   `BTreeMap<String, Vec<CallSiteRecord>>`, where the string key is
-   `tcx.def_path_str(callee_def_id)`. It deduplicates with a private `BTreeSet`
-   over `(callee path, source file, span lo, span hi)` so that
+   `BTreeMap<String, Vec<CallSiteRecord>>`, where the string key is the
+   callee definition path from `tcx.def_path_str(callee_def_id)`. It
+   deduplicates with a private `CallSiteLocation` stored in a `BTreeSet`, so
    `#[case]`-generated siblings collapse into one record.
 3. `pub(crate) fn lower_arg_atom<'tcx>(...) -> ArgAtom` is the HIR-to-`ArgAtom`
    adapter.
@@ -645,15 +646,14 @@ misses a generated `#[test]` companion. Behavioural evidence in Stage E will
 decide whether to enable this fallback for collection (the default detection
 options already mark this as `use_source_callee_fallback = false`).
 
-### Stage D — Dedup and span policy
+### Stage D — Dedup and span-location policy
 
-In the same module, implement the dedup key generation rule:
+In the same module, use `CallSiteLocation` as the private dedup key:
 
 - the source span used as the dedup key is
   `recover_user_editable_hir_span(call_expr.span)`,
-- the dedup map keys on `(callee_def_id, source_file, span_lo, span_hi)`
-  where `source_file` is the `cx.tcx.sess.source_map().span_to_filename(span)`
-  return value cast to its `FileName` shape,
+- the dedup state keys on the callee definition path, source file, and
+  recovered `span_lo` / `span_hi` via `CallSiteLocation`;
 - when recovery returns `None`, the record is dropped — not stored as
   unsupported.
 
@@ -677,10 +677,10 @@ Test surfaces, in order of priority:
      gated on `cfg(test)`.
 2. **Behavioural tests** with `rstest-bdd`:
    - new file
-     `crates/rstest_helper_should_be_fixture/tests/features/collection.feature`
-     describing scenarios in user terms — "Given a crate containing a single
-     `#[rstest]` test that calls a local helper once, the collector records
-     one call site keyed on the helper's `DefId`.";
+   `crates/rstest_helper_should_be_fixture/tests/features/collection.feature`
+   describing scenarios in user terms — "Given a crate containing a single
+   `#[rstest]` test that calls a local helper once, the collector records
+   one call site keyed on the helper's definition path.";
    - matching step definitions under
      `crates/rstest_helper_should_be_fixture/tests/collection_steps.rs`,
      using `dylint_testing` to drive a tiny synthetic crate through the
@@ -689,7 +689,7 @@ Test surfaces, in order of priority:
      `pub(crate) fn snapshot_collection(&self) -> CallSiteSnapshot` if
      necessary; document that the accessor is test-only by gating it under
      `#[cfg(any(test, feature = "test-snapshot"))]`).
-3. **Snapshot tests** with `insta` if a stable serialisation of the
+3. **Snapshot tests** with `insta` if a stable serialization of the
    collector snapshot is appropriate. Snapshot only the deduplicated
    `(callee_def_path, fingerprint, span_lo, span_hi)` projection so the
    snapshot is robust to incidental ordering.
@@ -989,12 +989,19 @@ pub(crate) struct CallSiteRecord {
     pub(crate) span: rustc_span::Span,
 }
 
+pub(crate) struct CallSiteLocation {
+    callee_key: String,
+    file_name: rustc_span::FileName,
+    lo: rustc_span::BytePos,
+    hi: rustc_span::BytePos,
+}
+
 pub(crate) struct CallSiteCollector {
     by_callee: std::collections::BTreeMap<
-        rustc_hir::def_id::DefId,
+        String,
         Vec<CallSiteRecord>,
     >,
-    seen: std::collections::BTreeSet<DedupKey>,
+    seen: std::collections::BTreeSet<CallSiteLocation>,
 }
 
 pub(crate) fn lower_arg_atom<'tcx>(
@@ -1009,11 +1016,8 @@ pub(crate) fn resolve_local_callee<'tcx>(
 ) -> Option<rustc_hir::def_id::DefId>;
 ```
 
-`DedupKey` is the `(callee_def_id, source_file_name, BytePos, BytePos)` tuple.
-Keep its fields private to the collector module.
-
 If `pub(crate)` test access is required by `rstest-bdd` steps, expose a
-`pub(crate) fn snapshot(&self) -> Vec<(rustc_hir::def_id::DefId, Vec<CallSiteRecord>)>`
+`pub(crate) fn snapshot(&self) -> Vec<(String, Vec<CallSiteRecord>)>`
 method on `CallSiteCollector` and a similar accessor on
 `RstestHelperShouldBeFixture`. Do not promote these to the crate's public API.
 

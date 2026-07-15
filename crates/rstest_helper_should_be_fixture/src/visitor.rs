@@ -9,7 +9,6 @@ use crate::collector::{
 use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_lint::LateContext;
@@ -163,11 +162,10 @@ fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
 }
 
 fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
-    match attr {
-        hir::Attribute::Unparsed(item) => item.style,
-        hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        hir::Attribute::Parsed(_) => AttrStyle::Outer,
-    }
+    let hir::Attribute::Unparsed(item) = attr else {
+        unreachable!("attribute_path filters parsed attributes");
+    };
+    item.style
 }
 
 pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String {
