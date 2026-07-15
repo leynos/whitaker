@@ -4,6 +4,7 @@
 mod build_support;
 
 use build_support::{exact_version, parser_dependency_requirement};
+use proptest::prelude::*;
 use rstest::rstest;
 
 #[rstest]
@@ -46,4 +47,17 @@ fn accepts_exact_requirement() {
         exact_version("=0.0.334").expect("exact requirement should parse"),
         "0.0.334"
     );
+}
+
+proptest! {
+    #[test]
+    fn exact_version_accepts_only_non_empty_exact_pins(
+        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just("".to_owned())],
+        suffix in "[A-Za-z0-9._-]{0,32}",
+    ) {
+        let requirement = format!("{prefix}{suffix}");
+        let is_exact_pin = prefix == "=" && !suffix.is_empty();
+
+        prop_assert_eq!(exact_version(&requirement).is_ok(), is_exact_pin);
+    }
 }

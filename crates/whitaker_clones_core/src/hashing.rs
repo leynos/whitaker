@@ -3,9 +3,9 @@
 //! Clone detection depends on hashes that are stable across builds, machines,
 //! and supported CPU architectures. This module owns the byte-mixing primitives
 //! used by token fingerprints and canonical AST subtree hashes so both paths
-//! share one deterministic overflow and serialisation contract.
+//! share one deterministic overflow and serialization contract.
 //!
-//! Callers must normalise their inputs before mixing them here. Integer helpers
+//! Callers must normalize their inputs before mixing them here. Integer helpers
 //! use little-endian bytes explicitly, and all arithmetic is wrapping FNV-style
 //! multiplication so equivalent source produces equivalent hashes on every
 //! supported platform. AST hashes also mix [`PARSER_SCHEMA_VERSION`] so parser
@@ -25,7 +25,7 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 pub const PARSER_SCHEMA_VERSION: &str =
     concat!("ra_ap_syntax=", env!("WHITAKER_RA_AP_SYNTAX_VERSION"));
 
-/// Mixes one already-normalised byte into the crate's stable FNV-style stream.
+/// Mixes one already-normalized byte into the crate's stable FNV-style stream.
 ///
 /// All token and AST hashes go through this primitive so the byte folding rule
 /// is shared. The function is intentionally tiny and wrapping: stability across
@@ -42,7 +42,7 @@ pub(crate) fn mix_byte(current: u64, byte: u8) -> u64 {
 
 /// Mixes a byte slice by repeatedly applying [`mix_byte`].
 ///
-/// Callers are responsible for serialising higher-level values into canonical
+/// Callers are responsible for serializing higher-level values into canonical
 /// bytes before calling this helper. Keeping the loop here avoids each feature
 /// extractor inventing its own traversal order or overflow behaviour.
 ///
@@ -61,7 +61,7 @@ pub(crate) fn mix_bytes(mut current: u64, bytes: &[u8]) -> u64 {
 /// Mixes a `u16` using little-endian bytes.
 ///
 /// AST kind identifiers are lowered as opaque `u16` values. Little-endian
-/// serialisation makes that representation explicit so hashes do not depend on
+/// serialization makes that representation explicit so hashes do not depend on
 /// the host CPU's byte order.
 ///
 /// # Examples

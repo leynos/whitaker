@@ -57,7 +57,19 @@ pub enum AstError {
     },
     /// A byte offset cannot be represented by the parser's text-size type.
     #[error("byte offset {0} exceeds the u32 TextSize range")]
-    OffsetTooLarge(u32),
+    OffsetTooLarge(usize),
+    /// The parsed source contains more syntax nodes than the lowering budget.
+    #[error("parsed source exceeds the AST node budget of {limit}")]
+    TreeTooLarge {
+        /// Maximum syntax nodes permitted during lowering.
+        limit: usize,
+    },
+    /// The parsed source exceeds the lowering recursion-depth budget.
+    #[error("parsed source exceeds the AST depth budget of {limit}")]
+    TreeTooDeep {
+        /// Maximum syntax depth permitted during lowering.
+        limit: usize,
+    },
     /// The selected subtree is dominated by parse-error nodes.
     #[error("byte span {start}..{end} maps to an unparsable (ERROR) subtree")]
     UnparsableSpan {

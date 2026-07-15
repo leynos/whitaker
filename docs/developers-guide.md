@@ -558,14 +558,14 @@ parser APIs, snapshots, and proof tooling.
 
 ### Rust toolchain bump runbook
 
-1. Change `rust-toolchain.toml` to the target nightly channel.
+1. Change `rust-toolchain.toml` to the target pinned nightly channel.
 2. Install or refresh the required components:
    `rustup component add rust-src rustc-dev llvm-tools-preview`.
-3. Rebuild the whole workspace with the new channel before making feature
-   changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API drift in
-   the production code rather than suppressing warnings.
-4. Confirm `cargo-dylint` and `dylint-link` can drive the new nightly. If no
-   compatible Dylint release exists, stop and record the blocker.
+3. Rebuild the whole workspace with the newly pinned channel before making
+   feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
+   drift in the production code rather than suppressing warnings.
+4. Confirm `cargo-dylint` and `dylint-link` can drive the pinned nightly. If
+   no compatible Dylint release exists, stop and record the blocker.
 5. Run the UI tests and re-baseline `.stderr` fixtures only after reviewing the
    diagnostic drift. Treat changed spans, wording, and suggestions as evidence
    to review, not as an automatic blessing.

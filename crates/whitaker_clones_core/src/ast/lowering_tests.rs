@@ -4,7 +4,9 @@ use insta::assert_json_snapshot;
 use rstest::rstest;
 use serde_json::json;
 
-use super::{kind_id, leaf_class};
+use ra_ap_syntax::{AstNode, Edition, SourceFile};
+
+use super::{MAX_AST_NODES, kind_id, leaf_class, lower_node_with_limit};
 use crate::{
     AstError, ByteSpan, Production,
     ast::{KindId, LeafClass, NormalisedNode, NormalisedTree, PARSER_SCHEMA_VERSION},
@@ -63,6 +65,38 @@ fn large_synthetic_source_still_lowers() -> Result<(), AstError> {
     let tree = lower_span(&source, span)?;
     assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
     Ok(())
+}
+
+#[rstest]
+fn oversized_source_is_rejected_by_the_node_budget() -> Result<(), AstError> {
+    let statements = (0..=MAX_AST_NODES)
+        .map(|index| format!("let value_{index} = {index};"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let source = format!("fn generated() {{ {statements} }}");
+    let span = ByteSpan::new(&source, 0, source.len() as u32)?;
+
+    assert_eq!(
+        lower_span(&source, span),
+        Err(AstError::TreeTooLarge {
+            limit: MAX_AST_NODES
+        })
+    );
+    Ok(())
+}
+
+#[rstest]
+fn deeply_nested_syntax_obeys_the_lowering_depth_budget() {
+    let source = "fn f() { if true { if true { if true { if true { 0; } } } } }";
+    let root = SourceFile::parse(source, Edition::CURRENT)
+        .tree()
+        .syntax()
+        .clone();
+
+    assert_eq!(
+        lower_node_with_limit(&root, 0, 2),
+        Err(AstError::TreeTooDeep { limit: 2 })
+    );
 }
 
 #[rstest]

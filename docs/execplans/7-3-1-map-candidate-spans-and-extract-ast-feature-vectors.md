@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: COMPLETED
 
 ## Purpose / big picture
 
@@ -740,8 +740,8 @@ the default unless Stage findings contradict it, then escalate):
 
 ## Outcomes & retrospective
 
-To be completed at milestones and at the end. Compare delivered behaviour
-against the Purpose section; note what would be done differently.
+Completed at the end of the milestone sequence. Compare delivered behaviour
+against the Purpose section; note any deltas, trade-offs, or follow-up work.
 
 ## Context and orientation
 
@@ -1277,8 +1277,7 @@ the draft PR references this ExecPlan.
 
 ## Concrete steps
 
-Run all commands from the worktree root
-`/home/leynos/.lody/repos/github---leynos---whitaker/worktrees/9fcb15ba-ebe1-4826-b124-ac54785b9705`.
+Run all commands from the worktree root for this checkout.
 Follow `AGENTS.md`: run gates sequentially (not in parallel) to benefit from
 the build cache, and `tee` long outputs to a log under `/tmp`.
 
@@ -1440,5 +1439,5 @@ Revision 1 (2026-06-09) — initial draft. Produced with a planning agent team
 testing/verification strands) and informed by `firecrawl` research into the
 current `ra_ap_syntax` API and MSRV constraints.
 
-Pending: the Stage B empirical version pin (carried as `0.0.PINNED`). Status
-remains DRAFT pending user approval per the ExecPlan approval gate.
+Historical note: the Stage B empirical version pin was carried as
+`0.0.PINNED` during drafting and resolved before completion of this plan.

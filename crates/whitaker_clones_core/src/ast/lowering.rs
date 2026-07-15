@@ -8,14 +8,12 @@ use ra_ap_syntax::{
 };
 use tracing::{debug, error, warn};
 
-use super::{
-    AstError, AstResult, ByteSpan, KindId, LeafClass, NormalisedNode, NormalisedTree,
-    select_smallest_covering,
-};
+use super::{AstError, AstResult, ByteSpan, KindId, LeafClass, NormalisedNode, NormalisedTree};
 
 pub use crate::hashing::PARSER_SCHEMA_VERSION;
 
-const MAX_EXPECTED_NODES: usize = 100_000;
+const MAX_AST_NODES: usize = 10_000;
+const MAX_AST_DEPTH: usize = 256;
 
 fn trace_ast_error(
     error: AstError,
@@ -95,6 +93,7 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
         "selected AST covering node"
     );
 
+    let lowered = lower_node(&selected, 0)?;
     if contains_error_element(&selected) {
         error!(
             start = span.start(),
@@ -108,31 +107,49 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
     }
 
     debug_assert!(selected.text_range().contains_range(target_range));
-    Ok(NormalisedTree::new(lower_node(&selected), span))
+    Ok(NormalisedTree::new(lowered, span))
 }
 
 /// Selects the smallest parser syntax node covering `target`.
 ///
-/// `root.descendants().collect::<Vec<_>>()` is O(n) in the number of syntax
-/// nodes in the parsed file, not just the candidate span. That cost is
-/// acceptable here because `ra_ap_syntax::SourceFile::parse` bounds `root` to a
-/// single source file (`min_nodes` upstream constraint), not an entire crate or
-/// workspace. Callers must not pass multi-megabyte source files without
-/// accepting this per-file traversal cost.
+/// Traversal is O(n) in the parsed source file, not just the candidate span.
+/// It enforces bounded node and depth budgets in every build so callers cannot
+/// turn a single-file parse into unbounded lowering work.
 fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
-    let nodes = root.descendants().collect::<Vec<_>>();
-    debug_assert!(
-        nodes.len() < MAX_EXPECTED_NODES,
-        "unexpectedly large syntax tree ({} nodes); investigate candidate span sizing",
-        nodes.len()
-    );
-    let ranges = nodes
-        .iter()
-        .map(|node| range_to_u32(node.text_range()))
-        .collect::<Vec<_>>();
+    let mut pending = vec![(root.clone(), 0_usize)];
+    let mut selected = None;
+    let mut node_count = 0_usize;
 
-    select_smallest_covering(&ranges, target)
-        .map(|index| nodes[index].clone())
+    while let Some((node, depth)) = pending.pop() {
+        if depth > MAX_AST_DEPTH {
+            return Err(AstError::TreeTooDeep {
+                limit: MAX_AST_DEPTH,
+            });
+        }
+        if node_count == MAX_AST_NODES {
+            return Err(AstError::TreeTooLarge {
+                limit: MAX_AST_NODES,
+            });
+        }
+        node_count += 1;
+
+        let range = range_to_u32(node.text_range());
+        if range.start <= target.start && range.end >= target.end {
+            let width = range.end - range.start;
+            if selected
+                .as_ref()
+                .is_none_or(|(_, selected_width)| width < *selected_width)
+            {
+                selected = Some((node.clone(), width));
+            }
+        }
+
+        let children = node.children().collect::<Vec<_>>();
+        pending.extend(children.into_iter().rev().map(|child| (child, depth + 1)));
+    }
+
+    selected
+        .map(|(node, _)| node)
         .ok_or_else(|| AstError::SpanOutOfBounds {
             start: target.start,
             end: target.end,
@@ -140,11 +157,29 @@ fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<Syn
         })
 }
 
-fn lower_node(node: &SyntaxNode) -> NormalisedNode {
+fn lower_node(node: &SyntaxNode, depth: usize) -> AstResult<NormalisedNode> {
+    lower_node_with_limit(node, depth, MAX_AST_DEPTH)
+}
+
+fn lower_node_with_limit(
+    node: &SyntaxNode,
+    depth: usize,
+    maximum_depth: usize,
+) -> AstResult<NormalisedNode> {
+    if depth > maximum_depth {
+        return Err(AstError::TreeTooDeep {
+            limit: maximum_depth,
+        });
+    }
+
     let mut children = Vec::new();
     for child in node.children_with_tokens() {
         match child {
-            NodeOrToken::Node(child_node) => children.push(lower_node(&child_node)),
+            NodeOrToken::Node(child_node) => children.push(lower_node_with_limit(
+                &child_node,
+                depth + 1,
+                maximum_depth,
+            )?),
             NodeOrToken::Token(token) if !token.kind().is_trivia() => {
                 children.push(lower_token(&token));
             }
@@ -152,7 +187,7 @@ fn lower_node(node: &SyntaxNode) -> NormalisedNode {
         }
     }
 
-    NormalisedNode::new(kind_id(node.kind()), None, children)
+    Ok(NormalisedNode::new(kind_id(node.kind()), None, children))
 }
 
 fn lower_token(token: &SyntaxToken) -> NormalisedNode {

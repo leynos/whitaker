@@ -49,11 +49,11 @@ impl KindCounts {
 /// assert_eq!(KindWeight::zero().get(), 0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct KindWeight(u64);
+pub struct KindWeight(u128);
 
 impl KindWeight {
     /// Fixed-point scale for `w(depth) = 2^-depth`.
-    pub const SCALE: u64 = 1_u64 << 63;
+    pub const SCALE: u128 = 1_u128 << 63;
 
     /// Returns a zero weight.
     #[must_use]
@@ -63,11 +63,11 @@ impl KindWeight {
 
     /// Returns the fixed-point value.
     #[must_use]
-    pub const fn get(self) -> u64 {
+    pub const fn get(self) -> u128 {
         self.0
     }
 
-    const fn from_raw(value: u64) -> Self {
+    const fn from_raw(value: u128) -> Self {
         Self(value)
     }
 }
@@ -176,11 +176,11 @@ pub fn kind_counts(tree: &NormalisedTree) -> KindCounts {
 pub fn weighted_histogram(counts: &KindCounts) -> KindHistogram {
     let mut histogram = BTreeMap::new();
     for (kind, depth, count) in counts.iter() {
-        let contribution = depth_weight(depth).saturating_mul(u64::from(count));
+        let contribution = weighted_contribution(depth, count);
         histogram
             .entry(kind)
             .and_modify(|weight: &mut KindWeight| {
-                *weight = KindWeight::from_raw(weight.get().saturating_add(contribution));
+                *weight = KindWeight::from_raw(weight.get() + contribution);
             })
             .or_insert_with(|| KindWeight::from_raw(contribution));
     }
@@ -220,10 +220,14 @@ fn next_depth(depth: Depth) -> Depth {
     Depth::new(depth.get().saturating_add(1))
 }
 
-fn depth_weight(depth: Depth) -> u64 {
+fn depth_weight(depth: Depth) -> u128 {
     KindWeight::SCALE
         .checked_shr(u32::from(depth.get()))
         .unwrap_or_default()
+}
+
+fn weighted_contribution(depth: Depth, count: u32) -> u128 {
+    depth_weight(depth) * u128::from(count)
 }
 
 fn collect_productions(node: &NormalisedNode, productions: &mut ProductionMultiset) {
@@ -248,5 +252,24 @@ fn collect_trigrams(
             parent.kind(),
             child.kind(),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::{Depth, weighted_contribution};
+
+    proptest! {
+        #[test]
+        fn each_representable_depth_one_count_increases_its_weight(
+            count in 0_u32..u32::MAX
+        ) {
+            let current_weight = weighted_contribution(Depth::new(1), count);
+            let increased_weight = weighted_contribution(Depth::new(1), count + 1);
+
+            prop_assert!(increased_weight > current_weight);
+        }
     }
 }

@@ -18,6 +18,25 @@ fn malformed_covering_candidates_are_ignored() {
 }
 
 #[rstest]
+fn reversed_target_ranges_are_rejected() {
+    let target_start = 5;
+    let target_end = 3;
+    let candidate = 0..10;
+
+    assert_eq!(
+        select_smallest_covering(
+            std::slice::from_ref(&candidate),
+            &(target_start..target_end)
+        ),
+        None
+    );
+    assert_eq!(
+        select_smallest_covering(std::slice::from_ref(&candidate), &(3..5)),
+        Some(0)
+    );
+}
+
+#[rstest]
 fn equal_width_covering_candidates_select_the_first() {
     let candidates = [0..5, 0..5];
 
@@ -63,6 +82,22 @@ fn weighted_histogram_applies_dyadic_depth_weights() -> AstResult<()> {
         Some(KindWeight::SCALE >> 2)
     );
 
+    Ok(())
+}
+
+#[rstest]
+fn weighted_histogram_accumulates_four_equal_depth_one_kinds() -> AstResult<()> {
+    let kind = KindId::new(9);
+    let tree = tree_with_root(NormalisedNode::new(
+        KindId::new(1),
+        None,
+        (0..4).map(|_| ident(kind)).collect(),
+    ))?;
+
+    assert_eq!(
+        kind_histogram(&tree).get(kind).map(KindWeight::get),
+        Some(4 * (KindWeight::SCALE >> 1))
+    );
     Ok(())
 }
 

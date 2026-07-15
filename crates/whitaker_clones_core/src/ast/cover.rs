@@ -19,6 +19,10 @@ pub fn select_smallest_covering(
     candidates: &[std::ops::Range<u32>],
     target: &std::ops::Range<u32>,
 ) -> Option<usize> {
+    if target.end < target.start {
+        return None;
+    }
+
     candidates
         .iter()
         .enumerate()
