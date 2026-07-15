@@ -122,11 +122,23 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
 }
 
 #[cfg(windows)]
+#[test]
+fn windows_env_guard_test_lock_recovers_after_panic() {
+    let result = std::panic::catch_unwind(|| {
+        let _serial_guard = windows_env_guard_test_lock();
+        panic!("intentionally poison the Windows UI test lock");
+    });
+
+    assert!(result.is_err());
+    let _serial_guard = windows_env_guard_test_lock();
+}
+
+#[cfg(windows)]
 fn windows_env_guard_test_lock() -> MutexGuard<'static, ()> {
     // These tests inspect process-global environment state after callbacks,
     // so their whole bodies must run serially rather than only each mutation.
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(|error| panic!("expected Windows env guard test lock: {error}"))
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
