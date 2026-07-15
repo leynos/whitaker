@@ -77,6 +77,9 @@ fn rejects_drive_relative_directories_on_windows() {
 
 #[test]
 fn propagates_runner_failures() {
+    #[cfg(windows)]
+    let _serial_guard = windows_env_guard_test_lock();
+
     let error = run_with_runner("lint", "ui", |crate_name, directory| {
         assert_eq!(crate_name, "lint");
         assert_eq!(directory, Utf8Path::new("ui"));
