@@ -149,9 +149,7 @@ def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope(
     assert env.get("SCCACHE_GHA_ENABLED") == "true", (
         "CI must enable the GitHub Actions-backed sccache integration"
     )
-    assert env.get("RUSTC_WRAPPER") == "sccache", (
-        "CI must route rustc through sccache"
-    )
+    assert env.get("RUSTC_WRAPPER") == "sccache", "CI must route rustc through sccache"
     assert str(env.get("CARGO_INCREMENTAL")) == "0", (
         "CI must disable incremental Cargo builds when relying on sccache"
     )
@@ -163,10 +161,8 @@ def test_ci_enables_shared_sccache_env_and_debug_target_cache_scope(
     )
 
 
-def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
-    workflow: Mapping[str, Any],
-) -> None:
-    """Ensure the PR coverage gate preserves Whitaker's coverage constraints."""
+def _assert_coverage_workflow_permissions(workflow: Mapping[str, Any]) -> None:
+    """Assert the permissions required by the coverage-check contract."""
     permissions = _get_mapping_item(
         workflow,
         "permissions",
@@ -176,6 +172,9 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
         "coverage checks require only read access to repository contents"
     )
 
+
+def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the coverage job after asserting its execution contract."""
     jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
     coverage_job = _get_mapping_item(
         jobs,
@@ -204,7 +203,11 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
         ],
         "coverage-check must prepare Rust, generate LCOV, then check CodeScene",
     )
+    return coverage_job
 
+
+def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None:
+    """Assert checkout history and Rust setup for the coverage job."""
     checkout_step = _find_step(coverage_job, "Checkout")
     assert checkout_step.get("uses") == "actions/checkout@v7", (
         "coverage-check must use the repository-approved checkout action"
@@ -219,11 +222,12 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
         "d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
 
+
+def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
+    """Assert tool pins and coverage generation for the coverage job."""
     nextest_step = _find_step(coverage_job, "Install cargo-nextest")
     llvm_cov_step = _find_step(coverage_job, "Install cargo-llvm-cov")
-    installer_action = (
-        "taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10"
-    )
+    installer_action = "taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10"
     assert nextest_step.get("uses") == installer_action, (
         "cargo-nextest must use the repository-approved installer action pin"
     )
@@ -241,6 +245,9 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
         "make coverage"
     ), "coverage-check must preserve Whitaker's crate exclusions and RUSTFLAGS"
 
+
+def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
+    """Assert the CodeScene changed-line coverage contract."""
     check_step = _find_step(coverage_job, "Check coverage against CodeScene gates")
     assert check_step.get("env", {}).get("CS_ACCESS_TOKEN") == (
         "${{ secrets.CS_ACCESS_TOKEN }}"
@@ -259,6 +266,17 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
         "access-token": "${{ env.CS_ACCESS_TOKEN }}",
         "installer-checksum": "${{ vars.CODESCENE_CLI_SHA256 }}",
     }, "coverage-check must pass the canonical project and check-mode inputs"
+
+
+def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
+    workflow: Mapping[str, Any],
+) -> None:
+    """Ensure the PR coverage gate preserves Whitaker's coverage constraints."""
+    _assert_coverage_workflow_permissions(workflow)
+    coverage_job = _coverage_check_job(workflow)
+    _assert_coverage_checkout_and_setup(coverage_job)
+    _assert_coverage_tool_installation(coverage_job)
+    _assert_codescene_check(coverage_job)
 
 
 def test_linux_full_keeps_the_full_linux_validation_stack(
@@ -297,12 +315,16 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         'cargo +1.95.0 install merman-cli --version "=0.7.0" --locked'
     ), "linux-full must install Merman 0.7.0 with its pinned Rust 1.95 toolchain"
 
-    markdown_globs = _find_step(linux_job, "Markdown lint").get("with", {}).get(
-        "globs",
+    markdown_globs = (
+        _find_step(linux_job, "Markdown lint")
+        .get("with", {})
+        .get(
+            "globs",
+        )
     )
-    assert markdown_globs == (
-        "**/*.md\n!**/.uv-cache/**\n!**/.uv-tools/**\n"
-    ), "Markdown lint must exclude rollout-owned uv cache and tool directories"
+    assert markdown_globs == ("**/*.md\n!**/.uv-cache/**\n!**/.uv-tools/**\n"), (
+        "Markdown lint must exclude rollout-owned uv cache and tool directories"
+    )
 
 
 def test_windows_compat_stays_limited_to_windows_compatibility_checks(
@@ -355,9 +377,7 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
 
     assert (
         _find_step(windows_job, "Test").get("run") == "make test NEXTEST_PROFILE=ci"
-    ), (
-        "windows-compat must run the full CI test profile on Windows"
-    )
+    ), "windows-compat must run the full CI test profile on Windows"
     assert _find_step(windows_job, "Installer smoke test").get("run") == (
         "make install-smoke"
     ), "windows-compat must install and execute the packaged installer"
