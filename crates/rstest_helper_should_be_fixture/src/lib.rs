@@ -11,6 +11,8 @@
 mod collector;
 #[cfg(feature = "dylint-driver")]
 mod driver;
+#[cfg(feature = "dylint-driver")]
+mod visitor;
 
 #[cfg(feature = "dylint-driver")]
 pub use driver::*;
