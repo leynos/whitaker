@@ -4,6 +4,7 @@ target/
 bin/act
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 *:Zone.Identifier
 .coverage
