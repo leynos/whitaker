@@ -23,7 +23,7 @@ a candidate's byte span, map it to the smallest covering syntax node from the
 that subtree. The feature vector has three components described in the design
 document: a depth-weighted **node-kind histogram**, a **production multiset**
 of parent→child (bigram) and parent→child→grandchild (trigram) edges, and a
-**canonical Merkle-style subtree hash** with normalised leaves.
+**canonical Merkle-style subtree hash** with normalized leaves.
 
 Scoring those features into a Type-3 similarity, and writing SARIF Run 1, is
 the **next** roadmap item (7.3.2) and is explicitly out of scope here. This
@@ -94,7 +94,10 @@ escalation, not a workaround.
   The selected `ra_ap_syntax` version is then a *contemporaneous* snapshot
   (matching the new nightly), not a backwards-bisected one, and must compile
   cleanly under `-D warnings`. Do not regress any other crate's behaviour while
-  bumping; UI-diagnostic drift is re-baselined, not suppressed.
+  bumping; UI-diagnostic drift is re-baselined, not suppressed. Follow-up for
+  leynos/rstest-bdd: update ADR-013, its ExecPlan, the developers' guide, and
+  CI from `nightly-2025-09-18`/Dylint `5.0.0` to `nightly-2026-05-28`/Dylint
+  `6.0.1`.
 - **No silenced lints.**
   `cargo clippy --workspace --all-targets --all-features -- -D warnings` must
   pass with no new `#[allow(...)]` except as a tightly scoped last resort with
@@ -386,7 +389,7 @@ invariance over equal contribution multisets. Green follow-up gates:
   `bumpy_road_function` UI smoke passed after this migration.
 - Observation: rustc 1.98 moved several APIs used by tests and lints:
   `StableHashCtxt` now lives under `rustc_data_structures::stable_hash`,
-  `hir::AttrPath` segments are `Box<[Symbol]>`, and type normalisation now uses
+  `hir::AttrPath` segments are `Box<[Symbol]>`, and type normalization now uses
   `ty::TypingEnv` plus `ty::Unnormalized::new_wip`.
 - Observation: the full Stage 0 gates exposed two real compatibility drifts in
   `no_unwrap_or_else_panic`, not fixture churn. First, newer HIR parent
@@ -754,9 +757,9 @@ AST engine (`ra_ap_syntax`)”**, covering parsing and region mapping, feature
 extraction (node-kind histogram, production multiset, canonical subtree hash),
 and — for 7.3.2, not here — scoring and SARIF Run 1.
 
-The existing crate is organised by feature, each as a directory module:
+The existing crate is organized by feature, each as a directory module:
 
-- `src/token/` — `rustc_lexer` normalisation, k-shingling, Rabin-Karp hashing,
+- `src/token/` — `rustc_lexer` normalization, k-shingling, Rabin-Karp hashing,
   winnowing. The stable FNV-1a-style hashing idiom this plan reuses for the
   subtree hash lives here.
 - `src/index/` — MinHash sketches, LSH candidate generation, `FragmentId`,
@@ -874,7 +877,7 @@ pub struct KindId(u16);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Depth(u16);
 
-/// Normalised leaf token class (Type-2 erasure of identifiers and literals).
+/// Normalized leaf token class (Type-2 erasure of identifiers and literals).
 /// `#[non_exhaustive]` so 7.3.2 may add literal sub-classes (mirroring the token
 /// pass's `<NUM>`/`<STR>`/… granularity) or `Lifetime` without a breaking bump.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -885,7 +888,7 @@ pub enum LeafClass { Ident, Literal, Other }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct NormalisedNode {
     kind: KindId,
-    leaf: Option<LeafClass>,          // Some iff this node is a normalised leaf
+    leaf: Option<LeafClass>,          // Some iff this node is a normalized leaf
     children: Vec<NormalisedNode>,
 }
 
@@ -921,7 +924,7 @@ pub fn kind_histogram(tree: &NormalisedTree) -> KindHistogram;
 /// (parent->child) bigrams and (parent->child->grandchild) trigrams.
 pub fn production_multiset(tree: &NormalisedTree) -> ProductionMultiset;
 
-/// Canonical Merkle-style subtree hash of the tree's root. Leaves normalise to
+/// Canonical Merkle-style subtree hash of the tree's root. Leaves normalize to
 /// <ID>/<LIT>/<OTHER>; internal nodes fold (kind, arity, ordered child hashes).
 /// The fold is seeded with `crate::hashing::PARSER_SCHEMA_VERSION` (a neutral
 /// const, not the adapter) so a parser-pin bump changes every hash (cache fails
@@ -1146,7 +1149,7 @@ fixed-point `KindWeight`. Stage C resolved that representation as
 `KindWeight::SCALE = 1 << 63` with `w(depth) = SCALE >> depth` and records the
 zero-after-depth-63 behaviour in the Decision Log. Stage C also resolved OQ6 by
 omitting per-node spans from the pure IR. Keep `canonical_hash` order-sensitive
-(kind + arity + ordered child hashes), leaf-normalising (`Ident`/`Literal`
+(kind + arity + ordered child hashes), leaf-normalizing (`Ident`/`Literal`
 erase payload → equal hashes; different kind or arity → different hashes), and
 seed it with `PARSER_SCHEMA_VERSION`. To respect the dependency rule,
 `PARSER_SCHEMA_VERSION` lives in the neutral `crate::hashing` module and is
@@ -1198,7 +1201,7 @@ but the `KindId → "BIN_EXPR"` renderer is a `#[cfg(test)]` helper in the adapt
 re-couple the domain to parser vocabulary). Add `proptest` invariants over an
 `Arbitrary` `NormalisedTree` strategy: determinism; `kind_counts`/
 `production_multiset` accumulation order-independence (sibling-visit
-permutation); leaf-normalisation hash equality. State explicitly that the
+permutation); leaf-normalization hash equality. State explicitly that the
 order-independence property excludes `canonical_hash`, which is deliberately
 order-*sensitive*; proptest uses the opaque `KindId(u16)`, never the rendered
 name. Keep a checked-in `proptest-regressions/` file. Validation:
@@ -1320,7 +1323,7 @@ Acceptance is behavioural and observable.
   returned `NormalisedTree` root maps to the binary-expression kind, not the
   block; call `canonical_hash` on the lowered subtrees of
   `fn f(){ let a = g(); }` and `fn f(){ let b = h(); }` and observe **equal**
-  hashes (identifier normalisation); call it on `a + b` vs `a - b` and observe
+  hashes (identifier normalization); call it on `a + b` vs `a - b` and observe
   **different** hashes (kind sensitivity).
 - **Quality criteria (definition of done):**
   - Toolchain (Stage 0): `rust-toolchain.toml` names `nightly-2026-05-28`, and

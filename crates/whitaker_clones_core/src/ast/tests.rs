@@ -3,10 +3,36 @@
 use super::{
     AstResult, ByteSpan, Depth, KindId, KindWeight, LeafClass, NormalisedNode, NormalisedTree,
     Production, canonical_hash, kind_counts, kind_histogram, production_multiset,
-    weighted_histogram,
+    select_smallest_covering, weighted_histogram,
 };
 use proptest::prelude::*;
 use rstest::rstest;
+
+#[rstest]
+fn malformed_covering_candidates_are_ignored() {
+    let malformed_start = 8;
+    let malformed_end = 3;
+    let candidates = [malformed_start..malformed_end, 0..10];
+
+    assert_eq!(select_smallest_covering(&candidates, &(4..5)), Some(1));
+}
+
+#[rstest]
+fn equal_width_covering_candidates_select_the_first() {
+    let candidates = [0..5, 0..5];
+
+    assert_eq!(select_smallest_covering(&candidates, &(2..3)), Some(0));
+}
+
+#[rstest]
+fn deeply_nested_trees_extract_features_and_hash_without_recursion() -> AstResult<()> {
+    let tree = tree_with_root(deep_chain(2_048))?;
+
+    assert_eq!(kind_counts(&tree).iter().count(), 2_049);
+    assert_eq!(production_multiset(&tree).bigrams().count(), 1);
+    assert_eq!(canonical_hash(&tree).to_hex().len(), 16);
+    Ok(())
+}
 
 #[rstest]
 fn kind_counts_record_depth_resolved_counts() -> AstResult<()> {
@@ -128,6 +154,13 @@ fn different_leaf_tree() -> AstResult<NormalisedTree> {
 
 fn tree_with_root(root: NormalisedNode) -> AstResult<NormalisedTree> {
     Ok(NormalisedTree::new(root, ByteSpan::new("fn f() {}", 0, 2)?))
+}
+
+fn deep_chain(depth: usize) -> NormalisedNode {
+    (0..depth).fold(
+        NormalisedNode::new(KindId::new(2), None, Vec::new()),
+        |child, _| NormalisedNode::new(KindId::new(2), None, vec![child]),
+    )
 }
 
 fn branch() -> NormalisedNode {

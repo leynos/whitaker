@@ -160,7 +160,7 @@ fn when_manifest_constructed(world: &mut ArtefactWorld) {
     };
     let digest_hex = "a".repeat(64);
     let content = ManifestContent {
-        generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
+        generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
         files: vec!["libwhitaker_lints.so".to_owned()],
         sha256: Sha256Digest::try_from(digest_hex.as_str()).expect("valid digest"),
     };
@@ -174,7 +174,7 @@ fn then_manifest_accessible(world: &mut ArtefactWorld) {
     assert_eq!(m.schema_version().as_u32(), 1);
     assert_eq!(m.toolchain().as_str(), "nightly-2026-05-28");
     assert_eq!(m.target().as_str(), "x86_64-unknown-linux-gnu");
-    assert_eq!(m.generated_at().as_str(), "2026-02-03T00:00:00Z");
+    assert_eq!(m.generated_at().as_str(), "2026-05-28T00:00:00Z");
     assert_eq!(m.files().len(), 1);
     assert_eq!(m.sha256().as_str().len(), 64);
 }

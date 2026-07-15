@@ -202,9 +202,17 @@ pub fn production_multiset(tree: &NormalisedTree) -> ProductionMultiset {
 }
 
 fn count_node_kinds(node: &NormalisedNode, depth: Depth, counts: &mut KindCounts) {
-    counts.increment(node.kind(), depth);
-    for child in node.children() {
-        count_node_kinds(child, next_depth(depth), counts);
+    let mut pending = vec![(node, depth)];
+    while let Some((current, current_depth)) = pending.pop() {
+        counts.increment(current.kind(), current_depth);
+        let child_depth = next_depth(current_depth);
+        pending.extend(
+            current
+                .children()
+                .iter()
+                .rev()
+                .map(|child| (child, child_depth)),
+        );
     }
 }
 
@@ -219,10 +227,13 @@ fn depth_weight(depth: Depth) -> u64 {
 }
 
 fn collect_productions(node: &NormalisedNode, productions: &mut ProductionMultiset) {
-    for child in node.children() {
-        productions.increment(Production::Bigram(node.kind(), child.kind()));
-        collect_trigrams(node, child, productions);
-        collect_productions(child, productions);
+    let mut pending = vec![node];
+    while let Some(parent) = pending.pop() {
+        for child in parent.children() {
+            productions.increment(Production::Bigram(parent.kind(), child.kind()));
+            collect_trigrams(parent, child, productions);
+        }
+        pending.extend(parent.children().iter().rev());
     }
 }
 

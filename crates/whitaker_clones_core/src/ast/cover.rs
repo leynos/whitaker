@@ -2,6 +2,10 @@
 
 /// Selects the smallest candidate span that covers `target`.
 ///
+/// When covering candidates have equal width, the first candidate encountered
+/// is selected. For `root.descendants()` order, this may prefer an ancestor
+/// over an equal-width child.
+///
 /// # Examples
 ///
 /// ```
@@ -18,7 +22,11 @@ pub fn select_smallest_covering(
     candidates
         .iter()
         .enumerate()
-        .filter(|(_, candidate)| candidate.start <= target.start && candidate.end >= target.end)
+        .filter(|(_, candidate)| {
+            candidate.end >= candidate.start
+                && candidate.start <= target.start
+                && candidate.end >= target.end
+        })
         .min_by_key(|(_, candidate)| candidate.end - candidate.start)
         .map(|(index, _)| index)
 }

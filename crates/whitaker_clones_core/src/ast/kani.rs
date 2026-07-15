@@ -160,13 +160,22 @@ fn verify_kind_index_is_bounded() {
     let kind = KindId::new(raw);
 
     kani::assert(kind.get() == raw, "KindId must preserve the lowered index");
-    kani::assert(
-        u32::from(kind.get()) <= u32::from(u16::MAX),
-        "KindId indexes must stay inside the u16 parser-kind range",
+    let tree = bounded_tree(
+        kind,
+        BranchSpec {
+            kind: symbolic_kind(),
+            leaf_kind: symbolic_kind(),
+        },
+        BranchSpec {
+            kind: symbolic_kind(),
+            leaf_kind: symbolic_kind(),
+        },
+        true,
     );
+    let beyond_bound = Depth::new(KANI_AST_MAX_DEPTH as u16 + 1);
     kani::assert(
-        Depth::new(KANI_AST_MAX_DEPTH as u16).get() <= KANI_AST_MAX_DEPTH as u16,
-        "bounded AST depth witness must stay inside the configured harness depth",
+        count_kind_at_depth(tree.root(), kind, Depth::root(), beyond_bound) == 0,
+        "bounded trees must contain no nodes beyond KANI_AST_MAX_DEPTH",
     );
 }
 

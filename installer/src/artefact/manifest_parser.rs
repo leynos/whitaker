@@ -35,7 +35,7 @@ pub enum ManifestParseError {
 ///     r#"{"git_sha":"abc1234","schema_version":1,"#,
 ///     r#""toolchain":"nightly-2026-05-28","#,
 ///     r#""target":"x86_64-unknown-linux-gnu","#,
-///     r#""generated_at":"2026-02-03T00:00:00Z","#,
+///     r#""generated_at":"2026-05-28T00:00:00Z","#,
 ///     r#""files":["lib.so"],"#,
 ///     r#""sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#,
 /// );
@@ -56,7 +56,7 @@ mod tests {
             r#"{"git_sha":"abc1234","schema_version":1,"#,
             r#""toolchain":"nightly-2026-05-28","#,
             r#""target":"x86_64-unknown-linux-gnu","#,
-            r#""generated_at":"2026-02-03T00:00:00Z","#,
+            r#""generated_at":"2026-05-28T00:00:00Z","#,
             r#""files":["lib.so"],"#,
             r#""sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#,
         )
@@ -70,6 +70,7 @@ mod tests {
         assert_eq!(manifest.toolchain().as_str(), "nightly-2026-05-28");
         assert_eq!(manifest.target().as_str(), "x86_64-unknown-linux-gnu");
         assert_eq!(manifest.schema_version().as_u32(), 1);
+        assert_eq!(manifest.generated_at().as_str(), "2026-05-28T00:00:00Z");
         assert_eq!(manifest.files(), &["lib.so"]);
         assert_eq!(manifest.sha256().as_str().len(), 64);
     }

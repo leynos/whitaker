@@ -53,7 +53,7 @@ pub struct ManifestContent {
 ///   "schema_version": 1,
 ///   "toolchain": "nightly-2026-05-28",
 ///   "target": "x86_64-unknown-linux-gnu",
-///   "generated_at": "2026-02-03T00:00:00Z",
+///   "generated_at": "2026-05-28T00:00:00Z",
 ///   "files": ["libwhitaker_lints@nightly-2026-05-28-x86_64-unknown-linux-gnu.so"],
 ///   "sha256": "..."
 /// }
@@ -80,7 +80,7 @@ pub struct ManifestContent {
 ///         .expect("valid target triple"),
 /// };
 /// let content = ManifestContent {
-///     generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
+///     generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
 ///     files: vec!["libwhitaker_lints.so".to_owned()],
 ///     sha256: Sha256Digest::try_from("a".repeat(64).as_str())
 ///         .expect("valid SHA-256 digest"),
@@ -113,8 +113,8 @@ impl GeneratedAt {
     /// ```
     /// use whitaker_installer::artefact::manifest::GeneratedAt;
     ///
-    /// let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
-    /// assert_eq!(ts.as_str(), "2026-02-03T00:00:00Z");
+    /// let ts = GeneratedAt::new("2026-05-28T00:00:00Z");
+    /// assert_eq!(ts.as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
     pub fn new(value: impl Into<String>) -> Self {
@@ -128,8 +128,8 @@ impl GeneratedAt {
     /// ```
     /// use whitaker_installer::artefact::manifest::GeneratedAt;
     ///
-    /// let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
-    /// assert_eq!(ts.as_str(), "2026-02-03T00:00:00Z");
+    /// let ts = GeneratedAt::new("2026-05-28T00:00:00Z");
+    /// assert_eq!(ts.as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -169,7 +169,7 @@ macro_rules! _manifest_doc_setup {
                 .expect("valid target triple"),
         };
         let content = ManifestContent {
-            generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
+            generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
             files: vec!["libwhitaker_lints.so".to_owned()],
             sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid SHA-256 digest"),
         };
@@ -252,7 +252,7 @@ impl Manifest {
     ///
     /// ```
     /// whitaker_installer::_manifest_doc_setup!(manifest);
-    /// assert_eq!(manifest.generated_at().as_str(), "2026-02-03T00:00:00Z");
+    /// assert_eq!(manifest.generated_at().as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
     pub fn generated_at(&self) -> &GeneratedAt {

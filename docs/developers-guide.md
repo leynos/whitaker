@@ -384,6 +384,10 @@ adapter, while Kani runs pass `--no-default-features` and compile the
 parser-free adapter stub. Keep that split unless Kani's pinned toolchain can
 compile the parser snapshot directly.
 
+`crates/whitaker_clones_core/build_support.rs` owns pure build-time parser
+dependency parsing. Only that crate's `build.rs` and its integration
+verification test may import it; runtime code must not use it.
+
 ### Make targets
 
 Use the Makefile targets for normal proof runs:

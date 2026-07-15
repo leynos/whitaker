@@ -47,14 +47,34 @@ fn seed_hash() -> u64 {
     mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes())
 }
 
-fn hash_node(mut hash: u64, node: &NormalisedNode) -> u64 {
+fn hash_node(hash: u64, node: &NormalisedNode) -> u64 {
+    let mut pending = vec![(node, 0, hash_node_header(hash, node))];
+    loop {
+        let Some((current, child_index, _)) = pending.last_mut() else {
+            return hash;
+        };
+        if let Some(child) = current.children().get(*child_index) {
+            *child_index += 1;
+            pending.push((child, 0, hash_node_header(seed_hash(), child)));
+            continue;
+        }
+
+        let Some((_, _, completed_hash)) = pending.pop() else {
+            return hash;
+        };
+        if let Some((_, _, parent_hash)) = pending.last_mut() {
+            *parent_hash = mix_u64(*parent_hash, completed_hash);
+        } else {
+            return completed_hash;
+        }
+    }
+}
+
+fn hash_node_header(mut hash: u64, node: &NormalisedNode) -> u64 {
     hash = mix_byte(hash, b'n');
     hash = mix_u16(hash, node.kind().get());
     hash = mix_byte(hash, leaf_tag(node.leaf()));
     hash = mix_u64(hash, child_count(node));
-    for child in node.children() {
-        hash = mix_u64(hash, hash_node(seed_hash(), child));
-    }
     hash
 }
 

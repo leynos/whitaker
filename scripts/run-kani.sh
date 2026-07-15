@@ -59,6 +59,9 @@ run_clone_detector_harnesses() {
         verify_kind_index_is_bounded \
         verify_count_accumulation_is_order_independent_bounded
     do
+        # Keep the parser feature off for every clone-detector harness, including
+        # verify_lsh_index_rejects_self_pairs: Kani's pinned Rust cannot satisfy
+        # ra_ap_syntax's MSRV.
         "${CARGO_KANI_BIN}" kani \
             --manifest-path "${CLONE_DETECTOR_MANIFEST}" \
             --no-default-features \

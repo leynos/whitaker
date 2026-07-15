@@ -37,6 +37,8 @@ where
 
 #[test]
 fn parses_standard_toolchain_format() {
+    // Downstream leynos/rstest-bdd must mirror this parse_toolchain_channel
+    // nightly-2026-05-28 case in its developers guide, ADR-013, and CI workflow.
     let contents = r#"
 [toolchain]
 channel = "nightly-2026-05-28"

@@ -13,7 +13,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const PARSER_DEPENDENCY: &str = "ra_ap_syntax";
+mod build_support;
+
+use build_support::{exact_version, parser_dependency_requirement};
+
 const PARSER_VERSION_ENV: &str = "WHITAKER_RA_AP_SYNTAX_VERSION";
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -33,23 +36,6 @@ fn workspace_manifest_path() -> Result<PathBuf, Box<dyn Error>> {
     find_workspace_manifest(&manifest_dir)
 }
 
-fn parser_dependency_requirement(manifest: &str) -> Result<String, Box<dyn Error>> {
-    let document = manifest.parse::<toml::Table>()?;
-    let dependency = document
-        .get("workspace")
-        .and_then(|workspace| workspace.get("dependencies"))
-        .and_then(|dependencies| dependencies.get(PARSER_DEPENDENCY))
-        .ok_or_else(missing_workspace_dependency)?;
-
-    let inline_requirement = dependency.as_str();
-    let table_requirement = dependency.get("version").and_then(toml::Value::as_str);
-
-    inline_requirement
-        .or(table_requirement)
-        .map(str::to_owned)
-        .ok_or_else(|| invalid_workspace_dependency().into())
-}
-
 fn find_workspace_manifest(manifest_dir: &Path) -> Result<PathBuf, Box<dyn Error>> {
     for directory in manifest_dir.ancestors() {
         let candidate = directory.join("Cargo.toml");
@@ -65,35 +51,6 @@ fn is_workspace_manifest(candidate: &Path) -> Result<bool, Box<dyn Error>> {
     let manifest = fs::read_to_string(candidate)?;
     let document = manifest.parse::<toml::Table>()?;
     Ok(document.contains_key("workspace"))
-}
-
-fn exact_version(requirement: &str) -> Result<&str, io::Error> {
-    requirement
-        .strip_prefix('=')
-        .ok_or_else(|| non_exact_workspace_dependency(requirement))
-}
-
-fn missing_workspace_dependency() -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!("workspace dependency `{PARSER_DEPENDENCY}` is missing"),
-    )
-}
-
-fn invalid_workspace_dependency() -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!("workspace dependency `{PARSER_DEPENDENCY}` has no version string"),
-    )
-}
-
-fn non_exact_workspace_dependency(requirement: &str) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!(
-            "workspace dependency `{PARSER_DEPENDENCY}` must be exact-pinned, got `{requirement}`"
-        ),
-    )
 }
 
 fn workspace_manifest_not_found(manifest_dir: &Path) -> io::Error {

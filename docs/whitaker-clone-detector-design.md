@@ -236,6 +236,34 @@ pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
 }
 ```
 
+### Normalization
+
+```rust
+pub enum Norm { T1, T2 }
+
+pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
+    use rustc_lexer::{tokenize, TokenKind};
+    let mut out = Vec::new();
+    let mut off = 0;
+    for tok in tokenize(src) {
+        let kind = match tok.kind {
+            TokenKind::Whitespace
+            | TokenKind::LineComment
+            | TokenKind::BlockComment { .. } => {
+                off += tok.len;
+                continue;
+            }
+            TokenKind::Ident if matches!(norm, Norm::T2) => 1, // <ID>
+            TokenKind::Literal { .. } if matches!(norm, Norm::T2) => 2, // <LIT>
+            _ => tok.kind as u32,
+        };
+        out.push((kind, off..off + tok.len));
+        off += tok.len;
+    }
+    out
+}
+```
+
 ### k-shingles, rolling hash, winnowing
 
 - **Shingle:** sequence of `k` token kinds (default `k=25`).
@@ -706,7 +734,7 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 5. **Proof obligations remain split by what each tool can substantiate.**
    Unit tests, `rstest-bdd`, snapshots, and `proptest` cover runtime lowering,
    sibling-order independence for count and production accumulation, leaf
-   normalisation, and parser-version drift. Kani verifies bounded production
+   normalization, and parser-version drift. Kani verifies bounded production
    span-cover selection and bounded AST feature invariants over synthetic
    trees. Verus proves the contribution-count accumulator algebra for a
    supplied multiset; it does not claim to verify parser traversal or the
