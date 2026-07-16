@@ -757,7 +757,7 @@ Example entry:
 [[dependency_binaries]]
 package = "cargo-dylint"
 binary = "cargo-dylint"
-version = "4.1.0"
+version = "6.0.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/trailofbits/dylint"
 ```
