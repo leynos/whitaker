@@ -354,9 +354,9 @@ parser adapter and several parser-agnostic domain modules:
 - `lowering.rs` is the only AST source file that may import `ra_ap_syntax`,
   `ra_ap_parser`, or `rowan`. It parses a Rust file, maps byte spans to the
   smallest covering syntax node, and lowers that node into the owned
-  `NormalisedTree` representation.
-- `tree.rs` owns the lowered domain types: `NormalisedTree`,
-  `NormalisedNode`, `KindId`, `Depth`, `LeafClass`, and `ByteSpan`. `KindId`
+  `NormalizedTree` representation.
+- `tree.rs` owns the lowered domain types: `NormalizedTree`,
+  `NormalizedNode`, `KindId`, `Depth`, `LeafClass`, and `ByteSpan`. `KindId`
   is an in-memory token and must not be persisted.
 - `hash.rs` owns `AstHash` and `canonical_hash`.
 - `features.rs`, `hash.rs`, and `cover.rs` operate only on the lowered domain
@@ -374,7 +374,7 @@ AST feature vectors use an exact count substrate. `kind_counts` records exact
 weights from those counts, `production_multiset` records deterministic
 parent-child and parent-child-grandchild production counts, and
 `canonical_hash` emits an `AstHash` seeded with `PARSER_SCHEMA_VERSION`.
-Changing the parser pin, normalisation rules, hash algorithm, or schema string
+Changing the parser pin, normalization rules, hash algorithm, or schema string
 must produce a reviewable snapshot change.
 
 `ra_ap_syntax` is exact-pinned in `Cargo.toml` because its parser vocabulary
@@ -485,7 +485,7 @@ For the current clone-detector constructors, the split is:
   four-slot proof log with compact two-band keys; normal builds keep the
   production `BTreeMap`/`BTreeSet` implementation and public API.
 - Kani verifies AST span-cover selection and bounded AST feature invariants
-  over synthetic `NormalisedTree` values. It calls the production
+  over synthetic `NormalizedTree` values. It calls the production
   `select_smallest_covering` helper for covering-node minimality and root
   fallback, and uses compact bounded tree fixtures for feature invariants so
   the proof does not compile or model `ra_ap_syntax`.
@@ -576,9 +576,10 @@ parser APIs, snapshots, and proof tooling.
 7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
-8. Confirm CI invokes Cargo through a locked dependency path. The CI workflow
-   sets `CARGO_LOCKED=--locked`, and Makefile Cargo recipes must preserve that
-   variable when adding new build, lint, package, or test commands.
+8. Decide whether the workflow needs a locked dependency path. The CI workflow
+   leaves `CARGO_LOCKED` unset by default. Makefile Cargo recipes must preserve
+   that variable when callers require `--locked` for a build, lint, package, or
+   test command.
 
 ### `ra_ap_syntax` re-pinning runbook
 
@@ -591,8 +592,8 @@ parser APIs, snapshots, and proof tooling.
    mismatch.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
-   `NormalisedTree` boundary instead.
-4. Update `PARSER_SCHEMA_VERSION` for every parser re-pin or normalisation
+   `NormalizedTree` boundary instead.
+4. Update `PARSER_SCHEMA_VERSION` for every parser re-pin or normalization
    change. Any future `ast_hashes` cache must be invalidated when this string
    changes.
 5. Refresh and review the AST snapshots, especially the parser schema snapshot

@@ -1,7 +1,7 @@
 //! Tests for parser-independent AST feature extraction.
 
 use super::{
-    AstResult, ByteSpan, Depth, KindId, KindWeight, LeafClass, NormalisedNode, NormalisedTree,
+    AstResult, ByteSpan, Depth, KindId, KindWeight, LeafClass, NormalizedNode, NormalizedTree,
     Production, canonical_hash, kind_counts, kind_histogram, production_multiset,
     select_smallest_covering, weighted_histogram,
 };
@@ -93,7 +93,7 @@ fn weighted_histogram_applies_dyadic_depth_weights() -> AstResult<()> {
 #[rstest]
 fn weighted_histogram_accumulates_four_equal_depth_one_kinds() -> AstResult<()> {
     let kind = KindId::new(9);
-    let tree = tree_with_root(NormalisedNode::new(
+    let tree = tree_with_root(NormalizedNode::new(
         KindId::new(1),
         None,
         (0..4).map(|_| ident(kind)).collect(),
@@ -168,55 +168,55 @@ fn canonical_hash_is_sensitive_to_leaf_class() -> AstResult<()> {
     Ok(())
 }
 
-fn feature_tree() -> AstResult<NormalisedTree> {
-    tree_with_root(NormalisedNode::new(
+fn feature_tree() -> AstResult<NormalizedTree> {
+    tree_with_root(NormalizedNode::new(
         KindId::new(1),
         None,
         vec![ident(KindId::new(2)), branch()],
     ))
 }
 
-fn reordered_tree() -> AstResult<NormalisedTree> {
-    tree_with_root(NormalisedNode::new(
+fn reordered_tree() -> AstResult<NormalizedTree> {
+    tree_with_root(NormalizedNode::new(
         KindId::new(1),
         None,
         vec![branch(), ident(KindId::new(2))],
     ))
 }
 
-fn different_leaf_tree() -> AstResult<NormalisedTree> {
-    tree_with_root(NormalisedNode::new(
+fn different_leaf_tree() -> AstResult<NormalizedTree> {
+    tree_with_root(NormalizedNode::new(
         KindId::new(1),
         None,
         vec![literal(KindId::new(2)), branch()],
     ))
 }
 
-fn tree_with_root(root: NormalisedNode) -> AstResult<NormalisedTree> {
-    Ok(NormalisedTree::new(root, ByteSpan::new("fn f() {}", 0, 2)?))
+fn tree_with_root(root: NormalizedNode) -> AstResult<NormalizedTree> {
+    Ok(NormalizedTree::new(root, ByteSpan::new("fn f() {}", 0, 2)?))
 }
 
-fn deep_chain(depth: usize) -> NormalisedNode {
+fn deep_chain(depth: usize) -> NormalizedNode {
     (0..depth).fold(
-        NormalisedNode::new(KindId::new(2), None, Vec::new()),
-        |child, _| NormalisedNode::new(KindId::new(2), None, vec![child]),
+        NormalizedNode::new(KindId::new(2), None, Vec::new()),
+        |child, _| NormalizedNode::new(KindId::new(2), None, vec![child]),
     )
 }
 
-fn branch() -> NormalisedNode {
-    NormalisedNode::new(
+fn branch() -> NormalizedNode {
+    NormalizedNode::new(
         KindId::new(3),
         None,
         vec![ident(KindId::new(2)), literal(KindId::new(4))],
     )
 }
 
-fn ident(kind: KindId) -> NormalisedNode {
-    NormalisedNode::new(kind, Some(LeafClass::Ident), Vec::new())
+fn ident(kind: KindId) -> NormalizedNode {
+    NormalizedNode::new(kind, Some(LeafClass::Ident), Vec::new())
 }
 
-fn literal(kind: KindId) -> NormalisedNode {
-    NormalisedNode::new(kind, Some(LeafClass::Literal), Vec::new())
+fn literal(kind: KindId) -> NormalizedNode {
+    NormalizedNode::new(kind, Some(LeafClass::Literal), Vec::new())
 }
 
 #[rstest]
@@ -234,7 +234,7 @@ fn feature_functions_are_deterministic() -> AstResult<()> {
 #[rstest]
 fn feature_functions_reflect_tree_contents() -> AstResult<()> {
     let expected = feature_tree()?;
-    let distinct = tree_with_root(NormalisedNode::new(
+    let distinct = tree_with_root(NormalizedNode::new(
         KindId::new(9),
         None,
         vec![literal(KindId::new(8))],
@@ -254,7 +254,7 @@ proptest! {
 
     #[test]
     fn count_and_production_features_ignore_sibling_visit_order(
-        root in normalised_node_strategy()
+        root in normalized_node_strategy()
     ) {
         let tree = tree_with_root(root.clone()).expect("static test span should be valid");
         let reversed = tree_with_root(reverse_siblings(&root))
@@ -269,25 +269,25 @@ proptest! {
     }
 
     #[test]
-    fn different_normalised_leaf_kinds_have_different_hashes(
+    fn different_normalized_leaf_kinds_have_different_hashes(
         kind in 0_u16..u16::MAX,
         leaf in leaf_class_strategy()
     ) {
-        let left = tree_with_root(NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
+        let left = tree_with_root(NormalizedNode::new(KindId::new(kind), leaf, Vec::new()))
             .expect("static test span should be valid");
-        let right = tree_with_root(NormalisedNode::new(KindId::new(kind + 1), leaf, Vec::new()))
+        let right = tree_with_root(NormalizedNode::new(KindId::new(kind + 1), leaf, Vec::new()))
             .expect("static test span should be valid");
 
         prop_assert_ne!(canonical_hash(&left), canonical_hash(&right));
     }
 }
 
-fn normalised_node_strategy() -> impl Strategy<Value = NormalisedNode> {
+fn normalized_node_strategy() -> impl Strategy<Value = NormalizedNode> {
     (0_u16..32, leaf_class_strategy())
-        .prop_map(|(kind, leaf)| NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
+        .prop_map(|(kind, leaf)| NormalizedNode::new(KindId::new(kind), leaf, Vec::new()))
         .prop_recursive(3, 32, 3, |inner| {
             (0_u16..32, prop::collection::vec(inner, 0..3))
-                .prop_map(|(kind, children)| NormalisedNode::new(KindId::new(kind), None, children))
+                .prop_map(|(kind, children)| NormalizedNode::new(KindId::new(kind), None, children))
         })
 }
 
@@ -300,12 +300,12 @@ fn leaf_class_strategy() -> impl Strategy<Value = Option<LeafClass>> {
     ]
 }
 
-fn reverse_siblings(node: &NormalisedNode) -> NormalisedNode {
+fn reverse_siblings(node: &NormalizedNode) -> NormalizedNode {
     let mut children = node
         .children()
         .iter()
         .map(reverse_siblings)
         .collect::<Vec<_>>();
     children.reverse();
-    NormalisedNode::new(node.kind(), node.leaf(), children)
+    NormalizedNode::new(node.kind(), node.leaf(), children)
 }

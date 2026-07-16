@@ -6,7 +6,7 @@
 use std::ops::Range;
 
 use super::{
-    ByteSpan, Depth, KindId, LeafClass, NormalisedNode, NormalisedTree, select_smallest_covering,
+    ByteSpan, Depth, KindId, LeafClass, NormalizedNode, NormalizedTree, select_smallest_covering,
 };
 
 const KANI_AST_MAX_DEPTH: usize = 3;
@@ -26,12 +26,12 @@ fn ast_span() -> ByteSpan {
     }
 }
 
-fn leaf(kind: KindId, leaf: LeafClass) -> NormalisedNode {
-    NormalisedNode::new(kind, Some(leaf), Vec::new())
+fn leaf(kind: KindId, leaf: LeafClass) -> NormalizedNode {
+    NormalizedNode::new(kind, Some(leaf), Vec::new())
 }
 
-fn branch(kind: KindId, children: Vec<NormalisedNode>) -> NormalisedNode {
-    NormalisedNode::new(kind, None, children)
+fn branch(kind: KindId, children: Vec<NormalizedNode>) -> NormalizedNode {
+    NormalizedNode::new(kind, None, children)
 }
 
 struct BranchSpec {
@@ -44,7 +44,7 @@ fn bounded_tree(
     left: BranchSpec,
     right: BranchSpec,
     left_first: bool,
-) -> NormalisedTree {
+) -> NormalizedTree {
     let left_leaf = leaf(left.leaf_kind, LeafClass::Ident);
     let right_leaf = leaf(right.leaf_kind, LeafClass::Literal);
     let left_branch = branch(left.kind, vec![left_leaf]);
@@ -55,7 +55,7 @@ fn bounded_tree(
         vec![right_branch, left_branch]
     };
 
-    NormalisedTree::new(branch(root_kind, children), ast_span())
+    NormalizedTree::new(branch(root_kind, children), ast_span())
 }
 
 fn symbolic_range() -> Range<u32> {
@@ -92,7 +92,7 @@ fn assert_minimal_cover(candidates: &[Range<u32>], target: &Range<u32>, selected
     }
 }
 
-fn count_kind_at_depth(node: &NormalisedNode, kind: KindId, depth: Depth, target: Depth) -> u32 {
+fn count_kind_at_depth(node: &NormalizedNode, kind: KindId, depth: Depth, target: Depth) -> u32 {
     let mut count: u32 = if node.kind() == kind && depth == target {
         1
     } else {

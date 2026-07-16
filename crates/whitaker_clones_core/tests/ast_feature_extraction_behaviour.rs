@@ -9,7 +9,7 @@ use ra_ap_syntax::SyntaxKind;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
-    AstError, AstHash, ByteSpan, NormalisedTree, canonical_hash, lower_span,
+    AstError, AstHash, ByteSpan, NormalizedTree, canonical_hash, lower_span,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -73,7 +73,7 @@ impl ExpectedKind {
 struct AstFeatureWorld {
     source: RefCell<String>,
     span_needle: RefCell<String>,
-    lowered: RefCell<Option<NormalisedTree>>,
+    lowered: RefCell<Option<NormalizedTree>>,
     lowering_error: RefCell<Option<AstError>>,
     left_source: RefCell<String>,
     right_source: RefCell<String>,

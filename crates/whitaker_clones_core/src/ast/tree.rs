@@ -63,7 +63,7 @@ impl Depth {
     }
 }
 
-/// Normalised leaf token class for Type-2-style leaf erasure.
+/// Normalized leaf token class for Type-2-style leaf erasure.
 ///
 /// # Examples
 ///
@@ -88,22 +88,22 @@ pub enum LeafClass {
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::ast::{KindId, NormalisedNode};
+/// use whitaker_clones_core::ast::{KindId, NormalizedNode};
 ///
-/// let node = NormalisedNode::new(KindId::new(1), None, Vec::new());
+/// let node = NormalizedNode::new(KindId::new(1), None, Vec::new());
 /// assert_eq!(node.kind(), KindId::new(1));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NormalisedNode {
+pub struct NormalizedNode {
     kind: KindId,
     leaf: Option<LeafClass>,
-    children: Vec<NormalisedNode>,
+    children: Vec<NormalizedNode>,
 }
 
-impl NormalisedNode {
+impl NormalizedNode {
     /// Creates a parser-independent AST node.
     #[must_use]
-    pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<NormalisedNode>) -> Self {
+    pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<NormalizedNode>) -> Self {
         Self {
             kind,
             leaf,
@@ -125,7 +125,7 @@ impl NormalisedNode {
 
     /// Returns the ordered child nodes.
     #[must_use]
-    pub fn children(&self) -> &[NormalisedNode] {
+    pub fn children(&self) -> &[NormalizedNode] {
         &self.children
     }
 }
@@ -135,29 +135,29 @@ impl NormalisedNode {
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalisedNode, NormalisedTree};
+/// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree};
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
-/// let tree = NormalisedTree::new(NormalisedNode::new(KindId::new(1), None, Vec::new()), span);
+/// let tree = NormalizedTree::new(NormalizedNode::new(KindId::new(1), None, Vec::new()), span);
 /// assert_eq!(tree.span(), span);
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NormalisedTree {
-    root: NormalisedNode,
+pub struct NormalizedTree {
+    root: NormalizedNode,
     span: ByteSpan,
 }
 
-impl NormalisedTree {
+impl NormalizedTree {
     /// Creates a lowered tree.
     #[must_use]
-    pub const fn new(root: NormalisedNode, span: ByteSpan) -> Self {
+    pub const fn new(root: NormalizedNode, span: ByteSpan) -> Self {
         Self { root, span }
     }
 
     /// Returns the lowered root node.
     #[must_use]
-    pub const fn root(&self) -> &NormalisedNode {
+    pub const fn root(&self) -> &NormalizedNode {
         &self.root
     }
 

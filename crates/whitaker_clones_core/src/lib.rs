@@ -18,7 +18,7 @@ pub mod run0;
 pub mod token;
 
 pub use ast::{
-    AstError, AstHash, AstResult, ByteSpan, KindCounts, KindHistogram, KindWeight, NormalisedTree,
+    AstError, AstHash, AstResult, ByteSpan, KindCounts, KindHistogram, KindWeight, NormalizedTree,
     Production, ProductionMultiset, canonical_hash, kind_counts, kind_histogram, lower_span,
     production_multiset, weighted_histogram,
 };

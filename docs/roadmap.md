@@ -90,7 +90,6 @@
   002](adr-002-dylint-expect-attribute-macro.md) §Migration plan.
   Requires 1.3.3.
 
-
 ### 2.3. Localization enablement
 
 - [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
@@ -393,7 +392,6 @@
   opt-in and English-only for tool ingestion. See [brain trust lints
   design](brain-trust-lints-design.md) §SARIF output.
   Requires 6.2.2 and 6.3.2.
-
 
 ### 6.6. Configuration, localization, and tests
 
@@ -771,7 +769,6 @@
   design](ownership-shape-lints-design.md) §10 Worked exception model:
   Servo-style code must stay quiet and §18 Testing strategy.
   Requires 1.2.1 and 9.4.4.
-
 
 ### 9.5. Localization, documentation, and promotion
 

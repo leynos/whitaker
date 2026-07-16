@@ -179,91 +179,6 @@ Whitaker's lint reads either the refined run (preferred) or falls back to Run 0.
 
 ## Pass A: token engine (rustc_lexer)
 
-
-### Normalization
-
-```rust
-pub enum Norm { T1, T2 }
-
-pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
-    use rustc_lexer::{tokenize, TokenKind};
-    let mut out = Vec::new();
-    let mut off = 0;
-    for tok in tokenize(src) {
-        let kind = match tok.kind {
-            TokenKind::Whitespace
-            | TokenKind::LineComment
-            | TokenKind::BlockComment { .. } => {
-                off += tok.len;
-                continue;
-            }
-            TokenKind::Ident if matches!(norm, Norm::T2) => 1, // <ID>
-            TokenKind::Literal { .. } if matches!(norm, Norm::T2) => 2, // <LIT>
-            _ => tok.kind as u32,
-        };
-        out.push((kind, off..off + tok.len));
-        off += tok.len;
-    }
-    out
-}
-```
-
-### Normalization
-
-```rust
-pub enum Norm { T1, T2 }
-
-pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
-    use rustc_lexer::{tokenize, TokenKind};
-    let mut out = Vec::new();
-    let mut off = 0;
-    for tok in tokenize(src) {
-        let kind = match tok.kind {
-            TokenKind::Whitespace
-            | TokenKind::LineComment
-            | TokenKind::BlockComment { .. } => {
-                off += tok.len;
-                continue;
-            }
-            TokenKind::Ident if matches!(norm, Norm::T2) => 1, // <ID>
-            TokenKind::Literal { .. } if matches!(norm, Norm::T2) => 2, // <LIT>
-            _ => tok.kind as u32,
-        };
-        out.push((kind, off..off + tok.len));
-        off += tok.len;
-    }
-    out
-}
-```
-
-### Normalization
-
-```rust
-pub enum Norm { T1, T2 }
-
-pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
-    use rustc_lexer::{tokenize, TokenKind};
-    let mut out = Vec::new();
-    let mut off = 0;
-    for tok in tokenize(src) {
-        let kind = match tok.kind {
-            TokenKind::Whitespace
-            | TokenKind::LineComment
-            | TokenKind::BlockComment { .. } => {
-                off += tok.len;
-                continue;
-            }
-            TokenKind::Ident if matches!(norm, Norm::T2) => 1, // <ID>
-            TokenKind::Literal { .. } if matches!(norm, Norm::T2) => 2, // <LIT>
-            _ => tok.kind as u32,
-        };
-        out.push((kind, off..off + tok.len));
-        off += tok.len;
-    }
-    out
-}
-```
-
 ### Normalization
 
 ```rust
@@ -323,13 +238,13 @@ pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
 ### Parsing and region mapping
 
 ```rust
-use whitaker_clones_core::{AstError, AstResult, ByteSpan, NormalisedTree, lower_span};
+use whitaker_clones_core::{AstError, AstResult, ByteSpan, NormalizedTree, lower_span};
 
 pub fn map_bytes_to_node(
     file_text: &str,
     start: usize,
     end: usize,
-) -> AstResult<NormalisedTree> {
+) -> AstResult<NormalizedTree> {
     let start = u32::try_from(start).map_err(|_| AstError::OffsetTooLarge(start))?;
     let end = u32::try_from(end).map_err(|_| AstError::OffsetTooLarge(end))?;
     let span = ByteSpan::new(file_text, start, end)?;
@@ -730,13 +645,12 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    pair log, so Kani can unwind insertion-summary and teardown loops without
    weakening the bounded state being checked.
 
-
 ## Implementation decisions (7.3.1)
 
 1. **The AST engine is isolated behind a lowered intermediate representation.**
    `crates/whitaker_clones_core/src/ast/lowering.rs` is the only file allowed
    to import `ra_ap_syntax` or its parser transitive crates. It lowers the
-   parser tree into `NormalisedTree`, which owns `NormalisedNode` values keyed
+   parser tree into `NormalizedTree`, which owns `NormalizedNode` values keyed
    by opaque `KindId` values, a `Depth`, a `LeafClass`, and child vectors. The
    pure feature modules depend only on that representation, so a future parser
    re-pin recompiles the adapter instead of leaking parser vocabulary through

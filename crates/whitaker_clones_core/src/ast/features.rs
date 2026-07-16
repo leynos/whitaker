@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{Depth, KindId, NormalisedNode, NormalisedTree};
+use super::{Depth, KindId, NormalizedNode, NormalizedTree};
 
 /// Exact, depth-resolved syntax-kind counts.
 ///
@@ -165,7 +165,7 @@ impl ProductionMultiset {
 /// Extracts exact kind counts from `tree`.
 ///
 #[must_use]
-pub fn kind_counts(tree: &NormalisedTree) -> KindCounts {
+pub fn kind_counts(tree: &NormalizedTree) -> KindCounts {
     let mut counts = KindCounts::default();
     count_node_kinds(tree.root(), Depth::root(), &mut counts);
     counts
@@ -189,19 +189,19 @@ pub fn weighted_histogram(counts: &KindCounts) -> KindHistogram {
 
 /// Extracts a weighted kind histogram from `tree`.
 #[must_use]
-pub fn kind_histogram(tree: &NormalisedTree) -> KindHistogram {
+pub fn kind_histogram(tree: &NormalizedTree) -> KindHistogram {
     weighted_histogram(&kind_counts(tree))
 }
 
 /// Extracts AST production counts from `tree`.
 #[must_use]
-pub fn production_multiset(tree: &NormalisedTree) -> ProductionMultiset {
+pub fn production_multiset(tree: &NormalizedTree) -> ProductionMultiset {
     let mut productions = ProductionMultiset::default();
     collect_productions(tree.root(), &mut productions);
     productions
 }
 
-fn count_node_kinds(node: &NormalisedNode, depth: Depth, counts: &mut KindCounts) {
+fn count_node_kinds(node: &NormalizedNode, depth: Depth, counts: &mut KindCounts) {
     let mut pending = vec![(node, depth)];
     while let Some((current, current_depth)) = pending.pop() {
         counts.increment(current.kind(), current_depth);
@@ -230,7 +230,7 @@ fn weighted_contribution(depth: Depth, count: u32) -> u128 {
     depth_weight(depth) * u128::from(count)
 }
 
-fn collect_productions(node: &NormalisedNode, productions: &mut ProductionMultiset) {
+fn collect_productions(node: &NormalizedNode, productions: &mut ProductionMultiset) {
     let mut pending = vec![node];
     while let Some(parent) = pending.pop() {
         for child in parent.children() {
@@ -242,8 +242,8 @@ fn collect_productions(node: &NormalisedNode, productions: &mut ProductionMultis
 }
 
 fn collect_trigrams(
-    grandparent: &NormalisedNode,
-    parent: &NormalisedNode,
+    grandparent: &NormalizedNode,
+    parent: &NormalizedNode,
     productions: &mut ProductionMultiset,
 ) {
     for child in parent.children() {

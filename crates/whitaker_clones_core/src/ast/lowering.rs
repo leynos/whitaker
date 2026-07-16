@@ -8,7 +8,7 @@ use ra_ap_syntax::{
 };
 use tracing::{debug, error, warn};
 
-use super::{AstError, AstResult, ByteSpan, KindId, LeafClass, NormalisedNode, NormalisedTree};
+use super::{AstError, AstResult, ByteSpan, KindId, LeafClass, NormalizedNode, NormalizedTree};
 
 pub use crate::hashing::PARSER_SCHEMA_VERSION;
 
@@ -34,7 +34,7 @@ fn trace_ast_error(
 }
 
 /// Parses `file_text`, maps `span` to the smallest covering syntax node, and
-/// lowers that subtree into a [`NormalisedTree`].
+/// lowers that subtree into a [`NormalizedTree`].
 ///
 /// The [`ByteSpan`] is deliberately re-validated against `file_text` even
 /// though callers pass an already constructed span. A `ByteSpan` proves only
@@ -58,7 +58,7 @@ fn trace_ast_error(
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
 #[tracing::instrument(skip(file_text), fields(start = span.start(), end = span.end()))]
-pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> {
+pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> {
     let span = ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
         trace_ast_error(
             error,
@@ -108,7 +108,7 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
     let lowered = lower_node(&selected, 0)?;
 
     debug_assert!(selected.text_range().contains_range(target_range));
-    Ok(NormalisedTree::new(lowered, span))
+    Ok(NormalizedTree::new(lowered, span))
 }
 
 fn validate_covering_node_budget(depth: usize, node_count: usize) -> AstResult<()> {
@@ -174,7 +174,7 @@ fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<Syn
         })
 }
 
-fn lower_node(node: &SyntaxNode, depth: usize) -> AstResult<NormalisedNode> {
+fn lower_node(node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
     lower_node_with_limit(node, depth, MAX_AST_DEPTH)
 }
 
@@ -182,7 +182,7 @@ fn lower_node_with_limit(
     node: &SyntaxNode,
     depth: usize,
     maximum_depth: usize,
-) -> AstResult<NormalisedNode> {
+) -> AstResult<NormalizedNode> {
     if depth > maximum_depth {
         return Err(AstError::TreeTooDeep {
             limit: maximum_depth,
@@ -204,11 +204,11 @@ fn lower_node_with_limit(
         }
     }
 
-    Ok(NormalisedNode::new(kind_id(node.kind()), None, children))
+    Ok(NormalizedNode::new(kind_id(node.kind()), None, children))
 }
 
-fn lower_token(token: &SyntaxToken) -> NormalisedNode {
-    NormalisedNode::new(
+fn lower_token(token: &SyntaxToken) -> NormalizedNode {
+    NormalizedNode::new(
         kind_id(token.kind()),
         Some(leaf_class(token.kind())),
         Vec::new(),

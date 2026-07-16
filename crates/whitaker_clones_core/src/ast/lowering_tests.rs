@@ -9,7 +9,7 @@ use ra_ap_syntax::{AstNode, Edition, SourceFile};
 use super::{MAX_AST_NODES, kind_id, leaf_class, lower_node_with_limit};
 use crate::{
     AstError, ByteSpan, Production,
-    ast::{KindId, LeafClass, NormalisedNode, NormalisedTree, PARSER_SCHEMA_VERSION},
+    ast::{KindId, LeafClass, NormalizedNode, NormalizedTree, PARSER_SCHEMA_VERSION},
     canonical_hash, kind_counts, lower_span, production_multiset,
 };
 
@@ -100,7 +100,7 @@ fn deeply_nested_syntax_obeys_the_lowering_depth_budget() {
 }
 
 #[rstest]
-fn literal_tokens_lower_as_normalised_literal_leaves() {
+fn literal_tokens_lower_as_normalized_literal_leaves() {
     let tree = lower_span_for("fn f() { let value = 42; }", "42").expect("literal should lower");
     assert!(contains_leaf_class(tree.root(), LeafClass::Literal));
 }
@@ -160,7 +160,7 @@ fn error_subtree_is_rejected() -> Result<(), AstError> {
     Ok(())
 }
 
-fn lower_span_for(source: &str, needle: &str) -> Result<NormalisedTree, AstError> {
+fn lower_span_for(source: &str, needle: &str) -> Result<NormalizedTree, AstError> {
     let start = source
         .find(needle)
         .ok_or(AstError::UnparsableSpan { start: 0, end: 0 })?;
@@ -168,7 +168,7 @@ fn lower_span_for(source: &str, needle: &str) -> Result<NormalisedTree, AstError
     lower_span(source, ByteSpan::new(source, start as u32, end as u32)?)
 }
 
-fn contains_leaf_class(node: &NormalisedNode, leaf_class: LeafClass) -> bool {
+fn contains_leaf_class(node: &NormalizedNode, leaf_class: LeafClass) -> bool {
     node.leaf() == Some(leaf_class)
         || node
             .children()
@@ -182,7 +182,7 @@ fn contains_leaf_class(node: &NormalisedNode, leaf_class: LeafClass) -> bool {
 #[case::literal(ra_ap_syntax::SyntaxKind::INT_NUMBER, LeafClass::Literal)]
 #[case::operator(ra_ap_syntax::SyntaxKind::PLUS, LeafClass::Other)]
 fn token_leaf_class_is_stable(#[case] kind: ra_ap_syntax::SyntaxKind, #[case] leaf: LeafClass) {
-    let node = NormalisedNode::new(kind_id(kind), Some(leaf_class(kind)), Vec::new());
+    let node = NormalizedNode::new(kind_id(kind), Some(leaf_class(kind)), Vec::new());
     assert_eq!(node.leaf(), Some(leaf));
 }
 

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use super::{LeafClass, NormalisedNode, NormalisedTree};
+use super::{LeafClass, NormalizedNode, NormalizedTree};
 use crate::hashing::{
     FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION, mix_byte, mix_bytes, mix_u16, mix_u64,
 };
@@ -12,11 +12,11 @@ use crate::hashing::{
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalisedNode, NormalisedTree};
+/// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree};
 /// use whitaker_clones_core::canonical_hash;
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
-/// let tree = NormalisedTree::new(NormalisedNode::new(KindId::new(1), None, Vec::new()), span);
+/// let tree = NormalizedTree::new(NormalizedNode::new(KindId::new(1), None, Vec::new()), span);
 /// assert_eq!(canonical_hash(&tree).to_hex().len(), 16);
 /// # Ok::<(), whitaker_clones_core::AstError>(())
 /// ```
@@ -39,7 +39,7 @@ impl fmt::Display for AstHash {
 
 /// Computes the canonical hash for `tree`.
 #[must_use]
-pub fn canonical_hash(tree: &NormalisedTree) -> AstHash {
+pub fn canonical_hash(tree: &NormalizedTree) -> AstHash {
     AstHash(hash_node(seed_hash(), tree.root()))
 }
 
@@ -47,7 +47,7 @@ fn seed_hash() -> u64 {
     mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes())
 }
 
-fn hash_node(hash: u64, node: &NormalisedNode) -> u64 {
+fn hash_node(hash: u64, node: &NormalizedNode) -> u64 {
     let mut pending = vec![(node, 0, hash_node_header(hash, node))];
     loop {
         let Some((current, child_index, _)) = pending.last_mut() else {
@@ -70,7 +70,7 @@ fn hash_node(hash: u64, node: &NormalisedNode) -> u64 {
     }
 }
 
-fn hash_node_header(mut hash: u64, node: &NormalisedNode) -> u64 {
+fn hash_node_header(mut hash: u64, node: &NormalizedNode) -> u64 {
     hash = mix_byte(hash, b'n');
     hash = mix_u16(hash, node.kind().get());
     hash = mix_byte(hash, leaf_tag(node.leaf()));
@@ -78,7 +78,7 @@ fn hash_node_header(mut hash: u64, node: &NormalisedNode) -> u64 {
     hash
 }
 
-fn child_count(node: &NormalisedNode) -> u64 {
+fn child_count(node: &NormalizedNode) -> u64 {
     u64::try_from(node.children().len()).unwrap_or(u64::MAX)
 }
 

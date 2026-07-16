@@ -9,7 +9,7 @@ Status: COMPLETED
 ## Purpose / big picture
 
 Whitaker's clone detector runs in two passes. Pass A (already shipped, roadmap
-items 7.2.x) tokenises Rust source, winnows fingerprints, and uses MinHash plus
+items 7.2.x) tokenizes Rust source, winnows fingerprints, and uses MinHash plus
 locality-sensitive hashing (LSH) to emit candidate clone pairs into a Static
 Analysis Results Interchange Format (SARIF) report. Pass A finds Type-1
 (whitespace/comment differences) and Type-2 (identifier/literal renaming)
@@ -37,7 +37,7 @@ What a reader can observe after this change:
   overdue maintenance bump that also unblocks a clean `ra_ap_syntax` pin for
   Pass B.
 - A new `whitaker_clones_core::ast` module exists with a single adapter entry
-  point, `lower_span(file_text, span) -> Result<NormalisedTree, AstError>`, and
+  point, `lower_span(file_text, span) -> Result<NormalizedTree, AstError>`, and
   three pure feature functions, `kind_histogram`, `production_multiset`, and
   `canonical_hash`.
 - `cargo test -p whitaker_clones_core` passes, including new `rstest` unit
@@ -168,7 +168,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
   `parse(text, Edition::CURRENT)` form. Severity: medium. Likelihood: high.
   Mitigation: exact-pin the version (`=0.0.x`) with a documented reason;
   confine every `ra_ap_syntax` symbol to `ast/lowering.rs`; lower into an
-  owned, parser-agnostic `NormalisedTree` so a future bump recompiles one file
+  owned, parser-agnostic `NormalizedTree` so a future bump recompiles one file
   and leaves all domain logic and proofs untouched.
 - Risk: **MSRV incompatibility (resolved by the Stage 0 bump).** Under the old
   `nightly-2025-09-18` pin (rustc 1.92), current `ra_ap_syntax` (MSRV 1.95) did
@@ -220,7 +220,7 @@ Thresholds that trigger escalation rather than autonomous continuation.
   Decision Log); keep `f64` out of the stored feature vector.
 - Risk: **Kani parses nothing.** Running `ra_ap_syntax` under Kani is
   intractable. Severity: low (by design). Likelihood: low. Mitigation: the
-  lowered-IR boundary means Kani harnesses build small owned `NormalisedTree`
+  lowered-IR boundary means Kani harnesses build small owned `NormalizedTree`
   values directly and never invoke the parser.
 - Risk: **Dev-test dependency surface.** Correcting an earlier draft: `insta`
   and `proptest` are *already* `[workspace.dependencies]`; this item only adds
@@ -385,7 +385,7 @@ invariance over equal contribution multisets. Green follow-up gates:
 - Observation: after the Dylint 6.0.1 bump, local lint code needed the rustc
   diagnostic API migration from `span_lint` to `emit_span_lint` plus
   `DiagDecorator`. The existing `rustc_lint` shim now re-exports
-  `DiagDecorator`, keeping that rustc-private surface centralised. The
+  `DiagDecorator`, keeping that rustc-private surface centralized. The
   `bumpy_road_function` UI smoke passed after this migration.
 - Observation: rustc 1.98 moved several APIs used by tests and lints:
   `StableHashCtxt` now lives under `rustc_data_structures::stable_hash`,
@@ -450,7 +450,7 @@ invariance over equal contribution multisets. Green follow-up gates:
   directly. This keeps the production `fingerprint.rs` imports private and
   avoids a stale re-export that would warn under `-D warnings`.
 - Observation: the pure AST feature functions now operate entirely over
-  hand-built `NormalisedTree` values. Stage C added `rstest` unit coverage for
+  hand-built `NormalizedTree` values. Stage C added `rstest` unit coverage for
   depth-resolved kind counts, dyadic weighted histograms, production
   bigrams/trigrams, and canonical-hash equality/inequality behaviour.
 - Observation: the first Stage C CodeRabbit review returned three valid
@@ -470,7 +470,7 @@ invariance over equal contribution multisets. Green follow-up gates:
   `parser` feature and runs clone-detector Kani harnesses with
   `--no-default-features`. Normal library builds keep the parser feature on by
   default; Kani verifies only parser-independent AST domain code and bounded
-  synthetic `NormalisedTree` values.
+  synthetic `NormalizedTree` values.
 - Observation: an intermediate Stage C CodeRabbit follow-up raised two
   documentation concerns about the build-script module purpose and the
   test-only visibility of `FNV_PRIME`. The next completed review raised five
@@ -493,7 +493,7 @@ invariance over equal contribution multisets. Green follow-up gates:
   dependency because the library now emits recovery warnings itself. The
   workspace dependency disables default features and enables only `std`; the
   adapter does not need `tracing-attributes`.
-- Observation: lowering non-trivia tokens as leaf `NormalisedNode` values keeps
+- Observation: lowering non-trivia tokens as leaf `NormalizedNode` values keeps
   operator and punctuation tokens visible to canonical hashes and production
   multisets. Identifier-like tokens (`IDENT`, keywords accepted by
   `SyntaxKind::is_any_identifier`, and `LIFETIME_IDENT`) lower as
@@ -516,7 +516,7 @@ invariance over equal contribution multisets. Green follow-up gates:
   `cargo insta test -p whitaker_clones_core -- ast`; earlier local attempts
   without the package/argument placement were corrected before recording the
   Stage E gate.
-- Observation: Stage E proptest invariants over synthetic `NormalisedTree`
+- Observation: Stage E proptest invariants over synthetic `NormalizedTree`
   values cover deterministic feature extraction and order-insensitive
   count/production surfaces. The canonical hash is intentionally excluded from
   the sibling-order invariant because ordered child hashes are part of its
@@ -558,17 +558,17 @@ Decisions already taken while drafting this plan:
   compat, ~105 string refs) is carried in Risks and gated by the Stage 0
   go/no-go. Chosen by the user (2026-06-09): folded-in Stage 0, both
   maintenance and 7.3.1 enabler. Date/Author: 2026-06-09, user direction.
-- Decision: **Use a lowered intermediate representation (`NormalisedTree`),
+- Decision: **Use a lowered intermediate representation (`NormalizedTree`),
   not a `trait SyntaxTreeNode` port over live `ra_ap_syntax` nodes.**
   Rationale: a borrowed-tree port forces the domain to be generic over an
   unbounded lazily-borrowed rowan graph, which Kani cannot construct
   symbolically and proptest cannot derive `Arbitrary` for without building an
   owned mock anyway. An owned IR makes bounded Kani harnesses and proptest
-  strategies trivial, makes feature functions pure `&NormalisedTree -> _`, and
+  strategies trivial, makes feature functions pure `&NormalizedTree -> _`, and
   confines every parser assumption to one lowering function — the strictest
   possible drift insulation. Cost: one small allocation per candidate subtree,
   which is negligible because Pass B only touches candidate regions.
-  Date/Author: 2026-06-09, planning team (synthesised).
+  Date/Author: 2026-06-09, planning team (synthesized).
 - Decision: **Store exact integer `(KindId, depth)` counts as the canonical
   histogram substrate, and apply the depth weighting in a thin, pure, total
   seam function — not `f64`, and not a scaled-integer-at-extraction store.**
@@ -675,12 +675,13 @@ Decisions already taken while drafting this plan:
   design document, while the proof strategy directly applies ADR-003's existing
   split between tests, bounded Kani execution, and Verus sidecars with explicit
   trust boundaries. Date/Author: 2026-06-16, implementation.
-- Decision: **Make CI Cargo lockfile enforcement explicit with
-  `CARGO_LOCKED=--locked`.** Rationale: Stage G needed to confirm that CI uses
-  the committed lockfile, but the existing workflow only called Make targets. A
-  variable keeps local developer defaults unchanged while allowing CI to pass
-  `--locked` through the Makefile's Cargo build, lint, test, package, and dry
-  run paths. Date/Author: 2026-06-16, implementation.
+- Decision: **Follow `origin/main`'s default `CARGO_LOCKED` policy after the
+  2026-07-16 rebase.** Rationale: `origin/main` removes the CI-level
+  `CARGO_LOCKED=--locked` override while retaining the Makefile variable for
+  callers that need it. This branch preserves that current workflow policy
+  rather than restoring an AST-specific CI override. The rebase also adopts the
+  repository-wide en-GB-oxendict spelling enforcement in branch documentation.
+  Date/Author: 2026-07-16, rebase.
 - Decision: **Represent AST kind weights as dyadic fixed point with
   `KindWeight::SCALE = 1 << 63` and `w(depth) = SCALE >> depth`.** Rationale:
   this is the simplest exact-integer option listed for Stage C: no float
@@ -689,7 +690,7 @@ Decisions already taken while drafting this plan:
   bound and the later Stage F structural harness cover the practical bound
   rather than encoding an artificial per-node span or depth cap in the IR.
   Date/Author: 2026-06-16, implementation.
-- Decision: **Omit per-node byte spans from `NormalisedNode` for 7.3.1.**
+- Decision: **Omit per-node byte spans from `NormalizedNode` for 7.3.1.**
   Rationale: the delivered feature vector components need only node kind, leaf
   class, child order, and root `ByteSpan`. Adding per-node provenance now would
   widen the pure IR and proof surface for no current consumer; 7.3.2 can add it
@@ -712,8 +713,8 @@ the default unless Stage findings contradict it, then escalate):
   the same parse-error shape from producing a spurious matching hash. The Stage
   D malformed-source test asserts this *specific* behaviour, not merely “does
   not crash”. Revisit the error-ratio threshold if it proves too strict/lax.
-- OQ6: **Per-node byte-span provenance in the IR.** `NormalisedNode` currently
-  carries no per-node byte offset; only the root `NormalisedTree` carries the
+- OQ6: **Per-node byte-span provenance in the IR.** `NormalizedNode` currently
+  carries no per-node byte offset; only the root `NormalizedTree` carries the
   candidate `ByteSpan`. 7.3.2's optional bounded tree-edit-distance refinement
   may want per-node provenance, which is cheap to add at lowering time but
   expensive to retrofit through the proofs later. Resolved in Stage C: **omit
@@ -730,7 +731,7 @@ the default unless Stage findings contradict it, then escalate):
   only if edition-specific syntax causes spurious parse failures.
 - OQ4: **Whether token (leaf) kinds enter the histogram/productions, or only
   non-trivia `SyntaxNode`s.** Resolved in Stage D: lower non-trivia tokens as
-  leaf `NormalisedNode` values so operators and punctuation remain part of the
+  leaf `NormalizedNode` values so operators and punctuation remain part of the
   AST feature vector. Trivia is skipped at lowering time. Identifier-like and
   literal token payloads are erased through `LeafClass`; other token kinds keep
   their opaque parser `KindId` and use `LeafClass::Other`.
@@ -813,7 +814,7 @@ Consult these while implementing:
   use Verus (small local pure semantic invariants, sidecar models in `verus/`)
   versus Kani (bounded checks over real production code, colocated under
   `#[cfg(kani)]`).
-- `docs/rust-testing-with-rstest-fixtures.md` — fixture and parameterisation
+- `docs/rust-testing-with-rstest-fixtures.md` — fixture and parameterization
   patterns for the unit tests.
 - `docs/rstest-bdd-users-guide.md` — the behavioural test pattern; mirror the
   existing `tests/candidate_pair_behaviour.rs` + `tests/features/*.feature`
@@ -842,13 +843,13 @@ Module layout under `src/ast/` (domain vs adapter marked):
 ast/
   mod.rs        module root, //! docs, dependency-rule invariant, re-exports
   error.rs      DOMAIN   AstError (thiserror), AstResult
-  tree.rs       DOMAIN   KindId, Depth, LeafClass, NormalisedNode/Tree, ByteSpan
+  tree.rs       DOMAIN   KindId, Depth, LeafClass, NormalizedNode/Tree, ByteSpan
   cover.rs      DOMAIN   select_smallest_covering(candidates, target) (pure index math)
   features.rs   DOMAIN   kind_counts, weighted_histogram, production_multiset (+ types)
   hash.rs       DOMAIN   canonical_hash, AstHash; uses crate::hashing (shared FNV-1a)
   lowering.rs   ADAPTER  the ONLY file importing ra_ap_syntax; lower_span; PARSER_SCHEMA_VERSION
   tests.rs      TEST     #[cfg(test)] unit + proptest over the IR
-  kani.rs       PROOF    #[cfg(kani)] bounded harnesses over NormalisedTree
+  kani.rs       PROOF    #[cfg(kani)] bounded harnesses over NormalizedTree
 ```
 
 Plus, outside `ast/`, a new `crate::hashing` module (`src/hashing.rs`,
@@ -886,15 +887,15 @@ pub enum LeafClass { Ident, Literal, Other }
 
 /// Owned, parser-agnostic node. The only tree the domain ever sees.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct NormalisedNode {
+pub struct NormalizedNode {
     kind: KindId,
     leaf: Option<LeafClass>,          // Some iff this node is a normalized leaf
-    children: Vec<NormalisedNode>,
+    children: Vec<NormalizedNode>,
 }
 
 /// A lowered candidate subtree plus its provenance span.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct NormalisedTree { root: NormalisedNode, span: ByteSpan }
+pub struct NormalizedTree { root: NormalizedNode, span: ByteSpan }
 
 /// Half-open byte range [start, end) over the source text. `new` rejects
 /// `start > end`, `start == end`, and offsets that are not UTF-8 char
@@ -911,7 +912,7 @@ substrate), then apply depth weighting in a thin total seam.
 /// Exact, depth-resolved node-kind counts — the canonical histogram substrate.
 /// Deterministic and exact (no rounding); this is what insta snapshots and what
 /// the Verus lemma folds. Backed by `BTreeMap<(KindId, Depth), u32>`.
-pub fn kind_counts(tree: &NormalisedTree) -> KindCounts;
+pub fn kind_counts(tree: &NormalizedTree) -> KindCounts;
 
 /// Apply the depth weight `w(depth)` (fixed-point `KindWeight`) to the counts.
 /// Pure and total; the depth-weight curve is a knob 7.3.2 can retune without
@@ -919,17 +920,17 @@ pub fn kind_counts(tree: &NormalisedTree) -> KindCounts;
 pub fn weighted_histogram(counts: &KindCounts) -> KindHistogram;
 
 /// Convenience wrapper: `weighted_histogram(&kind_counts(tree))`.
-pub fn kind_histogram(tree: &NormalisedTree) -> KindHistogram;
+pub fn kind_histogram(tree: &NormalizedTree) -> KindHistogram;
 
 /// (parent->child) bigrams and (parent->child->grandchild) trigrams.
-pub fn production_multiset(tree: &NormalisedTree) -> ProductionMultiset;
+pub fn production_multiset(tree: &NormalizedTree) -> ProductionMultiset;
 
 /// Canonical Merkle-style subtree hash of the tree's root. Leaves normalize to
 /// <ID>/<LIT>/<OTHER>; internal nodes fold (kind, arity, ordered child hashes).
 /// The fold is seeded with `crate::hashing::PARSER_SCHEMA_VERSION` (a neutral
 /// const, not the adapter) so a parser-pin bump changes every hash (cache fails
 /// closed). Backing store is private (FNV-1a u64 now).
-pub fn canonical_hash(tree: &NormalisedTree) -> AstHash;
+pub fn canonical_hash(tree: &NormalizedTree) -> AstHash;
 ```
 
 Public read APIs (the contract 7.3.2's cosine/Jaccard scorers consume — pinned
@@ -987,8 +988,8 @@ Adapter (`lowering.rs`), the sole `ra_ap_syntax` boundary:
 
 ```rust,ignore
 /// Parse `file_text`, map `span` to the smallest covering node, and lower that
-/// subtree into a `NormalisedTree`. Nothing rowan-shaped crosses this boundary.
-pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree>;
+/// subtree into a `NormalizedTree`. Nothing rowan-shaped crosses this boundary.
+pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree>;
 ```
 
 Errors (`error.rs`):
@@ -1015,19 +1016,19 @@ pub type AstResult<T> = Result<T, AstError>;
 `EmptySpan` and `NonCharBoundary` exist because the plan mirrors
 `run0/span.rs::validate_range`, which rejects `start >= end` and non-char-
 boundary offsets; `ByteSpan::new` rejects both *before* any `TextRange` is
-built. `UnparsableSpan` realises the OQ1 selected-subtree policy.
+built. `UnparsableSpan` realizes the OQ1 selected-subtree policy.
 
 Public re-exports added to `src/lib.rs` (minimal, forward-compatible with 7.3.2;
 `ra_ap_syntax` types are deliberately **not** re-exported). The list is
-trimmed to what 7.3.2 and external callers provably consume: `NormalisedNode`,
+trimmed to what 7.3.2 and external callers provably consume: `NormalizedNode`,
 `KindId`, and `LeafClass` stay `pub` *within* the `ast` module but are **not**
 root re-exported (no identified cross-module consumer; `canonical_hash` now
-takes `&NormalisedTree`, so `NormalisedNode` need not cross the root):
+takes `&NormalizedTree`, so `NormalizedNode` need not cross the root):
 
 ```rust,ignore
 pub mod ast;
 pub use ast::{
-    AstError, AstResult, ByteSpan, NormalisedTree,
+    AstError, AstResult, ByteSpan, NormalizedTree,
     KindCounts, KindHistogram, KindWeight, ProductionMultiset, Production, AstHash,
     kind_counts, weighted_histogram, kind_histogram,
     production_multiset, canonical_hash, lower_span,
@@ -1107,9 +1108,9 @@ and that no domain file `use`s `ast::lowering`. Keep the forbidden-crate list
 as a `const`.
 
 Add the first **red** unit test against a *pure* feature function (e.g.
-`canonical_hash` over a hand-built `NormalisedTree`), which is buildable
+`canonical_hash` over a hand-built `NormalizedTree`), which is buildable
 without the parser, so the red stage does not depend on the Stage D adapter.
-The smallest-covering-node red test is explicitly a Stage D artifact.
+The smallest-covering-node red test is explicitly a Stage D artefact.
 Validation: `cargo test -p whitaker_clones_core ast::` fails red for the
 expected reason; `cargo build -p whitaker_clones_core` compiles the skeleton;
 `tests/ast_boundary.rs` passes (the skeleton has no violations yet).
@@ -1155,7 +1156,7 @@ seed it with `PARSER_SCHEMA_VERSION`. To respect the dependency rule,
 `PARSER_SCHEMA_VERSION` lives in the neutral `crate::hashing` module and is
 derived by `crates/whitaker_clones_core/build.rs` from the exact workspace
 `ra_ap_syntax` dependency. Drive each function with red `rstest` unit tests
-over hand-built `NormalisedTree` values first. Validation:
+over hand-built `NormalizedTree` values first. Validation:
 `cargo test -p whitaker_clones_core ast::` and `token::` green; refactor within
 the 400-line file budget; re-run.
 
@@ -1199,7 +1200,7 @@ forces the bumper to confront cache invalidation. Render `KindId` as its
 but the `KindId → "BIN_EXPR"` renderer is a `#[cfg(test)]` helper in the adapter
 (`lowering.rs`), **not** a `Display` impl on the domain `KindId` (which would
 re-couple the domain to parser vocabulary). Add `proptest` invariants over an
-`Arbitrary` `NormalisedTree` strategy: determinism; `kind_counts`/
+`Arbitrary` `NormalizedTree` strategy: determinism; `kind_counts`/
 `production_multiset` accumulation order-independence (sibling-visit
 permutation); leaf-normalization hash equality. State explicitly that the
 order-independence property excludes `canonical_hash`, which is deliberately
@@ -1213,7 +1214,7 @@ Verus (`verus/clone_detector_ast_features.rs`): prove that count accumulation
 is a permutation-invariant fold over the multiset of per-node `(kind, depth)`
 contributions — folding **exact `u32` counts**, not scaled rationals (the
 count-substrate hybrid makes this a clean, decidable statement with no
-overflow/rounding obligation). State, in one falsifiable sentence in Artifacts,
+overflow/rounding obligation). State, in one falsifiable sentence in Artefacts,
 **exactly** what the trust bridge assumes versus proves. Be honest about the
 division of labour (review finding 🟡-3): if the property that actually breaks
 operationally — sibling visit order in the feature walk — is carried by
@@ -1227,7 +1228,7 @@ Decision Log entry, and the bounded Kani order-independence harness must then
 stand alone as the order-independence evidence (not a coverage hole).
 
 Kani (`src/ast/kani.rs`, `#[cfg(kani)]`): harnesses over a bounded synthetic
-`NormalisedTree`/candidate set, never the parser. Pin the bounded tree shape
+`NormalizedTree`/candidate set, never the parser. Pin the bounded tree shape
 (depth ≤ 3, ≤ 2 children) with a `const _` assertion tying the unwind bound to
 it — note the recursive state space is `branching^depth`, unlike the existing
 flat `LshIndex` harnesses, so confirm `--default-unwind 4` suffices or add
@@ -1244,14 +1245,14 @@ names in `run_clone_detector_harnesses` in `scripts/run-kani.sh`.
 **Mutation-validate as a matrix** (review finding 🟡-3): each deliberate
 mutation — `<=`→`<` in the minimality compare, *and* dropping the covering
 check — must be shown to fail **at least one named harness**, recording which
-mutation each harness catches in Artifacts; a single pass/fail bit is
+mutation each harness catches in Artefacts; a single pass/fail bit is
 insufficient. Restore the production code before committing. Validation:
 `make verus-clone-detector` and `make kani-clone-detector` pass; the mutation
 matrix is recorded.
 
 ### Stage G — Documentation, gates, review, roadmap
 
-Record the realised design decisions in
+Record the realized design decisions in
 `docs/whitaker-clone-detector-design.md` under a new “Implementation decisions
 (7.3.1)” subsection (mirroring the existing 7.2.x subsections), and document the
 `ast` module's hexagonal boundary, the count-substrate histogram, and the
@@ -1316,10 +1317,10 @@ Acceptance is behavioural and observable.
   covering-node test and each feature-math test must be shown failing before
   implementation (red) and passing after the minimal change (green), then the
   wider gate re-run after refactor. Capture the red failure messages in
-  Artifacts.
+  Artefacts.
 - **Behaviour to verify by hand:** in a scratch test or doctest, call
   `lower_span("fn f() { let x = 1 + 2; }", span_of("1 + 2"))` and observe the
-  returned `NormalisedTree` root maps to the binary-expression kind, not the
+  returned `NormalizedTree` root maps to the binary-expression kind, not the
   block; call `canonical_hash` on the lowered subtrees of
   `fn f(){ let a = g(); }` and `fn f(){ let b = h(); }` and observe **equal**
   hashes (identifier normalization); call it on `a + b` vs `a - b` and observe
@@ -1365,7 +1366,7 @@ Acceptance is behavioural and observable.
 - Each stage is committed separately so any stage can be rolled back with
   `git revert` without losing earlier stages.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Record here, as work proceeds: the resolved `nightly-2026-05-28`
 `rustc --version`; any `dylint_linting`/`dylint_testing` version change needed
@@ -1387,7 +1388,7 @@ proves success.
 - Stage F Verus trust bridge: `verus/clone_detector_ast_features.rs` proves
   the exact count accumulator algebra for a supplied multiset of
   `(kind, depth)` contributions; Rust unit tests and `proptest` cover the
-  production `NormalisedTree` traversal that produces those contributions.
+  production `NormalizedTree` traversal that produces those contributions.
 - Stage F mutation matrix:
   - `<=` -> `<` in the covering lower-bound predicate failed
     `verify_smallest_covering_node_selects_minimal_range` with
@@ -1424,7 +1425,7 @@ for all depths” trap and let the Verus lemma fold exact `u32` counts; made
 `AstHash` opaque (`to_hex`) rather than `pub u64`; pinned the 7.3.2-facing read
 APIs (`KindWeight`, concrete `Production` enum, `KindHistogram::get`/`iter`,
 `ProductionMultiset::count`/`bigrams`/`trigrams`); made `canonical_hash` take
-`&NormalisedTree` and seeded it with a neutral `PARSER_SCHEMA_VERSION` to fail
+`&NormalizedTree` and seeded it with a neutral `PARSER_SCHEMA_VERSION` to fail
 caches closed across parser bumps; enriched `AstError` (empty-span,
 char-boundary, `ERROR`-node) to match the `run0/span.rs` template; promoted the
 shared FNV-1a helper into `crate::hashing`; made the boundary guard a concrete

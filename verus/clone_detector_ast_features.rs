@@ -5,7 +5,7 @@
 //! `KindCounts`: adjacent contributions commute for every queried
 //! `(kind, depth)`, and any two sequences with the same contribution multiset
 //! fold to the same exact count for that queried pair. Production traversal
-//! fidelity is covered by Rust tests and proptest over `NormalisedTree`; this
+//! fidelity is covered by Rust tests and proptest over `NormalizedTree`; this
 //! proof covers the pure accumulator algebra, not parser lowering or tree
 //! traversal.
 
