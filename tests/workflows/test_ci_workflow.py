@@ -168,9 +168,7 @@ def _assert_coverage_workflow_permissions(workflow: Mapping[str, Any]) -> None:
         "permissions",
         parent_name="CI workflow",
     )
-    assert permissions.get("contents") == "read", (
-        "coverage checks require only read access to repository contents"
-    )
+    assert permissions == {"contents": "read"}, "CI permissions must be read-only"
 
 
 def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
@@ -181,6 +179,9 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
         "coverage-check",
         parent_name="CI workflow jobs",
     )
+    assert coverage_job.get("permissions") in (None, {"contents": "read"}), (
+        "coverage-check must not expand the workflow permissions"
+    )
     assert coverage_job.get("if") == "github.event_name == 'pull_request'", (
         "coverage-check must run only for pull requests"
     )
@@ -190,7 +191,6 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
         "coverage-check must use Bash for Makefile targets"
     )
-
     _assert_steps_in_order(
         _step_names(coverage_job),
         [
@@ -209,11 +209,14 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
 def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None:
     """Assert checkout history and Rust setup for the coverage job."""
     checkout_step = _find_step(coverage_job, "Checkout")
-    assert checkout_step.get("uses") == "actions/checkout@v7", (
-        "coverage-check must use the repository-approved checkout action"
-    )
+    assert checkout_step.get("uses") == (
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+    ), "coverage-check must use the repository-approved checkout action"
     assert checkout_step.get("with", {}).get("fetch-depth") == 0, (
         "CodeScene requires full Git history for changed-line coverage"
+    )
+    assert checkout_step.get("with", {}).get("persist-credentials") is False, (
+        "coverage-check must not retain checkout credentials"
     )
 
     setup_step = _find_step(coverage_job, "Setup Rust")
@@ -237,8 +240,8 @@ def _assert_coverage_tool_installation(coverage_job: Mapping[str, Any]) -> None:
     assert llvm_cov_step.get("uses") == installer_action, (
         "cargo-llvm-cov must use the repository-approved installer action pin"
     )
-    assert llvm_cov_step.get("with", {}).get("tool") == "cargo-llvm-cov", (
-        "coverage-check must install cargo-llvm-cov"
+    assert llvm_cov_step.get("with", {}).get("tool") == "cargo-llvm-cov@0.6.24", (
+        "coverage-check must install the estate-audited cargo-llvm-cov version"
     )
 
     assert _find_step(coverage_job, "Generate coverage").get("run") == (
@@ -296,6 +299,7 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Setup Rust for Merman",
             "Install Merman CLI",
             "Install Nixie",
+            "Enforce en-GB-oxendict spelling",
             "Nixie",
             "Markdown lint",
             "Lint",
@@ -306,7 +310,6 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
             "Nixie, Markdown lint, Clippy/doc linting, and publish-check"
         ),
     )
-
     assert _find_step(linux_job, "Publish dry run").get("run") == (
         'make publish-check PUBLISH_PACKAGES="whitaker-common whitaker-installer"'
     ), "linux-full must publish-check the release crates on Linux only"
@@ -314,7 +317,17 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
     assert _find_step(linux_job, "Install Merman CLI").get("run") == (
         'cargo +1.95.0 install merman-cli --version "=0.7.0" --locked'
     ), "linux-full must install Merman 0.7.0 with its pinned Rust 1.95 toolchain"
-
+    merman_setup = _find_step(linux_job, "Setup Rust for Merman")
+    assert merman_setup.get("uses") == (
+        "dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9"
+    ), "linux-full must pin the Merman Rust setup action"
+    assert merman_setup.get("with", {}).get("toolchain") == "1.95.0", (
+        "linux-full must pin Merman's Rust toolchain"
+    )
+    assert (
+        _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
+        == "make spelling"
+    ), "linux-full must run the spelling gate"
     markdown_globs = (
         _find_step(linux_job, "Markdown lint")
         .get("with", {})

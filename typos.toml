@@ -52,7 +52,6 @@ extend-ignore-re = [
     "(?m)^            location: ArtifactLocation \\{$",
     "(?m)^        \"\\-\\-artifact\\-server\\-path\",$",
     "(?m)^        \"failed to initialise isolated rustup: \\{\\}\",$",
-    "(?m)^        \"localised message title should never be empty\"$",
     "(?m)^        TraitItemMetrics::default_method\\(\"serialise\", 8\\),$",
     "(?m)^        \\.expect\\(\"failed to initialise isolated rustup environment\"\\);$",
     "(?m)^        \\.expect\\(\"settings should be normalised\"\\);$",

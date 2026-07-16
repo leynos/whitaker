@@ -6,8 +6,8 @@
 """Enforce exact phrase corrections alongside the Typos scanner.
 
 The checker loads shared and repository-local phrase policy, then scans eligible
-tracked UTF-8 text. It complements the Markdown-only Typos pass by catching
-prohibited forms in human-facing source comments and tests.
+tracked UTF-8 text. It complements the repository-wide Typos pass with exact
+phrase enforcement in human-facing source comments and tests.
 
 Run it from the repository root with
 ``uv run scripts/typos_rollout_check.py --repository .``.
@@ -172,15 +172,17 @@ def _excluded(path: Path, spec: GitIgnoreSpec) -> bool:
 
 def _masked(text: str, patterns: tuple[str, ...]) -> str:
     """Blank ignored spans while preserving line and column positions."""
-
-    def blank(match: re.Match[str]) -> str:
-        return "".join(
-            "\n" if character == "\n" else " " for character in match.group()
-        )
-
+    ignored = bytearray(len(text))
     for pattern in patterns:
-        text = re.sub(pattern, blank, text)
-    return text
+        for match in re.finditer(pattern, text):
+            ignored[match.start() : match.end()] = b"\x01" * (
+                match.end() - match.start()
+            )
+
+    return "".join(
+        "\n" if character == "\n" else " " if ignored[index] else character
+        for index, character in enumerate(text)
+    )
 
 
 def _phrase_findings(

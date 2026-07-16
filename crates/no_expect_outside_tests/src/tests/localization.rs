@@ -197,7 +197,7 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalizationWorld) {
         .expect("localization should succeed");
     assert!(
         !messages.primary().is_empty(),
-        "localised message title should never be empty"
+        "localized message title should never be empty"
     );
 }
 

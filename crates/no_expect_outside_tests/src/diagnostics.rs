@@ -1,3 +1,5 @@
+//! Builds receiver-aware, localized diagnostics for `no_expect_outside_tests`.
+
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
 use rustc_hir as hir;

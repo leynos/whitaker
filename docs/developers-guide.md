@@ -390,7 +390,7 @@ cache only when the authoritative dictionary is newer, so an already populated
 cache remains usable offline.
 
 Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
-localization compatibility identifiers, compiler fixtures, workflow keys and
+localization compatibility identifiers, compiler fixtures, workflow keys, and
 formal diagnostic text through narrow local policy. The exact phrase gate
 rejects the hyphenated variant in favour of `handwritten`, including in hidden
 tracked source.

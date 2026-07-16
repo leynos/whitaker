@@ -401,7 +401,7 @@ make check-fmt && make lint && make test
 All stages are additive and safe to rerun. If a test fails, fix the
 implementation or test, then rerun from the failing stage.
 
-## Artifacts and notes
+## Artefacts and notes
 
 No external artefacts. All code is contained within the `common/` crate.
 
