@@ -632,8 +632,9 @@ Extend `crates/rstest_helper_should_be_fixture/src/driver.rs`:
     parameter patterns and attributes;
   - drive a HIR walk over `body.value` that visits each `Call` /
     `MethodCall` expression once. Use a small `rustc_hir::intravisit::Visitor`
-    that does not descend into nested closures (record the closure expression
-    as unsupported instead) and that records each call into the collector.
+    that traverses nested and deferred closure bodies, preserves closure-span
+    fallback context while entering and leaving each closure, and records
+    `Call` and `MethodCall` expressions encountered within those bodies.
 - Implement `fn check_crate_post(&mut self, _cx: &LateContext<'tcx>)`:
   - emit a single `debug!(target: LINT_NAME, "rstest helper call-site
     collection complete: {n} callees, {m} records", …)` line at the end
