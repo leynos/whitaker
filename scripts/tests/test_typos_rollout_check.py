@@ -1,7 +1,7 @@
 """Test exact phrase-policy enforcement.
 
-This suite validates exact phrase-policy enforcement across the standalone
-checker's policy and command boundaries. Run it with
+This suite imports ``typos_rollout_check.py`` and validates its exact
+phrase-policy enforcement across policy and command boundaries. Run it with
 ``uv run pytest scripts/tests/test_typos_rollout_check.py``.
 """
 
