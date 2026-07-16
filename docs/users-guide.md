@@ -434,7 +434,7 @@ ______________________________________________________________________
 <!-- markdownlint-disable-next-line MD024 -->
 #### Purpose
 
-Detects test attributes correctly so `no_expect_outside_tests` can allow
+Detect test attributes correctly so `no_expect_outside_tests` can allow
 `.expect()` in recognized test-only code while still flagging production use.
 
 <!-- markdownlint-disable-next-line MD024 -->

@@ -375,6 +375,7 @@ def test_windows_compat_stays_limited_to_windows_compatibility_checks(
         "Setup Rust for Merman",
         "Install Merman CLI",
         "Install Nixie",
+        "Enforce en-GB-oxendict spelling",
         "Nixie",
         "Markdown lint",
         "Lint",

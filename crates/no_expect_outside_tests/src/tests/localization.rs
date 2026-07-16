@@ -68,10 +68,6 @@ impl LocalizationWorld {
         summary.function_name = name.map(ToString::to_string);
     }
 
-    fn get_receiver_type(&self) -> ReceiverLabel {
-        self.receiver.borrow().clone()
-    }
-
     fn record_result(&self, value: Result<NoExpectMessages, I18nError>) {
         *self.result.borrow_mut() = Some(value);
     }
@@ -189,12 +185,7 @@ fn then_help(world: &LocalizationWorld, snippet: String) {
 
 #[then("the fallback and localization logic should handle the receiver type robustly")]
 fn then_receiver_type_edge_cases_are_handled(world: &LocalizationWorld) {
-    let receiver_label = world.get_receiver_type();
-    let summary = world.summary.borrow().clone();
-
-    let messages = world
-        .with_localizer(|localizer| execute_localization(localizer, &receiver_label, &summary))
-        .expect("localization should succeed");
+    let messages = world.messages();
     assert!(
         !messages.primary().is_empty(),
         "localized message title should never be empty"

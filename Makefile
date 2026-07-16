@@ -158,7 +158,7 @@ markdownlint: spelling ## Lint Markdown files and enforce spelling
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'
 
 spelling: spelling-phrase-check ## Enforce en-GB-oxendict in tracked text
-	@git ls-files -z | xargs -0 -r env $(UV_ENV) \
+	@git ls-files -z | xargs -0 env $(UV_ENV) \
 		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude --hidden
 
 spelling-phrase-check: spelling-config ## Reject prohibited spelling phrases
