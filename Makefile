@@ -238,6 +238,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 
 publish-check: ## Build, test, and validate packages before publishing
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	set -eu; \
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
 	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
@@ -248,16 +249,12 @@ publish-check: ## Build, test, and validate packages before publishing
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
-	if [ "$$(cargo-dylint --version 2>/dev/null | awk '{print $$2}')" != "$(CARGO_DYLINT_VERSION)" ]; then \
-		$(CARGO) install --locked --version $(CARGO_DYLINT_VERSION) --root "$$DYLINT_TOOLS_DIR" cargo-dylint; \
-	fi; \
-	if ! $(CARGO) install --list 2>/dev/null | grep -q "^dylint-link v$(DYLINT_LINK_VERSION):"; then \
-		$(CARGO) install --locked --version $(DYLINT_LINK_VERSION) --root "$$DYLINT_TOOLS_DIR" dylint-link; \
-	fi; \
+	scripts/install-dylint-tools.sh "$$DYLINT_TOOLS_DIR" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)"; \
 	if [ -d "$$DYLINT_TOOLS_DIR/bin" ]; then export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
-	cd "$$TMP_DIR/whitaker-src" && { \
+	cd "$$TMP_DIR/whitaker-src" || exit 1; \
+	{ \
 		CLONE_HEAD=$$(git rev-parse HEAD); \
 		TARGET_REV=$${GIT_TAG:-$${WHITAKER_REV:-$$CLONE_HEAD}}; \
 		git checkout "$$TARGET_REV"; \
