@@ -109,7 +109,7 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
         binstall_version_check_with_result(Ok(failure_output("missing binstall"))),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(success_output()),
         },
         cargo_dylint_check_with_result(Ok(success_output())),
@@ -173,7 +173,7 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
         binstall_install("cargo-dylint", Ok(failure_output("binstall failed"))),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(failure_output("cargo install failed")),
         },
     ]);
@@ -205,14 +205,14 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer.expect_install().returning(|_, _, _| {
         Err(DependencyBinaryInstallError::NotFound {
-            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz".to_owned(),
+            url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz".to_owned(),
         })
     });
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(success_output()),
         },
         cargo_dylint_check_with_result(Ok(success_output())),
@@ -244,7 +244,7 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         .once()
         .returning(|_, _, _| {
             Err(DependencyBinaryInstallError::NotFound {
-                url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"
+                url: "https://example.test/cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz"
                     .to_owned(),
             })
         });
@@ -252,7 +252,7 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
         binstall_version_check_with_result(Ok(success_output())),
         ExpectedCall {
             cmd: "cargo",
-            args: vec!["install", "--locked", "--version", "4.1.0", "cargo-dylint"],
+            args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(success_output()),
         },
         cargo_dylint_check_with_result(Ok(success_output())),

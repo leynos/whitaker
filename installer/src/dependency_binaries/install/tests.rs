@@ -100,7 +100,7 @@ fn archive_filename_uses_dependency_version() {
         .expect("dependency should exist");
     assert_eq!(
         archive_filename(dependency, &target),
-        "cargo-dylint-x86_64-unknown-linux-gnu-v4.1.0.tgz"
+        "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz"
     );
 }
 

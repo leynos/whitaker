@@ -28,8 +28,11 @@ PUBLISH_PACKAGES ?=
 UV ?= uv
 WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
-CARGO_DYLINT_VERSION ?= 5.0.0
-DYLINT_LINK_VERSION ?= 5.0.0
+CARGO_DYLINT_VERSION ?= 6.0.1
+DYLINT_LINK_VERSION ?= 6.0.1
+# Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
+# needs a newer rustc than the repository's pinned nightly provides.
+DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 
 build: target/debug/$(APP) ## Build debug binary
@@ -238,6 +241,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 
 publish-check: ## Build, test, and validate packages before publishing
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
+	set -eu; \
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
 	PINNED_TOOLCHAIN=$$(awk -F '\"' '/^channel/ {print $$2}' rust-toolchain.toml); \
 	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
@@ -247,15 +251,13 @@ publish-check: ## Build, test, and validate packages before publishing
 	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
-	if ! command -v cargo-dylint >/dev/null 2>&1; then \
-		$(CARGO) install --locked --version $(CARGO_DYLINT_VERSION) cargo-dylint; \
-	fi; \
-	if ! command -v dylint-link >/dev/null 2>&1; then \
-		$(CARGO) install --locked --version $(DYLINT_LINK_VERSION) dylint-link; \
-	fi; \
+	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
+	scripts/install-dylint-tools.sh "$$DYLINT_TOOLS_DIR" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"; \
+	if [ -d "$$DYLINT_TOOLS_DIR/bin" ]; then export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
-	cd "$$TMP_DIR/whitaker-src" && { \
+	cd "$$TMP_DIR/whitaker-src" || exit 1; \
+	{ \
 		CLONE_HEAD=$$(git rev-parse HEAD); \
 		TARGET_REV=$${GIT_TAG:-$${WHITAKER_REV:-$$CLONE_HEAD}}; \
 		git checkout "$$TARGET_REV"; \
