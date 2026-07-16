@@ -30,6 +30,9 @@ WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.0.1
 DYLINT_LINK_VERSION ?= 6.0.1
+# Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
+# needs a newer rustc than the repository's pinned nightly provides.
+DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 
 build: target/debug/$(APP) ## Build debug binary
@@ -249,7 +252,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
-	scripts/install-dylint-tools.sh "$$DYLINT_TOOLS_DIR" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)"; \
+	scripts/install-dylint-tools.sh "$$DYLINT_TOOLS_DIR" "$(CARGO_DYLINT_VERSION)" "$(DYLINT_LINK_VERSION)" "$(CARGO)" "$(DYLINT_TOOLS_TOOLCHAIN)"; \
 	if [ -d "$$DYLINT_TOOLS_DIR/bin" ]; then export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
