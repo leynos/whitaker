@@ -159,7 +159,7 @@ pub fn manifest_contents() -> &'static str {
 ///     [[dependency_binaries]]
 ///     package = "cargo-dylint"
 ///     binary = "cargo-dylint"
-///     version = "4.1.0"
+///     version = "6.0.1"
 ///     license = "MIT OR Apache-2.0"
 ///     repository = "https://github.com/trailofbits/dylint"
 /// "#;
@@ -178,7 +178,7 @@ pub fn manifest_contents() -> &'static str {
 ///     [[dependency_binaries]]
 ///     package = "cargo-dylint"
 ///     binary = "cargo-dylint"
-///     version = "4.1.0"
+///     version = "6.0.1"
 ///     license = "MIT OR Apache-2.0"
 ///     repository = "https://github.com/trailofbits/dylint"
 ///
@@ -302,7 +302,7 @@ mod tests {
             [[dependency_binaries]]
             package = "cargo-dylint"
             binary = "cargo-dylint"
-            version = "4.1.0"
+            version = "6.0.1"
             license = "MIT OR Apache-2.0"
         "#
     }
@@ -313,7 +313,7 @@ mod tests {
             [[dependency_binaries]]
             package = "cargo-dylint"
             binary = "cargo-dylint"
-            version = "4.1.0"
+            version = "6.0.1"
             license = "MIT OR Apache-2.0"
             repository = "https://github.com/trailofbits/dylint"
 
@@ -366,6 +366,6 @@ mod tests {
             .expect("embedded manifest should stay parseable")
             .expect("tool should exist");
         assert_eq!(tool.binary(), "cargo-dylint");
-        assert_eq!(tool.version(), "4.1.0");
+        assert_eq!(tool.version(), "6.0.1");
     }
 }
