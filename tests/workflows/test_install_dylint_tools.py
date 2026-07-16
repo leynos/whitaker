@@ -101,6 +101,22 @@ esac""",
     )
 
 
+def _write_matching_tool_stubs(
+    tmp_path: Path,
+    *,
+    installed_dylint_link: str,
+) -> tuple[Path, Path]:
+    """Set up stubs with a matching cargo-dylint and return key paths.
+
+    Returns the stub directory and the (uncreated) tools root.
+    """
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _write_cargo_dylint_stub(stub_dir, f"cargo-dylint {CARGO_DYLINT_VERSION}")
+    _write_cargo_stub(stub_dir, installed_dylint_link=installed_dylint_link)
+    return stub_dir, tmp_path / "tools"
+
+
 def _run_script(
     stub_dir: Path,
     tools_root: Path,
@@ -135,11 +151,9 @@ def _install_log(stub_dir: Path) -> str:
 
 def test_matching_tools_install_nothing(tmp_path: Path) -> None:
     """Matching system versions must not trigger any install."""
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
-    _write_cargo_dylint_stub(stub_dir, f"cargo-dylint {CARGO_DYLINT_VERSION}")
-    _write_cargo_stub(stub_dir, installed_dylint_link=DYLINT_LINK_VERSION)
-    tools_root = tmp_path / "tools"
+    stub_dir, tools_root = _write_matching_tool_stubs(
+        tmp_path, installed_dylint_link=DYLINT_LINK_VERSION
+    )
 
     result = _run_script(stub_dir, tools_root)
 
@@ -180,11 +194,9 @@ def test_stale_or_missing_cargo_dylint_installs_pin(
 
 def test_missing_dylint_link_installs_pin(tmp_path: Path) -> None:
     """An unpinned dylint-link in the install list triggers an install."""
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
-    _write_cargo_dylint_stub(stub_dir, f"cargo-dylint {CARGO_DYLINT_VERSION}")
-    _write_cargo_stub(stub_dir, installed_dylint_link="5.0.0")
-    tools_root = tmp_path / "tools"
+    stub_dir, tools_root = _write_matching_tool_stubs(
+        tmp_path, installed_dylint_link="5.0.0"
+    )
 
     result = _run_script(stub_dir, tools_root)
 
