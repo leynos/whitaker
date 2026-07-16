@@ -1,4 +1,9 @@
-"""Test exact phrase-policy enforcement."""
+"""Test exact phrase-policy enforcement.
+
+This suite validates exact phrase-policy enforcement across the standalone
+checker's policy and command boundaries. Run it with
+``uv run pytest scripts/tests/test_typos_rollout_check.py``.
+"""
 
 import importlib
 from pathlib import Path
