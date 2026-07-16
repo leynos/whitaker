@@ -29,14 +29,16 @@ fn check_dylint_tools_reports_installed_tools() {
     });
 }
 
-#[test]
-fn check_dylint_tools_rejects_stale_cargo_dylint_version() {
+#[rstest::rstest]
+#[case::stale_version("cargo-dylint 5.0.0\n")]
+#[case::unparsable_output("not a version\n")]
+fn check_dylint_tools_rejects_unusable_cargo_dylint_output(#[case] version_stdout: &str) {
     // The fake PATH keeps dylint-link absent so only cargo-dylint is probed.
     with_fake_path(
         |_| {},
         || {
             let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
-                stdout_output("cargo-dylint 5.0.0\n"),
+                stdout_output(version_stdout),
             ))]);
 
             let status = check_dylint_tools(&executor);
@@ -53,61 +55,16 @@ fn check_dylint_tools_rejects_stale_cargo_dylint_version() {
     );
 }
 
-#[test]
-fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() {
-    with_fake_path(
-        |_| {},
-        || {
-            let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
-                stdout_output("not a version\n"),
-            ))]);
-
-            let status = check_dylint_tools(&executor);
-
-            assert_eq!(
-                status,
-                DylintToolStatus {
-                    cargo_dylint: false,
-                    dylint_link: false,
-                }
-            );
-            executor.assert_finished();
-        },
-    );
-}
-
-#[test]
-fn check_dylint_tools_rejects_stale_dylint_link_version() {
+#[rstest::rstest]
+#[case::stale_version(dylint_link_install_list_check_with_version("5.0.0"))]
+#[case::missing_from_list(ExpectedCall {
+    cmd: "cargo",
+    args: vec!["install", "--list"],
+    result: Ok(stdout_output("ripgrep v14.1.0:\n    rg\n")),
+})]
+fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: ExpectedCall) {
     with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_check(),
-            dylint_link_install_list_check_with_version("5.0.0"),
-        ]);
-
-        let status = check_dylint_tools(&executor);
-
-        assert_eq!(
-            status,
-            DylintToolStatus {
-                cargo_dylint: true,
-                dylint_link: false,
-            }
-        );
-        executor.assert_finished();
-    });
-}
-
-#[test]
-fn check_dylint_tools_rejects_dylint_link_missing_from_install_list() {
-    with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![
-            cargo_dylint_check(),
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["install", "--list"],
-                result: Ok(stdout_output("ripgrep v14.1.0:\n    rg\n")),
-            },
-        ]);
+        let executor = StubExecutor::new(vec![cargo_dylint_check(), install_list_check]);
 
         let status = check_dylint_tools(&executor);
 
