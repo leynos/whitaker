@@ -329,11 +329,23 @@ Implementation details:
 
 - The lint now maps `rustc_hir::Attribute` values into a small
   `OrderedAttribute` abstraction, so the ordering logic can be unit-tested
-  without depending on compiler types. `AttrInfo::from_hir` records the span,
-  whether the attribute is a doc comment (via `doc_str`), and whether it is
-  outer by reading the attribute style (`AttrStyle`). Inner attributes
-  therefore remain excluded from the ordering check in line with the
-  implementation.
+  without depending on compiler types. `AttrInfo::try_from_hir` records the
+  span, whether the attribute is a doc comment (via `doc_str`), and whether it
+  is outer by reading the attribute style (`AttrStyle`). It accepts `Unparsed`
+  and `DocComment` attributes directly, and also `Parsed` attribute kinds that
+  the compiler eagerly parses but that still carry a recoverable user-written
+  span (for example `Inline` and `MustUse`, via `parsed_attribute_span`'s
+  whitelist), so those attributes keep participating in ordering. `Parsed`
+  kinds without a recoverable span (compiler-internal summaries such as
+  `ConstStabilityIndirect`, and deliberately `Cold`) return `None` and are
+  excluded. Inner attributes remain excluded from the ordering check in line
+  with the implementation.
+- `attribute_within_item` decides whether an attribute belongs to the item
+  being checked. Because modern nightlies exclude outer attributes from the
+  item's HIR span — they sit immediately before it rather than inside it —
+  the check accepts a span either contained within the item span (older
+  compiler behaviour, and inner attributes) or preceding it (outer attributes
+  on current nightlies).
 - `FunctionKind` labels free functions, inherent methods, and trait methods so
   diagnostics mention the affected item type explicitly.
 - Diagnostics now rely on `LateContext::emit_spanned_lint`, highlighting the
