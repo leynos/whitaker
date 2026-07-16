@@ -13,8 +13,8 @@ extern crate rustc_lint as upstream;
 
 pub use upstream::*;
 
-/// Diagnostic-construction helpers from `rustc_errors` needed by lint
-/// emission call sites (e.g. `errors::DiagDecorator`).
 pub mod errors {
+    //! Diagnostic-construction helpers from `rustc_errors` needed by lint
+    //! emission call sites (e.g. `errors::DiagDecorator`).
     pub use rustc_errors::{Diag, DiagDecorator};
 }

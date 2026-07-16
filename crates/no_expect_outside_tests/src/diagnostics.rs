@@ -179,9 +179,9 @@ pub(crate) fn emit_diagnostic(
         NO_EXPECT_OUTSIDE_TESTS,
         expr.span,
         rustc_lint::errors::DiagDecorator(move |lint| {
-            lint.primary_message(primary.clone());
-            lint.note(note.clone());
-            lint.help(help.clone());
+            lint.primary_message(primary);
+            lint.note(note);
+            lint.help(help);
         }),
     );
 }

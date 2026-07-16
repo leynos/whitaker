@@ -302,9 +302,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
         FUNCTION_ATTRS_FOLLOW_DOCS,
         context.doc_span,
         rustc_lint::errors::DiagDecorator(move |lint| {
-            lint.primary_message(primary.clone());
-            lint.span_note(context.offending_span, note.clone());
-            lint.help(help.clone());
+            lint.primary_message(primary);
+            lint.span_note(context.offending_span, note);
+            lint.help(help);
         }),
     );
 }
