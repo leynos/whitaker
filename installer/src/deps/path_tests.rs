@@ -3,17 +3,18 @@
 use super::*;
 use crate::test_support::env_test_guard;
 use crate::test_utils::dependency_binary_helpers::{
-    cargo_dylint_check_with_result, with_fake_binary_on_path, with_fake_path, write_fake_binary,
-    write_fake_binary_with_status,
+    cargo_dylint_check, cargo_dylint_check_with_result, dylint_link_install_list_check,
+    dylint_link_install_list_check_with_version, with_fake_binary_on_path, with_fake_path,
+    write_fake_binary, write_fake_binary_with_status,
 };
-use crate::test_utils::{StubExecutor, success_output};
+use crate::test_utils::{ExpectedCall, StubExecutor, stdout_output};
 use temp_env::with_vars_unset;
 
 #[test]
 fn check_dylint_tools_reports_installed_tools() {
     with_fake_binary_on_path("dylint-link", || {
         let executor =
-            StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
+            StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
 
         let status = check_dylint_tools(&executor);
 
@@ -22,6 +23,99 @@ fn check_dylint_tools_reports_installed_tools() {
             DylintToolStatus {
                 cargo_dylint: true,
                 dylint_link: true,
+            }
+        );
+        executor.assert_finished();
+    });
+}
+
+#[test]
+fn check_dylint_tools_rejects_stale_cargo_dylint_version() {
+    // The fake PATH keeps dylint-link absent so only cargo-dylint is probed.
+    with_fake_path(
+        |_| {},
+        || {
+            let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
+                stdout_output("cargo-dylint 5.0.0\n"),
+            ))]);
+
+            let status = check_dylint_tools(&executor);
+
+            assert_eq!(
+                status,
+                DylintToolStatus {
+                    cargo_dylint: false,
+                    dylint_link: false,
+                }
+            );
+            executor.assert_finished();
+        },
+    );
+}
+
+#[test]
+fn check_dylint_tools_rejects_unparsable_cargo_dylint_output() {
+    with_fake_path(
+        |_| {},
+        || {
+            let executor = StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(
+                stdout_output("not a version\n"),
+            ))]);
+
+            let status = check_dylint_tools(&executor);
+
+            assert_eq!(
+                status,
+                DylintToolStatus {
+                    cargo_dylint: false,
+                    dylint_link: false,
+                }
+            );
+            executor.assert_finished();
+        },
+    );
+}
+
+#[test]
+fn check_dylint_tools_rejects_stale_dylint_link_version() {
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check(),
+            dylint_link_install_list_check_with_version("5.0.0"),
+        ]);
+
+        let status = check_dylint_tools(&executor);
+
+        assert_eq!(
+            status,
+            DylintToolStatus {
+                cargo_dylint: true,
+                dylint_link: false,
+            }
+        );
+        executor.assert_finished();
+    });
+}
+
+#[test]
+fn check_dylint_tools_rejects_dylint_link_missing_from_install_list() {
+    with_fake_binary_on_path("dylint-link", || {
+        let executor = StubExecutor::new(vec![
+            cargo_dylint_check(),
+            ExpectedCall {
+                cmd: "cargo",
+                args: vec!["install", "--list"],
+                result: Ok(stdout_output("ripgrep v14.1.0:\n    rg\n")),
+            },
+        ]);
+
+        let status = check_dylint_tools(&executor);
+
+        assert_eq!(
+            status,
+            DylintToolStatus {
+                cargo_dylint: true,
+                dylint_link: false,
             }
         );
         executor.assert_finished();
@@ -40,8 +134,7 @@ fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
             write_fake_binary_with_status(&binary_path, true, 1);
         },
         || {
-            let executor =
-                StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
+            let executor = StubExecutor::new(vec![cargo_dylint_check()]);
 
             let status = check_dylint_tools(&executor);
 
@@ -147,7 +240,7 @@ fn check_dylint_tools_detects_dylint_link_via_pathext_suffix() {
         || {
             temp_env::with_var("PATHEXT", Some(".CMD;.BAT"), || {
                 let executor =
-                    StubExecutor::new(vec![cargo_dylint_check_with_result(Ok(success_output()))]);
+                    StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
 
                 let status = check_dylint_tools(&executor);
 

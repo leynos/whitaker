@@ -4,8 +4,8 @@ use super::*;
 use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
 use crate::installer_packaging::TargetTriple;
 use crate::test_utils::dependency_binary_helpers::{
-    binstall_install, binstall_version_check_with_result, cargo_dylint_check_with_result,
-    with_fake_binary_on_path,
+    binstall_install, binstall_version_check_with_result, cargo_dylint_check,
+    cargo_dylint_check_with_result, dylint_link_install_list_check, with_fake_binary_on_path,
 };
 use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
@@ -46,7 +46,7 @@ fn install_dylint_tools_uses_repository_release_first() {
         .returning(|_, _, _| Ok(PathBuf::from("/tmp/bin/cargo-dylint")));
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
-        cargo_dylint_check_with_result(Ok(success_output())),
+        cargo_dylint_check(),
     ]);
     let mut stderr = Vec::new();
 
@@ -78,7 +78,7 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
         binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check_with_result(Ok(success_output())),
+        cargo_dylint_check(),
     ]);
     let mut stderr = Vec::new();
 
@@ -112,7 +112,7 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
             args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(success_output()),
         },
-        cargo_dylint_check_with_result(Ok(success_output())),
+        cargo_dylint_check(),
     ]);
     let mut stderr = Vec::new();
 
@@ -142,7 +142,7 @@ fn install_dylint_tools_falls_back_when_repository_verification_fails() {
         binstall_version_check_with_result(Ok(success_output())),
         cargo_dylint_check_with_result(Ok(failure_output("still missing"))),
         binstall_install("cargo-dylint", Ok(success_output())),
-        cargo_dylint_check_with_result(Ok(success_output())),
+        cargo_dylint_check(),
     ]);
     let mut stderr = Vec::new();
 
@@ -215,7 +215,7 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
             args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(success_output()),
         },
-        cargo_dylint_check_with_result(Ok(success_output())),
+        cargo_dylint_check(),
     ]);
     let mut stderr = Vec::new();
 
@@ -255,7 +255,10 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
             args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
             result: Ok(success_output()),
         },
-        cargo_dylint_check_with_result(Ok(success_output())),
+        cargo_dylint_check(),
+        // Refreshing the companion dylint-link status consults Cargo's
+        // installed-binary registry once the PATH probe passes.
+        dylint_link_install_list_check(),
     ]);
     let mut stderr = Vec::new();
 

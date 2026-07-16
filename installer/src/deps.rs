@@ -5,7 +5,8 @@
 //! release archives before falling back to `cargo binstall` or `cargo install`.
 
 use crate::dependency_binaries::{
-    DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller, host_target,
+    DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller, find_dependency_binary,
+    host_target,
 };
 use crate::dirs::{BaseDirs, SystemBaseDirs};
 use crate::error::{InstallerError, Result};
@@ -163,14 +164,99 @@ pub fn install_dylint_tools_with_options(
     )
 }
 
+/// Arguments used to query Cargo's registry of installed binaries.
+const CARGO_INSTALL_LIST_ARGS: [&str; 2] = ["install", "--list"];
+
 fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> bool {
+    // The manifest is embedded in the binary, so a lookup failure is
+    // effectively unreachable. Should it ever occur, degrade to the previous
+    // success-only probes rather than reporting every tool as missing.
+    let expected_version = find_dependency_binary(tool.package)
+        .ok()
+        .flatten()
+        .map(|dependency| dependency.version());
+
     if tool == &DYLINT_LINK_TOOL {
-        return match find_binary_on_path(tool.command) {
-            Some(binary_path) => dylint_link_probe_succeeds(&binary_path),
-            None => false,
-        };
+        return is_dylint_link_installed(executor, expected_version);
     }
-    command_succeeds(executor, tool.command, tool.args)
+    is_versioned_tool_installed(executor, tool, expected_version)
+}
+
+fn is_dylint_link_installed(
+    executor: &dyn CommandExecutor,
+    expected_version: Option<&str>,
+) -> bool {
+    // The existence probe runs first so that a missing binary never consults
+    // the executor.
+    let is_present = match find_binary_on_path(DYLINT_LINK_TOOL.command) {
+        Some(binary_path) => dylint_link_probe_succeeds(&binary_path),
+        None => false,
+    };
+    if !is_present {
+        return false;
+    }
+    let Some(expected_version) = expected_version else {
+        return true;
+    };
+    // `dylint-link` is a pure linker wrapper: it forwards its entire argument
+    // list to the underlying linker and can never report its own version, so
+    // `dylint-link --version` is not a usable version source. Query Cargo's
+    // registry of installed binaries instead, which records the version each
+    // binary was installed at.
+    cargo_installed_version(executor, DYLINT_LINK_TOOL.package)
+        .is_some_and(|version| version == expected_version)
+}
+
+fn is_versioned_tool_installed(
+    executor: &dyn CommandExecutor,
+    tool: &DependencyTool,
+    expected_version: Option<&str>,
+) -> bool {
+    let Some(expected_version) = expected_version else {
+        return command_succeeds(executor, tool.command, tool.args);
+    };
+    executor.run(tool.command, tool.args).is_ok_and(|output| {
+        output.status.success()
+            && first_semver_token(&String::from_utf8_lossy(&output.stdout))
+                .is_some_and(|version| version == expected_version)
+    })
+}
+
+/// Extracts the installed version of `package` from `cargo install --list`.
+///
+/// Matches lines of the form `dylint-link v6.0.1:` (or
+/// `dylint-link v6.0.1 (/path):` for path installs), returning the version
+/// with the leading `v` and trailing `:` stripped.
+fn cargo_installed_version(executor: &dyn CommandExecutor, package: &str) -> Option<String> {
+    let output = executor.run("cargo", &CARGO_INSTALL_LIST_ARGS).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().find_map(|line| {
+        let mut tokens = line.split_whitespace();
+        if tokens.next() != Some(package) {
+            return None;
+        }
+        tokens
+            .next()
+            .and_then(|token| token.strip_prefix('v'))
+            .map(|version| version.trim_end_matches(':').to_owned())
+    })
+}
+
+/// Returns the first whitespace-separated token shaped like `MAJOR.MINOR.PATCH`.
+fn first_semver_token(text: &str) -> Option<&str> {
+    text.split_whitespace().find(|token| {
+        let components: Vec<&str> = token.split('.').collect();
+        components.len() == 3
+            && components.iter().all(|component| {
+                !component.is_empty()
+                    && component
+                        .chars()
+                        .all(|character| character.is_ascii_digit())
+            })
+    })
 }
 
 fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
