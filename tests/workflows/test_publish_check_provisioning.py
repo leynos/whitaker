@@ -43,22 +43,13 @@ def _write_stub(directory: Path, name: str, body: str) -> Path:
     return stub
 
 
-def _write_harness(stub_dir: Path, *, install_exit: int = 0) -> Path:
-    """Write the full stub command set for a publish-check run.
+def _write_recording_stub(stub_dir: Path, log: Path, name: str) -> None:
+    """Write a stub that only records its invocation and succeeds."""
+    _write_stub(stub_dir, name, f'echo "{name} $@" >> "{log}"')
 
-    Every stub appends ``<command> <args>`` to ``invocations.log``. The
-    ``cargo`` stub additionally:
 
-    - creates the expected lint library on ``build --release`` so the
-      recipe's real ``cp`` succeeds;
-    - creates ``<root>/bin/cargo-dylint`` on ``install`` (when
-      ``install_exit`` is zero) so the recipe's ``PATH`` prepend fires;
-    - records ``command -v cargo-dylint`` on ``dylint`` so tests can
-      assert which binary a Dylint-facing command would resolve.
-    """
-    log = stub_dir / "invocations.log"
-    _write_stub(stub_dir, "rustup", f'echo "rustup $@" >> "{log}"')
-    _write_stub(stub_dir, "cargo-nextest", f'echo "cargo-nextest $@" >> "{log}"')
+def _write_stale_cargo_dylint_stub(stub_dir: Path, log: Path) -> None:
+    """Write a stale (5.0.0) cargo-dylint honouring the 6.x probe form."""
     _write_stub(
         stub_dir,
         "cargo-dylint",
@@ -69,6 +60,10 @@ if [ "$1" = "dylint" ] && [ "$2" = "--version" ]; then
 fi
 exit 2""",
     )
+
+
+def _write_git_stub(stub_dir: Path, log: Path) -> None:
+    """Write a git stub whose clone creates the destination directory."""
     _write_stub(
         stub_dir,
         "git",
@@ -79,15 +74,16 @@ rev-parse) echo 0000000000000000000000000000000000000000 ;;
 esac
 exit 0""",
     )
-    _write_stub(
-        stub_dir,
-        "cargo",
-        f"""case "$1" in
-+*) shift ;;
-esac
-echo "cargo $@" >> "{log}"
-case "$1" in
-install)
+
+
+def _cargo_install_case(install_exit: int) -> str:
+    """Return the install branch of the cargo stub.
+
+    Reports the pinned dylint-link for ``--list``; otherwise honours
+    ``install_exit`` and, on success, creates ``<root>/bin/cargo-dylint``
+    so the recipe's ``PATH`` prepend fires.
+    """
+    return f"""install)
     if [ "$2" = "--list" ]; then
         echo "dylint-link v{DYLINT_LINK_VERSION}:"
         exit 0
@@ -105,9 +101,17 @@ install)
     printf '#!/bin/sh\\nexit 0\\n' > "$root/bin/cargo-dylint"
     chmod 755 "$root/bin/cargo-dylint"
     exit 0
-    ;;
-build)
-    if [ -n "${{CARGO_TARGET_DIR:-}}" ]; then
+    ;;"""
+
+
+def _cargo_build_case() -> str:
+    """Return the build branch of the cargo stub.
+
+    Creates the expected lint library under ``CARGO_TARGET_DIR`` so the
+    recipe's real ``cp`` succeeds.
+    """
+    return """build)
+    if [ -n "${CARGO_TARGET_DIR:-}" ]; then
         crate=""
         prev=""
         for arg in "$@"; do
@@ -120,7 +124,21 @@ build)
         fi
     fi
     exit 0
-    ;;
+    ;;"""
+
+
+def _write_cargo_stub(stub_dir: Path, log: Path, *, install_exit: int) -> None:
+    """Write the cargo stub; the dylint branch records what PATH resolves."""
+    _write_stub(
+        stub_dir,
+        "cargo",
+        f"""case "$1" in
++*) shift ;;
+esac
+echo "cargo $@" >> "{log}"
+case "$1" in
+{_cargo_install_case(install_exit)}
+{_cargo_build_case()}
 dylint)
     echo "dylint-resolved $(command -v cargo-dylint)" >> "{log}"
     exit 0
@@ -130,6 +148,20 @@ dylint)
     ;;
 esac""",
     )
+
+
+def _write_harness(stub_dir: Path, *, install_exit: int = 0) -> Path:
+    """Write the full stub command set for a publish-check run.
+
+    Every stub appends ``<command> <args>`` to ``invocations.log``; each
+    stub's behaviour is documented on its writer.
+    """
+    log = stub_dir / "invocations.log"
+    _write_recording_stub(stub_dir, log, "rustup")
+    _write_recording_stub(stub_dir, log, "cargo-nextest")
+    _write_stale_cargo_dylint_stub(stub_dir, log)
+    _write_git_stub(stub_dir, log)
+    _write_cargo_stub(stub_dir, log, install_exit=install_exit)
     return log
 
 
