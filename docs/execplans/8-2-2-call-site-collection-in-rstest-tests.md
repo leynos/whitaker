@@ -14,9 +14,11 @@ ExecPlan is implemented, the lint will walk every strict `#[rstest]` test in
 the crate, recognize local helper calls inside those tests, classify each
 positional argument as either a fixture-local binding, a stable literal, a
 stable constant path, or unsupported, and record one
-`whitaker_common::rstest::ArgFingerprint` per call. The records are kept in
-per-callee, per-test maps inside the lint pass, ready for roadmap item 8.2.3 to
-apply thresholds and emit diagnostics.
+`whitaker_common::rstest::ArgFingerprint` per call. The lint pass keeps
+records in a deterministic `BTreeMap<String, Vec<CallSiteRecord>>`, keyed by
+callee definition path. Its Visitor traverses nested and deferred closure
+bodies while preserving closure-span fallback context, ready for roadmap item
+8.2.3 to apply thresholds and emit diagnostics.
 
 The observable outcome of 8.2.2 is therefore structural rather than diagnostic.
 A maintainer can:
