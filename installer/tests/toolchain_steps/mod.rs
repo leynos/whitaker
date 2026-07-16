@@ -224,7 +224,7 @@ pub fn when_installer_cli_run(world: &ToolchainWorld) {
     cmd.args(args.iter());
     cmd.current_dir(workspace_root());
 
-    // Sanitise rustup environment to prevent host settings from leaking
+    // Sanitize rustup environment to prevent host settings from leaking
     // into tests: always disable auto-install and remove toolchain overrides
     cmd.env("RUSTUP_AUTO_INSTALL", "0");
     cmd.env_remove("RUSTUP_TOOLCHAIN");

@@ -179,7 +179,7 @@ Whitaker's lint reads either the refined run (preferred) or falls back to Run 0.
 
 ## Pass A: token engine (rustc_lexer)
 
-### Normalisation
+### Normalization
 
 ```rust
 pub enum Norm { T1, T2 }

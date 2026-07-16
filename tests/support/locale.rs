@@ -1,7 +1,7 @@
 //! Test scaffolding for locale parameters in behaviour-driven scenarios.
 //!
 //! The `StepLocale` wrapper parses locale strings from BDD step definitions,
-//! stripping whitespace and quotation marks to normalise values before they are
+//! stripping whitespace and quotation marks to normalize values before they are
 //! passed to locale resolution and configuration helpers.
 
 use std::convert::Infallible;

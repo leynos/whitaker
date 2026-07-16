@@ -1,3 +1,5 @@
+//! Builds receiver-aware, localized diagnostics for `no_expect_outside_tests`.
+
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
 use rustc_hir as hir;
@@ -233,8 +235,8 @@ fn context_label(summary: &ContextSummary) -> ContextLabel {
 }
 
 #[cfg(test)]
-#[path = "tests/localisation.rs"]
-mod localisation;
+#[path = "tests/localization.rs"]
+mod localization;
 
 #[cfg(test)]
 #[path = "tests/receiver_type_edge_cases.rs"]

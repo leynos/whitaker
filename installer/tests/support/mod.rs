@@ -27,7 +27,7 @@ pub fn pinned_toolchain_channel() -> String {
 
 /// Checks if a toolchain is installed on the host system.
 ///
-/// Sanitises rustup environment by always setting RUSTUP_AUTO_INSTALL=0 and
+/// Sanitizes rustup environment by always setting RUSTUP_AUTO_INSTALL=0 and
 /// RUSTUP_TOOLCHAIN to prevent host settings from leaking into tests.
 pub fn is_toolchain_installed(channel: &str) -> bool {
     Command::new("rustup")
@@ -65,12 +65,12 @@ pub struct IsolatedRustupEnv {
     pub cargo_home: TempDir,
 }
 
-/// Initialises an isolated rustup environment by running `rustup show`.
+/// Initializes an isolated rustup environment by running `rustup show`.
 ///
 /// This creates necessary settings files that rustup expects to exist.
 /// The function sets RUSTUP_AUTO_INSTALL=0 to prevent auto-installing any
-/// toolchain during initialisation, clears RUSTUP_TOOLCHAIN to avoid
-/// rust-toolchain.toml files affecting initialisation, and runs from
+/// toolchain during initialization, clears RUSTUP_TOOLCHAIN to avoid
+/// rust-toolchain.toml files affecting initialization, and runs from
 /// rustup_home as a current directory to prevent rustup from walking up
 /// to the workspace and discovering a project's rust-toolchain.toml
 /// (which would affect toolchain selection).
@@ -153,12 +153,12 @@ fn install_rustup_to_cargo_bin(rustup_path: &str, cargo_bin: &Path) {
 /// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing.
 ///
 /// This ensures the auto-install code path is exercised regardless of host state.
-/// The function initialises rustup in the isolated environment and makes the system
+/// The function initializes rustup in the isolated environment and makes the system
 /// rustup binary available (via symlink on Unix, copy on Windows).
 ///
 /// # Panics
 ///
-/// Panics if the isolated environment cannot be created or initialised.
+/// Panics if the isolated environment cannot be created or initialized.
 pub fn setup_isolated_rustup() -> IsolatedRustupEnv {
     let rustup_home = TempDir::new().expect("failed to create RUSTUP_HOME temp dir");
     let cargo_home = TempDir::new().expect("failed to create CARGO_HOME temp dir");

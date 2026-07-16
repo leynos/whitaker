@@ -1,4 +1,4 @@
-//! Unit tests validating context summarisation outcomes across default and
+//! Unit tests validating context summarization outcomes across default and
 //! configured test attributes.
 
 use crate::context::summarise_context;

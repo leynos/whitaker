@@ -2,7 +2,7 @@
 //!
 //! `module_max_lines` measures the number of source lines occupied by a module
 //! and warns when the count exceeds the configurable `max_lines` threshold.
-//! The lint uses localisation data sourced from the shared Whitaker
+//! The lint uses localization data sourced from the shared Whitaker
 //! infrastructure so diagnostics match the suite's tone across locales.
 use log::debug;
 use rustc_hir as hir;
@@ -33,7 +33,7 @@ dylint_linting::impl_late_lint! {
     ModuleMaxLines::default()
 }
 
-/// Lint pass that tracks configuration and localisation state while checking modules.
+/// Lint pass that tracks configuration and localization state while checking modules.
 pub struct ModuleMaxLines {
     max_lines: usize,
     localizer: Localizer,

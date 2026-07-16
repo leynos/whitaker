@@ -1,4 +1,4 @@
-//! BDD-style localisation tests for function attribute diagnostic messages.
+//! BDD-style localization tests for function attribute diagnostic messages.
 //!
 //! Exercises locale selection, attribute fallback, and missing-message paths via
 //! `rstest-bdd` scenarios and a custom failing lookup to validate fallbacks.
@@ -14,7 +14,7 @@ use whitaker_common::i18n::I18nError;
 use whitaker_common::i18n::testing::FailingLookup;
 
 #[derive(Default)]
-struct LocalisationWorld {
+struct LocalizationWorld {
     localizer: RefCell<Option<Localizer>>,
     subject: RefCell<FunctionKind>,
     attribute: RefCell<String>,
@@ -23,7 +23,7 @@ struct LocalisationWorld {
     result: RefCell<Option<Result<FunctionAttrsMessages, I18nError>>>,
 }
 
-impl LocalisationWorld {
+impl LocalizationWorld {
     fn use_localizer(&self, locale: &str) {
         *self.localizer.borrow_mut() = Some(Localizer::new(Some(locale)));
     }
@@ -39,7 +39,7 @@ impl LocalisationWorld {
             Ref::map(self.result.borrow(), |opt| {
                 opt.as_ref().expect("result recorded")
             }),
-            |res| res.as_ref().expect("expected localisation to succeed"),
+            |res| res.as_ref().expect("expected localization to succeed"),
         )
     }
 
@@ -48,23 +48,23 @@ impl LocalisationWorld {
             Ref::map(self.result.borrow(), |opt| {
                 opt.as_ref().expect("result recorded")
             }),
-            |res| res.as_ref().expect_err("expected localisation to fail"),
+            |res| res.as_ref().expect_err("expected localization to fail"),
         )
     }
 }
 
 #[fixture]
-fn world() -> LocalisationWorld {
-    LocalisationWorld::default()
+fn world() -> LocalizationWorld {
+    LocalizationWorld::default()
 }
 
 #[given("the locale {locale} is selected")]
-fn given_locale(world: &LocalisationWorld, locale: String) {
+fn given_locale(world: &LocalizationWorld, locale: String) {
     world.use_localizer(&locale);
 }
 
 #[given("the subject kind is {kind}")]
-fn given_subject(world: &LocalisationWorld, kind: String) {
+fn given_subject(world: &LocalizationWorld, kind: String) {
     *world.subject.borrow_mut() = match kind.as_str() {
         "function" => FunctionKind::Function,
         "method" => FunctionKind::Method,
@@ -74,31 +74,31 @@ fn given_subject(world: &LocalisationWorld, kind: String) {
 }
 
 #[given("the attribute label is {label}")]
-fn given_attribute(world: &LocalisationWorld, label: String) {
+fn given_attribute(world: &LocalizationWorld, label: String) {
     *world.attribute.borrow_mut() = label;
 }
 
 #[given("the attribute snippet cannot be retrieved")]
-fn given_attribute_fallback(world: &LocalisationWorld) {
+fn given_attribute_fallback(world: &LocalizationWorld) {
     world.use_attribute_fallback.set(true);
 }
 
-#[given("localisation fails")]
-fn given_failure(world: &LocalisationWorld) {
+#[given("localization fails")]
+fn given_failure(world: &LocalizationWorld) {
     world.failing.set(true);
 }
 
 #[when("I localise the diagnostic")]
-fn when_localise(world: &LocalisationWorld) {
+fn when_localize(world: &LocalizationWorld) {
     let kind = *world.subject.borrow();
     let failing = world.failing.get();
     let attribute = resolve_attribute(world, failing);
-    let result = resolve_localisation(world, kind, attribute.as_str(), failing);
+    let result = resolve_localization(world, kind, attribute.as_str(), failing);
 
     world.result.replace(Some(result));
 }
 
-fn resolve_attribute(world: &LocalisationWorld, failing: bool) -> String {
+fn resolve_attribute(world: &LocalizationWorld, failing: bool) -> String {
     match (world.use_attribute_fallback.get(), failing) {
         (true, true) => {
             let lookup = failing_lookup();
@@ -109,8 +109,8 @@ fn resolve_attribute(world: &LocalisationWorld, failing: bool) -> String {
     }
 }
 
-fn resolve_localisation(
-    world: &LocalisationWorld,
+fn resolve_localization(
+    world: &LocalizationWorld,
     kind: FunctionKind,
     attribute: &str,
     failing: bool,
@@ -124,50 +124,50 @@ fn resolve_localisation(
 }
 
 #[then("the primary message contains {snippet}")]
-fn then_primary(world: &LocalisationWorld, snippet: String) {
+fn then_primary(world: &LocalizationWorld, snippet: String) {
     assert!(world.messages().primary().contains(&snippet));
 }
 
 #[then("the note mentions {snippet}")]
-fn then_note(world: &LocalisationWorld, snippet: String) {
+fn then_note(world: &LocalizationWorld, snippet: String) {
     assert!(world.messages().note().contains(&snippet));
 }
 
 #[then("the help mentions {snippet}")]
-fn then_help(world: &LocalisationWorld, snippet: String) {
+fn then_help(world: &LocalizationWorld, snippet: String) {
     assert!(world.messages().help().contains(&snippet));
 }
 
-#[then("localisation fails for {key}")]
-fn then_failure(world: &LocalisationWorld, key: String) {
+#[then("localization fails for {key}")]
+fn then_failure(world: &LocalizationWorld, key: String) {
     let error = world.error();
     match &*error {
         I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, &key),
     }
 }
 
-#[scenario(path = "tests/features/function_attrs_localisation.feature", index = 0)]
-fn scenario_fallback(world: LocalisationWorld) {
+#[scenario(path = "tests/features/function_attrs_localization.feature", index = 0)]
+fn scenario_fallback(world: LocalizationWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/function_attrs_localisation.feature", index = 1)]
-fn scenario_welsh(world: LocalisationWorld) {
+#[scenario(path = "tests/features/function_attrs_localization.feature", index = 1)]
+fn scenario_welsh(world: LocalizationWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/function_attrs_localisation.feature", index = 2)]
-fn scenario_attribute_fallback(world: LocalisationWorld) {
+#[scenario(path = "tests/features/function_attrs_localization.feature", index = 2)]
+fn scenario_attribute_fallback(world: LocalizationWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/function_attrs_localisation.feature", index = 3)]
-fn scenario_unknown_locale(world: LocalisationWorld) {
+#[scenario(path = "tests/features/function_attrs_localization.feature", index = 3)]
+fn scenario_unknown_locale(world: LocalizationWorld) {
     let _ = world;
 }
 
-#[scenario(path = "tests/features/function_attrs_localisation.feature", index = 4)]
-fn scenario_failure(world: LocalisationWorld) {
+#[scenario(path = "tests/features/function_attrs_localization.feature", index = 4)]
+fn scenario_failure(world: LocalizationWorld) {
     let _ = world;
 }
 

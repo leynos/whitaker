@@ -116,7 +116,7 @@ pub fn is_experimental_crate(name: &CrateName) -> bool {
 ///
 /// # Errors
 ///
-/// Returns an error if any crate name is not recognised, or if an experimental
+/// Returns an error if any crate name is not recognized, or if an experimental
 /// crate is requested without `--experimental`.
 pub fn validate_crate_names(names: &[CrateName], options: &CrateResolutionOptions) -> Result<()> {
     for name in names {
@@ -160,7 +160,7 @@ mod tests {
         expect_experimental_lint: bool,
     }
 
-    /// Parameterised tests for resolve_crates variants.
+    /// Parameterized tests for resolve_crates variants.
     #[rstest]
     #[case::default_suite_only(ResolveCratesCase { individual_lints: false, experimental: false, expect_lint: false, expect_suite: true, expect_bumpy_road: false, expect_experimental_lint: false })]
     #[case::individual_lints(ResolveCratesCase { individual_lints: true, experimental: false, expect_lint: true, expect_suite: false, expect_bumpy_road: true, expect_experimental_lint: false })]

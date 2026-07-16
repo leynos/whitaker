@@ -34,7 +34,7 @@ impl Default for Weights {
     }
 }
 
-/// User-facing configuration after normalisation.
+/// User-facing configuration after normalization.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Settings {
     /// Smoothed value threshold at which a bump is considered active.
@@ -61,7 +61,7 @@ impl Default for Settings {
     }
 }
 
-/// Normalises settings so invalid values fall back to safe defaults.
+/// Normalizes settings so invalid values fall back to safe defaults.
 ///
 /// The lint treats invalid values as configuration mistakes and falls back to
 /// defaults rather than panicking or emitting spurious diagnostics.

@@ -1,4 +1,4 @@
-//! Resolve localised diagnostic strings (primary/note/help) from Fluent bundles.
+//! Resolve localized diagnostic strings (primary/note/help) from Fluent bundles.
 //!
 //! # Examples
 //!
@@ -21,7 +21,7 @@
 use super::{Arguments, I18nError, Localizer};
 use std::fmt;
 
-/// Identifier for a Fluent message within a localisation bundle.
+/// Identifier for a Fluent message within a localization bundle.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct MessageKey<'a>(&'a str);
 
@@ -203,7 +203,7 @@ impl DiagnosticMessageSet {
 const NOTE_ATTR: AttrKey<'static> = AttrKey::new("note");
 const HELP_ATTR: AttrKey<'static> = AttrKey::new("help");
 
-#[must_use = "Use the resolved localisation messages when emitting diagnostics"]
+#[must_use = "Use the resolved localization messages when emitting diagnostics"]
 pub fn resolve_message_set(
     lookup: &impl BundleLookup,
     key: MessageKey<'_>,

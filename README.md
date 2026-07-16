@@ -55,7 +55,7 @@ suite flows opt in with `--experimental` or the corresponding suite feature.
 
 ## Features
 
-- **Localised diagnostics** — Messages available in English, Welsh (Cymraeg),
+- **Localized diagnostics** — Messages available in English, Welsh (Cymraeg),
   and Scottish Gaelic (Gàidhlig). Set your preference via `DYLINT_LOCALE` or
   `dylint.toml`.
 - **Configurable thresholds** — Adjust limits like `module_max_lines.max_lines`

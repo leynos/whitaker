@@ -47,7 +47,7 @@ pub struct WrapperResult {
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 /// use whitaker_installer::wrapper::generate_wrapper_scripts;
 ///
-/// let dirs = SystemBaseDirs::new().expect("failed to initialise directories");
+/// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
 /// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
 /// let result = generate_wrapper_scripts(&dirs, library_path)?;
 ///

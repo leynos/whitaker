@@ -21,7 +21,7 @@ pub use crate::workspace::find_workspace_root;
 pub struct BuildConfig {
     /// The Rust toolchain to use.
     pub toolchain: Toolchain,
-    /// Directory for build artifacts.
+    /// Directory for build artefacts.
     pub target_dir: Utf8PathBuf,
     /// Number of parallel build jobs (None for cargo default).
     pub jobs: Option<usize>,

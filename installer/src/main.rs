@@ -309,7 +309,7 @@ struct FastPathContext<'a> {
     target_dir: &'a Utf8PathBuf,
 }
 
-/// Finalise installation and record aggregate installer metrics.
+/// Finalize installation and record aggregate installer metrics.
 fn finish_install_and_record_metrics(
     context: &FinishInstallContext<'_>,
     stderr: &mut dyn Write,

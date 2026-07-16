@@ -1,4 +1,4 @@
-//! Edge-case localisation tests covering unusual receiver labels.
+//! Edge-case localization tests covering unusual receiver labels.
 
 use super::{
     ContextLabel, Localizer, NoExpectMessages, ReceiverCategory, ReceiverLabel, localised_messages,
@@ -27,7 +27,7 @@ fn handles_receiver_type_edge_cases(
     let context_label = ContextLabel::new(context);
     let category = ReceiverCategory::for_label(&receiver_label);
     let messages = localised_messages(&lookup, &receiver_label, &context_label, category)
-        .expect("localisation succeeds");
+        .expect("localization succeeds");
     assert!(
         assertion(&messages),
         "Edge case assertion failed for receiver: {receiver}"

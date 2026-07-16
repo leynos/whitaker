@@ -1,6 +1,6 @@
 //! Convert HIR ancestors into simplified context entries and detect test-only
 //! guards (for example, `cfg(test)`), supporting the lint's context
-//! summarisation.
+//! summarization.
 
 use rustc_ast::AttrStyle;
 use rustc_ast::ast::{MetaItem, MetaItemInner};

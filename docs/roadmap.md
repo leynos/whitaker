@@ -4,7 +4,7 @@
 
 ### 0.1. Workspace foundations
 
-- [ ] 0.1.1. Initialise the Cargo workspace with workspace members and
+- [ ] 0.1.1. Initialize the Cargo workspace with workspace members and
   `rust-toolchain` pin.
 - [ ] 0.1.2. Add baseline project metadata (`README`, `LICENSE`, contributing
   guide, `CODEOWNERS`).
@@ -68,7 +68,7 @@
   Requires 2.1.1.
 - [x] 2.2.3. Implement `module_must_have_inner_docs` ensuring each module opens
   with an inner doc comment, including UI scenarios for inline, file, and
-  macro-generated modules plus localised diagnostics and behaviour-driven
+  macro-generated modules plus localized diagnostics and behaviour-driven
   coverage.
   Requires 2.1.1.
 - [ ] 2.2.4. Implement `public_fn_must_have_docs` using effective visibility
@@ -90,7 +90,7 @@
   002](adr-002-dylint-expect-attribute-macro.md) §Migration plan.
   Requires 1.3.3.
 
-### 2.3. Localisation enablement
+### 2.3. Localization enablement
 
 - [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
   dependencies and expose a shared `common::i18n` loader.

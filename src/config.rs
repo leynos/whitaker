@@ -4,7 +4,7 @@
 //! package name. `SharedConfig` captures the subset of settings that apply to
 //! the suite crate itself so that lints can reuse a single source of truth.
 //! The loader defers to `dylint_linting::config_or_default` so that the
-//! semantics match what Dylint expects: values are deserialised from
+//! semantics match what Dylint expects: values are deserialized from
 //! `dylint.toml` when present and fall back to sensible defaults otherwise.
 
 use serde::Deserialize;

@@ -29,8 +29,8 @@ Feature: Localised diagnostics for std::fs usage
     Then the primary mentions "std::fs::read_dir"
     And the help references "cap_std::fs::Dir"
 
-  Scenario: Localisation failure surfaces the missing key
-    Given localisation fails
+  Scenario: Localization failure surfaces the missing key
+    Given localization fails
     And the operation is "std::fs::canonicalize"
     When I localise the std::fs diagnostic
-    Then localisation fails for "no_std_fs_operations"
+    Then localization fails for "no_std_fs_operations"

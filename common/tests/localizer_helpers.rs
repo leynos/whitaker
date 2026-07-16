@@ -1,7 +1,7 @@
-//! Behaviour-driven coverage for the localiser and diagnostic helpers.
+//! Behaviour-driven coverage for the localizer and diagnostic helpers.
 //!
 //! Scenarios validate locale resolution and fallback handling so lints can
-//! depend on deterministic localisation outcomes.
+//! depend on deterministic localization outcomes.
 
 use logtest::Logger;
 use rstest::{fixture, rstest};
@@ -277,12 +277,12 @@ fn scenario_environment_locale(world: HelperWorld) {
 }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 2)]
-fn scenario_localisation_fallback(world: HelperWorld) {
+fn scenario_localization_fallback(world: HelperWorld) {
     let _ = world;
 }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 3)]
-fn scenario_localisation_success(world: HelperWorld) {
+fn scenario_localization_success(world: HelperWorld) {
     let _ = world;
 }
 

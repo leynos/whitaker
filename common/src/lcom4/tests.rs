@@ -39,7 +39,7 @@ fn method_with_fields_and_calls() -> fn(&str, &[&str], &[&str]) -> MethodInfo {
     }
 }
 
-// --- Field-based cohesion (parameterised) ---
+// --- Field-based cohesion (parameterized) ---
 
 #[rstest]
 #[case::single_method(
@@ -104,7 +104,7 @@ fn field_based_cohesion(
     assert_eq!(cohesion_components(&methods), expected, "{scenario}");
 }
 
-// --- Call-based cohesion (parameterised) ---
+// --- Call-based cohesion (parameterized) ---
 
 #[rstest]
 #[case::direct_call(

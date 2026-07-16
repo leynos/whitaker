@@ -31,25 +31,25 @@ Feature: Localised diagnostics for expect usage
     And the receiver type is empty
     And the function context is ""
     When I localise the expect diagnostic
-    Then the fallback and localisation logic should handle the receiver type robustly
+    Then the fallback and localization logic should handle the receiver type robustly
 
   Scenario: Receiver type is malformed
     Given the locale "en-GB" is selected
     And the receiver type is malformed
     And the function context is "worker"
     When I localise the expect diagnostic
-    Then the fallback and localisation logic should handle the receiver type robustly
+    Then the fallback and localization logic should handle the receiver type robustly
 
   Scenario: Receiver type is unexpected
     Given the locale "en-GB" is selected
     And the receiver type is unexpected
     And the function context is "handler"
     When I localise the expect diagnostic
-    Then the fallback and localisation logic should handle the receiver type robustly
+    Then the fallback and localization logic should handle the receiver type robustly
 
-  Scenario: Localisation failure surfaces missing message
-    Given localisation fails
+  Scenario: Localization failure surfaces missing message
+    Given localization fails
     And the receiver type is "Result<(), ()>"
     And the function context is "worker"
     When I localise the expect diagnostic
-    Then localisation fails for "no_expect_outside_tests"
+    Then localization fails for "no_expect_outside_tests"

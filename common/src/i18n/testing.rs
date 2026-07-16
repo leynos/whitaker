@@ -1,8 +1,8 @@
-//! Test doubles and utilities for localisation tests.
+//! Test doubles and utilities for localization tests.
 //!
 //! This module provides test doubles such as [`FailingLookup`] and
 //! [`RecordingEmitter`] for exercising error paths and verifying diagnostic
-//! output during localisation tests.
+//! output during localization tests.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -12,7 +12,7 @@ use super::{Arguments, AttrKey, BundleLookup, I18nError, MessageKey};
 
 /// Test double that always returns `MissingMessage` errors for message lookups.
 ///
-/// Shared across localisation tests to exercise error-handling paths when Fluent
+/// Shared across localization tests to exercise error-handling paths when Fluent
 /// bundles do not contain the requested messages.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FailingLookup {
@@ -68,7 +68,7 @@ pub struct RecordingEmitter {
 }
 
 impl RecordingEmitter {
-    /// Access the recorded messages emitted during localisation failures.
+    /// Access the recorded messages emitted during localization failures.
     #[must_use]
     pub fn recorded_messages(&self) -> Vec<String> {
         self.messages.borrow().clone()

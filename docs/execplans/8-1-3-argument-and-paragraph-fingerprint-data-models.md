@@ -251,7 +251,7 @@ The relevant documentation already exists:
 - `docs/rstest-bdd-users-guide.md` documents the `rstest-bdd` conventions and
   limitations that the behaviour harness must follow.
 - `docs/rust-doctest-dry-guide.md` defines how public Rustdoc examples should
-  stay compileable without unnecessary execution complexity.
+  stay compilable without unnecessary execution complexity.
 - `docs/complexity-antipatterns-and-refactoring-strategies.md` reinforces the
   "small, focused helpers" bias that matters here because fingerprint lowering
   logic can otherwise become a future bumpy-road hotspot.

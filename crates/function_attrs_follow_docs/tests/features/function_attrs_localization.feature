@@ -31,9 +31,9 @@ Feature: Localised diagnostics for function attribute ordering
     When I localise the diagnostic
     Then the primary message contains "Doc comments"
 
-  Scenario: Localisation failure reports missing message
-    Given localisation fails
+  Scenario: Localization failure reports missing message
+    Given localization fails
     And the subject kind is "function"
     And the attribute label is "#[cfg(test)]"
     When I localise the diagnostic
-    Then localisation fails for "function_attrs_follow_docs"
+    Then localization fails for "function_attrs_follow_docs"

@@ -650,7 +650,7 @@ graph TD
   C_DONE --> D["Group pressure entries by callee and parameter index"]
 
   D --> E["Pass B: for each candidate parameter"]
-  E --> E1["Summarise parameter usage using HIR and MIR"]
+  E --> E1["Summarize parameter usage using HIR and MIR"]
   E1 --> E2["Classify parameter as ReadOnlyBorrowed, Consumed, MutablyBorrowed, or Opaque"]
 
   E2 --> E3["Apply exemption rules (exported API, trait method, extern, async)"]
@@ -693,18 +693,18 @@ A secondary call-site note may be emitted at one representative clone span.
 ### 13.6. Example
 
 ```rust
-fn normalise(name: String) -> usize {
+fn normalize(name: String) -> usize {
     name.trim().len()
 }
 
-let a = normalise(user.name.clone());
-let b = normalise(admin.name.clone());
+let a = normalize(user.name.clone());
+let b = normalize(admin.name.clone());
 ```
 
 Suggested direction:
 
 ```rust
-fn normalise(name: &str) -> usize {
+fn normalize(name: &str) -> usize {
     name.trim().len()
 }
 ```

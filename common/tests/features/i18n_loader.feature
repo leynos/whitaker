@@ -1,5 +1,5 @@
-Feature: Localisation loader
-  Whitaker lints require localised diagnostics with predictable fallbacks.
+Feature: Localization loader
+  Whitaker lints require localized diagnostics with predictable fallbacks.
 
   Scenario: Falling back to the bundled locale when no preference is provided
     Given no locale preference
@@ -63,7 +63,7 @@ Feature: Localisation loader
     Scenario: Surfacing a missing message error for unknown keys
       Given the locale preference en-GB
       When I request the message for imaginary.lint
-      Then localisation fails with a missing message error
+      Then localization fails with a missing message error
 
     Scenario: Welsh conditional note applies lenition
       Given the locale preference cy

@@ -459,6 +459,7 @@ Set `additional_test_attributes` to an array of attribute paths written as
 strings. Each entry should match the path Whitaker sees on the test function,
 for example `my_framework::test` or `wasm_bindgen_test`.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Ancestor context propagation
 
 `additional_test_attributes` now apply during ancestor context detection as
@@ -474,7 +475,7 @@ ancestry chain.
 
 #[my_framework::test]
 async fn my_test() {
-    helper(); // allowed — ancestor is a recognised test function
+    helper(); // allowed — ancestor is a recognized test function
 }
 
 fn helper() {

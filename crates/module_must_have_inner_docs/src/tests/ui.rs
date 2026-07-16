@@ -11,7 +11,7 @@ use whitaker_common::test_support::LocaleOverride;
 /// # Cases
 ///
 /// - `default_locale`: Uses the default English locale (`"ui"` fixtures, `None`).
-/// - `welsh_locale`: Uses Welsh localisation (`"ui-cy"` fixtures, `Some("cy")`).
+/// - `welsh_locale`: Uses Welsh localization (`"ui-cy"` fixtures, `Some("cy")`).
 /// - `unsupported_locale_falls_back_to_english`: Uses an unsupported locale
 ///   (`"xx-YY"`), expecting fallback to English (`"ui"` fixtures).
 ///

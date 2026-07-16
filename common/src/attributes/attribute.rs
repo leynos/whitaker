@@ -162,7 +162,7 @@ impl Attribute {
     }
 
     /// Indicates whether the attribute marks a test-like context when supplied
-    /// with additional recognised paths.
+    /// with additional recognized paths.
     ///
     /// Builtin test-like attributes include direct paths such as `test`,
     /// `tokio::test`, `async_std::test`, and `rstest`, plus prelude-qualified

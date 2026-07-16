@@ -129,7 +129,7 @@ plan and update `Decision Log` once the name is chosen.
 Stage B: update crate naming and resolution logic. Change the suite crate name
 in `suite/Cargo.toml` and update `SUITE_CRATE` plus any helper logic that uses
 it. Ensure build, staging, and scan logic use the new name, and that the
-installer still selects and recognises the suite. Validation: unit tests for
+installer still selects and recognizes the suite. Validation: unit tests for
 name parsing and list output should reflect the new identifier.
 
 Stage C: update tests and documentation. Adjust installer tests that hardcode

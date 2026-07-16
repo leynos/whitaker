@@ -13,12 +13,12 @@ struct TemporaryDirectory(PathBuf);
 /// Describes a single fixture artefact: its filename and the
 /// seconds-since-Unix-epoch modification timestamp to assign to it.
 #[derive(Clone, Copy, Debug)]
-struct ArtifactSpec<'a> {
+struct ArtefactSpec<'a> {
     file_name: &'a str,
     seconds_since_epoch: u64,
 }
 
-impl<'a> ArtifactSpec<'a> {
+impl<'a> ArtefactSpec<'a> {
     /// Creates a new spec with the given filename and modification timestamp.
     const fn new(file_name: &'a str, seconds_since_epoch: u64) -> Self {
         Self {
@@ -38,13 +38,13 @@ struct DependencyRlibSelection {
     selected: PathBuf,
 }
 
-const NEWEST_ARTIFACTS: [ArtifactSpec<'static>; 2] = [
-    ArtifactSpec::new("libtokio-older.rlib", 10),
-    ArtifactSpec::new("libtokio-newer.rlib", 20),
+const NEWEST_ARTEFACTS: [ArtefactSpec<'static>; 2] = [
+    ArtefactSpec::new("libtokio-older.rlib", 10),
+    ArtefactSpec::new("libtokio-newer.rlib", 20),
 ];
-const TIED_ARTIFACTS: [ArtifactSpec<'static>; 2] = [
-    ArtifactSpec::new("libtokio-alpha.rlib", 30),
-    ArtifactSpec::new("libtokio-zulu.rlib", 30),
+const TIED_ARTEFACTS: [ArtefactSpec<'static>; 2] = [
+    ArtefactSpec::new("libtokio-alpha.rlib", 30),
+    ArtefactSpec::new("libtokio-zulu.rlib", 30),
 ];
 
 /// rstest fixture that creates a uniquely named temporary directory for a
@@ -54,17 +54,17 @@ fn selection_directory() -> TemporaryDirectory {
     TemporaryDirectory::new("selection")
 }
 
-/// Creates `artifacts` inside `directory`, sets their modification times, then
+/// Creates `artefacts` inside `directory`, sets their modification times, then
 /// invokes `dependency_rlib` and returns both the expected and selected paths
 /// for the caller to compare.
 fn resolve_dependency_rlib_selection(
     directory: TemporaryDirectory,
-    artifacts: &[ArtifactSpec<'_>],
+    artefacts: &[ArtefactSpec<'_>],
     expected_file_name: &str,
 ) -> DependencyRlibSelection {
-    for artifact in artifacts {
-        let path = create_rlib(directory.path(), artifact.file_name);
-        set_modified_time(&path, artifact.seconds_since_epoch);
+    for artefact in artefacts {
+        let path = create_rlib(directory.path(), artefact.file_name);
+        set_modified_time(&path, artefact.seconds_since_epoch);
     }
 
     let expected = directory.path().join(expected_file_name);
@@ -79,16 +79,16 @@ fn resolve_dependency_rlib_selection(
 }
 
 #[rstest]
-#[case("newest", &NEWEST_ARTIFACTS, "libtokio-newer.rlib")]
-#[case("ties", &TIED_ARTIFACTS, "libtokio-alpha.rlib")]
-fn dependency_rlib_selects_expected_artifact(
+#[case("newest", &NEWEST_ARTEFACTS, "libtokio-newer.rlib")]
+#[case("ties", &TIED_ARTEFACTS, "libtokio-alpha.rlib")]
+fn dependency_rlib_selects_expected_artefact(
     selection_directory: TemporaryDirectory,
     #[case] _directory_name: &str,
-    #[case] artifacts: &[ArtifactSpec<'_>],
+    #[case] artefacts: &[ArtefactSpec<'_>],
     #[case] expected_file_name: &str,
 ) {
     let selection =
-        resolve_dependency_rlib_selection(selection_directory, artifacts, expected_file_name);
+        resolve_dependency_rlib_selection(selection_directory, artefacts, expected_file_name);
     assert_eq!(selection.selected, selection.expected);
 }
 

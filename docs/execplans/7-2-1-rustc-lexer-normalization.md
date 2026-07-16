@@ -409,7 +409,7 @@ Requirements:
    token end.
 3. Implement Rabin-Karp rolling hash with a documented constant base, matching
    the design's intent of deterministic 64-bit hashing.
-4. Prefer a simple, testable implementation over premature micro-optimisation.
+4. Prefer a simple, testable implementation over premature micro-optimization.
    A naive helper is acceptable for cross-checking in tests.
 5. Keep all arithmetic in integer space to satisfy the workspace Clippy policy.
 

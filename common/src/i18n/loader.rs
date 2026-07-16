@@ -1,4 +1,4 @@
-//! Localisation message loading and retrieval.
+//! Localization message loading and retrieval.
 //!
 //! This module defines the [`Localizer`] struct for resolving translated
 //! messages from Fluent bundles, along with supporting types for arguments
@@ -17,7 +17,7 @@ use super::{FALLBACK_LANGUAGE, FALLBACK_LITERAL, LOADER, LanguageIdentifier};
 /// HashMap wrapper used when passing Fluent arguments to lookups.
 pub type Arguments<'a> = HashMap<Cow<'a, str>, FluentValue<'a>>;
 
-/// Error raised when localisation data cannot satisfy a caller request.
+/// Error raised when localization data cannot satisfy a caller request.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum I18nError {
     /// Raised when the requested message slug is missing for the resolved locale.
@@ -25,10 +25,10 @@ pub enum I18nError {
     MissingMessage { key: String, locale: String },
 }
 
-/// Resolve localisation messages for a specific locale.
+/// Resolve localization messages for a specific locale.
 ///
 /// The loader eagerly falls back to `en-GB` when the requested locale is not
-/// recognised. This mirrors the planned lookup order that surfaces explicit
+/// recognized. This mirrors the planned lookup order that surfaces explicit
 /// configuration, environment overrides, and finally the bundled fallback.
 #[derive(Clone, Debug)]
 pub struct Localizer {

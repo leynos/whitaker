@@ -4,5 +4,16 @@ target/
 bin/act
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 *:Zone.Identifier
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.typos-oxendict-base.json
+.typos-oxendict-base.toml
+.uv-cache/
+.uv-tools/

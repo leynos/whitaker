@@ -387,9 +387,9 @@ All stages are additive and safe to rerun. No existing files are destructively
 modified. If a test fails, fix the implementation or test, then rerun from the
 failing stage.
 
-## Artifacts and notes
+## Artefacts and notes
 
-No external artifacts. All code is contained within the `common/` crate.
+No external artefacts. All code is contained within the `common/` crate.
 
 ## Interfaces and dependencies
 

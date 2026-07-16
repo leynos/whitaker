@@ -34,7 +34,7 @@ const LINT_NAME: &str = "no_std_fs_operations";
 ///
 /// # Strict Validation
 ///
-/// This configuration uses `deny_unknown_fields`, meaning any unrecognised
+/// This configuration uses `deny_unknown_fields`, meaning any unrecognized
 /// key (such as a typo like `excluded_crate` instead of `excluded_crates`)
 /// will cause configuration parsing to fail. When parsing fails, the lint
 /// falls back to defaults and logs a warning. If exclusions don't work as
@@ -184,7 +184,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
 }
 
 impl NoStdFsOperations {
-    /// Centralises exclusion logic for all lint pass methods.
+    /// Centralizes exclusion logic for all lint pass methods.
     #[inline]
     fn should_skip(&self) -> bool {
         self.excluded

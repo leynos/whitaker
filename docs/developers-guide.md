@@ -61,14 +61,14 @@ lint's structured diagnostics instead of brittle text matching.
 The shared helper `run_exclusion_test(crate_name, is_excluded, expectation)`
 resolves the lint library path via a `OnceLock`-cached `build_lint_library`
 call, creates the fixture project, and delegates to `assert_fixture_behaviour`.
-Both parametrised cases in `exclusion_crates_behaviour_test` delegate to this
+Both parametrized cases in `exclusion_crates_behaviour_test` delegate to this
 helper.
 
 The tests are annotated with `#[serial]` from `serial_test`, and the
 repository-level nextest contract also requires them to match the
 `serial-dylint-ui` test group in `.config/nextest.toml` when they are exercised
 through `make test`. Both the attribute and the repo-level group are required
-for correct serialised execution because nextest runs each test in a separate
+for correct serialized execution because nextest runs each test in a separate
 process, so the in-process `#[serial]` mutex alone is not sufficient. They are
 also marked `#[ignore]` by default because they depend on external tooling and
 a buildable workspace. Before running them, install `cargo-dylint` and
@@ -81,7 +81,7 @@ cargo test -p no_std_fs_operations --test integration_exclusion -- --ignored
 cargo nextest run -p no_std_fs_operations --test integration_exclusion --run-ignored ignored-only
 ```
 
-The parametrised `#[rstest]` case `exclusion_crates_behaviour_test` covers both
+The parametrized `#[rstest]` case `exclusion_crates_behaviour_test` covers both
 fixture configurations. For each case it asserts the subprocess exit status and
 the `no_std_fs_operations` diagnostic count, so the test verifies both the
 success path for excluded crates (zero diagnostics, exit 0) and the failure
@@ -378,6 +378,29 @@ per-developer overrides without modifying the Makefile.
 clone-detector proofs for `LshConfig::new` and `CandidatePair::new`.
 `make kani` runs the decomposition adjacency harnesses and the clone-detector
 harness group in one pass.
+
+### Spelling gate
+
+Run `make spelling` to enforce en-GB-oxendict spelling in tracked text. The
+gate uses Typos 1.48.0 together with the repository's generated `typos.toml`,
+and `make markdownlint` includes the spelling gate.
+
+The tracked configuration is built from the shared estate dictionary and the
+narrow `typos.local.toml` overlay. Run `make spelling-config-write` after an
+intentional policy change, and run `make spelling-config` to verify that the
+tracked output is current. The pinned builder refreshes the untracked local
+cache only when the authoritative dictionary is newer, so an already populated
+cache remains usable offline.
+
+Do not edit `typos.toml` directly. Preserve public and serialized SARIF terms,
+localization compatibility identifiers, compiler fixtures, workflow keys, and
+formal diagnostic text through narrow local policy. The exact phrase gate
+rejects the hyphenated variant in favour of `handwritten`, including in hidden
+tracked source.
+
+`make nixie` validates the repository's Mermaid diagrams. Continuous
+Integration installs Nixie 1.1.0 and its Merman 0.7.0 dependency on the Linux
+documentation leg.
 
 ### Verus scope and trust boundary
 
@@ -687,7 +710,7 @@ expressions on workflow steps:
 | Helper                                         | Signature                                    | Purpose                                                                                                                                                               |
 | ---------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `_github_operand_pattern`                      | `(operand: str) -> re.Pattern[str]`          | Builds a regex that matches the operand as a standalone token, preventing partial-name false positives (e.g. a prefix or suffix sharing characters with the operand). |
-| `_github_expression_mentions_operand`          | `(expression: object, operand: str) -> bool` | Returns `True` when the normalised expression contains the operand as a whole token.                                                                                  |
+| `_github_expression_mentions_operand`          | `(expression: object, operand: str) -> bool` | Returns `True` when the normalized expression contains the operand as a whole token.                                                                                  |
 | `_github_expression_negates_operand`           | `(expression: object, operand: str) -> bool` | Returns `True` when the expression contains `!operand` or `!(operand)`. Double negation (`!!operand`) is not flagged.                                                 |
 | `_github_expression_compares_operand_to_false` | `(expression: object, operand: str) -> bool` | Returns `True` when the expression contains `operand == false` (or `false == operand`) in any quoting style. Strict-equality only; `!=` comparisons are not matched.  |
 

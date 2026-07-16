@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector
+.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -26,6 +26,24 @@ WHITAKER_REPO ?= $(CURDIR)
 WHITAKER_REV ?= HEAD
 PUBLISH_PACKAGES ?=
 UV ?= uv
+UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+RUFF_VERSION ?= 0.15.12
+PATHSPEC_VERSION ?= 1.1.1
+TYPOS_VERSION ?= 1.48.0
+TYPOS_CONFIG_BUILDER_COMMIT := b604f198797fdd36a567dd0f8f07b13f9539b241
+TYPOS_CONFIG_BUILDER_SOURCE := git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_COMMIT)
+TYPOS_CONFIG_BUILDER := $(UV_ENV) $(UV) tool run --python 3.14 \
+	--from "$(TYPOS_CONFIG_BUILDER_SOURCE)" typos-config-builder
+SPELLING_PY_SRCS := \
+	scripts/typos_rollout_check.py scripts/tests/test_typos_rollout_check.py
+SPELLING_PY_TESTS := scripts/tests/test_typos_rollout_check.py
+SPELLING_PY_ENV := PYTHONDONTWRITEBYTECODE=1
+SPELLING_COVERAGE_FILE ?= /tmp/whitaker-spelling-helper.coverage
+SPELLING_COVERAGE_ARGS := --cov=typos_rollout_check --cov-fail-under=90
+SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(SPELLING_PY_ENV) \
+	COVERAGE_FILE=$(SPELLING_COVERAGE_FILE) $(UV_ENV) $(UV) run --no-project \
+	--python 3.14 --with pathspec==$(PATHSPEC_VERSION) --with pytest==9.0.2 \
+	--with pytest-cov==7.0.0 python -m pytest
 WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
 CARGO_DYLINT_VERSION ?= 6.0.1
@@ -40,8 +58,9 @@ release: target/release/$(APP) ## Build release binary
 
 all: release ## Default target builds release binary
 
-clean: ## Remove build artifacts
+clean: ## Remove build artefacts
 	$(CARGO) clean
+	rm -rf .uv-cache .uv-tools
 
 test: ## Run tests with warnings treated as errors
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; command -v cargo-nextest >/dev/null || { echo "Install cargo-nextest (cargo install cargo-nextest)"; exit 1; }
@@ -138,8 +157,29 @@ fmt: ## Format Rust and Markdown sources
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
-markdownlint: ## Lint Markdown files
-	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md'
+markdownlint: spelling ## Lint Markdown files and enforce spelling
+	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(MDLINT) '**/*.md' '!**/.uv-cache/**' '!**/.uv-tools/**'
+
+spelling: spelling-phrase-check ## Enforce en-GB-oxendict in tracked text
+	@git ls-files -z | xargs -0 env $(UV_ENV) \
+		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude --hidden
+
+spelling-phrase-check: spelling-config ## Reject prohibited spelling phrases
+	@PYTHONPATH=scripts $(SPELLING_PY_ENV) $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		scripts/typos_rollout_check.py --repository .
+
+spelling-config: spelling-helper-test ## Verify generated spelling configuration
+	@git ls-files --error-unmatch typos.toml >/dev/null
+	@$(TYPOS_CONFIG_BUILDER) --repository . --check
+
+spelling-config-write: spelling-helper-test ## Generate spelling configuration
+	@$(TYPOS_CONFIG_BUILDER) --repository .
+
+spelling-helper-test: ## Validate the shared spelling-policy integration
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(SPELLING_PY_SRCS)
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(SPELLING_PY_SRCS)
+	@$(SPELLING_HELPER_PYTEST) $(SPELLING_PY_TESTS) -c /dev/null \
+		--rootdir=. -p no:cacheprovider $(SPELLING_COVERAGE_ARGS)
 
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports

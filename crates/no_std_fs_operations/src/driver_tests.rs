@@ -14,7 +14,7 @@
 //!
 //! 2. **Unit test coverage is sufficient**: The exclusion implementation is
 //!    straightforward—when `self.excluded` is true, `emit_optional` returns early
-//!    (see `driver.rs`). All configuration parsing, deserialisation, and matching
+//!    (see `driver.rs`). All configuration parsing, deserialization, and matching
 //!    logic is fully validated by the tests below.
 //!
 //! 3. **Behaviour is deterministic**: The `check_crate` method sets `self.excluded`

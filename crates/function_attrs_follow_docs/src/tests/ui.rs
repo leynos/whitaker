@@ -1,7 +1,7 @@
 //! UI regression tests for the `function_attrs_follow_docs` lint, including
 //! locale-specific smoke coverage.
 //!
-//! The tests serialise execution so temporary `DYLINT_LOCALE` overrides remain
+//! The tests serialize execution so temporary `DYLINT_LOCALE` overrides remain
 //! race-free while the canonical and Welsh harnesses run against the same
 //! fixtures.
 

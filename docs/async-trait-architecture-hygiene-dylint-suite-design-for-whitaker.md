@@ -212,7 +212,7 @@ method whose return type is either:
 - A known boxed-future alias (as discovered by `boxed_future_aliases`), or
 - A syntactic shape matching `Pin<Box<dyn Future<Output=…> + … + 'a>>`.
 
-This intentionally classifies both hand-written boxed-future dyn traits and
+This intentionally classifies both handwritten boxed-future dyn traits and
 `async-trait` macro output, because for architecture hygiene they are the same
 artefact: an object-safe async boundary expressed via erased futures. [^5]
 

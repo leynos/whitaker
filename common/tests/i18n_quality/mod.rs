@@ -1,4 +1,4 @@
-//! Quality gates for localisation resources.
+//! Quality gates for localization resources.
 //!
 //! These tests keep placeholder usage aligned across locales, ensure Welsh help
 //! text remains complete, and exercise language-specific plural forms so we can

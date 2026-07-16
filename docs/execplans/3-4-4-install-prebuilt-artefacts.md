@@ -417,7 +417,7 @@ Add `--build-only` flag to `InstallArgs` in `installer/src/cli.rs`:
     #[arg(long)]
     pub build_only: bool,
 
-Update `Default` impl and add to boolean flag parameterised test.
+Update `Default` impl and add to boolean flag parameterized test.
 
 Add host target detection in `installer/src/main.rs`:
 

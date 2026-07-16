@@ -612,9 +612,9 @@ Expected: all pass, test count increases by approximately 30–40 (unit + BDD).
 - If tolerance thresholds are exceeded, stop, document the issue in
   `Surprises & Discoveries`, and escalate.
 
-## Artifacts and notes
+## Artefacts and notes
 
-No external artifacts. All code is contained within the `common/` crate.
+No external artefacts. All code is contained within the `common/` crate.
 
 ## Interfaces and dependencies
 

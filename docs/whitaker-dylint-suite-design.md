@@ -131,7 +131,7 @@ Utilities shared by lints:
   future lints can extend the recognized attribute set without restructuring
   the API.
 - Context detection operates on an explicit stack of `ContextEntry` frames. The
-  helpers analyze the recorded attributes so callers can reason about ambient
+  helpers analyse the recorded attributes so callers can reason about ambient
   test contexts without leaking traversal state.
 - Span utilities introduce `SourceLocation`/`SourceSpan` wrappers with
   validation, providing deterministic line counting and range projection for
@@ -147,7 +147,7 @@ Utilities shared by lints:
   their own names to the harness while publishing the canonical `ui` test
   without copying boilerplate. Tests inject stub runners via `run_with_runner`
   to cover happy and unhappy paths without touching the real filesystem.
-- Path handling standardises on a caret requirement anchored at `camino`
+- Path handling standardizes on a caret requirement anchored at `camino`
   v1.1.10. Transitive constraints currently resolve this to 1.2.1. This keeps
   the workspace benefiting from the maintenance fixes delivered since 1.1.6,
   including the `unexpected_cfgs`-warning resolution needed for lint workspaces.
@@ -175,7 +175,7 @@ Utilities shared by lints:
   records when the fallback locale is used and surfaces missing message errors
   eagerly. The helper exposes convenience accessors for direct messages and
   Fluent attributes while supporting argument interpolation.
-- Introduce `common::i18n::get_localizer_for_lint`, centralising the
+- Introduce `common::i18n::get_localizer_for_lint`, centralizing the
   environment/configuration resolution so lint crates share identical logging
   and fallback semantics. The helper reads `DYLINT_LOCALE`, applies workspace
   configuration, emits a debug summary, and returns the resolved `Localizer`.
@@ -206,7 +206,7 @@ Utilities shared by lints:
   avoid helper terms when plural logic is required. This keeps localization
   coverage intact without requiring a dependency upgrade.
 - Provide an `en-GB` fallback bundle that always loads. Additional locales live
-  alongside it and are discovered dynamically when the loader initialises.
+  alongside it and are discovered dynamically when the loader initializes.
   Messages use stable slugs such as `function_attrs_follow_docs.primary` and
   `.help` attributes to mirror the structure used by `rustc`.
 - Honour a `DYLINT_LOCALE` environment variable and a `dylint.toml` override in
@@ -245,7 +245,7 @@ Utilities shared by lints:
   matching `i18n_ftl_smoke.feature` file. The scenarios assert discovery
   behaviour, cover representative happy/unhappy parse cases, and keep the smoke
   fixtures executable via `rstest-bdd`.
-- Normalise Unicode isolation marks (`\u{2068}`/`\u{2069}`) inside behaviour
+- Normalize Unicode isolation marks (`\u{2068}`/`\u{2069}`) inside behaviour
   assertions so tests remain readable while still verifying the formatted
   output that Fluent now emits for bidi safety.
 
