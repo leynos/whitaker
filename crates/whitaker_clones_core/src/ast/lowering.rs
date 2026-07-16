@@ -111,6 +111,38 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
     Ok(NormalisedTree::new(lowered, span))
 }
 
+fn validate_covering_node_budget(depth: usize, node_count: usize) -> AstResult<()> {
+    if depth > MAX_AST_DEPTH {
+        return Err(AstError::TreeTooDeep {
+            limit: MAX_AST_DEPTH,
+        });
+    }
+    if node_count == MAX_AST_NODES {
+        return Err(AstError::TreeTooLarge {
+            limit: MAX_AST_NODES,
+        });
+    }
+
+    Ok(())
+}
+
+fn update_smallest_covering_node(
+    selected: &mut Option<(SyntaxNode, u32)>,
+    node: &SyntaxNode,
+    target: &Range<u32>,
+) {
+    let range = range_to_u32(node.text_range());
+    let width = range.end - range.start;
+    let covers_target = range.start <= target.start && range.end >= target.end;
+    let is_strictly_smaller = selected
+        .as_ref()
+        .is_none_or(|(_, selected_width)| width < *selected_width);
+
+    if covers_target && is_strictly_smaller {
+        *selected = Some((node.clone(), width));
+    }
+}
+
 /// Selects the smallest parser syntax node covering `target`.
 ///
 /// Traversal is O(n) in the parsed source file, not just the candidate span.
@@ -124,28 +156,10 @@ fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<Syn
     let mut node_count = 0_usize;
 
     while let Some((node, depth)) = pending.pop() {
-        if depth > MAX_AST_DEPTH {
-            return Err(AstError::TreeTooDeep {
-                limit: MAX_AST_DEPTH,
-            });
-        }
-        if node_count == MAX_AST_NODES {
-            return Err(AstError::TreeTooLarge {
-                limit: MAX_AST_NODES,
-            });
-        }
+        validate_covering_node_budget(depth, node_count)?;
         node_count += 1;
 
-        let range = range_to_u32(node.text_range());
-        if range.start <= target.start && range.end >= target.end {
-            let width = range.end - range.start;
-            if selected
-                .as_ref()
-                .is_none_or(|(_, selected_width)| width < *selected_width)
-            {
-                selected = Some((node.clone(), width));
-            }
-        }
+        update_smallest_covering_node(&mut selected, &node, target);
 
         let children = node.children().collect::<Vec<_>>();
         pending.extend(children.into_iter().rev().map(|child| (child, depth + 1)));
