@@ -247,12 +247,14 @@ publish-check: ## Build, test, and validate packages before publishing
 	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
-	if ! command -v cargo-dylint >/dev/null 2>&1; then \
-		$(CARGO) install --locked --version $(CARGO_DYLINT_VERSION) cargo-dylint; \
+	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
+	if [ "$$(cargo-dylint --version 2>/dev/null | awk '{print $$2}')" != "$(CARGO_DYLINT_VERSION)" ]; then \
+		$(CARGO) install --locked --version $(CARGO_DYLINT_VERSION) --root "$$DYLINT_TOOLS_DIR" cargo-dylint; \
 	fi; \
-	if ! command -v dylint-link >/dev/null 2>&1; then \
-		$(CARGO) install --locked --version $(DYLINT_LINK_VERSION) dylint-link; \
+	if ! $(CARGO) install --list 2>/dev/null | grep -q "^dylint-link v$(DYLINT_LINK_VERSION):"; then \
+		$(CARGO) install --locked --version $(DYLINT_LINK_VERSION) --root "$$DYLINT_TOOLS_DIR" dylint-link; \
 	fi; \
+	if [ -d "$$DYLINT_TOOLS_DIR/bin" ]; then export PATH="$$DYLINT_TOOLS_DIR/bin:$$PATH"; fi; \
 	TARGET_DIR="$$TMP_DIR/target"; \
 	git clone "$(WHITAKER_REPO)" "$$TMP_DIR/whitaker-src"; \
 	cd "$$TMP_DIR/whitaker-src" && { \
