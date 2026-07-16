@@ -174,7 +174,7 @@ pub fn run_with_runner(
     }
 }
 
-/// Serialises environment mutations required by `run_with_runner`.
+/// Serializes environment mutations required by `run_with_runner`.
 ///
 /// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
 /// `sccache`), because `dylint_testing::Test::example` scans
@@ -201,7 +201,7 @@ impl Drop for RunnerEnvGuard {
     fn drop(&mut self) {
         let _env_guard = env_test_guard();
 
-        // SAFETY: `env_test_guard` serialises the restoration writes below.
+        // SAFETY: `env_test_guard` serializes the restoration writes below.
         #[cfg(windows)]
         {
             if self.vcpkg_root_was_absent {
@@ -236,10 +236,10 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
         return None;
     }
 
-    // All environment reads and writes below are serialised by `_env_guard`.
+    // All environment reads and writes below are serialized by `_env_guard`.
     #[cfg(windows)]
     let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
-        // SAFETY: `_env_guard` serialises concurrent environment mutations.
+        // SAFETY: `_env_guard` serializes concurrent environment mutations.
         unsafe {
             env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
         }
@@ -249,7 +249,7 @@ fn runner_env_guard() -> Option<RunnerEnvGuard> {
     };
 
     let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").inspect(|_| {
-        // SAFETY: `_env_guard` serialises concurrent environment mutations.
+        // SAFETY: `_env_guard` serializes concurrent environment mutations.
         unsafe {
             env::remove_var("RUSTC_WRAPPER");
         }

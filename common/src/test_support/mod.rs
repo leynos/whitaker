@@ -49,7 +49,7 @@ pub fn env_test_guard() -> MutexGuard<'static, ()> {
 /// mutex for the full guard lifetime, so callers can execute callbacks that
 /// perform their own guarded environment setup without deadlocking. Use this
 /// as the shared environment-mutation helper for tests that need temporary
-/// global environment changes with `env_test_guard`-serialised setup and
+/// global environment changes with `env_test_guard`-serialized setup and
 /// teardown semantics.
 pub struct EnvVarGuard {
     key: &'static str,
@@ -75,7 +75,7 @@ impl EnvVarGuard {
     pub fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
         let _env_guard = env_test_guard();
         let previous = std::env::var_os(key);
-        // SAFETY: `env_test_guard` serialises this environment mutation.
+        // SAFETY: `env_test_guard` serializes this environment mutation.
         unsafe {
             std::env::set_var(key, value);
         }
@@ -97,7 +97,7 @@ impl EnvVarGuard {
     pub fn remove(key: &'static str) -> Self {
         let _env_guard = env_test_guard();
         let previous = std::env::var_os(key);
-        // SAFETY: `env_test_guard` serialises this environment mutation.
+        // SAFETY: `env_test_guard` serializes this environment mutation.
         unsafe {
             std::env::remove_var(key);
         }
@@ -110,13 +110,13 @@ impl Drop for EnvVarGuard {
         let _env_guard = env_test_guard();
         match &self.previous {
             Some(previous) => {
-                // SAFETY: `env_test_guard` serialises this environment mutation.
+                // SAFETY: `env_test_guard` serializes this environment mutation.
                 unsafe {
                     std::env::set_var(self.key, previous);
                 }
             }
             None => {
-                // SAFETY: `env_test_guard` serialises this environment mutation.
+                // SAFETY: `env_test_guard` serializes this environment mutation.
                 unsafe {
                     std::env::remove_var(self.key);
                 }

@@ -90,37 +90,6 @@
   002](adr-002-dylint-expect-attribute-macro.md) §Migration plan.
   Requires 1.3.3.
 
-
-### 2.3. Localization enablement
-
-- [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
-  dependencies and expose a shared `common::i18n` loader.
-  Requires 1.1.1.
-- [x] 2.3.2. Create the `locales/` resource tree with an `en-GB` fallback and
-  secondary `cy`/`gd` language samples covering every lint slug.
-  Requires 2.3.1.
-- [x] 2.3.3. Refactor lint diagnostics to source primary messages, notes, and
-  help text from Fluent bundles with structured arguments.
-  Requires 2.3.2.
-- [x] 2.3.4. Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and
-  add UI smoke tests that run under at least one non-English locale.
-  Requires 2.3.3.
-
-### 2.3. Localization enablement
-
-- [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace
-  dependencies and expose a shared `common::i18n` loader.
-  Requires 1.1.1.
-- [x] 2.3.2. Create the `locales/` resource tree with an `en-GB` fallback and
-  secondary `cy`/`gd` language samples covering every lint slug.
-  Requires 2.3.1.
-- [x] 2.3.3. Refactor lint diagnostics to source primary messages, notes, and
-  help text from Fluent bundles with structured arguments.
-  Requires 2.3.2.
-- [x] 2.3.4. Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and
-  add UI smoke tests that run under at least one non-English locale.
-  Requires 2.3.3.
-
 ### 2.3. Localization enablement
 
 - [x] 2.3.1. Add `fluent-templates` and `once_cell` to the workspace

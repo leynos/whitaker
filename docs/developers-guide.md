@@ -1462,7 +1462,7 @@ make a variable absent for the duration of a test. The guard acquires
 it must not hold that mutex while a runner callback executes, because the
 callback may need its own guarded environment setup.
 
-`whitaker::testing::ui::run_with_runner` applies a specialised guard before
+`whitaker::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
 while the runner needs bare `rustc` invocations for
 `dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
