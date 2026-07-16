@@ -8,7 +8,7 @@
 
 use rstest::rstest;
 use rustc_hir::def_id::{DefId, DefIndex};
-use rustc_span::{BytePos, DUMMY_SP, FileName};
+use rustc_span::{BytePos, DUMMY_SP, FileName, Span};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
 
 use super::{
@@ -88,12 +88,11 @@ fn collect_two_calls(lo2: u32, hi2: u32) -> (CallSiteCollector, [bool; 2]) {
 }
 
 fn record(callee_def_id: DefId) -> CallSiteRecord {
-    CallSiteRecord::new(
-        callee_def_id,
-        ArgFingerprint::default(),
-        def_id(99),
-        DUMMY_SP,
-    )
+    record_at(callee_def_id, DUMMY_SP)
+}
+
+fn record_at(callee_def_id: DefId, span: Span) -> CallSiteRecord {
+    CallSiteRecord::new(callee_def_id, ArgFingerprint::default(), def_id(99), span)
 }
 
 fn def_id(index: u32) -> DefId {
@@ -122,19 +121,28 @@ proptest! {
     }
 }
 
-fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, usize)> {
+fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
     let mut collector = CallSiteCollector::default();
     for (callee_index, lo, hi) in spans.iter().copied() {
         let callee = format!("crate::helper_{callee_index}");
         collector.record(
-            record(def_id(callee_index)),
+            record_at(
+                def_id(callee_index),
+                Span::with_root_ctxt(BytePos(lo), BytePos(hi)),
+            ),
             location(&callee, BytePos(lo), BytePos(hi)),
         );
     }
 
     collector
         .iter()
-        .map(|(callee, records)| (callee.to_string(), records.len()))
+        .map(|(callee, records)| {
+            let spans = records
+                .iter()
+                .map(|record| (record.span.lo().0, record.span.hi().0))
+                .collect();
+            (callee.to_string(), spans)
+        })
         .collect()
 }
 

@@ -140,9 +140,10 @@ This plan must be approved before implementation starts.
   one inner `#[test] fn case_N()` per case. The same helper call therefore
   appears `N` times even though the user wrote it once. Counting the generated
   sites separately would distort 8.2.3 thresholds. Severity: high. Likelihood:
-  high. Mitigation: key the call-site map on the *source* `DefId` and the
-  user-editable span of the call, not on the generated function `DefId`.
-  Compare via the source span returned by recovery before deduplicating.
+  high. Mitigation: key the call-site map on the callee definition path and
+  the user-editable call-site location, while keeping the source `DefId` on
+  each record. Compare via the source span returned by recovery before
+  deduplicating.
 
 - Risk: callee resolution returns no `DefId` when the call goes through a
   trait method, a generic function whose instantiation is not yet known, or a

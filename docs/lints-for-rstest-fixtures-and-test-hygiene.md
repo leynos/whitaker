@@ -53,8 +53,7 @@ that helper into a `#[fixture]` and injecting it as a test parameter.
 The lint emits only when all conditions hold:
 
 - Callsite is within a function recognized as an `#[rstest]` test.
-- Callee resolves to a function definition, and by default is local to the
-  crate.
+- Callee resolves to a local function or associated-function definition.
 - Distinct test count is at least `min_distinct_tests`.
 - Total call count is at least `min_calls`.
 - Every argument list satisfies one of:

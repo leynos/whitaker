@@ -564,8 +564,9 @@
   [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
    §Lint A: call-site fixture extraction. Requires 8.2.1.
   Status: the lint now passively collects local helper call evidence from
-  `#[rstest]` bodies, deduplicates generated cases by callee and recovered
-  source span, records fixture-local, literal, `const`, and `static` argument
+  `#[rstest]` bodies, deduplicates generated cases by callee definition path
+  and recovered source span, records fixture-local, literal, `const`, and
+  `static` argument
   fingerprints, and keeps diagnostics disabled until 8.2.3. The collector test
   and behaviour scenarios now share duplicate-call helpers, and `check_fn`
   delegates to a private `collect_call_sites` method so the driver keeps the

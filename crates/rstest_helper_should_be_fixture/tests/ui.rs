@@ -50,14 +50,20 @@ fn example_harness_collects_call_site_evidence() {
     let _ = std::fs::remove_file(&summary_path);
 
     assert!(summary.contains("callee_count=3"), "{summary}");
-    assert!(summary.contains("record_count=3"), "{summary}");
+    assert!(summary.contains("record_count=4"), "{summary}");
     assert!(
         summary.contains("callee=Builder::<'_>::build;records=1"),
         "{summary}"
     );
     assert!(summary.contains("callee=helper;records=1"), "{summary}");
     assert!(
-        summary.contains("callee=nested_helper;records=1"),
+        summary.contains("callee=nested_helper;records=2"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains(
+            "callee=nested_helper;records=2\nfingerprint=fixture-local\nfingerprint=unsupported"
+        ),
         "{summary}"
     );
     assert!(

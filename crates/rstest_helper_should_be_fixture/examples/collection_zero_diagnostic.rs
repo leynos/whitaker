@@ -66,6 +66,9 @@ fn case_generated_collection_stays_silent(#[case] input: &str, fixture: &str) {
     };
     assert_eq!(outer(), "fixture");
 
+    let fixture = "shadowed";
+    assert_eq!(nested_helper(fixture), "shadowed");
+
     let built = Builder { fixture }.build(input);
     assert!(built.ends_with(input));
 }

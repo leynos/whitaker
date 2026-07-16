@@ -13,8 +13,12 @@ use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_lint::LateContext;
 use rustc_span::Span;
+use std::collections::HashSet;
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::rstest::{ArgAtom, ArgFingerprint, ParameterBinding, RstestParameter};
+use whitaker_common::rstest::{
+    ArgAtom, ArgFingerprint, ParameterBinding, RstestDetectionOptions, RstestParameter,
+    RstestParameterKind, classify_rstest_parameter,
+};
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 
@@ -22,7 +26,7 @@ pub(crate) struct CallSiteVisitor<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
     collector: &'a mut CallSiteCollector,
     test_source_def_id: DefId,
-    fixture_locals: &'a std::collections::BTreeSet<String>,
+    fixture_local_ids: &'a HashSet<hir::HirId>,
     closure_span_fallbacks: Vec<Span>,
 }
 
@@ -31,13 +35,13 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
         cx: &'a LateContext<'tcx>,
         collector: &'a mut CallSiteCollector,
         test_source_def_id: DefId,
-        fixture_locals: &'a std::collections::BTreeSet<String>,
+        fixture_local_ids: &'a HashSet<hir::HirId>,
     ) -> Self {
         Self {
             cx,
             collector,
             test_source_def_id,
-            fixture_locals,
+            fixture_local_ids,
             closure_span_fallbacks: Vec::new(),
         }
     }
@@ -65,7 +69,7 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
 
         let fingerprint = ArgFingerprint::new(
             args.into_iter()
-                .map(|arg| lower_arg_atom(self.cx, arg, self.fixture_locals)),
+                .map(|arg| lower_arg_atom(self.cx, arg, self.fixture_local_ids)),
         );
         let record = CallSiteRecord::new(callee_def_id, fingerprint, self.test_source_def_id, span);
         let source_map = self.cx.tcx.sess.source_map();
@@ -126,6 +130,25 @@ pub(crate) fn rstest_parameters(
                 parameter_binding(param.pat),
                 parameter_attributes(cx, param.hir_id),
             )
+        })
+        .collect()
+}
+
+pub(crate) fn fixture_local_ids(
+    cx: &LateContext<'_>,
+    body: &hir::Body<'_>,
+    options: &RstestDetectionOptions,
+) -> HashSet<hir::HirId> {
+    let parameters = rstest_parameters(cx, body);
+    body.params
+        .iter()
+        .zip(parameters.iter())
+        .filter_map(|(param, parameter)| {
+            matches!(
+                classify_rstest_parameter(parameter, options),
+                RstestParameterKind::FixtureLocal { .. }
+            )
+            .then_some(param.pat.hir_id)
         })
         .collect()
 }

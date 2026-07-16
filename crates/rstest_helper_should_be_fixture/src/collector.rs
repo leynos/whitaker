@@ -4,7 +4,7 @@
 //! diagnostics so later roadmap items can apply thresholds and message policy
 //! without changing how call sites are discovered.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use log::debug;
 use rustc_hir as hir;
@@ -106,7 +106,7 @@ impl CallSiteCollector {
     /// # use crate::collector::{CallSiteCollector, CallSiteLocation, CallSiteRecord};
     /// # fn example(mut collector: CallSiteCollector, record: CallSiteRecord) {
     /// let location = CallSiteLocation::new(
-    ///     record.callee_key.clone(),
+    ///     "crate::helper".to_string(),
     ///     rustc_span::FileName::Custom("src/lib.rs".to_string()),
     ///     rustc_span::BytePos(0),
     ///     rustc_span::BytePos(4),
@@ -130,7 +130,9 @@ impl CallSiteCollector {
             return false;
         }
 
-        self.by_callee.entry(callee_key).or_default().push(record);
+        let records = self.by_callee.entry(callee_key).or_default();
+        records.push(record);
+        records.sort_by_key(|record| (record.span.lo(), record.span.hi()));
         true
     }
 
@@ -163,7 +165,7 @@ impl CallSiteCollector {
 pub(crate) fn lower_arg_atom<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &'tcx hir::Expr<'tcx>,
-    fixture_locals: &BTreeSet<String>,
+    fixture_local_ids: &HashSet<hir::HirId>,
 ) -> ArgAtom {
     if should_skip_arg_for_unrecoverable_span(expr.span) {
         debug!(
@@ -175,7 +177,7 @@ pub(crate) fn lower_arg_atom<'tcx>(
     }
 
     match &expr.kind {
-        hir::ExprKind::Path(qpath) => lower_path_arg(cx, expr, qpath, fixture_locals),
+        hir::ExprKind::Path(qpath) => lower_path_arg(cx, expr, qpath, fixture_local_ids),
         hir::ExprKind::Lit(lit) => literal_atom(cx, expr.span, lit),
         _ => {
             debug!(
@@ -196,10 +198,10 @@ fn lower_path_arg<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &'tcx hir::Expr<'tcx>,
     qpath: &hir::QPath<'tcx>,
-    fixture_locals: &BTreeSet<String>,
+    fixture_local_ids: &HashSet<hir::HirId>,
 ) -> ArgAtom {
     match cx.qpath_res(qpath, expr.hir_id) {
-        Res::Local(_) => local_fixture_atom(qpath, fixture_locals),
+        Res::Local(binding_id) => local_fixture_atom(qpath, binding_id, fixture_local_ids),
         Res::Def(DefKind::Const | DefKind::AssocConst | DefKind::Static { .. }, def_id) => {
             ArgAtom::const_path(cx.tcx.def_path_str(def_id))
         }
@@ -214,7 +216,11 @@ fn lower_path_arg<'tcx>(
     }
 }
 
-fn local_fixture_atom(qpath: &hir::QPath<'_>, fixture_locals: &BTreeSet<String>) -> ArgAtom {
+fn local_fixture_atom(
+    qpath: &hir::QPath<'_>,
+    binding_id: hir::HirId,
+    fixture_local_ids: &HashSet<hir::HirId>,
+) -> ArgAtom {
     let hir::QPath::Resolved(None, path) = qpath else {
         debug!(
             target: "rstest_helper_should_be_fixture",
@@ -230,7 +236,7 @@ fn local_fixture_atom(qpath: &hir::QPath<'_>, fixture_locals: &BTreeSet<String>)
         return ArgAtom::unsupported();
     };
     let name = segment.ident.as_str();
-    if fixture_locals.contains(name) {
+    if fixture_local_ids.contains(&binding_id) {
         ArgAtom::fixture_local(name)
     } else {
         debug!(

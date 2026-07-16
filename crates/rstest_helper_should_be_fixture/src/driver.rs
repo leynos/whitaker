@@ -6,7 +6,7 @@
 
 use crate::collector::CallSiteCollector;
 use crate::visitor::{
-    CallSiteVisitor, attribute_from_hir, redacted_fingerprint_shape, rstest_parameters,
+    CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape,
 };
 use log::debug;
 use rustc_hir as hir;
@@ -20,7 +20,7 @@ use std::io::Write;
 use whitaker::SharedConfig;
 use whitaker_common::attributes::AttributePath;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
-use whitaker_common::rstest::{RstestDetectionOptions, fixture_local_names, is_rstest_test_with};
+use whitaker_common::rstest::{RstestDetectionOptions, is_rstest_test_with};
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 /// Internal test-only hook used by the UI harness to assert passive collection.
@@ -200,10 +200,13 @@ impl RstestHelperShouldBeFixture {
             return;
         }
 
-        let parameters = rstest_parameters(cx, body);
-        let fixture_locals = fixture_local_names(&parameters, &self.detection_options);
-        let mut visitor =
-            CallSiteVisitor::new(cx, &mut self.collector, def_id.to_def_id(), &fixture_locals);
+        let fixture_local_ids = fixture_local_ids(cx, body, &self.detection_options);
+        let mut visitor = CallSiteVisitor::new(
+            cx,
+            &mut self.collector,
+            def_id.to_def_id(),
+            &fixture_local_ids,
+        );
         visitor.visit_expr(body.value);
     }
 }
