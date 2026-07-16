@@ -4,9 +4,7 @@ use super::{HarnessError, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-#[cfg(windows)]
 use std::sync::{Mutex, MutexGuard, OnceLock};
-#[cfg(windows)]
 use whitaker_common::test_support::EnvVarGuard;
 
 #[rstest]
@@ -77,8 +75,7 @@ fn rejects_drive_relative_directories_on_windows() {
 
 #[test]
 fn propagates_runner_failures() {
-    #[cfg(windows)]
-    let _serial_guard = windows_env_guard_test_lock();
+    let _serial_guard = runner_env_guard_test_lock();
 
     let error = run_with_runner("lint", "ui", |crate_name, directory| {
         assert_eq!(crate_name, "lint");
@@ -97,10 +94,9 @@ fn propagates_runner_failures() {
     );
 }
 
-#[cfg(windows)]
 #[test]
-fn windows_env_guard_clears_and_restores_rustc_wrapper() {
-    let _serial_guard = windows_env_guard_test_lock();
+fn runner_env_guard_clears_and_restores_rustc_wrapper() {
+    let _serial_guard = runner_env_guard_test_lock();
     let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
 
     run_with_runner("lint", "ui", |_, _| {
@@ -115,7 +111,7 @@ fn windows_env_guard_clears_and_restores_rustc_wrapper() {
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
-    let _serial_guard = windows_env_guard_test_lock();
+    let _serial_guard = runner_env_guard_test_lock();
     let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
     let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
 
@@ -128,24 +124,22 @@ fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
     assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
 }
 
-#[cfg(windows)]
 #[test]
-fn windows_env_guard_test_lock_recovers_after_panic() {
+fn runner_env_guard_test_lock_recovers_after_panic() {
     let result = std::panic::catch_unwind(|| {
-        let _serial_guard = windows_env_guard_test_lock();
-        panic!("intentionally poison the Windows UI test lock");
+        let _serial_guard = runner_env_guard_test_lock();
+        panic!("intentionally poison the UI environment test lock");
     });
 
     assert!(result.is_err());
-    let _serial_guard = windows_env_guard_test_lock();
+    let _serial_guard = runner_env_guard_test_lock();
 }
 
-#[cfg(windows)]
-fn windows_env_guard_test_lock() -> MutexGuard<'static, ()> {
+fn runner_env_guard_test_lock() -> MutexGuard<'static, ()> {
     // These tests inspect process-global environment state after callbacks,
     // so their whole bodies must run serially rather than only each mutation.
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }

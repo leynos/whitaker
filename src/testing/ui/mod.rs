@@ -6,16 +6,13 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::fmt;
+use std::{env, fmt};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-#[cfg(windows)]
-use std::env;
-#[cfg(windows)]
 use whitaker_common::test_support::env_test_guard;
 
 /// Errors produced when preparing or executing Dylint UI tests.
@@ -164,7 +161,7 @@ pub fn run_with_runner(
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
-    let _windows_env_guard = windows_env_guard();
+    let _runner_env_guard = runner_env_guard();
     ensure_toolchain_library(&crate_name_owned)?;
 
     match runner(crate_name_str, directory.as_ref()) {
@@ -177,37 +174,40 @@ pub fn run_with_runner(
     }
 }
 
-/// Serialises Windows-specific environment mutations required by `run_with_runner`.
+/// Serialises environment mutations required by `run_with_runner`.
 ///
-/// On Windows, two environment variables need temporary adjustment:
+/// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
+/// `sccache`), because `dylint_testing::Test::example` scans
+/// `cargo build --message-format=json` output for bare `rustc` invocations.
+/// When a wrapper is active, Cargo invokes `<wrapper> rustc ...` instead, and
+/// `dylint_testing` finds zero invocations, causing a panic.
+///
+/// On Windows, one additional environment variable needs temporary adjustment:
 ///
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
 ///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
-/// - `RUSTC_WRAPPER`: must be cleared when set (for example to `sccache`), because
-///   `dylint_testing::Test::example` scans `cargo build --message-format=json`
-///   output for bare `rustc` invocations. When a wrapper is active, `cargo`
-///   invokes `<wrapper> rustc ...` instead, and `dylint_testing` finds zero
-///   invocations, causing a panic.
 ///
 /// Each mutation and restoration step acquires `env_test_guard()` only for the
 /// environment write itself. The guard deliberately does not hold that mutex
 /// across the UI runner callback, because runner closures can perform their
 /// own environment-guarded setup.
-#[cfg(windows)]
-struct WindowsEnvGuard {
+struct RunnerEnvGuard {
+    #[cfg(windows)]
     vcpkg_root_was_absent: bool,
     rustc_wrapper_previous: Option<std::ffi::OsString>,
 }
 
-#[cfg(windows)]
-impl Drop for WindowsEnvGuard {
+impl Drop for RunnerEnvGuard {
     fn drop(&mut self) {
         let _env_guard = env_test_guard();
 
         // SAFETY: `env_test_guard` serialises the restoration writes below.
-        if self.vcpkg_root_was_absent {
-            unsafe {
-                env::remove_var("VCPKG_ROOT");
+        #[cfg(windows)]
+        {
+            if self.vcpkg_root_was_absent {
+                unsafe {
+                    env::remove_var("VCPKG_ROOT");
+                }
             }
         }
         if let Some(prev) = &self.rustc_wrapper_previous {
@@ -218,19 +218,26 @@ impl Drop for WindowsEnvGuard {
     }
 }
 
-#[cfg(windows)]
-fn windows_env_guard() -> Option<WindowsEnvGuard> {
+fn runner_env_guard() -> Option<RunnerEnvGuard> {
+    #[cfg(windows)]
     let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
+    #[cfg(windows)]
     let vcpkg_applicable = vcpkg_candidate.is_dir();
 
     let _env_guard = env_test_guard();
     let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
 
+    #[cfg(windows)]
     if !vcpkg_applicable && !has_rustc_wrapper {
+        return None;
+    }
+    #[cfg(not(windows))]
+    if !has_rustc_wrapper {
         return None;
     }
 
     // All environment reads and writes below are serialised by `_env_guard`.
+    #[cfg(windows)]
     let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
         // SAFETY: `_env_guard` serialises concurrent environment mutations.
         unsafe {
@@ -241,28 +248,24 @@ fn windows_env_guard() -> Option<WindowsEnvGuard> {
         false
     };
 
-    let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").map(|wrapper| {
+    let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").inspect(|_| {
         // SAFETY: `_env_guard` serialises concurrent environment mutations.
         unsafe {
             env::remove_var("RUSTC_WRAPPER");
         }
-        wrapper
     });
 
+    #[cfg(windows)]
     if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
         // Nothing was mutated; release the guard early.
         return None;
     }
 
-    Some(WindowsEnvGuard {
+    Some(RunnerEnvGuard {
+        #[cfg(windows)]
         vcpkg_root_was_absent,
         rustc_wrapper_previous,
     })
-}
-
-#[cfg(not(windows))]
-const fn windows_env_guard() -> Option<()> {
-    None
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

@@ -1462,13 +1462,13 @@ make a variable absent for the duration of a test. The guard acquires
 it must not hold that mutex while a runner callback executes, because the
 callback may need its own guarded environment setup.
 
-On Windows, `whitaker::testing::ui::run_with_runner` applies a specialised
-guard before invoking the Dylint UI runner. It sets `VCPKG_ROOT` to `C:\vcpkg`
-when that directory exists and the variable is otherwise absent, and it clears
-`RUSTC_WRAPPER` only while the runner needs bare `rustc` invocations for
-`dylint_testing::Test::example`. Restoration uses the same shared environment
-mutex, but the runner callback itself executes without holding that mutex to
-avoid nested-lock deadlocks.
+`whitaker::testing::ui::run_with_runner` applies a specialised guard before
+invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
+while the runner needs bare `rustc` invocations for
+`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
+`C:\vcpkg` when that directory exists and the variable is otherwise absent.
+Restoration uses the same shared environment mutex, but the runner callback
+itself executes without holding that mutex to avoid nested-lock deadlocks.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
