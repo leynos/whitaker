@@ -147,12 +147,13 @@ impl AttrInfo {
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
     fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        // User-written attributes are Unparsed or DocComment; other Parsed
-        // variants are compiler-internal and lack meaningful source locations.
+        // User-written attributes are Unparsed, DocComment, or a parsed
+        // AttributeKind that retains the original attribute span. Parsed
+        // kinds without a recoverable span (for example `#[cold]`) are
+        // compiler-internal summaries and cannot participate in ordering.
         let span = match attr {
             hir::Attribute::Unparsed(item) => item.span,
-            hir::Attribute::Parsed(AttributeKind::DocComment { span, .. }) => *span,
-            hir::Attribute::Parsed(_) => return None,
+            hir::Attribute::Parsed(kind) => parsed_attribute_span(kind)?,
         };
 
         // Dummy spans indicate compiler-generated code without source location.
@@ -263,7 +264,13 @@ fn attribute_within_item(
 
     let item_span = item_span.unwrap_or(raw_item_span);
 
-    attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi()
+    // Modern nightlies exclude attributes from the item span, so outer
+    // attributes sit immediately before it. Accept spans contained in the
+    // item (older behaviour and inner attributes) or preceding it (outer
+    // attributes on current nightlies).
+    let contained = attribute_span.lo() >= item_span.lo() && attribute_span.hi() <= item_span.hi();
+    let precedes = attribute_span.hi() <= item_span.lo();
+    contained || precedes
 }
 
 #[derive(Copy, Clone)]
@@ -355,6 +362,31 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
         .unwrap_or_else(|_| "the preceding attribute".to_string())
 }
 
+/// Recover the source span of a parsed attribute kind.
+///
+/// rustc migrates built-in attributes from `Unparsed` to parsed
+/// `AttributeKind` variants nightly by nightly. There is no uniform span
+/// accessor on the parsed representation, so the user-visible span is
+/// recovered per kind. Kinds without a span (for example `Cold` and
+/// `Used`) return `None` and are excluded from ordering checks. Only
+/// variants whose shape is identical on the currently supported nightlies
+/// are matched; further kinds can be added as the pin advances.
+fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
+    match kind {
+        AttributeKind::DocComment { span, .. }
+        | AttributeKind::Ignore { span, .. }
+        | AttributeKind::Inline(_, span)
+        | AttributeKind::MustUse { span, .. }
+        | AttributeKind::Naked(span)
+        | AttributeKind::NoMangle(span)
+        | AttributeKind::Optimize(_, span)
+        | AttributeKind::TargetFeature {
+            attr_span: span, ..
+        }
+        | AttributeKind::TrackCaller(span) => Some(*span),
+        _ => None,
+    }
+}
 fn detect_misordered_doc<A>(attrs: &[A]) -> Option<(usize, usize)>
 where
     A: OrderedAttribute,
@@ -381,6 +413,7 @@ trait OrderedAttribute {
     fn is_doc(&self) -> bool;
     fn span(&self) -> Span;
 }
+mod localization;
 
 #[cfg(test)]
 #[path = "tests/localization.rs"]

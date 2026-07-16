@@ -1,42 +1,42 @@
-warning: Doc comments on functions must precede other outer attributes
-  --> $DIR/fail_doc_after_attribute.rs:5:1
+warning: Doc comments on functions must precede other outer attributes.
+  --> $DIR/fail_doc_after_attribute.rs:6:1
    |
 LL | /// Function doc comment appears after `#[inline]`.
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The outer attribute #[inline] appears before the doc comment.
-  --> $DIR/fail_doc_after_attribute.rs:4:1
+  --> $DIR/fail_doc_after_attribute.rs:5:1
    |
 LL | #[inline]
    | ^^^^^^^^^
    = help: Move the doc comment so it appears before #[inline] on the item.
 note: the lint level is defined here
-  --> $DIR/fail_doc_after_attribute.rs:1:9
+  --> $DIR/fail_doc_after_attribute.rs:2:9
    |
 LL | #![warn(function_attrs_follow_docs)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning: Doc comments on methods must precede other outer attributes
-  --> $DIR/fail_doc_after_attribute.rs:12:5
+warning: Doc comments on methods must precede other outer attributes.
+  --> $DIR/fail_doc_after_attribute.rs:13:5
    |
 LL |     /// Method doc comment appears after `#[allow]`.
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The outer attribute #[allow(dead_code)] appears before the doc comment.
-  --> $DIR/fail_doc_after_attribute.rs:11:5
+  --> $DIR/fail_doc_after_attribute.rs:12:5
    |
 LL |     #[allow(dead_code)]
    |     ^^^^^^^^^^^^^^^^^^^
    = help: Move the doc comment so it appears before #[allow(dead_code)] on the item.
 
-warning: Doc comments on trait methods must precede other outer attributes
-  --> $DIR/fail_doc_after_attribute.rs:18:5
+warning: Doc comments on trait methods must precede other outer attributes.
+  --> $DIR/fail_doc_after_attribute.rs:19:5
    |
 LL |     /// Trait method doc comment appears after `#[allow]`.
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The outer attribute #[allow(dead_code)] appears before the doc comment.
-  --> $DIR/fail_doc_after_attribute.rs:17:5
+  --> $DIR/fail_doc_after_attribute.rs:18:5
    |
 LL |     #[allow(dead_code)]
    |     ^^^^^^^^^^^^^^^^^^^
