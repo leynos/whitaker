@@ -37,8 +37,11 @@ TYPOS_CONFIG_BUILDER := $(UV_ENV) $(UV) tool run --python 3.14 \
 SPELLING_PY_SRCS := \
 	scripts/typos_rollout_check.py scripts/tests/test_typos_rollout_check.py
 SPELLING_PY_TESTS := scripts/tests/test_typos_rollout_check.py
+SPELLING_PY_ENV := PYTHONDONTWRITEBYTECODE=1
+SPELLING_COVERAGE_FILE ?= /tmp/whitaker-spelling-helper.coverage
 SPELLING_COVERAGE_ARGS := --cov=typos_rollout_check --cov-fail-under=90
-SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project \
+SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(SPELLING_PY_ENV) \
+	COVERAGE_FILE=$(SPELLING_COVERAGE_FILE) $(UV_ENV) $(UV) run --no-project \
 	--python 3.14 --with pathspec==$(PATHSPEC_VERSION) --with pytest==9.0.2 \
 	--with pytest-cov==7.0.0 python -m pytest
 WORKFLOW_TEST_VENV ?= .venv
@@ -159,7 +162,7 @@ spelling: spelling-phrase-check ## Enforce en-GB-oxendict in tracked text
 		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude --hidden
 
 spelling-phrase-check: spelling-config ## Reject prohibited spelling phrases
-	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.14 \
+	@PYTHONPATH=scripts $(SPELLING_PY_ENV) $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		scripts/typos_rollout_check.py --repository .
 
 spelling-config: spelling-helper-test ## Verify generated spelling configuration

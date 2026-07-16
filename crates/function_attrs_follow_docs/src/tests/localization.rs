@@ -89,7 +89,7 @@ fn given_failure(world: &LocalizationWorld) {
 }
 
 #[when("I localise the diagnostic")]
-fn when_localise(world: &LocalizationWorld) {
+fn when_localize(world: &LocalizationWorld) {
     let kind = *world.subject.borrow();
     let failing = world.failing.get();
     let attribute = resolve_attribute(world, failing);

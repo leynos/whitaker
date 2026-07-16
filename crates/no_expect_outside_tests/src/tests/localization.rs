@@ -143,7 +143,7 @@ fn given_failure(world: &LocalizationWorld) {
 }
 
 #[when("I localise the expect diagnostic")]
-fn when_localise(world: &LocalizationWorld) {
+fn when_localize(world: &LocalizationWorld) {
     let receiver = world.receiver.borrow().clone();
     let summary = world.summary.borrow().clone();
 

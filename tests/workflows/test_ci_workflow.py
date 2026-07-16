@@ -191,18 +191,14 @@ def _coverage_check_job(workflow: Mapping[str, Any]) -> dict[str, Any]:
     assert coverage_job.get("defaults", {}).get("run", {}).get("shell") == "bash", (
         "coverage-check must use Bash for Makefile targets"
     )
-    _assert_steps_in_order(
-        _step_names(coverage_job),
-        [
-            "Checkout",
-            "Setup Rust",
-            "Install cargo-nextest",
-            "Install cargo-llvm-cov",
-            "Generate coverage",
-            "Check coverage against CodeScene gates",
-        ],
-        "coverage-check must prepare Rust, generate LCOV, then check CodeScene",
-    )
+    assert _step_names(coverage_job) == [
+        "Checkout",
+        "Setup Rust",
+        "Install cargo-nextest",
+        "Install cargo-llvm-cov",
+        "Generate coverage",
+        "Check coverage against CodeScene gates",
+    ], "coverage-check must contain only the approved ordered steps"
     return coverage_job
 
 

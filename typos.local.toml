@@ -227,7 +227,6 @@ ignore = [
   "(?m)^fn summarises_plain_context\\(\\) \\{$",
   "(?m)^fn validate_pluralisation_coverage\\(locale: &str, max_branches: i64\\) \\{$",
   "(?m)^fn when_finalised\\(world: &CcWorld\\) \\{$",
-  "(?m)^fn when_localise\\(world: &LocalizationWorld\\) \\{$",
   "(?m)^fn when_localise\\(world: &WorldCell\\) \\{$",
   "(?m)^fn when_normalise\\(world: &World\\) \\{$",
   "(?m)^fn when_summarise\\(world: &ContextWorld\\) \\{$",
