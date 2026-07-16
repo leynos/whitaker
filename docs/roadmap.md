@@ -193,8 +193,8 @@
   §Configuration model.
   Requires 3.5.1.
 - [ ] 3.6.4. Add shared `--locale`, `--colour`, and `--progress` controls, and
-  ensure the merged config surface remains localisable and accessible. See
-  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localisation
+  ensure the merged config surface remains localizable and accessible. See
+  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localization
   requirements and §Configuration model.
   Requires 2.3.4 and 3.6.3.
 
@@ -225,7 +225,7 @@
   Requires 3.6.2 and 3.7.3.
 - [ ] 3.8.2. Add `--json` to `whitaker ls` and `whitaker doctor`, using stable
   machine-readable fields that remain untranslated across locales. See
-  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localisation
+  [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and localization
   requirements and §`whitaker doctor`.
   Requires 3.8.1 and 3.8.4.
 - [ ] 3.8.3. Record structured dependency-install and bundle-build failures
@@ -241,7 +241,7 @@
 - [ ] 3.8.5. Add behaviour coverage for locale overrides, plain-progress
   output, and JSON parity between text and machine-readable status commands.
   See [Whitaker CLI design](whitaker-cli-design.md) §Accessibility and
-  localisation requirements.
+  localization requirements.
   Requires 3.6.4 and 3.8.2.
 
 ### 3.9. Compatibility release and documentation migration
@@ -395,20 +395,20 @@
   Requires 6.2.2 and 6.3.2.
 
 
-### 6.6. Configuration, localisation, and tests
+### 6.6. Configuration, localization, and tests
 
 - [ ] 6.6.1. Add `brain_type` and `brain_trait` configuration sections to
   `whitaker.toml` with documented defaults. See [brain trust lints
-  design](brain-trust-lints-design.md) §Configuration, localisation, and
+  design](brain-trust-lints-design.md) §Configuration, localization, and
   testing.
   Requires 3.6.3, 6.2.2, and 6.3.2.
-- [ ] 6.6.2. Add Fluent localisation entries for both lints. See [brain trust
-  lints design](brain-trust-lints-design.md) §Configuration, localisation, and
+- [ ] 6.6.2. Add Fluent localization entries for both lints. See [brain trust
+  lints design](brain-trust-lints-design.md) §Configuration, localization, and
   testing.
   Requires 2.3.3, 6.2.2, and 6.3.2.
 - [ ] 6.6.3. Add UI tests for positive and negative cases under
   `crates/brain_type/ui/` and `crates/brain_trait/ui/`. See [brain trust lints
-  design](brain-trust-lints-design.md) §Configuration, localisation, and
+  design](brain-trust-lints-design.md) §Configuration, localization, and
   testing.
   Requires 1.2.1, 6.2.2, and 6.3.2.
 
@@ -416,7 +416,7 @@
 
 - [ ] 6.7.1. Update `docs/users-guide.md` with lint descriptions, configuration
   keys, and SARIF usage. See [brain trust lints
-  design](brain-trust-lints-design.md) §Configuration, localisation, and
+  design](brain-trust-lints-design.md) §Configuration, localization, and
   testing.
   Requires 6.5.1 and 6.6.1.
 
@@ -648,7 +648,7 @@
   hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Integration
   constraints and §Comparison and rollout guidance.
   Requires 8.2.4, 8.3.4, and 8.4.4.
-- [ ] 8.5.2. Add Fluent localisation entries and diagnostic argument mappings
+- [ ] 8.5.2. Add Fluent localization entries and diagnostic argument mappings
   for all three lint slugs. See [rstest fixture and test hygiene
   lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Integration
   constraints.
@@ -672,7 +672,7 @@
 - [ ] 9.1.1. Add `common::ownership_shape` model types, evaluation helpers, and
   diagnostic argument builders. See [ownership shape lints
   design](ownership-shape-lints-design.md) §11 Shared implementation approach
-  and §16 Diagnostics and localisation.
+  and §16 Diagnostics and localization.
   Requires 1.1.1.
 - [ ] 9.1.2. Add resolved-path classifiers for clone-like operations and
   wrapper constructors, following the `def_path_str` plus parsed-segment
@@ -773,15 +773,15 @@
   Requires 1.2.1 and 9.4.4.
 
 
-### 9.5. Localisation, documentation, and promotion
+### 9.5. Localization, documentation, and promotion
 
 - [ ] 9.5.1. Add Fluent entries and diagnostic argument mappings for all three
   lints. See [ownership shape lints design](ownership-shape-lints-design.md)
-  §16 Diagnostics and localisation.
+  §16 Diagnostics and localization.
   Requires 2.3.3, 9.2.5, 9.3.5, and 9.4.5.
 - [ ] 9.5.2. Add Welsh and Gaelic smoke coverage for the ownership-shape
   diagnostics. See [ownership shape lints
-  design](ownership-shape-lints-design.md) §16 Diagnostics and localisation and
+  design](ownership-shape-lints-design.md) §16 Diagnostics and localization and
   §18 Testing strategy.
   Requires 2.3.4 and 9.5.1.
 - [ ] 9.5.3. Update `docs/users-guide.md` and `docs/developers-guide.md` with

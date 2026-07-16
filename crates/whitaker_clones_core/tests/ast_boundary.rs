@@ -42,6 +42,9 @@ fn domain_files() -> Result<Vec<PathBuf>, std::io::Error> {
 }
 
 fn assert_domain_boundary(path: &Path, contents: &str) {
+    let tokens = non_comment_tokens(contents);
+    assert_no_forbidden_paths(path, &tokens);
+
     for import in use_trees(contents) {
         for forbidden in FORBIDDEN_CRATES {
             assert!(
@@ -59,6 +62,24 @@ fn assert_domain_boundary(path: &Path, contents: &str) {
             import.join(" "),
         );
     }
+}
+
+fn assert_no_forbidden_paths(path: &Path, tokens: &[&str]) {
+    for forbidden in FORBIDDEN_CRATES {
+        assert!(
+            !contains_path(tokens, &[forbidden, "::"]),
+            "{} must not reference parser crate `{forbidden}` via `{}`",
+            path.display(),
+            tokens.join(" "),
+        );
+    }
+    assert!(
+        !contains_path(tokens, FORBIDDEN_DOMAIN_IMPORT),
+        "{} must not reference `{}` via `{}`",
+        path.display(),
+        FORBIDDEN_DOMAIN_IMPORT.join(""),
+        tokens.join(" "),
+    );
 }
 
 fn use_trees(contents: &str) -> Vec<Vec<&str>> {
@@ -161,4 +182,18 @@ fn forbidden_domain_import_forms_are_detected(#[case] source: &str) {
     let import = use_trees(source).pop().expect("source contains a use tree");
 
     assert!(contains_path(&import, FORBIDDEN_DOMAIN_IMPORT));
+}
+
+#[rstest]
+#[case::parser_crate("type Syntax = ra_ap_syntax::SyntaxNode;")]
+#[case::domain_module("const LOWER: &str = crate::ast::lowering::PARSER_SCHEMA_VERSION;")]
+fn inline_forbidden_paths_are_detected(#[case] source: &str) {
+    let tokens = non_comment_tokens(source);
+
+    assert!(
+        FORBIDDEN_CRATES
+            .iter()
+            .any(|crate_name| contains_path(&tokens, &[crate_name, "::"]))
+            || contains_path(&tokens, FORBIDDEN_DOMAIN_IMPORT)
+    );
 }

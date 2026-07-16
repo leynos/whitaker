@@ -93,7 +93,6 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
         "selected AST covering node"
     );
 
-    let lowered = lower_node(&selected, 0)?;
     if contains_error_element(&selected) {
         error!(
             start = span.start(),
@@ -106,6 +105,8 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
         });
     }
 
+    let lowered = lower_node(&selected, 0)?;
+
     debug_assert!(selected.text_range().contains_range(target_range));
     Ok(NormalisedTree::new(lowered, span))
 }
@@ -115,6 +116,8 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree> 
 /// Traversal is O(n) in the parsed source file, not just the candidate span.
 /// It enforces bounded node and depth budgets in every build so callers cannot
 /// turn a single-file parse into unbounded lowering work.
+/// Among covering nodes with the same minimal width, traversal retains the
+/// first node encountered.
 fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
     let mut pending = vec![(root.clone(), 0_usize)];
     let mut selected = None;
