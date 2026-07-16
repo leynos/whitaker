@@ -988,7 +988,7 @@ Adapter (`lowering.rs`), the sole `ra_ap_syntax` boundary:
 ```rust,ignore
 /// Parse `file_text`, map `span` to the smallest covering node, and lower that
 /// subtree into a `NormalisedTree`. Nothing rowan-shaped crosses this boundary.
-pub fn lower_span(file_text: &str, span: ByteSpan) -> Result<NormalisedTree, AstError>;
+pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalisedTree>;
 ```
 
 Errors (`error.rs`):
@@ -1005,7 +1005,7 @@ pub enum AstError {
     #[error("byte span {start}..{end} lies outside the parsed source of length {len}")]
     SpanOutOfBounds { start: u32, end: u32, len: usize },
     #[error("byte offset {0} exceeds the u32 TextSize range")]
-    OffsetTooLarge(u32),
+    OffsetTooLarge(usize),
     #[error("byte span {start}..{end} maps to an unparsable (ERROR) subtree")]
     UnparsableSpan { start: u32, end: u32 },
 }

@@ -68,8 +68,8 @@ check-cfg = ["cfg(dylint_lib, values(any()))"]
 
 [workspace.dependencies]
 camino = "1"
-dylint_linting = "5"
-dylint_testing = "5"
+dylint_linting = "6.0.1"
+dylint_testing = "6.0.1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "0.9"
@@ -100,7 +100,7 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   std/core keeps `rustc_private` consumers (for example `rustc_driver` in
   Dylint) from pulling mixed static and dynamic runtimes, eliminating the
   duplicate symbol errors seen on newer nightlies while staying on a toolchain
-  recent enough for `dylint_linting` 5.x.
+  recent enough for `dylint_linting` 6.0.1.
 - UI harness helpers now prepare the cdylib expected by the driver. Before each
   run, the harness copies `lib<crate>.so` to the `lib<crate>@<toolchain>.so`
   name derived from `RUSTUP_TOOLCHAIN`. The copy is skipped for synthetic crate

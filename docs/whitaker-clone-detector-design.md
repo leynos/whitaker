@@ -264,6 +264,34 @@ pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
 }
 ```
 
+### Normalization
+
+```rust
+pub enum Norm { T1, T2 }
+
+pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
+    use rustc_lexer::{tokenize, TokenKind};
+    let mut out = Vec::new();
+    let mut off = 0;
+    for tok in tokenize(src) {
+        let kind = match tok.kind {
+            TokenKind::Whitespace
+            | TokenKind::LineComment
+            | TokenKind::BlockComment { .. } => {
+                off += tok.len;
+                continue;
+            }
+            TokenKind::Ident if matches!(norm, Norm::T2) => 1, // <ID>
+            TokenKind::Literal { .. } if matches!(norm, Norm::T2) => 2, // <LIT>
+            _ => tok.kind as u32,
+        };
+        out.push((kind, off..off + tok.len));
+        off += tok.len;
+    }
+    out
+}
+```
+
 ### k-shingles, rolling hash, winnowing
 
 - **Shingle:** sequence of `k` token kinds (default `k=25`).
@@ -295,25 +323,28 @@ pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
 ### Parsing and region mapping
 
 ```rust
-use ra_ap_syntax::{SourceFile, SyntaxNode, TextRange, TextSize};
+use whitaker_clones_core::{AstError, AstResult, ByteSpan, NormalisedTree, lower_span};
 
-pub struct AstFragment {
-    pub node: SyntaxNode,
-    pub range: TextRange,
+pub fn map_bytes_to_node(
+    file_text: &str,
+    start: usize,
+    end: usize,
+) -> AstResult<NormalisedTree> {
+    let start = u32::try_from(start).map_err(|_| AstError::OffsetTooLarge(start))?;
+    let end = u32::try_from(end).map_err(|_| AstError::OffsetTooLarge(end))?;
+    let span = ByteSpan::new(file_text, start, end)?;
+    lower_span(file_text, span)
 }
 
-pub fn map_bytes_to_node(file_text: &str, start: usize, end: usize) -> AstFragment {
-    let sf = SourceFile::parse(file_text).ok().expect("parse");
-    let range = TextRange::new(TextSize::from(start as u32), TextSize::from(end as u32));
-    // Heuristic: choose the smallest node covering the byte range.
-    let mut best = sf.syntax().clone();
-    for n in sf.syntax().descendants() {
-        let r = n.text_range();
-        if r.contains_range(range) && r.len() <= best.text_range().len() {
-            best = n;
+pub fn describe_lowering_failure(file_text: &str, start: usize, end: usize) -> String {
+    match map_bytes_to_node(file_text, start, end) {
+        Ok(tree) => format!("lowered span {:?}", tree.span()),
+        Err(AstError::InvalidSpan { start, end }) => format!("invalid span {start}..{end}"),
+        Err(AstError::UnparsableSpan { start, end }) => {
+            format!("parser recovery left {start}..{end} unparsable")
         }
+        Err(error) => error.to_string(),
     }
-    AstFragment { node: best, range }
 }
 ```
 
@@ -734,7 +765,7 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 5. **Proof obligations remain split by what each tool can substantiate.**
    Unit tests, `rstest-bdd`, snapshots, and `proptest` cover runtime lowering,
    sibling-order independence for count and production accumulation, leaf
-   normalization, and parser-version drift. Kani verifies bounded production
+   normalization, and parser-version drift. Kani verifies bounded AST
    span-cover selection and bounded AST feature invariants over synthetic
    trees. Verus proves the contribution-count accumulator algebra for a
    supplied multiset; it does not claim to verify parser traversal or the

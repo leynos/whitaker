@@ -93,6 +93,8 @@ pub(crate) fn mix_u64(current: u64, value: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    //! Verifies deterministic hashing primitives and their serialization contract.
+
     use rstest::rstest;
 
     use super::{FNV_OFFSET_BASIS, mix_byte, mix_bytes, mix_u16, mix_u64};

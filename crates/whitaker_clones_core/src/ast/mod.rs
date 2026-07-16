@@ -1,10 +1,11 @@
 //! Parser-agnostic AST feature extraction for clone refinement.
 //!
 //! This module is split into a pure domain and one parser adapter. The
-//! dependency-rule invariant is: exactly one file under
-//! `crates/whitaker_clones_core/src/ast/` may import `ra_ap_syntax`, `rowan`, or
-//! `ra_ap_parser`, and that file is `ast/lowering.rs`. Domain files must never
-//! use `ast::lowering`; dependency flow is adapter to domain only.
+//! dependency-rule invariant is: exactly one production module may import
+//! `ra_ap_syntax`, `rowan`, or `ra_ap_parser`: `ast/lowering.rs`.
+//! Adapter-scoped tests such as `ast/lowering_tests.rs` are excluded from that
+//! restriction. Domain files must never use `ast::lowering`; dependency flow is
+//! adapter to domain only.
 
 mod cover;
 mod error;

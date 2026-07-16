@@ -6,16 +6,11 @@
 //! every canonical AST hash. Failing the build on a loose parser requirement
 //! prevents future dependency updates from silently reusing stale AST hashes.
 
-use std::{
-    env,
-    error::Error,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{env, error::Error, fs, path::PathBuf};
 
 mod build_support;
 
-use build_support::{exact_version, parser_dependency_requirement};
+use build_support::{exact_version, find_workspace_manifest, parser_dependency_requirement};
 
 const PARSER_VERSION_ENV: &str = "WHITAKER_RA_AP_SYNTAX_VERSION";
 
@@ -34,31 +29,4 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn workspace_manifest_path() -> Result<PathBuf, Box<dyn Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     find_workspace_manifest(&manifest_dir)
-}
-
-fn find_workspace_manifest(manifest_dir: &Path) -> Result<PathBuf, Box<dyn Error>> {
-    for directory in manifest_dir.ancestors() {
-        let candidate = directory.join("Cargo.toml");
-        if candidate.is_file() && is_workspace_manifest(&candidate)? {
-            return Ok(candidate);
-        }
-    }
-
-    Err(workspace_manifest_not_found(manifest_dir).into())
-}
-
-fn is_workspace_manifest(candidate: &Path) -> Result<bool, Box<dyn Error>> {
-    let manifest = fs::read_to_string(candidate)?;
-    let document = manifest.parse::<toml::Table>()?;
-    Ok(document.contains_key("workspace"))
-}
-
-fn workspace_manifest_not_found(manifest_dir: &Path) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::NotFound,
-        format!(
-            "could not find a parent Cargo.toml with a [workspace] table from `{}`",
-            manifest_dir.display()
-        ),
-    )
 }

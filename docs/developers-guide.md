@@ -356,8 +356,9 @@ parser adapter and several parser-agnostic domain modules:
   smallest covering syntax node, and lowers that node into the owned
   `NormalisedTree` representation.
 - `tree.rs` owns the lowered domain types: `NormalisedTree`,
-  `NormalisedNode`, `KindId`, `Depth`, `LeafClass`, `AstHash`, and `ByteSpan`.
-  `KindId` is an in-memory token and must not be persisted.
+  `NormalisedNode`, `KindId`, `Depth`, `LeafClass`, and `ByteSpan`. `KindId`
+  is an in-memory token and must not be persisted.
+- `hash.rs` owns `AstHash` and `canonical_hash`.
 - `features.rs`, `hash.rs`, and `cover.rs` operate only on the lowered domain
   types. They must not depend on parser crates or import the adapter module.
 - `tests.rs` and the `tests/ast_*` behavioural suites cover feature math,

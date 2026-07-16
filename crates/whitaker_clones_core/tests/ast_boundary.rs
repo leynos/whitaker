@@ -67,6 +67,12 @@ fn assert_domain_boundary(path: &Path, contents: &str) {
 fn assert_no_forbidden_paths(path: &Path, tokens: &[&str]) {
     for forbidden in FORBIDDEN_CRATES {
         assert!(
+            !contains_path(tokens, &["extern", "crate", forbidden]),
+            "{} must not declare parser crate `{forbidden}` via `{}`",
+            path.display(),
+            tokens.join(" "),
+        );
+        assert!(
             !contains_path(tokens, &[forbidden, "::"]),
             "{} must not reference parser crate `{forbidden}` via `{}`",
             path.display(),
@@ -177,6 +183,14 @@ fn forbidden_crate_import_forms_are_detected(#[case] source: &str) {
             .iter()
             .any(|crate_name| imports_crate(&import, crate_name))
     );
+}
+
+#[test]
+#[should_panic(expected = "must not declare parser crate `ra_ap_syntax`")]
+fn aliased_extern_crate_is_rejected() {
+    let tokens = non_comment_tokens("extern crate ra_ap_syntax as syntax;");
+
+    assert_no_forbidden_paths(Path::new("domain.rs"), &tokens);
 }
 
 #[rstest]

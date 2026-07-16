@@ -269,16 +269,16 @@ proptest! {
     }
 
     #[test]
-    fn equal_normalised_leaves_have_equal_hashes(
-        kind in 0_u16..32,
+    fn different_normalised_leaf_kinds_have_different_hashes(
+        kind in 0_u16..u16::MAX,
         leaf in leaf_class_strategy()
     ) {
         let left = tree_with_root(NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
             .expect("static test span should be valid");
-        let right = tree_with_root(NormalisedNode::new(KindId::new(kind), leaf, Vec::new()))
+        let right = tree_with_root(NormalisedNode::new(KindId::new(kind + 1), leaf, Vec::new()))
             .expect("static test span should be valid");
 
-        prop_assert_eq!(canonical_hash(&left), canonical_hash(&right));
+        prop_assert_ne!(canonical_hash(&left), canonical_hash(&right));
     }
 }
 

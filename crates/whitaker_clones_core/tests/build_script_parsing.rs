@@ -3,9 +3,12 @@
 #[path = "../build_support.rs"]
 mod build_support;
 
-use build_support::{exact_version, parser_dependency_requirement};
+use build_support::{
+    exact_version, find_workspace_manifest, is_workspace_manifest, parser_dependency_requirement,
+};
 use proptest::prelude::*;
 use rstest::rstest;
+use tempfile::tempdir;
 
 #[rstest]
 #[case::inline("[workspace.dependencies]\nra_ap_syntax = \"=0.0.334\"\n", "=0.0.334")]
@@ -47,6 +50,56 @@ fn accepts_exact_requirement() {
         exact_version("=0.0.334").expect("exact requirement should parse"),
         "0.0.334"
     );
+}
+
+#[rstest]
+fn finds_nearest_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let outer_workspace = directory.path().join("Cargo.toml");
+    let workspace_directory = directory.path().join("nested-workspace");
+    let workspace = workspace_directory.join("Cargo.toml");
+    let member = workspace_directory.join("member");
+    std::fs::create_dir_all(&member)?;
+    std::fs::write(&outer_workspace, "[workspace]\nmembers = []\n")?;
+    std::fs::write(&workspace, "[workspace]\nmembers = []\n")?;
+    std::fs::write(
+        member.join("Cargo.toml"),
+        "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
+    )?;
+
+    assert_eq!(find_workspace_manifest(&member)?, workspace);
+    Ok(())
+}
+
+#[rstest]
+fn ignores_non_workspace_manifests() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let manifest = directory.path().join("Cargo.toml");
+    std::fs::write(
+        &manifest,
+        "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
+    )?;
+
+    assert!(!is_workspace_manifest(&manifest)?);
+    Ok(())
+}
+
+#[rstest]
+fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let nested = directory.path().join("member");
+    std::fs::create_dir(&nested)?;
+
+    let error = find_workspace_manifest(&nested)
+        .expect_err("a directory without a workspace manifest should fail");
+
+    assert_eq!(
+        error
+            .downcast_ref::<std::io::Error>()
+            .map(std::io::Error::kind),
+        Some(std::io::ErrorKind::NotFound)
+    );
+    Ok(())
 }
 
 proptest! {

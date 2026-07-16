@@ -1,10 +1,14 @@
-//! Pure parser-pin extraction shared by the build script and its tests.
+//! Pure parser-pin and workspace-manifest discovery shared by build.rs and tests.
 //!
 //! This module belongs exclusively to build-time validation. Runtime crate
 //! code must not import it; integration tests include it only to verify the
 //! manifest formats and rejection rules used by `build.rs`.
 
-use std::{error::Error, io};
+use std::{
+    error::Error,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 const PARSER_DEPENDENCY: &str = "ra_ap_syntax";
 
@@ -32,6 +36,23 @@ pub(crate) fn exact_version(requirement: &str) -> Result<&str, io::Error> {
         .ok_or_else(|| non_exact_workspace_dependency(requirement))
 }
 
+pub(crate) fn find_workspace_manifest(manifest_dir: &Path) -> Result<PathBuf, Box<dyn Error>> {
+    for directory in manifest_dir.ancestors() {
+        let candidate = directory.join("Cargo.toml");
+        if candidate.is_file() && is_workspace_manifest(&candidate)? {
+            return Ok(candidate);
+        }
+    }
+
+    Err(workspace_manifest_not_found(manifest_dir).into())
+}
+
+pub(crate) fn is_workspace_manifest(candidate: &Path) -> Result<bool, Box<dyn Error>> {
+    let manifest = fs::read_to_string(candidate)?;
+    let document = manifest.parse::<toml::Table>()?;
+    Ok(document.contains_key("workspace"))
+}
+
 fn missing_workspace_dependency() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
@@ -51,6 +72,16 @@ fn non_exact_workspace_dependency(requirement: &str) -> io::Error {
         io::ErrorKind::InvalidData,
         format!(
             "workspace dependency `{PARSER_DEPENDENCY}` must be exact-pinned, got `{requirement}`"
+        ),
+    )
+}
+
+fn workspace_manifest_not_found(manifest_dir: &Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::NotFound,
+        format!(
+            "could not find a parent Cargo.toml with a [workspace] table from `{}`",
+            manifest_dir.display()
         ),
     )
 }

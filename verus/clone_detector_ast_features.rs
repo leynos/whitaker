@@ -13,15 +13,20 @@ use vstd::prelude::*;
 
 verus! {
 
+/// Models one exact `(kind, depth)` entry emitted by runtime `KindCounts`.
 pub struct Contribution {
+    /// Parser-independent syntax-kind identifier.
     pub kind: nat,
+    /// Depth relative to the lowered AST root.
     pub depth: nat,
 }
 
+/// Reports whether a contribution belongs to the queried `KindCounts` bucket.
 pub open spec fn contribution_matches(contribution: Contribution, kind: nat, depth: nat) -> bool {
     contribution.kind == kind && contribution.depth == depth
 }
 
+/// Applies one contribution to the runtime model's exact count accumulator.
 pub open spec fn increment_count(
     accumulator: nat,
     contribution: Contribution,
@@ -35,6 +40,7 @@ pub open spec fn increment_count(
     }
 }
 
+/// Folds contributions from an existing accumulator for a queried count bucket.
 pub open spec fn fold_count_from(
     contributions: Seq<Contribution>,
     kind: nat,
@@ -55,10 +61,12 @@ pub open spec fn fold_count_from(
     }
 }
 
+/// Folds runtime-model contributions into the exact queried `KindCounts` count.
 pub open spec fn fold_count(contributions: Seq<Contribution>, kind: nat, depth: nat) -> nat {
     fold_count_from(contributions, kind, depth, 0nat)
 }
 
+/// Counts contributions matching one `(kind, depth)` bucket without an accumulator.
 pub open spec fn matching_count(contributions: Seq<Contribution>, kind: nat, depth: nat) -> nat
     decreases contributions.len()
 {
@@ -71,6 +79,7 @@ pub open spec fn matching_count(contributions: Seq<Contribution>, kind: nat, dep
     }
 }
 
+/// States that two contribution sequences have equal counts in every bucket.
 pub open spec fn same_contribution_multiset(
     left: Seq<Contribution>,
     right: Seq<Contribution>,

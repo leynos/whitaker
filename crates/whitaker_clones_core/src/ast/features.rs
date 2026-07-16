@@ -257,19 +257,23 @@ fn collect_trigrams(
 
 #[cfg(test)]
 mod tests {
+    //! Verifies exact fixed-point depth weights across representable depths.
+
     use proptest::prelude::*;
 
-    use super::{Depth, weighted_contribution};
+    use super::{Depth, depth_weight, weighted_contribution};
 
     proptest! {
         #[test]
-        fn each_representable_depth_one_count_increases_its_weight(
+        fn each_representable_count_increases_its_weight(
+            depth in 0_u16..64,
             count in 0_u32..u32::MAX
         ) {
-            let current_weight = weighted_contribution(Depth::new(1), count);
-            let increased_weight = weighted_contribution(Depth::new(1), count + 1);
+            let depth = Depth::new(depth);
+            let current_weight = weighted_contribution(depth, count);
+            let increased_weight = weighted_contribution(depth, count + 1);
 
-            prop_assert!(increased_weight > current_weight);
+            prop_assert_eq!(increased_weight - current_weight, depth_weight(depth));
         }
     }
 }
