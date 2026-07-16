@@ -3,10 +3,14 @@
 //! These scenarios exercise `detect_misordered_doc` to ensure doc comments
 //! continue to precede other outer attributes across common layouts.
 
-use super::{AttrInfo, OrderedAttribute, attribute_within_item, detect_misordered_doc};
+use super::{
+    AttrInfo, OrderedAttribute, attribute_within_item, detect_misordered_doc, parsed_attribute_span,
+};
 use rstest::fixture;
 use rstest::rstest;
 use rstest_bdd_macros::{given, scenario, then, when};
+use rustc_hir::attrs::AttributeKind as HirAttributeKind;
+use rustc_hir::attrs::{InlineAttr, OptimizeAttr};
 use rustc_span::{BytePos, DUMMY_SP, Span};
 use std::cell::RefCell;
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
@@ -190,4 +194,80 @@ fn scenario_handles_no_doc(world: AttributeWorld, result: Option<(usize, usize)>
 #[scenario(path = "tests/features/function_doc_order.feature", index = 3)]
 fn scenario_ignores_inner_attributes(world: AttributeWorld, result: Option<(usize, usize)>) {
     let _ = (world, result);
+}
+
+#[rstest]
+#[case::contained(test_span(15, 25), true)]
+#[case::exactly_preceding(test_span(5, 10), true)]
+#[case::overlapping_start(test_span(5, 15), false)]
+#[case::after_item(test_span(45, 50), false)]
+fn attribute_within_item_span_boundaries(#[case] attribute_span: Span, #[case] expected: bool) {
+    let item_span = test_span(10, 40);
+
+    let within = attribute_within_item(Some(attribute_span), Some(item_span), item_span);
+
+    assert_eq!(within, expected);
+}
+
+#[rstest]
+fn attribute_within_item_accepts_dummy_item_span() {
+    assert!(attribute_within_item(
+        Some(test_span(5, 10)),
+        None,
+        DUMMY_SP
+    ));
+}
+
+/// Covers every span-bearing recovery branch of `parsed_attribute_span`
+/// plus two non-recovered kinds, so diagnostics survive compiler span
+/// behaviour changes. `DocComment` needs interned symbols, so the cases
+/// are built inside the assertion loop rather than as `#[case]` values.
+#[rstest]
+fn parsed_attribute_span_recovers_whitelisted_kinds() {
+    let span = test_span(3, 9);
+    let recovered: Vec<(&str, HirAttributeKind)> = vec![
+        ("ignore", HirAttributeKind::Ignore { span, reason: None }),
+        ("inline", HirAttributeKind::Inline(InlineAttr::Hint, span)),
+        ("must_use", HirAttributeKind::MustUse { span, reason: None }),
+        ("naked", HirAttributeKind::Naked(span)),
+        ("no_mangle", HirAttributeKind::NoMangle(span)),
+        (
+            "optimize",
+            HirAttributeKind::Optimize(OptimizeAttr::Speed, span),
+        ),
+        (
+            "target_feature",
+            HirAttributeKind::TargetFeature {
+                features: Default::default(),
+                attr_span: span,
+                was_forced: false,
+            },
+        ),
+        ("track_caller", HirAttributeKind::TrackCaller(span)),
+    ];
+
+    for (name, kind) in &recovered {
+        assert_eq!(
+            parsed_attribute_span(kind),
+            Some(span),
+            "{name} should recover its user-written span"
+        );
+    }
+
+    // Recovery is a whitelist: `Cold` carries a span but is not
+    // recovered, and `ConstStabilityIndirect` has no span at all.
+    let not_recovered: Vec<(&str, HirAttributeKind)> = vec![
+        ("cold", HirAttributeKind::Cold(span)),
+        (
+            "const_stability_indirect",
+            HirAttributeKind::ConstStabilityIndirect,
+        ),
+    ];
+    for (name, kind) in &not_recovered {
+        assert_eq!(
+            parsed_attribute_span(kind),
+            None,
+            "{name} must not be treated as user-orderable"
+        );
+    }
 }

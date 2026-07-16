@@ -138,11 +138,13 @@ impl AttrInfo {
     /// `///` or `//!`). These have source spans pointing to actual code locations
     /// and are processed by this lint.
     ///
-    /// Other `Parsed` variants (Inline, Coverage, MustUse, etc.) represent
-    /// compiler-internal information derived from user attributes or generated
-    /// by macros. These don't have source spans corresponding to user-written
-    /// code and would produce misleading diagnostics if included, so we filter
-    /// them out.
+    /// `Parsed` variants with a recoverable user-written span (for example
+    /// `Inline` and `MustUse`; see `parsed_attribute_span` for the full
+    /// whitelist) are processed like their unparsed equivalents, so
+    /// attributes the compiler eagerly parses still participate in
+    /// ordering. Parsed kinds without a recoverable span return `None`
+    /// and are excluded: they are compiler-internal summaries whose
+    /// locations would produce misleading diagnostics.
     ///
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
@@ -413,6 +415,7 @@ trait OrderedAttribute {
     fn is_doc(&self) -> bool;
     fn span(&self) -> Span;
 }
+mod localization;
 mod localization;
 
 #[cfg(test)]
