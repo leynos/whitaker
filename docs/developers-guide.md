@@ -15,6 +15,9 @@ Whitaker itself. For using Whitaker lints in a project, see the
   cargo install cargo-dylint dylint-link
   ```
 
+  (`make publish-check` provisions these automatically at the pinned
+  versions; see [Pre-publish validation](publishing.md#pre-publish-validation).)
+
 CI also installs or provides job-specific tools such as `cargo-nextest`, `bun`,
 `uv`, Mermaid CLI, and Nixie before running the targets that need them. Local
 runs of those targets require the same tools on `PATH`.
