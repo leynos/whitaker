@@ -55,20 +55,25 @@ pub(super) fn emit_diagnostic(
     let highlighted = top_two_bumps(input.bumps);
     let bump_spans = build_bump_spans(cx, input.body_span, &input.function_lines, &highlighted);
 
-    cx.span_lint(BUMPY_ROAD_FUNCTION, input.primary_span, |lint| {
-        lint.primary_message(messages.primary().to_string());
-        lint.span_note(input.primary_span, messages.note().to_string());
+    cx.emit_span_lint(
+        BUMPY_ROAD_FUNCTION,
+        input.primary_span,
+        rustc_lint::errors::DiagDecorator(|lint| {
+            lint.primary_message(messages.primary().to_string());
+            lint.span_note(input.primary_span, messages.note().to_string());
 
-        for (ordinal, interval) in highlighted.iter().enumerate() {
-            let Some(span) = bump_spans.get(ordinal).copied().flatten() else {
-                continue;
-            };
-            let label = resolve_bump_label(localizer, (ordinal + 1) as i64, interval.len() as i64);
-            lint.span_label(span, label);
-        }
+            for (ordinal, interval) in highlighted.iter().enumerate() {
+                let Some(span) = bump_spans.get(ordinal).copied().flatten() else {
+                    continue;
+                };
+                let label =
+                    resolve_bump_label(localizer, (ordinal + 1) as i64, interval.len() as i64);
+                lint.span_label(span, label);
+            }
 
-        lint.help(messages.help().to_string());
-    });
+            lint.help(messages.help().to_string());
+        }),
+    );
 }
 
 fn build_bump_spans(

@@ -44,11 +44,15 @@ pub(crate) fn emit_diagnostic(
         fallback_messages(&receiver_label)
     });
 
-    cx.span_lint(NO_UNWRAP_OR_ELSE_PANIC, expr.span, |lint| {
-        lint.primary_message(messages.primary().to_string());
-        lint.span_note(receiver.span, messages.note().to_string());
-        lint.help(messages.help().to_string());
-    });
+    cx.emit_span_lint(
+        NO_UNWRAP_OR_ELSE_PANIC,
+        expr.span,
+        rustc_lint::errors::DiagDecorator(|lint| {
+            lint.primary_message(messages.primary().to_string());
+            lint.span_note(receiver.span, messages.note().to_string());
+            lint.help(messages.help().to_string());
+        }),
+    );
 }
 
 fn fallback_messages(receiver: &str) -> DiagnosticMessageSet {

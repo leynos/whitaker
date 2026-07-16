@@ -4,7 +4,6 @@ use super::*;
 use rstest::rstest;
 use rustc_ast::AttrStyle;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
-use rustc_span::symbol::Ident;
 use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 
 // -------------------------------------------------------------------------
@@ -14,7 +13,7 @@ use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
     let path_segments = segments
         .iter()
-        .map(|segment| Ident::from_str(segment))
+        .map(|segment| rustc_span::Symbol::intern(segment))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let attr_item = hir::AttrItem {

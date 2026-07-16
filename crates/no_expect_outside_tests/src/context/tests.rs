@@ -107,7 +107,7 @@ fn hir_attribute_from_segments(segments: PathSegments) -> hir::Attribute {
     let path_segments = segments
         .as_ref()
         .iter()
-        .map(|segment| Ident::from_str(segment))
+        .map(|segment| rustc_span::Symbol::intern(segment))
         .collect::<Vec<_>>()
         .into_boxed_slice();
     let attr_item = hir::AttrItem {
@@ -130,7 +130,7 @@ fn hir_attribute_from_segments(segments: PathSegments) -> hir::Attribute {
 fn hir_cfg_test_attribute() -> hir::Attribute {
     let attr_item = hir::AttrItem {
         path: hir::AttrPath {
-            segments: vec![Ident::from_str("cfg")].into_boxed_slice(),
+            segments: vec![rustc_span::Symbol::intern("cfg")].into_boxed_slice(),
             span: DUMMY_SP,
         },
         args: hir::AttrArgs::Delimited(DelimArgs {

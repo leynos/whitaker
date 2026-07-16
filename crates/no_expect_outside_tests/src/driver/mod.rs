@@ -153,11 +153,10 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let typing_env = ty::TypingEnv {
-        typing_mode: ty::TypingMode::non_body_analysis(),
-        param_env: cx.param_env,
-    };
-    let ty = cx.tcx.normalize_erasing_regions(typing_env, ty).peel_refs();
+    let ty = cx
+        .tcx
+        .normalize_erasing_regions(cx.typing_env(), ty::Unnormalized::new_wip(ty))
+        .peel_refs();
 
     let Some(adt) = ty.ty_adt_def() else {
         return false;

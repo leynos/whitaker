@@ -175,11 +175,15 @@ pub(crate) fn emit_diagnostic(
     let note = messages.note().to_string();
     let help = messages.help().to_string();
 
-    cx.span_lint(NO_EXPECT_OUTSIDE_TESTS, expr.span, move |lint| {
-        lint.primary_message(primary.clone());
-        lint.note(note.clone());
-        lint.help(help.clone());
-    });
+    cx.emit_span_lint(
+        NO_EXPECT_OUTSIDE_TESTS,
+        expr.span,
+        rustc_lint::errors::DiagDecorator(move |lint| {
+            lint.primary_message(primary.clone());
+            lint.note(note.clone());
+            lint.help(help.clone());
+        }),
+    );
 }
 
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_expect_outside_tests");

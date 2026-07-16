@@ -301,11 +301,15 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
         fallback_messages(module_name)
     });
 
-    cx.span_lint(MODULE_MUST_HAVE_INNER_DOCS, context.primary_span, |lint| {
-        lint.primary_message(messages.primary().to_string());
-        lint.span_note(context.header_span, messages.note().to_string());
-        lint.help(messages.help().to_string());
-    });
+    cx.emit_span_lint(
+        MODULE_MUST_HAVE_INNER_DOCS,
+        context.primary_span,
+        rustc_lint::errors::DiagDecorator(|lint| {
+            lint.primary_message(messages.primary().to_string());
+            lint.span_note(context.header_span, messages.note().to_string());
+            lint.help(messages.help().to_string());
+        }),
+    );
 }
 
 type ModuleDocMessages = DiagnosticMessageSet;

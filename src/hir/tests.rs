@@ -17,11 +17,12 @@
 
 use super::{recover_user_editable_hir_span, span_recovery_frames};
 use rstest::{fixture, rstest};
-use rustc_data_structures::stable_hasher::HashingControls;
-use rustc_span::def_id::{DefId, DefPathHash, LocalDefId};
+use rustc_data_structures::stable_hash::{
+    RawDefId, RawDefPathHash, RawSpan, StableHashControls, StableHashCtxt, StableHasher,
+};
 use rustc_span::edition::Edition;
 use rustc_span::hygiene::{ExpnData, ExpnKind, LocalExpnId, MacroKind, Transparency};
-use rustc_span::{BytePos, DUMMY_SP, Span, SpanData, StableSourceFileId, SyntaxContext, sym};
+use rustc_span::{BytePos, DUMMY_SP, Span, SyntaxContext, sym};
 use whitaker_common::SpanRecoveryFrame;
 
 fn test_span(lo: u32, hi: u32) -> Span {
@@ -31,33 +32,18 @@ fn test_span(lo: u32, hi: u32) -> Span {
 #[derive(Clone, Copy)]
 struct TestHashStableContext;
 
-impl rustc_span::HashStableContext for TestHashStableContext {
-    fn def_path_hash(&self, _def_id: DefId) -> DefPathHash {
-        DefPathHash::default()
+impl StableHashCtxt for TestHashStableContext {
+    fn stable_hash_span(&mut self, _span: RawSpan, _hasher: &mut StableHasher) {}
+
+    fn def_path_hash(&self, _def_id: RawDefId) -> RawDefPathHash {
+        RawDefPathHash([0; 16])
     }
 
-    fn hash_spans(&self) -> bool {
-        false
+    fn stable_hash_controls(&self) -> StableHashControls {
+        StableHashControls { hash_spans: false }
     }
 
-    fn unstable_opts_incremental_ignore_spans(&self) -> bool {
-        true
-    }
-
-    fn def_span(&self, _def_id: LocalDefId) -> Span {
-        DUMMY_SP
-    }
-
-    fn span_data_to_lines_and_cols(
-        &mut self,
-        _span: &SpanData,
-    ) -> Option<(StableSourceFileId, usize, BytePos, usize, BytePos)> {
-        None
-    }
-
-    fn hashing_controls(&self) -> HashingControls {
-        HashingControls { hash_spans: false }
-    }
+    fn assert_default_stable_hash_controls(&self, _msg: &str) {}
 }
 
 fn expanded_span(span: Span, call_site: Span) -> Span {
