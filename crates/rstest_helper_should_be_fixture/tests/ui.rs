@@ -49,31 +49,19 @@ fn example_harness_collects_call_site_evidence() {
         std::fs::read_to_string(&summary_path).expect("collection summary should be written");
     let _ = std::fs::remove_file(&summary_path);
 
-    assert!(summary.contains("callee_count=3"), "{summary}");
-    assert!(summary.contains("record_count=4"), "{summary}");
-    assert!(
-        summary.contains("callee=Builder::<'_>::build;records=1"),
-        "{summary}"
-    );
-    assert!(summary.contains("callee=helper;records=1"), "{summary}");
-    assert!(
-        summary.contains("callee=nested_helper;records=2"),
-        "{summary}"
-    );
-    assert!(
-        summary.contains(
-            "callee=nested_helper;records=2\nfingerprint=fixture-local\nfingerprint=unsupported"
-        ),
-        "{summary}"
-    );
-    assert!(
-        summary.contains("fingerprint=unsupported,fixture-local"),
-        "{summary}"
-    );
-    assert!(
-        summary.contains("fingerprint=fixture-local,fixture-local,const-path,const-path"),
-        "{summary}"
-    );
+    for expected in [
+        "callee_count=3",
+        "record_count=5",
+        "callee=Builder::<'_>::build;records=1",
+        "callee=helper;records=2",
+        "callee=nested_helper;records=2",
+        "callee=nested_helper;records=2\nfingerprint=fixture-local\nfingerprint=unsupported",
+        "fingerprint=unsupported,fixture-local",
+        "fingerprint=fixture-local,fixture-local,const-path,const-path",
+        "fingerprint=fixture-local,const-lit,const-path,const-path",
+    ] {
+        assert!(summary.contains(expected), "{summary}");
+    }
     assert!(!summary.contains("literal"), "{summary}");
 }
 #[test]

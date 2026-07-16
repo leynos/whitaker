@@ -1,4 +1,7 @@
-//! Zero-diagnostic fixture that exercises helper-call collection.
+//! Trybuild collection input for the `rstest_helper_should_be_fixture` UI suite.
+//!
+//! The integration harness compiles this source to retain diagnostic-silent
+//! coverage independently of the Cargo-backed collection summary assertions.
 
 use rstest::{fixture, rstest};
 

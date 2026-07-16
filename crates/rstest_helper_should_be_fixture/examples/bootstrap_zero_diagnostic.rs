@@ -1,4 +1,8 @@
-//! Zero-diagnostic fixture for the `rstest_helper_should_be_fixture` bootstrap.
+//! Cargo-backed bootstrap input for the Dylint UI harness.
+//!
+//! `tests/ui.rs::run_example` compiles this example through
+//! `dylint_testing::ui::Test::example` to retain zero-diagnostic coverage for
+//! basic `#[rstest]` macro expansion.
 #![feature(rustc_private)]
 
 use rstest::rstest;

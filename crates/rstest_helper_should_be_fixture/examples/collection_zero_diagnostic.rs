@@ -1,4 +1,8 @@
-//! Zero-diagnostic fixture that exercises helper-call collection.
+//! Cargo-backed collection input for the Dylint UI harness.
+//!
+//! `tests/ui.rs::run_example` compiles this example through
+//! `dylint_testing::ui::Test::example` and asserts its diagnostic-silent
+//! collector summary, including argument fingerprint shapes.
 #![feature(rustc_private)]
 
 use rstest::{fixture, rstest};
@@ -59,6 +63,9 @@ fn nested_helper(fixture: &str) -> &str {
 fn case_generated_collection_stays_silent(#[case] input: &str, fixture: &str) {
     let value = helper(fixture, input, PREFIX, SUFFIX);
     assert!(value.contains(input));
+
+    let literal = helper(fixture, "literal", PREFIX, SUFFIX);
+    assert_eq!(literal, "prefix-fixture-literal-suffix");
 
     let outer = || {
         let inner = || nested_helper(fixture);

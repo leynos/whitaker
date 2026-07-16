@@ -1026,16 +1026,17 @@ If `pub(crate)` test access is required by `rstest-bdd` steps, expose a
 method on `CallSiteCollector` and a similar accessor on
 `RstestHelperShouldBeFixture`. Do not promote these to the crate's public API.
 
-Dependencies expected from existing workspace pins:
+Dependencies in the landed contract:
 
-- `rustc_hir`, `rustc_lint`, `rustc_session`, `rustc_span` (already used by
-  the bootstrap driver),
-- `dylint_linting` (already used),
-- `serde`, `log`, `whitaker`, `whitaker-common` (already used),
-- `rstest`, `rstest-bdd`, `rstest-bdd-macros`, `proptest`, `insta`,
-  `dylint_testing` (already in workspace dev-dependencies).
+- workspace-pinned `rustc_ast`, `rustc_hir`, `rustc_lint`, `rustc_session`,
+  and `rustc_span` driver crates,
+- `dylint_linting`, `serde`, `log`, `whitaker`, and `whitaker-common`,
+- workspace dev-dependencies `rstest`, `rstest-bdd`, `rstest-bdd-macros`,
+  `proptest`, `insta`, and `dylint_testing`,
+- crate-local test-support dependencies `filetime` and `fs2`.
 
-No new third-party dependency is anticipated.
+No additional third-party dependency is required for the implemented 8.2.2
+contract.
 
 ## Revision note
 
