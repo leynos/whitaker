@@ -214,16 +214,38 @@ fn literal(kind: KindId) -> NormalisedNode {
     NormalisedNode::new(kind, Some(LeafClass::Literal), Vec::new())
 }
 
-proptest! {
-    #[test]
-    fn feature_functions_are_deterministic(root in normalised_node_strategy()) {
-        let tree = tree_with_root(root).expect("static test span should be valid");
+#[rstest]
+fn feature_functions_are_deterministic() -> AstResult<()> {
+    let first = feature_tree()?;
+    let second = feature_tree()?;
 
-        prop_assert_eq!(kind_counts(&tree), kind_counts(&tree));
-        prop_assert_eq!(kind_histogram(&tree), kind_histogram(&tree));
-        prop_assert_eq!(production_multiset(&tree), production_multiset(&tree));
-        prop_assert_eq!(canonical_hash(&tree), canonical_hash(&tree));
-    }
+    assert_eq!(kind_counts(&first), kind_counts(&second));
+    assert_eq!(kind_histogram(&first), kind_histogram(&second));
+    assert_eq!(production_multiset(&first), production_multiset(&second));
+    assert_eq!(canonical_hash(&first), canonical_hash(&second));
+    Ok(())
+}
+
+#[rstest]
+fn feature_functions_reflect_tree_contents() -> AstResult<()> {
+    let expected = feature_tree()?;
+    let distinct = tree_with_root(NormalisedNode::new(
+        KindId::new(9),
+        None,
+        vec![literal(KindId::new(8))],
+    ))?;
+
+    assert_ne!(kind_counts(&expected), kind_counts(&distinct));
+    assert_ne!(kind_histogram(&expected), kind_histogram(&distinct));
+    assert_ne!(
+        production_multiset(&expected),
+        production_multiset(&distinct)
+    );
+    assert_ne!(canonical_hash(&expected), canonical_hash(&distinct));
+    Ok(())
+}
+
+proptest! {
 
     #[test]
     fn count_and_production_features_ignore_sibling_visit_order(
