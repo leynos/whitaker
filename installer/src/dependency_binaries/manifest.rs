@@ -360,12 +360,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn find_dependency_binary_returns_matching_package() {
-        let tool = find_dependency_binary("cargo-dylint")
+    #[rstest]
+    #[case::cargo_dylint("cargo-dylint", "cargo-dylint", "6.0.1")]
+    #[case::dylint_link("dylint-link", "dylint-link", "6.0.1")]
+    fn find_dependency_binary_returns_matching_package(
+        #[case] package: &str,
+        #[case] binary: &str,
+        #[case] version: &str,
+    ) {
+        let tool = find_dependency_binary(package)
             .expect("embedded manifest should stay parseable")
             .expect("tool should exist");
-        assert_eq!(tool.binary(), "cargo-dylint");
-        assert_eq!(tool.version(), "6.0.1");
+        assert_eq!(tool.binary(), binary);
+        assert_eq!(tool.version(), version);
     }
 }
