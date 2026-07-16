@@ -5,7 +5,7 @@ Feature: Artefact packaging for rolling release
   Scenario: Package a single library file into a tar.zst archive
     Given a library file "libwhitaker_suite.so"
     And a git SHA "abc1234"
-    And a toolchain channel "nightly-2025-09-18"
+    And a toolchain channel "nightly-2026-05-28"
     And a target triple "x86_64-unknown-linux-gnu"
     When the artefact is packaged
     Then the archive exists with the expected ADR-001 filename
@@ -46,7 +46,7 @@ Feature: Artefact packaging for rolling release
   Scenario: Archive contains multiple library files
     Given library files "libfoo.so" and "libbar.so" and "libbaz.so"
     And a git SHA "abc1234"
-    And a toolchain channel "nightly-2025-09-18"
+    And a toolchain channel "nightly-2026-05-28"
     And a target triple "x86_64-unknown-linux-gnu"
     When the artefact is packaged
     Then the archive contains 3 library files
@@ -55,7 +55,7 @@ Feature: Artefact packaging for rolling release
   Scenario: Manifest files field lists all library basenames
     Given library files "libfoo.so" and "libbar.so"
     And a git SHA "abc1234"
-    And a toolchain channel "nightly-2025-09-18"
+    And a toolchain channel "nightly-2026-05-28"
     And a target triple "x86_64-unknown-linux-gnu"
     When the artefact is packaged
     And the manifest JSON is generated

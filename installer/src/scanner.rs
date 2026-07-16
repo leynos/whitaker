@@ -143,11 +143,11 @@ fn scan_toolchain_release(
 /// ```
 /// use whitaker_installer::scanner::parse_library_filename;
 ///
-/// let result = parse_library_filename("libmodule_max_lines@nightly-2025-09-18.so");
+/// let result = parse_library_filename("libmodule_max_lines@nightly-2026-05-28.so");
 /// assert!(result.is_some());
 /// let (crate_name, toolchain) = result.expect("valid library filename");
 /// assert_eq!(crate_name.as_str(), "module_max_lines");
-/// assert_eq!(toolchain, "nightly-2025-09-18");
+/// assert_eq!(toolchain, "nightly-2026-05-28");
 /// ```
 #[must_use]
 pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
@@ -256,14 +256,14 @@ mod tests {
 
     #[rstest]
     #[case::standard_linux(
-        "libmodule_max_lines@nightly-2025-09-18.so",
+        "libmodule_max_lines@nightly-2026-05-28.so",
         "module_max_lines",
-        "nightly-2025-09-18"
+        "nightly-2026-05-28"
     )]
     #[case::suite(
-        "libwhitaker_suite@nightly-2025-09-18.so",
+        "libwhitaker_suite@nightly-2026-05-28.so",
         "whitaker_suite",
-        "nightly-2025-09-18"
+        "nightly-2026-05-28"
     )]
     #[case::stable_toolchain(
         "libno_expect_outside_tests@stable-1.80.0.so",
@@ -287,10 +287,10 @@ mod tests {
 
     #[rstest]
     #[case::no_at_sign("libmodule_max_lines.so")]
-    #[case::empty_crate("lib@nightly-2025-09-18.so")]
+    #[case::empty_crate("lib@nightly-2026-05-28.so")]
     #[case::empty_toolchain("libmodule_max_lines@.so")]
-    #[case::wrong_prefix("module_max_lines@nightly-2025-09-18.so")]
-    #[case::wrong_extension("libmodule_max_lines@nightly-2025-09-18.dll")]
+    #[case::wrong_prefix("module_max_lines@nightly-2026-05-28.so")]
+    #[case::wrong_extension("libmodule_max_lines@nightly-2026-05-28.dll")]
     #[case::random_file("readme.txt")]
     fn parse_library_filename_invalid(#[case] filename: &str) {
         skip_unless_linux!();
@@ -378,7 +378,7 @@ mod tests {
         let target_dir = Utf8Path::from_path(temp.path()).expect("non-UTF8 path");
 
         // Create toolchain directory structure
-        let toolchain = "nightly-2025-09-18";
+        let toolchain = "nightly-2026-05-28";
         let release_dir = target_dir.join(toolchain).join("release");
         std::fs::create_dir_all(&release_dir).expect("failed to create dirs");
 

@@ -30,7 +30,7 @@ struct PackageCli {
     #[arg(long)]
     git_sha: String,
 
-    /// Rust toolchain channel (e.g. "nightly-2025-09-18").
+    /// Rust toolchain channel (e.g. "nightly-2026-05-28").
     #[arg(long)]
     toolchain: String,
 
@@ -257,7 +257,7 @@ mod tests {
         "--git-sha",
         "abc1234",
         "--toolchain",
-        "nightly-2025-09-18",
+        "nightly-2026-05-28",
         "--target",
         "x86_64-unknown-linux-gnu",
         "--output-dir",
@@ -282,7 +282,7 @@ mod tests {
     fn cli_parses_all_required_args() {
         let cli = PackageCli::parse_from(cli_args(&["/tmp/libfoo.so", "/tmp/libbar.so"]));
         assert_eq!(cli.git_sha, "abc1234");
-        assert_eq!(cli.toolchain, "nightly-2025-09-18");
+        assert_eq!(cli.toolchain, "nightly-2026-05-28");
         assert_eq!(cli.target, "x86_64-unknown-linux-gnu");
         assert_eq!(cli.output_dir, PathBuf::from("/tmp/dist"));
         assert_eq!(cli.library_files.len(), 2);

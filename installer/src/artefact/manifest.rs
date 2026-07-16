@@ -51,10 +51,10 @@ pub struct ManifestContent {
 /// {
 ///   "git_sha": "abc1234",
 ///   "schema_version": 1,
-///   "toolchain": "nightly-2025-09-18",
+///   "toolchain": "nightly-2026-05-28",
 ///   "target": "x86_64-unknown-linux-gnu",
 ///   "generated_at": "2026-02-03T00:00:00Z",
-///   "files": ["libwhitaker_lints@nightly-2025-09-18-x86_64-unknown-linux-gnu.so"],
+///   "files": ["libwhitaker_lints@nightly-2026-05-28-x86_64-unknown-linux-gnu.so"],
 ///   "sha256": "..."
 /// }
 /// ```
@@ -74,7 +74,7 @@ pub struct ManifestContent {
 /// let provenance = ManifestProvenance {
 ///     git_sha: GitSha::try_from("abc1234").expect("valid git SHA"),
 ///     schema_version: SchemaVersion::current(),
-///     toolchain: ToolchainChannel::try_from("nightly-2025-09-18")
+///     toolchain: ToolchainChannel::try_from("nightly-2026-05-28")
 ///         .expect("valid toolchain channel"),
 ///     target: TargetTriple::try_from("x86_64-unknown-linux-gnu")
 ///         .expect("valid target triple"),
@@ -163,7 +163,7 @@ macro_rules! _manifest_doc_setup {
         let provenance = ManifestProvenance {
             git_sha: GitSha::try_from("abc1234").expect("valid git SHA"),
             schema_version: SchemaVersion::current(),
-            toolchain: ToolchainChannel::try_from("nightly-2025-09-18")
+            toolchain: ToolchainChannel::try_from("nightly-2026-05-28")
                 .expect("valid toolchain channel"),
             target: TargetTriple::try_from("x86_64-unknown-linux-gnu")
                 .expect("valid target triple"),
@@ -226,7 +226,7 @@ impl Manifest {
     ///
     /// ```
     /// whitaker_installer::_manifest_doc_setup!(manifest);
-    /// assert_eq!(manifest.toolchain().as_str(), "nightly-2025-09-18");
+    /// assert_eq!(manifest.toolchain().as_str(), "nightly-2026-05-28");
     /// ```
     #[must_use]
     pub fn toolchain(&self) -> &ToolchainChannel {

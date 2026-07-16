@@ -32,7 +32,7 @@ Feature: Prebuilt artefact download and verification
 
   Scenario: Toolchain mismatch triggers fallback
     Given a valid manifest with toolchain "nightly-2025-01-01"
-    And the expected toolchain is "nightly-2025-09-18"
+    And the expected toolchain is "nightly-2026-05-28"
     When prebuilt download is attempted
     Then the prebuilt result is fallback
     And the fallback reason mentions "toolchain mismatch"

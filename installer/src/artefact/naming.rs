@@ -28,7 +28,7 @@ const ARTEFACT_EXTENSION: &str = ".tar.zst";
 /// use whitaker_installer::artefact::target::TargetTriple;
 ///
 /// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
-/// let toolchain: ToolchainChannel = "nightly-2025-09-18"
+/// let toolchain: ToolchainChannel = "nightly-2026-05-28"
 ///     .try_into()
 ///     .expect("valid toolchain channel");
 /// let target: TargetTriple = "x86_64-unknown-linux-gnu"
@@ -38,7 +38,7 @@ const ARTEFACT_EXTENSION: &str = ".tar.zst";
 /// let name = ArtefactName::new(sha, toolchain, target);
 /// assert_eq!(
 ///     name.to_string(),
-///     "whitaker-lints-abc1234-nightly-2025-09-18-x86_64-unknown-linux-gnu.tar.zst"
+///     "whitaker-lints-abc1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
 /// );
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,7 +103,7 @@ mod tests {
     fn sample_name() -> ArtefactName {
         ArtefactName::new(
             GitSha::try_from("abc1234").expect("valid sha"),
-            ToolchainChannel::try_from("nightly-2025-09-18").expect("valid channel"),
+            ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel"),
             TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
         )
     }
@@ -113,7 +113,7 @@ mod tests {
         assert_eq!(
             sample_name.to_string(),
             concat!(
-                "whitaker-lints-abc1234-nightly-2025-09-18",
+                "whitaker-lints-abc1234-nightly-2026-05-28",
                 "-x86_64-unknown-linux-gnu.tar.zst"
             )
         );
@@ -127,14 +127,14 @@ mod tests {
     #[rstest]
     fn accessors_return_components(sample_name: ArtefactName) {
         assert_eq!(sample_name.git_sha().as_str(), "abc1234");
-        assert_eq!(sample_name.toolchain().as_str(), "nightly-2025-09-18");
+        assert_eq!(sample_name.toolchain().as_str(), "nightly-2026-05-28");
         assert_eq!(sample_name.target().as_str(), "x86_64-unknown-linux-gnu");
     }
 
     #[rstest]
     fn different_targets_produce_different_names() {
         let sha = GitSha::try_from("abc1234").expect("valid");
-        let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("valid");
+        let ch = ToolchainChannel::try_from("nightly-2026-05-28").expect("valid");
 
         let linux = ArtefactName::new(
             sha.clone(),

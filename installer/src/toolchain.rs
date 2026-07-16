@@ -229,10 +229,10 @@ impl Toolchain {
 ///
 /// let contents = r#"
 /// [toolchain]
-/// channel = "nightly-2025-09-18"
+/// channel = "nightly-2026-05-28"
 /// "#;
 /// let channel = parse_toolchain_channel(contents).unwrap();
-/// assert_eq!(channel, "nightly-2025-09-18");
+/// assert_eq!(channel, "nightly-2026-05-28");
 /// ```
 ///
 /// # Errors

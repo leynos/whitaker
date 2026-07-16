@@ -40,7 +40,7 @@ fn given_built_library(staging_world: &StagingWorld) {
 fn given_staging_dir(staging_world: &StagingWorld) {
     staging_world
         .toolchain
-        .replace("nightly-2025-09-18".to_owned());
+        .replace("nightly-2026-05-28".to_owned());
 }
 
 #[when("the library is staged")]
@@ -62,7 +62,7 @@ fn when_library_staged(staging_world: &StagingWorld) {
 #[then("the staged filename includes the toolchain")]
 fn then_staged_includes_toolchain(staging_world: &StagingWorld) {
     let name = staging_world.staged_name.borrow();
-    assert!(name.contains("nightly-2025-09-18"));
+    assert!(name.contains("nightly-2026-05-28"));
     assert!(name.contains("module_max_lines"));
 }
 
@@ -114,7 +114,7 @@ mod staging_failure {
         let dir_path = temp_dir.path();
 
         // Create the nested staging path structure that Stager expects.
-        let staging_path = dir_path.join("nightly-2025-09-18").join("release");
+        let staging_path = dir_path.join("nightly-2026-05-28").join("release");
         fs::create_dir_all(&staging_path).expect("failed to create staging path");
 
         // Make the directory read-only (no write permission).
@@ -126,7 +126,7 @@ mod staging_failure {
 
         let utf8_path =
             Utf8PathBuf::try_from(dir_path.to_path_buf()).expect("temp dir path not UTF-8");
-        let stager = Stager::new(utf8_path, "nightly-2025-09-18");
+        let stager = Stager::new(utf8_path, "nightly-2026-05-28");
 
         staging_failure_world.stager.replace(Some(stager));
         staging_failure_world._temp_dir.replace(Some(temp_dir));

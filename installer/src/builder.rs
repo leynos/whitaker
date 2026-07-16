@@ -238,7 +238,7 @@ mod tests {
             config: BuildConfig {
                 toolchain: Toolchain::with_override(
                     &Utf8PathBuf::from("/tmp/test"),
-                    "nightly-2025-09-18",
+                    "nightly-2026-05-28",
                 ),
                 target_dir: Utf8PathBuf::from("/tmp/target"),
                 jobs: None,

@@ -29,12 +29,12 @@ pub(super) struct FailureSetup<'a> {
     pub(super) additional_components: &'a [&'a str],
 }
 
-/// A typed toolchain channel identifier (e.g. `"nightly-2025-09-18"`).
+/// A typed toolchain channel identifier (e.g. `"nightly-2026-05-28"`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ToolchainChannel<'a>(pub(super) &'a str);
 
 impl<'a> ToolchainChannel<'a> {
-    /// Returns the inner channel string slice (e.g. `"nightly-2025-09-18"`).
+    /// Returns the inner channel string slice (e.g. `"nightly-2026-05-28"`).
     pub(super) fn as_str(self) -> &'a str {
         self.0
     }

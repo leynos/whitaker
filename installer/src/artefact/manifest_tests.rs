@@ -9,7 +9,7 @@ fn sample_provenance() -> ManifestProvenance {
     ManifestProvenance {
         git_sha: GitSha::try_from("abc1234").expect("valid sha"),
         schema_version: SchemaVersion::current(),
-        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid channel"),
+        toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel"),
         target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
     }
 }
@@ -18,7 +18,7 @@ fn sample_provenance() -> ManifestProvenance {
 fn sample_content() -> ManifestContent {
     ManifestContent {
         generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
-        files: vec!["libwhitaker_lints@nightly-2025-09-18-x86_64-unknown-linux-gnu.so".to_owned()],
+        files: vec!["libwhitaker_lints@nightly-2026-05-28-x86_64-unknown-linux-gnu.so".to_owned()],
         sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid digest"),
     }
 }
@@ -35,7 +35,7 @@ fn sample_manifest(
 fn accessors_return_all_fields(sample_manifest: Manifest) {
     assert_eq!(sample_manifest.git_sha().as_str(), "abc1234");
     assert_eq!(sample_manifest.schema_version().as_u32(), 1);
-    assert_eq!(sample_manifest.toolchain().as_str(), "nightly-2025-09-18");
+    assert_eq!(sample_manifest.toolchain().as_str(), "nightly-2026-05-28");
     assert_eq!(
         sample_manifest.target().as_str(),
         "x86_64-unknown-linux-gnu"
@@ -78,7 +78,7 @@ fn serialized_json_contains_all_adr_001_keys(sample_manifest: Manifest) {
     assert_eq!(obj.get("schema_version").and_then(Value::as_u64), Some(1));
     assert_eq!(
         obj.get("toolchain").and_then(Value::as_str),
-        Some("nightly-2025-09-18")
+        Some("nightly-2026-05-28")
     );
     assert_eq!(
         obj.get("target").and_then(Value::as_str),
@@ -97,7 +97,7 @@ fn manifest_with_multiple_files() {
     let provenance = ManifestProvenance {
         git_sha: GitSha::try_from("deadbeef").expect("valid"),
         schema_version: SchemaVersion::current(),
-        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+        toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"),
         target: TargetTriple::try_from("aarch64-apple-darwin").expect("valid"),
     };
     let content = ManifestContent {
@@ -121,7 +121,7 @@ fn serde_round_trip(sample_manifest: Manifest) {
     r#"{
         "git_sha": "abc1234",
         "schema_version": 1,
-        "toolchain": "nightly-2025-09-18",
+        "toolchain": "nightly-2026-05-28",
         "target": "wasm32-unknown-unknown",
         "generated_at": "2026-02-03T00:00:00Z",
         "files": ["lib.so"],

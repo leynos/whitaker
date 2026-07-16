@@ -156,7 +156,7 @@ fn given_packaged_artefact(world: &mut PackagingWorld) {
     fs::write(&path, b"fake library").expect("write");
     world.library_files.push(path);
     world.git_sha = Some(GitSha::try_from("abc1234").expect("valid"));
-    world.toolchain = Some(ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"));
+    world.toolchain = Some(ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"));
     world.target = Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"));
     run_packaging(world);
 }
@@ -212,7 +212,7 @@ fn then_valid_hex(world: &mut PackagingWorld) {
 fn given_no_files(world: &mut PackagingWorld) {
     world.library_files.clear();
     world.git_sha = Some(GitSha::try_from("abc1234").expect("valid"));
-    world.toolchain = Some(ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"));
+    world.toolchain = Some(ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"));
     world.target = Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"));
 }
 

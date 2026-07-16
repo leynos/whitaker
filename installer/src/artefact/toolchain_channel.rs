@@ -3,23 +3,23 @@
 //! Validates that the channel string is non-empty and contains only
 //! ASCII alphanumeric characters, hyphens, dots, and underscores — the
 //! characters permitted in Rust toolchain channel specifiers, including
-//! host-qualified names such as `nightly-2025-09-18-x86_64-unknown-linux-gnu`.
+//! host-qualified names such as `nightly-2026-05-28-x86_64-unknown-linux-gnu`.
 
 use super::error::{ArtefactError, Result};
 use serde::Serialize;
 use std::fmt;
 
-/// A validated Rust toolchain channel string (e.g. `nightly-2025-09-18`).
+/// A validated Rust toolchain channel string (e.g. `nightly-2026-05-28`).
 ///
 /// # Examples
 ///
 /// ```
 /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 ///
-/// let channel: ToolchainChannel = "nightly-2025-09-18"
+/// let channel: ToolchainChannel = "nightly-2026-05-28"
 ///     .try_into()
 ///     .expect("valid toolchain channel");
-/// assert_eq!(channel.as_str(), "nightly-2025-09-18");
+/// assert_eq!(channel.as_str(), "nightly-2026-05-28");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
@@ -27,7 +27,7 @@ pub struct ToolchainChannel(String);
 
 /// Check that every byte is ASCII alphanumeric, a hyphen, a dot, or an
 /// underscore.  Underscores appear in host-qualified toolchain names
-/// (e.g. `nightly-2025-09-18-x86_64-unknown-linux-gnu`).
+/// (e.g. `nightly-2026-05-28-x86_64-unknown-linux-gnu`).
 fn is_valid_channel_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_'
 }
@@ -57,11 +57,11 @@ impl ToolchainChannel {
     /// ```
     /// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
     ///
-    /// let channel: ToolchainChannel = "nightly-2025-09-18"
+    /// let channel: ToolchainChannel = "nightly-2026-05-28"
     ///     .try_into()
     ///     .expect("valid toolchain channel");
     /// let inner: String = channel.into_inner();
-    /// assert_eq!(inner, "nightly-2025-09-18");
+    /// assert_eq!(inner, "nightly-2026-05-28");
     /// ```
     #[must_use]
     pub fn into_inner(self) -> String {
@@ -125,10 +125,10 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case::nightly_with_date("nightly-2025-09-18")]
+    #[case::nightly_with_date("nightly-2026-05-28")]
     #[case::stable("stable")]
     #[case::version_with_dots("1.75.0")]
-    #[case::host_qualified("nightly-2025-09-18-x86_64-unknown-linux-gnu")]
+    #[case::host_qualified("nightly-2026-05-28-x86_64-unknown-linux-gnu")]
     fn accepts_valid_channel(#[case] input: &str) {
         let ch = ToolchainChannel::try_from(input).expect("expected valid channel");
         assert_eq!(ch.as_str(), input);
@@ -149,19 +149,19 @@ mod tests {
 
     #[test]
     fn display_shows_inner_value() {
-        let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("known good");
-        assert_eq!(format!("{ch}"), "nightly-2025-09-18");
+        let ch = ToolchainChannel::try_from("nightly-2026-05-28").expect("known good");
+        assert_eq!(format!("{ch}"), "nightly-2026-05-28");
     }
 
     #[test]
     fn from_owned_string_accepts_valid() {
-        let ch = ToolchainChannel::try_from(String::from("nightly-2025-09-18"));
+        let ch = ToolchainChannel::try_from(String::from("nightly-2026-05-28"));
         assert!(ch.is_ok());
     }
 
     #[test]
     fn serde_round_trip() {
-        let ch = ToolchainChannel::try_from("nightly-2025-09-18").expect("valid");
+        let ch = ToolchainChannel::try_from("nightly-2026-05-28").expect("valid");
         let json = serde_json::to_string(&ch).expect("serialize");
         let back: ToolchainChannel = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(ch, back);

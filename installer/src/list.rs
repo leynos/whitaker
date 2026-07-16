@@ -286,20 +286,20 @@ mod tests {
 
     #[rstest]
     #[case::json_format(true, &["toolchains", "\"active\""])]
-    #[case::human_format(false, &["nightly-2025-09-18", "whitaker_suite"])]
+    #[case::human_format(false, &["nightly-2026-05-28", "whitaker_suite"])]
     fn run_list_with_installed_library_includes_expected_output(
         temp_target: TempTarget,
         #[case] json: bool,
         #[case] expected: &[&str],
     ) {
-        create_mock_library(&temp_target.path, "nightly-2025-09-18");
+        create_mock_library(&temp_target.path, "nightly-2026-05-28");
         let args = ListArgs {
             json,
             target_dir: Some(temp_target.path.clone()),
         };
         let mut stdout = Vec::new();
 
-        let result = run_list_with(&args, &mut stdout, || Some("nightly-2025-09-18".to_owned()));
+        let result = run_list_with(&args, &mut stdout, || Some("nightly-2026-05-28".to_owned()));
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
@@ -315,7 +315,7 @@ mod tests {
     fn run_list_finds_prebuilt_layout_libraries(temp_target: TempTarget) {
         create_mock_prebuilt_library(
             &temp_target.path,
-            "nightly-2025-09-18",
+            "nightly-2026-05-28",
             "x86_64-unknown-linux-gnu",
         );
         let args = ListArgs {
@@ -324,11 +324,11 @@ mod tests {
         };
         let mut stdout = Vec::new();
 
-        let result = run_list_with(&args, &mut stdout, || Some("nightly-2025-09-18".to_owned()));
+        let result = run_list_with(&args, &mut stdout, || Some("nightly-2026-05-28".to_owned()));
 
         assert!(result.is_ok(), "expected success, got: {result:?}");
         let output = String::from_utf8_lossy(&stdout);
-        assert!(output.contains("nightly-2025-09-18"), "got: {output}");
+        assert!(output.contains("nightly-2026-05-28"), "got: {output}");
         assert!(output.contains("whitaker_suite"), "got: {output}");
     }
 
@@ -368,7 +368,7 @@ mod tests {
     ) {
         // Create a rust-toolchain.toml file
         let toolchain_content = r#"[toolchain]
-channel = "nightly-2025-09-18"
+channel = "nightly-2026-05-28"
 "#;
         fs::write(
             temp_target.path.join("rust-toolchain.toml"),
@@ -378,7 +378,7 @@ channel = "nightly-2025-09-18"
 
         let result = detect_active_toolchain_in(&temp_target.path);
 
-        assert_eq!(result, Some("nightly-2025-09-18".to_owned()));
+        assert_eq!(result, Some("nightly-2026-05-28".to_owned()));
     }
 
     // -------------------------------------------------------------------------
