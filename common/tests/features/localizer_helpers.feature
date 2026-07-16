@@ -1,4 +1,4 @@
-Feature: Localiser helpers
+Feature: Localizer helpers
   Lint helpers should resolve consistent locales and provide deterministic
   fallbacks when localization data is missing.
 

@@ -1,5 +1,5 @@
 Feature: Localization loader
-  Whitaker lints require localised diagnostics with predictable fallbacks.
+  Whitaker lints require localized diagnostics with predictable fallbacks.
 
   Scenario: Falling back to the bundled locale when no preference is provided
     Given no locale preference
