@@ -2358,6 +2358,7 @@ version = "0.2.6"
 dependencies = [
  "dylint_linting",
  "dylint_testing",
+ "filetime",
  "fs2",
  "log",
  "proptest",
