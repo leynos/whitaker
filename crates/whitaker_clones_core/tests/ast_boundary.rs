@@ -105,35 +105,46 @@ fn use_trees(contents: &str) -> Vec<Vec<&str>> {
 }
 
 fn non_comment_tokens(contents: &str) -> Vec<&str> {
+    let raw_tokens = non_comment_lexemes(contents);
+    coalesce_path_separators(&raw_tokens)
+}
+
+fn non_comment_lexemes(contents: &str) -> Vec<&str> {
     let mut offset = 0;
-    let raw_tokens = tokenize(contents)
+    tokenize(contents)
         .filter_map(|token| {
             let end = offset + token.len;
             let lexeme = &contents[offset..end];
             offset = end;
-            (!lexeme.trim().is_empty()
-                && !lexeme.starts_with("//")
-                && !lexeme.starts_with("/*")
-                && !lexeme.starts_with('"')
-                && !lexeme.starts_with("r\"")
-                && !lexeme.starts_with("r#"))
-            .then_some(lexeme)
+            is_non_comment_lexeme(lexeme).then_some(lexeme)
         })
-        .collect::<Vec<_>>();
-    let mut tokens = Vec::new();
+        .collect()
+}
+
+fn is_non_comment_lexeme(lexeme: &str) -> bool {
+    !lexeme.trim().is_empty()
+        && !lexeme.starts_with("//")
+        && !lexeme.starts_with("/*")
+        && !lexeme.starts_with('"')
+        && !lexeme.starts_with("r\"")
+        && !lexeme.starts_with("r#")
+}
+
+fn coalesce_path_separators<'a>(tokens: &[&'a str]) -> Vec<&'a str> {
+    let mut coalesced = Vec::new();
     let mut index = 0;
 
-    while index < raw_tokens.len() {
-        if raw_tokens[index] == ":" && raw_tokens.get(index + 1) == Some(&":") {
-            tokens.push("::");
+    while index < tokens.len() {
+        if tokens[index] == ":" && tokens.get(index + 1) == Some(&":") {
+            coalesced.push("::");
             index += 2;
         } else {
-            tokens.push(raw_tokens[index]);
+            coalesced.push(tokens[index]);
             index += 1;
         }
     }
 
-    tokens
+    coalesced
 }
 
 fn imports_crate(import: &[&str], forbidden: &str) -> bool {
@@ -173,6 +184,21 @@ fn forbidden_crate_import_forms_are_detected(#[case] source: &str) {
 #[case::string("const EXAMPLE: &str = \"use ra_ap_syntax::SyntaxNode;\";")]
 fn non_import_text_does_not_trigger_the_boundary_guard(#[case] source: &str) {
     assert!(use_trees(source).is_empty());
+}
+
+#[test]
+fn non_comment_tokens_discard_comments_and_strings_but_keep_paths() {
+    let tokens = non_comment_tokens(
+        "// hidden_comment\nconst HIDDEN: &str = \"hidden string\";\nuse crate::ast::tree::ByteSpan;",
+    );
+
+    assert!(!tokens.iter().any(|token| token.contains("hidden_comment")));
+    assert!(!tokens.iter().any(|token| token.contains("hidden string")));
+    assert!(contains_path(
+        &tokens,
+        &["crate", "::", "ast", "::", "tree", "::", "ByteSpan"],
+    ));
+    assert!(tokens.contains(&"use"));
 }
 
 #[rstest]
