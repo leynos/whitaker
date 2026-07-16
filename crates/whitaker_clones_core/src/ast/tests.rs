@@ -57,10 +57,15 @@ fn deeply_nested_trees_extract_features_and_hash_without_recursion() -> AstResul
 fn kind_counts_record_depth_resolved_counts() -> AstResult<()> {
     let counts = kind_counts(&feature_tree()?);
 
-    assert_eq!(counts.count(KindId::new(1), Depth::root()), 1);
-    assert_eq!(counts.count(KindId::new(2), Depth::new(1)), 1);
-    assert_eq!(counts.count(KindId::new(2), Depth::new(2)), 1);
-    assert_eq!(counts.count(KindId::new(4), Depth::new(2)), 1);
+    let expected = [
+        (KindId::new(1), Depth::root(), 1),
+        (KindId::new(2), Depth::new(1), 1),
+        (KindId::new(2), Depth::new(2), 1),
+        (KindId::new(3), Depth::new(1), 1),
+        (KindId::new(4), Depth::new(2), 1),
+    ];
+
+    assert_eq!(counts.iter().collect::<Vec<_>>(), expected);
 
     Ok(())
 }
