@@ -1,6 +1,6 @@
 [package]
 name = "rstest_helper_should_be_fixture"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2024"
 publish = false
 description = "Dylint lint that bootstraps rstest helper fixture extraction checks"
