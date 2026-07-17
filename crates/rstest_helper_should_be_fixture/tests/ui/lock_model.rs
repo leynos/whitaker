@@ -180,35 +180,72 @@ impl LockModel {
         before: &Self,
         operation: LockOperation,
     ) -> Result<(), String> {
-        if let Some((cleaner, owner)) = self.last_owner_aware_removal
-            && cleaner != owner
-        {
-            return Err("owner-aware cleanup removed a different owner".to_owned());
-        }
-
-        if self.last_cleanup_failed
-            && self.liveness_owner.is_some()
-            && self.liveness_owner != before.liveness_owner
-        {
-            return Err("failed cleanup transferred liveness ownership".to_owned());
-        }
-
-        if matches!(operation, LockOperation::RecoverStale)
-            && before.liveness_owner.is_some()
-            && before.directory.is_some()
-            && self.directory != before.directory
-        {
-            return Err("stale recovery removed a live owner's directory".to_owned());
-        }
-
-        if self.liveness_owner.is_none()
-            && before.liveness_owner.is_some()
-            && !self.last_release_followed_cleanup
-        {
-            return Err("liveness released before owner-aware cleanup".to_owned());
-        }
-
+        self.assert_owner_aware_cleanup_matches_owner()?;
+        self.assert_failed_cleanup_preserves_liveness(before)?;
+        self.assert_stale_recovery_preserves_live_directory(before, operation)?;
+        self.assert_liveness_release_follows_cleanup(before)?;
         Ok(())
+    }
+
+    fn assert_owner_aware_cleanup_matches_owner(&self) -> Result<(), String> {
+        let Some((cleaner, owner)) = self.last_owner_aware_removal else {
+            return Ok(());
+        };
+        if cleaner == owner {
+            return Ok(());
+        }
+
+        Err("owner-aware cleanup removed a different owner".to_owned())
+    }
+
+    fn assert_failed_cleanup_preserves_liveness(&self, before: &Self) -> Result<(), String> {
+        if !self.last_cleanup_failed {
+            return Ok(());
+        }
+
+        let Some(liveness_owner) = self.liveness_owner else {
+            return Ok(());
+        };
+        if Some(liveness_owner) == before.liveness_owner {
+            return Ok(());
+        }
+
+        Err("failed cleanup transferred liveness ownership".to_owned())
+    }
+
+    fn assert_stale_recovery_preserves_live_directory(
+        &self,
+        before: &Self,
+        operation: LockOperation,
+    ) -> Result<(), String> {
+        if !matches!(operation, LockOperation::RecoverStale) {
+            return Ok(());
+        }
+        if before.liveness_owner.is_none() {
+            return Ok(());
+        }
+        if before.directory.is_none() {
+            return Ok(());
+        }
+        if self.directory == before.directory {
+            return Ok(());
+        }
+
+        Err("stale recovery removed a live owner's directory".to_owned())
+    }
+
+    fn assert_liveness_release_follows_cleanup(&self, before: &Self) -> Result<(), String> {
+        if self.liveness_owner.is_some() {
+            return Ok(());
+        }
+        if before.liveness_owner.is_none() {
+            return Ok(());
+        }
+        if self.last_release_followed_cleanup {
+            return Ok(());
+        }
+
+        Err("liveness released before owner-aware cleanup".to_owned())
     }
 }
 
