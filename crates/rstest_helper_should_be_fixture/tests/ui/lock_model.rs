@@ -180,14 +180,13 @@ impl LockModel {
         before: &Self,
         operation: LockOperation,
     ) -> Result<(), String> {
-        self.assert_owner_aware_cleanup_matches_owner()?;
-        self.assert_failed_cleanup_preserves_liveness(before)?;
+        self.assert_owner_aware_cleanup_keeps_owner()?;
+        self.assert_failed_cleanup_preserves_liveness_owner(before)?;
         self.assert_stale_recovery_preserves_live_directory(before, operation)?;
-        self.assert_liveness_release_follows_cleanup(before)?;
-        Ok(())
+        self.assert_liveness_release_follows_cleanup(before)
     }
 
-    fn assert_owner_aware_cleanup_matches_owner(&self) -> Result<(), String> {
+    fn assert_owner_aware_cleanup_keeps_owner(&self) -> Result<(), String> {
         let Some((cleaner, owner)) = self.last_owner_aware_removal else {
             return Ok(());
         };
@@ -198,7 +197,7 @@ impl LockModel {
         Err("owner-aware cleanup removed a different owner".to_owned())
     }
 
-    fn assert_failed_cleanup_preserves_liveness(&self, before: &Self) -> Result<(), String> {
+    fn assert_failed_cleanup_preserves_liveness_owner(&self, before: &Self) -> Result<(), String> {
         if !self.last_cleanup_failed {
             return Ok(());
         }
