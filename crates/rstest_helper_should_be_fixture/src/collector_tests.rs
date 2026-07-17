@@ -7,6 +7,7 @@
 //! without constructing a rustc lint context.
 
 use rstest::rstest;
+use rustc_hir::ItemLocalId;
 use rustc_hir::def_id::{DefId, DefIndex};
 use rustc_span::{BytePos, DUMMY_SP, FileName, Span};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
@@ -57,6 +58,26 @@ fn collector_records_calls_by_source_span(
 }
 
 #[test]
+fn collector_keeps_macro_only_calls_with_distinct_hir_ids() {
+    let mut collector = CallSiteCollector::default();
+    let callee = def_id(1);
+
+    let inserted = [
+        collector.record(
+            record(callee),
+            location_with_hir_id("crate::helper", BytePos(10), BytePos(18), 1),
+        ),
+        collector.record(
+            record(callee),
+            location_with_hir_id("crate::helper", BytePos(10), BytePos(18), 2),
+        ),
+    ];
+
+    assert_eq!(inserted, [true, true]);
+    assert_eq!(collector.record_count(), 2);
+}
+
+#[test]
 fn literal_lowering_records_const_lit_atom() {
     assert_eq!(
         literal_text_atom("\"literal\"".to_string()),
@@ -100,7 +121,21 @@ fn def_id(index: u32) -> DefId {
 }
 
 fn location(callee: &str, lo: BytePos, hi: BytePos) -> CallSiteLocation {
-    CallSiteLocation::new(callee.to_string(), source_file(), lo, hi)
+    location_with_hir_id(callee, lo, hi, 0)
+}
+
+fn location_with_hir_id(
+    callee: &str,
+    lo: BytePos,
+    hi: BytePos,
+    hir_local_id: u32,
+) -> CallSiteLocation {
+    CallSiteLocation::new(
+        callee.to_string(),
+        source_file(),
+        Span::with_root_ctxt(lo, hi),
+        ItemLocalId::from_u32(hir_local_id),
+    )
 }
 
 fn source_file() -> FileName {

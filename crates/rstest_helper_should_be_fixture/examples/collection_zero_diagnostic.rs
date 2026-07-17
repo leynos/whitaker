@@ -11,6 +11,12 @@ const SUFFIX: &str = "suffix";
 // Keep a `static` path here so the collector exercises both constant forms.
 static PREFIX: &str = "prefix";
 
+macro_rules! call_nested_helper {
+    ($fixture:expr) => {
+        nested_helper($fixture)
+    };
+}
+
 fn main() {
     let value = helper(fixture(), "literal", PREFIX, SUFFIX);
     assert_eq!(value, "prefix-fixture-literal-suffix");
@@ -19,6 +25,7 @@ fn main() {
     assert_eq!(built, "fixture-suffix");
 
     assert_eq!(nested_helper(fixture()), "fixture");
+    assert_eq!(call_nested_helper!(fixture()), "fixture");
 }
 
 #[fixture]
@@ -69,6 +76,9 @@ fn case_generated_collection_stays_silent(#[case] input: &str, fixture: &str) {
 
     let outer = || {
         let inner = || nested_helper(fixture);
+        let first = call_nested_helper!(fixture);
+        let second = call_nested_helper!(fixture);
+        assert_eq!(first, second);
         inner()
     };
     assert_eq!(outer(), "fixture");

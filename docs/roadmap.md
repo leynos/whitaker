@@ -569,7 +569,7 @@
   `static` argument
   fingerprints, and keeps diagnostics disabled until 8.2.3. The collector test
   and behaviour scenarios now share duplicate-call helpers, and `check_fn`
-  delegates to a private `collect_call_sites` method so the driver keeps the
+  delegates to a private `collect_call_sites` method, so the driver keeps the
   collection boundary explicit. Validation has passed for
   `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and

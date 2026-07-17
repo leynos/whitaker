@@ -66,6 +66,7 @@ pub(crate) struct CallSiteLocation {
     file_name: FileName,
     lo: BytePos,
     hi: BytePos,
+    hir_local_id: hir::ItemLocalId,
 }
 
 impl CallSiteLocation {
@@ -78,21 +79,25 @@ impl CallSiteLocation {
     /// let location = CallSiteLocation::new(
     ///     "crate::helper".to_string(),
     ///     rustc_span::FileName::Custom("src/lib.rs".to_string()),
-    ///     rustc_span::BytePos(0),
-    ///     rustc_span::BytePos(4),
+    ///     rustc_span::Span::with_root_ctxt(
+    ///         rustc_span::BytePos(0),
+    ///         rustc_span::BytePos(4),
+    ///     ),
+    ///     rustc_hir::ItemLocalId::ZERO,
     /// );
     /// ```
-    pub(crate) const fn new(
+    pub(crate) fn new(
         callee_key: String,
         file_name: FileName,
-        lo: BytePos,
-        hi: BytePos,
+        span: Span,
+        hir_local_id: hir::ItemLocalId,
     ) -> Self {
         Self {
             callee_key,
             file_name,
-            lo,
-            hi,
+            lo: span.lo(),
+            hi: span.hi(),
+            hir_local_id,
         }
     }
 }
@@ -108,8 +113,11 @@ impl CallSiteCollector {
     /// let location = CallSiteLocation::new(
     ///     "crate::helper".to_string(),
     ///     rustc_span::FileName::Custom("src/lib.rs".to_string()),
-    ///     rustc_span::BytePos(0),
-    ///     rustc_span::BytePos(4),
+    ///     rustc_span::Span::with_root_ctxt(
+    ///         rustc_span::BytePos(0),
+    ///         rustc_span::BytePos(4),
+    ///     ),
+    ///     rustc_hir::ItemLocalId::ZERO,
     /// );
     /// let inserted = collector.record(record, location);
     /// assert!(inserted);

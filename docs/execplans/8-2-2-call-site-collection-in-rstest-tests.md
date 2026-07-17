@@ -602,13 +602,14 @@ Unit tests in this stage cover pure helpers only:
 - deduplication — recording the same `(callee, source-span)` twice keeps a
   single record and adds nothing on the second call;
 - `lower_arg_atom` mapping tests — drive the adapter from synthetic HIR
-  fixtures only where unavoidable, and prefer pure-function tests over
-  `LateContext`-backed harness tests.
+  fixtures only where unavoidable, reserve pure model properties for
+  `ArgAtom`/`ArgFingerprint`, and cover the adapter through compiled or UI
+  tests that exercise `LateContext`.
 
 The `lower_arg_atom` and `resolve_local_callee` adapters need a `LateContext`
-to function, so they should be exercised by behavioural tests (Stage E) rather
-than by traditional pure unit tests. Add only the unit coverage that does not
-require `rustc` (the collector behaviour and any string helpers).
+to function, so they should be exercised by compiled or UI tests (Stage E)
+rather than by traditional pure unit tests. Add only the unit coverage that
+does not require `rustc` (the collector behaviour and any string helpers).
 
 ### Stage C — Wiring into the late pass
 
@@ -661,14 +662,14 @@ In the same module, use `CallSiteLocation` as the private dedup key:
 
 - the source span used as the dedup key is
   `recover_user_editable_hir_span(call_expr.span)`,
-- the dedup state keys on the callee definition path, source file, and
-  recovered `span_lo` / `span_hi` via `CallSiteLocation`;
+- the dedup state keys on the callee definition path, source file, recovered
+  `span_lo` / `span_hi`, and `expr.hir_id.local_id` via `CallSiteLocation`;
 - when recovery returns `None`, the record is dropped — not stored as
   unsupported.
 
-Confirm with at least one behavioural test that two generated case functions
-(`#[rstest] #[case(0)] #[case(1)] fn t(#[case] n: usize) { helper(n) }`)
-produce one record, not two.
+Confirm with at least one behavioural test that generated case siblings still
+collapse into one record, while macro-only calls with the same recovered span
+remain distinct.
 
 ### Stage E — Tests
 
@@ -678,11 +679,11 @@ Test surfaces, in order of priority:
    `crates/rstest_helper_should_be_fixture/src/collector_tests.rs`:
    - `BTreeMap` ordering and deduplication of `CallSiteCollector` using
      synthetic record values;
-   - `lower_arg_atom` covered through property tests where possible — for
-     example, generate sequences of pure `ArgAtom`s, build them through the
-     pure constructors, and assert the resulting `ArgFingerprint` round-trips.
+   - reserve pure property coverage for the `ArgAtom`/`ArgFingerprint` model;
+     keep `lower_arg_atom` adapter coverage in compiled or UI tests that
+     exercise the `LateContext` boundary.
    - property tests should live in
-     `crates/rstest_helper_should_be_fixture/src/collector_proptests.rs`
+     `crates/rstest_helper_should_be_fixture/src/collector_tests.rs`
      gated on `cfg(test)`.
 2. **Behavioural tests** with `rstest-bdd`:
    - new file
@@ -691,13 +692,9 @@ Test surfaces, in order of priority:
    `#[rstest]` test that calls a local helper once, the collector records
    one call site keyed on the helper's definition path.";
    - matching step definitions under
-     `crates/rstest_helper_should_be_fixture/tests/collection_steps.rs`,
-     using `dylint_testing` to drive a tiny synthetic crate through the
-     lint pass and then asserting on a `pub(crate)` snapshot accessor on
-     `RstestHelperShouldBeFixture` (introduce
-     `pub(crate) fn snapshot_collection(&self) -> CallSiteSnapshot` if
-     necessary; document that the accessor is test-only by gating it under
-     `#[cfg(any(test, feature = "test-snapshot"))]`).
+     `crates/rstest_helper_should_be_fixture/src/collector_behaviour.rs`,
+     using `rstest-bdd` with synthetic collector records and then asserting on
+     the collector outcome.
 3. **Snapshot tests** with `insta` if a stable serialization of the
    collector snapshot is appropriate. Snapshot only the deduplicated
    `(callee_def_path, fingerprint, span_lo, span_hi)` projection so the

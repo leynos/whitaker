@@ -78,8 +78,8 @@ impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
             CallSiteLocation::new(
                 self.cx.tcx.def_path_str(callee_def_id),
                 source_map.span_to_filename(span),
-                span.lo(),
-                span.hi(),
+                span,
+                expr.hir_id.local_id,
             ),
         );
     }

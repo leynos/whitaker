@@ -54,11 +54,10 @@ fn example_harness_collects_call_site_evidence() {
 
     for expected in [
         "callee_count=3",
-        "record_count=5",
-        "callee=Builder::<'_>::build;records=1",
+        "record_count=7",
+        "callee=Builder::<'_>::build;records=1\nfingerprint=unsupported,fixture-local",
         "callee=helper;records=2",
-        "callee=nested_helper;records=2",
-        "callee=nested_helper;records=2\nfingerprint=fixture-local\nfingerprint=unsupported",
+        "callee=nested_helper;records=4",
         "fingerprint=unsupported,fixture-local",
         "fingerprint=fixture-local,fixture-local,const-path,const-path",
         "fingerprint=fixture-local,const-lit,const-path,const-path",

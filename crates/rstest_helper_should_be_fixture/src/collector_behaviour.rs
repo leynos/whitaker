@@ -90,7 +90,7 @@ fn location(callee: &str, lo: u32, hi: u32) -> CallSiteLocation {
     CallSiteLocation::new(
         callee.to_string(),
         FileName::Custom("src/lib.rs".to_string()),
-        BytePos(lo),
-        BytePos(hi),
+        rustc_span::Span::with_root_ctxt(BytePos(lo), BytePos(hi)),
+        rustc_hir::ItemLocalId::ZERO,
     )
 }
