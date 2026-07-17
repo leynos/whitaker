@@ -1,15 +1,15 @@
 //! Unit tests for test attribute detection helpers in the driver module.
 
+use super::*;
 use rstest::rstest;
 use rustc_ast::AttrStyle;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
-use super::*;
+use std::path::Path;
 
 // -------------------------------------------------------------------------
 // Test fixtures for HIR attributes
 // -------------------------------------------------------------------------
-use std::path::Path;
 
 fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
     let path_segments = segments
@@ -84,12 +84,22 @@ fn is_test_attribute_returns_false_for_parsed_attributes() {
     assert!(!is_test_attribute(&attr));
 }
 
+#[rstest]
+#[case::integration_test_crate("tests/clone_detector.rs", true)]
+#[case::nested_integration_test_crate("tests/clone_detector/main.rs", false)]
+#[case::unrelated_tests_ancestor("fixtures/tests/support/source.rs", false)]
+#[case::ordinary_source("src/lib.rs", false)]
 fn integration_test_crate_root_is_anchored_to_the_source_root(
     #[case] path: &str,
     #[case] expected: bool,
 ) {
     assert_eq!(is_integration_test_crate_root(Path::new(path)), expected);
 }
+
+// -------------------------------------------------------------------------
+// Tests for has_test_like_hir_attributes
+// -------------------------------------------------------------------------
+
 fn assert_has_test_like_attributes(
     attr_segments: &[&[&str]],
     additional_test_attributes: &[AttributePath],
