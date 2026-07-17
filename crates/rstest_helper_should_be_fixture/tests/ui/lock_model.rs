@@ -318,6 +318,7 @@ fn stale_recovery_reclaims_only_after_liveness_release() {
         LockOperation::Acquire(Owner::First),
         LockOperation::MarkStale,
         LockOperation::RecoverStale,
+        LockOperation::FailOwnerFileRemoval,
         LockOperation::Drop(Owner::First),
         LockOperation::RecoverStale,
     ];

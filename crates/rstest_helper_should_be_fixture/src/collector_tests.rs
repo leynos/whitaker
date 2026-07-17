@@ -154,6 +154,34 @@ proptest! {
 
         prop_assert_eq!(forward, backward);
     }
+
+    #[test]
+    fn collector_orders_equal_span_calls_by_hir_id(
+        first_hir_id in 1_u32..100,
+        second_hir_id in 1_u32..100,
+        first_literal in 1_u32..100,
+        second_literal in 1_u32..100,
+    ) {
+        prop_assume!(first_hir_id != second_hir_id);
+        prop_assume!(first_literal != second_literal);
+
+        let calls = [
+            (first_hir_id, first_literal),
+            (second_hir_id, second_literal),
+        ];
+        let forward = collect_equal_span_calls(&calls);
+        let backward = collect_equal_span_calls(&[calls[1], calls[0]]);
+        let mut expected = calls
+            .iter()
+            .map(|(hir_local_id, literal)| {
+                (*hir_local_id, ArgFingerprint::new([ArgAtom::const_lit(literal.to_string())]))
+            })
+            .collect::<Vec<_>>();
+        expected.sort_by_key(|(hir_local_id, _)| *hir_local_id);
+
+        prop_assert_eq!(&forward, &expected);
+        prop_assert_eq!(&backward, &expected);
+    }
 }
 
 fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
@@ -179,6 +207,35 @@ fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
             (callee.to_string(), spans)
         })
         .collect()
+}
+
+fn collect_equal_span_calls(calls: &[(u32, u32)]) -> Vec<(u32, ArgFingerprint)> {
+    let mut collector = CallSiteCollector::default();
+    let callee = def_id(1);
+    let span = Span::with_root_ctxt(BytePos(10), BytePos(18));
+
+    for (hir_local_id, literal) in calls {
+        collector.record(
+            CallSiteRecord::new(
+                callee,
+                ArgFingerprint::new([ArgAtom::const_lit(literal.to_string())]),
+                def_id(99),
+                span,
+            ),
+            location_with_hir_id("crate::helper", BytePos(10), BytePos(18), *hir_local_id),
+        );
+    }
+
+    collector
+        .iter()
+        .next()
+        .map(|(_, records)| {
+            records
+                .iter()
+                .map(|record| (record.hir_local_id.as_u32(), record.fingerprint.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn span_specs() -> impl Strategy<Value = Vec<(u32, u32, u32)>> {

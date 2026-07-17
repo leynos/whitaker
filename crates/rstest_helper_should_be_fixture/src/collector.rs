@@ -21,6 +21,7 @@ pub(crate) struct CallSiteRecord {
     pub(crate) fingerprint: ArgFingerprint,
     pub(crate) test_source_def_id: DefId,
     pub(crate) span: Span,
+    pub(crate) hir_local_id: hir::ItemLocalId,
 }
 
 impl CallSiteRecord {
@@ -48,6 +49,7 @@ impl CallSiteRecord {
             fingerprint,
             test_source_def_id,
             span,
+            hir_local_id: hir::ItemLocalId::ZERO,
         }
     }
 }
@@ -123,10 +125,15 @@ impl CallSiteCollector {
     /// assert!(inserted);
     /// # }
     /// ```
-    pub(crate) fn record(&mut self, record: CallSiteRecord, location: CallSiteLocation) -> bool {
+    pub(crate) fn record(
+        &mut self,
+        mut record: CallSiteRecord,
+        location: CallSiteLocation,
+    ) -> bool {
         let callee_key = location.callee_key.clone();
         let lo = location.lo;
         let hi = location.hi;
+        record.hir_local_id = location.hir_local_id;
         if !self.seen.insert(location) {
             debug!(
                 target: "rstest_helper_should_be_fixture",
@@ -141,7 +148,11 @@ impl CallSiteCollector {
         let records = self.by_callee.entry(callee_key).or_default();
         // Preserve iteration order without re-sorting the complete callee bucket.
         let insertion_index = records.partition_point(|existing| {
-            (existing.span.lo(), existing.span.hi()) < (record.span.lo(), record.span.hi())
+            (
+                existing.span.lo(),
+                existing.span.hi(),
+                existing.hir_local_id,
+            ) < (record.span.lo(), record.span.hi(), record.hir_local_id)
         });
         records.insert(insertion_index, record);
         true
