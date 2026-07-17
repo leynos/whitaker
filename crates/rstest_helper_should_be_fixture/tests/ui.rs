@@ -34,6 +34,9 @@ const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";
 const EXAMPLE_HARNESS_LOCK_LIVENESS_EXTENSION: &str = "owner-lock";
 
+#[path = "ui/lock_model.rs"]
+mod lock_model;
+
 #[rstest]
 #[case("bootstrap_zero_diagnostic")]
 #[case("collection_zero_diagnostic")]
@@ -355,6 +358,7 @@ fn held_example_harness_liveness_lock_is_reported_as_contended() {
     }
 }
 
+/// Adapter coverage for the model's live-owner, release, then reclaim boundary.
 #[test]
 fn stale_recovery_preserves_active_owner_then_reclaims_after_release() {
     let path = unique_summary_path();
@@ -376,6 +380,7 @@ fn stale_recovery_preserves_active_owner_then_reclaims_after_release() {
     assert!(!path.exists(), "released stale directory should be removed");
 }
 
+/// Adapter coverage for the model's owner-token cleanup boundary.
 #[test]
 fn lock_cleanup_does_not_remove_a_different_owner() {
     let path = unique_summary_path();
