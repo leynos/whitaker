@@ -58,6 +58,9 @@ pub enum AstError {
     /// A byte offset cannot be represented by the parser's text-size type.
     #[error("byte offset {0} exceeds the u32 TextSize range")]
     OffsetTooLarge(usize),
+    /// Parser-backed lowering was requested without the parser feature.
+    #[error("parser-backed AST lowering requires the `parser` feature")]
+    ParserUnavailable,
     /// The parsed source contains more syntax nodes than the lowering budget.
     #[error("parsed source exceeds the AST node budget of {limit}")]
     TreeTooLarge {

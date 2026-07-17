@@ -19,7 +19,7 @@ struct BuildFixture {
 
 #[test]
 fn build_script_accepts_an_exact_workspace_parser_pin() -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture("=0.0.334")?;
+    let fixture = build_fixture(Some("=0.0.334"))?;
     let output = cargo_check(&fixture.manifest_path)?;
 
     assert!(
@@ -32,7 +32,7 @@ fn build_script_accepts_an_exact_workspace_parser_pin() -> Result<(), Box<dyn Er
 
 #[test]
 fn build_script_rejects_a_loose_workspace_parser_pin() -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture("0.0.334")?;
+    let fixture = build_fixture(Some("0.0.334"))?;
     let output = cargo_check(&fixture.manifest_path)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -47,18 +47,38 @@ fn build_script_rejects_a_loose_workspace_parser_pin() -> Result<(), Box<dyn Err
     Ok(())
 }
 
-fn build_fixture(requirement: &str) -> Result<BuildFixture, Box<dyn Error>> {
+#[test]
+fn build_script_rejects_a_missing_workspace_parser_pin() -> Result<(), Box<dyn Error>> {
+    let fixture = build_fixture(None)?;
+    let output = cargo_check(&fixture.manifest_path)?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !output.status.success(),
+        "missing parser pin should fail the build script"
+    );
+    assert!(
+        stderr.contains("workspace dependency `ra_ap_syntax` is missing"),
+        "build-script failure should explain the missing parser pin:\n{stderr}"
+    );
+    Ok(())
+}
+
+fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Error>> {
     let directory = tempdir()?;
     let fixture_root = directory.path();
     let package_dir = fixture_root.join("fixture");
     let manifest_path = package_dir.join("Cargo.toml");
 
     fs::create_dir_all(package_dir.join("src"))?;
+    let parser_dependency = requirement.map_or_else(String::new, |version| {
+        format!("ra_ap_syntax = \"{version}\"\n")
+    });
     fs::write(
         fixture_root.join("Cargo.toml"),
         format!(
             "[workspace]\nmembers = [\"fixture\"]\nresolver = \"2\"\n\n\
-             [workspace.dependencies]\nra_ap_syntax = \"{requirement}\"\n"
+             [workspace.dependencies]\n{parser_dependency}"
         ),
     )?;
     fs::write(
@@ -91,6 +111,7 @@ fn cargo_check(manifest_path: &Path) -> Result<Output, Box<dyn Error>> {
     Ok(
         Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
             .arg("check")
+            .arg("--offline")
             .arg("--quiet")
             .arg("--manifest-path")
             .arg(manifest_path)

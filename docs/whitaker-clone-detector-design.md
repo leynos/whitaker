@@ -665,9 +665,11 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 3. **AST features use an exact count substrate.** The stored feature vector is
    based on exact `(KindId, Depth) -> u32` counts, production bigram/trigram
    counts, and an `AstHash` seeded with `PARSER_SCHEMA_VERSION`. Weighted
-   histograms are derived from the exact counts using dyadic fixed-point
-   weights, so equality and snapshot tests are deterministic and do not depend
-   on floating-point ordering or platform behaviour.
+   histograms are derived from the exact counts using a dyadic fixed-point
+   scale of `2^63`, so weights stay nonzero through depth 63 and become zero
+   beyond that. Equality and snapshot tests are deterministic and do not
+   depend on floating-point ordering or platform behaviour. The public hash
+   output remains opaque hexadecimal, not a raw `u64`.
 
 4. **`ra_ap_syntax` is exact-pinned and gated behind the default parser
    feature.** The 7.3.1 implementation pins `ra_ap_syntax` to `=0.0.334` and
@@ -743,8 +745,8 @@ pub fn ast_features(node: &ra_ap_syntax::SyntaxNode) -> FeatureVec {
     /* histogram with depth weights */
 }
 
-pub fn ast_hash(node: &ra_ap_syntax::SyntaxNode) -> u64 {
-    /* merkle-ish canonical hash */
+pub fn ast_hash(node: &ra_ap_syntax::SyntaxNode) -> AstHash {
+    /* merkle-ish canonical hash rendered as opaque hex */
 }
 ```
 

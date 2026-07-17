@@ -63,6 +63,15 @@ def test_release_dry_run_detects_host_triple_with_rustc(
     ), "builds must target HOST_TRIPLE"
 
 
+def test_release_dry_run_applies_cargo_locked_to_metadata(
+    release_installer_dry_run_recipe: str,
+) -> None:
+    """Ensure metadata uses the same locked dependency graph as the builds."""
+    assert "$(CARGO) metadata $(CARGO_LOCKED) --manifest-path installer/Cargo.toml" in (
+        release_installer_dry_run_recipe
+    ), "release-installer-dry-run metadata must honour CARGO_LOCKED"
+
+
 def test_release_dry_run_builds_binaries_in_target_scoped_tree(
     release_installer_dry_run_recipe: str,
 ) -> None:

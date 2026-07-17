@@ -11,13 +11,13 @@
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::path::Component;
+use std::path::Path;
 
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::sym;
+use rustc_span::{RemapPathScopeComponents, sym};
 use serde::Deserialize;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
@@ -193,22 +193,17 @@ fn ancestor_function_is_test<'tcx>(
         })
 }
 
-fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>, span: rustc_span::Span) -> bool {
-    let Some(filename) = cx
-        .tcx
-        .sess
-        .source_map()
-        .span_to_filename(span)
-        .into_local_path()
-    else {
-        return false;
-    };
+fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>) -> bool {
+    cx.tcx.sess.local_crate_source_file().is_some_and(|source| {
+        is_integration_test_crate_root(source.path(RemapPathScopeComponents::DIAGNOSTICS))
+    })
+}
 
-    // Integration tests are in tests/ directory; use path components for
-    // cross-platform compatibility (Windows uses backslashes)
-    filename
-        .components()
-        .any(|c| matches!(c, Component::Normal(s) if s == OsStr::new("tests")))
+fn is_integration_test_crate_root(crate_root: &Path) -> bool {
+    crate_root
+        .parent()
+        .and_then(Path::file_name)
+        .is_some_and(|directory| directory == OsStr::new("tests"))
 }
 fn is_likely_test_function<'tcx>(
     cx: &LateContext<'tcx>,
@@ -227,7 +222,7 @@ fn is_likely_test_function<'tcx>(
         harness_marked_test_functions,
         additional_test_attributes,
     ) || is_in_cfg_test_module(cx, expr.hir_id)
-        || is_in_tests_directory(cx, expr.span)
+        || is_in_tests_directory(cx)
 }
 
 fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {

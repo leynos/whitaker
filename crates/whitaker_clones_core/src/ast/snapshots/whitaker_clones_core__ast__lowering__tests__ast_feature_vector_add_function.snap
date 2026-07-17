@@ -1,9 +1,10 @@
 ---
-source: crates/whitaker_clones_core/src/ast/lowering.rs
+source: crates/whitaker_clones_core/src/ast/lowering_tests.rs
+assertion_line: 219
 expression: "json!({\n    \"schema\": PARSER_SCHEMA_VERSION, \"span\":\n    { \"start\": span.start(), \"end\": span.end() }, \"kind_counts\": counts,\n    \"productions\": productions, \"canonical_hash\":\n    canonical_hash(&tree).to_hex(),\n})"
 ---
 {
-  "canonical_hash": "2b62d1f6fa1216f9",
+  "canonical_hash": "e5e9a4c891df8391",
   "kind_counts": [
     {
       "count": 1,
@@ -425,7 +426,7 @@ expression: "json!({\n    \"schema\": PARSER_SCHEMA_VERSION, \"span\":\n    { \"
       "production": "STMT_LIST -> BIN_EXPR -> PATH_EXPR"
     }
   ],
-  "schema": "ra_ap_syntax=0.0.334",
+  "schema": "whitaker_ast=1;ra_ap_syntax=0.0.334",
   "span": {
     "end": 39,
     "start": 0

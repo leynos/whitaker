@@ -1115,20 +1115,18 @@ Validation: `cargo test -p whitaker_clones_core ast::` fails red for the
 expected reason; `cargo build -p whitaker_clones_core` compiles the skeleton;
 `tests/ast_boundary.rs` passes (the skeleton has no violations yet).
 
-### Stage B — `ra_ap_syntax` contemporaneous pin (go/no-go)
+### Stage B — `ra_ap_syntax` exact pin (`=0.0.334`) (go/no-go)
 
 On the `nightly-2026-05-28` channel (rustc ≥ 1.95), select the `ra_ap_syntax`
-snapshot dated near the new nightly — start from the latest at planning time (≈
-v0.0.336, MSRV 1.95, per the firecrawl research) and step *down* only if a
-genuine build/API error appears. Add it exact-pinned (`=0.0.x`) to
+snapshot dated near the new nightly and exact-pin it to `=0.0.334`. Add that
+dependency to
 `[workspace.dependencies]` with the documented-reason comment, and
 `{ workspace = true }` to `whitaker_clones_core`. Run
 `cargo build -p whitaker_clones_core` under `-D warnings`, pinning at most
 three offending transitive crates with `--precise` (escalate if more are
-needed). Replace `0.0.PINNED` in both manifests and OQ2 with the concrete
-version; commit `Cargo.toml` and `Cargo.lock` together; record the resolved
-transitive set (including exact `rowan`/`ra_ap_parser` versions) in Surprises &
-Discoveries.
+needed). Commit `Cargo.toml` and `Cargo.lock` together; record the resolved
+transitive set (including exact `rowan`/`ra_ap_parser` versions) in Surprises
+& Discoveries.
 
 Go/no-go: if no contemporaneous snapshot builds cleanly, **stop and escalate**
 (Tolerances). Otherwise proceed. Validation: a throwaway `lowering.rs` line
@@ -1290,13 +1288,15 @@ cargo build --workspace 2>&1 | tee /tmp/bump-build-whitaker.out
 # Re-baseline UI fixtures through the Dylint/trybuild blessing flow, reviewing each diff.
 
 # Per-gate logging template (ACTION in {fmt,lint,test,kani,verus}):
-make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-$(git branch --show-current).out
-make lint      2>&1 | tee /tmp/lint-whitaker-$(git branch --show-current).out
-make test      2>&1 | tee /tmp/test-whitaker-$(git branch --show-current).out
-make kani-clone-detector  2>&1 | tee /tmp/kani-whitaker-$(git branch --show-current).out
-make verus-clone-detector 2>&1 | tee /tmp/verus-whitaker-$(git branch --show-current).out
+branch_name=$(git branch --show-current)
+branch_slug=${branch_name//\//-}
+make check-fmt 2>&1 | tee /tmp/check-fmt-whitaker-${branch_slug}.out
+make lint      2>&1 | tee /tmp/lint-whitaker-${branch_slug}.out
+make test      2>&1 | tee /tmp/test-whitaker-${branch_slug}.out
+make kani-clone-detector  2>&1 | tee /tmp/kani-whitaker-${branch_slug}.out
+make verus-clone-detector 2>&1 | tee /tmp/verus-whitaker-${branch_slug}.out
 
-# Stage B contemporaneous ra_ap_syntax pin (illustrative; replace 0.0.X):
+# Stage B exact `ra_ap_syntax` pin (`=0.0.334`):
 # (toolchain is now nightly-2026-05-28, so no +toolchain override is needed)
 cargo build -p whitaker_clones_core 2>&1 | tee /tmp/raap-build.out
 # Focused test runs during red-green-refactor:
@@ -1401,6 +1401,10 @@ proves success.
     (captured in `/tmp/kani-mutation-drop-cover-*.out`).
   - After restoring `select_smallest_covering`, both affected harnesses passed
     (captured in `/tmp/kani-restored-cover-*.out`).
+- Completion evidence: the workspace-isolated Cargo build-script harness
+  derived `PARSER_SCHEMA_VERSION` from the exact workspace dependency and kept
+  the re-pin aligned with the parser snapshot; snapshot review stayed required
+  after any parser or schema change.
 
 ## Revision note
 

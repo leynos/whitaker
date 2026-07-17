@@ -24,11 +24,8 @@ mod lowering {
 
     /// Reports that parser-backed lowering is unavailable without the
     /// `parser` feature.
-    pub fn lower_span(_file_text: &str, span: ByteSpan) -> Result<NormalizedTree, AstError> {
-        Err(AstError::UnparsableSpan {
-            start: span.start(),
-            end: span.end(),
-        })
+    pub fn lower_span(_file_text: &str, _span: ByteSpan) -> Result<NormalizedTree, AstError> {
+        Err(AstError::ParserUnavailable)
     }
 }
 #[cfg(feature = "parser")]

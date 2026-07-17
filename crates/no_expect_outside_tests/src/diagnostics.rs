@@ -3,7 +3,7 @@
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
 use rustc_hir as hir;
-use rustc_lint::{LateContext, LintContext};
+use rustc_lint::{DiagDecorator, LateContext, LintContext};
 use rustc_middle::ty;
 use rustc_span::sym;
 use std::borrow::Cow;
@@ -180,7 +180,7 @@ pub(crate) fn emit_diagnostic(
     cx.emit_span_lint(
         NO_EXPECT_OUTSIDE_TESTS,
         expr.span,
-        rustc_lint::errors::DiagDecorator(move |lint| {
+        DiagDecorator(move |lint| {
             lint.primary_message(primary);
             lint.note(note);
             lint.help(help);

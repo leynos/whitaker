@@ -160,12 +160,30 @@ fn then_lowered_root_kind_is(world: &AstFeatureWorld, kind: String) {
 
 #[then("the AST hashes match")]
 fn then_ast_hashes_match(world: &AstFeatureWorld) {
-    assert_eq!(*world.left_hash.borrow(), *world.right_hash.borrow());
+    let left_hash = world
+        .left_hash
+        .borrow()
+        .expect("left AST hash should be available after lowering");
+    let right_hash = world
+        .right_hash
+        .borrow()
+        .expect("right AST hash should be available after lowering");
+
+    assert_eq!(left_hash, right_hash);
 }
 
 #[then("the AST hashes differ")]
 fn then_ast_hashes_differ(world: &AstFeatureWorld) {
-    assert_ne!(*world.left_hash.borrow(), *world.right_hash.borrow());
+    let left_hash = world
+        .left_hash
+        .borrow()
+        .expect("left AST hash should be available after lowering");
+    let right_hash = world
+        .right_hash
+        .borrow()
+        .expect("right AST hash should be available after lowering");
+
+    assert_ne!(left_hash, right_hash);
 }
 
 /// The `#[scenario]` macro runs every Gherkin step for this scenario before

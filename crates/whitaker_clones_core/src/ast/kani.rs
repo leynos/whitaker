@@ -6,7 +6,8 @@
 use std::ops::Range;
 
 use super::{
-    ByteSpan, Depth, KindId, LeafClass, NormalizedNode, NormalizedTree, select_smallest_covering,
+    ByteSpan, Depth, KindId, LeafClass, NormalizedNode, NormalizedTree, kind_counts,
+    select_smallest_covering,
 };
 
 const KANI_AST_MAX_DEPTH: usize = 3;
@@ -92,25 +93,6 @@ fn assert_minimal_cover(candidates: &[Range<u32>], target: &Range<u32>, selected
     }
 }
 
-fn count_kind_at_depth(node: &NormalizedNode, kind: KindId, depth: Depth, target: Depth) -> u32 {
-    let mut count: u32 = if node.kind() == kind && depth == target {
-        1
-    } else {
-        0
-    };
-
-    for child in node.children() {
-        count = count.saturating_add(count_kind_at_depth(
-            child,
-            kind,
-            Depth::new(depth.get().saturating_add(1)),
-            target,
-        ));
-    }
-
-    count
-}
-
 #[kani::proof]
 #[kani::unwind(5)]
 fn verify_smallest_covering_node_selects_minimal_range() {
@@ -174,7 +156,7 @@ fn verify_kind_index_is_bounded() {
     );
     let beyond_bound = Depth::new(KANI_AST_MAX_DEPTH as u16 + 1);
     kani::assert(
-        count_kind_at_depth(tree.root(), kind, Depth::root(), beyond_bound) == 0,
+        kind_counts(&tree).count(kind, beyond_bound) == 0,
         "bounded trees must contain no nodes beyond KANI_AST_MAX_DEPTH",
     );
 }
@@ -216,8 +198,8 @@ fn verify_count_accumulation_is_order_independent_bounded() {
     kani::assume(query_depth.get() <= KANI_AST_MAX_DEPTH as u16);
 
     kani::assert(
-        count_kind_at_depth(forward.root(), query_kind, Depth::root(), query_depth)
-            == count_kind_at_depth(reverse.root(), query_kind, Depth::root(), query_depth),
+        kind_counts(&forward).count(query_kind, query_depth)
+            == kind_counts(&reverse).count(query_kind, query_depth),
         "kind-count contribution folds must ignore sibling visit order for the bounded tree",
     );
 }

@@ -586,18 +586,23 @@ parser APIs, snapshots, and proof tooling.
 1. Choose a `ra_ap_syntax` snapshot contemporaneous with the pinned Rust
    nightly rather than backwards-bisecting to an older parser unless the plan
    explicitly requires that trade-off.
-2. Exact-pin the parser dependency in
-   `crates/whitaker_clones_core/Cargo.toml`. If more than three transitive
-   crates require manual `cargo update --precise` pins, stop and record the
-   mismatch.
+2. Exact-pin the parser dependency in the workspace `Cargo.toml` under
+   `[workspace.dependencies]`. The accepted outcome is an entry such as
+   `ra_ap_syntax = "=0.0.334"` with the `parser` feature wired through
+   `whitaker_clones_core`. Loose pins, invalid specifiers, or a missing
+   workspace dependency must fail the re-pin attempt. If more than three
+   transitive crates need manual `cargo update --precise` pins, stop and
+   record the mismatch.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
    `NormalizedTree` boundary instead.
 4. Update `PARSER_SCHEMA_VERSION` for every parser re-pin or normalization
-   change. Any future `ast_hashes` cache must be invalidated when this string
-   changes.
-5. Refresh and review the AST snapshots, especially the parser schema snapshot
-   and named-kind feature-vector snapshot, so syntax-kind drift is visible.
+   change. The build script derives the schema version from the exact
+   workspace dependency, so any missing or non-exact pin must fail before the
+   hash module composes the value.
+5. Refresh and review the AST snapshots, especially the parser schema
+   snapshot and named-kind feature-vector snapshot, so syntax-kind drift is
+   visible.
 6. Run `cargo build -p whitaker_clones_core`, the AST-focused tests,
    `make check-fmt`, `make lint`, `make test`, `make verus-clone-detector`,
    `make kani-clone-detector`, and `make markdownlint`.

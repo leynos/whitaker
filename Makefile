@@ -230,7 +230,7 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}'); \
-	VERSION=$$($(CARGO) metadata --manifest-path installer/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "whitaker-installer") | .version'); \
+	VERSION=$$($(CARGO) metadata $(CARGO_LOCKED) --manifest-path installer/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "whitaker-installer") | .version'); \
 	if [ -z "$$VERSION" ]; then \
 		echo "Failed to extract whitaker-installer version from Cargo metadata"; \
 		exit 1; \

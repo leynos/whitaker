@@ -8,6 +8,19 @@ use super::{
 use proptest::prelude::*;
 use rstest::rstest;
 
+#[cfg(not(feature = "parser"))]
+#[rstest]
+fn parser_free_lowering_reports_parser_unavailable() -> AstResult<()> {
+    let source = "fn f() {}";
+    let span = ByteSpan::new(source, 0, source.len() as u32)?;
+
+    assert_eq!(
+        super::lower_span(source, span),
+        Err(super::AstError::ParserUnavailable)
+    );
+    Ok(())
+}
+
 #[rstest]
 fn malformed_covering_candidates_are_ignored() {
     let malformed_start = 8;

@@ -21,9 +21,14 @@ pub(crate) const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 #[cfg(not(test))]
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
-/// Parser schema version mixed into AST hashes.
-pub const PARSER_SCHEMA_VERSION: &str =
-    concat!("ra_ap_syntax=", env!("WHITAKER_RA_AP_SYNTAX_VERSION"));
+/// Parser and Whitaker AST schema versions mixed into AST hashes.
+///
+/// Bump `whitaker_ast` when normalized-tree or canonical-hash semantics
+/// change, even when the parser snapshot remains unchanged.
+pub const PARSER_SCHEMA_VERSION: &str = concat!(
+    "whitaker_ast=1;ra_ap_syntax=",
+    env!("WHITAKER_RA_AP_SYNTAX_VERSION")
+);
 
 /// Mixes one already-normalized byte into the crate's stable FNV-style stream.
 ///

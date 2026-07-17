@@ -324,6 +324,9 @@ def test_linux_full_keeps_the_full_linux_validation_stack(
         _find_step(linux_job, "Enforce en-GB-oxendict spelling").get("run")
         == "make spelling"
     ), "linux-full must run the spelling gate"
+    assert _find_step(linux_job, "Setup uv").get("with", {}).get("version") == "0.11.19", (
+        "linux-full must use the tested uv version"
+    )
     markdown_globs = (
         _find_step(linux_job, "Markdown lint")
         .get("with", {})
