@@ -342,10 +342,7 @@ fn rate(part: u64, whole: u64) -> f64 {
 }
 
 fn duration_to_millis(duration: Duration) -> u64 {
-    match u64::try_from(duration.as_millis()) {
-        Ok(millis) => millis,
-        Err(_) => u64::MAX,
-    }
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 fn format_duration(duration: Duration) -> String {

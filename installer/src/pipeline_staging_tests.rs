@@ -36,7 +36,7 @@ impl StagingTestContext {
         Self {
             _temp_dir: temp_dir,
             target_dir,
-            toolchain: Toolchain::with_override(&workspace_root, "nightly-2025-09-18"),
+            toolchain: Toolchain::with_override(&workspace_root, "nightly-2026-05-28"),
             workspace_root,
             jobs: None,
             verbosity: 0,
@@ -127,7 +127,7 @@ fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext)
     // toolchain and profile when scanner logic depends on path layout.
     let expected_path = staging_ctx
         .target_dir()
-        .join("nightly-2025-09-18")
+        .join("nightly-2026-05-28")
         .join("release");
     assert_eq!(
         staging_path, expected_path,
@@ -176,7 +176,7 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
     // The staged filename must preserve crate and toolchain identity so
     // multi-toolchain installs do not collide.
     let staged_filename = format!(
-        "{}whitaker_suite@nightly-2025-09-18{}",
+        "{}whitaker_suite@nightly-2026-05-28{}",
         library_prefix(),
         library_extension()
     );

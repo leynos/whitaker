@@ -16,7 +16,7 @@ fn sample_git_sha() -> GitSha {
 
 #[fixture]
 fn sample_toolchain() -> ToolchainChannel {
-    ToolchainChannel::try_from("nightly-2025-09-18").expect("valid channel")
+    ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel")
 }
 
 #[fixture]
@@ -143,7 +143,7 @@ fn package_artefact_rejects_empty_files(temp_dir: TempDir) {
 
     let params = PackageParams {
         git_sha: GitSha::try_from("abc1234").expect("valid"),
-        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+        toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"),
         target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
         library_files: vec![],
         output_dir,
@@ -165,7 +165,7 @@ fn package_artefact_fails_when_library_file_missing(temp_dir: TempDir) {
 
     let params = PackageParams {
         git_sha: GitSha::try_from("abc1234").expect("valid"),
-        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+        toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"),
         target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
         library_files: vec![missing],
         output_dir,
@@ -225,7 +225,7 @@ fn create_test_package(temp_dir: &TempDir) -> PackageOutput {
 
     let params = PackageParams {
         git_sha: GitSha::try_from("deadbeef").expect("valid"),
-        toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+        toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"),
         target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
         library_files: vec![lib_path],
         output_dir,
@@ -272,7 +272,7 @@ fn packaging_produces_deterministic_digest(temp_dir: TempDir) {
         fs::create_dir_all(&output_dir).expect("mkdir");
         let params = PackageParams {
             git_sha: GitSha::try_from("abc1234").expect("valid"),
-            toolchain: ToolchainChannel::try_from("nightly-2025-09-18").expect("valid"),
+            toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"),
             target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"),
             library_files: vec![lib_path.clone()],
             output_dir,

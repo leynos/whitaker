@@ -4,10 +4,10 @@ Feature: Artefact naming, manifest schema, and verification policy
 
   Scenario: Construct artefact name from valid components
     Given a git SHA "abc1234"
-    And a toolchain channel "nightly-2025-09-18"
+    And a toolchain channel "nightly-2026-05-28"
     And a target triple "x86_64-unknown-linux-gnu"
     When an artefact name is constructed
-    Then the filename is "whitaker-lints-abc1234-nightly-2025-09-18-x86_64-unknown-linux-gnu.tar.zst"
+    Then the filename is "whitaker-lints-abc1234-nightly-2026-05-28-x86_64-unknown-linux-gnu.tar.zst"
 
   Scenario: Reject unsupported target triple
     Given an invalid target triple "wasm32-unknown-unknown"

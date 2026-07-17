@@ -56,11 +56,11 @@ mod tests {
         dirs.expect_whitaker_data_dir()
             .returning(|| Some(PathBuf::from("/home/test/.local/share/whitaker")));
 
-        let result = prebuilt_library_dir(&dirs, "nightly-2025-09-18", "x86_64-unknown-linux-gnu")
+        let result = prebuilt_library_dir(&dirs, "nightly-2026-05-28", "x86_64-unknown-linux-gnu")
             .expect("expected path construction to succeed");
         let expected = Utf8PathBuf::from("/home/test/.local/share/whitaker")
             .join("lints")
-            .join("nightly-2025-09-18")
+            .join("nightly-2026-05-28")
             .join("x86_64-unknown-linux-gnu")
             .join("lib");
 
@@ -77,7 +77,7 @@ mod tests {
         dirs.expect_whitaker_data_dir()
             .return_once(move || data_dir.clone());
 
-        let err = prebuilt_library_dir(&dirs, "nightly-2025-09-18", "x86_64-unknown-linux-gnu")
+        let err = prebuilt_library_dir(&dirs, "nightly-2026-05-28", "x86_64-unknown-linux-gnu")
             .expect_err("expected error");
         assert!(
             matches!(err, InstallerError::StagingFailed { ref reason } if reason.contains(expected_reason)),
@@ -98,7 +98,7 @@ mod tests {
             ])))
         });
 
-        let err = prebuilt_library_dir(&dirs, "nightly-2025-09-18", "x86_64-unknown-linux-gnu")
+        let err = prebuilt_library_dir(&dirs, "nightly-2026-05-28", "x86_64-unknown-linux-gnu")
             .expect_err("expected UTF-8 conversion error");
         assert!(
             matches!(err, InstallerError::StagingFailed { ref reason } if reason.contains("not valid UTF-8")),

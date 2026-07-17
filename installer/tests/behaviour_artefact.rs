@@ -146,7 +146,7 @@ fn then_channel_rejected(world: &mut ArtefactWorld) {
 fn given_manifest_fields(world: &mut ArtefactWorld) {
     world.git_sha = Some(GitSha::try_from("abc1234").expect("valid sha"));
     world.toolchain =
-        Some(ToolchainChannel::try_from("nightly-2025-09-18").expect("valid channel"));
+        Some(ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel"));
     world.target = Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"));
 }
 
@@ -172,7 +172,7 @@ fn then_manifest_accessible(world: &mut ArtefactWorld) {
     let m = world.manifest.as_ref().expect("manifest set");
     assert_eq!(m.git_sha().as_str(), "abc1234");
     assert_eq!(m.schema_version().as_u32(), 1);
-    assert_eq!(m.toolchain().as_str(), "nightly-2025-09-18");
+    assert_eq!(m.toolchain().as_str(), "nightly-2026-05-28");
     assert_eq!(m.target().as_str(), "x86_64-unknown-linux-gnu");
     assert_eq!(m.generated_at().as_str(), "2026-02-03T00:00:00Z");
     assert_eq!(m.files().len(), 1);

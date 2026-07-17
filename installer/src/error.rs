@@ -277,33 +277,33 @@ mod tests {
     #[test]
     fn toolchain_not_installed_suggests_install_command() {
         let err = InstallerError::ToolchainNotInstalled {
-            toolchain: "nightly-2025-09-18".to_owned(),
+            toolchain: "nightly-2026-05-28".to_owned(),
         };
         let msg = err.to_string();
         assert!(msg.contains("rustup toolchain install"));
-        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("nightly-2026-05-28"));
     }
 
     #[test]
     fn toolchain_install_failed_includes_toolchain_and_message() {
         let err = InstallerError::ToolchainInstallFailed {
-            toolchain: "nightly-2025-09-18".to_owned(),
+            toolchain: "nightly-2026-05-28".to_owned(),
             message: "network error".to_owned(),
         };
         let msg = err.to_string();
-        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("nightly-2026-05-28"));
         assert!(msg.contains("network error"));
     }
 
     #[test]
     fn toolchain_component_install_failed_includes_components() {
         let err = InstallerError::ToolchainComponentInstallFailed {
-            toolchain: "nightly-2025-09-18".to_owned(),
+            toolchain: "nightly-2026-05-28".to_owned(),
             components: "rust-src, rustc-dev".to_owned(),
             message: "component error".to_owned(),
         };
         let msg = err.to_string();
-        assert!(msg.contains("nightly-2025-09-18"));
+        assert!(msg.contains("nightly-2026-05-28"));
         assert!(msg.contains("rust-src, rustc-dev"));
         assert!(msg.contains("component error"));
     }

@@ -165,14 +165,18 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
         fallback_messages(module_name, info.lines, info.limit)
     });
 
-    cx.span_lint(MODULE_MAX_LINES, info.ident.span, |lint| {
-        lint.primary_message(messages.primary().to_string());
-        lint.span_note(
-            module_header_span(info.item_span, info.ident.span),
-            messages.note().to_string(),
-        );
-        lint.help(messages.help().to_string());
-    });
+    cx.emit_span_lint(
+        MODULE_MAX_LINES,
+        info.ident.span,
+        rustc_lint::errors::DiagDecorator(|lint| {
+            lint.primary_message(messages.primary().to_string());
+            lint.span_note(
+                module_header_span(info.item_span, info.ident.span),
+                messages.note().to_string(),
+            );
+            lint.help(messages.help().to_string());
+        }),
+    );
 }
 
 fn fallback_messages(module: &str, lines: usize, limit: usize) -> DiagnosticMessageSet {

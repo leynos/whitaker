@@ -183,11 +183,15 @@ impl TestMustNotHaveExample {
         let note = messages.note().to_string();
         let help = messages.help().to_string();
 
-        cx.span_lint(TEST_MUST_NOT_HAVE_EXAMPLE, function.span, move |lint| {
-            lint.primary_message(primary);
-            lint.note(note);
-            lint.help(help);
-        });
+        cx.emit_span_lint(
+            TEST_MUST_NOT_HAVE_EXAMPLE,
+            function.span,
+            rustc_lint::errors::DiagDecorator(move |lint| {
+                lint.primary_message(primary);
+                lint.note(note);
+                lint.help(help);
+            }),
+        );
     }
 
     fn check_function_item<'tcx>(

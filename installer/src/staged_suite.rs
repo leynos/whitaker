@@ -96,7 +96,7 @@ mod tests {
     }
 
     fn test_toolchain() -> Toolchain {
-        Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18")
+        Toolchain::with_override(Utf8Path::new("."), "nightly-2026-05-28")
     }
 
     fn utf8_temp_dir(temp_dir: &TempDir) -> Utf8PathBuf {

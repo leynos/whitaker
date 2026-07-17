@@ -33,7 +33,7 @@ pub enum ManifestParseError {
 ///
 /// let json = concat!(
 ///     r#"{"git_sha":"abc1234","schema_version":1,"#,
-///     r#""toolchain":"nightly-2025-09-18","#,
+///     r#""toolchain":"nightly-2026-05-28","#,
 ///     r#""target":"x86_64-unknown-linux-gnu","#,
 ///     r#""generated_at":"2026-02-03T00:00:00Z","#,
 ///     r#""files":["lib.so"],"#,
@@ -54,7 +54,7 @@ mod tests {
     fn valid_manifest_json() -> String {
         concat!(
             r#"{"git_sha":"abc1234","schema_version":1,"#,
-            r#""toolchain":"nightly-2025-09-18","#,
+            r#""toolchain":"nightly-2026-05-28","#,
             r#""target":"x86_64-unknown-linux-gnu","#,
             r#""generated_at":"2026-02-03T00:00:00Z","#,
             r#""files":["lib.so"],"#,
@@ -67,7 +67,7 @@ mod tests {
     fn parses_valid_manifest() {
         let manifest = parse_manifest(&valid_manifest_json()).expect("valid");
         assert_eq!(manifest.git_sha().as_str(), "abc1234");
-        assert_eq!(manifest.toolchain().as_str(), "nightly-2025-09-18");
+        assert_eq!(manifest.toolchain().as_str(), "nightly-2026-05-28");
         assert_eq!(manifest.target().as_str(), "x86_64-unknown-linux-gnu");
         assert_eq!(manifest.schema_version().as_u32(), 1);
         assert_eq!(manifest.files(), &["lib.so"]);

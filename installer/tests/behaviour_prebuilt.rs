@@ -15,7 +15,7 @@ use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
-const DEFAULT_TOOLCHAIN: &str = "nightly-2025-09-18";
+const DEFAULT_TOOLCHAIN: &str = "nightly-2026-05-28";
 
 /// How the stub downloader should respond to `download_manifest`.
 enum ManifestBehaviour {

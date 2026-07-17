@@ -46,7 +46,7 @@ pub enum PrebuiltResult {
 pub struct PrebuiltConfig<'a> {
     /// The host target triple (e.g. `x86_64-unknown-linux-gnu`).
     pub target: &'a str,
-    /// The expected toolchain channel (e.g. `nightly-2025-09-18`).
+    /// The expected toolchain channel (e.g. `nightly-2026-05-28`).
     pub toolchain: &'a str,
     /// The directory where libraries are extracted and staged.
     pub destination_dir: &'a Utf8Path,

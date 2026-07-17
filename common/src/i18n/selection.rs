@@ -144,9 +144,7 @@ pub fn resolve_localizer(
 /// Trim whitespace and discard empty locale candidates.
 #[must_use]
 pub fn normalise_locale(input: Option<&str>) -> Option<&str> {
-    input
-        .map(str::trim)
-        .and_then(|value| if value.is_empty() { None } else { Some(value) })
+    input.map(str::trim).filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

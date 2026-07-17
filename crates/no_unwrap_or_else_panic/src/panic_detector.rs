@@ -85,11 +85,10 @@ pub(crate) fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    let typing_env = ty::TypingEnv {
-        typing_mode: ty::TypingMode::non_body_analysis(),
-        param_env: cx.param_env,
-    };
-    let ty = cx.tcx.normalize_erasing_regions(typing_env, ty).peel_refs();
+    let ty = cx
+        .tcx
+        .normalize_erasing_regions(cx.typing_env(), ty::Unnormalized::new_wip(ty))
+        .peel_refs();
 
     let Some(adt) = ty.ty_adt_def() else {
         return false;
@@ -220,7 +219,7 @@ fn is_fmt_args_runtime_call<'tcx>(cx: &LateContext<'tcx>, callee: &Expr<'tcx>) -
         return false;
     };
 
-    if !matches!(segment.ident.name, sym::new_v1 | sym::new_v1_formatted) {
+    if segment.ident.name != sym::new {
         return false;
     }
 

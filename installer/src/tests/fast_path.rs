@@ -37,7 +37,7 @@ fn fast_path_fixture() -> FastPathFixture {
             bin_dir: Some("/tmp/bin".into()),
             data_dir: Some("/tmp".into()),
         },
-        toolchain: Toolchain::with_override(Utf8Path::new("."), "nightly-2025-09-18"),
+        toolchain: Toolchain::with_override(Utf8Path::new("."), "nightly-2026-05-28"),
         target_dir: Utf8PathBuf::from("/tmp/target"),
         requested_crates: vec![],
     }
@@ -61,7 +61,7 @@ fn fast_path_context_holds_supplied_values(fast_path_fixture: FastPathFixture) {
 
     assert!(std::ptr::eq(ctx.args, &fast_path_fixture.args));
     assert_eq!(ctx.dirs.home_dir(), Some(PathBuf::from("/tmp")));
-    assert_eq!(ctx.toolchain.channel(), "nightly-2025-09-18");
+    assert_eq!(ctx.toolchain.channel(), "nightly-2026-05-28");
     assert_eq!(ctx.target_dir, &Utf8PathBuf::from("/tmp/target"));
     assert!(ctx.requested_crates.is_empty());
 }

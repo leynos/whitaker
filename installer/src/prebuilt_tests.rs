@@ -8,7 +8,7 @@ use rstest::rstest;
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
-const TOOLCHAIN: &str = "nightly-2025-09-18";
+const TOOLCHAIN: &str = "nightly-2026-05-28";
 
 fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     PrebuiltConfig {

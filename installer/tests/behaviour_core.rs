@@ -228,7 +228,7 @@ fn given_standard_toolchain(toolchain_world: &ToolchainWorld) {
     toolchain_world.contents.replace(
         r#"
 [toolchain]
-channel = "nightly-2025-09-18"
+channel = "nightly-2026-05-28"
 components = ["rust-src"]
 "#
         .to_owned(),
@@ -239,7 +239,7 @@ components = ["rust-src"]
 fn given_top_level_channel(toolchain_world: &ToolchainWorld) {
     toolchain_world
         .contents
-        .replace(r#"channel = "nightly-2025-09-18""#.to_owned());
+        .replace(r#"channel = "nightly-2026-05-28""#.to_owned());
 }
 
 #[given("a rust-toolchain.toml without a channel")]
@@ -268,7 +268,7 @@ fn when_toolchain_detected(toolchain_world: &ToolchainWorld) {
 #[then("the channel is extracted correctly")]
 fn then_channel_extracted(toolchain_world: &ToolchainWorld) {
     let channel = toolchain_world.channel.borrow();
-    assert_eq!(*channel, Some("nightly-2025-09-18".to_owned()));
+    assert_eq!(*channel, Some("nightly-2026-05-28".to_owned()));
 }
 
 #[then("detection fails with an invalid file error")]

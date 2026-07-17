@@ -12,7 +12,8 @@ use whitaker_installer::deps::DependencyInstallOptions;
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::installer_packaging::TargetTriple;
 use whitaker_installer::test_utils::dependency_binary_helpers::{
-    AlwaysNotFoundRepositoryInstaller, with_fake_binary_on_path,
+    AlwaysNotFoundRepositoryInstaller, cargo_dylint_check, dylint_link_install_list_check,
+    with_fake_binary_on_path,
 };
 use whitaker_installer::test_utils::*;
 
@@ -111,11 +112,8 @@ fn resolve_requested_crates_rejects_unknown_lints() {
 #[rstest]
 fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs) {
     with_fake_binary_on_path("dylint-link", || {
-        let executor = StubExecutor::new(vec![ExpectedCall {
-            cmd: "cargo",
-            args: vec!["dylint", "--version"],
-            result: Ok(success_output()),
-        }]);
+        let executor =
+            StubExecutor::new(vec![cargo_dylint_check(), dylint_link_install_list_check()]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
@@ -148,6 +146,7 @@ fn ensure_dylint_tools_installs_missing_tools(
                 args: vec!["dylint", "--version"],
                 result: Ok(failure_output("missing cargo-dylint")),
             },
+            dylint_link_install_list_check(),
             ExpectedCall {
                 cmd: "cargo",
                 args: vec!["binstall", "--version"],
@@ -158,11 +157,7 @@ fn ensure_dylint_tools_installs_missing_tools(
                 args: vec!["install", "--locked", "--version", "6.0.1", "cargo-dylint"],
                 result: Ok(success_output()),
             },
-            ExpectedCall {
-                cmd: "cargo",
-                args: vec!["dylint", "--version"],
-                result: Ok(success_output()),
-            },
+            cargo_dylint_check(),
         ]);
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
@@ -200,6 +195,7 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
                 args: vec!["dylint", "--version"],
                 result: Ok(failure_output("missing cargo-dylint")),
             },
+            dylint_link_install_list_check(),
             ExpectedCall {
                 cmd: "cargo",
                 args: vec!["binstall", "--version"],

@@ -71,6 +71,26 @@ pub fn success_output() -> Output {
     }
 }
 
+/// Creates a successful command `Output` with the given stdout text.
+///
+/// # Examples
+///
+/// ```
+/// use whitaker_installer::test_utils::stdout_output;
+///
+/// let output = stdout_output("cargo-dylint 1.2.3");
+/// assert!(output.status.success());
+/// assert_eq!(output.stdout, b"cargo-dylint 1.2.3");
+/// assert!(output.stderr.is_empty());
+/// ```
+pub fn stdout_output(stdout: impl AsRef<str>) -> Output {
+    Output {
+        status: exit_status(0),
+        stdout: stdout.as_ref().as_bytes().to_vec(),
+        stderr: Vec::new(),
+    }
+}
+
 /// Creates a failed command `Output` with the given stderr message.
 ///
 /// # Examples

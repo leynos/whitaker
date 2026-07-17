@@ -43,7 +43,7 @@ impl TestContext {
         Self {
             workspace_root: base.clone(),
             target_dir: base.join("target"),
-            toolchain: Toolchain::with_override(&base, "nightly-2025-09-18"),
+            toolchain: Toolchain::with_override(&base, "nightly-2026-05-28"),
             jobs: None,
             verbosity: 0,
             experimental: false,
@@ -99,7 +99,7 @@ fn test_ctx() -> TestContext {
 #[rstest]
 fn build_config_from_context_sets_toolchain(test_ctx: TestContext) {
     let config = build_config_from_context(&test_ctx.pipeline_context());
-    assert_eq!(config.toolchain.channel(), "nightly-2025-09-18");
+    assert_eq!(config.toolchain.channel(), "nightly-2026-05-28");
 }
 
 #[rstest]
@@ -226,7 +226,7 @@ fn pipeline_context_fields_are_accessible() {
 
     assert_eq!(context.workspace_root, Utf8Path::new("test_workspace"));
     assert_eq!(context.target_dir, Utf8Path::new("test_workspace/target"));
-    assert_eq!(context.toolchain.channel(), "nightly-2025-09-18");
+    assert_eq!(context.toolchain.channel(), "nightly-2026-05-28");
     assert_eq!(context.jobs, Some(4));
     assert_eq!(context.verbosity, 2);
     assert!(context.experimental);

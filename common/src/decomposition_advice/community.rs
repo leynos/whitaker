@@ -143,7 +143,7 @@ pub(crate) fn build_adjacency(
     }
 
     for neighbours in &mut adjacency {
-        neighbours.sort_by(|left, right| left.0.cmp(&right.0));
+        neighbours.sort_by_key(|left| left.0);
     }
 
     adjacency

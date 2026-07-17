@@ -238,11 +238,15 @@ fn emit_diagnostic(
     let note = normalise_isolation_marks(messages.note());
     let help = normalise_isolation_marks(messages.help());
 
-    cx.span_lint(CONDITIONAL_MAX_N_BRANCHES, metadata.span, move |lint| {
-        lint.primary_message(primary);
-        lint.span_note(metadata.span, note);
-        lint.help(help);
-    });
+    cx.emit_span_lint(
+        CONDITIONAL_MAX_N_BRANCHES,
+        metadata.span,
+        rustc_lint::errors::DiagDecorator(move |lint| {
+            lint.primary_message(primary);
+            lint.span_note(metadata.span, note);
+            lint.help(help);
+        }),
+    );
 }
 
 fn normalise_isolation_marks(text: &str) -> String {

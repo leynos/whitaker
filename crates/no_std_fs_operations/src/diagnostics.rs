@@ -36,11 +36,15 @@ pub(crate) fn emit_diagnostic(
         fallback_messages(&fallback_operation)
     });
 
-    cx.span_lint(NO_STD_FS_OPERATIONS, span, move |lint| {
-        lint.primary_message(sanitize_message(messages.primary().to_string()));
-        lint.note(sanitize_message(messages.note().to_string()));
-        lint.help(sanitize_message(messages.help().to_string()));
-    });
+    cx.emit_span_lint(
+        NO_STD_FS_OPERATIONS,
+        span,
+        rustc_lint::errors::DiagDecorator(move |lint| {
+            lint.primary_message(sanitize_message(messages.primary().to_string()));
+            lint.note(sanitize_message(messages.note().to_string()));
+            lint.help(sanitize_message(messages.help().to_string()));
+        }),
+    );
 }
 
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_std_fs_operations");

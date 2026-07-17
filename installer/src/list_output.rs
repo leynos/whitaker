@@ -142,11 +142,11 @@ mod tests {
     fn sample_lints() -> InstalledLints {
         let mut by_toolchain = BTreeMap::new();
         by_toolchain.insert(
-            "nightly-2025-09-18".to_owned(),
+            "nightly-2026-05-28".to_owned(),
             vec![InstalledLibrary {
                 crate_name: CrateName::from("whitaker_suite"),
-                toolchain: "nightly-2025-09-18".to_owned(),
-                path: Utf8PathBuf::from("/fake/path/libwhitaker_suite@nightly-2025-09-18.so"),
+                toolchain: "nightly-2026-05-28".to_owned(),
+                path: Utf8PathBuf::from("/fake/path/libwhitaker_suite@nightly-2026-05-28.so"),
             }],
         );
         InstalledLints { by_toolchain }
@@ -166,7 +166,7 @@ mod tests {
         let output = format_human(&lints, None);
 
         assert!(output.contains("Installed lints:"));
-        assert!(output.contains("Toolchain: nightly-2025-09-18"));
+        assert!(output.contains("Toolchain: nightly-2026-05-28"));
         assert!(output.contains("whitaker_suite"));
         assert!(output.contains("module_max_lines"));
     }
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn format_human_marks_active_toolchain() {
         let lints = sample_lints();
-        let output = format_human(&lints, Some("nightly-2025-09-18"));
+        let output = format_human(&lints, Some("nightly-2026-05-28"));
 
         assert!(output.contains("(active)"));
     }
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn format_json_includes_all_fields() {
         let lints = sample_lints();
-        let json = format_json(&lints, Some("nightly-2025-09-18"));
+        let json = format_json(&lints, Some("nightly-2026-05-28"));
 
         assert!(json.contains("\"channel\""));
         assert!(json.contains("\"active\": true"));

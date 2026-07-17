@@ -95,7 +95,7 @@ libraries = [ { git = "https://example.com/your/repo.git", pattern = "crates/*" 
   `camino`, `serde`, `thiserror`, `toml`, and proxy crates such as
   `rustc_attr_data_structures` so lint crates can opt into shared versions via
   `workspace = true`.
-- The workspace pins `nightly-2025-09-18` in `rust-toolchain.toml` and
+- The workspace pins `nightly-2026-05-28` in `rust-toolchain.toml` and
   forces `-C prefer-dynamic` via `.cargo/config.toml`. Preferring dynamic
   std/core keeps `rustc_private` consumers (for example `rustc_driver` in
   Dylint) from pulling mixed static and dynamic runtimes, eliminating the

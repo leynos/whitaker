@@ -68,7 +68,7 @@ fn staging_fixture() -> StagingFixture {
     StagingFixture {
         _temp_dir: temp_dir,
         staging_path,
-        toolchain: "nightly-2025-09-18",
+        toolchain: "nightly-2026-05-28",
     }
 }
 
@@ -111,7 +111,7 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
         toolchain,
     } = staging_fixture;
 
-    let foreign_path = staging_path.join("libforeign_lint@nightly-2025-09-18.so");
+    let foreign_path = staging_path.join("libforeign_lint@nightly-2026-05-28.so");
     fs::write(foreign_path.as_std_path(), b"foreign library")
         .expect("test setup should write foreign library");
 
@@ -172,7 +172,7 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
         args: &args,
         dirs: &dirs,
         requested_crates: &requested_crates,
-        toolchain_channel: "nightly-2025-09-18",
+        toolchain_channel: "nightly-2026-05-28",
     };
 
     let mut stderr = Vec::new();

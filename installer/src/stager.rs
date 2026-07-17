@@ -139,11 +139,11 @@ mod tests {
 
     #[test]
     fn staged_filename_includes_toolchain() {
-        let stager = Stager::new(Utf8PathBuf::from("/tmp/test"), "nightly-2025-09-18");
+        let stager = Stager::new(Utf8PathBuf::from("/tmp/test"), "nightly-2026-05-28");
         let crate_name = CrateName::from("module_max_lines");
         let filename = stager.staged_filename(&crate_name);
 
-        assert!(filename.contains("nightly-2025-09-18"));
+        assert!(filename.contains("nightly-2026-05-28"));
         assert!(filename.contains("module_max_lines"));
     }
 
@@ -151,13 +151,13 @@ mod tests {
     fn staging_path_includes_toolchain_and_release() {
         let stager = Stager::new(
             Utf8PathBuf::from("/home/user/.local/share/dylint/lib"),
-            "nightly-2025-09-18",
+            "nightly-2026-05-28",
         );
         let path = stager.staging_path();
 
         // Use ends_with for platform-independent path checking (compares components,
         // not strings, so it works with both / and \ separators)
-        assert!(path.ends_with("nightly-2025-09-18/release"));
+        assert!(path.ends_with("nightly-2026-05-28/release"));
         assert!(path.as_str().contains("dylint"));
         assert!(path.as_str().contains("lib"));
     }

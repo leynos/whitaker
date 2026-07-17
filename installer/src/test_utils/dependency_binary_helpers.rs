@@ -12,7 +12,7 @@ use crate::error::Result;
 use crate::installer_packaging::TargetTriple;
 #[cfg(any(test, feature = "test-support"))]
 use crate::test_support::env_test_guard;
-use crate::test_utils::{ExpectedCall, failure_output, success_output};
+use crate::test_utils::{ExpectedCall, failure_output, stdout_output, success_output};
 #[cfg(any(test, feature = "test-support"))]
 use std::fs;
 #[cfg(all(any(test, feature = "test-support"), unix))]
@@ -189,32 +189,69 @@ fn cargo_source_install(
     }
 }
 
-fn dependency_version(tool: &str) -> &'static str {
+/// Returns the manifest-pinned version for a dependency tool.
+///
+/// # Panics
+///
+/// Panics when the manifest cannot be parsed or the tool is unknown.
+pub fn dependency_version(tool: &str) -> &'static str {
     find_dependency_binary(tool)
         .expect("dependency manifest should parse")
         .map(|dependency| dependency.version())
         .unwrap_or_else(|| panic!("unexpected tool: {tool}"))
 }
 
+/// Successful `cargo dylint --version` output reporting the manifest version.
+pub fn cargo_dylint_version_output() -> Output {
+    stdout_output(format!(
+        "cargo-dylint {}\n",
+        dependency_version("cargo-dylint")
+    ))
+}
+
+/// Expected `cargo install --list` call reporting the manifest-pinned
+/// `dylint-link` version.
+pub fn dylint_link_install_list_check() -> ExpectedCall {
+    dylint_link_install_list_check_with_version(dependency_version("dylint-link"))
+}
+
+/// Expected `cargo install --list` call reporting the given `dylint-link`
+/// version.
+pub fn dylint_link_install_list_check_with_version(version: &str) -> ExpectedCall {
+    ExpectedCall {
+        cmd: "cargo",
+        args: vec!["install", "--list"],
+        result: Ok(stdout_output(format!(
+            "dylint-link v{version}:\n    dylint-link\n"
+        ))),
+    }
+}
+
 /// Creates an expected call for verifying repository installation.
 pub fn repository_verification_call(tool: &str, verification_fails: bool) -> Option<ExpectedCall> {
-    let result = if verification_fails {
-        Ok(failure_output("still missing"))
-    } else {
-        Ok(success_output())
-    };
     match tool {
         "cargo-dylint" => Some(ExpectedCall {
             cmd: "cargo",
             args: vec!["dylint", "--version"],
-            result,
+            result: if verification_fails {
+                Ok(failure_output("still missing"))
+            } else {
+                Ok(cargo_dylint_version_output())
+            },
         }),
-        "dylint-link" => None,
+        // Successful verification consults Cargo's installed-binary registry
+        // once the PATH existence probe passes. A failing verification is
+        // modelled as the binary being absent from PATH, which short-circuits
+        // before the executor is consulted.
+        "dylint-link" => (!verification_fails).then(dylint_link_install_list_check),
         other => panic!("unexpected tool: {other}"),
     }
 }
 
 /// Returns the expected verification call for a given tool.
+///
+/// Cargo-fallback scenarios in the behaviour suite model `dylint-link` as
+/// absent from PATH, so its verification never reaches the executor there.
 fn tool_verification_check(tool: &str) -> Option<ExpectedCall> {
     match tool {
         "cargo-dylint" => Some(cargo_dylint_check()),
@@ -384,7 +421,7 @@ pub fn cargo_dylint_check() -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
         args: vec!["dylint", "--version"],
-        result: Ok(success_output()),
+        result: Ok(cargo_dylint_version_output()),
     }
 }
 

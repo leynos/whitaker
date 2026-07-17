@@ -106,11 +106,11 @@ Screen reader note: The following JSON snippet illustrates the manifest format.
 {
   "git_sha": "abc1234",
   "schema_version": 1,
-  "toolchain": "nightly-2025-09-18",
+  "toolchain": "nightly-2026-05-28",
   "target": "x86_64-unknown-linux-gnu",
-  "generated_at": "2026-02-03T00:00:00Z",
+  "generated_at": "2026-05-28T00:00:00Z",
   "files": [
-    "libwhitaker_lints@nightly-2025-09-18-x86_64-unknown-linux-gnu.so"
+    "libwhitaker_lints@nightly-2026-05-28-x86_64-unknown-linux-gnu.so"
   ],
   "sha256": "..."
 }

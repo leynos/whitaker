@@ -39,12 +39,12 @@ where
 fn parses_standard_toolchain_format() {
     let contents = r#"
 [toolchain]
-channel = "nightly-2025-09-18"
+channel = "nightly-2026-05-28"
 components = ["rust-src", "rustc-dev"]
 "#;
     let channel =
         parse_toolchain_channel(contents).expect("should parse standard toolchain format");
-    assert_eq!(channel, "nightly-2025-09-18");
+    assert_eq!(channel, "nightly-2026-05-28");
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn rejects_invalid_toolchain_file(#[case] contents: &str, #[case] expected_reaso
 }
 
 fn run_missing_toolchain_install_test(extra: &[&str], expected_components: &[&str]) {
-    let channel = "nightly-2025-09-18";
+    let channel = "nightly-2026-05-28";
     let toolchain = test_toolchain(channel);
     let mut runner = MockCommandRunner::new();
     let mut seq = mockall::Sequence::new();
@@ -111,7 +111,7 @@ fn ensure_installed_installs_missing_toolchain(
 }
 
 fn run_component_installation_test(extra: &[&str], expected: &[&str]) {
-    let channel = "nightly-2025-09-18";
+    let channel = "nightly-2026-05-28";
     let toolchain = test_toolchain(channel);
     let mut runner = MockCommandRunner::new();
     let mut seq = mockall::Sequence::new();
@@ -146,14 +146,14 @@ fn ensure_installed_adds_correct_components(
 
 #[test]
 fn install_components_with_additional_components_assembles_rustup_args_in_order() {
-    let toolchain = test_toolchain("nightly-2025-09-18");
+    let toolchain = test_toolchain("nightly-2026-05-28");
     let runner = CapturingCommandRunner::new(output_with_status(0));
 
     toolchain
         .install_components_with(&runner, &[CRANELIFT_COMPONENT])
         .expect("component installation should succeed");
 
-    let expected_args: Vec<String> = ["component", "add", "--toolchain", "nightly-2025-09-18"]
+    let expected_args: Vec<String> = ["component", "add", "--toolchain", "nightly-2026-05-28"]
         .into_iter()
         .chain(REQUIRED_COMPONENTS.iter().copied())
         .chain([CRANELIFT_COMPONENT])
@@ -167,7 +167,7 @@ fn install_components_with_additional_components_assembles_rustup_args_in_order(
 
 #[test]
 fn install_components_with_failure_reports_all_components() {
-    let toolchain = test_toolchain("nightly-2025-09-18");
+    let toolchain = test_toolchain("nightly-2026-05-28");
     let runner =
         CapturingCommandRunner::new(output_with_stderr(1, COMPONENT_INSTALL_FAILURE_MESSAGE));
     let expected_components = [REQUIRED_COMPONENTS, &[CRANELIFT_COMPONENT]].concat();
@@ -184,7 +184,7 @@ fn install_components_with_failure_reports_all_components() {
                 ref toolchain,
                 ref components,
                 ref message,
-            } if toolchain == "nightly-2025-09-18"
+            } if toolchain == "nightly-2026-05-28"
                 && components == &expected_component_list
                 && message == COMPONENT_INSTALL_FAILURE_MESSAGE
         ),
@@ -208,7 +208,7 @@ fn ensure_installed_reports_failure(
     #[case] failure: InstallFailure,
     #[case] additional_components: &[&str],
 ) {
-    let channel = ToolchainChannel("nightly-2025-09-18");
+    let channel = ToolchainChannel("nightly-2026-05-28");
     let toolchain = test_toolchain(channel.as_str());
     let setup = FailureSetup {
         failure,
