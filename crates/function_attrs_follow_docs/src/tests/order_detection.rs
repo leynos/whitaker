@@ -220,8 +220,9 @@ fn attribute_within_item_accepts_dummy_item_span() {
 
 /// Covers every span-bearing recovery branch of `parsed_attribute_span`
 /// plus two non-recovered kinds, so diagnostics survive compiler span
-/// behaviour changes. `DocComment` needs interned symbols, so the cases
-/// are built inside the assertion loop rather than as `#[case]` values.
+/// behaviour changes. `DocComment` is omitted because constructing one
+/// requires an active symbol interner; its arm shares the whitelist
+/// match covered by the other recovered kinds.
 #[rstest]
 fn parsed_attribute_span_recovers_whitelisted_kinds() {
     let span = test_span(3, 9);
@@ -254,14 +255,14 @@ fn parsed_attribute_span_recovers_whitelisted_kinds() {
         );
     }
 
-    // Recovery is a whitelist: `Cold` carries a span but is not
-    // recovered, and `ConstStabilityIndirect` has no span at all.
+    // Recovery is a whitelist: `AllowInternalUnsafe` carries a span but
+    // is not recovered, and `Cold` has no span at all.
     let not_recovered: Vec<(&str, HirAttributeKind)> = vec![
-        ("cold", HirAttributeKind::Cold(span)),
         (
-            "const_stability_indirect",
-            HirAttributeKind::ConstStabilityIndirect,
+            "allow_internal_unsafe",
+            HirAttributeKind::AllowInternalUnsafe(span),
         ),
+        ("cold", HirAttributeKind::Cold),
     ];
     for (name, kind) in &not_recovered {
         assert_eq!(

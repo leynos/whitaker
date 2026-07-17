@@ -332,14 +332,14 @@ Implementation details:
   without depending on compiler types. `AttrInfo::try_from_hir` records the
   span, whether the attribute is a doc comment (via `doc_str`), and whether it
   is outer by reading the attribute style (`AttrStyle`). It accepts `Unparsed`
-  and `DocComment` attributes directly, and also `Parsed` attribute kinds that
-  the compiler eagerly parses but that still carry a recoverable user-written
-  span (for example `Inline` and `MustUse`, via `parsed_attribute_span`'s
-  whitelist), so those attributes keep participating in ordering. `Parsed`
-  kinds without a recoverable span (compiler-internal summaries such as
-  `ConstStabilityIndirect`, and deliberately `Cold`) return `None` and are
-  excluded. Inner attributes remain excluded from the ordering check in line
-  with the implementation.
+  attributes directly, and `Parsed` attribute kinds whose user-written span is
+  recoverable through `parsed_attribute_span`'s whitelist — `DocComment` is
+  one such parsed kind, handled the same way as `Inline` and `MustUse` — so
+  those attributes keep participating in ordering. `Parsed` kinds outside the
+  whitelist return `None` and are excluded, whether they carry no span at all
+  (such as `Cold`) or carry one that the ordering check deliberately does not
+  recover (such as `AllowInternalUnsafe`). Inner attributes remain excluded
+  from the ordering check in line with the implementation.
 - `attribute_within_item` decides whether an attribute belongs to the item
   being checked. Because modern nightlies exclude outer attributes from the
   item's HIR span — they sit immediately before it rather than inside it —

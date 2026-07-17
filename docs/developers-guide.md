@@ -1132,6 +1132,33 @@ To handle a new `T` (e.g., a custom span type in a test harness):
 
 No adapter code is needed unless `T` is `rustc_span::Span`.
 
+### Parsed attribute spans and item boundaries
+
+`function_attrs_follow_docs` layers two further recovery rules on top of the
+shared helpers, both in `crates/function_attrs_follow_docs/src/driver.rs`:
+
+- **Parsed attribute spans.** rustc migrates built-in attributes from
+  `Unparsed` to parsed `AttributeKind` variants nightly by nightly, and the
+  parsed representation has no uniform span accessor. `parsed_attribute_span`
+  therefore recovers the user-written span per kind through an explicit
+  whitelist (`DocComment`, `Ignore`, `Inline`, `MustUse`, `Naked`, `NoMangle`,
+  `Optimize`, `TargetFeature`, `TrackCaller`). Kinds outside the whitelist
+  return `None` and drop out of the ordering check — some carry no span at
+  all (`Cold`, `Used`), others carry one that is deliberately not recovered
+  yet (`AllowInternalUnsafe`, `Deprecated`). When the pin advances and a
+  variant changes shape, extend or adjust the whitelist rather than matching
+  spanless kinds.
+- **Item boundaries.** Modern nightlies exclude outer attributes from the
+  item's HIR span, so `attribute_within_item` accepts an attribute span that
+  is either contained within the item span (older behaviour, and inner
+  attributes) or ends at or before the item's start (outer attributes on
+  current nightlies). Dummy item spans are treated as vacuously in-bounds.
+
+Unit coverage for both rules lives in
+`crates/function_attrs_follow_docs/src/tests/order_detection.rs`
+(`parsed_attribute_span_recovers_whitelisted_kinds` and
+`attribute_within_item_span_boundaries`).
+
 ## Shared fingerprint helpers
 
 `common::rstest` exposes two families of pure data model for deterministic

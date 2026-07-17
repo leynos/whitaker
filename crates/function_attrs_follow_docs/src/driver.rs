@@ -149,10 +149,10 @@ impl AttrInfo {
     /// See `ui/pass_derive_macro_generated.rs` for the regression test covering
     /// compiler-generated attribute handling.
     fn try_from_hir(attr: &hir::Attribute) -> Option<Self> {
-        // User-written attributes are Unparsed, DocComment, or a parsed
-        // AttributeKind that retains the original attribute span. Parsed
-        // kinds without a recoverable span (for example `#[cold]`) are
-        // compiler-internal summaries and cannot participate in ordering.
+        // User-written attributes are Unparsed, or a parsed AttributeKind
+        // (including DocComment) whose original attribute span is
+        // recoverable. Parsed kinds without a recoverable span (for
+        // example `#[cold]`) cannot participate in ordering.
         let span = match attr {
             hir::Attribute::Unparsed(item) => item.span,
             hir::Attribute::Parsed(kind) => parsed_attribute_span(kind)?,
@@ -369,8 +369,11 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
 /// rustc migrates built-in attributes from `Unparsed` to parsed
 /// `AttributeKind` variants nightly by nightly. There is no uniform span
 /// accessor on the parsed representation, so the user-visible span is
-/// recovered per kind. Kinds without a span (for example `Cold` and
-/// `Used`) return `None` and are excluded from ordering checks. Only
+/// recovered per kind via this whitelist. Kinds outside the whitelist
+/// return `None` and are excluded from ordering checks: some carry no
+/// span at all (for example `Cold` and `Used`), while others (such as
+/// `AllowInternalUnsafe` and `Deprecated`) do carry a span but are
+/// deliberately not recovered until the ordering check needs them. Only
 /// variants whose shape is identical on the currently supported nightlies
 /// are matched; further kinds can be added as the pin advances.
 fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
@@ -415,8 +418,6 @@ trait OrderedAttribute {
     fn is_doc(&self) -> bool;
     fn span(&self) -> Span;
 }
-mod localization;
-mod localization;
 
 #[cfg(test)]
 #[path = "tests/localization.rs"]
