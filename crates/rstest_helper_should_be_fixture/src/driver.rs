@@ -106,7 +106,6 @@ pub struct RstestHelperShouldBeFixture {
     config: Config,
     detection_options: RstestDetectionOptions,
     collector: CallSiteCollector,
-    rstest_companion_tests: HashSet<hir::HirId>,
     rstest_collection_roots: HashSet<hir::HirId>,
     localizer: Localizer,
 }
@@ -119,7 +118,6 @@ impl Default for RstestHelperShouldBeFixture {
             config,
             detection_options,
             collector: CallSiteCollector::default(),
-            rstest_companion_tests: HashSet::new(),
             rstest_collection_roots: HashSet::new(),
             localizer: Localizer::new(None),
         }
@@ -162,7 +160,6 @@ impl RstestHelperShouldBeFixture {
         self.config = config;
         self.detection_options = self.config.detection_options();
         self.collector.clear();
-        self.rstest_companion_tests.clear();
         self.rstest_collection_roots.clear();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
@@ -174,15 +171,6 @@ impl RstestHelperShouldBeFixture {
         def_id: LocalDefId,
     ) {
         let hir_id = cx.tcx.local_def_id_to_hir_id(def_id);
-        if self.rstest_companion_tests.contains(&hir_id) {
-            debug!(
-                target: LINT_NAME,
-                "skipping helper call-site collection for non-rstest function: def_id={:?}",
-                def_id,
-            );
-            return;
-        }
-
         let attrs = cx
             .tcx
             .hir_attrs(hir_id)

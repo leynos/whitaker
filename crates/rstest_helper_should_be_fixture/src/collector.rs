@@ -131,8 +131,11 @@ impl CallSiteCollector {
         }
 
         let records = self.by_callee.entry(callee_key).or_default();
-        records.push(record);
-        records.sort_by_key(|record| (record.span.lo(), record.span.hi()));
+        // Preserve iteration order without re-sorting the complete callee bucket.
+        let insertion_index = records.partition_point(|existing| {
+            (existing.span.lo(), existing.span.hi()) < (record.span.lo(), record.span.hi())
+        });
+        records.insert(insertion_index, record);
         true
     }
 

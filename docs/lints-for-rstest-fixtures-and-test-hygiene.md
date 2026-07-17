@@ -448,7 +448,7 @@ standard lints.
 - The lint now walks strict `#[rstest]` test bodies in `check_fn` and passively
   collects local helper calls. It remains diagnostic-silent; threshold
   evaluation, helper grouping, and `span_lint_hir_and_then` emission stay
-  assigned to 8.2.3 and 8.2.4.
+  assigned to 8.2.3. UI pass/fail coverage stays assigned to 8.2.4.
 - The HIR-to-`ArgAtom` adapter lives inside
   `crates/rstest_helper_should_be_fixture/src/collector.rs` for this milestone.
   That keeps compiler-private HIR logic out of `whitaker_common::rstest`, while

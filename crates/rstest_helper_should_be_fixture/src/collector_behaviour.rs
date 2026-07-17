@@ -63,13 +63,15 @@ fn then_two_records(world: &CollectorWorld) {
     assert_eq!(world.collector.record_count(), 2);
 }
 
-#[expect(unused_variables, reason = "rstest-bdd requires the world parameter")]
 #[scenario(path = "tests/features/collection.feature", index = 0)]
-fn scenario_generated_cases_deduplicate(world: CollectorWorld) {}
+fn scenario_generated_cases_deduplicate(world: CollectorWorld) {
+    let _ = world;
+}
 
-#[expect(unused_variables, reason = "rstest-bdd requires the world parameter")]
 #[scenario(path = "tests/features/collection.feature", index = 1)]
-fn scenario_distinct_calls_remain_distinct(world: CollectorWorld) {}
+fn scenario_distinct_calls_remain_distinct(world: CollectorWorld) {
+    let _ = world;
+}
 
 fn record(callee_def_id: DefId, atom: ArgAtom) -> CallSiteRecord {
     CallSiteRecord::new(

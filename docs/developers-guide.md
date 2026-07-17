@@ -1473,12 +1473,15 @@ itself executes without holding that mutex to avoid nested-lock deadlocks.
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
 can run test binaries in separate processes, so a plain in-process `Mutex` is
-not sufficient for those examples. The lock acquisition path reaps directories
-that are older than 30 minutes, treats `NotFound` during stale cleanup as
-another process already releasing the lock, and waits indefinitely for a live
-lock in production while keeping the bounded timeout in tests. A sidecar
-advisory lock serializes ownership transitions, and the directory's owner token
-prevents an original holder from deleting a successor after stale recovery.
+not sufficient for those examples. A directory becomes eligible for stale
+recovery only after it has aged past 30 minutes, and stale cleanup removes
+that age-eligible lock directory only after successfully acquiring the
+lifetime owner-liveness lock. If stale cleanup sees `NotFound`, it treats the
+directory as already removed rather than as a failed recovery attempt, and
+the live lock path still waits indefinitely in production while the tests keep
+the bounded timeout. A sidecar advisory lock serializes ownership transitions,
+and the directory's owner token prevents an original holder from deleting a
+successor after stale recovery.
 
 ### Configuration constant patterns
 

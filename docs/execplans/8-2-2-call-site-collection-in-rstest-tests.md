@@ -312,7 +312,7 @@ Each completed item should be timestamped, e.g.,
   toolchain, so it cannot be used directly as a `BTreeMap` or `BTreeSet` key.
   Impact: `CallSiteCollector` now keys deterministic maps and deduplication on
   `cx.tcx.def_path_str(callee_def_id)` while preserving the raw callee `DefId`
-  inside each `CallSiteRecord`.
+  inside each `CallSiteRecord` for downstream lookup.
 
 - Discovery: full-scope `coderabbit review --agent` can reach
   `tools_completed` and then hang in CodeRabbit CLI v0.5.3 without writing
@@ -395,7 +395,8 @@ Each completed item should be timestamped, e.g.,
   key and keep `DefId` on `CallSiteRecord`. Rationale: the pinned rustc `DefId`
   implements equality and hashing but not ordering, while the roadmap requires
   deterministic per-callee collection. Definition paths provide the stable
-  ordering surface already used elsewhere in Whitaker. Author/Date: Codex /
+  ordering surface already used elsewhere in Whitaker, and the raw `DefId`
+  remains available for later compiler-side lookup. Author/Date: Codex /
   2026-06-04.
 
 - Decision: Keep the final refactor private to the lint crate and avoid public
@@ -475,7 +476,7 @@ Roadmap prerequisites 8.1.1, 8.1.2, and 8.1.3 provide:
 - `whitaker_common::rstest::is_rstest_test` /
   `is_rstest_test_with(attrs, trace, options)` for strict detection;
 - `whitaker_common::rstest::RstestDetectionOptions` /
-  `RstestParameter` / `classify_rstest_parameter` / `fixture_local_names`;
+  `RstestParameter` / `classify_rstest_parameter` / `fixture_local_ids`;
 - `whitaker_common::rstest::ArgAtom` /
   `whitaker_common::rstest::ArgFingerprint`;
 - `whitaker_common::rstest::recover_user_editable_span` plus
@@ -551,16 +552,18 @@ pure pieces and one adapter:
    callee definition path from `tcx.def_path_str(callee_def_id)`. It
    deduplicates with a private `CallSiteLocation` stored in a `BTreeSet`, so
    `#[case]`-generated siblings collapse into one record.
-3. `pub(crate) fn lower_arg_atom<'tcx>(...) -> ArgAtom` is the HIR-to-`ArgAtom`
-   adapter.
+3. `pub(crate) fn lower_arg_atom<'tcx>(...) -> ArgAtom` is the compiler-aware
+   HIR-to-`ArgAtom` adapter. It uses `HashSet<rustc_hir::HirId>` fixture-local
+   ID collection, matches `Res::Local(binding_id)` bindings against those IDs,
+   and classifies expression shape plus source recoverability.
 
 Adapter rules, applied in order:
 
 - if `recover_user_editable_hir_span(expr.span).is_none()`, return
   `ArgAtom::Unsupported`;
 - if the expression is `ExprKind::Path(QPath::Resolved(None, path))` whose
-  resolution is `Res::Local(_)` for a binding whose first segment matches a
-  fixture-local name, return `ArgAtom::FixtureLocal { name }`;
+  resolution is `Res::Local(binding_id)` for a binding whose `HirId` is in the
+  fixture-local ID set, return `ArgAtom::FixtureLocal { name }`;
 - if the expression is `ExprKind::Lit(lit)`, return
   `ArgAtom::ConstLit { text: snippet }` where `snippet` is the user-editable
   source slice of the literal taken via
@@ -630,9 +633,10 @@ Extend `crates/rstest_helper_should_be_fixture/src/driver.rs`:
   - early-return when the function is not a strict `#[rstest]` test under
     the configured `RstestDetectionOptions` (use `whitaker::hir`-provided
     attribute access to feed `is_rstest_test_with`);
-  - compute `fixture_locals = fixture_local_names(&parameters,
+  - compute `fixture_local_ids = fixture_local_ids(&parameters,
     &self.detection_options)`, where `parameters` is built from the body's
-    parameter patterns and attributes;
+    parameter patterns and attributes and the helper returns a
+    `HashSet<rustc_hir::HirId>`;
   - drive a HIR walk over `body.value` that visits each `Call` /
     `MethodCall` expression once. Use a small `rustc_hir::intravisit::Visitor`
     that traverses nested and deferred closure bodies, preserves closure-span
@@ -950,6 +954,10 @@ Wyvern design-coherence findings (summary):
 
 Firecrawl findings (summary):
 
+The source-backed findings below rely on the rstest documentation[^1], Dylint
+documentation[^2], rustc nightly documentation[^3], and the prior-art
+research[^4].
+
 ```plaintext
 - rstest 0.26 provider-driven parameter attributes:
   case, values, files, future, context. #[from] and #[with] are fixture-
@@ -957,28 +965,27 @@ Firecrawl findings (summary):
   #[ignore], and #[notrace] are operational modifiers, not provider
   drivers.
 - rstest macro expansion preserves the original function body as the inner
-  item visited by LateLintPass::check_fn; #[case]-driven tests are emitted
-  as siblings under an outer module named after the test function.
-- Dylint 5.x impl_late_lint! registers a LateLintPass. check_crate_post is
-  the canonical aggregation hook.
-- rustc HIR: cx.qpath_res(qpath, hir_id) for direct calls and constants;
-  cx.typeck_results().type_dependent_def_id(expr.hir_id) for method calls;
-  cx.tcx.def_path_str(def_id) for stable definition paths.
+  item visited by `LateLintPass::check_fn`; `#[case]`-driven tests are
+  emitted as siblings under an outer module named after the test
+  function.[^1]
+- Dylint 5.x `impl_late_lint!` registers a `LateLintPass`. `check_crate_post`
+  is the canonical aggregation hook.[^2]
+- rustc HIR: `cx.qpath_res(qpath, hir_id)` for direct calls and constants;
+  `cx.typeck_results().type_dependent_def_id(expr.hir_id)` for method calls;
+  `cx.tcx.def_path_str(def_id)` for stable definition paths.[^3]
 - Prior art for "extract repeated helper as fixture" lints: nothing
-  comparable in pytest, Ruff, or Clippy. The Whitaker rule is novel.
+  comparable in pytest, Ruff, or Clippy. The Whitaker rule is novel.[^4]
 ```
 
-External references checked during planning:
-
-- `docs.rs/rstest` — fixture and rstest attribute docs:
+[^1]: `docs.rs/rstest` fixture and rstest attribute docs:
   <https://docs.rs/rstest/latest/rstest/attr.rstest.html>
   <https://docs.rs/rstest/latest/rstest/attr.fixture.html>
-- `docs.rs/dylint_linting/5` — Dylint late-lint macros.
-- rustc nightly docs for `LateLintPass` and `ExprKind`:
+[^2]: `docs.rs/dylint_linting/5` - Dylint late-lint macros.
+[^3]: rustc nightly docs for `LateLintPass` and `ExprKind`:
   <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/trait.LateLintPass.html>
   <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/hir/enum.ExprKind.html>
-- Ruff/`flake8-pytest-style` fixture-style rules — none equivalent to the
-  proposed Whitaker rule (see Firecrawl findings).
+[^4]: Firecrawl findings checked during planning; no comparable prior
+  art was identified in pytest, Ruff, or Clippy.
 
 ## Interfaces and dependencies
 
@@ -1012,7 +1019,7 @@ pub(crate) struct CallSiteCollector {
 pub(crate) fn lower_arg_atom<'tcx>(
     cx: &rustc_lint::LateContext<'tcx>,
     expr: &'tcx rustc_hir::Expr<'tcx>,
-    fixture_locals: &std::collections::BTreeSet<String>,
+    fixture_local_ids: &std::collections::HashSet<rustc_hir::HirId>,
 ) -> whitaker_common::rstest::ArgAtom;
 
 pub(crate) fn resolve_local_callee<'tcx>(
