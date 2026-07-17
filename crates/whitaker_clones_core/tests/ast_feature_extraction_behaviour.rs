@@ -158,8 +158,7 @@ fn then_lowered_root_kind_is(world: &AstFeatureWorld, kind: String) {
     assert_eq!(tree.root().kind().get(), expected);
 }
 
-#[then("the AST hashes match")]
-fn then_ast_hashes_match(world: &AstFeatureWorld) {
+fn ast_hash_pair(world: &AstFeatureWorld) -> (AstHash, AstHash) {
     let left_hash = world
         .left_hash
         .borrow()
@@ -168,20 +167,20 @@ fn then_ast_hashes_match(world: &AstFeatureWorld) {
         .right_hash
         .borrow()
         .expect("right AST hash should be available after lowering");
+
+    (left_hash, right_hash)
+}
+
+#[then("the AST hashes match")]
+fn then_ast_hashes_match(world: &AstFeatureWorld) {
+    let (left_hash, right_hash) = ast_hash_pair(world);
 
     assert_eq!(left_hash, right_hash);
 }
 
 #[then("the AST hashes differ")]
 fn then_ast_hashes_differ(world: &AstFeatureWorld) {
-    let left_hash = world
-        .left_hash
-        .borrow()
-        .expect("left AST hash should be available after lowering");
-    let right_hash = world
-        .right_hash
-        .borrow()
-        .expect("right AST hash should be available after lowering");
+    let (left_hash, right_hash) = ast_hash_pair(world);
 
     assert_ne!(left_hash, right_hash);
 }
