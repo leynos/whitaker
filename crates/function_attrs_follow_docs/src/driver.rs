@@ -163,6 +163,15 @@ impl AttrInfo {
             return None;
         }
 
+        // Attributes whose span carries an expansion context were inserted by
+        // a macro rather than written at that position; the user cannot
+        // reorder them, and their recovered call-site span would misattribute
+        // an enclosing item's attribute (for example `#[async_trait]`) to
+        // every item the macro emits.
+        if span.from_expansion() {
+            return None;
+        }
+
         let is_doc = attr.doc_str().is_some();
         let is_outer = attr
             .doc_resolution_scope()
