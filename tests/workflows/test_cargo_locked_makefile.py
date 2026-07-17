@@ -56,8 +56,12 @@ def _run_make(target: str, cargo: Path, locked: str, stub_dir: Path) -> list[str
         "CARGO_LOCKED_LOG": str(log),
         "PATH": f"{stub_dir}:/usr/bin:/bin",
     }
+    environment.pop("CARGO_LOCKED", None)
+    make_arguments = ["make", target, f"CARGO={cargo}"]
+    if locked:
+        make_arguments.append(f"CARGO_LOCKED={locked}")
     result = subprocess.run(
-        ["make", target, f"CARGO={cargo}", f"CARGO_LOCKED={locked}"],
+        make_arguments,
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
