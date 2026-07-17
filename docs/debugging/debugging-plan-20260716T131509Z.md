@@ -12,7 +12,7 @@ JSON output.
 ### H1: the wrapper is not cleared on Linux (high confidence)
 
 `run_with_runner` calls a Windows-only environment guard. On non-Windows
-targets that guard is a no-op, so Cargo invokes `sccache rustc` and
+targets, that guard is a no-op, so Cargo invokes `sccache rustc` and
 `dylint_testing` cannot recognize the invocation it expects.
 
 - Prediction: an ordinary targeted UI test fails with the reported error when
