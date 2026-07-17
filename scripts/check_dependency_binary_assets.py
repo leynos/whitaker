@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["cyclopts>=2.9", "plumbum"]
@@ -43,7 +43,12 @@ ARCHIVE_TARGETS: tuple[str, ...] = (
 def expected_assets(
     manifest_path: Path, targets: typ.Sequence[str] = ARCHIVE_TARGETS
 ) -> list[str]:
-    """Return every archive name the manifest implies for the targets."""
+    """Return every asset name the manifest implies for the targets.
+
+    Each archive is accompanied by its ``.sha256`` sidecar: the installer
+    downloads and verifies the checksum before accepting an archive, so a
+    release missing a sidecar is as broken as one missing the archive.
+    """
     manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
     assets: list[str] = []
     for entry in manifest.get("dependency_binaries", []):
@@ -51,7 +56,9 @@ def expected_assets(
         version = entry["version"]
         for target in targets:
             extension = "zip" if "windows" in target else "tgz"
-            assets.append(f"{package}-{target}-v{version}.{extension}")
+            archive = f"{package}-{target}-v{version}.{extension}"
+            assets.append(archive)
+            assets.append(f"{archive}.sha256")
     return assets
 
 

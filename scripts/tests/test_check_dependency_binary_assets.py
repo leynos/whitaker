@@ -50,12 +50,14 @@ def manifest_path(tmp_path: Path) -> Path:
 
 
 def test_expected_assets_cover_every_tool_and_target(probe, manifest_path) -> None:
-    """Every tool gains one archive per target with the right extension."""
+    """Every tool gains an archive and checksum sidecar per target."""
     assets = probe.expected_assets(manifest_path)
 
-    assert len(assets) == 2 * len(probe.ARCHIVE_TARGETS)
+    assert len(assets) == 2 * 2 * len(probe.ARCHIVE_TARGETS)
     assert "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz" in assets
+    assert "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz.sha256" in assets
     assert "dylint-link-x86_64-pc-windows-msvc-v6.0.1.zip" in assets
+    assert "dylint-link-x86_64-pc-windows-msvc-v6.0.1.zip.sha256" in assets
     assert not [a for a in assets if "windows" in a and a.endswith(".tgz")]
 
 
@@ -65,7 +67,9 @@ def test_expected_assets_respects_target_override(probe, manifest_path) -> None:
 
     assert assets == [
         "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz",
+        "cargo-dylint-x86_64-unknown-linux-gnu-v6.0.1.tgz.sha256",
         "dylint-link-x86_64-unknown-linux-gnu-v6.0.1.tgz",
+        "dylint-link-x86_64-unknown-linux-gnu-v6.0.1.tgz.sha256",
     ]
 
 
