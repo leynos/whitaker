@@ -27,9 +27,9 @@ A maintainer can:
   `debug!` logging targeted at the lint name,
 - run a new behavioural test under `rstest-bdd` that asserts the collector
   records exactly the call sites a fixture-format Rust file declares, and
-- read property-based and snapshot tests proving that fingerprints are stable
-  across textually-equivalent helper calls, deterministic across HIR walk
-  order, and insensitive to macro-only call sites.
+- read property-based tests proving that fingerprints are stable across
+  textually-equivalent helper calls, deterministic across HIR walk order, and
+  insensitive to macro-only call sites.
 
 The lint must remain diagnostic-silent. Aggregation thresholds, helper-class
 filtering by trigger conditions, and `span_lint_hir_and_then` calls all belong
@@ -100,8 +100,7 @@ This plan was approved before implementation started.
   justify it before adding it.
 - Test surface: if `rstest-bdd` cannot demonstrate the collector's behaviour
   in user terms after one attempt, stop and choose between extending the
-  observability surface (for example, exposing a `pub(crate)` snapshot of the
-  collected state) and downgrading to a unit-only proof.
+  observability surface and downgrading to a unit-only proof.
 - Iterations: if `make test` still fails after two targeted fix attempts on
   the same milestone, stop and document the failing command, log path, and
   remaining options.
@@ -206,8 +205,8 @@ This plan was approved before implementation started.
   the crate-post hook drains it into a `debug!` log without emitting
   diagnostics.
 - [x] (2026-06-04T01:56:56Z) Added focused unit coverage for deterministic
-  collector ordering and source-span deduplication. Property, snapshot, and
-  behavioural coverage remain to be added in the next stage.
+  collector ordering and source-span deduplication. Property and behavioural
+  coverage remain to be added in the next stage.
 - [x] (2026-06-04T02:46:39Z) Added `rstest-bdd` behavioural coverage for
   generated-case deduplication and distinct-source span retention, a `proptest`
   insertion-order invariant for collector determinism, and a trybuild pass
@@ -695,11 +694,7 @@ Test surfaces, in order of priority:
      `crates/rstest_helper_should_be_fixture/src/collector_behaviour.rs`,
      using `rstest-bdd` with synthetic collector records and then asserting on
      the collector outcome.
-3. **Snapshot tests** with `insta` if a stable serialization of the
-   collector snapshot is appropriate. Snapshot only the deduplicated
-   `(callee_def_path, fingerprint, span_lo, span_hi)` projection so the
-   snapshot is robust to incidental ordering.
-4. **End-to-end behavioural fixture** under
+3. **End-to-end behavioural fixture** under
    `crates/rstest_helper_should_be_fixture/examples/` mirroring
    `no_unwrap_or_else_panic`'s `pass_unwrap_in_rstest_harness.rs` so the
    harness exercises the full `cargo dylint` path. Mark it `#[ignore]` if it
@@ -1025,18 +1020,13 @@ pub(crate) fn resolve_local_callee<'tcx>(
 ) -> Option<rustc_hir::def_id::DefId>;
 ```
 
-If `pub(crate)` test access is required by `rstest-bdd` steps, expose a
-`pub(crate) fn snapshot(&self) -> Vec<(String, Vec<CallSiteRecord>)>`
-method on `CallSiteCollector` and a similar accessor on
-`RstestHelperShouldBeFixture`. Do not promote these to the crate's public API.
-
 Dependencies in the landed contract:
 
 - workspace-pinned `rustc_ast`, `rustc_hir`, `rustc_lint`, `rustc_session`,
   and `rustc_span` driver crates,
 - `dylint_linting`, `serde`, `log`, `whitaker`, and `whitaker-common`,
 - workspace dev-dependencies `rstest`, `rstest-bdd`, `rstest-bdd-macros`,
-  `proptest`, `insta`, and `dylint_testing`,
+  `proptest`, and `dylint_testing`,
 - crate-local test-support dependencies `filetime` and `fs2`.
 
 No additional third-party dependency is required for the implemented 8.2.2
