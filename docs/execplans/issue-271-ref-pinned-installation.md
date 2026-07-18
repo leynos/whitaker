@@ -86,7 +86,7 @@ clone recovers from the detached checkout).
   before pulling (Stage C step 3). This is a required behaviour, tested.
 - Risk: the prebuilt manifest's `git_sha` format (full versus abbreviated
   SHA) is not yet confirmed, so SHA comparison against a resolved ref could
-  mis-match.
+  mismatch.
   Severity: medium. Likelihood: medium.
   Mitigation: Stage A confirms the format from
   `installer/src/artefact/git_sha.rs` and the release workflow; comparison
@@ -122,11 +122,13 @@ clone recovers from the detached checkout).
   `git_ref`) → green (26 cli tests). Commit 6e36c2d.
 - [x] (2026-07-08) Stage B/C slice 2: git helpers `resolve_commit`,
   `fetch_ref`, `checkout_detached`, `ensure_default_branch`. Red (E0425 missing
-  functions) → green (8 real-git TempDir tests). Commit a7de0ba.
+  functions) → green (8 real-git TempDir tests). See
+  <https://github.com/leynos/whitaker/commit/a7de0ba03ecc5e20bc4c128b11f013dd9fe8edc2>.
 - [x] (2026-07-08) Stage B/C slice 3: workspace plumbing — `WorkspaceCheckout`,
   `ensure_workspace(dirs, update, git_ref)`, `RefUnsupported`, pin-on-miss
   fetch, `ensure_default_branch` before every update. Red (E0425/E0599) → green.
-  Commit ded3ac5.
+  See
+  <https://github.com/leynos/whitaker/commit/ded3ac53dd40feee95f4e0d698053b0d019876b0>.
 - [x] (2026-07-08) Stage B/C slice 4: prebuilt `expected_git_sha` validation
   (prefix-tolerant) threaded through the fast path. Red (mismatch returned
   Success) → green (3 unit + 1 BDD). Commit c65281c.
@@ -207,7 +209,7 @@ clone recovers from the detached checkout).
   implementation slice (prebuilt-mismatch with slice 4; pinned dry-run and the
   in-workspace refusal with slice 5) rather than as a separate Stage B pass, so
   each commit stays self-consistent and green. Every new test still failed first
-  for the intended reason (recorded in Progress and Artifacts).
+  for the intended reason (recorded in Progress and Artefacts).
   Date/Author: 2026-07-08, agent.
 - Decision (implementation): the user sees two messages when pinning — a
   pre-checkout `Pinning Whitaker suite to REF...` progress line and, after the
@@ -250,7 +252,7 @@ publishes to crates.io as `whitaker-installer`. Key modules, all paths
 relative to the repository root:
 
 - `installer/src/cli.rs` — clap definitions. `InstallArgs` is the flag
-  struct; it has a hand-written `Default` impl and is flattened into `Cli`
+  struct; it has a handwritten `Default` impl and is flattened into `Cli`
   for the default (no-subcommand) install. Tests in
   `installer/src/cli_tests.rs`.
 - `installer/src/main.rs` — orchestration. `run_install` performs: (1)

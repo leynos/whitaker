@@ -22,11 +22,13 @@ fn cli_parses_defaults() {
     assert!(cli.install.git_ref.is_none());
 }
 
+#[test]
 fn cli_parses_ref_flag_bare() {
     let cli = Cli::parse_from(["whitaker-installer", "--ref", "v0.2.5"]);
     assert_eq!(cli.install.git_ref.as_deref(), Some("v0.2.5"));
 }
 
+#[test]
 fn cli_parses_ref_flag_under_install_subcommand() {
     let cli = Cli::parse_from(["whitaker-installer", "install", "--ref", "1a2b3c4d"]);
     match cli.command {
@@ -36,6 +38,8 @@ fn cli_parses_ref_flag_under_install_subcommand() {
         _ => panic!("expected Install command"),
     }
 }
+
+#[test]
 fn cli_parses_target_dir() {
     let cli = Cli::parse_from(["whitaker-installer", "-t", "/tmp/dylint"]);
     assert_eq!(

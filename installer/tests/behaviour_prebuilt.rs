@@ -205,11 +205,14 @@ fn given_destination_path_conflict(world: &mut PrebuiltWorld) {
     world.force_destination_conflict = true;
 }
 
+#[given("the pinned commit does not match the manifest git SHA")]
 fn given_pinned_commit_mismatch(world: &mut PrebuiltWorld) {
     // The shared test manifest records git_sha "abc1234"; this full SHA does
     // not share that prefix, so the pinned install cannot reuse the artefact.
     world.expected_git_sha = Some("deadbeef00000000000000000000000000000000".to_owned());
 }
+
+#[when("prebuilt download is attempted")]
 fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
     let toolchain = world
         .expected_toolchain
@@ -394,6 +397,10 @@ fn scenario_build_only(world: PrebuiltWorld) {
     let _ = world;
 }
 
+#[scenario(
+    path = "tests/features/prebuilt_download.feature",
+    name = "Prebuilt is skipped when the pinned ref does not match"
+)]
 fn scenario_pinned_ref_mismatch(world: PrebuiltWorld) {
     let _ = world;
 }
