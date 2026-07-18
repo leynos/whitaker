@@ -176,7 +176,6 @@ build experimental lints as individual libraries, combine it with
 require `--experimental`; without that opt-in the installer rejects the request
 before building anything.
 
-
 ### Pinning the suite
 
 By default the standalone installer tracks the moving `leynos/whitaker` default

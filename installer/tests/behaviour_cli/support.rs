@@ -1,5 +1,13 @@
 //! Shared fixtures, command helpers, and assertions for CLI behaviour tests.
 
+#[path = "support/pinned_ref.rs"]
+mod pinned_ref;
+
+pub(super) use pinned_ref::{
+    assert_pinned_ref_output_is_shown, assert_ref_unsupported_message_is_shown,
+    configure_dry_run_with_pinned_ref, configure_ref_in_workspace,
+};
+
 use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 use rstest::fixture;
 use std::cell::{Cell, Ref, RefCell};
@@ -144,63 +152,6 @@ pub(super) fn configure_dry_run_with_target_dir(cli_world: &CliWorld) {
     ]);
 }
 
-/// The ref used by the pinned-install CLI scenarios.
-pub(super) const SCENARIO_REF: &str = "v0.2.5";
-
-pub(super) fn configure_dry_run_with_pinned_ref(cli_world: &CliWorld) {
-    let Some(channel) = ensure_required_toolchain_available(cli_world) else {
-        return;
-    };
-
-    let target_dir = setup_temp_dir(cli_world);
-    cli_world.args.replace(vec![
-        "--dry-run".to_owned(),
-        "--toolchain".to_owned(),
-        channel,
-        "--target-dir".to_owned(),
-        target_dir,
-        "--ref".to_owned(),
-        SCENARIO_REF.to_owned(),
-    ]);
-}
-
-pub(super) fn configure_ref_in_workspace(cli_world: &CliWorld) {
-    // The harness runs the installer from the whitaker workspace root, so a
-    // `--ref` must be refused. `--skip-deps` keeps the refusal ahead of any
-    // dependency installation, and no toolchain is required to reach it.
-    cli_world.args.replace(vec![
-        "--ref".to_owned(),
-        SCENARIO_REF.to_owned(),
-        "--skip-deps".to_owned(),
-    ]);
-}
-
-pub(super) fn assert_pinned_ref_output_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains(&format!("Pinned ref: {SCENARIO_REF}")),
-        "expected dry-run output to report the pinned ref, stderr: {stderr}"
-    );
-}
-
-pub(super) fn assert_ref_unsupported_message_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("the current directory is itself a Whitaker workspace"),
-        "expected a ref-unsupported refusal, stderr: {stderr}"
-    );
-}
-
 pub(super) fn configure_dry_run_unknown_lint(cli_world: &CliWorld) {
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
@@ -272,12 +223,16 @@ pub(super) fn get_output(cli_world: &CliWorld) -> Ref<'_, Output> {
     Ref::map(output, |opt| opt.as_ref().expect("output not set"))
 }
 
-fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
+/// Borrows command output when a scenario has not been skipped.
+fn output_for_assertions(cli_world: &CliWorld) -> Option<Ref<'_, Output>> {
+    (!cli_world.skip_assertions.get()).then(|| get_output(cli_world))
+}
 
-    let output = get_output(cli_world);
+fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
+    let Some(output) = output_for_assertions(cli_world) else {
+        return;
+    };
+
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
         output.status.success(),
@@ -292,14 +247,13 @@ pub(super) fn assert_cli_exits_successfully(cli_world: &CliWorld) {
 }
 
 pub(super) fn assert_dry_run_output_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
+    let Some(output) = output_for_assertions(cli_world) else {
         return;
-    }
+    };
 
     let toolchain = cli_world.toolchain.borrow();
     let toolchain = toolchain.as_ref().expect("toolchain not set");
 
-    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(stderr.contains("Dry run - no files will be modified"));
@@ -324,11 +278,10 @@ pub(super) fn assert_cli_exits_with_error(cli_world: &CliWorld) {
 }
 
 pub(super) fn assert_unknown_lint_message_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
+    let Some(output) = output_for_assertions(cli_world) else {
         return;
-    }
+    };
 
-    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(
@@ -346,11 +299,10 @@ pub(super) fn assert_unknown_lint_message_is_shown(cli_world: &CliWorld) {
 }
 
 pub(super) fn assert_experimental_lint_opt_in_message_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
+    let Some(output) = output_for_assertions(cli_world) else {
         return;
-    }
+    };
 
-    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(
@@ -370,11 +322,10 @@ pub(super) fn assert_experimental_lint_opt_in_message_is_shown(cli_world: &CliWo
 }
 
 pub(super) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
+    let Some(output) = output_for_assertions(cli_world) else {
         return;
-    }
+    };
 
-    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(stderr.contains("Dry run - no files will be modified"));
@@ -389,11 +340,10 @@ pub(super) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWo
 }
 
 pub(super) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
+    let Some(output) = output_for_assertions(cli_world) else {
         return;
-    }
+    };
 
-    let output = get_output(cli_world);
     assert!(
         output.status.success(),
         "installation failed: {}",
@@ -402,11 +352,10 @@ pub(super) fn assert_installation_succeeds_or_is_skipped(cli_world: &CliWorld) {
 }
 
 pub(super) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
+    let Some(output) = output_for_assertions(cli_world) else {
         return;
-    }
+    };
 
-    let output = get_output(cli_world);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let channel = cli_world.toolchain.borrow();
     let channel = channel.as_ref().expect("toolchain not set");

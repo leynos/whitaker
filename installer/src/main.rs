@@ -6,6 +6,7 @@
 
 mod install_flow;
 mod staged_suite;
+mod workspace_progress;
 
 #[cfg(test)]
 use crate::install_flow::ensure_dylint_tools_with_options;
@@ -223,54 +224,16 @@ fn ensure_whitaker_workspace(
     dirs: &dyn BaseDirs,
     stderr: &mut dyn Write,
 ) -> Result<WorkspaceCheckout> {
-    use whitaker_installer::workspace::{
-        WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
-    };
+    use whitaker_installer::workspace::ensure_workspace;
 
     let git_ref = args.git_ref.as_deref();
-
-    if !args.quiet
-        && let Some(clone_dir) = clone_directory(dirs)
-        && let Some(cwd) = std::env::current_dir()
-            .ok()
-            .and_then(|p| Utf8PathBuf::try_from(p).ok())
-    {
-        match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
-            WorkspaceAction::CloneTo(dir) => {
-                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-            }
-            WorkspaceAction::UpdateAt(dir) => {
-                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-            }
-            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
-        }
-
-        if let Some(git_ref) = git_ref {
-            write_stderr_line(stderr, format!("Pinning Whitaker suite to {git_ref}..."));
-        }
-    }
+    workspace_progress::report_workspace_progress(args, dirs, stderr);
 
     let checkout = ensure_workspace(dirs, !args.no_update, git_ref)?;
-    if !args.quiet
-        && let Some(commit) = &checkout.pinned_commit
-    {
-        write_stderr_line(
-            stderr,
-            format!(
-                "Pinned Whitaker suite to {} ({}).",
-                git_ref.unwrap_or(commit.as_str()),
-                short_commit(commit)
-            ),
-        );
-    }
+    workspace_progress::report_pinned_checkout(args.quiet, git_ref, &checkout, stderr);
     Ok(checkout)
 }
 
-/// Abbreviates a commit SHA to its leading 12 characters for display.
-fn short_commit(commit: &str) -> &str {
-    let end = commit.len().min(12);
-    &commit[..end]
-}
 /// Detects or overrides the toolchain, then verifies it is installed.
 fn resolve_toolchain(
     workspace_root: &Utf8Path,

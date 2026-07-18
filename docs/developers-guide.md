@@ -1631,6 +1631,24 @@ This skips building entirely, providing faster lint runs during development.
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
 
+#### Private helper boundaries
+
+Installer helpers remain private to the module that owns their side effects.
+`git::run_git_checked` is only for Git commands whose successful output is
+discarded and whose non-zero exit status maps directly to `InstallerError::Git`;
+commands that inspect output or interpret a non-zero status must continue to use
+`run_git_with_timeout` directly. Real-Git regression fixtures and tests belong
+in `git_tests.rs`, keeping the production adapter focused. The helpers in
+`workspace_progress.rs` only render operator messages at the CLI edge and must
+not clone, update, or pin the checkout themselves.
+
+Behaviour-test support follows the same ownership rule.
+`behaviour_cli::support::output_for_assertions` combines scenario-skip handling
+with borrowing the captured process output. Assertion-specific expectations
+remain in their step functions. Pinned-ref scenario setup and assertions stay
+in `support/pinned_ref.rs`; support for other behaviour suites should stay local
+unless multiple suites need exactly the same contract.
+
 #### `resolve_additional_components`
 
 ```rust

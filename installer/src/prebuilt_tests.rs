@@ -15,6 +15,7 @@ const MATCHING_COMMIT: &str = "abc1234000000000000000000000000000000ab";
 
 /// A full 40-hex commit SHA that does not share the manifest's prefix.
 const MISMATCHED_COMMIT: &str = "deadbeef00000000000000000000000000000000";
+
 fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     PrebuiltConfig {
         target: TARGET,
@@ -45,6 +46,7 @@ fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
     (downloader, extractor)
 }
 
+#[test]
 fn expected_git_sha_mismatch_returns_fallback() {
     let (_temp, destination_dir) = destination_dir();
     let config = PrebuiltConfig {
@@ -62,10 +64,13 @@ fn expected_git_sha_mismatch_returns_fallback() {
     }
 }
 
-fn expected_git_sha_match_returns_success() {
+#[rstest]
+#[case::matching_commit(Some(MATCHING_COMMIT))]
+#[case::unpinned(None)]
+fn matching_or_unpinned_git_sha_returns_success(#[case] expected_git_sha: Option<&str>) {
     let (_temp, destination_dir) = destination_dir();
     let config = PrebuiltConfig {
-        expected_git_sha: Some(MATCHING_COMMIT),
+        expected_git_sha,
         ..base_config(&destination_dir)
     };
     let (downloader, extractor) = success_mocks();
@@ -77,18 +82,6 @@ fn expected_git_sha_match_returns_success() {
     );
 }
 
-fn expected_git_sha_none_leaves_behaviour_unchanged() {
-    let (_temp, destination_dir) = destination_dir();
-    let config = base_config(&destination_dir);
-    assert!(config.expected_git_sha.is_none());
-    let (downloader, extractor) = success_mocks();
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    assert!(
-        matches!(result, PrebuiltResult::Success { .. }),
-        "expected Success, got {result:?}"
-    );
-}
 fn destination_dir() -> (tempfile::TempDir, Utf8PathBuf) {
     let temp = tempfile::tempdir().expect("temp dir");
     let root = Utf8PathBuf::try_from(temp.path().to_path_buf()).expect("UTF-8 path");
