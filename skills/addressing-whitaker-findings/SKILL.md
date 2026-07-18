@@ -50,7 +50,7 @@ because there a failure is the test verdict.
   cannot see through the expansion; rewrite as `if let`/`else` (a
   plain `match` may then trip clippy's `single_match_else`).
 
-**Proc-macro erasure — functions the lint cannot recognise as tests.**
+**Proc-macro erasure — functions the lint cannot recognize as tests.**
 Attributes are gone by the time lints see HIR, so these are treated as
 production code even inside `cfg(test)`:
 
@@ -60,7 +60,7 @@ production code even inside `cfg(test)`:
 - `#[serial]`-wrapped `#[test]` functions.
 
 In each case, make the function fallible instead of suppressing.
-Plain `#[test]` and `#[rstest]` bodies ARE recognised.
+Plain `#[test]` and `#[rstest]` bodies ARE recognized.
 
 **Structural no-propagation contexts** get a documented escape hatch,
 not a scattering of expects: an extension trait (e.g. `ExpectValid`)
