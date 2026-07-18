@@ -37,7 +37,7 @@ to roadmap item 8.2.3. UI pass/fail fixtures and the final `whitaker.toml`
 schema notes belong to 8.2.4. The roadmap tick for 8.2.2 only lands after 8.2.2
 has its own gates green and CodeRabbit clean.
 
-This plan must be approved before implementation starts.
+This plan was approved before implementation started.
 
 ## Constraints
 

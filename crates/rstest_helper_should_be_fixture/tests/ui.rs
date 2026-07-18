@@ -14,6 +14,7 @@ extern crate rustc_driver;
 use dylint_testing::ui::Test;
 use filetime::{FileTime, set_file_mtime};
 use fs2::FileExt;
+use log::debug;
 use rstest::rstest;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -33,10 +34,11 @@ const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";
 const EXAMPLE_HARNESS_LOCK_LIVENESS_EXTENSION: &str = "owner-lock";
+const EXAMPLE_HARNESS_LOCK_LOG_TARGET: &str =
+    "rstest_helper_should_be_fixture::example_harness_lock";
 
 #[path = "ui/lock_model.rs"]
 mod lock_model;
-
 #[rstest]
 #[case("bootstrap_zero_diagnostic")]
 #[case("collection_zero_diagnostic")]
@@ -54,10 +56,10 @@ fn example_harness_collects_call_site_evidence() {
 
     for expected in [
         "callee_count=3",
-        "record_count=7",
+        "record_count=8",
         "callee=Builder::<'_>::build;records=1\nfingerprint=unsupported,fixture-local",
         "callee=helper;records=2",
-        "callee=nested_helper;records=4",
+        "callee=nested_helper;records=5",
         "fingerprint=unsupported,fixture-local",
         "fingerprint=fixture-local,fixture-local,const-path,const-path",
         "fingerprint=fixture-local,const-lit,const-path,const-path",
@@ -103,15 +105,14 @@ struct ExampleHarnessLockOwner(String);
 impl ExampleHarnessLockOwner {
     fn new() -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let elapsed = SystemTime::now()
+        let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        let timestamp = elapsed.as_nanos();
+            .unwrap_or_default()
+            .as_nanos();
         let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
         Self(format!("{}-{timestamp}-{sequence}", std::process::id()))
     }
 }
-
 impl ExampleHarnessLock {
     fn acquire() -> io::Result<Self> {
         Self::acquire_at(
@@ -122,11 +123,17 @@ impl ExampleHarnessLock {
 
     fn acquire_at(path: PathBuf, wait_limit: Option<Duration>) -> io::Result<Self> {
         let started_at = Instant::now();
+        let mut attempt = 0_u64;
         loop {
+            attempt += 1;
             let state_guard = lock_example_harness_state(&path)?;
             match create_example_harness_lock(path.clone()) {
-                Ok(lock) => return Ok(lock),
+                Ok(lock) => {
+                    debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=acquired path={} owner={} attempt={} elapsed_ms={}", path.display(), lock.owner.0, attempt, started_at.elapsed().as_millis());
+                    return Ok(lock);
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=contended path={} attempt={} elapsed_ms={}", path.display(), attempt, started_at.elapsed().as_millis());
                     recover_stale_example_harness_lock_while_locked(&path)?;
                 }
                 Err(error) => return Err(error),
@@ -136,7 +143,6 @@ impl ExampleHarnessLock {
         }
     }
 }
-
 fn create_example_harness_lock(path: PathBuf) -> io::Result<ExampleHarnessLock> {
     let Some(owner_liveness) = try_lock_example_harness_liveness(&path)? else {
         return Err(io::Error::from(io::ErrorKind::AlreadyExists));
@@ -153,7 +159,6 @@ fn create_example_harness_lock(path: PathBuf) -> io::Result<ExampleHarnessLock> 
         owner_liveness,
     })
 }
-
 impl Drop for ExampleHarnessLock {
     fn drop(&mut self) {
         if let Ok(_state_guard) = lock_example_harness_state(&self.path) {
@@ -171,6 +176,7 @@ fn wait_for_example_harness_lock_release(
 ) -> io::Result<()> {
     recover_stale_example_harness_lock(path)?;
     if wait_limit.is_some_and(|wait_limit| started_at.elapsed() >= wait_limit) {
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=timed_out path={} elapsed_ms={}", path.display(), started_at.elapsed().as_millis());
         return Err(example_harness_lock_timeout(path));
     }
     std::thread::sleep(EXAMPLE_HARNESS_LOCK_POLL_INTERVAL);
@@ -182,16 +188,14 @@ fn example_harness_lock_timeout(path: &Path) -> io::Error {
         io::ErrorKind::TimedOut,
         format!(
             "timed out waiting for example harness lock at {}",
-            path.display(),
+            path.display()
         ),
     )
 }
-
 fn recover_stale_example_harness_lock(path: &Path) -> io::Result<()> {
     let _state_guard = lock_example_harness_state(path)?;
     recover_stale_example_harness_lock_while_locked(path)
 }
-
 fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -201,18 +205,18 @@ fn recover_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()
     let modified = metadata.modified()?;
 
     if example_harness_lock_is_stale(modified, SystemTime::now()) {
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_eligible path={}", path.display());
         remove_stale_example_harness_lock_while_locked(path)?;
     }
     Ok(())
 }
-
 fn remove_stale_example_harness_lock(path: &Path) -> io::Result<()> {
     let _state_guard = lock_example_harness_state(path)?;
     remove_stale_example_harness_lock_while_locked(path)
 }
-
 fn remove_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()> {
     let Some(_owner_liveness) = try_lock_example_harness_liveness(path)? else {
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=stale_recovery_live_owner path={}", path.display());
         return Ok(());
     };
     match read_example_harness_lock_owner(path)? {
@@ -220,7 +224,6 @@ fn remove_stale_example_harness_lock_while_locked(path: &Path) -> io::Result<()>
         None => remove_example_harness_lock_directory(path),
     }
 }
-
 fn lock_example_harness_state(path: &Path) -> io::Result<File> {
     let state_path = path.with_extension("state");
     let state_file = OpenOptions::new()
@@ -232,7 +235,6 @@ fn lock_example_harness_state(path: &Path) -> io::Result<File> {
     state_file.lock_exclusive()?;
     Ok(state_file)
 }
-
 fn try_lock_example_harness_liveness(path: &Path) -> io::Result<Option<File>> {
     let liveness_file = OpenOptions::new()
         .create(true)
@@ -268,6 +270,7 @@ fn remove_lock_if_owned(path: &Path, owner: &ExampleHarnessLockOwner) -> io::Res
         return Ok(());
     };
     if current_owner != *owner {
+        debug!(target: EXAMPLE_HARNESS_LOCK_LOG_TARGET, "event=owner_mismatch path={} expected_owner={} actual_owner={}", path.display(), owner.0, current_owner.0);
         return Ok(());
     }
     remove_example_harness_lock_directory(path)

@@ -113,8 +113,9 @@ impl CallSiteVisitor<'_, '_> {
     fn recover_call_span(&self, span: Span) -> Option<Span> {
         whitaker::hir::recover_user_editable_hir_span(span).or_else(|| {
             self.closure_span_fallbacks
-                .last()
-                .and_then(|span| whitaker::hir::recover_user_editable_hir_span(*span))
+                .iter()
+                .rev()
+                .find_map(|span| whitaker::hir::recover_user_editable_hir_span(*span))
         })
     }
 }

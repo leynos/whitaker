@@ -65,12 +65,12 @@ fn then_two_records(world: &CollectorWorld) {
 
 #[scenario(path = "tests/features/collection.feature", index = 0)]
 fn scenario_generated_cases_deduplicate(world: CollectorWorld) {
-    let _ = world;
+    assert_eq!(world.collector.record_count(), 1);
 }
 
 #[scenario(path = "tests/features/collection.feature", index = 1)]
 fn scenario_distinct_calls_remain_distinct(world: CollectorWorld) {
-    let _ = world;
+    assert_eq!(world.collector.record_count(), 2);
 }
 
 fn record(callee_def_id: DefId, atom: ArgAtom) -> CallSiteRecord {
