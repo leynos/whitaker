@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rstest::rstest;
-use rustc_lexer::tokenize;
+use rustc_lexer::{LiteralKind, TokenKind, tokenize};
 
 const FORBIDDEN_CRATES: &[&str] = &["ra_ap_syntax", "ra_ap_parser", "rowan"];
 const FORBIDDEN_DOMAIN_IMPORT: &[&str] = &["ast", "::", "lowering"];
@@ -122,18 +122,33 @@ fn non_comment_lexemes(contents: &str) -> Vec<&str> {
             let end = offset + token.len;
             let lexeme = &contents[offset..end];
             offset = end;
-            is_non_comment_lexeme(lexeme).then_some(lexeme)
+            is_non_comment_lexeme(token.kind).then(|| normalize_raw_identifier(token.kind, lexeme))
         })
         .collect()
 }
 
-fn is_non_comment_lexeme(lexeme: &str) -> bool {
-    !lexeme.trim().is_empty()
-        && !lexeme.starts_with("//")
-        && !lexeme.starts_with("/*")
-        && !lexeme.starts_with('"')
-        && !lexeme.starts_with("r\"")
-        && !lexeme.starts_with("r#")
+fn is_non_comment_lexeme(kind: TokenKind) -> bool {
+    !matches!(
+        kind,
+        TokenKind::Whitespace
+            | TokenKind::LineComment
+            | TokenKind::BlockComment { .. }
+            | TokenKind::Literal {
+                kind: LiteralKind::Str { .. }
+                    | LiteralKind::ByteStr { .. }
+                    | LiteralKind::RawStr { .. }
+                    | LiteralKind::RawByteStr { .. },
+                ..
+            }
+    )
+}
+
+fn normalize_raw_identifier(kind: TokenKind, lexeme: &str) -> &str {
+    if kind == TokenKind::RawIdent {
+        lexeme.strip_prefix("r#").unwrap_or(lexeme)
+    } else {
+        lexeme
+    }
 }
 
 fn coalesce_path_separators<'a>(tokens: &[&'a str]) -> Vec<&'a str> {
@@ -227,6 +242,8 @@ fn forbidden_domain_import_forms_are_detected(#[case] source: &str) {
 #[rstest]
 #[case::parser_crate("type Syntax = ra_ap_syntax::SyntaxNode;")]
 #[case::domain_module("const LOWER: &str = crate::ast::lowering::PARSER_SCHEMA_VERSION;")]
+#[case::raw_parser_crate("type Syntax = r#ra_ap_syntax::SyntaxNode;")]
+#[case::raw_domain_module("const LOWER: &str = crate::r#ast::lowering::PARSER_SCHEMA_VERSION;")]
 fn inline_forbidden_paths_are_detected(#[case] source: &str) {
     let tokens = non_comment_tokens(source);
 

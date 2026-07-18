@@ -27,6 +27,13 @@ fn build_script_accepts_an_exact_workspace_parser_pin() -> Result<(), Box<dyn Er
         "exact parser pin should pass the build script:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let run_output = cargo_run(&fixture.manifest_path)?;
+    assert!(
+        run_output.status.success(),
+        "parser-version fixture should run:\n{}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(String::from_utf8(run_output.stdout)?.trim(), "0.0.334");
     Ok(())
 }
 
@@ -93,6 +100,10 @@ fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Erro
         package_dir.join("src/lib.rs"),
         "pub const PARSER_VERSION: &str = env!(\"WHITAKER_RA_AP_SYNTAX_VERSION\");\n",
     )?;
+    fs::write(
+        package_dir.join("src/main.rs"),
+        format!("fn main() {{ println!(\"{{}}\", {FIXTURE_PACKAGE}::PARSER_VERSION); }}\n"),
+    )?;
 
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     fs::copy(crate_root.join("build.rs"), package_dir.join("build.rs"))?;
@@ -111,6 +122,18 @@ fn cargo_check(manifest_path: &Path) -> Result<Output, Box<dyn Error>> {
     Ok(
         Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
             .arg("check")
+            .arg("--offline")
+            .arg("--quiet")
+            .arg("--manifest-path")
+            .arg(manifest_path)
+            .output()?,
+    )
+}
+
+fn cargo_run(manifest_path: &Path) -> Result<Output, Box<dyn Error>> {
+    Ok(
+        Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .arg("run")
             .arg("--offline")
             .arg("--quiet")
             .arg("--manifest-path")

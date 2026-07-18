@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -51,6 +52,14 @@ esac''',
 
 def _run_make(target: str, cargo: Path, locked: str, stub_dir: Path) -> list[str]:
     """Run one target with stubbed tools and return recorded Cargo arguments."""
+    workspace = stub_dir.parent / "workspace"
+    scripts_directory = workspace / "scripts"
+    scripts_directory.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / "Makefile", workspace / "Makefile")
+    shutil.copy2(
+        REPO_ROOT / "scripts/generate_checksums.py",
+        scripts_directory / "generate_checksums.py",
+    )
     log = stub_dir / f"{target}-{locked or 'unlocked'}.log"
     environment = os.environ | {
         "CARGO_LOCKED_LOG": str(log),
@@ -62,7 +71,7 @@ def _run_make(target: str, cargo: Path, locked: str, stub_dir: Path) -> list[str
         make_arguments.append(f"CARGO_LOCKED={locked}")
     result = subprocess.run(
         make_arguments,
-        cwd=REPO_ROOT,
+        cwd=workspace,
         capture_output=True,
         text=True,
         check=False,

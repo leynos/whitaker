@@ -525,10 +525,9 @@ invariance over equal contribution multisets. Green follow-up gates:
   `0` findings after all deterministic gates were green. The review log is
   `/tmp/coderabbit-stage-e-9fcb15ba-ebe1-4826-b124-ac54785b9705-7-3-1-map-candidate-spans-and-extract-ast-feature-vectors.out`.
 - Observation: Stage G found that the GitHub CI workflow invoked Makefile
-  targets without a lockfile flag. Stage G therefore added a `CARGO_LOCKED`
-  Makefile variable and set `CARGO_LOCKED=--locked` in CI, so build, lint,
-  nextest, publish-check, package, and release-dry-run Cargo invocations use
-  the committed lockfile when CI runs them.
+  targets without a lockfile flag. The current branch follows `origin/main`'s
+  `CARGO_LOCKED` contract instead, leaving the Makefile variable empty by
+  default and letting callers opt into `--locked` explicitly when they need it.
 - Observation: Stage G confirmed `Cargo.lock` is tracked in the repository
   root and remains part of the branch diff history through the parser pin.
 - Observation: Stage G attempted the required broad `make fmt` documentation
@@ -676,9 +675,9 @@ Decisions already taken while drafting this plan:
   split between tests, bounded Kani execution, and Verus sidecars with explicit
   trust boundaries. Date/Author: 2026-06-16, implementation.
 - Decision: **Follow `origin/main`'s default `CARGO_LOCKED` policy after the
-  2026-07-16 rebase.** Rationale: `origin/main` removes the CI-level
-  `CARGO_LOCKED=--locked` override while retaining the Makefile variable for
-  callers that need it. This branch preserves that current workflow policy
+  2026-07-16 rebase.** Rationale: `origin/main` keeps `CARGO_LOCKED` empty by
+  default while retaining the Makefile variable for callers that need
+  `--locked` explicitly. This branch preserves that current workflow policy
   rather than restoring an AST-specific CI override. The rebase also adopts the
   repository-wide en-GB-oxendict spelling enforcement in branch documentation.
   Date/Author: 2026-07-16, rebase.
@@ -1265,7 +1264,8 @@ covering the contemporaneous-snapshot selection, the ≤ 3 transitive `--precise
 pin budget, the escalation trigger, and the note that `PARSER_SCHEMA_VERSION`
 and any `ast_hashes` cache must be invalidated on a re-pin — so the next
 toolchain-bump author does not re-derive Stages 0/B from scratch. Confirm
-`Cargo.lock` is committed and that the CI build uses `--locked`. Assess whether
+`Cargo.lock` is committed and that the CI build leaves `CARGO_LOCKED` empty by
+default so callers opt into `--locked` explicitly. Assess whether
 the lowered-IR boundary or the proof strategy warrants a new ADR; if so, author
 `docs/adr-004-*.md` per the style guide and reference it from the design doc
 (record the decision either way). Run `make check-fmt`, `make lint`,

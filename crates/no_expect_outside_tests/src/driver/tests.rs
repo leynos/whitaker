@@ -86,7 +86,7 @@ fn is_test_attribute_returns_false_for_parsed_attributes() {
 
 #[rstest]
 #[case::integration_test_crate("tests/clone_detector.rs", true)]
-#[case::nested_integration_test_crate("tests/clone_detector/main.rs", false)]
+#[case::multi_file_integration_test_crate("tests/clone_detector/main.rs", true)]
 #[case::unrelated_tests_ancestor("fixtures/tests/support/source.rs", false)]
 #[case::ordinary_source("src/lib.rs", false)]
 fn integration_test_crate_root_is_anchored_to_the_source_root(

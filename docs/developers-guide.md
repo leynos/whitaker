@@ -561,7 +561,8 @@ parser APIs, snapshots, and proof tooling.
 
 1. Change `rust-toolchain.toml` to the target pinned nightly channel.
 2. Install or refresh the required components:
-   `rustup component add rust-src rustc-dev llvm-tools-preview`.
+   `rustup component add rust-src rustfmt clippy rustc-dev
+   llvm-tools-preview`.
 3. Rebuild the whole workspace with the newly pinned channel before making
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.
@@ -576,10 +577,10 @@ parser APIs, snapshots, and proof tooling.
 7. Run the normal gates in order: `make check-fmt`, `make lint`, `make test`,
    and `make markdownlint`. Run relevant proof targets if the bump touches
    clone-detector or decomposition proof surfaces.
-8. Decide whether the workflow needs a locked dependency path. The CI workflow
-   leaves `CARGO_LOCKED` unset by default. Makefile Cargo recipes must preserve
-   that variable when callers require `--locked` for a build, lint, package, or
-   test command.
+8. Keep `CARGO_LOCKED` empty by default. Makefile Cargo recipes pass the value
+   through unchanged so callers can opt into `--locked` explicitly when they
+   need Cargo to enforce the lockfile for a build, lint, package, or test
+   command.
 
 ### `ra_ap_syntax` re-pinning runbook
 

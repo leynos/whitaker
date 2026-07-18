@@ -200,10 +200,18 @@ fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>) -> bool {
 }
 
 fn is_integration_test_crate_root(crate_root: &Path) -> bool {
-    crate_root
+    let is_direct_test = crate_root
         .parent()
         .and_then(Path::file_name)
-        .is_some_and(|directory| directory == OsStr::new("tests"))
+        .is_some_and(|directory| directory == OsStr::new("tests"));
+    let is_multi_file_test = crate_root.file_name() == Some(OsStr::new("main.rs"))
+        && crate_root
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::file_name)
+            .is_some_and(|directory| directory == OsStr::new("tests"));
+
+    is_direct_test || is_multi_file_test
 }
 fn is_likely_test_function<'tcx>(
     cx: &LateContext<'tcx>,

@@ -738,15 +738,21 @@ impl LshIndex {
 }
 ```
 
-### AST features
+### AST features and hashing
+
+The parser adapter lowers source into `NormalizedTree`; canonical hashing
+operates on that lowered tree and does not consume `ra_ap_syntax::SyntaxNode`
+directly.
 
 ```rust
-pub fn ast_features(node: &ra_ap_syntax::SyntaxNode) -> FeatureVec {
-    /* histogram with depth weights */
+pub fn kind_counts(tree: &NormalizedTree) -> KindCounts {
+    /* exact kind counts over lowered trees */
 }
+```
 
-pub fn ast_hash(node: &ra_ap_syntax::SyntaxNode) -> AstHash {
-    /* merkle-ish canonical hash rendered as opaque hex */
+```rust
+pub fn canonical_hash(tree: &NormalizedTree) -> AstHash {
+    /* canonical hash over lowered trees */
 }
 ```
 
