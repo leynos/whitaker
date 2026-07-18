@@ -33,8 +33,11 @@ as a default.
   inline.
 - Each script starts with an `uv` script block, so runtime and dependency
   expectations travel with the file. Prefer the shebang
-  `#!/usr/bin/env -S uv run python` followed by the metadata block shown in the
-  example below.
+  `#!/usr/bin/env -S uv run --script` followed by the metadata block shown in
+  the example below. The `--script` flag is required: `uv run python` executes
+  the interpreter directly and ignores the inline metadata block, so a script
+  invoked that way fails at import time on any machine without its
+  dependencies preinstalled.
 - External processes are invoked via [`plumbum`](https://plumbum.readthedocs.io)
   to provide structured command execution rather than ad‑hoc shell strings.
 - File‑system interactions use `pathlib.Path`. Higher‑level operations (for
@@ -44,7 +47,7 @@ as a default.
 ### Minimal script (no CLI)
 
 ```python
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["plumbum", "cmd-mox"]
@@ -74,7 +77,7 @@ Employ Cyclopts when a script requires parameters, particularly under CI with
 `INPUT_*` variables.
 
 ```python
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
@@ -285,7 +288,7 @@ except FileNotFoundError:
 ## Cyclopts + Plumbum + Pathlib together (reference script)
 
 ```python
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
 # dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
