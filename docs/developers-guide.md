@@ -267,6 +267,90 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
+## Mutation-testing workflow contract tests
+
+Whitaker runs scheduled, informational mutation testing through a thin caller
+workflow, [`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
+which delegates to the shared reusable workflow
+`leynos/shared-actions/.github/workflows/mutation-cargo.yml`. The heavy
+lifting — running `cargo-mutants`, sharding, and summarizing survivors — lives
+in `shared-actions`; this repository carries only declarative configuration.
+The run is **informational only**: it never gates a pull request. Survivors
+are reported through the job summary and downloadable artefacts so they can be
+triaged into tests, not enforced as a blocking check.
+
+The workflow runs in two modes. A **daily schedule** (04:50 UTC) fires a
+change-scoped run that mutates only the source files touched within the
+detection window, so quiet days are cheap no-ops. A **manual dispatch** (the
+Actions "Run workflow" control) mutates the whole workspace; select a branch
+in that control to exercise a feature branch.
+
+The caller passes a small set of configuration inputs, each carrying intent:
+
+- `paths` — `src/,common/,crates/,installer/,suite/`, the workspace member
+  prefixes rooted at the repository root; there are no top-level `examples/`
+  or `benches/` directories to add.
+- `exclude-globs` — scaffolding whose surviving mutants would be noise rather
+  than genuine test gaps: the `rustc_*` proxy crates and the `clippy_utils`
+  stub (both re-export compiler internals), each lint's `ui/` and `examples/`
+  dylint fixtures, and the shared test infrastructure in `src/testing` and
+  `common/src/test_support`.
+- `extra-args` — `--all-features`, matching the feature baseline the
+  Makefile's `CARGO_FLAGS` uses for `make test`, so feature-gated code is not
+  reported as untested.
+
+Unlike the excludes applied by `make test`'s `TEST_EXCLUDES`, the mutation
+caller does **not** exclude the `whitaker` root crate or the
+`function_attrs_follow_docs`, `module_max_lines`, and `no_expect_outside_tests`
+lint crates from mutation scope (only their `ui/`/`examples/` fixtures are
+excluded). Those crates enable `feature(rustc_private)` under the
+`dylint-driver` feature and need the dynamic-linking `RUSTFLAGS`
+(`-C prefer-dynamic -Z force-unstable-if-unmarked`) that the `test` and
+`typecheck` Makefile targets inject per invocation — see the note in
+[`.cargo/config.toml`](../.cargo/config.toml), which deliberately keeps that
+flag out of workspace-wide configuration because it would break `cargo
+install` for `whitaker-installer`. The shared mutation workflow has no
+equivalent per-crate RUSTFLAGS step, so it cannot reproduce
+`TEST_CARGO_FLAGS` faithfully across the whole workspace. Consequently this
+adoption is **pin-only**: the caller declares the best approximation of the CI
+scope it safely can, rather than a `--test-workspace` run that mirrors
+`make test` crate-for-crate, and the contract test asserts only that this
+declared configuration holds — not that a full workspace mutation baseline
+passes.
+
+The `uses:` reference pins the shared workflow to a full 40-character commit
+SHA rather than a branch or tag, so a force-push upstream cannot silently
+change what runs here. The contract test asserts only that the pin is a full
+commit SHA, not a particular value, so Dependabot bumps it automatically
+without any accompanying test edit.
+
+### Workflow contract tests
+
+Because the caller is configuration rather than code, a contract test suite,
+[`tests/workflow_contracts/mutation_testing_test.py`](../tests/workflow_contracts/mutation_testing_test.py),
+pins the shape it must uphold, failing the pull request when the caller
+drifts — repointing the pin at a branch, widening the token scope, or
+dropping a configuration input — rather than letting the breakage surface
+only in a scheduled run. Run it locally with:
+
+```sh
+make test-workflow-contracts
+```
+
+which wraps `uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest
+tests/workflow_contracts -q`. The suite validates:
+
+- the `uses:` reference targets `mutation-cargo.yml` pinned to a full commit
+  SHA;
+- the `with:` block carries exactly the expected `paths`, `exclude-globs`,
+  and `extra-args` configuration described above;
+- job permissions are least-privilege (`contents: read`, `id-token: write`)
+  and the workflow-level default token scope is empty;
+- `concurrency` serializes runs per ref without cancelling one in progress;
+  and
+- the triggers keep the daily schedule and a plain `workflow_dispatch` with no
+  legacy branch input.
+
 ## Proof workflows
 
 Whitaker now ships repository-managed proof tooling for the formal verification
