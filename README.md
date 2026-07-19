@@ -1,5 +1,8 @@
 # Whitaker
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
+https://deepwiki.com/leynos/whitaker)
+
 Snarky Dylint rules for the df12 logisphere.
 
 Whitaker is a collection of opinionated
