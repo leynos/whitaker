@@ -106,8 +106,10 @@ pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -
     )
 }
 
+/// Joins `binary_name` onto `directory` with the platform executable suffix,
+/// so directly probed fakes are runnable on Windows as well as Unix.
 #[cfg(any(test, feature = "test-support"))]
-fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
+pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     #[cfg(windows)]
     {
         directory.join(format!("{binary_name}.cmd"))

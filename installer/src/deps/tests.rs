@@ -285,7 +285,10 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
 /// directory guard alongside the binary path.
 fn staged_dylint_link(exit_code: i32) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
     let dir = tempfile::tempdir()?;
-    let path = dir.path().join("dylint-link");
+    let path = crate::test_utils::dependency_binary_helpers::path_binary_location(
+        dir.path(),
+        "dylint-link",
+    );
     crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(
         &path, true, exit_code,
     );
