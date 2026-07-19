@@ -106,8 +106,10 @@ pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -
     )
 }
 
+/// Joins `binary_name` onto `directory` with the platform executable suffix,
+/// so directly probed fakes are runnable on Windows as well as Unix.
 #[cfg(any(test, feature = "test-support"))]
-fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
+pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     #[cfg(windows)]
     {
         directory.join(format!("{binary_name}.cmd"))
@@ -239,11 +241,13 @@ pub fn repository_verification_call(tool: &str, verification_fails: bool) -> Opt
                 Ok(cargo_dylint_version_output())
             },
         }),
-        // Successful verification consults Cargo's installed-binary registry
-        // once the PATH existence probe passes. A failing verification is
-        // modelled as the binary being absent from PATH, which short-circuits
-        // before the executor is consulted.
-        "dylint-link" => (!verification_fails).then(dylint_link_install_list_check),
+        // Repository installs of dylint-link are verified by probing the
+        // extracted binary directly, so neither outcome consults the
+        // executor.
+        "dylint-link" => {
+            let _ = verification_fails;
+            None
+        }
         other => panic!("unexpected tool: {other}"),
     }
 }

@@ -18,7 +18,9 @@ use whitaker_installer::installer_packaging::TargetTriple;
 use whitaker_installer::test_support::env_test_guard;
 use whitaker_installer::test_utils::{
     StubDirs, StubExecutor,
-    dependency_binary_helpers::{ExpectedCallConfig, expected_calls, write_fake_binary},
+    dependency_binary_helpers::{
+        ExpectedCallConfig, expected_calls, path_binary_location, write_fake_binary,
+    },
 };
 
 enum RepositoryInstallerBehaviour {
@@ -41,7 +43,17 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         match &self.behaviour {
             RepositoryInstallerBehaviour::Success => dirs.bin_dir().map_or_else(
                 || Err(DependencyBinaryInstallError::MissingBinDir),
-                |bin_dir| Ok(bin_dir.join(format!("{}-{}", dependency.package(), target))),
+                |bin_dir| {
+                    // Stage a runnable fake at the returned path: dylint-link
+                    // verification probes the extracted binary directly. The
+                    // platform suffix keeps the fake executable on Windows.
+                    let installed_path = path_binary_location(
+                        &bin_dir,
+                        &format!("{}-{}", dependency.package(), target),
+                    );
+                    write_fake_binary(&installed_path, true);
+                    Ok(installed_path)
+                },
             ),
             RepositoryInstallerBehaviour::NotFound => Err(DependencyBinaryInstallError::NotFound {
                 url: format!(

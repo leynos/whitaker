@@ -8,8 +8,9 @@ use std::process::Output;
 
 use super::{
     CARGO_DYLINT_TOOL, CommandExecutor, DEPENDENCY_TOOLS, DYLINT_LINK_TOOL, DependencyTool,
-    DylintToolStatus, is_binstall_available, is_tool_installed,
+    DylintToolStatus, dylint_link_probe_succeeds, is_binstall_available, is_tool_installed,
 };
+use std::path::Path;
 
 pub(super) struct RepositoryInstallContext<'a> {
     pub(super) dirs: &'a dyn crate::dirs::BaseDirs,
@@ -103,7 +104,7 @@ pub(super) fn install_tool(
         cargo_install_plan = cargo_install_plan.with_version(dependency.version());
 
         match repo.installer.install(dependency, repo.target, repo.dirs) {
-            Ok(_) if is_tool_installed(executor, tool) => {
+            Ok(installed_path) if repository_install_verified(executor, tool, &installed_path) => {
                 write_message(
                     stderr,
                     context.quiet,
@@ -290,6 +291,26 @@ fn run_cargo_install(
 
     write_message(stderr, quiet, success_message);
     Ok(InstallOutcome::CargoInstall)
+}
+
+/// Verify a repository-release install of `tool`.
+///
+/// `dylint-link` forwards every argument to the underlying linker and can
+/// never report its own version, and Cargo's registry of installed binaries
+/// never records repository extractions, so the generic version check would
+/// reject every repository install. The extracted binary is probed directly
+/// instead: the release asset name pins the version and the download has
+/// already been verified, so a successful probe is sufficient evidence.
+fn repository_install_verified(
+    executor: &dyn CommandExecutor,
+    tool: &DependencyTool,
+    installed_path: &Path,
+) -> bool {
+    if tool == &DYLINT_LINK_TOOL {
+        dylint_link_probe_succeeds(installed_path)
+    } else {
+        is_tool_installed(executor, tool)
+    }
 }
 
 pub(super) fn command_error_message(output: &Output) -> String {
