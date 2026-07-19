@@ -95,7 +95,10 @@ def test_representative_targets_forward_cargo_locked(tmp_path: Path, locked: str
     ]
 
     assert recorded
-    assert all(("--locked" in invocation) == bool(locked) for invocation in recorded)
+    assert all(("--locked" in invocation) == bool(locked) for invocation in recorded), (
+        f"typecheck/lint should use {locked or 'unlocked'} mode; "
+        f"recorded invocations: {recorded!r}"
+    )
 
 
 @pytest.mark.parametrize("locked", ["", "--locked"])
@@ -113,4 +116,7 @@ def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
 
     assert len(recorded) == 3
     assert recorded[0].startswith("metadata ")
-    assert all(("--locked" in invocation) == bool(locked) for invocation in recorded)
+    assert all(("--locked" in invocation) == bool(locked) for invocation in recorded), (
+        f"release-installer-dry-run should use {locked or 'unlocked'} mode; "
+        f"recorded invocations: {recorded!r}"
+    )

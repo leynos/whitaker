@@ -48,6 +48,7 @@ fn seed_hash() -> u64 {
 }
 
 fn hash_node(hash: u64, node: &NormalizedNode) -> u64 {
+    let seed = seed_hash();
     let mut pending = vec![(node, 0, hash_node_header(hash, node))];
     loop {
         let Some((current, child_index, _)) = pending.last_mut() else {
@@ -55,7 +56,7 @@ fn hash_node(hash: u64, node: &NormalizedNode) -> u64 {
         };
         if let Some(child) = current.children().get(*child_index) {
             *child_index += 1;
-            pending.push((child, 0, hash_node_header(seed_hash(), child)));
+            pending.push((child, 0, hash_node_header(seed, child)));
             continue;
         }
 

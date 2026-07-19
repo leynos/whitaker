@@ -270,7 +270,7 @@ proptest! {
     }
 
     #[test]
-    fn different_normalized_leaf_kinds_have_different_hashes(
+    fn different_kind_ids_with_same_leaf_have_different_hashes(
         kind in 0_u16..u16::MAX,
         leaf in leaf_class_strategy()
     ) {

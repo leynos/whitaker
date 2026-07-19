@@ -338,12 +338,11 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
 }
 
 fn module_imports_test_crate(items: &[&hir::Item<'_>]) -> bool {
-    items.iter().any(|item| {
-        matches!(item.kind, hir::ItemKind::ExternCrate(..))
-            && item
-                .kind
-                .ident()
-                .is_some_and(|ident| ident.name.as_str() == "test")
+    items.iter().any(|item| match item.kind {
+        hir::ItemKind::ExternCrate(original_name, ident) => {
+            original_name.unwrap_or(ident.name).as_str() == "test"
+        }
+        _ => false,
     })
 }
 
