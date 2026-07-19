@@ -35,9 +35,6 @@ tests.** A fixture arranges state; arrangement can fail, so it must
 return `Result` and propagate errors. Only the test body may unwrap: a
 failure there is the test verdict.
 
-**Triage:** [type:grammar] The colon introduces the explanation for why
-the test body may unwrap.
-
 - Convert fixtures and helpers to return `anyhow::Result`,
   `io::Result`, or the domain error; tests consume with `?` or unwrap
   in the body.
