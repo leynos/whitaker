@@ -40,19 +40,19 @@ impl fmt::Display for AstHash {
 /// Computes the canonical hash for `tree`.
 #[must_use]
 pub fn canonical_hash(tree: &NormalizedTree) -> AstHash {
-    AstHash(hash_node(seed_hash(), tree.root()))
+    let seed = seed_hash();
+    AstHash(hash_node(seed, tree.root()))
 }
 
 fn seed_hash() -> u64 {
     mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes())
 }
 
-fn hash_node(hash: u64, node: &NormalizedNode) -> u64 {
-    let seed = seed_hash();
-    let mut pending = vec![(node, 0, hash_node_header(hash, node))];
+fn hash_node(seed: u64, node: &NormalizedNode) -> u64 {
+    let mut pending = vec![(node, 0, hash_node_header(seed, node))];
     loop {
         let Some((current, child_index, _)) = pending.last_mut() else {
-            return hash;
+            return seed;
         };
         if let Some(child) = current.children().get(*child_index) {
             *child_index += 1;
@@ -61,7 +61,7 @@ fn hash_node(hash: u64, node: &NormalizedNode) -> u64 {
         }
 
         let Some((_, _, completed_hash)) = pending.pop() else {
-            return hash;
+            return seed;
         };
         if let Some((_, _, parent_hash)) = pending.last_mut() {
             *parent_hash = mix_u64(*parent_hash, completed_hash);
