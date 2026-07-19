@@ -3,9 +3,11 @@
 use crate::artefact::download::HttpDownloader;
 
 use super::installer::DependencyBinaryInstallError;
+use crate::hex::to_lower_hex;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io;
+use std::io::Read;
 use std::path::Path;
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
@@ -78,8 +80,15 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
         // Compute actual checksum
         let mut archive_file = File::open(destination)?;
         let mut hasher = Sha256::new();
-        io::copy(&mut archive_file, &mut hasher)?;
-        let actual_checksum = format!("{:x}", hasher.finalize());
+        let mut buffer = [0u8; 8192];
+        loop {
+            let bytes_read = archive_file.read(&mut buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..bytes_read]);
+        }
+        let actual_checksum = to_lower_hex(&hasher.finalize());
 
         // Verify checksum
         if actual_checksum != expected_checksum {

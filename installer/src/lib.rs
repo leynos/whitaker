@@ -46,6 +46,7 @@ pub mod deps;
 pub mod dirs;
 pub mod error;
 pub mod git;
+mod hex;
 pub mod install_metrics;
 pub mod installer_packaging;
 pub mod list;
