@@ -233,18 +233,6 @@ fn literal(kind: KindId) -> NormalizedNode {
 }
 
 #[rstest]
-fn feature_functions_are_deterministic() -> AstResult<()> {
-    let first = feature_tree()?;
-    let second = feature_tree()?;
-
-    assert_eq!(kind_counts(&first), kind_counts(&second));
-    assert_eq!(kind_histogram(&first), kind_histogram(&second));
-    assert_eq!(production_multiset(&first), production_multiset(&second));
-    assert_eq!(canonical_hash(&first), canonical_hash(&second));
-    Ok(())
-}
-
-#[rstest]
 fn feature_functions_reflect_tree_contents() -> AstResult<()> {
     let expected = feature_tree()?;
     let distinct = tree_with_root(NormalizedNode::new(

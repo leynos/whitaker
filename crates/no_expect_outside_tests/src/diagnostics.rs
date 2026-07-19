@@ -1,4 +1,6 @@
-//! Builds receiver-aware, localized diagnostics for `no_expect_outside_tests`.
+//! Converts driver/context analysis into localized `NO_EXPECT_OUTSIDE_TESTS`
+//! diagnostics; the driver detects violations and context supplies
+//! test-context evidence.
 
 use crate::NO_EXPECT_OUTSIDE_TESTS;
 use crate::context::ContextSummary;
