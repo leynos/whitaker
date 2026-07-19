@@ -32,14 +32,19 @@ traps that cost earlier adopters rework.
 
 The policy behind these lints: **fixture and helper functions are not
 tests.** A fixture arranges state; arrangement can fail, so it must
-return `Result` and propagate errors. Only the test body may unwrap,
-because there a failure is the test verdict.
+return `Result` and propagate errors. Only the test body may unwrap: a
+failure there is the test verdict.
+
+**Triage:** [type:grammar] The colon introduces the explanation for why
+the test body may unwrap.
 
 - Convert fixtures and helpers to return `anyhow::Result`,
   `io::Result`, or the domain error; tests consume with `?` or unwrap
   in the body.
-- Poisoned-mutex panics in test doubles (`lock().unwrap_or_else(|e|
-  panic!(…))`) become `PoisonError::into_inner` recovery.
+- A poisoned mutex means a panic occurred while its lock was held. In
+  test doubles, use `PoisonError::into_inner` only when the double's
+  invariants remain valid; otherwise propagate the poison error or fail
+  the fixture.
 - `#[tokio::main]` expands to `.expect()` on runtime construction:
   build the runtime explicitly in binaries and BDD harnesses and
   propagate the error.
@@ -113,8 +118,10 @@ Sanctioned exclusion categories, each with a rationale comment:
   bootstrapper; a pyo3 crate mirroring CPython file-handler APIs).
   Say so in the comment, and name the migration path if one exists.
 
-New test crates that touch `std::fs` will fail CI until added to the
-exclusion list — that is the point: the policy decision stays visible.
+New test crates that use `std::fs` must either migrate to the
+capability-scoped API or receive a documented exclusion. CI must fail
+until one path is chosen — that is the point: the policy decision stays
+visible.
 
 ### `module_max_lines`
 

@@ -25,6 +25,7 @@ formal verification helpers.
 | `docs/`      | User, developer, design, roadmap, decision-record, and planning documentation.                                                        |
 | `installer/` | The `whitaker-installer` crate, packaging logic, and installer-specific behaviour tests.                                              |
 | `scripts/`   | Repository automation for checksums, Kani, and Verus setup and execution.                                                             |
+| `skills/`    | Agent-facing skills that document repeatable maintenance and remediation workflows.                                                   |
 | `src/`       | Root library code that assembles shared lint registration and workspace-facing APIs.                                                  |
 | `suite/`     | The suite crate used to package and expose the lint set coherently.                                                                   |
 | `tests/`     | Workspace-level integration, behaviour, UI harness, and workflow tests.                                                               |
