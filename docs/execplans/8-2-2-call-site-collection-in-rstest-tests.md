@@ -25,12 +25,10 @@ A maintainer can:
 
 - inspect the collected call-site map at the end of a crate-post hook via
   `debug!` logging targeted at the lint name,
-- run a new behavioural test under `rstest-bdd` that asserts the collector
-  records exactly the call sites a fixture-format Rust file declares, and
-- read property-based tests proving that fingerprints are stable across
-  textually-equivalent helper calls and deterministic across HIR walk order,
-  plus explicit span-recovery and trybuild regression tests covering macro-only
-  call sites.
+- read unit and property tests proving source-span deduplication, fingerprint
+  stability, and deterministic HIR ordering, and
+- run the Cargo-backed `collection_zero_diagnostic` UI harness through the lint
+  pipeline as the behavioural and end-to-end validation boundary.
 
 The lint must remain diagnostic-silent. Aggregation thresholds, helper-class
 filtering by trigger conditions, and `span_lint_hir_and_then` calls all belong
@@ -99,9 +97,9 @@ This plan was approved before implementation started.
 - Dependencies: if a new third-party dependency is required (in particular,
   rustc-private crates beyond those already pinned in the workspace), stop and
   justify it before adding it.
-- Test surface: if `rstest-bdd` cannot demonstrate the collector's behaviour
-  in user terms after one attempt, stop and choose between extending the
-  observability surface and downgrading to a unit-only proof.
+- Test surface: if the Cargo-backed UI harness cannot demonstrate the
+  collector's behaviour in user terms after one attempt, stop and choose
+  between extending the observability surface and retaining only unit proof.
 - Iterations: if `make test` still fails after two targeted fix attempts on
   the same milestone, stop and document the failing command, log path, and
   remaining options.
@@ -206,13 +204,12 @@ This plan was approved before implementation started.
   the crate-post hook drains it into a `debug!` log without emitting
   diagnostics.
 - [x] (2026-06-04T01:56:56Z) Added focused unit coverage for deterministic
-  collector ordering and source-span deduplication. Property and behavioural
+  collector ordering and source-span deduplication. Property and end-to-end
   coverage remain to be added in the next stage.
-- [x] (2026-06-04T02:46:39Z) Added `rstest-bdd` behavioural coverage for
-  generated-case deduplication and distinct-source span retention, a `proptest`
-  insertion-order invariant for collector determinism, and a trybuild pass
-  fixture proving collection remains diagnostic-silent for fixture, literal,
-  `const`, and `static` arguments.
+- [x] (2026-06-04T02:46:39Z) Added parameterized unit coverage for duplicate
+  and distinct source spans, a `proptest` insertion-order invariant for
+  collector determinism, and a trybuild pass fixture proving collection remains
+  diagnostic-silent for fixture, literal, `const`, and `static` arguments.
 - [x] (2026-06-04T04:44:51Z) Expanded the shared HIR span-recovery regression
   with an explicit `macro_only_hir_span_has_no_user_editable_recovery` test,
   covering the helper the collector uses to drop call sites whose spans cannot
@@ -242,18 +239,17 @@ This plan was approved before implementation started.
   executed 1459 tests with 1459 passed and 3 skipped.
 - [x] (2026-06-04T03:37:16Z) Addressed two CodeRabbit findings from the
   second milestone by exercising helper symbols from the zero-diagnostic UI
-  fixture's `main` function and replacing BDD scenario `let _ = world`
-  appeasement with scoped `#[expect(unused_variables)]` attributes.
+  fixture's `main` function and strengthening the collector's direct storage
+  assertions.
 - [x] (2026-06-04T03:37:16Z) Revalidated after the CodeRabbit fixes with
   `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
   `make check-fmt`, `make lint`, `make test`, and `make markdownlint`; the full
   workspace test run again executed 1459 tests with 1459 passed and 3 skipped.
 - [x] (2026-06-04T04:09:23Z) Addressed the valid trivial CodeRabbit style
   finding by collapsing the trybuild fixture function to a single-line simple
-  return, rejected the equivalent `rstest-bdd` fixture suggestion because it
-  produces an `unused_braces` compiler warning under the macro expansion, and
-  revalidated with focused nextest, `make check-fmt`, `make lint`, and
-  `make test`.
+  return, rejected an equivalent macro fixture form because it produces an
+  `unused_braces` compiler warning under the macro expansion, and revalidated
+  with focused nextest, `make check-fmt`, `make lint`, and `make test`.
 - [x] (2026-06-04T04:12:23Z) Documented the intentional `static` argument path
   in the zero-diagnostic UI fixture after CodeRabbit suggested normalizing it
   to `const`; the fixture keeps both forms so the collector exercises constant
@@ -279,10 +275,9 @@ This plan was approved before implementation started.
   `8-2-2-call-site-collection-in-rstest-tests`, pushed the implementation
   commits to origin, and updated draft PR
   [#235](https://github.com/leynos/whitaker/pull/235).
-- [x] (2026-06-16T00:00:00Z) Refactored the collector unit and behavioural
-  tests to share the duplicate-call setup through `collect_two_calls` and
-  `insert_two_calls`, preserving the existing deduplication and distinct-span
-  semantics.
+- [x] (2026-06-16T00:00:00Z) Consolidated duplicate-call and distinct-span
+  storage outcomes in the parameterized `collector_records_calls_by_source_span`
+  unit test, preserving the existing semantics.
 - [x] (2026-06-16T00:00:00Z) Moved the `check_fn` call-site collection body
   into the private `collect_call_sites` helper so the `LateLintPass`
   implementation now delegates with one statement and the collection boundary
@@ -302,6 +297,10 @@ This plan was approved before implementation started.
 - [x] (2026-06-16T00:00:00Z) Pushed the completed implementation, refactor,
   Mermaid fix, and roadmap update to
   `origin/8-2-2-call-site-collection-in-rstest-tests`.
+- [x] (2026-07-20T00:00:00Z) Reclassified direct collector checks as unit and
+  property coverage, removed the duplicate synthetic BDD seam and its
+  crate-local dependencies, and retained the Cargo-backed UI harness as the
+  behavioural and end-to-end boundary.
 
 Each completed item should be timestamped, e.g.,
 `- [x] (2026-05-28T12:30:00Z) Drafted this ExecPlan.`.
@@ -320,12 +319,6 @@ Each completed item should be timestamped, e.g.,
   scoped to `crates/rstest_helper_should_be_fixture`, which completed with 0
   findings. Future milestones should retry full-scope review after
   documentation and roadmap changes land.
-
-- Discovery: `rstest-bdd` step fixture injection matches parameter names
-  literally; naming a step parameter `_world` does not bind the `world`
-  fixture. Impact: the "When collector stores evidence" step became a no-op
-  step because the "Given" step already builds the world state, avoiding a
-  misleading unused fixture binding while preserving the behavioural scenario.
 
 - Discovery: `make fmt` runs Markdown formatting and then Markdown lint across
   the whole repository; existing unrelated Markdown lint errors can make the
@@ -667,7 +660,7 @@ In the same module, use `CallSiteLocation` as the private dedup key:
 - when recovery returns `None`, the record is dropped — not stored as
   unsupported.
 
-Confirm with at least one behavioural test that generated case siblings still
+Confirm with direct unit and property tests that generated case siblings still
 collapse into one record, while macro-only calls with the same recovered span
 remain distinct.
 
@@ -685,22 +678,11 @@ Test surfaces, in order of priority:
    - property tests should live in
      `crates/rstest_helper_should_be_fixture/src/collector_tests.rs`
      gated on `cfg(test)`.
-2. **Behavioural tests** with `rstest-bdd`:
-   - new file
-   `crates/rstest_helper_should_be_fixture/tests/features/collection.feature`
-   describing scenarios in user terms — "Given a crate containing a single
-   `#[rstest]` test that calls a local helper once, the collector records
-   one call site keyed on the helper's definition path.";
-   - matching step definitions under
-     `crates/rstest_helper_should_be_fixture/src/collector_behaviour.rs`,
-     using `rstest-bdd` with synthetic collector records and then asserting on
-     the collector outcome.
-3. **End-to-end behavioural fixture** under
+2. **End-to-end behavioural fixture** under
    `crates/rstest_helper_should_be_fixture/examples/` mirroring
    `no_unwrap_or_else_panic`'s `pass_unwrap_in_rstest_harness.rs` so the
-   harness exercises the full `cargo dylint` path. Mark it `#[ignore]` if it
-   needs external tooling, mirroring the existing pattern documented in
-   `docs/developers-guide.md` §"Integration tests for lint exclusion behaviour".
+   Cargo-backed `collection_zero_diagnostic` harness exercises the full lint
+   path through `dylint_testing::ui::Test::example`.
 
 Property tests should focus on these invariants:
 
@@ -850,7 +832,8 @@ The implementation is accepted when all of the following are true:
   documented APIs and at least the documented unit tests pass.
 - `RstestHelperShouldBeFixture` accumulates a non-empty collection state
   when a synthetic test crate contains a `#[rstest]` test calling a local
-  helper, demonstrated through `rstest-bdd` scenarios.
+  helper, demonstrated through the Cargo-backed
+  `collection_zero_diagnostic` UI harness.
 - Calling the same helper twice from the same source location (whether
   reached directly or via `#[case]`-generated companions) yields exactly one
   collected record.
@@ -893,11 +876,11 @@ If a step fails part-way through, inspect `git diff` and either continue from
 the partially edited file or revert only the files changed for this task. Do
 not revert unrelated user changes.
 
-If the collector or adapter scaffold is wrong, delete only
-`crates/rstest_helper_should_be_fixture/src/collector*.rs` and the new
-behavioural files under `crates/rstest_helper_should_be_fixture/tests/` before
-they are committed, then recreate from the patterns named in Stage B and Stage
-E.
+If the collector or adapter scaffold is wrong, inspect only
+`crates/rstest_helper_should_be_fixture/src/collector.rs`, its direct unit and
+property tests, and the Cargo-backed example/UI fixture before changing files.
+Recreate them from the patterns named in Stage B and Stage E without disturbing
+unrelated tests.
 
 After a commit, prefer a corrective follow-up commit over rewriting history
 unless the user explicitly asks for history cleanup.
@@ -923,9 +906,9 @@ Wyvern repository-pattern findings (summary):
   only exercised by unit tests in src/hir/tests.rs.
 - span_lint_hir_and_then is referenced only in design documents — no lint
   uses it yet.
-- UI tests live under crates/<lint>/ui/ and use dylint_testing::Test plus
-  the whitaker::testing::ui harness. Behavioural tests live under
-  crates/<lint>/tests/features/*.feature with rstest-bdd step defs.
+- UI tests use dylint_testing::Test plus the whitaker::testing::ui harness.
+  This collector uses a Cargo-backed example as its behavioural boundary and
+  keeps direct data-structure checks in unit and property tests.
 - The local crates/clippy_utils crate is a panic-detection stub and does
   not expose fn_def_id; the small Call/MethodCall switch is best inlined.
 ```
@@ -1026,8 +1009,7 @@ Dependencies in the landed contract:
 - workspace-pinned `rustc_ast`, `rustc_hir`, `rustc_lint`, `rustc_session`,
   and `rustc_span` driver crates,
 - `dylint_linting`, `serde`, `log`, `whitaker`, and `whitaker-common`,
-- workspace dev-dependencies `rstest`, `rstest-bdd`, `rstest-bdd-macros`,
-  `proptest`, and `dylint_testing`,
+- workspace dev-dependencies `rstest`, `proptest`, and `dylint_testing`,
 - crate-local test-support dependencies `filetime` and `fs2`.
 
 No additional third-party dependency is required for the implemented 8.2.2

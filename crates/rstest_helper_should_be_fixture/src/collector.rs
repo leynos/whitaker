@@ -338,7 +338,3 @@ fn is_local_function(cx: &LateContext<'_>, def_id: DefId) -> bool {
 #[cfg(test)]
 #[path = "collector_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "collector_behaviour.rs"]
-mod behaviour;

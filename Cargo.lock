@@ -2363,8 +2363,6 @@ dependencies = [
  "log",
  "proptest",
  "rstest",
- "rstest-bdd",
- "rstest-bdd-macros",
  "rustc_ast",
  "rustc_hir",
  "rustc_lint",
