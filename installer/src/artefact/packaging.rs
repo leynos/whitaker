@@ -35,6 +35,7 @@ use super::schema_version::SchemaVersion;
 use super::sha256_digest::Sha256Digest;
 use super::target::TargetTriple;
 use super::toolchain_channel::ToolchainChannel;
+use crate::hex::to_lower_hex;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
@@ -89,7 +90,7 @@ pub fn compute_sha256(path: &Path) -> Result<Sha256Digest, PackagingError> {
         }
         hasher.update(&buffer[..bytes_read]);
     }
-    let hex = format!("{:x}", hasher.finalize());
+    let hex = to_lower_hex(&hasher.finalize());
     Ok(Sha256Digest::try_from(hex)?)
 }
 

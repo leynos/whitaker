@@ -33,7 +33,7 @@ tracing = { version = "0.1.44", default-features = false, features = ["attribute
 thiserror = "2"
 trybuild = "1.0.116"
 log = "0.4.28"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 tar = "0.4.44"
 ureq = "3.2.0"
 zstd = "0.13.3"
