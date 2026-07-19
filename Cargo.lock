@@ -3683,6 +3683,8 @@ dependencies = [
 name = "whitaker_clones_core"
 version = "0.2.7"
 dependencies = [
+ "camino",
+ "cap-std",
  "insta",
  "proptest",
  "ra_ap_syntax",

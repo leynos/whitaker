@@ -4,12 +4,10 @@
 //! code must not import it; integration tests include it only to verify the
 //! manifest formats and rejection rules used by `build.rs`.
 
-use std::{
-    error::Error,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{error::Error, io};
 
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 const PARSER_DEPENDENCY: &str = "ra_ap_syntax";
 
 pub(crate) fn parser_dependency_requirement(manifest: &str) -> Result<String, Box<dyn Error>> {
@@ -36,10 +34,12 @@ pub(crate) fn exact_version(requirement: &str) -> Result<&str, io::Error> {
         .ok_or_else(|| non_exact_workspace_dependency(requirement))
 }
 
-pub(crate) fn find_workspace_manifest(manifest_dir: &Path) -> Result<PathBuf, Box<dyn Error>> {
+pub(crate) fn find_workspace_manifest(
+    manifest_dir: &Utf8Path,
+) -> Result<Utf8PathBuf, Box<dyn Error>> {
     for directory in manifest_dir.ancestors() {
         let candidate = directory.join("Cargo.toml");
-        if candidate.is_file() && is_workspace_manifest(&candidate)? {
+        if is_workspace_manifest(&candidate)? {
             return Ok(candidate);
         }
     }
@@ -47,8 +47,19 @@ pub(crate) fn find_workspace_manifest(manifest_dir: &Path) -> Result<PathBuf, Bo
     Err(workspace_manifest_not_found(manifest_dir).into())
 }
 
-pub(crate) fn is_workspace_manifest(candidate: &Path) -> Result<bool, Box<dyn Error>> {
-    let manifest = fs::read_to_string(candidate)?;
+pub(crate) fn is_workspace_manifest(candidate: &Utf8Path) -> Result<bool, Box<dyn Error>> {
+    let Some(directory) = candidate.parent() else {
+        return Ok(false);
+    };
+    let Some(filename) = candidate.file_name() else {
+        return Ok(false);
+    };
+    let directory = Dir::open_ambient_dir(directory, ambient_authority())?;
+    let manifest = match directory.read_to_string(filename) {
+        Ok(manifest) => manifest,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
     let document = manifest.parse::<toml::Table>()?;
     Ok(document.contains_key("workspace"))
 }
@@ -76,12 +87,12 @@ fn non_exact_workspace_dependency(requirement: &str) -> io::Error {
     )
 }
 
-fn workspace_manifest_not_found(manifest_dir: &Path) -> io::Error {
+fn workspace_manifest_not_found(manifest_dir: &Utf8Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::NotFound,
         format!(
             "could not find a parent Cargo.toml with a [workspace] table from `{}`",
-            manifest_dir.display()
+            manifest_dir
         ),
     )
 }

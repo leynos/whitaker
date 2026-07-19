@@ -6,8 +6,9 @@
 //! every canonical AST hash. Failing the build on a loose parser requirement
 //! prevents future dependency updates from silently reusing stale AST hashes.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use std::{env, error::Error, fs};
 
+use camino::Utf8PathBuf;
 mod build_support;
 
 use build_support::{exact_version, find_workspace_manifest, parser_dependency_requirement};
@@ -20,13 +21,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let version_requirement = parser_dependency_requirement(&manifest)?;
     let parser_version = exact_version(&version_requirement)?;
 
-    println!("cargo:rerun-if-changed={}", workspace_manifest.display());
+    println!("cargo:rerun-if-changed={workspace_manifest}");
     println!("cargo:rustc-env={PARSER_VERSION_ENV}={parser_version}");
 
     Ok(())
 }
 
-fn workspace_manifest_path() -> Result<PathBuf, Box<dyn Error>> {
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+fn workspace_manifest_path() -> Result<Utf8PathBuf, Box<dyn Error>> {
+    let manifest_dir = Utf8PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     find_workspace_manifest(&manifest_dir)
 }

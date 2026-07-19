@@ -6,6 +6,7 @@ mod build_support;
 use build_support::{
     exact_version, find_workspace_manifest, is_workspace_manifest, parser_dependency_requirement,
 };
+use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::tempdir;
@@ -67,6 +68,9 @@ fn finds_nearest_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> 
         "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
     )?;
 
+    let member = Utf8PathBuf::from_path_buf(member).expect("temporary paths must be UTF-8");
+    let workspace = Utf8PathBuf::from_path_buf(workspace).expect("temporary paths must be UTF-8");
+
     assert_eq!(find_workspace_manifest(&member)?, workspace);
     Ok(())
 }
@@ -80,6 +84,8 @@ fn ignores_non_workspace_manifests() -> Result<(), Box<dyn std::error::Error>> {
         "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
     )?;
 
+    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
+
     assert!(!is_workspace_manifest(&manifest)?);
     Ok(())
 }
@@ -90,6 +96,7 @@ fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>
     let nested = directory.path().join("member");
     std::fs::create_dir(&nested)?;
 
+    let nested = Utf8PathBuf::from_path_buf(nested).expect("temporary paths must be UTF-8");
     let error = find_workspace_manifest(&nested)
         .expect_err("a directory without a workspace manifest should fail");
 

@@ -1,8 +1,7 @@
 //! Regression guard for the AST parser-adapter boundary.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 use rustc_lexer::{LiteralKind, TokenKind, tokenize};
 
@@ -18,30 +17,42 @@ fn ast_domain_files_do_not_import_parser_crates() -> Result<(), Box<dyn std::err
         "AST domain-file discovery must not be empty"
     );
 
-    for path in domain_files {
-        assert_domain_boundary(&path, &fs::read_to_string(&path)?);
+    for file in domain_files {
+        assert_domain_boundary(&file.path, &file.contents);
     }
 
     Ok(())
 }
 
-fn domain_files() -> Result<Vec<PathBuf>, std::io::Error> {
-    let ast_directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ast");
-    let mut files = fs::read_dir(ast_directory)?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| !ADAPTER_OR_TEST_FILES.contains(&name))
-        })
-        .collect::<Vec<_>>();
-    files.sort();
+struct DomainFile {
+    path: Utf8PathBuf,
+    contents: String,
+}
+
+fn domain_files() -> Result<Vec<DomainFile>, std::io::Error> {
+    let ast_path = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ast");
+    let ast_directory = Dir::open_ambient_dir(&ast_path, ambient_authority())?;
+    let mut files = Vec::new();
+
+    for entry in ast_directory.entries()? {
+        let entry = entry?;
+        let filename = entry.file_name()?;
+        let path = ast_path.join(&filename);
+        let should_include =
+            path.extension() == Some("rs") && !ADAPTER_OR_TEST_FILES.contains(&filename.as_str());
+        if should_include {
+            files.push(DomainFile {
+                path,
+                contents: ast_directory.read_to_string(&filename)?,
+            });
+        }
+    }
+
+    files.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(files)
 }
 
-fn assert_domain_boundary(path: &Path, contents: &str) {
+fn assert_domain_boundary(path: &Utf8Path, contents: &str) {
     let tokens = non_comment_tokens(contents);
     assert_no_forbidden_paths(path, &tokens);
 
@@ -50,39 +61,39 @@ fn assert_domain_boundary(path: &Path, contents: &str) {
             assert!(
                 !imports_crate(&import, forbidden),
                 "{} must not depend on parser crate `{forbidden}` via `{}`",
-                path.display(),
+                path,
                 import.join(" "),
             );
         }
         assert!(
             !contains_path(&import, FORBIDDEN_DOMAIN_IMPORT),
             "{} must not depend on `{}` via `{}`",
-            path.display(),
+            path,
             FORBIDDEN_DOMAIN_IMPORT.join(""),
             import.join(" "),
         );
     }
 }
 
-fn assert_no_forbidden_paths(path: &Path, tokens: &[&str]) {
+fn assert_no_forbidden_paths(path: &Utf8Path, tokens: &[&str]) {
     for forbidden in FORBIDDEN_CRATES {
         assert!(
             !contains_path(tokens, &["extern", "crate", forbidden]),
             "{} must not declare parser crate `{forbidden}` via `{}`",
-            path.display(),
+            path,
             tokens.join(" "),
         );
         assert!(
             !contains_path(tokens, &[forbidden, "::"]),
             "{} must not reference parser crate `{forbidden}` via `{}`",
-            path.display(),
+            path,
             tokens.join(" "),
         );
     }
     assert!(
         !contains_path(tokens, FORBIDDEN_DOMAIN_IMPORT),
         "{} must not reference `{}` via `{}`",
-        path.display(),
+        path,
         FORBIDDEN_DOMAIN_IMPORT.join(""),
         tokens.join(" "),
     );
@@ -205,7 +216,7 @@ fn forbidden_crate_import_forms_are_detected(#[case] source: &str) {
 fn aliased_extern_crate_is_rejected() {
     let tokens = non_comment_tokens("extern crate ra_ap_syntax as syntax;");
 
-    assert_no_forbidden_paths(Path::new("domain.rs"), &tokens);
+    assert_no_forbidden_paths(Utf8Path::new("domain.rs"), &tokens);
 }
 
 #[rstest]

@@ -276,10 +276,10 @@ fn has_companion_test_module<'tcx>(
 ///
 /// Qualifying modules contain `RSTEST_HARNESS_DESCRIPTOR` or carry the inner
 /// `fn`/`const` sibling pattern emitted by the `rustc --test` harness inside
-/// generated modules. Newer `rstest`/`rustc` combinations give the descriptor
-/// const and generated function different expansion contexts, so modules that
-/// also import the `test` crate may match on names alone. Empty modules and
-/// modules containing only unrelated items are not treated as companions.
+/// generated modules. Newer `rstest`/`rustc` combinations can give the
+/// descriptor const and generated function different expansion contexts, so
+/// split-span pairs must also be adjacent and import the `test` crate. Empty
+/// modules and modules containing only unrelated items are not companions.
 fn module_qualifies_as_rstest_companion_module<'tcx>(
     cx: &LateContext<'tcx>,
     module_item: &'tcx hir::Item<'tcx>,
@@ -317,20 +317,21 @@ fn module_has_inner_harness_descriptor_pairs<'tcx>(
 
     items
         .iter()
-        .copied()
-        .filter(|item| matches!(item.kind, hir::ItemKind::Fn { .. }))
-        .any(|fn_item| {
+        .enumerate()
+        .filter(|(_, item)| matches!(item.kind, hir::ItemKind::Fn { .. }))
+        .any(|(fn_index, fn_item)| {
             let Some((fn_id, fn_name, _, fn_span)) =
                 item_components(cx, fn_item, |k| matches!(k, hir::ItemKind::Fn { .. }))
             else {
                 return false;
             };
-            items.iter().copied().any(|sibling| {
+            items.iter().enumerate().any(|(const_index, sibling)| {
                 item_components(cx, sibling, |k| matches!(k, hir::ItemKind::Const(..))).is_some_and(
                     |(s_id, s_name, _, s_span)| {
                         s_id != fn_id
                             && s_name == fn_name
-                            && (s_span.source_equal(fn_span) || imports_test_crate)
+                            && (s_span.source_equal(fn_span)
+                                || (imports_test_crate && fn_index.abs_diff(const_index) == 1))
                     },
                 )
             })

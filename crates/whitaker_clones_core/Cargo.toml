@@ -21,6 +21,8 @@ tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
 
 [dev-dependencies]
+camino = { workspace = true }
+cap-std = { workspace = true }
 insta = { workspace = true }
 proptest = { workspace = true }
 rstest = { workspace = true }
@@ -31,6 +33,8 @@ tempfile = { workspace = true }
 toml = { workspace = true }
 
 [build-dependencies]
+camino = { workspace = true }
+cap-std = { workspace = true }
 toml = { workspace = true }
 [lints]
 workspace = true

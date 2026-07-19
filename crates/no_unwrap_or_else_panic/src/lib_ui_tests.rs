@@ -207,3 +207,13 @@ fn rstest_empty_companion_does_not_exempt_parent_function() {
         &["--test", "-D", "no_unwrap_or_else_panic"],
     ));
 }
+
+#[cfg(not(windows))]
+#[test]
+fn aliased_test_crate_non_companion_does_not_exempt_parent_function() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_aliased_test_crate_non_companion",
+        "aliased test crate non-companion (negative)",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
+}

@@ -93,7 +93,9 @@ fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Erro
         format!(
             "[package]\nname = \"{FIXTURE_PACKAGE}\"\nversion = \"0.0.0\"\n\
              edition = \"2024\"\npublish = false\nbuild = \"build.rs\"\n\n\
-             [build-dependencies]\ntoml = \"1.1.2\"\n"
+             [build-dependencies]\ncamino = \"1.2.1\"\n\
+             cap-std = {{ version = \"3.4.5\", features = [\"fs_utf8\"] }}\n\
+             toml = \"1.1.2\"\n"
         ),
     )?;
     fs::write(

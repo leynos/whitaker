@@ -1038,7 +1038,7 @@ Dependency declarations:
 
 - `rust-toolchain.toml`: `channel = "nightly-2026-05-28"` (Stage 0).
 - Root `Cargo.toml` `[workspace.dependencies]`: add
-  `ra_ap_syntax = "=0.0.PINNED"` with a comment recording the documented reason
+  `ra_ap_syntax = "=0.0.334"` with a comment recording the documented reason
   for the exact pin (date-stamped unstable API; pin the snapshot
   contemporaneous with `nightly-2026-05-28`; revisit on the next toolchain
   bump).
