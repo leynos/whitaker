@@ -94,7 +94,10 @@ def test_representative_targets_forward_cargo_locked(tmp_path: Path, locked: str
         for invocation in _run_make(target, cargo, locked, stub_dir)
     ]
 
-    assert recorded
+    assert recorded, (
+        f"typecheck/lint should invoke Cargo in {'locked' if locked else 'unlocked'} mode; "
+        f"recorded invocations: {recorded!r}"
+    )
     assert all(("--locked" in invocation) == bool(locked) for invocation in recorded), (
         f"typecheck/lint should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
@@ -114,8 +117,14 @@ def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
 
     recorded = _run_make("release-installer-dry-run", cargo, locked, stub_dir)
 
-    assert len(recorded) == 3
-    assert recorded[0].startswith("metadata ")
+    assert len(recorded) == 3, (
+        "release-installer-dry-run should record metadata plus two builds in "
+        f"{'locked' if locked else 'unlocked'} mode; recorded invocations: {recorded!r}"
+    )
+    assert recorded[0].startswith("metadata "), (
+        "release-installer-dry-run should record metadata first in "
+        f"{'locked' if locked else 'unlocked'} mode; recorded invocations: {recorded!r}"
+    )
     assert all(("--locked" in invocation) == bool(locked) for invocation in recorded), (
         f"release-installer-dry-run should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
