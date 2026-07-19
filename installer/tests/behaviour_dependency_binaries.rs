@@ -41,7 +41,14 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         match &self.behaviour {
             RepositoryInstallerBehaviour::Success => dirs.bin_dir().map_or_else(
                 || Err(DependencyBinaryInstallError::MissingBinDir),
-                |bin_dir| Ok(bin_dir.join(format!("{}-{}", dependency.package(), target))),
+                |bin_dir| {
+                    // Stage a runnable fake at the returned path: dylint-link
+                    // verification probes the extracted binary directly.
+                    let installed_path =
+                        bin_dir.join(format!("{}-{}", dependency.package(), target));
+                    write_fake_binary(&installed_path, true);
+                    Ok(installed_path)
+                },
             ),
             RepositoryInstallerBehaviour::NotFound => Err(DependencyBinaryInstallError::NotFound {
                 url: format!(

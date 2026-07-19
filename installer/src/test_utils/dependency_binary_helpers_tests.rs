@@ -22,27 +22,13 @@ fn repository_verification_call_returns_probe_for_cargo_dylint() {
     );
 }
 
-#[test]
-fn repository_verification_call_consults_install_list_for_dylint_link() {
-    let call = repository_verification_call("dylint-link", false)
-        .expect("successful dylint-link verification should query the install list");
-
-    assert_eq!(call.cmd, "cargo");
-    assert_eq!(call.args, vec!["install", "--list"]);
-    let output = call.result.expect("install list query should succeed");
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be UTF-8");
-    assert!(
-        stdout.contains(&format!(
-            "dylint-link v{}:",
-            dependency_version("dylint-link")
-        )),
-        "expected stdout to list the manifest version, got {stdout:?}"
-    );
-}
-
-#[test]
-fn repository_verification_call_skips_executor_for_failed_dylint_link() {
-    assert!(repository_verification_call("dylint-link", true).is_none());
+#[rstest::rstest]
+#[case::successful_verification(false)]
+#[case::failed_verification(true)]
+fn repository_verification_call_skips_executor_for_dylint_link(#[case] verification_fails: bool) {
+    // Repository installs of dylint-link are verified by probing the
+    // extracted binary directly, so no executor call is expected either way.
+    assert!(repository_verification_call("dylint-link", verification_fails).is_none());
 }
 
 #[test]
@@ -66,7 +52,7 @@ fn expected_calls_include_repository_probe_for_cargo_dylint() {
 }
 
 #[test]
-fn expected_calls_include_install_list_probe_for_dylint_link() {
+fn expected_calls_omit_executor_verification_for_dylint_link() {
     let calls = expected_calls(
         "dylint-link",
         ExpectedCallConfig {
@@ -80,9 +66,7 @@ fn expected_calls_include_install_list_probe_for_dylint_link() {
         },
     );
 
-    assert_eq!(calls.len(), 2);
+    assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].cmd, "cargo");
     assert_eq!(calls[0].args, vec!["binstall", "--version"]);
-    assert_eq!(calls[1].cmd, "cargo");
-    assert_eq!(calls[1].args, vec!["install", "--list"]);
 }

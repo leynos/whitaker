@@ -281,6 +281,84 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
     executor.assert_finished();
 }
 
+/// Writes a fake `dylint-link` into a temporary directory and returns the
+/// directory guard alongside the binary path.
+fn staged_dylint_link(exit_code: i32) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("dylint-link");
+    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(
+        &path, true, exit_code,
+    );
+    Ok((dir, path))
+}
+
+#[test]
+fn install_dylint_tools_uses_repository_release_for_dylint_link() {
+    // `dylint-link` cannot report a version, and Cargo's registry never
+    // records repository extractions, so verification must probe the
+    // extracted binary directly rather than consult the executor.
+    let (_dir, binary_path) = staged_dylint_link(0).expect("stage fake dylint-link");
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .returning(move |_, _, _| Ok(binary_path.clone()));
+    let executor = StubExecutor::new(vec![binstall_version_check_with_result(Ok(
+        success_output(),
+    ))]);
+    let mut stderr = Vec::new();
+
+    install_dylint_tools_with_options(
+        &executor,
+        &DylintToolStatus {
+            cargo_dylint: true,
+            dylint_link: false,
+        },
+        &mut stderr,
+        install_options(&repository_installer, false),
+    )
+    .expect("repository install should satisfy dylint-link");
+
+    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
+    assert!(output.contains("Installed dylint-link from repository release."));
+    assert!(!output.contains("failed verification"));
+    executor.assert_finished();
+}
+
+#[test]
+fn install_dylint_tools_falls_back_when_dylint_link_probe_fails() {
+    let (_dir, binary_path) = staged_dylint_link(1).expect("stage fake dylint-link");
+    let mut repository_installer = MockDependencyBinaryInstaller::new();
+    repository_installer
+        .expect_install()
+        .returning(move |_, _, _| Ok(binary_path.clone()));
+    let executor = StubExecutor::new(vec![
+        binstall_version_check_with_result(Ok(success_output())),
+        binstall_install("dylint-link", Ok(success_output())),
+        // The post-binstall check probes the PATH binary and then confirms
+        // the version against Cargo's installed-binary registry.
+        dylint_link_install_list_check(),
+    ]);
+    let mut stderr = Vec::new();
+
+    with_fake_binary_on_path("dylint-link", || {
+        install_dylint_tools_with_options(
+            &executor,
+            &DylintToolStatus {
+                cargo_dylint: true,
+                dylint_link: false,
+            },
+            &mut stderr,
+            install_options(&repository_installer, false),
+        )
+        .expect("binstall fallback should succeed");
+    });
+
+    let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
+    assert!(output.contains("Repository install for dylint-link failed verification"));
+    assert!(output.contains("Installed dylint-link with cargo binstall."));
+    executor.assert_finished();
+}
+
 #[test]
 fn install_tool_errors_when_dependency_manifest_entry_is_missing() {
     let missing_tool = DependencyTool {
