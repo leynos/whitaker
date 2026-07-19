@@ -28,8 +28,9 @@ A maintainer can:
 - run a new behavioural test under `rstest-bdd` that asserts the collector
   records exactly the call sites a fixture-format Rust file declares, and
 - read property-based tests proving that fingerprints are stable across
-  textually-equivalent helper calls, deterministic across HIR walk order, and
-  insensitive to macro-only call sites.
+  textually-equivalent helper calls and deterministic across HIR walk order,
+  plus explicit span-recovery and trybuild regression tests covering macro-only
+  call sites.
 
 The lint must remain diagnostic-silent. Aggregation thresholds, helper-class
 filtering by trigger conditions, and `span_lint_hir_and_then` calls all belong
