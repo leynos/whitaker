@@ -126,9 +126,9 @@ Dependency-tool verification is asymmetric by design:
   health check rejects valid artefacts. A Cargo-managed `dylint-link` is
   instead checked by resolving an executable file on `PATH` and confirming the
   version Cargo recorded for it, while a repository-release `dylint-link` is
-  trusted on the strength of its install pipeline (see below).
+  trusted after its install pipeline succeeds (see below).
 
-For repository-release installs the trust boundary is the pipeline itself: the
+For repository-release installs, the trust boundary is the pipeline itself: the
 release asset name pins the package and version, the `.sha256` sidecar
 establishes integrity, extraction confirms the expected archive member, and the
 permission step establishes launch eligibility. Genuine failures in any of
