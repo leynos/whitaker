@@ -842,7 +842,7 @@ The dependency-install path is split into focused modules under
 each dependency tool was satisfied. `install_tool()` returns
 `RepositoryRelease`, `CargoBinstall`, or `CargoInstall`, and
 `update_status_after_install()` uses that outcome to decide whether it should
-probe for `dylint-link` after installing `cargo-dylint`.
+re-check for `dylint-link` after installing `cargo-dylint`.
 
 The HTTP download layers in
 `installer/src/dependency_binaries/install/downloader.rs` and
@@ -867,8 +867,8 @@ fallback, including the direct missing-asset path, invokes
 recorded in `installer/dependency-binaries.toml` instead of silently using the
 latest upstream release.
 
-`update_status_after_install()` delegates the local-install probe decision to
-`should_refresh_companions()`. That helper returns `true` only when the install
+`update_status_after_install()` delegates the local-install re-check decision
+to `should_refresh_companions()`. That helper returns `true` only when the install
 outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
 code checks for a resolvable `dylint-link` binary only after local
 `cargo-dylint` installs and does not re-check it when the pre-built repository
