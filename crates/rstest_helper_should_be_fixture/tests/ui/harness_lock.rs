@@ -1,6 +1,6 @@
 //! Example-harness lock protocol for the UI test binary.
 //!
-//! `tests/ui.rs::run_example` serialises example compilations across separate
+//! `tests/ui.rs::run_example` serializes example compilations across separate
 //! nextest processes with a filesystem lock. This module owns that protocol —
 //! the lock type, its stale-owner recovery, and the adapter tests that exercise
 //! it — so `ui.rs` stays focused on the example and trybuild assertions.
