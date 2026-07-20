@@ -516,13 +516,12 @@ calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint and
-loads configuration defaults so teams can opt into the forthcoming rule. It
-now passively collects local helper calls inside strict `#[rstest]` tests and
-fingerprints fixture-local, literal, `const`, and `static` arguments for later
-aggregation. The lint remains diagnostic-silent: threshold evaluation and
-actionable diagnostics are tracked by 8.2.3, while UI pass/fail coverage is
-tracked by 8.2.4.
+This lint is experimental. The current implementation registers the lint,
+loads configuration defaults, and passively collects local helper calls
+inside strict `#[rstest]` tests, fingerprinting fixture-local, literal,
+`const`, and `static` arguments for later aggregation. The lint remains
+diagnostic-silent: threshold evaluation and actionable diagnostics are
+tracked by 8.2.3, while UI pass/fail coverage is tracked by 8.2.4.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
