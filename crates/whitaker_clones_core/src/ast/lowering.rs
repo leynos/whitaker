@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use ra_ap_syntax::{
     AstNode, Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
-    TextSize,
+    TextSize, WalkEvent,
 };
 use tracing::{debug, error, warn};
 
@@ -93,19 +93,21 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
         "selected AST covering node"
     );
 
-    if contains_error_element(&selected) {
-        error!(
-            start = span.start(),
-            end = span.end(),
-            "selected AST span contains parser error elements"
-        );
-        return Err(AstError::UnparsableSpan {
-            start: span.start(),
-            end: span.end(),
-        });
-    }
-
-    let lowered = lower_node(&selected, 0)?;
+    // Lowering doubles as parser-error detection: a single descent both builds
+    // the normalized subtree and rejects any `ERROR` node or token, so the
+    // selected span is never walked twice.
+    let lowered = LoweringLimits::new(span)
+        .lower(&selected, 0)
+        .map_err(|error| {
+            if matches!(error, AstError::UnparsableSpan { .. }) {
+                error!(
+                    start = span.start(),
+                    end = span.end(),
+                    "selected AST span contains parser error elements"
+                );
+            }
+            error
+        })?;
 
     debug_assert!(selected.text_range().contains_range(target_range));
     Ok(NormalizedTree::new(lowered, span))
@@ -150,19 +152,25 @@ fn update_smallest_covering_node(
 /// turn a single-file parse into unbounded lowering work.
 /// Among covering nodes with the same minimal width, traversal retains the
 /// first node encountered.
+///
+/// The walk uses the parser's pre-order cursor so it visits each node once
+/// without allocating a child buffer per node; depth is tracked from the
+/// balanced enter/leave events.
 fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
-    let mut pending = vec![(root.clone(), 0_usize)];
     let mut selected = None;
     let mut node_count = 0_usize;
+    let mut depth = 0_usize;
 
-    while let Some((node, depth)) = pending.pop() {
-        validate_covering_node_budget(depth, node_count)?;
-        node_count += 1;
-
-        update_smallest_covering_node(&mut selected, &node, target);
-
-        let children = node.children().collect::<Vec<_>>();
-        pending.extend(children.into_iter().rev().map(|child| (child, depth + 1)));
+    for event in root.preorder() {
+        match event {
+            WalkEvent::Enter(node) => {
+                validate_covering_node_budget(depth, node_count)?;
+                node_count += 1;
+                update_smallest_covering_node(&mut selected, &node, target);
+                depth += 1;
+            }
+            WalkEvent::Leave(_) => depth -= 1,
+        }
     }
 
     selected
@@ -174,37 +182,64 @@ fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<Syn
         })
 }
 
-fn lower_node(node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
-    lower_node_with_limit(node, depth, MAX_AST_DEPTH)
+/// Recursion-scoped invariants for lowering a covering subtree.
+///
+/// Bundling the depth budget with the requested span keeps the recursive
+/// [`lower`](LoweringLimits::lower) signature small while giving every level the
+/// span it needs to report [`AstError::UnparsableSpan`] on parser `ERROR`
+/// elements.
+struct LoweringLimits {
+    /// Maximum syntax depth permitted during lowering.
+    maximum_depth: usize,
+    /// Requested candidate span, reported when the subtree is unparsable.
+    span: ByteSpan,
 }
 
-fn lower_node_with_limit(
-    node: &SyntaxNode,
-    depth: usize,
-    maximum_depth: usize,
-) -> AstResult<NormalizedNode> {
-    if depth > maximum_depth {
-        return Err(AstError::TreeTooDeep {
-            limit: maximum_depth,
-        });
-    }
-
-    let mut children = Vec::new();
-    for child in node.children_with_tokens() {
-        match child {
-            NodeOrToken::Node(child_node) => children.push(lower_node_with_limit(
-                &child_node,
-                depth + 1,
-                maximum_depth,
-            )?),
-            NodeOrToken::Token(token) if !token.kind().is_trivia() => {
-                children.push(lower_token(&token));
-            }
-            NodeOrToken::Token(_) => {}
+impl LoweringLimits {
+    fn new(span: ByteSpan) -> Self {
+        Self {
+            maximum_depth: MAX_AST_DEPTH,
+            span,
         }
     }
 
-    Ok(NormalizedNode::new(kind_id(node.kind()), None, children))
+    /// Lowers `node` while rejecting any parser `ERROR` node or token in the
+    /// same descent, so error detection needs no separate subtree walk.
+    fn lower(&self, node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
+        if depth > self.maximum_depth {
+            return Err(AstError::TreeTooDeep {
+                limit: self.maximum_depth,
+            });
+        }
+        if node.kind() == SyntaxKind::ERROR {
+            return Err(self.unparsable_span());
+        }
+
+        let mut children = Vec::new();
+        for child in node.children_with_tokens() {
+            match child {
+                NodeOrToken::Node(child_node) => {
+                    children.push(self.lower(&child_node, depth + 1)?);
+                }
+                NodeOrToken::Token(token) if token.kind() == SyntaxKind::ERROR => {
+                    return Err(self.unparsable_span());
+                }
+                NodeOrToken::Token(token) if !token.kind().is_trivia() => {
+                    children.push(lower_token(&token));
+                }
+                NodeOrToken::Token(_) => {}
+            }
+        }
+
+        Ok(NormalizedNode::new(kind_id(node.kind()), None, children))
+    }
+
+    fn unparsable_span(&self) -> AstError {
+        AstError::UnparsableSpan {
+            start: self.span.start(),
+            end: self.span.end(),
+        }
+    }
 }
 
 fn lower_token(token: &SyntaxToken) -> NormalizedNode {
@@ -239,11 +274,6 @@ fn text_range(span: ByteSpan) -> TextRange {
 
 fn range_to_u32(range: TextRange) -> Range<u32> {
     u32::from(range.start())..u32::from(range.end())
-}
-
-fn contains_error_element(node: &SyntaxNode) -> bool {
-    node.descendants_with_tokens()
-        .any(|element| element.kind() == SyntaxKind::ERROR)
 }
 
 #[cfg(test)]

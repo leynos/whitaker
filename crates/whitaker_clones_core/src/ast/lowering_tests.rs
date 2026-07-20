@@ -6,7 +6,7 @@ use serde_json::json;
 
 use ra_ap_syntax::{AstNode, Edition, SourceFile};
 
-use super::{MAX_AST_NODES, kind_id, leaf_class, lower_node_with_limit};
+use super::{LoweringLimits, MAX_AST_NODES, kind_id, leaf_class};
 use crate::{
     AstError, ByteSpan, Production,
     ast::{KindId, LeafClass, NormalizedNode, NormalizedTree, PARSER_SCHEMA_VERSION},
@@ -86,17 +86,23 @@ fn oversized_source_is_rejected_by_the_node_budget() -> Result<(), AstError> {
 }
 
 #[rstest]
-fn deeply_nested_syntax_obeys_the_lowering_depth_budget() {
+fn deeply_nested_syntax_obeys_the_lowering_depth_budget() -> Result<(), AstError> {
     let source = "fn f() { if true { if true { if true { if true { 0; } } } } }";
     let root = SourceFile::parse(source, Edition::CURRENT)
         .tree()
         .syntax()
         .clone();
+    let span = ByteSpan::new(source, 0, source.len() as u32)?;
 
     assert_eq!(
-        lower_node_with_limit(&root, 0, 2),
+        LoweringLimits {
+            maximum_depth: 2,
+            span,
+        }
+        .lower(&root, 0),
         Err(AstError::TreeTooDeep { limit: 2 })
     );
+    Ok(())
 }
 
 #[rstest]
