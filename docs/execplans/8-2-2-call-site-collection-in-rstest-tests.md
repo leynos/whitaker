@@ -208,8 +208,9 @@ This plan was approved before implementation started.
   coverage remain to be added in the next stage.
 - [x] (2026-06-04T02:46:39Z) Added parameterized unit coverage for duplicate
   and distinct source spans, a `proptest` insertion-order invariant for
-  collector determinism, and a trybuild pass fixture proving collection remains
-  diagnostic-silent for fixture, literal, `const`, and `static` arguments.
+  collector determinism, and the Cargo-backed `collection_zero_diagnostic` UI
+  harness proving collection remains diagnostic-silent for fixture, literal,
+  `const`, and `static` arguments.
 - [x] (2026-06-04T04:44:51Z) Expanded the shared HIR span-recovery regression
   with an explicit `macro_only_hir_span_has_no_user_editable_recovery` test,
   covering the helper the collector uses to drop call sites whose spans cannot
@@ -661,8 +662,9 @@ In the same module, use `CallSiteLocation` as the private dedup key:
   unsupported.
 
 Confirm with direct unit and property tests that generated case siblings still
-collapse into one record, while macro-only calls with the same recovered span
-remain distinct.
+collapse into one record, that calls with recoverable user-editable spans
+sharing an equal recovered span remain distinct via the `hir_local_id`
+tie-breaker, and that calls whose span recovery returns `None` are dropped.
 
 ### Stage E — Tests
 

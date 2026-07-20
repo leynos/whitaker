@@ -78,6 +78,37 @@ fn collector_keeps_macro_only_calls_with_distinct_hir_ids() {
 }
 
 #[test]
+fn collector_orders_large_single_callee_bucket_by_span() {
+    // Exercises the deferred `finalize` sort at scale: many call sites for a
+    // single callee, inserted out of order, must still read back in ascending
+    // span order without the per-insertion shifting the sorted store avoids.
+    const CALL_COUNT: u32 = 4_096;
+    let mut collector = CallSiteCollector::default();
+    let callee = def_id(1);
+
+    // Insert in descending span order so every record is maximally out of place.
+    for index in (0..CALL_COUNT).rev() {
+        let lo = index * 10;
+        let inserted = collector.record(
+            record_at(callee, Span::with_root_ctxt(BytePos(lo), BytePos(lo + 8))),
+            location("crate::helper", BytePos(lo), BytePos(lo + 8)),
+        );
+        assert!(inserted);
+    }
+    collector.finalize();
+
+    let ordered_los = collector
+        .iter()
+        .next()
+        .map(|(_, records)| records.iter().map(|r| r.span.lo().0).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    let expected = (0..CALL_COUNT).map(|index| index * 10).collect::<Vec<_>>();
+    assert_eq!(collector.record_count(), CALL_COUNT as usize);
+    assert_eq!(ordered_los, expected);
+}
+
+#[test]
 fn literal_lowering_records_const_lit_atom() {
     assert_eq!(
         literal_text_atom("\"literal\"".to_string()),
@@ -196,6 +227,7 @@ fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
             location(&callee, BytePos(lo), BytePos(hi)),
         );
     }
+    collector.finalize();
 
     collector
         .iter()
@@ -225,6 +257,7 @@ fn collect_equal_span_calls(calls: &[(u32, u32)]) -> Vec<(u32, ArgFingerprint)> 
             location_with_hir_id("crate::helper", BytePos(10), BytePos(18), *hir_local_id),
         );
     }
+    collector.finalize();
 
     collector
         .iter()

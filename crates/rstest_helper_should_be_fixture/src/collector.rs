@@ -145,20 +145,47 @@ impl CallSiteCollector {
             return false;
         }
 
-        let records = self.by_callee.entry(callee_key).or_default();
-        // Preserve iteration order without re-sorting the complete callee bucket.
-        let insertion_index = records.partition_point(|existing| {
-            (
-                existing.span.lo(),
-                existing.span.hi(),
-                existing.hir_local_id,
-            ) < (record.span.lo(), record.span.hi(), record.hir_local_id)
-        });
-        records.insert(insertion_index, record);
+        // Append in insertion order; `finalize` sorts each bucket once so the
+        // per-callee cost stays O(n log n) instead of the O(n^2) that repeated
+        // sorted `Vec::insert` shifting would incur.
+        self.by_callee.entry(callee_key).or_default().push(record);
         true
     }
 
+    /// Sorts each callee bucket into deterministic call-site order.
+    ///
+    /// Records accumulate in insertion order during collection. This final
+    /// pass orders them by recovered span (`lo`, then `hi`) and HIR-local id,
+    /// so a single `O(n log n)` sort per callee replaces the per-insertion
+    /// element shifting a sorted `Vec::insert` would require. Callers must
+    /// invoke this after the last [`record`](Self::record) and before reading
+    /// through [`iter`](Self::iter); it is idempotent and cheap to repeat.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// # use crate::collector::CallSiteCollector;
+    /// # fn example(mut collector: CallSiteCollector) {
+    /// collector.finalize();
+    /// # }
+    /// ```
+    pub(crate) fn finalize(&mut self) {
+        for records in self.by_callee.values_mut() {
+            records.sort_by(|a, b| {
+                (a.span.lo(), a.span.hi(), a.hir_local_id).cmp(&(
+                    b.span.lo(),
+                    b.span.hi(),
+                    b.hir_local_id,
+                ))
+            });
+        }
+    }
+
     /// Returns collected records in deterministic callee order.
+    ///
+    /// Callee buckets are ordered by definition path. Records within each
+    /// bucket are only sorted once [`finalize`](Self::finalize) has run;
+    /// before then they appear in insertion order.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&str, &[CallSiteRecord])> {
         self.by_callee
             .iter()

@@ -218,6 +218,9 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     }
 
     fn check_crate_post(&mut self, _cx: &LateContext<'tcx>) {
+        // Order every callee bucket once, after the final `check_fn` record,
+        // before any read of the collected evidence.
+        self.collector.finalize();
         for (callee, records) in self.collector.iter() {
             for record in records {
                 debug!(

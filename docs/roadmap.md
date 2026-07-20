@@ -569,8 +569,9 @@
   local IDs to retain and deterministically order calls that share a recovered
   span, records fixture-local, literal, `const`, and `static` argument
   fingerprints, and keeps diagnostics disabled until 8.2.3. Parameterized
-  collector unit cases cover duplicate and distinct source spans, while the
-  Cargo-backed `collection_zero_diagnostic` UI harness provides the
+  collector unit cases cover duplicate and distinct source spans, `proptest`
+  cases assert insertion-order independence and deterministic call ordering,
+  while the Cargo-backed `collection_zero_diagnostic` UI harness provides the
   behavioural and end-to-end validation boundary. The private
   `collect_call_sites` method keeps the driver boundary explicit. Validation
   has passed for

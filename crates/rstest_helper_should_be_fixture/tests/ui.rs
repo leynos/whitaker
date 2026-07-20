@@ -31,6 +31,10 @@ const COLLECTION_SUMMARY_ENV: &str = "WHITAKER_RSTEST_HELPER_COLLECTION_SUMMARY"
 // can legitimately hold it for several minutes, so only remove directories
 // old enough to be abandoned by a crashed process.
 const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
+// Bound the default `acquire()` wait so a wedged live owner surfaces a timeout
+// instead of polling forever. It exceeds the stale-recovery window so genuinely
+// abandoned locks are reclaimed before this ceiling is reached.
+const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(31 * 60);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";
 const EXAMPLE_HARNESS_LOCK_LIVENESS_EXTENSION: &str = "owner-lock";
@@ -117,7 +121,7 @@ impl ExampleHarnessLock {
     fn acquire() -> io::Result<Self> {
         Self::acquire_at(
             std::env::temp_dir().join("rstest-helper-example-harness.lock"),
-            None,
+            Some(EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT),
         )
     }
 
