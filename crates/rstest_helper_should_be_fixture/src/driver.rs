@@ -8,6 +8,9 @@ use crate::collector::CallSiteCollector;
 use crate::visitor::{
     CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape,
 };
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::{Dir, OpenOptions};
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::def_id::LocalDefId;
@@ -271,14 +274,34 @@ impl RstestHelperShouldBeFixture {
     }
 
     fn write_collection_summary(&self) -> std::io::Result<()> {
-        let Some(path) = std::env::var_os(COLLECTION_SUMMARY_ENV) else {
-            return Ok(());
+        let path = match std::env::var(COLLECTION_SUMMARY_ENV) {
+            Ok(path) => Utf8PathBuf::from(path),
+            Err(std::env::VarError::NotPresent) => return Ok(()),
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "collection summary path is not valid UTF-8",
+                ));
+            }
         };
 
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        // `cap_std` grants no ambient authority, so open the summary's parent
+        // directory (the test harness supplies an absolute path) and append to
+        // the file relative to that capability.
+        let parent = match path.parent() {
+            Some(parent) if !parent.as_str().is_empty() => parent,
+            _ => Utf8Path::new("."),
+        };
+        let Some(file_name) = path.file_name() else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "collection summary path has no file name",
+            ));
+        };
+
+        let directory = Dir::open_ambient_dir(parent, ambient_authority())?;
+        let mut file =
+            directory.open_with(file_name, OpenOptions::new().create(true).append(true))?;
         writeln!(file, "{}", self.collection_summary())
     }
 }

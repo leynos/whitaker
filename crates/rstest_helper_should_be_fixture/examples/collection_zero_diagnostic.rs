@@ -98,3 +98,14 @@ fn case_generated_collection_stays_silent(#[case] input: &str, fixture: &str) {
     let built = Builder { fixture }.build(input);
     assert!(built.ends_with(input));
 }
+
+#[rstest]
+#[case("nested")]
+fn method_call_in_closure_collection_stays_silent(#[case] input: &str, fixture: &str) {
+    // Regression: a method call nested inside a closure is owned by the
+    // closure, not the test function. Resolving it through the ambient typeck
+    // results would ICE the driver, so the collector scopes method resolution
+    // to the call expression's own HIR owner.
+    let build_via_method = || Builder { fixture }.build(input);
+    assert!(build_via_method().ends_with(input));
+}

@@ -320,7 +320,7 @@ pub(crate) fn resolve_local_callee<'tcx>(
 ) -> Option<DefId> {
     let def_id = match &expr.kind {
         hir::ExprKind::Call(callee, _) => resolve_direct_call(cx, callee),
-        hir::ExprKind::MethodCall(..) => cx.typeck_results().type_dependent_def_id(expr.hir_id),
+        hir::ExprKind::MethodCall(..) => resolve_method_call_def_id(cx, expr),
         _ => {
             debug!(
                 target: "rstest_helper_should_be_fixture",
@@ -356,6 +356,30 @@ fn resolve_direct_call<'tcx>(
         return None;
     };
     cx.qpath_res(qpath, callee.hir_id).opt_def_id()
+}
+
+/// Resolves a method call to its callee, scoping typeck results to the
+/// expression's HIR owner.
+///
+/// The lint's [`CallSiteVisitor`](crate::visitor::CallSiteVisitor) walks nested
+/// bodies without refreshing the ambient typeck context, so a method call
+/// inside a nested closure carries a different owner than `cx.typeck_results()`.
+/// Reading `type_dependent_def_id` from mismatched results would ICE, so this
+/// mirrors `LateContext::qpath_res`: prefer owner-matching results, otherwise
+/// load the owner's own typeck results, and yield `None` when none exist.
+fn resolve_method_call_def_id<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &'tcx hir::Expr<'tcx>,
+) -> Option<DefId> {
+    let owner = expr.hir_id.owner;
+    cx.maybe_typeck_results()
+        .filter(|typeck_results| typeck_results.hir_owner == owner)
+        .or_else(|| {
+            cx.tcx
+                .has_typeck_results(owner.def_id)
+                .then(|| cx.tcx.typeck(owner.def_id))
+        })
+        .and_then(|typeck_results| typeck_results.type_dependent_def_id(expr.hir_id))
 }
 
 fn is_local_function(cx: &LateContext<'_>, def_id: DefId) -> bool {

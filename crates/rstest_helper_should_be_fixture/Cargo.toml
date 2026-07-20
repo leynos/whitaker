@@ -26,10 +26,14 @@ dylint-driver = [
     "dep:rustc_span",
     "dep:serde",
     "dep:whitaker",
+    "dep:camino",
+    "dep:cap-std",
 ]
 constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
+camino = { workspace = true, optional = true }
+cap-std = { workspace = true, optional = true }
 whitaker-common = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 log = { workspace = true, optional = true }

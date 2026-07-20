@@ -2356,6 +2356,8 @@ checksum = "88f2ca584f7d9d359a09f616900be015302c959d58c2c2da6c075573352dfa0d"
 name = "rstest_helper_should_be_fixture"
 version = "0.2.6"
 dependencies = [
+ "camino",
+ "cap-std",
  "dylint_linting",
  "dylint_testing",
  "filetime",
