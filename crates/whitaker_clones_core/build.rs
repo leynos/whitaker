@@ -6,18 +6,20 @@
 //! every canonical AST hash. Failing the build on a loose parser requirement
 //! prevents future dependency updates from silently reusing stale AST hashes.
 
-use std::{env, error::Error, fs};
+use std::{env, error::Error};
 
 use camino::Utf8PathBuf;
 mod build_support;
 
-use build_support::{exact_version, find_workspace_manifest, parser_dependency_requirement};
+use build_support::{
+    exact_version, find_workspace_manifest, parser_dependency_requirement, read_workspace_manifest,
+};
 
 const PARSER_VERSION_ENV: &str = "WHITAKER_RA_AP_SYNTAX_VERSION";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let workspace_manifest = workspace_manifest_path()?;
-    let manifest = fs::read_to_string(&workspace_manifest)?;
+    let manifest = read_workspace_manifest(&workspace_manifest)?;
     let version_requirement = parser_dependency_requirement(&manifest)?;
     let parser_version = exact_version(&version_requirement)?;
 

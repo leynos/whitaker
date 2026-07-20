@@ -5,6 +5,7 @@ mod build_support;
 
 use build_support::{
     exact_version, find_workspace_manifest, is_workspace_manifest, parser_dependency_requirement,
+    read_workspace_manifest,
 };
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
@@ -99,6 +100,37 @@ fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>
     let nested = Utf8PathBuf::from_path_buf(nested).expect("temporary paths must be UTF-8");
     let error = find_workspace_manifest(&nested)
         .expect_err("a directory without a workspace manifest should fail");
+
+    assert_eq!(
+        error
+            .downcast_ref::<std::io::Error>()
+            .map(std::io::Error::kind),
+        Some(std::io::ErrorKind::NotFound)
+    );
+    Ok(())
+}
+
+#[rstest]
+fn reads_a_located_manifest() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let manifest = directory.path().join("Cargo.toml");
+    let contents = "[workspace]\nmembers = []\n";
+    std::fs::write(&manifest, contents)?;
+
+    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
+
+    assert_eq!(read_workspace_manifest(&manifest)?, contents);
+    Ok(())
+}
+
+#[rstest]
+fn read_of_absent_manifest_reports_not_found() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let manifest = directory.path().join("Cargo.toml");
+
+    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
+    let error =
+        read_workspace_manifest(&manifest).expect_err("reading an absent manifest should fail");
 
     assert_eq!(
         error

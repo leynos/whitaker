@@ -48,20 +48,40 @@ pub(crate) fn find_workspace_manifest(
 }
 
 pub(crate) fn is_workspace_manifest(candidate: &Utf8Path) -> Result<bool, Box<dyn Error>> {
-    let Some(directory) = candidate.parent() else {
+    let Some(manifest) = read_manifest_text(candidate)? else {
         return Ok(false);
-    };
-    let Some(filename) = candidate.file_name() else {
-        return Ok(false);
-    };
-    let directory = Dir::open_ambient_dir(directory, ambient_authority())?;
-    let manifest = match directory.read_to_string(filename) {
-        Ok(manifest) => manifest,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
     };
     let document = manifest.parse::<toml::Table>()?;
     Ok(document.contains_key("workspace"))
+}
+
+/// Reads a manifest that discovery has already located, failing if it vanished.
+///
+/// Filesystem access is capability-scoped via `cap_std` so the build script
+/// never reaches for `std::fs`; a missing file becomes an explicit error rather
+/// than the silent `Ok(None)` that [`read_manifest_text`] returns for probing.
+pub(crate) fn read_workspace_manifest(path: &Utf8Path) -> Result<String, Box<dyn Error>> {
+    read_manifest_text(path)?.ok_or_else(|| manifest_not_readable(path).into())
+}
+
+/// Reads `candidate` through a capability-scoped `cap_std` directory handle.
+///
+/// Returns `Ok(None)` when the path cannot name a file within a directory or
+/// the file is absent, letting callers treat "no such manifest" as a normal
+/// outcome without a `std::fs` dependency.
+fn read_manifest_text(candidate: &Utf8Path) -> Result<Option<String>, Box<dyn Error>> {
+    let Some(directory) = candidate.parent() else {
+        return Ok(None);
+    };
+    let Some(filename) = candidate.file_name() else {
+        return Ok(None);
+    };
+    let directory = Dir::open_ambient_dir(directory, ambient_authority())?;
+    match directory.read_to_string(filename) {
+        Ok(manifest) => Ok(Some(manifest)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn missing_workspace_dependency() -> io::Error {
@@ -84,6 +104,13 @@ fn non_exact_workspace_dependency(requirement: &str) -> io::Error {
         format!(
             "workspace dependency `{PARSER_DEPENDENCY}` must be exact-pinned, got `{requirement}`"
         ),
+    )
+}
+
+fn manifest_not_readable(path: &Utf8Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("workspace manifest `{path}` disappeared before it could be read"),
     )
 }
 
