@@ -1,20 +1,20 @@
 error: Replace unwrap_or_else on `std::option::Option<i32>` with a non-panicking fallback.
-  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:19:13
+  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:24:13
    |
 LL |     let _ = Some(value).unwrap_or_else(|| panic!("aliased non-companion {value}"));
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The closure supplied to unwrap_or_else triggers a panic.
-  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:19:13
+  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:24:13
    |
 LL |     let _ = Some(value).unwrap_or_else(|| panic!("aliased non-companion {value}"));
    |             ^^^^^^^^^^^
    = help: Propagate the error or use expect with a descriptive message instead of panicking.
 note: the lint level is defined here
-  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:10:10
+  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:18:8
    |
-LL |     deny(no_unwrap_or_else_panic)
-   |          ^^^^^^^^^^^^^^^^^^^^^^^
+LL | #[deny(no_unwrap_or_else_panic)]
+   |        ^^^^^^^^^^^^^^^^^^^^^^^
 
 error: aborting due to 1 previous error
 
