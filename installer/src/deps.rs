@@ -186,13 +186,10 @@ fn is_dylint_link_installed(
     executor: &dyn CommandExecutor,
     expected_version: Option<&str>,
 ) -> bool {
-    // The existence probe runs first so that a missing binary never consults
-    // the executor.
-    let is_present = match find_binary_on_path(DYLINT_LINK_TOOL.command) {
-        Some(binary_path) => dylint_link_probe_succeeds(&binary_path),
-        None => false,
-    };
-    if !is_present {
+    // Presence is established by resolving an executable file on PATH.
+    // `dylint-link` is a linker wrapper with no reliable self-reporting
+    // subcommand, so it is never executed to prove it works.
+    if find_binary_on_path(DYLINT_LINK_TOOL.command).is_none() {
         return false;
     }
     let Some(expected_version) = expected_version else {
@@ -279,31 +276,6 @@ fn find_binary_in_directory(directory: &Path, binary_name: &str) -> Option<std::
     binary_candidates(directory, binary_name)
         .into_iter()
         .find(|candidate| is_executable_file(candidate))
-}
-
-fn dylint_link_probe_succeeds(binary_path: &Path) -> bool {
-    let mut command = Command::new(binary_path);
-    command.arg("--help");
-
-    if let Some(toolchain) = dylint_link_probe_toolchain() {
-        command.env("RUSTUP_TOOLCHAIN", toolchain);
-    }
-
-    command.output().is_ok_and(|output| output.status.success())
-}
-
-fn dylint_link_probe_toolchain() -> Option<String> {
-    std::env::var("RUSTUP_TOOLCHAIN")
-        .ok()
-        .filter(|toolchain| !toolchain.trim().is_empty())
-        .or_else(|| {
-            host_target().map(|target| {
-                // `dylint-link` reads `RUSTUP_TOOLCHAIN` before it inspects CLI
-                // arguments, so the probe synthesizes a stable host toolchain
-                // when the caller did not provide one.
-                format!("stable-{}", target.as_str())
-            })
-        })
 }
 
 fn binary_candidates(directory: &Path, binary_name: &str) -> Vec<std::path::PathBuf> {

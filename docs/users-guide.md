@@ -40,11 +40,12 @@ This:
    source-build path is taken, the installer reports that it is falling back to
    Cargo, and on success it prints
    `Installed <tool> from source with cargo install.`. After installation,
-   `cargo-dylint` is verified by running `cargo dylint --version`, while
-   `dylint-link` is verified by resolving the executable on `PATH` and then
-   invoking it with `--help`. The installer sets `RUSTUP_TOOLCHAIN` for that
-   probe when needed, which avoids false failures from upstream
-   `dylint-link --version` while still rejecting stale shims and broken scripts.
+   `cargo-dylint` is verified by running `cargo dylint --version`.
+   `dylint-link` is never executed: it is a linker wrapper that forwards its
+   arguments to the underlying linker, so it has no reliable self-reporting
+   subcommand. A release artefact is trusted once its checksum, extraction, and
+   executable permissions have been established, and a Cargo-managed copy is
+   checked by resolving it on `PATH` and comparing the version Cargo recorded.
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes

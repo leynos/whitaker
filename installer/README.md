@@ -119,14 +119,25 @@ snippets to simplify this setup.
 Dependency-tool verification is asymmetric by design:
 
 - `cargo-dylint` is checked by running `cargo dylint --version`.
-- `dylint-link` is checked by resolving the executable on `PATH` and then
-  invoking it with `--help`. The probe injects `RUSTUP_TOOLCHAIN` when the
-  caller has not already set it, which avoids the false negatives from
-  `dylint-link --version` while still rejecting stale shims and broken scripts.
+- `dylint-link` is never executed. It is a linker wrapper that forwards its
+  entire argument list to the underlying linker, so it has no reliable
+  self-reporting subcommand: `--version` exits early, and `--help` depends on
+  a usable linker and toolchain in the ambient environment. Executing it as a
+  health check rejects valid artefacts. A Cargo-managed `dylint-link` is
+  instead checked by resolving an executable file on `PATH` and confirming the
+  version Cargo recorded for it, while a repository-release `dylint-link` is
+  trusted on the strength of its install pipeline (see below).
+
+For repository-release installs the trust boundary is the pipeline itself: the
+release asset name pins the package and version, the `.sha256` sidecar
+establishes integrity, extraction confirms the expected archive member, and the
+permission step establishes launch eligibility. Genuine failures in any of
+those steps — a missing asset, checksum mismatch, failed download or
+extraction, or an unwritable executable — still fall back to Cargo.
 
 On Windows, the installer honours `PATHEXT` while scanning `PATH`, so the
 normal Cargo-installed `dylint-link.exe` and other shell-resolved executable
-suffixes are recognized and then verified with the same invocation-based probe.
+suffixes are recognized.
 
 The wrappers are:
 

@@ -283,27 +283,33 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
 
 /// Writes a fake `dylint-link` into a temporary directory and returns the
 /// directory guard alongside the binary path.
-fn staged_dylint_link(exit_code: i32) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
+///
+/// The fake is staged with a failing exit status so that any attempt to
+/// execute it as a health check would be observable as a verification
+/// failure.
+fn staged_unrunnable_dylint_link() -> std::io::Result<(tempfile::TempDir, PathBuf)> {
     let dir = tempfile::tempdir()?;
     let path = crate::test_utils::dependency_binary_helpers::path_binary_location(
         dir.path(),
         "dylint-link",
     );
-    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(
-        &path, true, exit_code,
-    );
+    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1);
     Ok((dir, path))
 }
 
 #[test]
-fn install_dylint_tools_uses_repository_release_for_dylint_link() {
-    // `dylint-link` cannot report a version, and Cargo's registry never
-    // records repository extractions, so verification must probe the
-    // extracted binary directly rather than consult the executor.
-    let (_dir, binary_path) = staged_dylint_link(0).expect("stage fake dylint-link");
+fn install_dylint_tools_accepts_repository_dylint_link_without_executing_it() {
+    // `dylint-link` forwards its argument list to the underlying linker and
+    // has no reliable self-reporting subcommand, so a successful repository
+    // install is accepted on the strength of the download, checksum,
+    // extraction, and permission steps alone. Staging a fake that exits
+    // non-zero proves the binary is never executed as a health check: any
+    // such probe would reject it and fall back to Cargo.
+    let (_dir, binary_path) = staged_unrunnable_dylint_link().expect("stage fake dylint-link");
     let mut repository_installer = MockDependencyBinaryInstaller::new();
     repository_installer
         .expect_install()
+        .once()
         .returning(move |_, _, _| Ok(binary_path.clone()));
     let executor = StubExecutor::new(vec![binstall_version_check_with_result(Ok(
         success_output(),
@@ -324,20 +330,28 @@ fn install_dylint_tools_uses_repository_release_for_dylint_link() {
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Installed dylint-link from repository release."));
     assert!(!output.contains("failed verification"));
+    // No Cargo command beyond the binstall-availability probe may run: a
+    // source build of dylint-link cannot succeed on toolchains below the
+    // crate's rustc floor.
     executor.assert_finished();
 }
 
 #[test]
-fn install_dylint_tools_falls_back_when_dylint_link_probe_fails() {
-    let (_dir, binary_path) = staged_dylint_link(1).expect("stage fake dylint-link");
+fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
+    // Genuine repository failures — missing asset, checksum mismatch,
+    // extraction failure, or an unwritable executable — must still fall back
+    // to Cargo.
     let mut repository_installer = MockDependencyBinaryInstaller::new();
-    repository_installer
-        .expect_install()
-        .returning(move |_, _, _| Ok(binary_path.clone()));
+    repository_installer.expect_install().returning(|_, _, _| {
+        Err(DependencyBinaryInstallError::Install {
+            binary: "dylint-link".to_owned(),
+            reason: "checksum mismatch".to_owned(),
+        })
+    });
     let executor = StubExecutor::new(vec![
         binstall_version_check_with_result(Ok(success_output())),
         binstall_install("dylint-link", Ok(success_output())),
-        // The post-binstall check probes the PATH binary and then confirms
+        // The post-binstall check resolves the PATH binary and then confirms
         // the version against Cargo's installed-binary registry.
         dylint_link_install_list_check(),
     ]);
@@ -357,7 +371,7 @@ fn install_dylint_tools_falls_back_when_dylint_link_probe_fails() {
     });
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
-    assert!(output.contains("Repository install for dylint-link failed verification"));
+    assert!(output.contains("Repository install for dylint-link unavailable"));
     assert!(output.contains("Installed dylint-link with cargo binstall."));
     executor.assert_finished();
 }
