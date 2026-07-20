@@ -943,11 +943,22 @@ The dependency-install path is split into focused modules under
 
 - `metadata.rs` computes target-specific archive names, binary names, and the
   exact archive member path
-- `downloader.rs` resolves rolling-release asset URLs and downloads archives
+- `downloader.rs` resolves rolling-release asset URLs, downloads archives,
+  and verifies the SHA-256 checksum by streaming the file in fixed-size
+  chunks and rendering the digest with `to_lower_hex`
 - `extractor.rs` extracts the exact packaged member into a temporary file and
   atomically renames it into the local bin directory
 - `installer.rs` orchestrates directory discovery, download, extraction, and
   executable permission fixes
+
+The crate-level `installer/src/hex.rs` module (not part of the
+`install/` subdirectory above) provides `to_lower_hex`, which renders bytes
+as lowercase hex. It exists because `sha2` 0.11 changed `Sha256::finalize()`
+to return `hybrid_array::Array<u8, _>`, which does not implement
+`LowerHex`, and `Sha256` no longer implements `io::Write`, so neither
+`format!("{:x}", digest)` nor `io::copy(reader, &mut hasher)` compile
+against it any more. `to_lower_hex` is shared by `downloader.rs`,
+`artefact/packaging.rs`, and the `sha256_hex` test helper.
 
 `installer/src/deps.rs` drives the high-level fallback order:
 

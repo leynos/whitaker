@@ -77,30 +77,49 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
                 reason: "empty or invalid checksum file".to_string(),
             })?;
 
-        // Compute actual checksum
-        let mut archive_file = File::open(destination)?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0u8; 8192];
-        loop {
-            let bytes_read = archive_file.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
-            hasher.update(&buffer[..bytes_read]);
-        }
-        let actual_checksum = to_lower_hex(&hasher.finalize());
-
-        // Verify checksum
-        if actual_checksum != expected_checksum {
-            return Err(DependencyBinaryInstallError::Checksum {
-                archive: destination.to_path_buf(),
-                expected: expected_checksum.to_string(),
-                actual: actual_checksum,
-            });
-        }
-
-        Ok(())
+        // Verify the archive against the expected checksum.
+        verify_archive_checksum(destination, expected_checksum)
     }
+}
+
+/// Compute the lowercase-hex SHA-256 digest of the file at `path`.
+///
+/// Reads the file in fixed-size chunks so archives of any size hash with a
+/// bounded buffer.
+fn compute_file_sha256(path: &Path) -> io::Result<String> {
+    let mut archive_file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let bytes_read = archive_file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(to_lower_hex(&hasher.finalize()))
+}
+
+/// Verify that the archive at `destination` matches the `expected` digest.
+///
+/// # Errors
+///
+/// Returns [`DependencyBinaryInstallError::Checksum`] when the computed digest
+/// differs from `expected`, and propagates any I/O error encountered while
+/// reading the archive.
+fn verify_archive_checksum(
+    destination: &Path,
+    expected: &str,
+) -> Result<(), DependencyBinaryInstallError> {
+    let actual_checksum = compute_file_sha256(destination)?;
+    if actual_checksum != expected {
+        return Err(DependencyBinaryInstallError::Checksum {
+            archive: destination.to_path_buf(),
+            expected: expected.to_string(),
+            actual: actual_checksum,
+        });
+    }
+    Ok(())
 }
 
 /// Build the rolling-release asset URL for one dependency archive filename.
@@ -125,10 +144,20 @@ fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallErro
 
 #[cfg(test)]
 mod tests {
-    //! Tests for downloader error mapping.
+    //! Tests for downloader error mapping and archive checksum verification.
 
     use super::*;
     use rstest::rstest;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    /// Write `contents` to a fresh temp file and return the handle.
+    fn temp_file_with(contents: &[u8]) -> NamedTempFile {
+        let mut file = NamedTempFile::new().expect("create temp file");
+        file.write_all(contents).expect("write temp file");
+        file.flush().expect("flush temp file");
+        file
+    }
 
     #[rstest]
     #[case(404, true)]
@@ -151,6 +180,58 @@ mod tests {
                 error,
                 DependencyBinaryInstallError::Download { .. }
             ));
+        }
+    }
+
+    #[test]
+    fn compute_file_sha256_matches_known_vector() {
+        let file = temp_file_with(b"abc");
+        assert_eq!(
+            compute_file_sha256(file.path()).expect("hash temp file"),
+            concat!(
+                "ba7816bf8f01cfea414140de5dae2223",
+                "b00361a396177a9cb410ff61f20015ad",
+            ),
+        );
+    }
+
+    #[test]
+    fn compute_file_sha256_hashes_content_larger_than_the_buffer() {
+        // Exercise the buffered read loop across several 8192-byte reads: the
+        // chunked digest must equal a single-shot digest of the same bytes.
+        let payload = vec![0xa5_u8; 8192 * 3 + 17];
+        let file = temp_file_with(&payload);
+        assert_eq!(
+            compute_file_sha256(file.path()).expect("hash temp file"),
+            to_lower_hex(&Sha256::digest(&payload)),
+        );
+    }
+
+    #[test]
+    fn verify_archive_checksum_accepts_a_matching_digest() {
+        let file = temp_file_with(b"hello world");
+        let expected = compute_file_sha256(file.path()).expect("hash temp file");
+        assert!(verify_archive_checksum(file.path(), &expected).is_ok());
+    }
+
+    #[test]
+    fn verify_archive_checksum_rejects_a_mismatched_digest() {
+        let file = temp_file_with(b"hello world");
+        let wrong = "0".repeat(64);
+        let error = verify_archive_checksum(file.path(), &wrong)
+            .expect_err("mismatched checksum must fail");
+        match error {
+            DependencyBinaryInstallError::Checksum {
+                archive,
+                expected,
+                actual,
+            } => {
+                assert_eq!(archive, file.path());
+                assert_eq!(expected, wrong);
+                assert_eq!(actual.len(), 64);
+                assert_ne!(actual, wrong);
+            }
+            other => panic!("expected a Checksum error, got {other:?}"),
         }
     }
 }

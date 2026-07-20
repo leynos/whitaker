@@ -314,6 +314,8 @@ mod dependency_binary_helpers_tests;
 
 #[cfg(test)]
 mod tests {
+    //! Tests asserting `sha256_hex` against known SHA-256 test vectors.
+
     use super::sha256_hex;
 
     #[test]

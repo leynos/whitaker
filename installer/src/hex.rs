@@ -17,6 +17,8 @@ pub(crate) fn to_lower_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the lowercase hexadecimal digest formatter.
+
     use super::*;
 
     #[test]
@@ -27,5 +29,24 @@ mod tests {
     #[test]
     fn empty_input_yields_empty_string() {
         assert_eq!(to_lower_hex(&[]), "");
+    }
+
+    #[test]
+    fn every_byte_renders_as_two_lowercase_round_tripping_digits() {
+        // Bounded exhaustive check over the whole u8 range: each byte must
+        // render as exactly two lowercase ASCII hex digits that parse back to
+        // the original value.
+        for byte in u8::MIN..=u8::MAX {
+            let rendered = to_lower_hex(&[byte]);
+            assert_eq!(rendered.len(), 2, "byte {byte:#04x} must render two digits");
+            assert!(
+                rendered
+                    .bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
+                "byte {byte:#04x} rendered non-lowercase-hex output {rendered:?}",
+            );
+            let parsed = u8::from_str_radix(&rendered, 16).expect("two hex digits parse as a byte");
+            assert_eq!(parsed, byte, "round-trip mismatch for byte {byte:#04x}");
+        }
     }
 }
