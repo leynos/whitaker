@@ -1408,6 +1408,22 @@ proves success.
 
 ## Revision note
 
+Revision 4 (2026-07-20) — applied post-implementation review feedback. The
+`build.rs` workspace-manifest read moved off `std::fs` onto a capability-scoped
+`cap_std` helper (`build_support::read_workspace_manifest`), keeping all
+build-script filesystem access `std::fs`/`std::path`-free. The span→node
+mapping (`select_covering_node`) now walks the parser's pre-order cursor instead
+of collecting a fresh child `Vec` per node, and parser-`ERROR` detection folded
+into the single lowering descent (`LoweringLimits::lower`) so the selected
+subtree is no longer traversed a second time. The new
+`no_unwrap_or_else_panic` aliased-test-crate fixture dropped its crate-wide
+`allow(unknown_lints)`; the `deny(no_unwrap_or_else_panic)` and a narrowly
+scoped `allow(unknown_lints)` now sit on the single subject item (plain rustc
+does not register the Dylint lint when it builds the example as a `--test`
+target), and each remaining `#[expect(dead_code)]` carries a harness-only
+justification plus a roadmap 2.2.9 link tracking migration to
+`#[whitaker_support::dylint_expect(...)]`.
+
 Revision 3 (2026-06-09) — added a prerequisite **Stage 0 toolchain bump** to
 `nightly-2026-05-28` at the user's direction (folded into this item as its own
 atomic commit; motivated as both overdue maintenance and the cleanest unblock
