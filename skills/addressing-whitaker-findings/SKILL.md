@@ -14,7 +14,7 @@ traps that cost earlier adopters rework.
 ## Working stance
 
 - Prefer a real fix to a suppression, and a suppression to a lie. The
-  suite encodes house policy; most findings point at genuine debt.
+  suite encodes house policy; most findings point to genuine debt.
 - Findings arrive in waves. `cargo dylint` stops at the first failing
   crate, so expect build script → lib → lib tests → each integration
   test crate, and budget three to four fix/re-run cycles on a repository
@@ -58,7 +58,7 @@ production code even inside `cfg(test)`:
 
 - rstest `#[fixture]` functions,
 - cucumber step functions (and `additional_test_attributes` cannot
-  help, because the macros consume their attributes),
+  help because the macros consume their attributes),
 - `#[serial]`-wrapped `#[test]` functions.
 
 In each case, make the function fallible instead of suppressing.
