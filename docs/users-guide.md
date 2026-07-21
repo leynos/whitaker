@@ -445,10 +445,11 @@ written either as bare names such as `case` or qualified names such as
 <!-- markdownlint-disable-next-line MD024 -->
 #### Ancestor context propagation
 
-`additional_test_attributes` apply during ancestor context detection as well as
-direct annotation matching. If a parent function is annotated with a recognized
-test attribute, Whitaker treats nested code within that function as test context
-too, so `.expect()` remains allowed throughout that ancestry chain.
+`additional_test_attributes` now apply during ancestor context detection as
+well as direct annotation matching. If a parent function is annotated with a
+configured custom test attribute, Whitaker treats nested code within that
+function as test context too, so `.expect()` remains allowed throughout that
+ancestry chain.
 
 ```rust
 // dylint.toml
