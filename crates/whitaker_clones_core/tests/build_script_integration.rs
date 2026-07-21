@@ -3,18 +3,18 @@
 use std::{
     env,
     error::Error,
-    fs,
-    path::{Path, PathBuf},
     process::{Command, Output},
 };
 
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::tempdir;
 
 const FIXTURE_PACKAGE: &str = "parser_pin_build_script_fixture";
 
 struct BuildFixture {
     _directory: tempfile::TempDir,
-    manifest_path: PathBuf,
+    manifest_path: Utf8PathBuf,
 }
 
 #[test]
@@ -73,23 +73,28 @@ fn build_script_rejects_a_missing_workspace_parser_pin() -> Result<(), Box<dyn E
 
 fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Error>> {
     let directory = tempdir()?;
-    let fixture_root = directory.path();
-    let package_dir = fixture_root.join("fixture");
-    let manifest_path = package_dir.join("Cargo.toml");
+    let fixture_root =
+        Utf8Path::from_path(directory.path()).ok_or("temporary path is not valid UTF-8")?;
+    let manifest_path = fixture_root.join("fixture").join("Cargo.toml");
 
-    fs::create_dir_all(package_dir.join("src"))?;
+    // Capability-scope every write to the fixture tree rather than reaching for
+    // ambient `std::fs`. The tempdir handle keeps the directory alive; `root`
+    // can only touch paths beneath it.
+    let root = Dir::open_ambient_dir(fixture_root, ambient_authority())?;
+    root.create_dir_all("fixture/src")?;
+
     let parser_dependency = requirement.map_or_else(String::new, |version| {
         format!("ra_ap_syntax = \"{version}\"\n")
     });
-    fs::write(
-        fixture_root.join("Cargo.toml"),
+    root.write(
+        "Cargo.toml",
         format!(
             "[workspace]\nmembers = [\"fixture\"]\nresolver = \"2\"\n\n\
              [workspace.dependencies]\n{parser_dependency}"
         ),
     )?;
-    fs::write(
-        &manifest_path,
+    root.write(
+        "fixture/Cargo.toml",
         format!(
             "[package]\nname = \"{FIXTURE_PACKAGE}\"\nversion = \"0.0.0\"\n\
              edition = \"2024\"\npublish = false\nbuild = \"build.rs\"\n\n\
@@ -98,20 +103,22 @@ fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Erro
              toml = \"1.1.2\"\n"
         ),
     )?;
-    fs::write(
-        package_dir.join("src/lib.rs"),
+    root.write(
+        "fixture/src/lib.rs",
         "pub const PARSER_VERSION: &str = env!(\"WHITAKER_RA_AP_SYNTAX_VERSION\");\n",
     )?;
-    fs::write(
-        package_dir.join("src/main.rs"),
+    root.write(
+        "fixture/src/main.rs",
         format!("fn main() {{ println!(\"{{}}\", {FIXTURE_PACKAGE}::PARSER_VERSION); }}\n"),
     )?;
 
-    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    fs::copy(crate_root.join("build.rs"), package_dir.join("build.rs"))?;
-    fs::copy(
-        crate_root.join("build_support.rs"),
-        package_dir.join("build_support.rs"),
+    // Copy the build script and its support module out of this crate's source
+    // tree through a second capability-scoped directory handle.
+    let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())?;
+    root.write("fixture/build.rs", crate_root.read_to_string("build.rs")?)?;
+    root.write(
+        "fixture/build_support.rs",
+        crate_root.read_to_string("build_support.rs")?,
     )?;
 
     Ok(BuildFixture {
@@ -120,7 +127,7 @@ fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Erro
     })
 }
 
-fn cargo_check(manifest_path: &Path) -> Result<Output, Box<dyn Error>> {
+fn cargo_check(manifest_path: &Utf8Path) -> Result<Output, Box<dyn Error>> {
     Ok(
         Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
             .arg("check")
@@ -132,7 +139,7 @@ fn cargo_check(manifest_path: &Path) -> Result<Output, Box<dyn Error>> {
     )
 }
 
-fn cargo_run(manifest_path: &Path) -> Result<Output, Box<dyn Error>> {
+fn cargo_run(manifest_path: &Utf8Path) -> Result<Output, Box<dyn Error>> {
     Ok(
         Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
             .arg("run")
