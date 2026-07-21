@@ -52,7 +52,7 @@ fn hash_node(seed: u64, node: &NormalizedNode) -> u64 {
     let mut pending = vec![(node, 0, hash_node_header(seed, node))];
     loop {
         let Some((current, child_index, _)) = pending.last_mut() else {
-            return seed;
+            unreachable!("hash_node seeds pending with one node and returns before it empties")
         };
         if let Some(child) = current.children().get(*child_index) {
             *child_index += 1;
@@ -61,7 +61,7 @@ fn hash_node(seed: u64, node: &NormalizedNode) -> u64 {
         }
 
         let Some((_, _, completed_hash)) = pending.pop() else {
-            return seed;
+            unreachable!("hash_node pops the node it just observed through last_mut")
         };
         if let Some((_, _, parent_hash)) = pending.last_mut() {
             *parent_hash = mix_u64(*parent_hash, completed_hash);
