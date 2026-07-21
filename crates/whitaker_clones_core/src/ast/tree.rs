@@ -102,8 +102,20 @@ pub struct NormalizedNode {
 
 impl NormalizedNode {
     /// Creates a parser-independent AST node.
+    ///
+    /// # Panics
+    ///
+    /// In debug builds, panics if `leaf` is `Some` and `children` is non-empty.
+    /// A lowered leaf token carries no substructure, so the AST domain keeps the
+    /// leaf tag and children mutually exclusive; canonical hashing and
+    /// leaf-erasure feature extraction rely on that invariant to stay
+    /// unambiguous.
     #[must_use]
     pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<NormalizedNode>) -> Self {
+        debug_assert!(
+            leaf.is_none() || children.is_empty(),
+            "a leaf-tagged NormalizedNode must have no children"
+        );
         Self {
             kind,
             leaf,
