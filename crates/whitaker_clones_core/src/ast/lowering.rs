@@ -134,35 +134,39 @@ fn node_covers_target(node: &SyntaxNode, target: &Range<u32>) -> bool {
     range.start <= target.start && range.end >= target.end
 }
 
-fn update_smallest_covering_node(
-    selected: &mut Option<(SyntaxNode, u32)>,
-    node: &SyntaxNode,
-    target: &Range<u32>,
-) {
+/// Records `node` as the current best when it is narrower than the incumbent.
+///
+/// Callers must confirm `node` covers the target before calling this; the
+/// smallest such node encountered wins, and the strict `<` comparison keeps the
+/// first of any equal-width covering nodes (the shallowest, given pre-order
+/// descent).
+fn update_smallest_covering_node(selected: &mut Option<(SyntaxNode, u32)>, node: &SyntaxNode) {
     let range = range_to_u32(node.text_range());
     let width = range.end - range.start;
     let is_strictly_smaller = selected
         .as_ref()
         .is_none_or(|(_, selected_width)| width < *selected_width);
 
-    if node_covers_target(node, target) && is_strictly_smaller {
+    if is_strictly_smaller {
         *selected = Some((node.clone(), width));
     }
 }
 
 /// Selects the smallest parser syntax node covering `target`.
 ///
-/// Sibling syntax nodes hold disjoint ranges, so at most one child of any
-/// covering node can itself cover `target`. The walk therefore descends only
-/// into children whose range can still cover the target, visiting the
-/// root-to-target ancestor chain rather than the whole parse tree. Unrelated
-/// syntax elsewhere in the file is skipped without counting toward the budget,
-/// so a small candidate is never rejected because the surrounding file is
-/// large; the size of the *lowered* subtree is bounded separately during
-/// lowering.
+/// Traversal is bounded to nodes on covering paths for the requested candidate
+/// span rather than to the whole parsed file. Sibling syntax nodes hold
+/// disjoint ranges, so only a child whose range fully covers `target` can be,
+/// or contain, a smaller covering node; the walk descends into just those
+/// children and skips unrelated subtrees without counting them toward the
+/// budget. A narrow candidate therefore visits only its root-to-target
+/// ancestry and is never rejected merely because the surrounding file is large.
+/// A whole-file candidate can still require walking the full tree — but during
+/// lowering of the selected root, where the node budget guards against oversized
+/// input, not during selection.
 ///
-/// The depth and node budgets bound the pruned descent. Among covering nodes
-/// with the same minimal width, the first (shallowest) encountered is retained.
+/// The depth and node budgets bound the descent. Among covering nodes with the
+/// same minimal width, the first (shallowest) encountered is retained.
 fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
     let mut selected = None;
     let mut node_count = 0_usize;
@@ -171,7 +175,13 @@ fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<Syn
     while let Some((node, depth)) = pending.pop() {
         validate_covering_node_budget(depth, node_count)?;
         node_count += 1;
-        update_smallest_covering_node(&mut selected, &node, target);
+
+        // A node that does not fully cover the target can neither be, nor
+        // contain, the smallest covering node, so skip it and its subtree.
+        if !node_covers_target(&node, target) {
+            continue;
+        }
+        update_smallest_covering_node(&mut selected, &node);
 
         pending.extend(
             node.children()
