@@ -1452,6 +1452,37 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
+#### Shared UI harness environment guards
+
+Workspace-level UI harness tests that mutate process-wide environment variables
+must use `whitaker_common::test_support::EnvVarGuard`. Use
+`EnvVarGuard::set` to install a temporary value and `EnvVarGuard::remove` to
+make a variable absent for the duration of a test. The guard acquires
+`env_test_guard()` only while it captures, mutates, or restores the variable;
+it must not hold that mutex while a runner callback executes, because the
+callback may need its own guarded environment setup.
+
+`whitaker::testing::ui::run_with_runner` applies a specialized guard before
+invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
+while the runner needs bare `rustc` invocations for
+`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
+`C:\vcpkg` when that directory exists and the variable is otherwise absent.
+Restoration uses the same shared environment mutex, but the runner callback
+itself executes without holding that mutex to avoid nested-lock deadlocks.
+
+Example-based UI tests in `rstest_helper_should_be_fixture` also use a
+cross-process directory lock under the system temporary directory. `nextest`
+can run test binaries in separate processes, so a plain in-process `Mutex` is
+not sufficient for those examples. A directory becomes eligible for stale
+recovery only after it has aged past 30 minutes, and stale cleanup removes
+that age-eligible lock directory only after successfully acquiring the
+lifetime owner-liveness lock. If stale cleanup sees `NotFound`, it treats the
+directory as already removed rather than as a failed recovery attempt, and
+the live lock path still waits indefinitely in production while the tests keep
+the bounded timeout. A sidecar advisory lock serializes ownership transitions,
+and the directory's owner token prevents an original holder from deleting a
+successor after stale recovery.
+
 ### Configuration constant patterns
 
 Lint crates that expose configurable thresholds or defaults should centralize
@@ -1718,6 +1749,22 @@ The current experimental set contains `rstest_helper_should_be_fixture`. It is
 feature-gated in the suite as `experimental-rstest-helper-should-be-fixture`
 and listed in `installer/src/resolution.rs` so the installer can derive the
 matching suite feature automatically.
+
+`rstest_helper_should_be_fixture` currently uses an in-crate collector rather
+than a shared adapter. The collector stores passive call-site evidence in
+deterministic `BTreeMap` order keyed by `tcx.def_path_str(callee_def_id)`,
+deduplicates entries with a private `CallSiteLocation`, and preserves the raw
+`DefId` in each record for later diagnostics. The late pass only records local
+function or associated-function callees inside strict `#[rstest]` tests,
+drops call sites whose spans cannot recover to user-editable source, and
+lowers arguments conservatively to fixture-local, literal, constant path, or
+unsupported atoms.
+
+Future rstest lints should promote this adapter out of
+`crates/rstest_helper_should_be_fixture/src/collector.rs` only when another
+crate consumes the same HIR lowering policy. Until then, keep compiler-aware
+HIR logic in the lint crate and keep the pure `ArgAtom`/`ArgFingerprint` model
+in `whitaker_common::rstest`.
 
 ### Adding a new lint
 

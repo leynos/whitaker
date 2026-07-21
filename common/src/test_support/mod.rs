@@ -27,7 +27,7 @@ pub use ui::{
     read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
 };
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 /// Serializes tests that mutate process-wide environment variables.
@@ -42,6 +42,88 @@ pub fn env_test_guard() -> MutexGuard<'static, ()> {
         .unwrap_or_else(|error| panic!("expected environment test lock: {error}"))
 }
 
+/// Guard that sets one environment variable and restores its prior state.
+///
+/// The guard acquires [`env_test_guard`] only while mutating the process
+/// environment during construction and drop. It deliberately does not hold the
+/// mutex for the full guard lifetime, so callers can execute callbacks that
+/// perform their own guarded environment setup without deadlocking. Use this
+/// as the shared environment-mutation helper for tests that need temporary
+/// global environment changes with `env_test_guard`-serialized setup and
+/// teardown semantics.
+pub struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    /// Sets `key` to `value`, returning a guard that restores the previous
+    /// value or removes the variable when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use whitaker_common::test_support::EnvVarGuard;
+    ///
+    /// let _guard = EnvVarGuard::set("WHITAKER_TEST_ENV_VAR", "enabled");
+    /// assert_eq!(
+    ///     std::env::var("WHITAKER_TEST_ENV_VAR").expect("test env var should be set"),
+    ///     "enabled",
+    /// );
+    /// ```
+    #[must_use]
+    pub fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+        let _env_guard = env_test_guard();
+        let previous = std::env::var_os(key);
+        // SAFETY: `env_test_guard` serializes this environment mutation.
+        unsafe {
+            std::env::set_var(key, value);
+        }
+        Self { key, previous }
+    }
+
+    /// Removes `key`, returning a guard that restores the previous value when
+    /// dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use whitaker_common::test_support::EnvVarGuard;
+    ///
+    /// let _guard = EnvVarGuard::remove("WHITAKER_REMOVED_TEST_ENV_VAR");
+    /// assert!(std::env::var_os("WHITAKER_REMOVED_TEST_ENV_VAR").is_none());
+    /// ```
+    #[must_use]
+    pub fn remove(key: &'static str) -> Self {
+        let _env_guard = env_test_guard();
+        let previous = std::env::var_os(key);
+        // SAFETY: `env_test_guard` serializes this environment mutation.
+        unsafe {
+            std::env::remove_var(key);
+        }
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        let _env_guard = env_test_guard();
+        match &self.previous {
+            Some(previous) => {
+                // SAFETY: `env_test_guard` serializes this environment mutation.
+                unsafe {
+                    std::env::set_var(self.key, previous);
+                }
+            }
+            None => {
+                // SAFETY: `env_test_guard` serializes this environment mutation.
+                unsafe {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
+}
 /// Guard that overrides `DYLINT_LOCALE` for the lifetime of the instance.
 ///
 /// The guard captures any existing value and restores it when dropped. The

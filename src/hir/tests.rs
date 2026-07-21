@@ -120,3 +120,12 @@ fn span_recovery_walks_expected_frames(
         );
     });
 }
+
+#[test]
+fn macro_only_hir_span_has_no_user_editable_recovery() {
+    rustc_span::create_default_session_globals_then(|| {
+        let expanded = expanded_span(test_span(30, 40), DUMMY_SP);
+
+        assert_eq!(recover_user_editable_hir_span(expanded), None);
+    });
+}

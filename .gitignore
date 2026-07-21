@@ -1,6 +1,7 @@
 target/
 **/*.rs.bk
 .grepai/
+.memdb/
 bin/act
 __pycache__/
 *.py[cod]

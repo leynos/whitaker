@@ -556,26 +556,36 @@
 
 - [x] 8.2.1. Create the `rstest_helper_should_be_fixture` lint crate, register
   `RSTEST_HELPER_SHOULD_BE_FIXTURE`, and wire configuration loading defaults.
-  See [rstest fixture and test hygiene
-  lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint A: call-site
-  fixture extraction.
-  Requires 1.1.2 and 8.1.1.
-- [ ] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
+  See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.1.1.
+- [x] 8.2.2. Implement call-site collection in `#[rstest]` tests, including
   fixture-local classification and constant-aware argument fingerprinting. See
-  [rstest fixture and test hygiene
-  lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint A: call-site
-  fixture extraction.
-  Requires 8.1.3 and 8.2.1.
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.1, 8.1.2, and 8.1.3.
+  Status: the lint now passively collects local helper call evidence from
+  strict `#[rstest]` test bodies, deduplicates generated cases by callee
+  definition path and recovered source span, and uses `CallSiteLocation` HIR
+  local IDs to retain and deterministically order calls that share a recovered
+  span, records fixture-local, literal, `const`, and `static` argument
+  fingerprints, and keeps diagnostics disabled until 8.2.3. Parameterized
+  collector unit cases cover duplicate and distinct source spans, `proptest`
+  cases assert insertion-order independence and deterministic call ordering,
+  while the Cargo-backed `collection_zero_diagnostic` UI harness provides the
+  behavioural and end-to-end validation boundary. The private
+  `collect_call_sites` method keeps the driver boundary explicit. Validation
+  has passed for
+  `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`.
 - [ ] 8.2.3. Implement crate-post aggregation thresholds and actionable
-  diagnostics with `span_lint_hir_and_then`. See [rstest fixture and test
-  hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint A:
-  call-site fixture extraction.
-  Requires 8.1.2 and 8.2.2.
-- [ ] 8.2.4. Add UI pass/fail coverage for repeated no-arg helpers, repeated
-  fixture/constant argument helpers, and non-trigger cases. See [rstest fixture
-  and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md) §Lint
-  A: call-site fixture extraction.
-  Requires 1.2.1 and 8.2.3.
+  diagnostics with `span_lint_hir_and_then`. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.2 and 8.1.2.
+- [ ] 8.2.4. Add UI pass/fail coverage for repeated no-arg helpers,
+  repeated fixture/constant argument helpers, and non-trigger cases. See
+  [rstest fixture and test hygiene lints](lints-for-rstest-fixtures-and-test-hygiene.md)
+   §Lint A: call-site fixture extraction. Requires 8.2.3 and 1.2.1.
 
 ### 8.3. `single_binding_paragraph` lint
 

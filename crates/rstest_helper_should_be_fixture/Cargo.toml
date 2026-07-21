@@ -16,29 +16,40 @@ test = false
 [features]
 default = []
 dylint-driver = [
+    "dep:rustc_ast",
+    "dep:rustc_hir",
     "dep:whitaker-common",
     "dep:dylint_linting",
     "dep:log",
     "dep:rustc_lint",
     "dep:rustc_session",
+    "dep:rustc_span",
     "dep:serde",
     "dep:whitaker",
+    "dep:camino",
+    "dep:cap-std",
 ]
 constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
+camino = { workspace = true, optional = true }
+cap-std = { workspace = true, optional = true }
 whitaker-common = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
+rustc_ast = { workspace = true, optional = true }
+rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
+rustc_span = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+dylint_testing = { workspace = true }
+filetime = "0.2.29"
+fs2 = "0.4"
 proptest = { workspace = true }
 rstest = { workspace = true }
-rstest-bdd = { workspace = true }
-rstest-bdd-macros = { workspace = true }
 toml = { workspace = true }
 trybuild = { workspace = true }
