@@ -1333,6 +1333,11 @@ Acceptance is behavioural and observable.
   - Tests: `make test` passes; new `ast::` unit tests, the
     `ast_feature_extraction` BDD scenarios, the `insta` snapshot, and the
     `proptest` invariants all pass.
+  - Parser pin: the hermetic
+    `cargo test -p whitaker_clones_core --test build_script_integration` target
+    provides temporary-workspace Cargo validation of the parser pin — verifying
+    acceptance and the emitted parser version for an exact pin, rejection of a
+    loose/non-exact pin, and rejection of a missing workspace dependency.
   - Lint/format: `make check-fmt` and `make lint` pass with no new allows;
     `make markdownlint` passes for changed docs.
   - Verification: `make kani-clone-detector` and `make verus-clone-detector`

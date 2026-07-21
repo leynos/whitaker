@@ -604,7 +604,12 @@ parser APIs, snapshots, and proof tooling.
 5. Refresh and review the AST snapshots, especially the parser schema
    snapshot and named-kind feature-vector snapshot, so syntax-kind drift is
    visible.
-6. Run `cargo build -p whitaker_clones_core`, the AST-focused tests,
+6. Run the parser-pin integration target
+   `cargo test -p whitaker_clones_core --test build_script_integration` after
+   changing the `[workspace.dependencies]` pin; it must confirm acceptance and
+   the exported parser version for an exact pin, and rejection for
+   loose/invalid and missing-dependency cases. Then run
+   `cargo build -p whitaker_clones_core`, the AST-focused tests,
    `make check-fmt`, `make lint`, `make test`, `make verus-clone-detector`,
    `make kani-clone-detector`, and `make markdownlint`.
 7. Preserve the default `parser` feature and the Kani `--no-default-features`
