@@ -32,16 +32,11 @@ mod lock_model;
 #[case("bootstrap_zero_diagnostic")]
 #[case("collection_zero_diagnostic")]
 fn example_compiles_without_diagnostics(#[case] example: &str) {
-    run_example(example);
+    ExampleHarness::acquire().run_example(example);
 }
 #[test]
 fn example_harness_collects_call_site_evidence() {
-    let summary_path = unique_summary_path();
-    let _guard = EnvVarGuard::set(COLLECTION_SUMMARY_ENV, summary_path.as_os_str());
-    run_example("collection_zero_diagnostic");
-    let summary =
-        std::fs::read_to_string(&summary_path).expect("collection summary should be written");
-    let _ = std::fs::remove_file(&summary_path);
+    let summary = ExampleHarness::acquire().collect_summary("collection_zero_diagnostic");
 
     for expected in [
         "callee_count=3",
@@ -67,22 +62,58 @@ fn trybuild_fixtures_compile_without_diagnostics() {
     cases.pass("tests/ui/bootstrap_zero_diagnostic.rs");
     cases.pass("tests/ui/collection_zero_diagnostic.rs");
 }
-fn run_example(example: &str) {
-    let _lock = ExampleHarnessLock::acquire().expect("example harness lock should be acquired");
-    let crate_name = env!("CARGO_PKG_NAME");
-    let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
-        run_test_runner(example, || {
-            let mut test = Test::example(crate_name, example);
-            test.rustc_flags(["--test"]);
-            test.run();
+/// RAII fixture that holds the example-harness lock for its whole lifetime.
+///
+/// Constructing it acquires [`ExampleHarnessLock`], and it is only released when
+/// the fixture drops. Because every example run — and any summary read — happens
+/// through a borrow of the fixture, the lock spans the entire critical section
+/// (env-var setup, compilation, summary read, and cleanup). This stops callers
+/// from re-implementing the acquire/set/run/read/remove dance and accidentally
+/// releasing the lock mid-assertion, which would let a concurrent run append to
+/// the same summary path.
+struct ExampleHarness {
+    _lock: ExampleHarnessLock,
+}
+
+impl ExampleHarness {
+    fn acquire() -> Self {
+        let lock = ExampleHarnessLock::acquire().expect("example harness lock should be acquired");
+        Self { _lock: lock }
+    }
+
+    /// Compiles and runs one example while the lock is held.
+    fn run_example(&self, example: &str) {
+        let crate_name = env!("CARGO_PKG_NAME");
+        let directory = "examples";
+        whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+            run_test_runner(example, || {
+                let mut test = Test::example(crate_name, example);
+                test.rustc_flags(["--test"]);
+                test.run();
+            })
         })
-    })
-    .unwrap_or_else(|error| {
-        panic!(
-            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
-        )
-    });
+        .unwrap_or_else(|error| {
+            panic!(
+                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+            )
+        });
+    }
+
+    /// Runs `example` with the collection-summary env var pointed at a fresh
+    /// path, returning the appended summary text.
+    ///
+    /// The env-var guard and the harness lock are both held across the run and
+    /// the read, and the summary file is removed before returning, so no
+    /// concurrently scheduled run can append to the same path mid-read.
+    fn collect_summary(&self, example: &str) -> String {
+        let summary_path = unique_summary_path();
+        let _guard = EnvVarGuard::set(COLLECTION_SUMMARY_ENV, summary_path.as_os_str());
+        self.run_example(example);
+        let summary =
+            std::fs::read_to_string(&summary_path).expect("collection summary should be written");
+        let _ = std::fs::remove_file(&summary_path);
+        summary
+    }
 }
 
 fn unique_summary_path() -> PathBuf {

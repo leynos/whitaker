@@ -1,6 +1,6 @@
 //! Cargo-backed collection input for the Dylint UI harness.
 //!
-//! `tests/ui.rs::run_example` compiles this example through
+//! `tests/ui.rs`'s `ExampleHarness` compiles this example through
 //! `dylint_testing::ui::Test::example` and asserts its diagnostic-silent
 //! collector summary, including argument fingerprint shapes.
 #![feature(rustc_private)]

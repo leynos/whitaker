@@ -1,9 +1,10 @@
 //! Example-harness lock protocol for the UI test binary.
 //!
-//! `tests/ui.rs::run_example` serializes example compilations across separate
-//! nextest processes with a filesystem lock. This module owns that protocol —
-//! the lock type, its stale-owner recovery, and the adapter tests that exercise
-//! it — so `ui.rs` stays focused on the example and trybuild assertions.
+//! `tests/ui.rs`'s `ExampleHarness` fixture serializes example compilations
+//! across separate nextest processes with a filesystem lock. This module owns
+//! that protocol — the lock type, its stale-owner recovery, and the adapter
+//! tests that exercise it — so `ui.rs` stays focused on the example and
+//! trybuild assertions.
 
 use filetime::{FileTime, set_file_mtime};
 use fs2::FileExt;
