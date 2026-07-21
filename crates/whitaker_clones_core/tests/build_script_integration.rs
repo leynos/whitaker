@@ -8,6 +8,7 @@ use std::{
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
 const FIXTURE_PACKAGE: &str = "parser_pin_build_script_fixture";
@@ -17,9 +18,11 @@ struct BuildFixture {
     manifest_path: Utf8PathBuf,
 }
 
-#[test]
-fn build_script_accepts_an_exact_workspace_parser_pin() -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture(Some("=0.0.334"))?;
+#[rstest]
+fn build_script_accepts_an_exact_workspace_parser_pin(
+    #[with(Some("=0.0.334"))] build_fixture: Result<BuildFixture, Box<dyn Error>>,
+) -> Result<(), Box<dyn Error>> {
+    let fixture = build_fixture?;
     let output = cargo_check(&fixture.manifest_path)?;
 
     assert!(
@@ -37,9 +40,11 @@ fn build_script_accepts_an_exact_workspace_parser_pin() -> Result<(), Box<dyn Er
     Ok(())
 }
 
-#[test]
-fn build_script_rejects_a_loose_workspace_parser_pin() -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture(Some("0.0.334"))?;
+#[rstest]
+fn build_script_rejects_a_loose_workspace_parser_pin(
+    #[with(Some("0.0.334"))] build_fixture: Result<BuildFixture, Box<dyn Error>>,
+) -> Result<(), Box<dyn Error>> {
+    let fixture = build_fixture?;
     let output = cargo_check(&fixture.manifest_path)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -54,9 +59,11 @@ fn build_script_rejects_a_loose_workspace_parser_pin() -> Result<(), Box<dyn Err
     Ok(())
 }
 
-#[test]
-fn build_script_rejects_a_missing_workspace_parser_pin() -> Result<(), Box<dyn Error>> {
-    let fixture = build_fixture(None)?;
+#[rstest]
+fn build_script_rejects_a_missing_workspace_parser_pin(
+    #[with(None)] build_fixture: Result<BuildFixture, Box<dyn Error>>,
+) -> Result<(), Box<dyn Error>> {
+    let fixture = build_fixture?;
     let output = cargo_check(&fixture.manifest_path)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -71,7 +78,10 @@ fn build_script_rejects_a_missing_workspace_parser_pin() -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Error>> {
+#[fixture]
+fn build_fixture(
+    #[default(None)] requirement: Option<&str>,
+) -> Result<BuildFixture, Box<dyn Error>> {
     let directory = tempdir()?;
     let fixture_root =
         Utf8Path::from_path(directory.path()).ok_or("temporary path is not valid UTF-8")?;
@@ -88,19 +98,37 @@ fn build_fixture(requirement: Option<&str>) -> Result<BuildFixture, Box<dyn Erro
     });
     root.write(
         "Cargo.toml",
+        // `format!` cannot capture variables when the format string comes from a
+        // macro such as `concat!`, so the interpolations are passed explicitly.
         format!(
-            "[workspace]\nmembers = [\"fixture\"]\nresolver = \"2\"\n\n\
-             [workspace.dependencies]\n{parser_dependency}"
+            concat!(
+                "[workspace]\n",
+                "members = [\"fixture\"]\n",
+                "resolver = \"2\"\n",
+                "\n",
+                "[workspace.dependencies]\n",
+                "{parser_dependency}",
+            ),
+            parser_dependency = parser_dependency,
         ),
     )?;
     root.write(
         "fixture/Cargo.toml",
         format!(
-            "[package]\nname = \"{FIXTURE_PACKAGE}\"\nversion = \"0.0.0\"\n\
-             edition = \"2024\"\npublish = false\nbuild = \"build.rs\"\n\n\
-             [build-dependencies]\ncamino = \"1.2.1\"\n\
-             cap-std = {{ version = \"3.4.5\", features = [\"fs_utf8\"] }}\n\
-             toml = \"1.1.2\"\n"
+            concat!(
+                "[package]\n",
+                "name = \"{FIXTURE_PACKAGE}\"\n",
+                "version = \"0.0.0\"\n",
+                "edition = \"2024\"\n",
+                "publish = false\n",
+                "build = \"build.rs\"\n",
+                "\n",
+                "[build-dependencies]\n",
+                "camino = \"1.2.1\"\n",
+                "cap-std = {{ version = \"3.4.5\", features = [\"fs_utf8\"] }}\n",
+                "toml = \"1.1.2\"\n",
+            ),
+            FIXTURE_PACKAGE = FIXTURE_PACKAGE,
         ),
     )?;
     root.write(
