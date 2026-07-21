@@ -1,10 +1,11 @@
 //! Adapter from parser syntax trees into the parser-agnostic AST domain.
 
+use std::cell::Cell;
 use std::ops::Range;
 
 use ra_ap_syntax::{
     AstNode, Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
-    TextSize, WalkEvent,
+    TextSize,
 };
 use tracing::{debug, error, warn};
 
@@ -128,6 +129,11 @@ fn validate_covering_node_budget(depth: usize, node_count: usize) -> AstResult<(
     Ok(())
 }
 
+fn node_covers_target(node: &SyntaxNode, target: &Range<u32>) -> bool {
+    let range = range_to_u32(node.text_range());
+    range.start <= target.start && range.end >= target.end
+}
+
 fn update_smallest_covering_node(
     selected: &mut Option<(SyntaxNode, u32)>,
     node: &SyntaxNode,
@@ -135,42 +141,43 @@ fn update_smallest_covering_node(
 ) {
     let range = range_to_u32(node.text_range());
     let width = range.end - range.start;
-    let covers_target = range.start <= target.start && range.end >= target.end;
     let is_strictly_smaller = selected
         .as_ref()
         .is_none_or(|(_, selected_width)| width < *selected_width);
 
-    if covers_target && is_strictly_smaller {
+    if node_covers_target(node, target) && is_strictly_smaller {
         *selected = Some((node.clone(), width));
     }
 }
 
 /// Selects the smallest parser syntax node covering `target`.
 ///
-/// Traversal is O(n) in the parsed source file, not just the candidate span.
-/// It enforces bounded node and depth budgets in every build so callers cannot
-/// turn a single-file parse into unbounded lowering work.
-/// Among covering nodes with the same minimal width, traversal retains the
-/// first node encountered.
+/// Sibling syntax nodes hold disjoint ranges, so at most one child of any
+/// covering node can itself cover `target`. The walk therefore descends only
+/// into children whose range can still cover the target, visiting the
+/// root-to-target ancestor chain rather than the whole parse tree. Unrelated
+/// syntax elsewhere in the file is skipped without counting toward the budget,
+/// so a small candidate is never rejected because the surrounding file is
+/// large; the size of the *lowered* subtree is bounded separately during
+/// lowering.
 ///
-/// The walk uses the parser's pre-order cursor so it visits each node once
-/// without allocating a child buffer per node; depth is tracked from the
-/// balanced enter/leave events.
+/// The depth and node budgets bound the pruned descent. Among covering nodes
+/// with the same minimal width, the first (shallowest) encountered is retained.
 fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
     let mut selected = None;
     let mut node_count = 0_usize;
-    let mut depth = 0_usize;
+    let mut pending = vec![(root.clone(), 0_usize)];
 
-    for event in root.preorder() {
-        match event {
-            WalkEvent::Enter(node) => {
-                validate_covering_node_budget(depth, node_count)?;
-                node_count += 1;
-                update_smallest_covering_node(&mut selected, &node, target);
-                depth += 1;
-            }
-            WalkEvent::Leave(_) => depth -= 1,
-        }
+    while let Some((node, depth)) = pending.pop() {
+        validate_covering_node_budget(depth, node_count)?;
+        node_count += 1;
+        update_smallest_covering_node(&mut selected, &node, target);
+
+        pending.extend(
+            node.children()
+                .filter(|child| node_covers_target(child, target))
+                .map(|child| (child, depth + 1)),
+        );
     }
 
     selected
@@ -184,33 +191,54 @@ fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<Syn
 
 /// Recursion-scoped invariants for lowering a covering subtree.
 ///
-/// Bundling the depth budget with the requested span keeps the recursive
-/// [`lower`](LoweringLimits::lower) signature small while giving every level the
-/// span it needs to report [`AstError::UnparsableSpan`] on parser `ERROR`
-/// elements.
+/// Bundling the depth and node budgets with the requested span keeps the
+/// recursive [`lower`](LoweringLimits::lower) signature small while giving every
+/// level the span it needs to report [`AstError::UnparsableSpan`] on parser
+/// `ERROR` elements. The node budget lives here, not in covering-node
+/// selection, so it bounds the subtree actually lowered rather than the whole
+/// parsed file.
 struct LoweringLimits {
     /// Maximum syntax depth permitted during lowering.
     maximum_depth: usize,
+    /// Maximum syntax nodes permitted in the lowered subtree.
+    maximum_nodes: usize,
     /// Requested candidate span, reported when the subtree is unparsable.
     span: ByteSpan,
+    /// Nodes lowered so far, accumulated across the recursive descent.
+    node_count: Cell<usize>,
 }
 
 impl LoweringLimits {
     fn new(span: ByteSpan) -> Self {
+        Self::with_depth_limit(MAX_AST_DEPTH, span)
+    }
+
+    fn with_depth_limit(maximum_depth: usize, span: ByteSpan) -> Self {
         Self {
-            maximum_depth: MAX_AST_DEPTH,
+            maximum_depth,
+            maximum_nodes: MAX_AST_NODES,
             span,
+            node_count: Cell::new(0),
         }
     }
 
     /// Lowers `node` while rejecting any parser `ERROR` node or token in the
-    /// same descent, so error detection needs no separate subtree walk.
+    /// same descent, so error detection needs no separate subtree walk. The
+    /// running node count bounds the lowered subtree so an oversized selection
+    /// cannot turn a single parse into unbounded lowering work.
     fn lower(&self, node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
         if depth > self.maximum_depth {
             return Err(AstError::TreeTooDeep {
                 limit: self.maximum_depth,
             });
         }
+        let lowered_nodes = self.node_count.get();
+        if lowered_nodes == self.maximum_nodes {
+            return Err(AstError::TreeTooLarge {
+                limit: self.maximum_nodes,
+            });
+        }
+        self.node_count.set(lowered_nodes + 1);
         if node.kind() == SyntaxKind::ERROR {
             return Err(self.unparsable_span());
         }

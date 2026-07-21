@@ -95,13 +95,26 @@ fn deeply_nested_syntax_obeys_the_lowering_depth_budget() -> Result<(), AstError
     let span = ByteSpan::new(source, 0, source.len() as u32)?;
 
     assert_eq!(
-        LoweringLimits {
-            maximum_depth: 2,
-            span,
-        }
-        .lower(&root, 0),
+        LoweringLimits::with_depth_limit(2, span).lower(&root, 0),
         Err(AstError::TreeTooDeep { limit: 2 })
     );
+    Ok(())
+}
+
+#[rstest]
+fn small_candidate_amid_unrelated_nodes_is_not_rejected_by_the_budget() -> Result<(), AstError> {
+    // A tiny valid candidate (`a + b`) buried in a function whose remaining
+    // statements far exceed the node budget. Pruned covering-node selection must
+    // descend only the ancestor chain, so the unrelated statements neither count
+    // toward the budget nor prevent the candidate from lowering.
+    let filler = (0..=MAX_AST_NODES)
+        .map(|index| format!("let filler_{index} = {index};"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let source = format!("fn generated() {{ let target = a + b; {filler} }}");
+
+    let tree = lower_span_for(&source, "a + b").expect("small candidate should lower");
+    assert_eq!(kind_name(tree.root().kind()), "BIN_EXPR");
     Ok(())
 }
 
