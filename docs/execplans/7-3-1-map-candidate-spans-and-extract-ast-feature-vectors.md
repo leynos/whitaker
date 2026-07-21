@@ -1228,8 +1228,9 @@ Kani (`src/ast/kani.rs`, `#[cfg(kani)]`): harnesses over a bounded synthetic
 `NormalizedTree`/candidate set, never the parser. Pin the bounded tree shape
 (depth ≤ 3, ≤ 2 children) with a `const _` assertion tying the unwind bound to
 it — note the recursive state space is `branching^depth`, unlike the existing
-flat `LshIndex` harnesses, so confirm `--default-unwind 4` suffices or add
-per-harness `#[kani::unwind(N)]`. Harnesses:
+flat `LshIndex` harnesses; the resolved bound is `KANI_AST_UNWIND = 5`
+(`KANI_AST_MAX_DEPTH + 2`), applied per-harness via `#[kani::unwind(5)]`.
+Harnesses:
 `verify_smallest_covering_node_selects_minimal_range` (over the factored
 `cover::select_smallest_covering`, with `kani::assume(n >= 2)` so the
 minimality postcondition has something to bite on: result covers the target and
