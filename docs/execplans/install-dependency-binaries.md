@@ -238,10 +238,10 @@ Relevant existing files:
   A repository-release `dylint-link` is accepted once the verified install
   pipeline succeeds: pinned asset naming, checksum verification, expected-member
   extraction, and executable-permission (launch-eligibility) setup. A
-  Cargo-managed `dylint-link` is instead verified by resolving an executable on
-  `PATH` (honouring Windows `PATHEXT`) and comparing its version with Cargo's
-  recorded installed version. Missing tools are installed with `cargo binstall`
-  or `cargo install`.
+  Cargo-managed `dylint-link` is instead verified by two independent checks: an
+  executable resolves on `PATH` (honouring Windows `PATHEXT`), and Cargo's
+  recorded installed version for the package matches the expected version.
+  Missing tools are installed with `cargo binstall` or `cargo install`.
 - `installer/src/cli.rs`
   Existing installer flags. No new user-facing flag is required by the task,
   but this file may need a small addition only if implementation decides to

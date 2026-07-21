@@ -124,8 +124,9 @@ Dependency-tool verification is asymmetric by design:
   self-reporting subcommand: `--version` exits early, and `--help` depends on
   a usable linker and toolchain in the ambient environment. Executing it as a
   health check rejects valid artefacts. A Cargo-managed `dylint-link` is
-  instead checked by resolving an executable file on `PATH` and confirming the
-  version Cargo recorded for it, while a repository-release `dylint-link` is
+  instead checked by two independent conditions: an executable file resolves on
+  `PATH`, and Cargo's recorded installed version for the `dylint-link` package
+  matches the expected version. A repository-release `dylint-link` is
   trusted after its install pipeline succeeds (see below).
 
 For repository-release installs, the trust boundary is the pipeline itself: the
