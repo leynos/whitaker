@@ -142,7 +142,7 @@ fn is_non_comment_lexeme(kind: TokenKind) -> bool {
     !matches!(
         kind,
         TokenKind::Whitespace
-            | TokenKind::LineComment
+            | TokenKind::LineComment { .. }
             | TokenKind::BlockComment { .. }
             | TokenKind::Literal {
                 kind: LiteralKind::Str { .. }
