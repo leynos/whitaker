@@ -597,10 +597,13 @@ parser APIs, snapshots, and proof tooling.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
    `NormalizedTree` boundary instead.
-4. Update `PARSER_SCHEMA_VERSION` for every parser re-pin or normalization
-   change. The build script derives the schema version from the exact
-   workspace dependency, so any missing or non-exact pin must fail before the
-   hash module composes the value.
+4. After a parser re-pin, rebuild `whitaker_clones_core` and confirm the build
+   script re-derives the parser-version component of `PARSER_SCHEMA_VERSION`
+   automatically; do not hand-edit that component. For a normalization change
+   that alters the lowered AST shape, bump the AST schema revision (the
+   `whitaker_ast=N` prefix in `hashing.rs`). Either way, a missing or non-exact
+   workspace dependency pin must still fail before the hash module composes the
+   value.
 5. Refresh and review the AST snapshots, especially the parser schema
    snapshot and named-kind feature-vector snapshot, so syntax-kind drift is
    visible.

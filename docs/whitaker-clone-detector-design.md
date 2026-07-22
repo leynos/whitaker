@@ -152,7 +152,7 @@ hashes = 128
 - `locations[0]`: primary occurrence (current file if emitted by lint)
 - `relatedLocations[*]`: peer fragments in the class
 - `partialFingerprints`: `{ "whitakerFragment": FragmentId, "tokenHash": u64,`
-  `"astHash": u64 }`
+  `"astHash": opaque hex string }`
 - `properties`:
 
   ```json
@@ -265,8 +265,9 @@ pub fn describe_lowering_failure(file_text: &str, start: usize, end: usize) -> S
 
 ### Feature extraction
 
-- **Node-kind histogram:** vector `V[kind_id] += w(depth)` with
-  `w(depth) = 1 / (1 + depth)`.
+- **Node-kind histogram:** vector `V[kind_id] += w(depth)` with dyadic
+  fixed-point weights `w(depth) = 2^63 >> depth`, which stay nonzero through
+  depth 63 and become zero beyond it.
 - **Production multiset:** bigrams and trigrams of
   `(parent_kind -> child_kind)`.
 - **Canonical subtree hash:** Merkle-style hash where leaves are normalized

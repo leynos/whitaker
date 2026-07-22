@@ -666,7 +666,7 @@ Decisions already taken while drafting this plan:
   Rationale: the public API remains unchanged for normal builds, while
   `cargo kani --no-default-features` can verify the parser-free clone-detector
   harnesses on Kani's older pinned rustc. The no-parser `lower_span` stub
-  returns `AstError::UnparsableSpan`; it exists only to keep the public module
+  returns `AstError::ParserUnavailable`; it exists only to keep the public module
   shape available when the parser dependency is disabled. Date/Author:
   2026-06-16, implementation.
 - Decision: **Do not add a new ADR for 7.3.1.** Rationale: the lowered-IR
@@ -1006,6 +1006,8 @@ pub enum AstError {
     SpanOutOfBounds { start: u32, end: u32, len: usize },
     #[error("byte offset {0} exceeds the u32 TextSize range")]
     OffsetTooLarge(usize),
+    #[error("parser-backed AST lowering requires the `parser` feature")]
+    ParserUnavailable,
     #[error("byte span {start}..{end} maps to an unparsable (ERROR) subtree")]
     UnparsableSpan { start: u32, end: u32 },
 }
