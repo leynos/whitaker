@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -10,6 +11,49 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# A lock-relevant Cargo call: `$(CARGO)` (optionally `+<toolchain>`) followed by
+# a build/test/package subcommand. `dylint list` and similar read-only calls are
+# intentionally excluded because they do not resolve the dependency graph.
+_LOCK_RELEVANT_CARGO = re.compile(
+    r"\$\(CARGO\)(?:\s+\+\S+)?\s+(?:\$\(TEST_RUNNER\)|build|package|nextest\s+run)"
+)
+
+
+def _makefile_recipe_lines(target: str) -> list[str]:
+    """Return the tab-indented command lines of a Makefile target's recipe."""
+    lines = (REPO_ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
+    recipe: list[str] = []
+    collecting = False
+    for line in lines:
+        if re.match(rf"{re.escape(target)}:", line):
+            collecting = True
+            continue
+        if collecting:
+            if line.startswith("\t"):
+                recipe.append(line)
+            else:
+                break
+    return recipe
+
+
+@pytest.mark.parametrize("target", ["test", "publish-check"])
+def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
+    """Lock-relevant Cargo calls in the recipe forward `$(CARGO_LOCKED)`.
+
+    `make test` and `publish-check` are not runnable under a stubbed toolchain
+    (they resolve real toolchains, clone the repository, and install Dylint
+    tooling), so this asserts the recipe text threads the lock flag through each
+    build/test/package invocation instead.
+    """
+    lock_relevant = [
+        line for line in _makefile_recipe_lines(target) if _LOCK_RELEVANT_CARGO.search(line)
+    ]
+    assert lock_relevant, f"the {target} recipe should invoke Cargo build/test/package"
+    for line in lock_relevant:
+        assert "$(CARGO_LOCKED)" in line, (
+            f"{target} must thread $(CARGO_LOCKED) through Cargo call: {line.strip()!r}"
+        )
 
 
 def _write_stub(directory: Path, name: str, body: str) -> Path:

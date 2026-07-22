@@ -218,7 +218,7 @@ def _assert_coverage_checkout_and_setup(coverage_job: Mapping[str, Any]) -> None
     setup_step = _find_step(coverage_job, "Setup Rust")
     assert setup_step.get("uses") == (
         "leynos/shared-actions/.github/actions/setup-rust@"
-        "d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8"
+        "18bed1ca49a6de3d8882bd72635a32ae3f023d57"
     ), "coverage-check must reuse the current main-branch Rust setup pin"
 
 
@@ -256,7 +256,7 @@ def _assert_codescene_check(coverage_job: Mapping[str, Any]) -> None:
     ), "the CodeScene step must guard its pull-request secret"
     assert check_step.get("uses") == (
         "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-        "927edd45ae77be4251a8a18ca9eb5613a2e32cbd"
+        "18bed1ca49a6de3d8882bd72635a32ae3f023d57"
     ), "coverage-check must use the proven CodeScene action pin"
     assert check_step.get("with") == {
         "format": "lcov",
@@ -276,6 +276,27 @@ def test_coverage_check_reuses_bespoke_whitaker_coverage_path(
     _assert_coverage_checkout_and_setup(coverage_job)
     _assert_coverage_tool_installation(coverage_job)
     _assert_codescene_check(coverage_job)
+
+
+def _assert_pinned_checkout(job: Mapping[str, Any], job_name: str) -> None:
+    """Assert a validation job pins the approved checkout action without creds."""
+    checkout_step = _find_step(job, "Checkout")
+    assert checkout_step.get("uses") == (
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+    ), f"{job_name} must use the repository-approved pinned checkout action"
+    assert checkout_step.get("with", {}).get("persist-credentials") is False, (
+        f"{job_name} must not retain checkout credentials"
+    )
+
+
+def test_validation_jobs_pin_the_checkout_action(
+    workflow: Mapping[str, Any],
+) -> None:
+    """linux-full and windows-compat both pin the approved checkout action."""
+    jobs = _get_mapping_item(workflow, "jobs", parent_name="CI workflow")
+    for job_name in ("linux-full", "windows-compat"):
+        job = _get_mapping_item(jobs, job_name, parent_name="CI workflow jobs")
+        _assert_pinned_checkout(job, job_name)
 
 
 def test_linux_full_keeps_the_full_linux_validation_stack(
