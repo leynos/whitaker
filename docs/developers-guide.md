@@ -316,7 +316,8 @@ adoption is **pin-only**: the caller declares the best approximation of the CI
 scope it safely can, rather than a `--test-workspace` run that mirrors
 `make test` crate-for-crate, and the contract test asserts only that this
 declared configuration holds — not that a full workspace mutation baseline
-passes.
+passes. [ADR 004](adr-004-pin-only-mutation-testing-contract.md) records this
+decision, its alternatives, and the accepted limitations.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently

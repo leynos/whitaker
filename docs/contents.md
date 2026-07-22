@@ -79,6 +79,10 @@
   pipeline](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md)
   records the formal verification direction for the clone detector pipeline and
   its proof boundaries.
+- [Architectural decision record (ADR) 004: pin-only mutation-testing
+  contract](adr-004-pin-only-mutation-testing-contract.md) records why the
+  shared mutation workflow tests its declared configuration without claiming
+  parity with the continuous integration test baseline.
 
 ## Planning material
 
