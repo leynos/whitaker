@@ -7,10 +7,22 @@ use build_support::{
     exact_version, find_workspace_manifest, is_workspace_manifest, parser_dependency_requirement,
     read_workspace_manifest,
 };
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
 use rstest::rstest;
 use tempfile::tempdir;
+
+/// Opens `directory` as a capability-scoped `cap_std` handle over its UTF-8
+/// path, so fixtures write through `cap_std::fs_utf8` rather than ambient
+/// `std::fs`. Returns the directory's UTF-8 root and the handle.
+fn open_fixture_root(
+    directory: &std::path::Path,
+) -> Result<(Utf8PathBuf, Dir), Box<dyn std::error::Error>> {
+    let root = Utf8Path::from_path(directory).ok_or("temporary path is not valid UTF-8")?;
+    let root_dir = Dir::open_ambient_dir(root, ambient_authority())?;
+    Ok((root.to_owned(), root_dir))
+}
 
 #[rstest]
 #[case::inline("[workspace.dependencies]\nra_ap_syntax = \"=0.0.334\"\n", "=0.0.334")]
@@ -57,20 +69,17 @@ fn accepts_exact_requirement() {
 #[rstest]
 fn finds_nearest_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let outer_workspace = directory.path().join("Cargo.toml");
-    let workspace_directory = directory.path().join("nested-workspace");
-    let workspace = workspace_directory.join("Cargo.toml");
-    let member = workspace_directory.join("member");
-    std::fs::create_dir_all(&member)?;
-    std::fs::write(&outer_workspace, "[workspace]\nmembers = []\n")?;
-    std::fs::write(&workspace, "[workspace]\nmembers = []\n")?;
-    std::fs::write(
-        member.join("Cargo.toml"),
+    let (root, root_dir) = open_fixture_root(directory.path())?;
+    root_dir.create_dir_all("nested-workspace/member")?;
+    root_dir.write("Cargo.toml", "[workspace]\nmembers = []\n")?;
+    root_dir.write("nested-workspace/Cargo.toml", "[workspace]\nmembers = []\n")?;
+    root_dir.write(
+        "nested-workspace/member/Cargo.toml",
         "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
     )?;
 
-    let member = Utf8PathBuf::from_path_buf(member).expect("temporary paths must be UTF-8");
-    let workspace = Utf8PathBuf::from_path_buf(workspace).expect("temporary paths must be UTF-8");
+    let member = root.join("nested-workspace").join("member");
+    let workspace = root.join("nested-workspace").join("Cargo.toml");
 
     assert_eq!(find_workspace_manifest(&member)?, workspace);
     Ok(())
@@ -79,13 +88,13 @@ fn finds_nearest_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> 
 #[rstest]
 fn ignores_non_workspace_manifests() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let manifest = directory.path().join("Cargo.toml");
-    std::fs::write(
-        &manifest,
+    let (root, root_dir) = open_fixture_root(directory.path())?;
+    root_dir.write(
+        "Cargo.toml",
         "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
     )?;
 
-    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
+    let manifest = root.join("Cargo.toml");
 
     assert!(!is_workspace_manifest(&manifest)?);
     Ok(())
@@ -94,10 +103,10 @@ fn ignores_non_workspace_manifests() -> Result<(), Box<dyn std::error::Error>> {
 #[rstest]
 fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let nested = directory.path().join("member");
-    std::fs::create_dir(&nested)?;
+    let (root, root_dir) = open_fixture_root(directory.path())?;
+    root_dir.create_dir("member")?;
 
-    let nested = Utf8PathBuf::from_path_buf(nested).expect("temporary paths must be UTF-8");
+    let nested = root.join("member");
     let error = find_workspace_manifest(&nested)
         .expect_err("a directory without a workspace manifest should fail");
 
@@ -113,11 +122,11 @@ fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>
 #[rstest]
 fn reads_a_located_manifest() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
-    let manifest = directory.path().join("Cargo.toml");
+    let (root, root_dir) = open_fixture_root(directory.path())?;
     let contents = "[workspace]\nmembers = []\n";
-    std::fs::write(&manifest, contents)?;
+    root_dir.write("Cargo.toml", contents)?;
 
-    let manifest = Utf8PathBuf::from_path_buf(manifest).expect("temporary paths must be UTF-8");
+    let manifest = root.join("Cargo.toml");
 
     assert_eq!(read_workspace_manifest(&manifest)?, contents);
     Ok(())
