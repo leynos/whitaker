@@ -65,13 +65,17 @@ fn assert_domain_boundary(path: &Utf8Path, contents: &str) {
                 import.join(" "),
             );
         }
-        assert!(
-            !contains_path(&import, FORBIDDEN_DOMAIN_IMPORT),
-            "{} must not depend on `{}` via `{}`",
-            path,
-            FORBIDDEN_DOMAIN_IMPORT.join(""),
-            import.join(" "),
-        );
+        // Flatten grouped/nested use trees so every sibling branch is checked,
+        // not only the first one.
+        for leaf in expand_use_tree(&import) {
+            assert!(
+                !contains_path(&leaf, FORBIDDEN_DOMAIN_IMPORT),
+                "{} must not depend on `{}` via `{}`",
+                path,
+                FORBIDDEN_DOMAIN_IMPORT.join(""),
+                import.join(" "),
+            );
+        }
     }
 }
 
@@ -192,31 +196,68 @@ fn imports_crate(import: &[&str], forbidden: &str) -> bool {
 }
 
 fn contains_path(import: &[&str], path: &[&str]) -> bool {
-    (0..import.len()).any(|start| path_matches_at(&import[start..], path))
+    import.windows(path.len()).any(|window| window == path)
 }
 
-/// Matches `path` against the front of `import`, treating grouped or nested
-/// `use`-tree delimiters (`{`, `}`, `,`) between path components as transparent
-/// so `ast::{lowering}` still matches `ast :: lowering`. Delimiters never stand
-/// in for a path component, so contiguous non-grouped paths match exactly as a
-/// plain window comparison would.
-fn path_matches_at(import: &[&str], path: &[&str]) -> bool {
-    let mut position = 0;
-    for (index, expected) in path.iter().enumerate() {
-        if index > 0 {
-            while import
-                .get(position)
-                .is_some_and(|token| matches!(*token, "{" | "}" | ","))
-            {
-                position += 1;
+/// Expands a `use`-tree token stream into every leaf path it denotes, so a
+/// grouped or nested tree is checked branch by branch rather than only along
+/// its first branch. For example
+/// `crate :: ast :: { tree :: ByteSpan , lowering :: lower_span }` expands to
+/// `[[crate, ::, ast, ::, tree, ::, ByteSpan],`
+/// ` [crate, ::, ast, ::, lowering, ::, lower_span]]`, so `contains_path` sees
+/// `ast :: lowering` regardless of the sibling ordering.
+fn expand_use_tree<'a>(tokens: &[&'a str]) -> Vec<Vec<&'a str>> {
+    parse_use_tree(tokens, &[]).0
+}
+
+/// Parses one use-tree item — a path prefix optionally followed by a `{ … }`
+/// group — returning the leaf paths it expands to and the unconsumed remainder
+/// (positioned at a `,`, `}`, or end of input).
+fn parse_use_tree<'a>(tokens: &[&'a str], prefix: &[&'a str]) -> (Vec<Vec<&'a str>>, usize) {
+    let mut path = prefix.to_vec();
+    let mut index = 0;
+
+    while index < tokens.len() {
+        match tokens[index] {
+            "{" => {
+                let (leaves, consumed) = parse_group(&tokens[index + 1..], &path);
+                return (leaves, index + 1 + consumed);
+            }
+            "," | "}" => break,
+            "as" => index += if index + 1 < tokens.len() { 2 } else { 1 },
+            segment => {
+                path.push(segment);
+                index += 1;
             }
         }
-        if import.get(position) != Some(expected) {
-            return false;
-        }
-        position += 1;
     }
-    true
+
+    (vec![path], index)
+}
+
+/// Parses the comma-separated siblings of a `{ … }` group (the opening `{`
+/// already consumed), combining each with `prefix`. Returns the leaf paths and
+/// the number of tokens consumed, including the closing `}`.
+fn parse_group<'a>(tokens: &[&'a str], prefix: &[&'a str]) -> (Vec<Vec<&'a str>>, usize) {
+    let mut leaves = Vec::new();
+    let mut position = 0;
+
+    loop {
+        let (sibling_leaves, consumed) = parse_use_tree(&tokens[position..], prefix);
+        leaves.extend(sibling_leaves);
+        position += consumed;
+
+        match tokens.get(position) {
+            Some(&",") => position += 1,
+            Some(&"}") => {
+                position += 1;
+                break;
+            }
+            _ => break, // malformed or truncated input; stop defensively
+        }
+    }
+
+    (leaves, position)
 }
 
 #[rstest]
@@ -269,10 +310,16 @@ fn non_comment_tokens_discard_comments_and_strings_but_keep_paths() {
 #[case::direct("use crate::ast::lowering::lower_span;")]
 #[case::re_exported("pub use crate::ast::lowering::lower_span;")]
 #[case::grouped("use crate::ast::{lowering::lower_span};")]
+#[case::grouped_later_sibling("use crate::ast::{tree::ByteSpan, lowering::lower_span};")]
+#[case::nested_group_later_sibling("use crate::ast::{tree::{ByteSpan}, lowering::lower_span};")]
 fn forbidden_domain_import_forms_are_detected(#[case] source: &str) {
     let import = use_trees(source).pop().expect("source contains a use tree");
 
-    assert!(contains_path(&import, FORBIDDEN_DOMAIN_IMPORT));
+    assert!(
+        expand_use_tree(&import)
+            .iter()
+            .any(|leaf| contains_path(leaf, FORBIDDEN_DOMAIN_IMPORT))
+    );
 }
 
 #[rstest]
