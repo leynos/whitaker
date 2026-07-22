@@ -81,12 +81,24 @@ def _run_make(target: str, cargo: Path, locked: str, stub_dir: Path) -> list[str
     return log.read_text(encoding="utf-8").splitlines()
 
 
-@pytest.mark.parametrize("locked", ["", "--locked"])
-def test_representative_targets_forward_cargo_locked(tmp_path: Path, locked: str) -> None:
-    """Ordinary Cargo targets include the requested lock mode and no other one."""
+@pytest.fixture
+def cargo_stub(tmp_path: Path) -> tuple[Path, Path]:
+    """Create the stub ``bin`` directory with a Cargo stand-in.
+
+    Returns the ``(stub_dir, cargo)`` pair shared by the Makefile tests.
+    """
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir()
     cargo = _write_cargo_stub(stub_dir)
+    return stub_dir, cargo
+
+
+@pytest.mark.parametrize("locked", ["", "--locked"])
+def test_representative_targets_forward_cargo_locked(
+    cargo_stub: tuple[Path, Path], locked: str
+) -> None:
+    """Ordinary Cargo targets include the requested lock mode and no other one."""
+    stub_dir, cargo = cargo_stub
 
     recorded = [
         invocation
@@ -106,14 +118,12 @@ def test_representative_targets_forward_cargo_locked(tmp_path: Path, locked: str
 
 @pytest.mark.parametrize("locked", ["", "--locked"])
 def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
-    tmp_path: Path, locked: str
+    cargo_stub: tuple[Path, Path], locked: str
 ) -> None:
     """Installer metadata and both builds share the caller's lock mode."""
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
+    stub_dir, cargo = cargo_stub
     _write_stub(stub_dir, "rustc", 'echo "host: fake-host"')
     _write_stub(stub_dir, "jq", "echo 0.2.5")
-    cargo = _write_cargo_stub(stub_dir)
 
     recorded = _run_make("release-installer-dry-run", cargo, locked, stub_dir)
 
