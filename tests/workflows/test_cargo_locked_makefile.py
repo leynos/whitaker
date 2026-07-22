@@ -164,6 +164,11 @@ def _run_make(
         env=process_env,
     )
     assert result.returncode == 0, result.stderr
+    assert log.exists(), (
+        f"{target} succeeded without recording any Cargo calls to the "
+        f"{environment.locked or 'unlocked'} log at {log}\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
     return log.read_text(encoding="utf-8").splitlines()
 
 
