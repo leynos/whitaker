@@ -1,6 +1,6 @@
 [package]
 name = "whitaker_suite"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2024"
 publish = false
 description = "Aggregated Whitaker Dylint suite cdylib"
