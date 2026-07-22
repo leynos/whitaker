@@ -125,7 +125,7 @@ fn build_fixture(
                 "\n",
                 "[build-dependencies]\n",
                 "camino = \"1.2.1\"\n",
-                "cap-std = {{ version = \"3.4.5\", features = [\"fs_utf8\"] }}\n",
+                "cap-std = {{ version = \"4.0.2\", features = [\"fs_utf8\"] }}\n",
                 "toml = \"1.1.2\"\n",
             ),
             FIXTURE_PACKAGE = FIXTURE_PACKAGE,
