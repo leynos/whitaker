@@ -192,7 +192,31 @@ fn imports_crate(import: &[&str], forbidden: &str) -> bool {
 }
 
 fn contains_path(import: &[&str], path: &[&str]) -> bool {
-    import.windows(path.len()).any(|window| window == path)
+    (0..import.len()).any(|start| path_matches_at(&import[start..], path))
+}
+
+/// Matches `path` against the front of `import`, treating grouped or nested
+/// `use`-tree delimiters (`{`, `}`, `,`) between path components as transparent
+/// so `ast::{lowering}` still matches `ast :: lowering`. Delimiters never stand
+/// in for a path component, so contiguous non-grouped paths match exactly as a
+/// plain window comparison would.
+fn path_matches_at(import: &[&str], path: &[&str]) -> bool {
+    let mut position = 0;
+    for (index, expected) in path.iter().enumerate() {
+        if index > 0 {
+            while import
+                .get(position)
+                .is_some_and(|token| matches!(*token, "{" | "}" | ","))
+            {
+                position += 1;
+            }
+        }
+        if import.get(position) != Some(expected) {
+            return false;
+        }
+        position += 1;
+    }
+    true
 }
 
 #[rstest]
@@ -244,6 +268,7 @@ fn non_comment_tokens_discard_comments_and_strings_but_keep_paths() {
 #[rstest]
 #[case::direct("use crate::ast::lowering::lower_span;")]
 #[case::re_exported("pub use crate::ast::lowering::lower_span;")]
+#[case::grouped("use crate::ast::{lowering::lower_span};")]
 fn forbidden_domain_import_forms_are_detected(#[case] source: &str) {
     let import = use_trees(source).pop().expect("source contains a use tree");
 
