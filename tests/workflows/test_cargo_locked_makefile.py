@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass
 from itertools import takewhile
 from pathlib import Path
 
@@ -97,15 +98,22 @@ esac''',
     )
 
 
+@dataclass(frozen=True)
+class MakeRunEnvironment:
+    """Inputs shared by one stubbed Make invocation."""
+
+    cargo: Path
+    locked: str
+    stub_dir: Path
+
+
 def _run_make(
     target: str,
-    cargo: Path,
-    locked: str,
-    stub_dir: Path,
+    environment: MakeRunEnvironment,
     extra_make_args: list[str] | None = None,
 ) -> list[str]:
     """Run one target with stubbed tools and return recorded Cargo arguments."""
-    workspace = stub_dir.parent / "workspace"
+    workspace = environment.stub_dir.parent / "workspace"
     scripts_directory = workspace / "scripts"
     scripts_directory.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / "Makefile", workspace / "Makefile")
@@ -120,15 +128,15 @@ def _run_make(
     shutil.copy2(REPO_ROOT / "rust-toolchain.toml", workspace / "rust-toolchain.toml")
     _write_stub(scripts_directory, "install-dylint-tools.sh", "exit 0")
 
-    log = stub_dir / f"{target}-{locked or 'unlocked'}.log"
-    environment = os.environ | {
+    log = environment.stub_dir / f"{target}-{environment.locked or 'unlocked'}.log"
+    process_env = os.environ | {
         "CARGO_LOCKED_LOG": str(log),
-        "PATH": f"{stub_dir}:/usr/bin:/bin",
+        "PATH": f"{environment.stub_dir}:/usr/bin:/bin",
     }
-    environment.pop("CARGO_LOCKED", None)
-    make_arguments = ["make", target, f"CARGO={cargo}"]
-    if locked:
-        make_arguments.append(f"CARGO_LOCKED={locked}")
+    process_env.pop("CARGO_LOCKED", None)
+    make_arguments = ["make", target, f"CARGO={environment.cargo}"]
+    if environment.locked:
+        make_arguments.append(f"CARGO_LOCKED={environment.locked}")
     if extra_make_args:
         make_arguments.extend(extra_make_args)
     result = subprocess.run(
@@ -137,7 +145,7 @@ def _run_make(
         capture_output=True,
         text=True,
         check=False,
-        env=environment,
+        env=process_env,
     )
     assert result.returncode == 0, result.stderr
     return log.read_text(encoding="utf-8").splitlines()
@@ -213,9 +221,7 @@ def test_make_test_forwards_cargo_locked(cargo_stub: tuple[Path, Path], locked: 
     whitaker_script = stub_dir.parent / "whitaker-script"
     recorded = _run_make(
         "test",
-        cargo,
-        locked,
-        stub_dir,
+        MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir),
         extra_make_args=[f"WHITAKER_SCRIPT={whitaker_script}"],
     )
 
@@ -239,9 +245,7 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
 
     recorded = _run_make(
         "publish-check",
-        cargo,
-        locked,
-        stub_dir,
+        MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir),
         extra_make_args=[
             "LINT_CRATES=bumpy_road_function",
             "PUBLISH_PACKAGES=whitaker-common",
@@ -281,11 +285,12 @@ def test_representative_targets_forward_cargo_locked(
 ) -> None:
     """Ordinary Cargo targets include the requested lock mode and no other one."""
     stub_dir, cargo = cargo_stub
+    environment = MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir)
 
     recorded = [
         invocation
         for target in ("typecheck", "lint")
-        for invocation in _run_make(target, cargo, locked, stub_dir)
+        for invocation in _run_make(target, environment)
     ]
 
     assert recorded, (
@@ -307,7 +312,10 @@ def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
     _write_stub(stub_dir, "rustc", 'echo "host: fake-host"')
     _write_stub(stub_dir, "jq", "echo 0.2.5")
 
-    recorded = _run_make("release-installer-dry-run", cargo, locked, stub_dir)
+    recorded = _run_make(
+        "release-installer-dry-run",
+        MakeRunEnvironment(cargo=cargo, locked=locked, stub_dir=stub_dir),
+    )
 
     assert len(recorded) == 3, (
         "release-installer-dry-run should record metadata plus two builds in "
