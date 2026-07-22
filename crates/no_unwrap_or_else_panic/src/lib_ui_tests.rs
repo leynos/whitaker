@@ -177,15 +177,24 @@ fn read_rustc_flags(source: &Path) -> io::Result<Option<Vec<String>>> {
 #[case("pass_unwrap_in_rstest_harness", "rstest")]
 #[case("pass_unwrap_in_rstest_companion_module", "rstest companion module")]
 #[case(
-    "pass_unwrap_in_rstest_aliased_test_crate",
-    "rstest aliased test crate"
-)]
-#[case(
     "pass_unwrap_in_rstest_descriptor_only_companion",
     "rstest descriptor-only companion"
 )]
 fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) {
     run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
+}
+
+// The aliased-test-crate companion carries no in-source lint attributes, so the
+// lint is registered and denied through the harness's command-line flag; a valid
+// rstest companion must then keep the parent exempt (no diagnostic emitted).
+#[cfg(not(windows))]
+#[test]
+fn rstest_aliased_test_crate_companion_exempts_parent_function() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "pass_unwrap_in_rstest_aliased_test_crate",
+        "rstest aliased test crate",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
 }
 
 #[cfg(not(windows))]

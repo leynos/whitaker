@@ -1,11 +1,6 @@
 //! Regression fixture for an rstest companion that aliases the `test` crate.
 
-#![cfg_attr(
-    test,
-    feature(rustc_private, test),
-    allow(unknown_lints),
-    deny(no_unwrap_or_else_panic)
-)]
+#![cfg_attr(test, feature(rustc_private, test))]
 
 #[cfg(test)]
 fn rstest_aliased_test_crate_subject(value: i32) {
