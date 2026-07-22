@@ -281,8 +281,7 @@ fn given_packaged_with_known(world: &mut PackagingWorld) {
 }
 
 #[when("the archive filename is inspected")]
-#[expect(unused_variables, reason = "rstest-bdd requires the world parameter")]
-fn when_filename_inspected(world: &mut PackagingWorld) {
+fn when_filename_inspected(#[from(world)] _world: &mut PackagingWorld) {
     // Filename is available via output; no additional action needed.
 }
 

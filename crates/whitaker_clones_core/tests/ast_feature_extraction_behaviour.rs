@@ -188,20 +188,18 @@ fn then_ast_hashes_differ(world: &AstFeatureWorld) {
 /// The `#[scenario]` macro runs every Gherkin step for this scenario before
 /// this body executes; no additional assertions are required here.
 #[scenario(path = "tests/features/ast_feature_extraction.feature", index = 0)]
-fn scenario_smallest_covering_expression_is_selected(world: AstFeatureWorld) {
-    let _ = world;
-}
+fn scenario_smallest_covering_expression_is_selected(#[from(world)] _world: AstFeatureWorld) {}
 
 /// The `#[scenario]` macro runs every Gherkin step for this scenario before
 /// this body executes; no additional assertions are required here.
 #[scenario(path = "tests/features/ast_feature_extraction.feature", index = 1)]
-fn scenario_identifier_renamed_fragments_share_an_ast_hash(world: AstFeatureWorld) {
-    let _ = world;
+fn scenario_identifier_renamed_fragments_share_an_ast_hash(#[from(world)] _world: AstFeatureWorld) {
 }
 
 /// The `#[scenario]` macro runs every Gherkin step for this scenario before
 /// this body executes; no additional assertions are required here.
 #[scenario(path = "tests/features/ast_feature_extraction.feature", index = 2)]
-fn scenario_structurally_different_fragments_have_different_ast_hash(world: AstFeatureWorld) {
-    let _ = world;
+fn scenario_structurally_different_fragments_have_different_ast_hash(
+    #[from(world)] _world: AstFeatureWorld,
+) {
 }
