@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+from itertools import takewhile
 from pathlib import Path
 
 import pytest
@@ -23,18 +24,20 @@ _LOCK_RELEVANT_CARGO = re.compile(
 def _makefile_recipe_lines(target: str) -> list[str]:
     """Return the tab-indented command lines of a Makefile target's recipe."""
     lines = (REPO_ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
-    recipe: list[str] = []
-    collecting = False
-    for line in lines:
-        if re.match(rf"{re.escape(target)}:", line):
-            collecting = True
-            continue
-        if collecting:
-            if line.startswith("\t"):
-                recipe.append(line)
-            else:
-                break
-    return recipe
+    recipe_start = next(
+        (
+            index + 1
+            for index, line in enumerate(lines)
+            if re.match(rf"{re.escape(target)}:", line)
+        ),
+        len(lines),
+    )
+    return list(takewhile(lambda line: line.startswith("\t"), lines[recipe_start:]))
+
+
+def test_recipe_lines_are_empty_for_an_absent_target() -> None:
+    """An unknown Makefile target yields no recipe lines."""
+    assert _makefile_recipe_lines("definitely-not-a-real-target") == []
 
 
 @pytest.mark.parametrize("target", ["test", "publish-check"])
