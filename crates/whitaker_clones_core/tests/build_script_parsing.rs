@@ -10,8 +10,36 @@ use build_support::{
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use tempfile::tempdir;
+
+const WORKSPACE_MANIFEST: &str = concat!("[workspace]\n", "members = []\n");
+const MEMBER_MANIFEST: &str = concat!(
+    "[package]\n",
+    "name = \"member\"\n",
+    "version = \"0.1.0\"\n",
+);
+
+/// Shared temporary-workspace bootstrap for the filesystem-backed tests.
+///
+/// Holds the `TempDir` so it outlives the test, alongside its UTF-8 root path
+/// and a capability-scoped `cap_std` handle over it.
+struct FixtureRoot {
+    _directory: tempfile::TempDir,
+    root: Utf8PathBuf,
+    root_dir: Dir,
+}
+
+#[fixture]
+fn fixture_root() -> Result<FixtureRoot, Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let (root, root_dir) = open_fixture_root(directory.path())?;
+    Ok(FixtureRoot {
+        _directory: directory,
+        root,
+        root_dir,
+    })
+}
 
 /// Opens `directory` as a capability-scoped `cap_std` handle over its UTF-8
 /// path, so fixtures write through `cap_std::fs_utf8` rather than ambient
@@ -67,46 +95,47 @@ fn accepts_exact_requirement() {
 }
 
 #[rstest]
-fn finds_nearest_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let (root, root_dir) = open_fixture_root(directory.path())?;
-    root_dir.create_dir_all("nested-workspace/member")?;
-    root_dir.write("Cargo.toml", "[workspace]\nmembers = []\n")?;
-    root_dir.write("nested-workspace/Cargo.toml", "[workspace]\nmembers = []\n")?;
-    root_dir.write(
-        "nested-workspace/member/Cargo.toml",
-        "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
-    )?;
+fn finds_nearest_workspace_manifest(
+    fixture_root: Result<FixtureRoot, Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = fixture_root?;
+    fixture.root_dir.create_dir_all("nested-workspace/member")?;
+    fixture.root_dir.write("Cargo.toml", WORKSPACE_MANIFEST)?;
+    fixture
+        .root_dir
+        .write("nested-workspace/Cargo.toml", WORKSPACE_MANIFEST)?;
+    fixture
+        .root_dir
+        .write("nested-workspace/member/Cargo.toml", MEMBER_MANIFEST)?;
 
-    let member = root.join("nested-workspace").join("member");
-    let workspace = root.join("nested-workspace").join("Cargo.toml");
+    let member = fixture.root.join("nested-workspace").join("member");
+    let workspace = fixture.root.join("nested-workspace").join("Cargo.toml");
 
     assert_eq!(find_workspace_manifest(&member)?, workspace);
     Ok(())
 }
 
 #[rstest]
-fn ignores_non_workspace_manifests() -> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let (root, root_dir) = open_fixture_root(directory.path())?;
-    root_dir.write(
-        "Cargo.toml",
-        "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
-    )?;
+fn ignores_non_workspace_manifests(
+    fixture_root: Result<FixtureRoot, Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = fixture_root?;
+    fixture.root_dir.write("Cargo.toml", MEMBER_MANIFEST)?;
 
-    let manifest = root.join("Cargo.toml");
+    let manifest = fixture.root.join("Cargo.toml");
 
     assert!(!is_workspace_manifest(&manifest)?);
     Ok(())
 }
 
 #[rstest]
-fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let (root, root_dir) = open_fixture_root(directory.path())?;
-    root_dir.create_dir("member")?;
+fn reports_missing_workspace_manifest(
+    fixture_root: Result<FixtureRoot, Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = fixture_root?;
+    fixture.root_dir.create_dir("member")?;
 
-    let nested = root.join("member");
+    let nested = fixture.root.join("member");
     let error = find_workspace_manifest(&nested)
         .expect_err("a directory without a workspace manifest should fail");
 
@@ -120,15 +149,15 @@ fn reports_missing_workspace_manifest() -> Result<(), Box<dyn std::error::Error>
 }
 
 #[rstest]
-fn reads_a_located_manifest() -> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let (root, root_dir) = open_fixture_root(directory.path())?;
-    let contents = "[workspace]\nmembers = []\n";
-    root_dir.write("Cargo.toml", contents)?;
+fn reads_a_located_manifest(
+    fixture_root: Result<FixtureRoot, Box<dyn std::error::Error>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = fixture_root?;
+    fixture.root_dir.write("Cargo.toml", WORKSPACE_MANIFEST)?;
 
-    let manifest = root.join("Cargo.toml");
+    let manifest = fixture.root.join("Cargo.toml");
 
-    assert_eq!(read_workspace_manifest(&manifest)?, contents);
+    assert_eq!(read_workspace_manifest(&manifest)?, WORKSPACE_MANIFEST);
     Ok(())
 }
 
