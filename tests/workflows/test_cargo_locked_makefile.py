@@ -38,7 +38,9 @@ def _makefile_recipe_lines(target: str) -> list[str]:
 
 def test_recipe_lines_are_empty_for_an_absent_target() -> None:
     """An unknown Makefile target yields no recipe lines."""
-    assert _makefile_recipe_lines("definitely-not-a-real-target") == []
+    assert _makefile_recipe_lines("definitely-not-a-real-target") == [], (
+        "an absent Makefile target must yield no recipe lines"
+    )
 
 
 @pytest.mark.parametrize("target", ["test", "publish-check"])
