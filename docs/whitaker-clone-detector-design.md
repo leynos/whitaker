@@ -648,6 +648,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 ## Implementation decisions (7.3.1)
 
+Triage: `type:docstyle`
+
 1. **The AST engine is isolated behind a lowered intermediate representation.**
    `crates/whitaker_clones_core/src/ast/lowering.rs` is the only file allowed
    to import `ra_ap_syntax` or its parser transitive crates. It lowers the
