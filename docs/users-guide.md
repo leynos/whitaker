@@ -40,11 +40,12 @@ This:
    source-build path is taken, the installer reports that it is falling back to
    Cargo, and on success it prints
    `Installed <tool> from source with cargo install.`. After installation,
-   `cargo-dylint` is verified by running `cargo dylint --version`, while
-   `dylint-link` is verified by resolving the executable on `PATH` and then
-   invoking it with `--help`. The installer sets `RUSTUP_TOOLCHAIN` for that
-   probe when needed, which avoids false failures from upstream
-   `dylint-link --version` while still rejecting stale shims and broken scripts.
+   `cargo-dylint` is verified by running `cargo dylint --version`.
+   `dylint-link` is never executed: it is a linker wrapper that forwards its
+   arguments to the underlying linker, so it has no reliable self-reporting
+   subcommand. A release artefact is trusted once its checksum, extraction, and
+   executable permissions have been established, and a Cargo-managed copy is
+   checked by resolving it on `PATH` and comparing the version Cargo recorded.
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
@@ -58,8 +59,8 @@ After installation, run `whitaker --all` in any Rust project to lint it. Use
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
 Cargo-installed executable such as `dylint-link.exe` in
-`%USERPROFILE%\.cargo\bin` is located correctly and then verified with the same
-invocation-based probe without needing a separate wrapper or manual
+`%USERPROFILE%\.cargo\bin` is located correctly and then matched against the
+version Cargo recorded for it, without needing a separate wrapper or manual
 environment-variable workaround.
 
 **Options:**

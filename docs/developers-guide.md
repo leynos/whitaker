@@ -828,11 +828,9 @@ The dependency-install path is split into focused modules under
 
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
-   running `cargo dylint --version`, while `dylint-link` is checked by
-   resolving the executable on `PATH` and invoking it with `--help`. The probe
-   synthesizes `RUSTUP_TOOLCHAIN` from the host target when the environment
-   variable is unset, because upstream reads that variable before processing
-   CLI flags.
+   running `cargo dylint --version`. A repository-release `dylint-link` is
+   accepted on the strength of its install pipeline and is never executed;
+   see "Why `dylint-link` is never probed" below.
 3. If the repository download reports `NotFound`, skip `cargo binstall` and
    fall back directly to `cargo install`.
 4. For other repository failures, fall back to `cargo binstall` when available
@@ -844,7 +842,7 @@ The dependency-install path is split into focused modules under
 each dependency tool was satisfied. `install_tool()` returns
 `RepositoryRelease`, `CargoBinstall`, or `CargoInstall`, and
 `update_status_after_install()` uses that outcome to decide whether it should
-probe for `dylint-link` after installing `cargo-dylint`.
+re-check for `dylint-link` after installing `cargo-dylint`.
 
 The HTTP download layers in
 `installer/src/dependency_binaries/install/downloader.rs` and
@@ -869,15 +867,39 @@ fallback, including the direct missing-asset path, invokes
 recorded in `installer/dependency-binaries.toml` instead of silently using the
 latest upstream release.
 
-`update_status_after_install()` delegates the local-install probe decision to
-`should_refresh_companions()`. That helper returns `true` only when the install
+`update_status_after_install()` delegates the local-install re-check decision
+to `should_refresh_companions()`. That helper returns `true` only when the install
 outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
 code checks for a resolvable `dylint-link` binary only after local
 `cargo-dylint` installs and does not re-check it when the pre-built repository
 artefact was used or when `dylint-link` was already present.
 
+#### Why `dylint-link` is never probed
+
+`dylint-link` is a linker wrapper: it forwards its entire argument list to the
+underlying linker. It therefore has no reliable self-reporting subcommand.
+`--version` exits early, and `--help` succeeds only when a usable linker and
+toolchain are present in the ambient environment, so it reports on the
+environment rather than on the artefact. Executing it as a health check
+rejected valid, checksum-verified release artefacts and forced a
+`cargo install --locked --version 6.0.1 dylint-link` fallback that cannot
+compile on toolchains below the crate's rustc floor, breaking consumers pinned
+to older toolchains.
+
+The trust boundary for a repository-release install is the install pipeline:
+the release asset name pins the package and version, the `.sha256` sidecar
+establishes integrity, extraction confirms the expected archive member, and the
+permission step establishes launch eligibility. `repository_install_verified()`
+in `installer/src/deps/install.rs` therefore accepts `dylint-link` as soon as
+that pipeline reports success, and retains the generic version check for
+`cargo-dylint`. Genuine pipeline failures still fall back to Cargo.
+
+A Cargo-managed `dylint-link` already on `PATH` is checked by resolving an
+executable file and comparing the version Cargo recorded for it, which needs no
+execution either.
+
 The `dylint-link` verification in `installer/src/deps.rs` is implemented by
-seven small private helpers:
+five small private helpers:
 
 - `find_binary_on_path(binary_name)` returns the first executable candidate so
   the installation check can validate the exact path it found.
@@ -885,12 +907,6 @@ seven small private helpers:
   search that `find_binary_on_path()` uses while walking `PATH`.
 - `binary_candidates(directory, binary_name)` builds the ordered set of
   candidate paths that each directory contributes to the lookup.
-- `dylint_link_probe_toolchain()` preserves an existing `RUSTUP_TOOLCHAIN`
-  value or synthesizes `stable-<host-target>` so `dylint-link --help` can run
-  in the same environments where `dylint-link --version` exits early.
-- `dylint_link_probe_succeeds(path)` runs the resolved binary with `--help` and
-  requires a successful exit status before Whitaker treats the tool as
-  installed.
 - `is_executable_file(path)` applies the platform-specific file test:
   executable-bit plus regular-file checks on Unix, and `path.is_file()` on
   non-Unix targets where the executable suffix carries the meaning.

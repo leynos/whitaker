@@ -233,9 +233,15 @@ The repository root is `/home/user/project`.
 Relevant existing files:
 
 - `installer/src/deps.rs`
-  Current dependency-check/install orchestration. Today it checks whether
-  `cargo dylint --version` and `dylint-link --version` succeed, then installs
-  missing tools with `cargo binstall` or `cargo install`.
+  Dependency-check/install orchestration. It verifies `cargo-dylint` by running
+  `cargo dylint --version` and never executes `dylint-link` as a health check.
+  A repository-release `dylint-link` is accepted once the verified install
+  pipeline succeeds: pinned asset naming, checksum verification, expected-member
+  extraction, and executable-permission (launch-eligibility) setup. A
+  Cargo-managed `dylint-link` is instead verified by two independent checks: an
+  executable resolves on `PATH` (honouring Windows `PATHEXT`), and Cargo's
+  recorded installed version for the package matches the expected version.
+  Missing tools are installed with `cargo binstall` or `cargo install`.
 - `installer/src/cli.rs`
   Existing installer flags. No new user-facing flag is required by the task,
   but this file may need a small addition only if implementation decides to
@@ -448,7 +454,9 @@ Recommended implementation details:
    - looks up the tool in the committed manifest;
    - attempts repository download and installation;
    - verifies the installed binary by rerunning the same version command used by
-     the existing detection path;
+     the existing detection path (superseded for `dylint-link` by #299: a
+     repository-release `dylint-link` is trusted on its verified install
+     pipeline and is never executed as a health check);
    - falls back to Cargo if any repository step fails.
 3. Preserve the existing non-fatal behaviour: inability to use the repository
    path is not itself a hard installer error if Cargo fallback succeeds.
@@ -579,10 +587,12 @@ Outcomes:
    `installer/dependency-binaries.toml` manifest.
 2. Release assets now include a generated provenance/licence Markdown sidecar
    describing package names, versions, licences, and upstream repositories.
-3. The installer now attempts repository-hosted dependency binaries first,
-   verifies the installed tool command, and falls back to `cargo binstall` or
-   `cargo install` when the repository path is unavailable, verification fails,
-   or when `cargo binstall` is absent or fails.
+3. The installer now attempts repository-hosted dependency binaries first. It
+   verifies an installed `cargo-dylint` with `cargo dylint --version` but never
+   executes `dylint-link` as a health check, trusting a repository-release
+   `dylint-link` on its verified install pipeline. It falls back to
+   `cargo binstall` or `cargo install` when the repository path is unavailable,
+   verification fails, or when `cargo binstall` is absent or fails.
 4. Coverage includes unit tests for manifest parsing, packaging, and install
    orchestration plus `rstest-bdd` behavioural scenarios for repository
    success, fallback, verification failure, unsupported targets, and provenance
