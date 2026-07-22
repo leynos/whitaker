@@ -1,11 +1,11 @@
 error: Replace unwrap_or_else on `std::option::Option<i32>` with a non-panicking fallback.
-  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:13:13
+  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:17:13
    |
 LL |     let _ = Some(value).unwrap_or_else(|| panic!("aliased non-companion {value}"));
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
 note: The closure supplied to unwrap_or_else triggers a panic.
-  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:13:13
+  --> $DIR/fail_unwrap_in_aliased_test_crate_non_companion.rs:17:13
    |
 LL |     let _ = Some(value).unwrap_or_else(|| panic!("aliased non-companion {value}"));
    |             ^^^^^^^^^^^

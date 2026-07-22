@@ -9,27 +9,26 @@
 // on the command line, so the lint is registered and denied there without an
 // in-source lint attribute that plain rustc would reject as an unknown lint.
 #[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
+)]
 fn aliased_test_crate_non_companion_subject(value: i32) {
     let _ = Some(value).unwrap_or_else(|| panic!("aliased non-companion {value}"));
 }
-
-// The harness never calls this fixture; reference it in an anonymous const so
-// `dead_code` stays honest. This does not change what the lint reports on the
-// function body.
-#[cfg(test)]
-const _: fn(i32) = aliased_test_crate_non_companion_subject;
 
 /// An ordinary sibling module that happens to import the compiler test crate.
 #[cfg(test)]
 mod aliased_test_crate_non_companion_subject {
     extern crate test as test_harness;
 
+    #[expect(
+        dead_code,
+        reason = "proves an aliased `test` import alone is not an rstest companion; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
+    )]
     fn unrelated_item() {
         let _ = test_harness::black_box(1);
     }
-
-    // Reference the sibling item for the same reason as the parent fixture.
-    const _: fn() = unrelated_item;
 }
 
 fn main() {}
