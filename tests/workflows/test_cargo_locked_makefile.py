@@ -43,22 +43,36 @@ def test_recipe_lines_are_empty_for_an_absent_target() -> None:
     )
 
 
+def _cargo_invocation(recipe_line: str) -> str:
+    """Return the `$(CARGO) ...` call in a recipe line, trimmed at its terminator.
+
+    Isolating the invocation from any environment prefix or later command on the
+    same line means a `$(CARGO_LOCKED)` sitting outside this Cargo call is not
+    mistaken for a flag threaded into it. `$(CARGO)` is matched exactly, so the
+    `$(CARGO_LOCKED)` variable (no closing paren after `CARGO`) never matches.
+    """
+    invocation = recipe_line[recipe_line.index("$(CARGO)") :]
+    for terminator in (";", "&&"):
+        invocation = invocation.split(terminator, 1)[0]
+    return invocation
+
+
 @pytest.mark.parametrize("target", ["test", "publish-check"])
 def test_recipe_cargo_calls_thread_cargo_locked(target: str) -> None:
     """Lock-relevant Cargo calls in the recipe forward `$(CARGO_LOCKED)`.
 
-    `make test` and `publish-check` are not runnable under a stubbed toolchain
-    (they resolve real toolchains, clone the repository, and install Dylint
-    tooling), so this asserts the recipe text threads the lock flag through each
-    build/test/package invocation instead.
+    Complements the stub-executed `make test`/`publish-check` tests with a
+    recipe-text check: it isolates each Cargo invocation and asserts the lock
+    flag sits *inside* that call, not merely somewhere on the line.
     """
     lock_relevant = [
         line for line in _makefile_recipe_lines(target) if _LOCK_RELEVANT_CARGO.search(line)
     ]
     assert lock_relevant, f"the {target} recipe should invoke Cargo build/test/package"
     for line in lock_relevant:
-        assert "$(CARGO_LOCKED)" in line, (
-            f"{target} must thread $(CARGO_LOCKED) through Cargo call: {line.strip()!r}"
+        invocation = _cargo_invocation(line)
+        assert "$(CARGO_LOCKED)" in invocation, (
+            f"{target} must thread $(CARGO_LOCKED) inside the Cargo call: {invocation.strip()!r}"
         )
 
 
