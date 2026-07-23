@@ -6,7 +6,10 @@ use serde_json::json;
 
 use ra_ap_syntax::{AstNode, Edition, SourceFile};
 
-use super::{LoweringLimits, MAX_AST_NODES, kind_id, leaf_class};
+use super::{
+    LoweringLimits, MAX_AST_DEPTH, MAX_AST_NODES, kind_id, leaf_class,
+    validate_covering_node_budget,
+};
 use crate::{
     AstError, ByteSpan, Production,
     ast::{KindId, LeafClass, NormalizedNode, NormalizedTree, PARSER_SCHEMA_VERSION},
@@ -97,6 +100,26 @@ fn deeply_nested_syntax_obeys_the_lowering_depth_budget() -> Result<(), AstError
     assert_eq!(
         LoweringLimits::with_depth_limit(2, span).lower(&root, 0),
         Err(AstError::TreeTooDeep { limit: 2 })
+    );
+    Ok(())
+}
+
+#[rstest]
+fn covering_node_selection_budget_surfaces_typed_errors() -> Result<(), AstError> {
+    // The selection budget guards the covering-node walk independently of the
+    // lowering budget, and both breaches must surface as the same typed errors.
+    let span = ByteSpan::new("fn f() {}", 0, 2)?;
+    assert_eq!(
+        validate_covering_node_budget(span, MAX_AST_DEPTH + 1, 0),
+        Err(AstError::TreeTooDeep {
+            limit: MAX_AST_DEPTH
+        })
+    );
+    assert_eq!(
+        validate_covering_node_budget(span, 0, MAX_AST_NODES),
+        Err(AstError::TreeTooLarge {
+            limit: MAX_AST_NODES
+        })
     );
     Ok(())
 }

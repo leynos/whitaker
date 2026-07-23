@@ -690,3 +690,46 @@ useful diagnostic. The rule denies only closures whose `panic!` message does
 not meet the interpolated-only test exception. When the closure contains a
 static string literal in tests, prefer `.expect("static message")`; only
 interpolated-only `panic!` fallbacks are permitted there.
+
+## Clone Detection: AST Feature Extraction
+
+Whitaker's experimental clone detector runs in two passes. Pass A is a token
+scan over the workspace; Pass B lifts each candidate span into an abstract
+syntax tree (AST) substrate that later scoring will consume. This release
+ships the Pass B substrate only — it does not yet report clones (see below).
+
+**What the substrate does.** Given a source file and a candidate byte range,
+`lower_span` validates a non-empty, UTF-8-aligned `ByteSpan`, parses the
+supplied source, and lowers the smallest syntax subtree that covers the span
+into a parser-independent `NormalizedTree`. Working from the smallest covering
+subtree keeps the representation tied to the candidate rather than the whole
+file.
+
+**Feature vectors.** From a `NormalizedTree`, extraction derives a
+deterministic set of features:
+
+- exact counts of each syntax kind;
+- dyadic fixed-point depth weighting (`2^63 >> depth`), so weights halve with
+  depth and collapse to zero beyond depth 63;
+- production bigrams and trigrams (parent-to-child and
+  grandparent-to-parent-to-child kind sequences); and
+- an opaque hexadecimal canonical hash of the normalized subtree.
+
+**Schema-versioned hashes.** Every canonical hash mixes in
+`PARSER_SCHEMA_VERSION`, which is tied to the pinned parser snapshot. A
+parser-schema change therefore changes every hash by design, intentionally
+invalidating persisted snapshots and caches so stale AST fingerprints are
+never reused across incompatible parser versions.
+
+**Parser feature.** `whitaker_clones_core` enables its exact-pinned
+`ra_ap_syntax` parser adapter through the default `parser` feature. The feature
+is on by default; building the crate with it disabled makes `lower_span`
+return `AstError::ParserUnavailable` instead of lowering anything.
+
+**Not yet emitted.** Type-3 clone scoring and SARIF Run 1 emission are deferred
+to roadmap item 7.3.2. This release builds and exposes the AST substrate only;
+it does not score clones or emit AST-based SARIF results.
+
+Contributors maintaining the pinned parser should follow the
+[`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)
+in the Developer's Guide.

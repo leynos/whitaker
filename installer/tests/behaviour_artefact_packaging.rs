@@ -280,11 +280,6 @@ fn given_packaged_with_known(world: &mut PackagingWorld) {
     given_packaged_artefact(world);
 }
 
-#[when("the archive filename is inspected")]
-fn when_filename_inspected(#[from(world)] _world: &mut PackagingWorld) {
-    // Filename is available via output; no additional action needed.
-}
-
 #[then("it matches the ArtefactName string representation")]
 fn then_filename_matches_artefact_name(world: &mut PackagingWorld) {
     let output = world.output.as_ref().expect("output set");

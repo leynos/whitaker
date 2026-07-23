@@ -81,7 +81,7 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
     }
     let root = parse.tree().syntax().clone();
     let target_range = text_range(span);
-    let selected = select_covering_node(&root, &(span.start()..span.end())).map_err(|error| {
+    let selected = select_covering_node(&root, span).map_err(|error| {
         trace_ast_error(
             error,
             "no AST syntax node covers the requested span",
@@ -114,13 +114,27 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
     Ok(NormalizedTree::new(lowered, span))
 }
 
-fn validate_covering_node_budget(depth: usize, node_count: usize) -> AstResult<()> {
+fn validate_covering_node_budget(span: ByteSpan, depth: usize, node_count: usize) -> AstResult<()> {
     if depth > MAX_AST_DEPTH {
+        error!(
+            start = span.start(),
+            end = span.end(),
+            depth,
+            limit = MAX_AST_DEPTH,
+            "AST covering-node selection exceeded the depth budget"
+        );
         return Err(AstError::TreeTooDeep {
             limit: MAX_AST_DEPTH,
         });
     }
     if node_count == MAX_AST_NODES {
+        error!(
+            start = span.start(),
+            end = span.end(),
+            node_count,
+            limit = MAX_AST_NODES,
+            "AST covering-node selection exceeded the node budget"
+        );
         return Err(AstError::TreeTooLarge {
             limit: MAX_AST_NODES,
         });
@@ -167,25 +181,26 @@ fn update_smallest_covering_node(selected: &mut Option<(SyntaxNode, u32)>, node:
 ///
 /// The depth and node budgets bound the descent. Among covering nodes with the
 /// same minimal width, the first (shallowest) encountered is retained.
-fn select_covering_node(root: &SyntaxNode, target: &Range<u32>) -> AstResult<SyntaxNode> {
+fn select_covering_node(root: &SyntaxNode, span: ByteSpan) -> AstResult<SyntaxNode> {
+    let target = span.start()..span.end();
     let mut selected = None;
     let mut node_count = 0_usize;
     let mut pending = vec![(root.clone(), 0_usize)];
 
     while let Some((node, depth)) = pending.pop() {
-        validate_covering_node_budget(depth, node_count)?;
+        validate_covering_node_budget(span, depth, node_count)?;
         node_count += 1;
 
         // A node that does not fully cover the target can neither be, nor
         // contain, the smallest covering node, so skip it and its subtree.
-        if !node_covers_target(&node, target) {
+        if !node_covers_target(&node, &target) {
             continue;
         }
         update_smallest_covering_node(&mut selected, &node);
 
         pending.extend(
             node.children()
-                .filter(|child| node_covers_target(child, target))
+                .filter(|child| node_covers_target(child, &target))
                 .map(|child| (child, depth + 1)),
         );
     }
@@ -238,12 +253,26 @@ impl LoweringLimits {
     /// cannot turn a single parse into unbounded lowering work.
     fn lower(&self, node: &SyntaxNode, depth: usize) -> AstResult<NormalizedNode> {
         if depth > self.maximum_depth {
+            error!(
+                start = self.span.start(),
+                end = self.span.end(),
+                depth,
+                limit = self.maximum_depth,
+                "AST lowering exceeded the depth budget"
+            );
             return Err(AstError::TreeTooDeep {
                 limit: self.maximum_depth,
             });
         }
         let lowered_nodes = self.node_count.get();
         if lowered_nodes == self.maximum_nodes {
+            error!(
+                start = self.span.start(),
+                end = self.span.end(),
+                node_count = lowered_nodes,
+                limit = self.maximum_nodes,
+                "AST lowering exceeded the node budget"
+            );
             return Err(AstError::TreeTooLarge {
                 limit: self.maximum_nodes,
             });
