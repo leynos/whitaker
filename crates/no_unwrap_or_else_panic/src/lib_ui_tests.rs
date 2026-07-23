@@ -184,6 +184,21 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
 }
 
+// A hand-authored same-named `#[test]` module has the same `fn`/`const` harness
+// pair shape as a real rstest companion (and an aliased `extern crate test`),
+// but it is not emitted by the `#[rstest]` proc-macro, so it carries no
+// macro-expansion provenance. Companion detection must reject it and the lint
+// must still fire on the parent function (diagnostic asserted via `.stderr`).
+#[cfg(not(windows))]
+#[test]
+fn hand_written_test_companion_does_not_exempt_parent_function() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_hand_written_test_companion",
+        "handwritten test companion (negative)",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
+}
+
 #[cfg(not(windows))]
 #[test]
 fn rstest_unwrap_outside_tests_still_fails_in_non_harness_code() {
@@ -200,6 +215,16 @@ fn rstest_empty_companion_does_not_exempt_parent_function() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(
         "fail_unwrap_in_rstest_empty_companion",
         "rstest empty companion (negative)",
+        &["--test", "-D", "no_unwrap_or_else_panic"],
+    ));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn aliased_test_crate_non_companion_does_not_exempt_parent_function() {
+    run_example_under_test_harness(&ExampleHarnessRun::with_flags(
+        "fail_unwrap_in_aliased_test_crate_non_companion",
+        "aliased test crate non-companion (negative)",
         &["--test", "-D", "no_unwrap_or_else_panic"],
     ));
 }

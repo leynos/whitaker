@@ -8,6 +8,7 @@ TOOL_PATH_SUFFIX = $$HOME/.cargo/bin:$$HOME/.bun/bin:$$HOME/.local/bin
 APP ?= whitaker-installer
 PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(PATH)
 CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo/bin/cargo" ] && echo "$(HOME)/.cargo/bin/cargo"))
+CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
@@ -105,7 +106,7 @@ test: ## Run tests with warnings treated as errors
 		rm -f "$$WHITAKER_BACKUP"; \
 		WHITAKER_BACKUP=""; \
 	fi; \
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -144,11 +145,11 @@ workflow-test-deps: ## Install Python dependencies for workflow tests
 
 target/%/$(APP): ## Build binary in debug or release mode
 	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
-	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
 lint: ## Run Clippy with warnings denied
-	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
-	$(CARGO) clippy $(CARGO_FLAGS) -- $(RUST_FLAGS)
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
+	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
@@ -187,7 +188,7 @@ nixie:
 	export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; $(NIXIE) --no-sandbox
 
 typecheck:
-	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS)
+	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) check $(CARGO_LOCKED) $(CARGO_FLAGS)
 
 verus: ## Run the pinned Verus proof sidecar
 	./scripts/run-verus.sh
@@ -229,13 +230,13 @@ release-installer-dry-run: ## Build and package the host-platform installer arch
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	HOST_TRIPLE=$$(rustc -vV | awk -F ': ' '/host:/ {print $$2}'); \
-	VERSION=$$($(CARGO) metadata --manifest-path installer/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "whitaker-installer") | .version'); \
+	VERSION=$$($(CARGO) metadata $(CARGO_LOCKED) --manifest-path installer/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "whitaker-installer") | .version'); \
 	if [ -z "$$VERSION" ]; then \
 		echo "Failed to extract whitaker-installer version from Cargo metadata"; \
 		exit 1; \
 	fi; \
-	$(CARGO) build $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
-	$(CARGO) build $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) -p whitaker-installer --release --target "$$HOST_TRIPLE"; \
+	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) --release -p whitaker-installer --bin whitaker-package-installer --target "$$HOST_TRIPLE"; \
 	DIST_DIR="$$TMP_DIR/dist"; \
 	mkdir -p "$$DIST_DIR"; \
 	case "$$HOST_TRIPLE" in \
@@ -287,8 +288,8 @@ publish-check: ## Build, test, and validate packages before publishing
 	TOOLCHAIN="$$PINNED_TOOLCHAIN"; \
 	ORIG_DIR="$(CURDIR)"; \
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build --workspace --all-features $(BUILD_JOBS); \
-	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_LOCKED) --workspace --all-features $(BUILD_JOBS); \
+	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(CARGO_LOCKED) --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \
@@ -302,7 +303,7 @@ publish-check: ## Build, test, and validate packages before publishing
 		TARGET_REV=$${GIT_TAG:-$${WHITAKER_REV:-$$CLONE_HEAD}}; \
 		git checkout "$$TARGET_REV"; \
 		for lint in $(LINT_CRATES); do \
-			CARGO_TARGET_DIR="$$TARGET_DIR" RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build --release --features dylint-driver -p $$lint; \
+			CARGO_TARGET_DIR="$$TARGET_DIR" RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN build $(CARGO_LOCKED) --release --features dylint-driver -p $$lint; \
 			mkdir -p "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release"; \
 			cp "$$TARGET_DIR/release/lib$$lint.so" "$$TARGET_DIR/dylint/libraries/$$TOOLCHAIN/release/lib$$lint@$$TOOLCHAIN.so"; \
 		done; \
@@ -310,7 +311,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	}; \
 	cd "$$ORIG_DIR"; \
 	for crate in $(PUBLISH_PACKAGES); do \
-		$(CARGO) package -p $$crate --allow-dirty; \
+		$(CARGO) package $(CARGO_LOCKED) -p $$crate --allow-dirty; \
 	done
 
 package-lints: ## Build lint crates and package as .tar.zst archives

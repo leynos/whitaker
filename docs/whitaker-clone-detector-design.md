@@ -152,7 +152,7 @@ hashes = 128
 - `locations[0]`: primary occurrence (current file if emitted by lint)
 - `relatedLocations[*]`: peer fragments in the class
 - `partialFingerprints`: `{ "whitakerFragment": FragmentId, "tokenHash": u64,`
-  `"astHash": u64 }`
+  `"astHash": opaque hex string }`
 - `properties`:
 
   ```json
@@ -238,32 +238,36 @@ pub fn normalize(src: &str, norm: Norm) -> Vec<(u32, std::ops::Range<usize>)> {
 ### Parsing and region mapping
 
 ```rust
-use ra_ap_syntax::{SourceFile, SyntaxNode, TextRange, TextSize};
+use whitaker_clones_core::{AstError, AstResult, ByteSpan, NormalizedTree, lower_span};
 
-pub struct AstFragment {
-    pub node: SyntaxNode,
-    pub range: TextRange,
+pub fn map_bytes_to_node(
+    file_text: &str,
+    start: usize,
+    end: usize,
+) -> AstResult<NormalizedTree> {
+    let start = u32::try_from(start).map_err(|_| AstError::OffsetTooLarge(start))?;
+    let end = u32::try_from(end).map_err(|_| AstError::OffsetTooLarge(end))?;
+    let span = ByteSpan::new(file_text, start, end)?;
+    lower_span(file_text, span)
 }
 
-pub fn map_bytes_to_node(file_text: &str, start: usize, end: usize) -> AstFragment {
-    let sf = SourceFile::parse(file_text).ok().expect("parse");
-    let range = TextRange::new(TextSize::from(start as u32), TextSize::from(end as u32));
-    // Heuristic: choose the smallest node covering the byte range.
-    let mut best = sf.syntax().clone();
-    for n in sf.syntax().descendants() {
-        let r = n.text_range();
-        if r.contains_range(range) && r.len() <= best.text_range().len() {
-            best = n;
+pub fn describe_lowering_failure(file_text: &str, start: usize, end: usize) -> String {
+    match map_bytes_to_node(file_text, start, end) {
+        Ok(tree) => format!("lowered span {:?}", tree.span()),
+        Err(AstError::InvalidSpan { start, end }) => format!("invalid span {start}..{end}"),
+        Err(AstError::UnparsableSpan { start, end }) => {
+            format!("parser recovery left {start}..{end} unparsable")
         }
+        Err(error) => error.to_string(),
     }
-    AstFragment { node: best, range }
 }
 ```
 
 ### Feature extraction
 
-- **Node-kind histogram:** vector `V[kind_id] += w(depth)` with
-  `w(depth) = 1 / (1 + depth)`.
+- **Node-kind histogram:** vector `V[kind_id] += w(depth)` with dyadic
+  fixed-point weights `w(depth) = 2^63 >> depth`, which stay nonzero through
+  depth 63 and become zero beyond it.
 - **Production multiset:** bigrams and trigrams of
   `(parent_kind -> child_kind)`.
 - **Canonical subtree hash:** Merkle-style hash where leaves are normalized
@@ -284,8 +288,9 @@ pub fn map_bytes_to_node(file_text: &str, start: usize, end: usize) -> AstFragme
 
 ## Incrementality and caching
 
-- **Per-file cache:** `{ path, mtime, hash(file_text), token_fp, minhash,
-  ast_hashes }` in `target/whitaker/clones-cache.bin`.
+- **Per-file cache:**
+  `{ path, mtime, hash(file_text), token_fp, minhash, ast_hashes }` in
+  `target/whitaker/clones-cache.bin`.
 - **Dirtying:** path or mtime change, or config hash change, invalidates
   entries.
 - **Sharding:** index shards by the first 12 bits of the fingerprint to reduce
@@ -377,8 +382,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 4. **Level enum serialization.** The `Level` enum serializes as lowercase
    strings (`"none"`, `"note"`, `"warning"`, `"error"`) via
-   `#[serde(rename_all = "lowercase")]`, matching the SARIF 2.1.0
-   specification. `Warning` is the default variant.
+   `#[serde(rename_all = "lowercase")]`, matching the SARIF 2.1.0 specification.
+   `Warning` is the default variant.
 
 5. **Deduplication key composition.** Result deduplication uses a composite key
    of `(whitakerFragment fingerprint, file URI, region)`. Results lacking any
@@ -418,8 +423,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    values in the token kind alone. The shipped implementation therefore:
    preserves original identifier, lifetime, and literal text for `T1`; treats
    Rust keywords and punctuation as fixed atoms; and canonicalizes identifiers
-   and lifetimes by encounter order plus literals by category (`<NUM>`,
-   `<STR>`, `<CHAR>`, `<BYTE>`, `<BYTE_STR>`) for `T2`.
+   and lifetimes by encounter order plus literals by category (`<NUM>`, `<STR>`,
+   `<CHAR>`, `<BYTE>`, `<BYTE_STR>`) for `T2`.
 
 3. **Malformed source handling.** Normalization is fallible. Unsupported tokens
    and unterminated block comments or literals are reported as typed
@@ -601,8 +606,8 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
 
 3. **The bounded proof shape is deliberately split by invariant.** The empty
    input harness checks that `MinHasher::sketch(&[])` returns
-   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the
-   same one-fingerprint set twice and proves equality for an arbitrary symbolic
+   `IndexError::EmptyFingerprintSet`. The determinism harness sketches the same
+   one-fingerprint set twice and proves equality for an arbitrary symbolic
    signature lane. The duplicate-hash harness keeps the retained hash symbolic
    over a bounded `u8` domain and proves that repeating that hash at a distinct
    range does not change the first signature lane.
@@ -640,6 +645,55 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    harnesses use `#[kani::unwind(7)]`, one greater than the six-slot bounded
    pair log, so Kani can unwind insertion-summary and teardown loops without
    weakening the bounded state being checked.
+
+## Implementation decisions (7.3.1)
+
+1. **The AST engine is isolated behind a lowered intermediate representation.**
+   `crates/whitaker_clones_core/src/ast/lowering.rs` is the only file allowed
+   to import `ra_ap_syntax` or its parser transitive crates. It lowers the
+   parser tree into `NormalizedTree`, which owns `NormalizedNode` values keyed
+   by opaque `KindId` values, a `Depth`, a `LeafClass`, and child vectors. The
+   pure feature modules depend only on that representation, so a future parser
+   re-pin recompiles the adapter instead of leaking parser vocabulary through
+   the domain.
+
+2. **Candidate spans lower to the smallest covering syntax node.** The adapter
+   parses a Rust source file with `ra_ap_syntax`, maps the candidate byte span
+   to a text range, walks descendants that cover that range, and chooses the
+   tightest covering node. Empty, non-character-boundary, out-of-bounds, and
+   unparsable spans return typed `AstError` values instead of panicking.
+
+3. **AST features use an exact count substrate.** The stored feature vector is
+   based on exact `(KindId, Depth) -> u32` counts, production bigram/trigram
+   counts, and an `AstHash` seeded with `PARSER_SCHEMA_VERSION`. Weighted
+   histograms are derived from the exact counts using a dyadic fixed-point
+   scale of `2^63`, so weights stay nonzero through depth 63 and become zero
+   beyond that. Equality and snapshot tests are deterministic and do not
+   depend on floating-point ordering or platform behaviour. The public hash
+   output remains opaque hexadecimal, not a raw `u64`.
+
+4. **`ra_ap_syntax` is exact-pinned and gated behind the default parser
+   feature.** The 7.3.1 implementation pins `ra_ap_syntax` to `=0.0.334` and
+   enables it through the default `parser` feature of `whitaker_clones_core`.
+   Normal builds get the real adapter by default. Kani runs pass
+   `--no-default-features`, compiling a parser-free adapter stub because Kani
+   0.67 currently uses a Rust toolchain older than the parser snapshot's MSRV.
+
+5. **Proof obligations remain split by what each tool can substantiate.**
+   Unit tests, `rstest-bdd`, snapshots, and `proptest` cover runtime lowering,
+   sibling-order independence for count and production accumulation, leaf
+   normalization, and parser-version drift. Kani verifies bounded AST
+   span-cover selection and bounded AST feature invariants over synthetic
+   trees. Verus proves the contribution-count accumulator algebra for a
+   supplied multiset; it does not claim to verify parser traversal or the
+   production Rust implementation directly.
+
+6. **No new ADR is needed for 7.3.1.** The lowered-IR boundary is a local
+   adapter decision, and the proof strategy is an application of
+   [ADR 003](adr-003-formal-proof-strategy-for-clone-detector-pipeline.md): use
+   ordinary tests for broad behavioural coverage, Kani for bounded execution of
+   selected Rust code, and Verus for sidecar proofs with explicit trust
+   boundaries.
 
 ## Minimal code skeletons (selected)
 
@@ -685,15 +739,21 @@ impl LshIndex {
 }
 ```
 
-### AST features
+### AST features and hashing
+
+The parser adapter lowers source into `NormalizedTree`; canonical hashing
+operates on that lowered tree and does not consume `ra_ap_syntax::SyntaxNode`
+directly.
 
 ```rust
-pub fn ast_features(node: &ra_ap_syntax::SyntaxNode) -> FeatureVec {
-    /* histogram with depth weights */
+pub fn kind_counts(tree: &NormalizedTree) -> KindCounts {
+    /* exact kind counts over lowered trees */
 }
+```
 
-pub fn ast_hash(node: &ra_ap_syntax::SyntaxNode) -> u64 {
-    /* merkle-ish canonical hash */
+```rust
+pub fn canonical_hash(tree: &NormalizedTree) -> AstHash {
+    /* canonical hash over lowered trees */
 }
 ```
 

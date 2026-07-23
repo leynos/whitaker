@@ -29,6 +29,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 flate2 = "1.1"
 serde_json = "1.0.149"
 toml = "1.1.2"
+tracing = { version = "0.1.44", default-features = false, features = ["attributes", "std"] }
 thiserror = "2"
 trybuild = "1.0.116"
 log = "0.4.28"
@@ -42,6 +43,10 @@ rstest-bdd = "0.5.0"
 rstest-bdd-macros = "0.5.0"
 proptest = "1"
 rustc_lexer = "0.1.0"
+# Exact-pin rust-analyzer's unstable parser snapshot so AST hashes stay tied to
+# the parser schema. Whenever the nightly toolchain changes, bump this version
+# in lockstep to prevent AST hash drift.
+ra_ap_syntax = "=0.0.334"
 whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.7" }
 whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.7" }
 temp-env = "0.3.6"

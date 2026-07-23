@@ -1,0 +1,7 @@
+---
+source: crates/whitaker_clones_core/src/ast/lowering.rs
+expression: "json!({ \"parser_schema_version\": PARSER_SCHEMA_VERSION })"
+---
+{
+  "parser_schema_version": "whitaker_ast=1;ra_ap_syntax=0.0.334"
+}

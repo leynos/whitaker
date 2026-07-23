@@ -11,13 +11,13 @@
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::path::Component;
+use std::path::Path;
 
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::sym;
+use rustc_span::{RemapPathScopeComponents, sym};
 use serde::Deserialize;
 use whitaker::SharedConfig;
 use whitaker::hir::has_test_like_hir_attributes;
@@ -166,19 +166,24 @@ fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
     cx.tcx.is_diagnostic_item(sym::Option, def_id) || cx.tcx.is_diagnostic_item(sym::Result, def_id)
 }
 
-// Check if the expression is inside a function that appears to be a test.
-//
-// This is a fallback for when the standard attribute detection doesn't find
-// #[test] (which may happen in integration test crates where the test harness
-// processes attributes differently).
-fn is_likely_test_function<'tcx>(
+fn is_owner_test_function<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &hir::Expr<'tcx>,
     harness_marked_test_functions: &HashSet<hir::HirId>,
     additional_test_attributes: &[AttributePath],
 ) -> bool {
-    if cx
-        .tcx
+    let owner_hir_id: hir::HirId = expr.hir_id.owner.into();
+    has_test_like_hir_attributes(cx.tcx.hir_attrs(owner_hir_id), additional_test_attributes)
+        || is_harness_marked_test_function(owner_hir_id, harness_marked_test_functions)
+}
+
+fn ancestor_function_is_test<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &hir::Expr<'tcx>,
+    harness_marked_test_functions: &HashSet<hir::HirId>,
+    additional_test_attributes: &[AttributePath],
+) -> bool {
+    cx.tcx
         .hir_parent_iter(expr.hir_id)
         .filter_map(|(_, node)| extract_function_item(node))
         .any(|item| {
@@ -186,34 +191,46 @@ fn is_likely_test_function<'tcx>(
             has_test_like_hir_attributes(attrs, additional_test_attributes)
                 || is_harness_marked_test_function(item.hir_id(), harness_marked_test_functions)
         })
-    {
-        return true;
-    }
+}
 
-    if is_in_cfg_test_module(cx, expr.hir_id) {
-        return true;
-    }
+fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>) -> bool {
+    cx.tcx.sess.local_crate_source_file().is_some_and(|source| {
+        is_integration_test_crate_root(source.path(RemapPathScopeComponents::DIAGNOSTICS))
+    })
+}
 
-    // Fallback: check if the source file looks like a test file
-    let span = expr.span;
-    if let Some(filename) = cx
-        .tcx
-        .sess
-        .source_map()
-        .span_to_filename(span)
-        .into_local_path()
-    {
-        // Integration tests are in tests/ directory; use path components for
-        // cross-platform compatibility (Windows uses backslashes)
-        let has_tests_component = filename
-            .components()
-            .any(|c| matches!(c, Component::Normal(s) if s == OsStr::new("tests")));
-        if has_tests_component {
-            return true;
-        }
-    }
+fn is_integration_test_crate_root(crate_root: &Path) -> bool {
+    let is_direct_test = crate_root
+        .parent()
+        .and_then(Path::file_name)
+        .is_some_and(|directory| directory == OsStr::new("tests"));
+    let is_multi_file_test = crate_root.file_name() == Some(OsStr::new("main.rs"))
+        && crate_root
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::file_name)
+            .is_some_and(|directory| directory == OsStr::new("tests"));
 
-    false
+    is_direct_test || is_multi_file_test
+}
+fn is_likely_test_function<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &hir::Expr<'tcx>,
+    harness_marked_test_functions: &HashSet<hir::HirId>,
+    additional_test_attributes: &[AttributePath],
+) -> bool {
+    is_owner_test_function(
+        cx,
+        expr,
+        harness_marked_test_functions,
+        additional_test_attributes,
+    ) || ancestor_function_is_test(
+        cx,
+        expr,
+        harness_marked_test_functions,
+        additional_test_attributes,
+    ) || is_in_cfg_test_module(cx, expr.hir_id)
+        || is_in_tests_directory(cx)
 }
 
 fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {

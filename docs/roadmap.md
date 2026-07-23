@@ -470,10 +470,16 @@
 
 ### 7.3. AST refinement (Type-3)
 
-- [ ] 7.3.1. Map candidate spans to `ra_ap_syntax` nodes and extract AST
-  feature vectors. See [clone detector
-  design](whitaker-clone-detector-design.md) §Pass B: AST engine
-  (ra_ap_syntax).
+- [x] 7.3.1. Map candidate spans to `ra_ap_syntax` nodes and extract AST
+  feature vectors. Evidence: `ra_ap_syntax = "=0.0.334"` is exact-pinned;
+  `build.rs` exports the exact parser-version component and `hashing.rs`
+  combines it with the AST schema revision in `PARSER_SCHEMA_VERSION`.
+  `crates/whitaker_clones_core/tests/build_script_integration.rs` provides
+  hermetic temporary-workspace Cargo validation of the parser pin, covering an
+  exact pin and its emitted parser version, rejection of a loose/non-exact pin,
+  and rejection of a missing workspace dependency.
+  See [clone detector design](whitaker-clone-detector-design.md) §Pass B:
+  AST engine (ra_ap_syntax).
   Requires 7.2.3.
 - [ ] 7.3.2. Score Type-3 similarity and update SARIF run 1 with cosine and AST
   hash metadata. See [clone detector design](whitaker-clone-detector-design.md)

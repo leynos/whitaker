@@ -40,7 +40,6 @@ Feature: Artefact packaging for rolling release
 
   Scenario: Archive filename matches ArtefactName convention
     Given a packaged artefact with known components
-    When the archive filename is inspected
     Then it matches the ArtefactName string representation
 
   Scenario: Archive contains multiple library files

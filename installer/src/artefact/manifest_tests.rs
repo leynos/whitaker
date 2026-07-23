@@ -17,7 +17,7 @@ fn sample_provenance() -> ManifestProvenance {
 #[fixture]
 fn sample_content() -> ManifestContent {
     ManifestContent {
-        generated_at: GeneratedAt::new("2026-02-03T00:00:00Z"),
+        generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
         files: vec!["libwhitaker_lints@nightly-2026-05-28-x86_64-unknown-linux-gnu.so".to_owned()],
         sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid digest"),
     }
@@ -42,7 +42,7 @@ fn accessors_return_all_fields(sample_manifest: Manifest) {
     );
     assert_eq!(
         sample_manifest.generated_at().as_str(),
-        "2026-02-03T00:00:00Z"
+        "2026-05-28T00:00:00Z"
     );
     assert_eq!(sample_manifest.files().len(), 1);
     assert_eq!(sample_manifest.sha256().as_str().len(), 64);
@@ -50,8 +50,8 @@ fn accessors_return_all_fields(sample_manifest: Manifest) {
 
 #[rstest]
 fn generated_at_display() {
-    let ts = GeneratedAt::new("2026-02-03T00:00:00Z");
-    assert_eq!(format!("{ts}"), "2026-02-03T00:00:00Z");
+    let ts = GeneratedAt::new("2026-05-28T00:00:00Z");
+    assert_eq!(format!("{ts}"), "2026-05-28T00:00:00Z");
 }
 
 #[rstest]
@@ -101,7 +101,7 @@ fn manifest_with_multiple_files() {
         target: TargetTriple::try_from("aarch64-apple-darwin").expect("valid"),
     };
     let content = ManifestContent {
-        generated_at: GeneratedAt::new("2026-02-03T12:00:00Z"),
+        generated_at: GeneratedAt::new("2026-05-28T12:00:00Z"),
         files: vec!["file_a.dylib".to_owned(), "file_b.dylib".to_owned()],
         sha256: Sha256Digest::try_from("b".repeat(64).as_str()).expect("valid"),
     };
@@ -123,7 +123,7 @@ fn serde_round_trip(sample_manifest: Manifest) {
         "schema_version": 1,
         "toolchain": "nightly-2026-05-28",
         "target": "wasm32-unknown-unknown",
-        "generated_at": "2026-02-03T00:00:00Z",
+        "generated_at": "2026-05-28T00:00:00Z",
         "files": ["lib.so"],
         "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }"#

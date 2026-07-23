@@ -9,16 +9,32 @@ repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
 
+[features]
+default = ["parser"]
+parser = ["dep:ra_ap_syntax"]
 [dependencies]
 thiserror = { workspace = true }
 rustc_lexer = { workspace = true }
+ra_ap_syntax = { workspace = true, optional = true }
 sha2 = { workspace = true }
+tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
 
 [dev-dependencies]
+camino = { workspace = true }
+cap-std = { workspace = true }
+insta = { workspace = true }
+proptest = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+toml = { workspace = true }
 
+[build-dependencies]
+camino = { workspace = true }
+cap-std = { workspace = true }
+toml = { workspace = true }
 [lints]
 workspace = true

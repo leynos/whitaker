@@ -5,6 +5,7 @@ use rstest::rstest;
 use rustc_ast::AttrStyle;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
+use std::path::Path;
 
 // -------------------------------------------------------------------------
 // Test fixtures for HIR attributes
@@ -81,6 +82,18 @@ fn is_test_attribute_rejects_non_test_attributes(#[case] segments: &[&str]) {
 fn is_test_attribute_returns_false_for_parsed_attributes() {
     let attr = parsed_must_use_attribute();
     assert!(!is_test_attribute(&attr));
+}
+
+#[rstest]
+#[case::integration_test_crate("tests/clone_detector.rs", true)]
+#[case::multi_file_integration_test_crate("tests/clone_detector/main.rs", true)]
+#[case::unrelated_tests_ancestor("fixtures/tests/support/source.rs", false)]
+#[case::ordinary_source("src/lib.rs", false)]
+fn integration_test_crate_root_is_anchored_to_the_source_root(
+    #[case] path: &str,
+    #[case] expected: bool,
+) {
+    assert_eq!(is_integration_test_crate_root(Path::new(path)), expected);
 }
 
 // -------------------------------------------------------------------------

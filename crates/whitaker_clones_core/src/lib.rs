@@ -11,10 +11,17 @@
 //! - Locality-sensitive hashing (LSH) candidate generation.
 //! - Token-pass acceptance and SARIF Run 0 emission for accepted pairs.
 
+pub mod ast;
+mod hashing;
 pub mod index;
 pub mod run0;
 pub mod token;
 
+pub use ast::{
+    AstError, AstHash, AstResult, ByteSpan, KindCounts, KindHistogram, KindWeight, NormalizedTree,
+    Production, ProductionMultiset, canonical_hash, kind_counts, kind_histogram, lower_span,
+    production_multiset, weighted_histogram,
+};
 pub use index::{
     CandidatePair, FragmentId, IndexError, IndexResult, LshConfig, LshIndex, MINHASH_SIZE,
     MinHashSignature, MinHasher,

@@ -1,0 +1,434 @@
+---
+source: crates/whitaker_clones_core/src/ast/lowering_tests.rs
+assertion_line: 219
+expression: "json!({\n    \"schema\": PARSER_SCHEMA_VERSION, \"span\":\n    { \"start\": span.start(), \"end\": span.end() }, \"kind_counts\": counts,\n    \"productions\": productions, \"canonical_hash\":\n    canonical_hash(&tree).to_hex(),\n})"
+---
+{
+  "canonical_hash": "e5e9a4c891df8391",
+  "kind_counts": [
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "COMMA"
+    },
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "L_PAREN"
+    },
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "R_PAREN"
+    },
+    {
+      "count": 1,
+      "depth": 4,
+      "kind": "L_CURLY"
+    },
+    {
+      "count": 1,
+      "depth": 4,
+      "kind": "R_CURLY"
+    },
+    {
+      "count": 1,
+      "depth": 5,
+      "kind": "PLUS"
+    },
+    {
+      "count": 2,
+      "depth": 4,
+      "kind": "COLON"
+    },
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "THIN_ARROW"
+    },
+    {
+      "count": 1,
+      "depth": 2,
+      "kind": "FN_KW"
+    },
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "IDENT"
+    },
+    {
+      "count": 2,
+      "depth": 6,
+      "kind": "IDENT"
+    },
+    {
+      "count": 1,
+      "depth": 7,
+      "kind": "IDENT"
+    },
+    {
+      "count": 2,
+      "depth": 8,
+      "kind": "IDENT"
+    },
+    {
+      "count": 2,
+      "depth": 9,
+      "kind": "IDENT"
+    },
+    {
+      "count": 1,
+      "depth": 4,
+      "kind": "BIN_EXPR"
+    },
+    {
+      "count": 1,
+      "depth": 2,
+      "kind": "BLOCK_EXPR"
+    },
+    {
+      "count": 1,
+      "depth": 1,
+      "kind": "FN"
+    },
+    {
+      "count": 2,
+      "depth": 4,
+      "kind": "IDENT_PAT"
+    },
+    {
+      "count": 1,
+      "depth": 2,
+      "kind": "NAME"
+    },
+    {
+      "count": 2,
+      "depth": 5,
+      "kind": "NAME"
+    },
+    {
+      "count": 1,
+      "depth": 6,
+      "kind": "NAME_REF"
+    },
+    {
+      "count": 2,
+      "depth": 7,
+      "kind": "NAME_REF"
+    },
+    {
+      "count": 2,
+      "depth": 8,
+      "kind": "NAME_REF"
+    },
+    {
+      "count": 2,
+      "depth": 3,
+      "kind": "PARAM"
+    },
+    {
+      "count": 1,
+      "depth": 2,
+      "kind": "PARAM_LIST"
+    },
+    {
+      "count": 1,
+      "depth": 4,
+      "kind": "PATH"
+    },
+    {
+      "count": 2,
+      "depth": 5,
+      "kind": "PATH"
+    },
+    {
+      "count": 2,
+      "depth": 6,
+      "kind": "PATH"
+    },
+    {
+      "count": 2,
+      "depth": 5,
+      "kind": "PATH_EXPR"
+    },
+    {
+      "count": 1,
+      "depth": 5,
+      "kind": "PATH_SEGMENT"
+    },
+    {
+      "count": 2,
+      "depth": 6,
+      "kind": "PATH_SEGMENT"
+    },
+    {
+      "count": 2,
+      "depth": 7,
+      "kind": "PATH_SEGMENT"
+    },
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "PATH_TYPE"
+    },
+    {
+      "count": 2,
+      "depth": 4,
+      "kind": "PATH_TYPE"
+    },
+    {
+      "count": 1,
+      "depth": 2,
+      "kind": "RET_TYPE"
+    },
+    {
+      "count": 1,
+      "depth": 0,
+      "kind": "SOURCE_FILE"
+    },
+    {
+      "count": 1,
+      "depth": 3,
+      "kind": "STMT_LIST"
+    }
+  ],
+  "productions": [
+    {
+      "count": 1,
+      "production": "BIN_EXPR -> PLUS"
+    },
+    {
+      "count": 2,
+      "production": "BIN_EXPR -> PATH_EXPR"
+    },
+    {
+      "count": 1,
+      "production": "BLOCK_EXPR -> STMT_LIST"
+    },
+    {
+      "count": 1,
+      "production": "FN -> FN_KW"
+    },
+    {
+      "count": 1,
+      "production": "FN -> BLOCK_EXPR"
+    },
+    {
+      "count": 1,
+      "production": "FN -> NAME"
+    },
+    {
+      "count": 1,
+      "production": "FN -> PARAM_LIST"
+    },
+    {
+      "count": 1,
+      "production": "FN -> RET_TYPE"
+    },
+    {
+      "count": 2,
+      "production": "IDENT_PAT -> NAME"
+    },
+    {
+      "count": 3,
+      "production": "NAME -> IDENT"
+    },
+    {
+      "count": 5,
+      "production": "NAME_REF -> IDENT"
+    },
+    {
+      "count": 2,
+      "production": "PARAM -> COLON"
+    },
+    {
+      "count": 2,
+      "production": "PARAM -> IDENT_PAT"
+    },
+    {
+      "count": 2,
+      "production": "PARAM -> PATH_TYPE"
+    },
+    {
+      "count": 1,
+      "production": "PARAM_LIST -> COMMA"
+    },
+    {
+      "count": 1,
+      "production": "PARAM_LIST -> L_PAREN"
+    },
+    {
+      "count": 1,
+      "production": "PARAM_LIST -> R_PAREN"
+    },
+    {
+      "count": 2,
+      "production": "PARAM_LIST -> PARAM"
+    },
+    {
+      "count": 5,
+      "production": "PATH -> PATH_SEGMENT"
+    },
+    {
+      "count": 2,
+      "production": "PATH_EXPR -> PATH"
+    },
+    {
+      "count": 5,
+      "production": "PATH_SEGMENT -> NAME_REF"
+    },
+    {
+      "count": 3,
+      "production": "PATH_TYPE -> PATH"
+    },
+    {
+      "count": 1,
+      "production": "RET_TYPE -> THIN_ARROW"
+    },
+    {
+      "count": 1,
+      "production": "RET_TYPE -> PATH_TYPE"
+    },
+    {
+      "count": 1,
+      "production": "SOURCE_FILE -> FN"
+    },
+    {
+      "count": 1,
+      "production": "STMT_LIST -> L_CURLY"
+    },
+    {
+      "count": 1,
+      "production": "STMT_LIST -> R_CURLY"
+    },
+    {
+      "count": 1,
+      "production": "STMT_LIST -> BIN_EXPR"
+    },
+    {
+      "count": 2,
+      "production": "BIN_EXPR -> PATH_EXPR -> PATH"
+    },
+    {
+      "count": 1,
+      "production": "BLOCK_EXPR -> STMT_LIST -> L_CURLY"
+    },
+    {
+      "count": 1,
+      "production": "BLOCK_EXPR -> STMT_LIST -> R_CURLY"
+    },
+    {
+      "count": 1,
+      "production": "BLOCK_EXPR -> STMT_LIST -> BIN_EXPR"
+    },
+    {
+      "count": 1,
+      "production": "FN -> BLOCK_EXPR -> STMT_LIST"
+    },
+    {
+      "count": 1,
+      "production": "FN -> NAME -> IDENT"
+    },
+    {
+      "count": 1,
+      "production": "FN -> PARAM_LIST -> COMMA"
+    },
+    {
+      "count": 1,
+      "production": "FN -> PARAM_LIST -> L_PAREN"
+    },
+    {
+      "count": 1,
+      "production": "FN -> PARAM_LIST -> R_PAREN"
+    },
+    {
+      "count": 2,
+      "production": "FN -> PARAM_LIST -> PARAM"
+    },
+    {
+      "count": 1,
+      "production": "FN -> RET_TYPE -> THIN_ARROW"
+    },
+    {
+      "count": 1,
+      "production": "FN -> RET_TYPE -> PATH_TYPE"
+    },
+    {
+      "count": 2,
+      "production": "IDENT_PAT -> NAME -> IDENT"
+    },
+    {
+      "count": 2,
+      "production": "PARAM -> IDENT_PAT -> NAME"
+    },
+    {
+      "count": 2,
+      "production": "PARAM -> PATH_TYPE -> PATH"
+    },
+    {
+      "count": 2,
+      "production": "PARAM_LIST -> PARAM -> COLON"
+    },
+    {
+      "count": 2,
+      "production": "PARAM_LIST -> PARAM -> IDENT_PAT"
+    },
+    {
+      "count": 2,
+      "production": "PARAM_LIST -> PARAM -> PATH_TYPE"
+    },
+    {
+      "count": 5,
+      "production": "PATH -> PATH_SEGMENT -> NAME_REF"
+    },
+    {
+      "count": 2,
+      "production": "PATH_EXPR -> PATH -> PATH_SEGMENT"
+    },
+    {
+      "count": 5,
+      "production": "PATH_SEGMENT -> NAME_REF -> IDENT"
+    },
+    {
+      "count": 3,
+      "production": "PATH_TYPE -> PATH -> PATH_SEGMENT"
+    },
+    {
+      "count": 1,
+      "production": "RET_TYPE -> PATH_TYPE -> PATH"
+    },
+    {
+      "count": 1,
+      "production": "SOURCE_FILE -> FN -> FN_KW"
+    },
+    {
+      "count": 1,
+      "production": "SOURCE_FILE -> FN -> BLOCK_EXPR"
+    },
+    {
+      "count": 1,
+      "production": "SOURCE_FILE -> FN -> NAME"
+    },
+    {
+      "count": 1,
+      "production": "SOURCE_FILE -> FN -> PARAM_LIST"
+    },
+    {
+      "count": 1,
+      "production": "SOURCE_FILE -> FN -> RET_TYPE"
+    },
+    {
+      "count": 1,
+      "production": "STMT_LIST -> BIN_EXPR -> PLUS"
+    },
+    {
+      "count": 2,
+      "production": "STMT_LIST -> BIN_EXPR -> PATH_EXPR"
+    }
+  ],
+  "schema": "whitaker_ast=1;ra_ap_syntax=0.0.334",
+  "span": {
+    "end": 39,
+    "start": 0
+  }
+}
