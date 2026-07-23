@@ -82,7 +82,9 @@ escalation, not a workaround.
   (7.6.x) cannot accidentally compare raw discriminants across parser pins.
 - **Bounded per-candidate cost.** Lowering touches one candidate subtree; the
   upstream `min_nodes`/node-count bound from the Pass A config governs subtree
-  size. 7.3.1 does not lower whole files; the smallest-covering selection
+  size. 7.3.1 avoids indiscriminate full-file lowering — a candidate that spans
+  the source still legitimately selects `SOURCE_FILE` and intentionally lowers
+  the complete file through `lower_span`. The smallest-covering selection
   descends from the root via a bounded pending-stack worklist over covering
   children, enforcing the `MAX_AST_NODES` node budget and `MAX_AST_DEPTH`
   depth budget.
