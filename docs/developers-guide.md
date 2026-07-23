@@ -1464,9 +1464,32 @@ This helper is architecturally significant for two reasons:
   lint-specific ancestry logic, so other lints can reuse the same test-harness
   discovery rules if they need them later.
 - It only marks a function when a same-named sibling module in the same module
-  scope contains rstest synthesis evidence (`RSTEST_HARNESS_DESCRIPTOR` or a
-  `fn`/`const` harness-descriptor pair), which prevents both empty modules and
-  arbitrary const-only sibling modules from inheriting test status accidentally.
+  scope carries reliable rstest synthesis evidence, which prevents empty
+  modules, arbitrary const-only sibling modules, and hand-authored `#[test]`
+  modules from inheriting test status accidentally.
+
+Two independent kinds of evidence qualify a sibling module as an rstest
+companion:
+
+1. **Explicit marker.** The module exposes a `RSTEST_HARNESS_DESCRIPTOR` const.
+   This is unambiguous — no hand-authored test module emits that marker — so it
+   qualifies the module on its own, and manual regression fixtures that cannot
+   run the real proc-macro rely on it.
+2. **Harness pair with expansion provenance.** The module contains the in-module
+   `fn` / same-span (or adjacent split-span) `const` descriptor pair that
+   `rustc --test` synthesizes, **and** the module item itself originates from
+   macro expansion (`module_item.span.from_expansion()`).
+
+The provenance guard in the second case is load-bearing. The `--test` harness
+emits the same-named, same-span `const` descriptor for **every** `#[test]`
+function, so the `fn`/`const` pair on its own is not rstest-specific: a
+hand-authored `mod foo { extern crate test as t; #[test] fn bar() {} }` sitting
+next to an ordinary `fn foo` has the identical HIR shape and would otherwise
+wrongly exempt `fn foo`. The distinguishing rstest/`rustc` invariant is that
+rstest generates the companion module through its attribute proc-macro, so the
+module item comes from macro expansion, whereas a handwritten module sits at
+the crate's root syntax context. The harness-pair heuristic is therefore only
+trusted for modules that come from expansion.
 
 The implementation follows three steps:
 
@@ -1475,12 +1498,10 @@ The implementation follows three steps:
 2. For each function item, look for a same-named sibling module in the same
    parent module.
 3. Inspect that sibling module for rstest synthesis evidence before marking the
-   original function as a test context. A module qualifies as a companion when
-   it either exposes a `RSTEST_HARNESS_DESCRIPTOR` const (the descriptor-only
-   shape emitted for minimal rstest expansions) or contains the in-module `fn`
-   / same-span `const` descriptor pair synthesized by `rustc --test` inside
-   generated modules. Empty modules and modules containing only unrelated items
-   are never treated as companions.
+   original function as a test context, applying the two-tier evidence rule
+   above. Empty modules, modules containing only unrelated items, and
+   hand-authored `#[test]` modules that lack expansion provenance are never
+   treated as companions.
 
 That split lets the lint treat rstest companion modules as an extension of the
 existing `--test` harness model instead of a separate policy path.

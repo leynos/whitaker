@@ -184,15 +184,17 @@ fn example_compiles_under_test_harness(#[case] name: &str, #[case] label: &str) 
     run_example_under_test_harness(&ExampleHarnessRun::new(name, label));
 }
 
-// The aliased-test-crate companion carries no in-source lint attributes, so the
-// lint is registered and denied through the harness's command-line flag; a valid
-// rstest companion must then keep the parent exempt (no diagnostic emitted).
+// A hand-authored same-named `#[test]` module has the same `fn`/`const` harness
+// pair shape as a real rstest companion (and an aliased `extern crate test`),
+// but it is not emitted by the `#[rstest]` proc-macro, so it carries no
+// macro-expansion provenance. Companion detection must reject it and the lint
+// must still fire on the parent function (diagnostic asserted via `.stderr`).
 #[cfg(not(windows))]
 #[test]
-fn rstest_aliased_test_crate_companion_exempts_parent_function() {
+fn hand_written_test_companion_does_not_exempt_parent_function() {
     run_example_under_test_harness(&ExampleHarnessRun::with_flags(
-        "pass_unwrap_in_rstest_aliased_test_crate",
-        "rstest aliased test crate",
+        "fail_unwrap_in_hand_written_test_companion",
+        "handwritten test companion (negative)",
         &["--test", "-D", "no_unwrap_or_else_panic"],
     ));
 }
