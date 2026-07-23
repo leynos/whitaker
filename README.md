@@ -64,6 +64,10 @@ suite flows opt in with `--experimental` or the corresponding suite feature.
 - **Configurable thresholds** — Adjust limits like `module_max_lines.max_lines`
   to match your team's standards.
 - **Modular design** — Use individual lints or load the whole suite.
+- **Pinnable suite** — The standalone installer's `--ref <SHA|tag>` builds and
+  stages the lint suite from an exact commit of `leynos/whitaker`, for
+  reproducible lint behaviour across CI. See
+  [Pinning the suite](docs/users-guide.md#pinning-the-suite).
 
 ## Project Status
 

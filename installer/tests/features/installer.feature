@@ -134,3 +134,15 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits successfully
     And experimental lint dry-run output is shown
+
+  Scenario: Pin the suite to a ref in dry-run
+    Given the installer is invoked with dry-run and a pinned ref
+    When the installer CLI is run
+    Then the CLI exits successfully
+    And dry-run output shows the pinned ref
+
+  Scenario: Refuse --ref inside a Whitaker workspace
+    Given the installer is invoked with a ref from a Whitaker workspace
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And a ref-unsupported message is shown

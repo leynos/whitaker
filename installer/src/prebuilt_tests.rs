@@ -10,13 +10,76 @@ const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 const TOOLCHAIN: &str = "nightly-2026-05-28";
 
+/// A full 40-hex commit SHA beginning with the test manifest's `abc1234`.
+const MATCHING_COMMIT: &str = "abc1234000000000000000000000000000000ab";
+
+/// A full 40-hex commit SHA that does not share the manifest's prefix.
+const MISMATCHED_COMMIT: &str = "deadbeef00000000000000000000000000000000";
+
 fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     PrebuiltConfig {
         target: TARGET,
         toolchain: TOOLCHAIN,
         destination_dir,
         quiet: true,
+        expected_git_sha: None,
     }
+}
+
+/// Build a happy-path config plus mocks, overriding only `expected_git_sha`.
+fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
+    let fake_sha = sha256_hex(FAKE_ARCHIVE);
+    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
+    let mut downloader = MockArtefactDownloader::new();
+    downloader
+        .expect_download_manifest()
+        .returning(move |_| Ok(manifest_json.clone()));
+    downloader
+        .expect_download_archive()
+        .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
+    let mut extractor = MockArtefactExtractor::new();
+    extractor.expect_extract().returning(|_archive, dest| {
+        let source_name = "libwhitaker_suite.so".to_owned();
+        std::fs::write(dest.join(&source_name), b"fake").expect("write extracted file");
+        Ok(vec![source_name])
+    });
+    (downloader, extractor)
+}
+
+#[test]
+fn expected_git_sha_mismatch_returns_fallback() {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        expected_git_sha: Some(MISMATCHED_COMMIT),
+        ..base_config(&destination_dir)
+    };
+    let (downloader, extractor) = success_mocks();
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    match result {
+        PrebuiltResult::Fallback { reason } => {
+            assert!(reason.contains("SHA mismatch"), "reason: {reason}");
+        }
+        other => panic!("expected Fallback, got {other:?}"),
+    }
+}
+
+#[rstest]
+#[case::matching_commit(Some(MATCHING_COMMIT))]
+#[case::unpinned(None)]
+fn matching_or_unpinned_git_sha_returns_success(#[case] expected_git_sha: Option<&str>) {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        expected_git_sha,
+        ..base_config(&destination_dir)
+    };
+    let (downloader, extractor) = success_mocks();
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    assert!(
+        matches!(result, PrebuiltResult::Success { .. }),
+        "expected Success, got {result:?}"
+    );
 }
 
 fn destination_dir() -> (tempfile::TempDir, Utf8PathBuf) {
