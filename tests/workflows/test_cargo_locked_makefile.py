@@ -232,12 +232,9 @@ def _is_lock_relevant_invocation(invocation: str) -> bool:
 
 
 def _has_locked_flag(invocation: str) -> bool:
-    """Whether a recorded `$@` carries `--locked` as an exact argument token.
-
-    Tokenizes before matching so a hypothetical flag such as `--locked-extra`
-    does not satisfy the check the way a bare `"--locked" in invocation`
-    substring test would.
-    """
+    """Whether a recorded `$@` carries `--locked` as an exact argument token."""
+    # Tokenize before matching so a flag such as `--locked-extra` does not
+    # satisfy the check the way a bare `"--locked" in invocation` substring would.
     return "--locked" in invocation.split()
 
 
