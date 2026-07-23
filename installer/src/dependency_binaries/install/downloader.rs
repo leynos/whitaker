@@ -77,21 +77,24 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
                 reason: "empty or invalid checksum file".to_string(),
             })?;
 
-        // Verify the archive against the expected checksum.
-        verify_archive_checksum(destination, expected_checksum)
+        // Open the freshly written archive at this boundary and hash the
+        // stream. The checksum helpers stay pure over the reader rather than
+        // re-opening the path themselves.
+        let archive = File::open(destination)?;
+        verify_archive_checksum(archive, destination, expected_checksum)
     }
 }
 
-/// Compute the lowercase-hex SHA-256 digest of the file at `path`.
+/// Compute the lowercase-hex SHA-256 digest of `reader`.
 ///
-/// Reads the file in fixed-size chunks so archives of any size hash with a
-/// bounded buffer.
-fn compute_file_sha256(path: &Path) -> io::Result<String> {
-    let mut archive_file = File::open(path)?;
+/// Reads the stream in fixed-size chunks so inputs of any size hash with a
+/// bounded buffer. The caller owns opening and scoping the underlying handle,
+/// keeping this a pure transformation over the byte stream.
+fn compute_sha256(mut reader: impl Read) -> io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
     loop {
-        let bytes_read = archive_file.read(&mut buffer)?;
+        let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
         }
@@ -100,21 +103,27 @@ fn compute_file_sha256(path: &Path) -> io::Result<String> {
     Ok(to_lower_hex(&hasher.finalize()))
 }
 
-/// Verify that the archive at `destination` matches the `expected` digest.
+/// Verify that `reader` hashes to `expected`, attributing a mismatch to
+/// `archive`.
+///
+/// The caller opens and scopes `reader`; `archive` names the source only for
+/// diagnostics. Keeping verification pure over the stream avoids re-opening the
+/// archive path here.
 ///
 /// # Errors
 ///
 /// Returns [`DependencyBinaryInstallError::Checksum`] when the computed digest
 /// differs from `expected`, and propagates any I/O error encountered while
-/// reading the archive.
+/// reading the stream.
 fn verify_archive_checksum(
-    destination: &Path,
+    reader: impl Read,
+    archive: &Path,
     expected: &str,
 ) -> Result<(), DependencyBinaryInstallError> {
-    let actual_checksum = compute_file_sha256(destination)?;
+    let actual_checksum = compute_sha256(reader)?;
     if actual_checksum != expected {
         return Err(DependencyBinaryInstallError::Checksum {
-            archive: destination.to_path_buf(),
+            archive: archive.to_path_buf(),
             expected: expected.to_string(),
             actual: actual_checksum,
         });
@@ -183,11 +192,16 @@ mod tests {
         }
     }
 
+    /// Open `file` as a fresh read handle for streaming into the hasher.
+    fn read_handle(file: &NamedTempFile) -> File {
+        File::open(file.path()).expect("open temp file")
+    }
+
     #[test]
-    fn compute_file_sha256_matches_known_vector() {
+    fn compute_sha256_matches_known_vector() {
         let file = temp_file_with(b"abc");
         assert_eq!(
-            compute_file_sha256(file.path()).expect("hash temp file"),
+            compute_sha256(read_handle(&file)).expect("hash archive stream"),
             concat!(
                 "ba7816bf8f01cfea414140de5dae2223",
                 "b00361a396177a9cb410ff61f20015ad",
@@ -196,13 +210,13 @@ mod tests {
     }
 
     #[test]
-    fn compute_file_sha256_hashes_content_larger_than_the_buffer() {
+    fn compute_sha256_hashes_content_larger_than_the_buffer() {
         // Exercise the buffered read loop across several 8192-byte reads: the
         // chunked digest must equal a single-shot digest of the same bytes.
         let payload = vec![0xa5_u8; 8192 * 3 + 17];
         let file = temp_file_with(&payload);
         assert_eq!(
-            compute_file_sha256(file.path()).expect("hash temp file"),
+            compute_sha256(read_handle(&file)).expect("hash archive stream"),
             to_lower_hex(&Sha256::digest(&payload)),
         );
     }
@@ -210,15 +224,15 @@ mod tests {
     #[test]
     fn verify_archive_checksum_accepts_a_matching_digest() {
         let file = temp_file_with(b"hello world");
-        let expected = compute_file_sha256(file.path()).expect("hash temp file");
-        assert!(verify_archive_checksum(file.path(), &expected).is_ok());
+        let expected = compute_sha256(read_handle(&file)).expect("hash archive stream");
+        assert!(verify_archive_checksum(read_handle(&file), file.path(), &expected).is_ok());
     }
 
     #[test]
     fn verify_archive_checksum_rejects_a_mismatched_digest() {
         let file = temp_file_with(b"hello world");
         let wrong = "0".repeat(64);
-        let error = verify_archive_checksum(file.path(), &wrong)
+        let error = verify_archive_checksum(read_handle(&file), file.path(), &wrong)
             .expect_err("mismatched checksum must fail");
         match error {
             DependencyBinaryInstallError::Checksum {
