@@ -220,6 +220,12 @@ fn next_depth(depth: Depth) -> Depth {
     Depth::new(depth.get().saturating_add(1))
 }
 
+// Weights halve with depth (`2^-depth` in fixed point). Below the fixed-point
+// resolution the weight intentionally collapses to zero: depths 64..=127 shift
+// `SCALE` (`1 << 63`) entirely out through an ordinary in-range shift, and
+// depths >= 128 reach `u128`'s bit width, so `checked_shr` returns `None` and
+// `unwrap_or_default` supplies the zero. Sub-resolution depths contribute
+// nothing rather than panicking or wrapping.
 fn depth_weight(depth: Depth) -> u128 {
     KindWeight::SCALE
         .checked_shr(u32::from(depth.get()))
@@ -275,5 +281,18 @@ mod tests {
 
             prop_assert_eq!(increased_weight - current_weight, depth_weight(depth));
         }
+    }
+
+    #[test]
+    fn weights_below_the_fixed_point_resolution_collapse_to_zero() {
+        // Depth 63 keeps the last representable weight; depth 64 is the first
+        // whose weight rounds to zero through an ordinary in-range shift. Depth
+        // 128 reaches `u128`'s bit width, so `checked_shr` returns `None` and
+        // the weight falls back to zero via `unwrap_or_default` rather than
+        // panicking, and every deeper depth stays at zero.
+        assert_eq!(depth_weight(Depth::new(63)), 1);
+        assert_eq!(depth_weight(Depth::new(64)), 0);
+        assert_eq!(depth_weight(Depth::new(128)), 0);
+        assert_eq!(depth_weight(Depth::new(u16::MAX)), 0);
     }
 }

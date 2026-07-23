@@ -314,66 +314,78 @@ ______________________________________________________________________
 <!-- markdownlint-disable-next-line MD024 -->
 #### Purpose
 
-Bootstraps the experimental lint that will recommend converting repeated helper
-calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
+Ensures doc comments appear before other outer attributes on functions,
+methods, and trait methods.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint,
-loads configuration defaults, and passively collects local helper calls
-inside strict `#[rstest]` tests, fingerprinting fixture-local, literal,
-`const`, and `static` arguments for later aggregation. The lint remains
-diagnostic-silent: threshold evaluation and actionable diagnostics are
-tracked by 8.2.3, while UI pass/fail coverage is tracked by 8.2.4.
+When attributes are generated or reordered by a procedural macro (for example,
+`rstest` or `derive`), the lint recovers the original source span from the
+macro expansion chain. Attributes whose spans cannot be traced back to any
+user-written source location (macro-only glue) are silently excluded from the
+ordering check, so the lint never fires on compiler- or macro-generated code
+that the developer cannot edit.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 
-```toml
-[rstest_helper_should_be_fixture]
-min_calls = 2
-min_distinct_tests = 2
-require_identical_fixture_arg_names = false
-provider_param_attributes = ["case", "values", "files", "future", "context"]
-use_source_callee_fallback = false
-```
-
-`provider_param_attributes` lists `rstest` parameter attributes that should be
-treated as data providers rather than fixture-local bindings. Entries may be
-written either as bare names such as `case` or qualified names such as
-`rstest::case`; Whitaker normalizes them to the shared detection policy.
+`function_attrs_follow_docs` has no configuration knobs.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### What is allowed
 
-- Single-use helper calls inside `#[rstest]` tests
-- Helper calls whose totals stay below `min_calls` or `min_distinct_tests`
-- Parameter-provider uses covered by `provider_param_attributes`, such as
-  `case`, `values`, `files`, `future`, and `context`
+- Doc comments that appear before every other outer attribute on the same
+  function, method, or trait method.
+- Macro-generated attributes whose spans are excluded because they are
+  macro-only.
+- Inner attributes, which are outside the lint's scope.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### What is denied
 
-When diagnostic phases are implemented, `rstest_helper_should_be_fixture` will
-deny repeated non-provider helper invocations across `#[rstest]` tests when
-they meet or exceed both `min_calls` and `min_distinct_tests`. The
-`require_identical_fixture_arg_names` setting controls whether candidate
-fixture arguments must use the same names, and `use_source_callee_fallback`
-controls whether source-callsite recovery may be used for macro-expanded
-callee locations.
+- Outer attributes that appear before a doc comment on the same function,
+  method, or trait method.
+- Macro-expanded attributes that recover to a user-editable source span and
+  sort before the doc comment.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### How to fix
 
-- Replace repeated helper calls with a shared `#[fixture]` parameter.
-- If `require_identical_fixture_arg_names` is enabled, rename helper arguments
-  so repeated calls use the same fixture argument names.
-- Prefer provider attributes listed in `provider_param_attributes` for
-  parameterized data inputs rather than modelling them as fixture-local helper
-  calls.
-- Tune `min_calls`, `min_distinct_tests`, and `use_source_callee_fallback` when
-  repository conventions need stricter or looser matching.
+Move doc comments so they appear before other outer attributes:
+
+```rust
+// Wrong
+#[inline]
+/// This function does something.
+fn example() {}
+
+// Correct
+/// This function does something.
+#[inline]
+fn example() {}
+```
+
+With `rstest`, place the doc comment before all attributes, including the test
+annotation:
+
+```rust
+// Wrong
+#[rstest]
+#[case(1, 2, 3)]
+/// Verifies addition.
+fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
+    assert_eq!(a + b, expected);
+}
+
+// Correct
+/// Verifies addition.
+#[rstest]
+#[case(1, 2, 3)]
+fn adds(#[case] a: i32, #[case] b: i32, #[case] expected: i32) {
+    assert_eq!(a + b, expected);
+}
+```
 
 ______________________________________________________________________
 
@@ -412,35 +424,30 @@ ______________________________________________________________________
 <!-- markdownlint-disable-next-line MD024 -->
 #### Purpose
 
-Bootstraps the experimental lint that will recommend converting repeated helper
-calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
+Detect test attributes correctly so `no_expect_outside_tests` can allow
+`.expect()` in recognized test-only code while still flagging production use.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint,
-loads configuration defaults, and passively collects local helper calls
-inside strict `#[rstest]` tests, fingerprinting fixture-local, literal,
-`const`, and `static` arguments for later aggregation. The lint remains
-diagnostic-silent: threshold evaluation and actionable diagnostics are
-tracked by 8.2.3, while UI pass/fail coverage is tracked by 8.2.4.
+Whitaker recognizes `#[test]`, prelude-qualified `#[test]` forms,
+`#[tokio::test]`, `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`,
+`#[rstest::rstest]`, `#[rstest_parametrize]`, `#[rstest::rstest_parametrize]`,
+`#[case]`, and `#[rstest::case]` by default. The `additional_test_attributes`
+setting extends that matching list with project-specific markers, so the lint
+treats those annotated functions as tests too.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 
 ```toml
-[rstest_helper_should_be_fixture]
-min_calls = 2
-min_distinct_tests = 2
-require_identical_fixture_arg_names = false
-provider_param_attributes = ["case", "values", "files", "future", "context"]
-use_source_callee_fallback = false
+[no_expect_outside_tests]
+additional_test_attributes = ["my_framework::test", "wasm_bindgen_test"]
 ```
 
-`provider_param_attributes` lists `rstest` parameter attributes that should be
-treated as data providers rather than fixture-local bindings. Entries may be
-written either as bare names such as `case` or qualified names such as
-`rstest::case`; Whitaker normalizes them to the shared detection policy.
+Set `additional_test_attributes` to an array of attribute paths written as
+strings. Each entry should match the path Whitaker sees on the test function,
+for example `my_framework::test` or `wasm_bindgen_test`.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Ancestor context propagation
@@ -470,33 +477,32 @@ fn helper() {
 <!-- markdownlint-disable-next-line MD024 -->
 #### What is allowed
 
-- Single-use helper calls inside `#[rstest]` tests
-- Helper calls whose totals stay below `min_calls` or `min_distinct_tests`
-- Parameter-provider uses covered by `provider_param_attributes`, such as
-  `case`, `values`, `files`, `future`, and `context`
+- Default markers such as `#[test]`, `#[::test]`,
+  `#[::std::prelude::v1::test]`, `#[tokio::test]`, `#[async_std::test]`,
+  `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`, `#[rstest_parametrize]`,
+  `#[rstest::rstest_parametrize]`, `#[case]`, and `#[rstest::case]`
+- Project-specific markers listed in `additional_test_attributes`, such as
+  `#[wasm_bindgen_test]`
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### What is denied
 
-When diagnostic phases are implemented, `rstest_helper_should_be_fixture` will
-deny repeated non-provider helper invocations across `#[rstest]` tests when
-they meet or exceed both `min_calls` and `min_distinct_tests`. The
-`require_identical_fixture_arg_names` setting controls whether candidate
-fixture arguments must use the same names, and `use_source_callee_fallback`
-controls whether source-callsite recovery may be used for macro-expanded
-callee locations.
+Functions using `.expect()` will still be flagged when their test attribute is
+not in Whitaker's default list and is not listed in
+`additional_test_attributes`.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### How to fix
 
-- Replace repeated helper calls with a shared `#[fixture]` parameter.
-- If `require_identical_fixture_arg_names` is enabled, rename helper arguments
-  so repeated calls use the same fixture argument names.
-- Prefer provider attributes listed in `provider_param_attributes` for
-  parameterized data inputs rather than modelling them as fixture-local helper
-  calls.
-- Tune `min_calls`, `min_distinct_tests`, and `use_source_callee_fallback` when
-  repository conventions need stricter or looser matching.
+- Add the missing test marker to `additional_test_attributes` if the function is
+  genuinely part of a supported test framework
+- Change the attribute usage to a recognized form such as `#[test]`,
+  `#[::test]`, `#[::std::prelude::v1::test]`, `#[tokio::test]`,
+  `#[async_std::test]`, `#[gpui::test]`, `#[rstest]`, `#[rstest::rstest]`,
+  `#[rstest_parametrize]`, `#[rstest::rstest_parametrize]`, `#[case]`, or
+  `#[rstest::case]` where appropriate
+- If the function is not test-only code, replace `.expect()` with explicit error
+  handling such as `?` or `map_err`
 
 ______________________________________________________________________
 

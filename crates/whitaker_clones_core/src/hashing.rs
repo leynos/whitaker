@@ -30,7 +30,12 @@ pub const PARSER_SCHEMA_VERSION: &str = concat!(
     env!("WHITAKER_RA_AP_SYNTAX_VERSION")
 );
 
-/// Mixes one already-normalized byte into the crate's stable FNV-style stream.
+/// Mixes one already-normalized byte into the crate's stable FNV-1 stream.
+///
+/// This is the FNV-1 variant: it multiplies the running hash by `FNV_PRIME`
+/// *before* XOR-ing the byte in. Do not reorder these operations into FNV-1a
+/// (XOR before multiply); the ordering is part of the on-disk hash contract and
+/// changing it would silently invalidate every persisted fingerprint.
 ///
 /// All token and AST hashes go through this primitive so the byte folding rule
 /// is shared. The function is intentionally tiny and wrapping: stability across

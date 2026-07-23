@@ -231,6 +231,16 @@ def _is_lock_relevant_invocation(invocation: str) -> bool:
     return _cargo_head(invocation) in {"build", "nextest run", "package"}
 
 
+def _has_locked_flag(invocation: str) -> bool:
+    """Whether a recorded `$@` carries `--locked` as an exact argument token.
+
+    Tokenizes before matching so a hypothetical flag such as `--locked-extra`
+    does not satisfy the check the way a bare `"--locked" in invocation`
+    substring test would.
+    """
+    return "--locked" in invocation.split()
+
+
 @pytest.mark.parametrize("locked", ["", "--locked"])
 def test_make_test_forwards_cargo_locked(cargo_stub: tuple[Path, Path], locked: str) -> None:
     """`make test` threads the requested lock mode into its nextest invocation."""
@@ -249,7 +259,7 @@ def test_make_test_forwards_cargo_locked(cargo_stub: tuple[Path, Path], locked: 
     cargo_calls = [line for line in recorded if _is_lock_relevant_invocation(line)]
     assert cargo_calls, f"make test should invoke Cargo; recorded: {recorded!r}"
     for line in cargo_calls:
-        assert ("--locked" in line) == bool(locked), (
+        assert _has_locked_flag(line) == bool(locked), (
             f"make test must use {locked or 'unlocked'} mode; invocation: {line!r}"
         )
 
@@ -283,7 +293,7 @@ def test_publish_check_forwards_cargo_locked_to_every_invocation(
     assert "nextest run" in heads, f"publish-check should run nextest; recorded: {recorded!r}"
     assert "package" in heads, f"publish-check should package crates; recorded: {recorded!r}"
     for line in lock_relevant:
-        assert ("--locked" in line) == bool(locked), (
+        assert _has_locked_flag(line) == bool(locked), (
             f"publish-check must use {locked or 'unlocked'} mode; invocation: {line!r}"
         )
 
@@ -318,7 +328,7 @@ def test_representative_targets_forward_cargo_locked(
         f"typecheck/lint should invoke Cargo in {'locked' if locked else 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
-    assert all(("--locked" in invocation) == bool(locked) for invocation in recorded), (
+    assert all(_has_locked_flag(invocation) == bool(locked) for invocation in recorded), (
         f"typecheck/lint should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )
@@ -346,7 +356,7 @@ def test_release_dry_run_forwards_cargo_locked_to_metadata_and_builds(
         "release-installer-dry-run should record metadata first in "
         f"{'locked' if locked else 'unlocked'} mode; recorded invocations: {recorded!r}"
     )
-    assert all(("--locked" in invocation) == bool(locked) for invocation in recorded), (
+    assert all(_has_locked_flag(invocation) == bool(locked) for invocation in recorded), (
         f"release-installer-dry-run should use {locked or 'unlocked'} mode; "
         f"recorded invocations: {recorded!r}"
     )

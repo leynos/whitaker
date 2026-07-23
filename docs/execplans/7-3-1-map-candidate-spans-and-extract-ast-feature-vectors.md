@@ -83,7 +83,9 @@ escalation, not a workaround.
 - **Bounded per-candidate cost.** Lowering touches one candidate subtree; the
   upstream `min_nodes`/node-count bound from the Pass A config governs subtree
   size. 7.3.1 does not lower whole files; the smallest-covering selection
-  climbs only to the tightest covering ancestor.
+  descends from the root via a bounded pending-stack worklist over covering
+  children, enforcing the `MAX_AST_NODES` node budget and `MAX_AST_DEPTH`
+  depth budget.
 - **Toolchain bump (Stage 0).** This item bumps `rust-toolchain.toml` from
   `nightly-2025-09-18` (rustc 1.92.0-nightly) to **`nightly-2026-05-28`**
   (rustc ≈ 1.9x-nightly, comfortably ≥ 1.95) as a prerequisite Stage 0, landing
@@ -1420,8 +1422,9 @@ Revision 4 (2026-07-20) — applied post-implementation review feedback. The
 `build.rs` workspace-manifest read moved off `std::fs` onto a capability-scoped
 `cap_std` helper (`build_support::read_workspace_manifest`), keeping all
 build-script filesystem access `std::fs`/`std::path`-free. The span→node
-mapping (`select_covering_node`) now walks the parser's pre-order cursor instead
-of collecting a fresh child `Vec` per node, and parser-`ERROR` detection folded
+mapping (`select_covering_node`) now uses an explicit pending-stack worklist
+over `node.children()`, pruned to only those children covering the target span
+and bounded by the node/depth budgets, and parser-`ERROR` detection folded
 into the single lowering descent (`LoweringLimits::lower`) so the selected
 subtree is no longer traversed a second time. The new
 `no_unwrap_or_else_panic` aliased-test-crate fixture dropped its crate-wide
