@@ -137,7 +137,7 @@ impl BaseDirs for StubDirs {
 #[cfg(any(test, feature = "test-support"))]
 pub fn sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(data))
+    crate::hex::to_lower_hex(&Sha256::digest(data))
 }
 
 /// Build prebuilt manifest JSON for tests with configurable fields.
@@ -311,3 +311,33 @@ impl CommandExecutor for StubExecutor {
 pub mod dependency_binary_helpers;
 #[cfg(test)]
 mod dependency_binary_helpers_tests;
+
+#[cfg(test)]
+mod tests {
+    //! Tests asserting `sha256_hex` against known SHA-256 test vectors.
+
+    use super::sha256_hex;
+
+    #[test]
+    fn sha256_hex_matches_known_vector() {
+        // SHA-256 of "abc" is a well-known NIST test vector.
+        assert_eq!(
+            sha256_hex(b"abc"),
+            concat!(
+                "ba7816bf8f01cfea414140de5dae2223",
+                "b00361a396177a9cb410ff61f20015ad",
+            ),
+        );
+    }
+
+    #[test]
+    fn sha256_hex_of_empty_input_is_the_known_constant() {
+        assert_eq!(
+            sha256_hex(b""),
+            concat!(
+                "e3b0c44298fc1c149afbf4c8996fb924",
+                "27ae41e4649b934ca495991b7852b855",
+            ),
+        );
+    }
+}

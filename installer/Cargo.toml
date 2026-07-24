@@ -56,6 +56,7 @@ test-support = ["dep:temp-env"]
 
 [dependencies]
 camino = { workspace = true }
+cap-std = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 whitaker-common = { workspace = true }
 directories-next = { workspace = true }
@@ -83,6 +84,7 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 temp-env = { workspace = true }
 tempfile = { workspace = true }
+trybuild = { workspace = true }
 whitaker-installer = { path = ".", features = ["test-support"] }
 
 [lints]
