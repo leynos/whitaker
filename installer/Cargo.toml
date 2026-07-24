@@ -56,6 +56,7 @@ test-support = ["dep:temp-env"]
 
 [dependencies]
 camino = { workspace = true }
+cap-std = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 whitaker-common = { workspace = true }
 directories-next = { workspace = true }

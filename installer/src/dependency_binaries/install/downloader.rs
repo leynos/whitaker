@@ -4,8 +4,10 @@ use crate::artefact::download::HttpDownloader;
 
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
+use camino::Utf8Path;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use sha2::{Digest, Sha256};
-use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::path::Path;
@@ -45,12 +47,23 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
             .build();
         let agent = ureq::Agent::new_with_config(config);
 
-        // Download the archive
+        // Acquire a capability for the destination's parent directory up front.
+        // Every archive read and write flows through this handle, so the
+        // downloader never reaches for ambient `std::fs` file access.
+        let destination = Utf8Path::from_path(destination).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "destination archive path is not valid UTF-8",
+            )
+        })?;
+        let (dir, archive_name) = open_destination_dir(destination)?;
+
+        // Download the archive, writing it through the directory capability.
         let response = agent
             .get(&url)
             .call()
             .map_err(|error| map_ureq_error(&url, &error))?;
-        let mut file = File::create(destination)?;
+        let mut file = dir.create(archive_name)?;
         let mut body = response.into_body();
         let mut reader = body.as_reader();
         io::copy(&mut reader, &mut file)?;
@@ -77,12 +90,38 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
                 reason: "empty or invalid checksum file".to_string(),
             })?;
 
-        // Open the freshly written archive at this boundary and hash the
-        // stream. The checksum helpers stay pure over the reader rather than
-        // re-opening the path themselves.
-        let archive = File::open(destination)?;
-        verify_archive_checksum(archive, destination, expected_checksum)
+        // Re-open the freshly written archive through the same capability and
+        // hash the stream. The checksum helpers stay pure over the reader
+        // rather than re-opening any path themselves.
+        let archive = dir.open(archive_name)?;
+        verify_archive_checksum(archive, destination.as_std_path(), expected_checksum)
     }
+}
+
+/// Open the parent directory of `destination` as a capability, returning it
+/// alongside the archive's file name.
+///
+/// `cap_std` grants no ambient authority, so the parent directory is opened
+/// explicitly; all subsequent archive I/O is scoped to the returned handle
+/// rather than routed through ambient `std::fs`.
+///
+/// # Errors
+///
+/// Returns an I/O error when `destination` has no file name or its parent
+/// directory cannot be opened.
+fn open_destination_dir(destination: &Utf8Path) -> io::Result<(Dir, &str)> {
+    let parent = match destination.parent() {
+        Some(parent) if !parent.as_str().is_empty() => parent,
+        _ => Utf8Path::new("."),
+    };
+    let archive_name = destination.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destination archive path has no file name",
+        )
+    })?;
+    let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
+    Ok((dir, archive_name))
 }
 
 /// Compute the lowercase-hex SHA-256 digest of `reader`.
@@ -157,8 +196,9 @@ mod tests {
 
     use super::*;
     use rstest::rstest;
+    use std::fs::File;
     use std::io::Write;
-    use tempfile::NamedTempFile;
+    use tempfile::{NamedTempFile, TempDir};
 
     /// Write `contents` to a fresh temp file and return the handle.
     fn temp_file_with(contents: &[u8]) -> NamedTempFile {
@@ -226,6 +266,29 @@ mod tests {
         let file = temp_file_with(b"hello world");
         let expected = compute_sha256(read_handle(&file)).expect("hash archive stream");
         assert!(verify_archive_checksum(read_handle(&file), file.path(), &expected).is_ok());
+    }
+
+    #[test]
+    fn open_destination_dir_scopes_archive_io_to_the_parent() {
+        // Mirror `download`'s file handling without the network: create the
+        // archive through the directory capability, then re-open it through the
+        // same capability and verify the digest end to end.
+        let temp = TempDir::new().expect("create temp dir");
+        let destination = temp.path().join("archive.tgz");
+        let destination = Utf8Path::from_path(&destination).expect("temp path is UTF-8");
+
+        let (dir, archive_name) = open_destination_dir(destination).expect("open destination dir");
+        assert_eq!(archive_name, "archive.tgz");
+
+        let mut file = dir
+            .create(archive_name)
+            .expect("create archive via capability");
+        file.write_all(b"hello world").expect("write archive");
+        drop(file);
+
+        let expected = to_lower_hex(&Sha256::digest(b"hello world"));
+        let archive = dir.open(archive_name).expect("open archive via capability");
+        assert!(verify_archive_checksum(archive, destination.as_std_path(), &expected).is_ok());
     }
 
     #[test]
