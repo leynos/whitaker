@@ -196,7 +196,6 @@ mod tests {
 
     use super::*;
     use rstest::rstest;
-    use std::fs::File;
     use std::io::Write;
     use tempfile::{NamedTempFile, TempDir};
 
@@ -232,9 +231,9 @@ mod tests {
         }
     }
 
-    /// Open `file` as a fresh read handle for streaming into the hasher.
-    fn read_handle(file: &NamedTempFile) -> File {
-        File::open(file.path()).expect("open temp file")
+    /// Reopen `file` as a fresh read handle for streaming into the hasher.
+    fn read_handle(file: &NamedTempFile) -> impl Read {
+        file.reopen().expect("reopen temp file")
     }
 
     #[test]

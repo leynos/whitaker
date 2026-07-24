@@ -9,10 +9,18 @@
 ///
 /// Every byte is rendered as exactly two digits, including leading
 /// zeroes, so the returned string is always twice the length of
-/// `bytes`.
+/// `bytes`. The output buffer is preallocated and each nibble maps
+/// straight into a lookup table, avoiding a per-byte `format!`
+/// allocation.
 #[must_use]
 pub(crate) fn to_lower_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        hex.push(char::from(HEX_DIGITS[usize::from(byte >> 4)]));
+        hex.push(char::from(HEX_DIGITS[usize::from(byte & 0x0f)]));
+    }
+    hex
 }
 
 #[cfg(test)]
