@@ -3658,6 +3658,7 @@ name = "whitaker-installer"
 version = "0.2.7"
 dependencies = [
  "camino",
+ "cap-std 4.0.2",
  "clap",
  "directories-next",
  "flate2",
