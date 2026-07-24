@@ -268,16 +268,37 @@ mod tests {
     }
 
     #[test]
-    fn open_destination_dir_scopes_archive_io_to_the_parent() {
-        // Mirror `download`'s file handling without the network: create the
-        // archive through the directory capability, then re-open it through the
-        // same capability and verify the digest end to end.
+    fn open_destination_dir_rejects_a_path_without_a_file_name() {
+        // The filesystem root has no file name, so the capability boundary
+        // cannot derive an archive name and must reject it up front.
+        let root = Utf8Path::new("/");
+        let error = open_destination_dir(root).expect_err("root path has no file name");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(
+            error.to_string().contains("has no file name"),
+            "error should identify the missing file name, got: {error}",
+        );
+    }
+
+    #[test]
+    fn open_destination_dir_writes_into_the_destination_parent_not_the_cwd() {
+        // A distinctive name so a leaked artefact in the working directory is
+        // unambiguous and never collides with a real file.
+        const ARCHIVE_NAME: &str = "whitaker_capability_scope_probe.tgz";
+
+        let cwd_leak = std::env::current_dir()
+            .expect("resolve current dir")
+            .join(ARCHIVE_NAME);
+        // Defensive: clear any stale probe left by an aborted earlier run.
+        let _ = std::fs::remove_file(&cwd_leak);
+
         let temp = TempDir::new().expect("create temp dir");
-        let destination = temp.path().join("archive.tgz");
+        let destination = temp.path().join(ARCHIVE_NAME);
         let destination = Utf8Path::from_path(&destination).expect("temp path is UTF-8");
 
         let (dir, archive_name) = open_destination_dir(destination).expect("open destination dir");
-        assert_eq!(archive_name, "archive.tgz");
+        assert_eq!(archive_name, ARCHIVE_NAME);
 
         let mut file = dir
             .create(archive_name)
@@ -285,9 +306,58 @@ mod tests {
         file.write_all(b"hello world").expect("write archive");
         drop(file);
 
+        // The capability must write into the destination's parent directory...
+        assert!(
+            destination.as_std_path().exists(),
+            "archive must exist at the destination path",
+        );
+        // ...and never into the process working directory. This assertion fails
+        // if `open_destination_dir` opens `.` for a destination with a real
+        // parent.
+        assert!(
+            !cwd_leak.exists(),
+            "capability must not create the archive in the current working directory",
+        );
+
+        // Re-open through the same capability and keep the end-to-end checksum
+        // assertion.
         let expected = to_lower_hex(&Sha256::digest(b"hello world"));
         let archive = dir.open(archive_name).expect("open archive via capability");
         assert!(verify_archive_checksum(archive, destination.as_std_path(), &expected).is_ok());
+
+        // Defensive cleanup in case a regression wrote the probe into the CWD.
+        let _ = std::fs::remove_file(&cwd_leak);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn download_rejects_a_non_utf8_destination_before_any_network_access() {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        // 0x80 is a lone UTF-8 continuation byte, so this path is never valid
+        // UTF-8. The download must reject it during path validation, which
+        // happens before any HTTP call, so the test needs no network.
+        let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
+            b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
+        ]));
+
+        let downloader = RepositoryArchiveDownloader;
+        let error = downloader
+            .download("whitaker-dependency", &invalid)
+            .expect_err("non-UTF-8 destination must be rejected");
+
+        match error {
+            DependencyBinaryInstallError::Io(source) => {
+                assert_eq!(source.kind(), io::ErrorKind::InvalidInput);
+                assert!(
+                    source
+                        .to_string()
+                        .contains("destination archive path is not valid UTF-8"),
+                    "error should identify the non-UTF-8 destination, got: {source}",
+                );
+            }
+            other => panic!("expected an Io error, got {other:?}"),
+        }
     }
 
     #[test]
