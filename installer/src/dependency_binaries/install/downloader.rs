@@ -4,7 +4,7 @@ use crate::artefact::download::HttpDownloader;
 
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use log::warn;
@@ -59,119 +59,206 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
             .build();
         let agent = ureq::Agent::new_with_config(config);
 
-        // Acquire a capability for the destination's parent directory up front.
-        // Every archive read and write flows through this handle, so the
-        // downloader never reaches for ambient `std::fs` file access.
-        let destination = Utf8Path::from_path(destination).ok_or_else(|| {
-            warn!(
-                target: LOG_TARGET,
-                "dependency archive download failed (category={CATEGORY_UTF8}): \
-                 destination archive path is not valid UTF-8",
-            );
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "destination archive path is not valid UTF-8",
-            )
-        })?;
-        let (dir, archive_name) = open_destination_dir(destination).inspect_err(|error| {
-            warn!(
-                target: LOG_TARGET,
-                "dependency archive download failed (category={CATEGORY_CAPABILITY}): \
-                 cannot open destination directory for {destination}: {error}",
-            );
-        })?;
-
-        // Download the archive, writing it through the directory capability.
-        let response = agent
-            .get(&url)
-            .call()
-            .map_err(|error| map_ureq_error(&url, &error))
-            .inspect_err(|error| {
-                warn!(
-                    target: LOG_TARGET,
-                    "dependency archive download failed (category={CATEGORY_FETCH}): {url}: {error}",
-                );
-            })?;
-        let mut file = dir.create(archive_name).inspect_err(|error| {
-            warn!(
-                target: LOG_TARGET,
-                "dependency archive download failed (category={CATEGORY_CAPABILITY}): \
-                 cannot create archive {archive_name}: {error}",
-            );
-        })?;
-        let mut body = response.into_body();
-        let mut reader = body.as_reader();
-        io::copy(&mut reader, &mut file).inspect_err(|error| {
-            warn!(
-                target: LOG_TARGET,
-                "dependency archive download failed (category={CATEGORY_FETCH}): \
-                 writing {url} to disk: {error}",
-            );
-        })?;
-        drop(file);
-
-        // Download and parse the expected checksum
-        let checksum_response = agent
-            .get(&checksum_url)
-            .call()
-            .map_err(|error| map_ureq_error(&checksum_url, &error))
-            .inspect_err(|error| {
-                warn!(
-                    target: LOG_TARGET,
-                    "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
-                     {checksum_url}: {error}",
-                );
-            })?;
-        let checksum_body = checksum_response
-            .into_body()
-            .read_to_string()
-            .map_err(|error| DependencyBinaryInstallError::Download {
-                url: checksum_url.clone(),
-                reason: error.to_string(),
-            })
-            .inspect_err(|error| {
-                warn!(
-                    target: LOG_TARGET,
-                    "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
-                     reading {checksum_url}: {error}",
-                );
-            })?;
-        let expected_checksum = checksum_body
-            .lines()
-            .next()
-            .and_then(|line| line.split_whitespace().next())
-            .ok_or_else(|| {
-                warn!(
-                    target: LOG_TARGET,
-                    "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
-                     empty or invalid checksum file at {checksum_url}",
-                );
-                DependencyBinaryInstallError::Download {
-                    url: checksum_url.clone(),
-                    reason: "empty or invalid checksum file".to_string(),
-                }
-            })?;
-
-        // Re-open the freshly written archive through the same capability and
-        // hash the stream. The checksum helpers stay pure over the reader
-        // rather than re-opening any path themselves.
-        let archive = dir.open(archive_name).inspect_err(|error| {
-            warn!(
-                target: LOG_TARGET,
-                "dependency archive download failed (category={CATEGORY_CAPABILITY}): \
-                 cannot reopen archive {archive_name}: {error}",
-            );
-        })?;
-        verify_archive_checksum(archive, destination.as_std_path(), expected_checksum).inspect_err(
-            |error| {
-                warn!(
-                    target: LOG_TARGET,
-                    "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
-                     verification failed for {url}: {error}",
-                );
-            },
-        )
+        // Acquire a parent-directory capability up front; every archive read
+        // and write flows through it, so the downloader never reaches for
+        // ambient `std::fs` file access.
+        let (destination, dir, archive_name) = open_download_destination(destination)?;
+        let archive = ScopedArchive {
+            dir: &dir,
+            name: &archive_name,
+        };
+        download_archive(&agent, &url, &archive)?;
+        let expected_checksum = fetch_expected_checksum(&agent, &checksum_url)?;
+        verify_downloaded_archive(&archive, &destination, &url, &expected_checksum)
     }
+}
+
+/// A capability-scoped archive: a directory handle paired with the archive's
+/// name within it. Bundling the two keeps every read and write inside the
+/// granted capability and lets the download helpers share one cohesive
+/// argument instead of threading the pair separately.
+struct ScopedArchive<'a> {
+    dir: &'a Dir,
+    name: &'a str,
+}
+
+/// Validate `destination` as UTF-8 and open its parent directory as a
+/// capability, returning owned values so the caller has no borrowed-lifetime
+/// coupling to the directory handle or archive name.
+///
+/// # Errors
+///
+/// Returns [`DependencyBinaryInstallError::Io`] with
+/// [`io::ErrorKind::InvalidInput`] when `destination` is not valid UTF-8, and
+/// propagates capability-open failures from [`open_destination_dir`].
+fn open_download_destination(
+    destination: &Path,
+) -> Result<(Utf8PathBuf, Dir, String), DependencyBinaryInstallError> {
+    let destination = Utf8Path::from_path(destination).ok_or_else(|| {
+        warn!(
+            target: LOG_TARGET,
+            "dependency archive download failed (category={CATEGORY_UTF8}): \
+             destination archive path is not valid UTF-8",
+        );
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destination archive path is not valid UTF-8",
+        )
+    })?;
+    let (dir, archive_name) = open_destination_dir(destination).inspect_err(|error| {
+        warn!(
+            target: LOG_TARGET,
+            "dependency archive download failed (category={CATEGORY_CAPABILITY}): \
+             cannot open destination directory for {destination}: {error}",
+        );
+    })?;
+    Ok((destination.to_owned(), dir, archive_name.to_owned()))
+}
+
+/// Fetch the archive at `url` and write it into `archive`'s capability-scoped
+/// directory.
+///
+/// The response body is streamed only into the handle returned by
+/// `archive.dir.create`, which is dropped before returning.
+///
+/// # Errors
+///
+/// Returns a mapped [`map_ureq_error`] failure when the fetch fails, and
+/// propagates capability-create and write failures.
+fn download_archive(
+    agent: &ureq::Agent,
+    url: &str,
+    archive: &ScopedArchive,
+) -> Result<(), DependencyBinaryInstallError> {
+    let archive_name = archive.name;
+    let response = agent
+        .get(url)
+        .call()
+        .map_err(|error| map_ureq_error(url, &error))
+        .inspect_err(|error| {
+            warn!(
+                target: LOG_TARGET,
+                "dependency archive download failed (category={CATEGORY_FETCH}): {url}: {error}",
+            );
+        })?;
+    let mut file = archive.dir.create(archive_name).inspect_err(|error| {
+        warn!(
+            target: LOG_TARGET,
+            "dependency archive download failed (category={CATEGORY_CAPABILITY}): \
+             cannot create archive {archive_name}: {error}",
+        );
+    })?;
+    let mut body = response.into_body();
+    let mut reader = body.as_reader();
+    io::copy(&mut reader, &mut file).inspect_err(|error| {
+        warn!(
+            target: LOG_TARGET,
+            "dependency archive download failed (category={CATEGORY_FETCH}): \
+             writing {url} to disk: {error}",
+        );
+    })?;
+    drop(file);
+    Ok(())
+}
+
+/// Fetch the `.sha256` sidecar at `checksum_url` and return the expected digest.
+///
+/// # Errors
+///
+/// Returns [`DependencyBinaryInstallError::Download`] on fetch, body-read, or
+/// malformed/empty checksum failures.
+fn fetch_expected_checksum(
+    agent: &ureq::Agent,
+    checksum_url: &str,
+) -> Result<String, DependencyBinaryInstallError> {
+    let checksum_response = agent
+        .get(checksum_url)
+        .call()
+        .map_err(|error| map_ureq_error(checksum_url, &error))
+        .inspect_err(|error| {
+            warn!(
+                target: LOG_TARGET,
+                "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
+                 {checksum_url}: {error}",
+            );
+        })?;
+    let checksum_body = checksum_response
+        .into_body()
+        .read_to_string()
+        .map_err(|error| DependencyBinaryInstallError::Download {
+            url: checksum_url.to_owned(),
+            reason: error.to_string(),
+        })
+        .inspect_err(|error| {
+            warn!(
+                target: LOG_TARGET,
+                "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
+                 reading {checksum_url}: {error}",
+            );
+        })?;
+    parse_checksum_token(&checksum_body, checksum_url).map(str::to_owned)
+}
+
+/// Extract the digest token (first whitespace-delimited field of the first
+/// line) from a checksum-file body.
+///
+/// # Errors
+///
+/// Returns [`DependencyBinaryInstallError::Download`] with an
+/// `empty or invalid checksum file` reason when no token is present.
+fn parse_checksum_token<'body>(
+    body: &'body str,
+    checksum_url: &str,
+) -> Result<&'body str, DependencyBinaryInstallError> {
+    body.lines()
+        .next()
+        .and_then(|line| line.split_whitespace().next())
+        .ok_or_else(|| {
+            warn!(
+                target: LOG_TARGET,
+                "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
+                 empty or invalid checksum file at {checksum_url}",
+            );
+            DependencyBinaryInstallError::Download {
+                url: checksum_url.to_owned(),
+                reason: "empty or invalid checksum file".to_string(),
+            }
+        })
+}
+
+/// Reopen the freshly written archive through its capability and verify its
+/// digest.
+///
+/// The archive is reopened only via `archive.dir.open`, and `destination` is
+/// passed to [`verify_archive_checksum`] purely for error diagnostics.
+///
+/// # Errors
+///
+/// Propagates capability-reopen failures and
+/// [`DependencyBinaryInstallError::Checksum`] on a digest mismatch.
+fn verify_downloaded_archive(
+    archive: &ScopedArchive,
+    destination: &Utf8Path,
+    url: &str,
+    expected_checksum: &str,
+) -> Result<(), DependencyBinaryInstallError> {
+    let archive_name = archive.name;
+    let reader = archive.dir.open(archive_name).inspect_err(|error| {
+        warn!(
+            target: LOG_TARGET,
+            "dependency archive download failed (category={CATEGORY_CAPABILITY}): \
+             cannot reopen archive {archive_name}: {error}",
+        );
+    })?;
+    verify_archive_checksum(reader, destination.as_std_path(), expected_checksum).inspect_err(
+        |error| {
+            warn!(
+                target: LOG_TARGET,
+                "dependency archive download failed (category={CATEGORY_CHECKSUM}): \
+                 verification failed for {url}: {error}",
+            );
+        },
+    )
 }
 
 /// Open the parent directory of `destination` as a capability, returning it
@@ -304,6 +391,32 @@ mod tests {
                 error,
                 DependencyBinaryInstallError::Download { .. }
             ));
+        }
+    }
+
+    #[test]
+    fn parse_checksum_token_returns_the_first_field_of_the_first_line() {
+        let body = "abc123def456  whitaker-tool.tgz\nignored second line\n";
+        assert_eq!(
+            parse_checksum_token(body, "https://example.test/archive.tgz.sha256")
+                .expect("token present"),
+            "abc123def456",
+        );
+    }
+
+    #[rstest]
+    #[case("")]
+    #[case("   \n")]
+    #[case("\n\n")]
+    fn parse_checksum_token_rejects_an_empty_or_blank_body(#[case] body: &str) {
+        let error = parse_checksum_token(body, "https://example.test/archive.tgz.sha256")
+            .expect_err("blank checksum body must fail");
+        match error {
+            DependencyBinaryInstallError::Download { url, reason } => {
+                assert_eq!(url, "https://example.test/archive.tgz.sha256");
+                assert_eq!(reason, "empty or invalid checksum file");
+            }
+            other => panic!("expected a Download error, got {other:?}"),
         }
     }
 
