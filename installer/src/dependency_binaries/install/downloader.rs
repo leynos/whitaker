@@ -281,24 +281,49 @@ mod tests {
         );
     }
 
+    /// Removes a probe file from a capability-scoped directory when dropped, so
+    /// a leaked artefact is cleaned up even if an assertion panics first.
+    struct ProbeCleanup {
+        dir: Dir,
+        name: String,
+    }
+
+    impl Drop for ProbeCleanup {
+        fn drop(&mut self) {
+            // A correct run never writes the probe into this directory, so a
+            // missing file is the expected case.
+            let _ = self.dir.remove_file(&self.name);
+        }
+    }
+
     #[test]
     fn open_destination_dir_writes_into_the_destination_parent_not_the_cwd() {
-        // A distinctive name so a leaked artefact in the working directory is
-        // unambiguous and never collides with a real file.
-        const ARCHIVE_NAME: &str = "whitaker_capability_scope_probe.tgz";
-
-        let cwd_leak = std::env::current_dir()
-            .expect("resolve current dir")
-            .join(ARCHIVE_NAME);
-        // Defensive: clear any stale probe left by an aborted earlier run.
-        let _ = std::fs::remove_file(&cwd_leak);
-
         let temp = TempDir::new().expect("create temp dir");
-        let destination = temp.path().join(ARCHIVE_NAME);
-        let destination = Utf8Path::from_path(&destination).expect("temp path is UTF-8");
+        let temp_dir = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+        // A unique, test-owned probe name derived from the temp directory, so
+        // it can never collide with — or delete — a pre-existing file in the
+        // working directory.
+        let archive_file = format!(
+            "{}.tgz",
+            temp_dir.file_name().expect("temp dir has a file name"),
+        );
+        let destination = temp_dir.join(&archive_file);
 
-        let (dir, archive_name) = open_destination_dir(destination).expect("open destination dir");
-        assert_eq!(archive_name, ARCHIVE_NAME);
+        // Open the process working directory as a capability, paired with RAII
+        // cleanup: if a regression leaks the probe here, it is removed on drop
+        // even when an assertion below panics first.
+        let cwd_probe = ProbeCleanup {
+            dir: Dir::open_ambient_dir(".", ambient_authority()).expect("open cwd capability"),
+            name: archive_file.clone(),
+        };
+        // An independent capability for the destination's directory, used to
+        // confirm the archive actually lands there rather than trusting the
+        // directory handle returned by the code under test.
+        let destination_dir = Dir::open_ambient_dir(temp_dir, ambient_authority())
+            .expect("open destination capability");
+
+        let (dir, archive_name) = open_destination_dir(&destination).expect("open destination dir");
+        assert_eq!(archive_name, archive_file.as_str());
 
         let mut file = dir
             .create(archive_name)
@@ -308,14 +333,14 @@ mod tests {
 
         // The capability must write into the destination's parent directory...
         assert!(
-            destination.as_std_path().exists(),
+            destination_dir.exists(&archive_file),
             "archive must exist at the destination path",
         );
         // ...and never into the process working directory. This assertion fails
         // if `open_destination_dir` opens `.` for a destination with a real
         // parent.
         assert!(
-            !cwd_leak.exists(),
+            !cwd_probe.dir.exists(&archive_file),
             "capability must not create the archive in the current working directory",
         );
 
@@ -325,8 +350,9 @@ mod tests {
         let archive = dir.open(archive_name).expect("open archive via capability");
         assert!(verify_archive_checksum(archive, destination.as_std_path(), &expected).is_ok());
 
-        // Defensive cleanup in case a regression wrote the probe into the CWD.
-        let _ = std::fs::remove_file(&cwd_leak);
+        // `cwd_probe` drops here (or on any earlier panic), removing a leaked
+        // probe through its capability.
+        drop(cwd_probe);
     }
 
     #[cfg(unix)]
