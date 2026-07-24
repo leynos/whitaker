@@ -46,7 +46,7 @@ rustc_lexer = "0.1.0"
 # Exact-pin rust-analyzer's unstable parser snapshot so AST hashes stay tied to
 # the parser schema. Whenever the nightly toolchain changes, bump this version
 # in lockstep to prevent AST hash drift.
-ra_ap_syntax = "=0.0.334"
+ra_ap_syntax = "=0.0.342"
 whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.7" }
 whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.7" }
 temp-env = "0.3.6"
