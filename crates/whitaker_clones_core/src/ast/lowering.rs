@@ -364,5 +364,8 @@ fn range_to_u32(range: TextRange) -> Range<u32> {
 }
 
 #[cfg(test)]
+#[path = "lowering_metrics_tests.rs"]
+mod metrics_tests;
+#[cfg(test)]
 #[path = "lowering_tests.rs"]
 mod tests;
