@@ -2,6 +2,7 @@
 
 use std::cell::Cell;
 use std::ops::Range;
+use std::time::Instant;
 
 use ra_ap_syntax::{
     AstNode, Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
@@ -9,6 +10,7 @@ use ra_ap_syntax::{
 };
 use tracing::{debug, error, warn};
 
+use super::metrics::record_lower_span_metrics;
 use super::{AstError, AstResult, ByteSpan, KindId, LeafClass, NormalizedNode, NormalizedTree};
 
 pub use crate::hashing::PARSER_SCHEMA_VERSION;
@@ -44,8 +46,9 @@ fn trace_ast_error(
 /// text. This defence-in-depth check is not redundant and must remain in place
 /// even though it resembles double validation.
 ///
-/// Latency metrics and feature-vector emission metrics are deferred to 7.3.2,
-/// where scoring and SARIF emission consume those observations.
+/// Latency and categorized outcome metrics emit at this lowering boundary.
+/// Feature-vector emission metrics remain reserved for the 7.3.2 scoring and
+/// SARIF Run 1 consumption boundary.
 ///
 /// # Examples
 ///
@@ -60,16 +63,27 @@ fn trace_ast_error(
 /// ```
 #[tracing::instrument(skip(file_text), fields(start = span.start(), end = span.end()))]
 pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> {
-    let span = ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
+    let started_at = Instant::now();
+    let (result, recovered) = lower_span_inner(file_text, span);
+    record_lower_span_metrics(&result, started_at.elapsed(), recovered);
+    result
+}
+
+fn lower_span_inner(file_text: &str, span: ByteSpan) -> (AstResult<NormalizedTree>, bool) {
+    let span = match ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
         trace_ast_error(
             error,
             "AST span lies outside the supplied source text",
             "AST span validation failed",
         )
-    })?;
+    }) {
+        Ok(span) => span,
+        Err(error) => return (Err(error), false),
+    };
     let parse = SourceFile::parse(file_text, Edition::CURRENT);
     let parse_errors = parse.errors();
-    if !parse_errors.is_empty() {
+    let recovered = !parse_errors.is_empty();
+    if recovered {
         // This is the designated logging boundary for parser recovery in this
         // adapter; the lowered AST domain remains parser-agnostic.
         warn!(
@@ -81,13 +95,16 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
     }
     let root = parse.tree().syntax().clone();
     let target_range = text_range(span);
-    let selected = select_covering_node(&root, span).map_err(|error| {
+    let selected = match select_covering_node(&root, span).map_err(|error| {
         trace_ast_error(
             error,
             "no AST syntax node covers the requested span",
             "AST covering-node selection failed",
         )
-    })?;
+    }) {
+        Ok(selected) => selected,
+        Err(error) => return (Err(error), recovered),
+    };
     debug!(
         kind = ?selected.kind(),
         span_width = u32::from(selected.text_range().len()),
@@ -97,7 +114,7 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
     // Lowering doubles as parser-error detection: a single descent both builds
     // the normalized subtree and rejects any `ERROR` node or token, so the
     // selected span is never walked twice.
-    let lowered = LoweringLimits::new(span)
+    let lowered = match LoweringLimits::new(span)
         .lower(&selected, 0)
         .map_err(|error| {
             if matches!(error, AstError::UnparsableSpan { .. }) {
@@ -108,10 +125,13 @@ pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> 
                 );
             }
             error
-        })?;
+        }) {
+        Ok(lowered) => lowered,
+        Err(error) => return (Err(error), recovered),
+    };
 
     debug_assert!(selected.text_range().contains_range(target_range));
-    Ok(NormalizedTree::new(lowered, span))
+    (Ok(NormalizedTree::new(lowered, span)), recovered)
 }
 
 fn validate_covering_node_budget(span: ByteSpan, depth: usize, node_count: usize) -> AstResult<()> {

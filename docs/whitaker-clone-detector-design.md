@@ -273,6 +273,20 @@ pub fn describe_lowering_failure(file_text: &str, start: usize, end: usize) -> S
 - **Canonical subtree hash:** Merkle-style hash where leaves are normalized
   (`<ID>`, `<LIT>`), and internal nodes include kind plus arity.
 
+### AST operational metrics
+
+The parser-agnostic `ast::metrics` module owns the stable metric names, the
+bounded outcome vocabulary, and the exhaustive `AstError` categorization.
+`lower_span` is the only permitted emitter for lowering latency, outcomes and
+parser recovery, including the no-parser fallback. Callers must compose with
+that boundary rather than emitting duplicate lowering observations.
+
+The outcome label is limited to `success`, `invalid_span`, `unparsable_span`,
+`node_budget_exhausted`, `depth_budget_exhausted` and `parser_unavailable`.
+Metrics must not label individual nodes, spans, paths or raw source text.
+Feature-vector emission remains owned by the 7.3.2 scoring and SARIF Run 1
+consumer so a vector is counted only when that boundary consumes it.
+
 ### Scoring and acceptance (Type-3)
 
 - Compute cosine similarity between histograms.
