@@ -58,9 +58,21 @@ pub(super) fn fetch_expected_checksum(
                 "checksum read failed",
             );
         })?;
-    // Normalize to lower case so an upper-case sidecar digest still matches the
+    // Convert the pure parser's `Option` into the URL-bearing failure, then
+    // normalize to lower case so an upper-case sidecar digest still matches the
     // lower-case digest produced by `compute_sha256`.
-    let expected = parse_checksum_token(&checksum_body, checksum_url)?.to_ascii_lowercase();
+    let token = parse_checksum_token(&checksum_body).ok_or_else(|| {
+        warn!(
+            category = CATEGORY_CHECKSUM,
+            url = %checksum_url,
+            "empty or invalid checksum file",
+        );
+        DependencyBinaryInstallError::Download {
+            url: checksum_url.to_owned(),
+            reason: "empty or invalid checksum file".to_string(),
+        }
+    })?;
+    let expected = token.to_ascii_lowercase();
     debug!(
         category = CATEGORY_CHECKSUM,
         checksum_state = CHECKSUM_STATE_PARSED,
@@ -71,30 +83,12 @@ pub(super) fn fetch_expected_checksum(
 }
 
 /// Extract the digest token (first whitespace-delimited field of the first
-/// line) from a checksum-file body.
-///
-/// # Errors
-///
-/// Returns [`DependencyBinaryInstallError::Download`] with an
-/// `empty or invalid checksum file` reason when no token is present.
-fn parse_checksum_token<'body>(
-    body: &'body str,
-    checksum_url: &str,
-) -> Result<&'body str, DependencyBinaryInstallError> {
+/// line) from a checksum-file body, returning `None` for an empty, blank, or
+/// otherwise tokenless body.
+fn parse_checksum_token(body: &str) -> Option<&str> {
     body.lines()
         .next()
         .and_then(|line| line.split_whitespace().next())
-        .ok_or_else(|| {
-            warn!(
-                category = CATEGORY_CHECKSUM,
-                url = %checksum_url,
-                "empty or invalid checksum file",
-            );
-            DependencyBinaryInstallError::Download {
-                url: checksum_url.to_owned(),
-                reason: "empty or invalid checksum file".to_string(),
-            }
-        })
 }
 
 /// Compute the lowercase-hex SHA-256 digest of `reader`.
@@ -168,27 +162,15 @@ mod tests {
     #[test]
     fn parse_checksum_token_returns_the_first_field_of_the_first_line() {
         let body = "abc123def456  whitaker-tool.tgz\nignored second line\n";
-        assert_eq!(
-            parse_checksum_token(body, "https://example.test/archive.tgz.sha256")
-                .expect("token present"),
-            "abc123def456",
-        );
+        assert_eq!(parse_checksum_token(body), Some("abc123def456"));
     }
 
     #[rstest]
     #[case("")]
     #[case("   \n")]
     #[case("\n\n")]
-    fn parse_checksum_token_rejects_an_empty_or_blank_body(#[case] body: &str) {
-        let error = parse_checksum_token(body, "https://example.test/archive.tgz.sha256")
-            .expect_err("blank checksum body must fail");
-        match error {
-            DependencyBinaryInstallError::Download { url, reason } => {
-                assert_eq!(url, "https://example.test/archive.tgz.sha256");
-                assert_eq!(reason, "empty or invalid checksum file");
-            }
-            other => panic!("expected a Download error, got {other:?}"),
-        }
+    fn parse_checksum_token_returns_none_for_an_empty_or_blank_body(#[case] body: &str) {
+        assert_eq!(parse_checksum_token(body), None);
     }
 
     #[test]

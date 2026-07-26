@@ -1,10 +1,9 @@
 //! End-to-end boundary tests for the dependency-archive download workflow.
 //!
-//! These tests drive [`super::downloader::download_from_urls`] against a
-//! loopback-only HTTP server so the full validate → fetch → write → checksum →
-//! verify sequence runs without touching the network. The server helper lives
-//! here — rather than in `downloader.rs` — to keep that module focused and
-//! within its size budget, as it is test support shared only by these cases.
+//! These drive [`super::downloader::download_from_urls`] against a loopback-only
+//! HTTP server so the full validate → fetch → write → checksum → verify sequence
+//! runs without the network. The server helper lives here (not in `downloader.rs`)
+//! to keep that module within its size budget; it is test support for these cases.
 
 use super::downloader::{
     DependencyArchiveDownloader, RepositoryArchiveDownloader, download_from_urls,
@@ -40,9 +39,8 @@ impl CannedResponse {
     }
 }
 
-/// A loopback-only HTTP/1.1 server for exercising the download workflow without
-/// touching the network. It answers a fixed route table, records the requested
-/// paths, and shuts down cleanly on drop even if no request arrives.
+/// A loopback-only HTTP/1.1 server for the download workflow. It answers a fixed
+/// route table, records requested paths, and shuts down cleanly on drop.
 struct LocalServer {
     base_url: String,
     requested: Arc<Mutex<Vec<String>>>,
@@ -91,8 +89,7 @@ impl Drop for LocalServer {
 }
 
 /// Accept connections until `stop` is set, serving each through the route table.
-/// Non-blocking polling keeps the loop responsive to shutdown even when no
-/// request ever arrives.
+/// Non-blocking polling keeps the loop responsive to shutdown when idle.
 fn run_server(
     listener: &TcpListener,
     routes: &HashMap<String, CannedResponse>,
@@ -117,11 +114,9 @@ fn serve_connection(
     routes: &HashMap<String, CannedResponse>,
     requested: &Arc<Mutex<Vec<String>>>,
 ) {
-    // The listener is non-blocking so the accept loop can poll for shutdown;
-    // restore blocking mode on the accepted connection and bound its reads and
-    // writes so a slow or stuck client cannot fail reads prematurely or hang
-    // shutdown. `try_clone` shares the same socket, so `peer` inherits these
-    // settings.
+    // Restore blocking mode and bound reads/writes on the accepted connection
+    // (the listener is non-blocking only so the accept loop can poll for
+    // shutdown). `try_clone` shares the socket, so `peer` inherits these.
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
@@ -301,6 +296,40 @@ fn download_from_urls_accepts_an_uppercase_checksum_sidecar() {
         &destination,
     )
     .expect("an upper-case checksum sidecar must still verify");
+}
+
+#[test]
+fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url() {
+    // A blank sidecar has no token; the workflow maps the pure parser's `None`
+    // to a URL-bearing `Download` error identifying the checksum endpoint.
+    let archive_bytes = b"whitaker dependency archive payload".to_vec();
+    let mut routes = HashMap::new();
+    routes.insert("/archive.tgz".to_owned(), CannedResponse::ok(archive_bytes));
+    routes.insert(
+        "/archive.tgz.sha256".to_owned(),
+        CannedResponse::ok(b"   \n".to_vec()),
+    );
+    let server = LocalServer::start(routes);
+
+    let temp = TempDir::new().expect("create temp dir");
+    let destination = temp.path().join("archive.tgz");
+    let checksum_url = server.url("/archive.tgz.sha256");
+
+    let error = download_from_urls(
+        &test_agent(),
+        &server.url("/archive.tgz"),
+        &checksum_url,
+        &destination,
+    )
+    .expect_err("a blank checksum sidecar must fail");
+
+    match error {
+        DependencyBinaryInstallError::Download { url, reason } => {
+            assert_eq!(url, checksum_url);
+            assert_eq!(reason, "empty or invalid checksum file");
+        }
+        other => panic!("expected a Download error, got {other:?}"),
+    }
 }
 
 #[cfg(unix)]
