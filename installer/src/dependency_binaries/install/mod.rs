@@ -4,11 +4,14 @@
 //! assets before the installer falls back to `cargo binstall` or `cargo
 //! install`.
 
+mod checksum;
 mod downloader;
 mod extractor;
 mod installer;
 mod metadata;
 
+#[cfg(test)]
+mod downloader_boundary_tests;
 #[cfg(test)]
 mod tests;
 
