@@ -951,6 +951,17 @@ The dependency-install path is split into focused modules under
 - `installer.rs` orchestrates directory discovery, download, extraction, and
   executable permission fixes
 
+`downloader.rs` performs all archive filesystem I/O through a
+capability-scoped `cap_std::fs_utf8::Dir` rather than ambient `std::fs`.
+`open_download_destination` first converts the destination to a
+`camino::Utf8Path`, rejecting a non-UTF-8 path up front with an
+`io::ErrorKind::InvalidInput` error. It then calls `open_destination_dir`,
+which opens the destination's parent via
+`Dir::open_ambient_dir(parent, ambient_authority())`; this is the single
+point where the `ambient_authority()` grant bootstraps the capability. Every
+subsequent archive operation — create, write, and re-open for checksum
+verification — goes through that `Dir` handle.
+
 The crate-level `installer/src/hex.rs` module (not part of the
 `install/` subdirectory above) provides `to_lower_hex`, which renders bytes
 as lowercase hex. It exists because `sha2` 0.11 changed `Sha256::finalize()`
