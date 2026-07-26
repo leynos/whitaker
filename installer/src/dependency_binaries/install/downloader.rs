@@ -62,7 +62,7 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
         filename: &str,
         destination: &Path,
     ) -> Result<(), DependencyBinaryInstallError> {
-        let archive_url = asset_url(filename);
+        let archive_url = HttpDownloader::asset_url(filename);
         let checksum_url = format!("{archive_url}.sha256");
         let config = ureq::Agent::config_builder()
             .timeout_global(Some(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS)))
@@ -112,7 +112,8 @@ fn download_from_urls(
     let expected_checksum = fetch_expected_checksum(agent, checksum_url)?;
 
     // Re-open the freshly written archive through the same capability and verify
-    // it; the checksum helper stays pure over the reader.
+    // it; the checksum helper stays pure over the reader. `verify_archive_checksum`
+    // consumes the reader, so the handle is closed before any cleanup below.
     let archive = dir.open(&archive_name).inspect_err(|error| {
         warn!(
             category = CATEGORY_CAPABILITY,
@@ -121,15 +122,16 @@ fn download_from_urls(
             "failed to reopen archive for verification",
         );
     })?;
-    verify_archive_checksum(archive, destination.as_std_path(), &expected_checksum)
-        .inspect(|_| {
+    match verify_archive_checksum(archive, destination.as_std_path(), &expected_checksum) {
+        Ok(()) => {
             debug!(
                 category = CATEGORY_CHECKSUM,
                 checksum_state = CHECKSUM_STATE_VERIFIED,
                 "archive checksum verified",
             );
-        })
-        .inspect_err(|error| {
+            Ok(())
+        }
+        Err(error) => {
             warn!(
                 category = CATEGORY_CHECKSUM,
                 checksum_state = CHECKSUM_STATE_MISMATCH,
@@ -137,7 +139,19 @@ fn download_from_urls(
                 error = %error,
                 "archive checksum verification failed",
             );
-        })
+            // Remove the unverified archive through the same capability so a
+            // retry never observes stale, unverified data at the destination.
+            if let Err(cleanup_error) = dir.remove_file(&archive_name) {
+                warn!(
+                    category = CATEGORY_CAPABILITY,
+                    archive_name = %archive_name,
+                    error = %cleanup_error,
+                    "failed to remove unverified archive after checksum failure",
+                );
+            }
+            Err(error)
+        }
+    }
 }
 
 /// Validate `destination` as UTF-8 and open its parent directory as a
@@ -371,13 +385,6 @@ fn verify_archive_checksum(
         });
     }
     Ok(())
-}
-
-/// Build the rolling-release asset URL for one dependency archive filename.
-fn asset_url(filename: &str) -> String {
-    // Dependency binaries are published to the rolling release so the
-    // repository-owned manifest can advance independently of installer tags.
-    HttpDownloader::asset_url(filename)
 }
 
 /// Map `ureq` failures into semantic dependency-installer errors.
@@ -735,6 +742,14 @@ mod tests {
         routes: &HashMap<String, CannedResponse>,
         requested: &Arc<Mutex<Vec<String>>>,
     ) {
+        // The listener is non-blocking so the accept loop can poll for shutdown;
+        // restore blocking mode on the accepted connection and bound its reads
+        // and writes so a slow or stuck client cannot fail reads prematurely or
+        // hang shutdown. `try_clone` shares the same socket, so `peer` inherits
+        // these settings.
+        let _ = stream.set_nonblocking(false);
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
         let Ok(peer) = stream.try_clone() else {
             return;
         };
@@ -768,8 +783,13 @@ mod tests {
             None => ("404 Not Found", b"not found"),
         };
         let header = format!(
-            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\n\
-             Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
+            concat!(
+                "HTTP/1.1 {}\r\n",
+                "Content-Length: {}\r\n",
+                "Content-Type: application/octet-stream\r\n",
+                "Connection: close\r\n\r\n",
+            ),
+            status_line,
             body.len(),
         );
         let _ = stream.write_all(header.as_bytes());
@@ -869,6 +889,43 @@ mod tests {
         let requested = server.requested_paths();
         assert!(requested.contains(&"/archive.tgz".to_owned()));
         assert!(requested.contains(&"/archive.tgz.sha256".to_owned()));
+
+        // The unverified archive must not survive a checksum mismatch, so a
+        // retry never reads stale data from the destination.
+        let temp_dir = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
+        let dir =
+            Dir::open_ambient_dir(temp_dir, ambient_authority()).expect("open temp dir capability");
+        assert!(
+            !dir.exists("archive.tgz"),
+            "archive must be removed from the destination after a checksum mismatch",
+        );
+    }
+
+    #[test]
+    fn download_from_urls_accepts_an_uppercase_checksum_sidecar() {
+        // Serve the correct digest in UPPER CASE: the download must still verify,
+        // proving `fetch_expected_checksum` normalizes the sidecar token to lower
+        // case before comparison.
+        let archive_bytes = b"whitaker dependency archive payload".to_vec();
+        let checksum = to_lower_hex(&Sha256::digest(&archive_bytes)).to_ascii_uppercase();
+        let mut routes = HashMap::new();
+        routes.insert("/archive.tgz".to_owned(), CannedResponse::ok(archive_bytes));
+        routes.insert(
+            "/archive.tgz.sha256".to_owned(),
+            CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
+        );
+        let server = LocalServer::start(routes);
+
+        let temp = TempDir::new().expect("create temp dir");
+        let destination = temp.path().join("archive.tgz");
+
+        download_from_urls(
+            &test_agent(),
+            &server.url("/archive.tgz"),
+            &server.url("/archive.tgz.sha256"),
+            &destination,
+        )
+        .expect("an upper-case checksum sidecar must still verify");
     }
 
     #[cfg(unix)]
