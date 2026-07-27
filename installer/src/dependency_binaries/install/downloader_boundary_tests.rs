@@ -5,178 +5,88 @@
 //! runs without the network. The server helper lives here (not in `downloader.rs`)
 //! to keep that module within its size budget; it is test support for these cases.
 
-use super::downloader::{
-    DependencyArchiveDownloader, RepositoryArchiveDownloader, download_from_urls,
-};
+use super::downloader::download_from_urls;
+// Only the non-UTF-8 production-path test (gated `#[cfg(unix)]`) drives the
+// trait and concrete downloader; keep these imports on the same gate so other
+// platforms do not see them as unused.
+#[cfg(unix)]
+use super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
+use super::http_test_server::{CannedResponse, LocalServer};
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
 use camino::Utf8Path;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
+use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::io::Read;
+use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 
-/// One canned HTTP/1.1 response body served for a matched path.
-struct CannedResponse {
-    status_line: &'static str,
-    body: Vec<u8>,
-}
-
-impl CannedResponse {
-    fn ok(body: Vec<u8>) -> Self {
-        Self {
-            status_line: "200 OK",
-            body,
-        }
-    }
-}
-
-/// A loopback-only HTTP/1.1 server for the download workflow. It answers a fixed
-/// route table, records requested paths, and shuts down cleanly on drop.
-struct LocalServer {
-    base_url: String,
-    requested: Arc<Mutex<Vec<String>>>,
-    stop: Arc<AtomicBool>,
-    handle: Option<JoinHandle<()>>,
-}
-
-impl LocalServer {
-    fn start(routes: HashMap<String, CannedResponse>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
-        let port = listener.local_addr().expect("resolve local addr").port();
-        listener
-            .set_nonblocking(true)
-            .expect("set listener non-blocking");
-        let requested = Arc::new(Mutex::new(Vec::new()));
-        let stop = Arc::new(AtomicBool::new(false));
-        let handle = {
-            let requested = Arc::clone(&requested);
-            let stop = Arc::clone(&stop);
-            thread::spawn(move || run_server(&listener, &routes, &requested, &stop))
-        };
-        Self {
-            base_url: format!("http://127.0.0.1:{port}"),
-            requested,
-            stop,
-            handle: Some(handle),
-        }
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!("{}{path}", self.base_url)
-    }
-
-    fn requested_paths(&self) -> Vec<String> {
-        self.requested.lock().expect("lock requested paths").clone()
-    }
-}
-
-impl Drop for LocalServer {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
-    }
-}
-
-/// Accept connections until `stop` is set, serving each through the route table.
-/// Non-blocking polling keeps the loop responsive to shutdown when idle.
-fn run_server(
-    listener: &TcpListener,
-    routes: &HashMap<String, CannedResponse>,
-    requested: &Arc<Mutex<Vec<String>>>,
-    stop: &AtomicBool,
-) {
-    while !stop.load(Ordering::Relaxed) {
-        match listener.accept() {
-            Ok((stream, _)) => serve_connection(stream, routes, requested),
-            Err(ref error) if error.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(5));
-            }
-            Err(_) => break,
-        }
-    }
-}
-
-/// Read one request, record its path, and write the matching canned response
-/// (or a 404). `Connection: close` lets the client frame the response end.
-fn serve_connection(
-    mut stream: TcpStream,
-    routes: &HashMap<String, CannedResponse>,
-    requested: &Arc<Mutex<Vec<String>>>,
-) {
-    // Restore blocking mode and bound reads/writes on the accepted connection
-    // (the listener is non-blocking only so the accept loop can poll for
-    // shutdown). `try_clone` shares the socket, so `peer` inherits these.
-    let _ = stream.set_nonblocking(false);
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-    let Ok(peer) = stream.try_clone() else {
-        return;
-    };
-    let mut reader = BufReader::new(peer);
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
-        return;
-    }
-    let path = request_line
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or_default()
-        .to_owned();
-    // Drain the remaining request headers up to the blank line.
-    loop {
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
-            Ok(_) if line == "\r\n" || line == "\n" => break,
-            Ok(_) => {}
-            Err(_) => break,
-        }
-    }
-    requested
-        .lock()
-        .expect("lock requested paths")
-        .push(path.clone());
-
-    let (status_line, body): (&str, &[u8]) = match routes.get(&path) {
-        Some(response) => (response.status_line, &response.body),
-        None => ("404 Not Found", b"not found"),
-    };
-    let header = format!(
-        concat!(
-            "HTTP/1.1 {}\r\n",
-            "Content-Length: {}\r\n",
-            "Content-Type: application/octet-stream\r\n",
-            "Connection: close\r\n\r\n",
-        ),
-        status_line,
-        body.len(),
-    );
-    let _ = stream.write_all(header.as_bytes());
-    let _ = stream.write_all(body);
-    let _ = stream.flush();
-}
-
-/// A short-timeout agent for driving the local server.
-fn test_agent() -> ureq::Agent {
+/// A short-timeout agent fixture for driving the local server.
+#[fixture]
+fn agent() -> ureq::Agent {
     let config = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
         .build();
     ureq::Agent::new_with_config(config)
 }
 
-#[test]
-fn download_from_urls_writes_the_archive_and_requests_both_endpoints() {
+/// A running local server plus a temporary destination for `archive.tgz`. The
+/// temp dir is retained so the destination outlives the test body.
+struct DownloadHarness {
+    server: LocalServer,
+    _temp: TempDir,
+    destination: PathBuf,
+}
+
+impl DownloadHarness {
+    fn archive_url(&self) -> String {
+        self.server.url("/archive.tgz")
+    }
+
+    fn checksum_url(&self) -> String {
+        self.server.url("/archive.tgz.sha256")
+    }
+
+    fn requested_paths(&self) -> Vec<String> {
+        self.server.requested_paths()
+    }
+
+    /// Open the destination's parent directory as a capability, for asserting on
+    /// the written archive.
+    fn destination_dir(&self) -> Dir {
+        let parent = Utf8Path::from_path(
+            self.destination
+                .parent()
+                .expect("destination has a parent directory"),
+        )
+        .expect("temp path is UTF-8");
+        Dir::open_ambient_dir(parent, ambient_authority()).expect("open temp dir capability")
+    }
+}
+
+/// Start a local server for `routes` and a temp destination for the archive.
+///
+/// This is a plain constructor rather than an `#[fixture]` because the route
+/// table varies per test and depends on test-local data, which rstest's
+/// fixture injection cannot supply.
+fn download_harness(routes: HashMap<String, CannedResponse>) -> DownloadHarness {
+    let server = LocalServer::start(routes);
+    let temp = TempDir::new().expect("create temp dir");
+    let destination = temp.path().join("archive.tgz");
+    DownloadHarness {
+        server,
+        _temp: temp,
+        destination,
+    }
+}
+
+#[rstest]
+fn download_from_urls_writes_the_archive_and_requests_both_endpoints(agent: ureq::Agent) {
     let archive_bytes = b"whitaker dependency archive payload".to_vec();
     let checksum = to_lower_hex(&Sha256::digest(&archive_bytes));
     let mut routes = HashMap::new();
@@ -188,38 +98,34 @@ fn download_from_urls_writes_the_archive_and_requests_both_endpoints() {
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
     );
-    let server = LocalServer::start(routes);
-
-    let temp = TempDir::new().expect("create temp dir");
-    let destination = temp.path().join("archive.tgz");
+    let harness = download_harness(routes);
 
     download_from_urls(
-        &test_agent(),
-        &server.url("/archive.tgz"),
-        &server.url("/archive.tgz.sha256"),
-        &destination,
+        &agent,
+        &harness.archive_url(),
+        &harness.checksum_url(),
+        &harness.destination,
     )
     .expect("download succeeds");
 
     // Read the archive back through a capability to confirm the exact bytes
     // landed at the requested destination.
-    let temp_dir = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
-    let dir =
-        Dir::open_ambient_dir(temp_dir, ambient_authority()).expect("open temp dir capability");
     let mut written = Vec::new();
-    dir.open("archive.tgz")
+    harness
+        .destination_dir()
+        .open("archive.tgz")
         .expect("open written archive")
         .read_to_end(&mut written)
         .expect("read written archive");
     assert_eq!(written, archive_bytes);
 
-    let requested = server.requested_paths();
+    let requested = harness.requested_paths();
     assert!(requested.contains(&"/archive.tgz".to_owned()));
     assert!(requested.contains(&"/archive.tgz.sha256".to_owned()));
 }
 
-#[test]
-fn download_from_urls_reports_a_checksum_mismatch() {
+#[rstest]
+fn download_from_urls_reports_a_checksum_mismatch(agent: ureq::Agent) {
     let archive_bytes = b"whitaker dependency archive payload".to_vec();
     // Syntactically valid but incorrect (all-zero) digest.
     let wrong_checksum = "0".repeat(64);
@@ -229,16 +135,13 @@ fn download_from_urls_reports_a_checksum_mismatch() {
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{wrong_checksum}  archive.tgz\n").into_bytes()),
     );
-    let server = LocalServer::start(routes);
-
-    let temp = TempDir::new().expect("create temp dir");
-    let destination = temp.path().join("archive.tgz");
+    let harness = download_harness(routes);
 
     let error = download_from_urls(
-        &test_agent(),
-        &server.url("/archive.tgz"),
-        &server.url("/archive.tgz.sha256"),
-        &destination,
+        &agent,
+        &harness.archive_url(),
+        &harness.checksum_url(),
+        &harness.destination,
     )
     .expect_err("mismatched checksum must fail");
 
@@ -248,7 +151,7 @@ fn download_from_urls_reports_a_checksum_mismatch() {
             expected,
             actual,
         } => {
-            assert_eq!(archive, destination);
+            assert_eq!(archive, harness.destination);
             assert_eq!(expected, wrong_checksum);
             assert_ne!(actual, expected);
             assert_eq!(actual.len(), 64);
@@ -256,23 +159,20 @@ fn download_from_urls_reports_a_checksum_mismatch() {
         other => panic!("expected a Checksum error, got {other:?}"),
     }
 
-    let requested = server.requested_paths();
+    let requested = harness.requested_paths();
     assert!(requested.contains(&"/archive.tgz".to_owned()));
     assert!(requested.contains(&"/archive.tgz.sha256".to_owned()));
 
     // The unverified archive must not survive a checksum mismatch, so a retry
     // never reads stale data from the destination.
-    let temp_dir = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
-    let dir =
-        Dir::open_ambient_dir(temp_dir, ambient_authority()).expect("open temp dir capability");
     assert!(
-        !dir.exists("archive.tgz"),
+        !harness.destination_dir().exists("archive.tgz"),
         "archive must be removed from the destination after a checksum mismatch",
     );
 }
 
-#[test]
-fn download_from_urls_accepts_an_uppercase_checksum_sidecar() {
+#[rstest]
+fn download_from_urls_accepts_an_uppercase_checksum_sidecar(agent: ureq::Agent) {
     // Serve the correct digest in UPPER CASE: the download must still verify,
     // proving `fetch_expected_checksum` normalizes the sidecar token to lower
     // case before comparison.
@@ -284,22 +184,19 @@ fn download_from_urls_accepts_an_uppercase_checksum_sidecar() {
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
     );
-    let server = LocalServer::start(routes);
-
-    let temp = TempDir::new().expect("create temp dir");
-    let destination = temp.path().join("archive.tgz");
+    let harness = download_harness(routes);
 
     download_from_urls(
-        &test_agent(),
-        &server.url("/archive.tgz"),
-        &server.url("/archive.tgz.sha256"),
-        &destination,
+        &agent,
+        &harness.archive_url(),
+        &harness.checksum_url(),
+        &harness.destination,
     )
     .expect("an upper-case checksum sidecar must still verify");
 }
 
-#[test]
-fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url() {
+#[rstest]
+fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url(agent: ureq::Agent) {
     // A blank sidecar has no token; the workflow maps the pure parser's `None`
     // to a URL-bearing `Download` error identifying the checksum endpoint.
     let archive_bytes = b"whitaker dependency archive payload".to_vec();
@@ -309,17 +206,14 @@ fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url() {
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(b"   \n".to_vec()),
     );
-    let server = LocalServer::start(routes);
-
-    let temp = TempDir::new().expect("create temp dir");
-    let destination = temp.path().join("archive.tgz");
-    let checksum_url = server.url("/archive.tgz.sha256");
+    let harness = download_harness(routes);
+    let checksum_url = harness.checksum_url();
 
     let error = download_from_urls(
-        &test_agent(),
-        &server.url("/archive.tgz"),
+        &agent,
+        &harness.archive_url(),
         &checksum_url,
-        &destination,
+        &harness.destination,
     )
     .expect_err("a blank checksum sidecar must fail");
 
@@ -330,6 +224,12 @@ fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url() {
         }
         other => panic!("expected a Download error, got {other:?}"),
     }
+
+    // The archive was written before the checksum failed, so it must be removed.
+    assert!(
+        !harness.destination_dir().exists("archive.tgz"),
+        "archive must be removed after a checksum retrieval failure",
+    );
 }
 
 #[cfg(unix)]
@@ -348,7 +248,7 @@ fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
     ]));
 
     let error = download_from_urls(
-        &test_agent(),
+        &agent(),
         &server.url("/archive.tgz"),
         &server.url("/archive.tgz.sha256"),
         &invalid,

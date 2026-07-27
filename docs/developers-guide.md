@@ -943,9 +943,13 @@ The dependency-install path is split into focused modules under
 
 - `metadata.rs` computes target-specific archive names, binary names, and the
   exact archive member path
-- `downloader.rs` resolves rolling-release asset URLs, downloads archives,
-  and verifies the SHA-256 checksum by streaming the file in fixed-size
-  chunks and rendering the digest with `to_lower_hex`
+- `downloader.rs` resolves rolling-release asset URLs, downloads the
+  archive, re-opens it through the capability, and orchestrates the
+  checksum-verification call
+- `checksum.rs` fetches and parses the `.sha256` sidecar, then verifies the
+  SHA-256 checksum: `compute_sha256` streams the archive in fixed-size
+  chunks and renders the digest with `to_lower_hex`, and
+  `verify_archive_checksum` compares it against the expected value
 - `extractor.rs` extracts the exact packaged member into a temporary file and
   atomically renames it into the local bin directory
 - `installer.rs` orchestrates directory discovery, download, extraction, and

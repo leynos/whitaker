@@ -13,6 +13,8 @@ mod metadata;
 #[cfg(test)]
 mod downloader_boundary_tests;
 #[cfg(test)]
+mod http_test_server;
+#[cfg(test)]
 mod tests;
 
 pub use downloader::DependencyArchiveDownloader;

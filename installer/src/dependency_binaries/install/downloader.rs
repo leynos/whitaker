@@ -13,12 +13,10 @@ use tracing::{debug, instrument, warn};
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
-// Bounded `category` field emitted on every boundary event, kept stable so
-// operators can aggregate download failures without unbounded label
-// cardinality: `utf8` (non-UTF-8 destination), `capability` (a `cap_std`
-// directory create/open/reopen), `fetch` (a network request), `write`
-// (streaming the archive to disk), and `checksum` (checksum retrieval, parse,
-// or verification — shared with `super::checksum`).
+// Bounded `category` field on every boundary event, kept stable so operators
+// can aggregate failures without unbounded cardinality: `utf8`, `capability`
+// (a `cap_std` dir op), `fetch` (network), `write` (archive-to-disk), and
+// `checksum` (retrieval/parse/verify, shared with `super::checksum`).
 const CATEGORY_UTF8: &str = "utf8";
 const CATEGORY_CAPABILITY: &str = "capability";
 const CATEGORY_FETCH: &str = "fetch";
@@ -71,13 +69,11 @@ impl DependencyArchiveDownloader for RepositoryArchiveDownloader {
 /// Run the download workflow against explicit archive and checksum URLs.
 ///
 /// This internal seam keeps [`RepositoryArchiveDownloader::download`] as
-/// production orchestration — agent construction and release-URL derivation —
-/// while letting tests drive the full boundary sequence against a local server.
-/// The public API exposes no URL override.
-///
-/// The destination is validated and its parent-directory capability is opened
-/// before the first HTTP request, so an invalid destination fails without any
-/// network access.
+/// production orchestration (agent construction and release-URL derivation)
+/// while letting tests drive the full boundary sequence against a local server;
+/// the public API exposes no URL override. The destination is validated and its
+/// capability opened before the first HTTP request, so an invalid destination
+/// fails without any network access.
 ///
 /// # Errors
 ///
@@ -100,16 +96,18 @@ pub(super) fn download_from_urls(
 ) -> Result<(), DependencyBinaryInstallError> {
     debug!("starting dependency archive download");
 
-    // Acquire a parent-directory capability up front; every archive read and
-    // write flows through it, so the downloader never reaches for ambient
-    // `std::fs` file access. Validation happens here, before any HTTP request.
+    // Acquire the parent-directory capability up front so every archive read and
+    // write flows through it (never ambient `std::fs`); validation happens here,
+    // before any HTTP request.
     let (destination, dir, archive_name) = open_download_destination(destination)?;
     download_archive(agent, archive_url, &dir, &archive_name)?;
-    let expected_checksum = fetch_expected_checksum(agent, checksum_url)?;
+    // Any failure after the archive is written removes it, so a retry never sees
+    // a partial or unverified file.
+    let expected_checksum = fetch_expected_checksum(agent, checksum_url)
+        .inspect_err(|_| remove_partial_archive(&dir, &archive_name))?;
 
-    // Re-open the freshly written archive through the same capability and verify
-    // it; the checksum helper stays pure over the reader. `verify_archive_checksum`
-    // consumes the reader, so the handle is closed before any cleanup below.
+    // Re-open the written archive and verify it; `verify_archive_checksum`
+    // consumes the reader, closing the handle before any cleanup below.
     let archive = dir.open(&archive_name).inspect_err(|error| {
         warn!(
             category = CATEGORY_CAPABILITY,
@@ -117,6 +115,7 @@ pub(super) fn download_from_urls(
             error = %error,
             "failed to reopen archive for verification",
         );
+        remove_partial_archive(&dir, &archive_name);
     })?;
     match verify_archive_checksum(archive, destination.as_std_path(), &expected_checksum) {
         Ok(()) => {
@@ -135,24 +134,27 @@ pub(super) fn download_from_urls(
                 error = %error,
                 "archive checksum verification failed",
             );
-            // Remove the unverified archive through the same capability so a
-            // retry never observes stale, unverified data at the destination.
-            if let Err(cleanup_error) = dir.remove_file(&archive_name) {
-                warn!(
-                    category = CATEGORY_CAPABILITY,
-                    archive_name = %archive_name,
-                    error = %cleanup_error,
-                    "failed to remove unverified archive after checksum failure",
-                );
-            }
+            // Remove the unverified archive so a retry never observes stale data.
+            remove_partial_archive(&dir, &archive_name);
             Err(error)
         }
     }
 }
 
+/// Remove a partial or unverified archive; a cleanup failure is only logged.
+fn remove_partial_archive(dir: &Dir, archive_name: &str) {
+    if let Err(error) = dir.remove_file(archive_name) {
+        warn!(
+            category = CATEGORY_CAPABILITY,
+            archive_name = %archive_name,
+            error = %error,
+            "failed to remove archive after a download failure",
+        );
+    }
+}
+
 /// Validate `destination` as UTF-8 and open its parent directory as a
-/// capability, returning owned values so the caller has no borrowed-lifetime
-/// coupling to the directory handle or archive name.
+/// capability, returning owned values so the caller has no borrowed lifetimes.
 ///
 /// # Errors
 ///
@@ -185,8 +187,8 @@ fn open_download_destination(
 
 /// Fetch the archive at `url` and write it into `dir` as `archive_name`.
 ///
-/// The response body is streamed only into the handle returned by
-/// `dir.create`, which is dropped before returning.
+/// The response body is streamed only into the handle returned by `dir.create`,
+/// which is dropped before returning.
 ///
 /// # Errors
 ///
@@ -220,24 +222,26 @@ fn download_archive(
     })?;
     let mut body = response.into_body();
     let mut reader = body.as_reader();
-    io::copy(&mut reader, &mut file).inspect_err(|error| {
+    let copy_result = io::copy(&mut reader, &mut file);
+    drop(file);
+    if let Err(error) = copy_result {
         warn!(
             category = CATEGORY_WRITE,
             url = %url,
             error = %error,
             "failed to write archive to disk",
         );
-    })?;
-    drop(file);
+        // Remove the partially written archive so a retry starts clean.
+        remove_partial_archive(dir, archive_name);
+        return Err(error.into());
+    }
     Ok(())
 }
 
 /// Open the parent directory of `destination` as a capability, returning it
-/// alongside the archive's file name.
-///
-/// `cap_std` grants no ambient authority, so the parent directory is opened
-/// explicitly; all subsequent archive I/O is scoped to the returned handle
-/// rather than routed through ambient `std::fs`.
+/// alongside the archive's file name. `cap_std` grants no ambient authority, so
+/// the parent is opened explicitly and all subsequent archive I/O is scoped to
+/// the returned handle rather than ambient `std::fs`.
 ///
 /// # Errors
 ///
