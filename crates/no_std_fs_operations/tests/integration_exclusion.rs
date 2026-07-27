@@ -26,7 +26,7 @@ use serial_test::serial;
 
 mod test_support;
 
-use test_support::{create_fixture_project, create_path_fixture_project};
+use test_support::{FixtureProject, create_fixture_project, create_path_fixture_project};
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 
@@ -251,27 +251,29 @@ struct Expectation {
     should_succeed: bool,
 }
 
+/// A fixture-project factory paired with the label used in its error context.
+///
+/// The constructor and its `kind` always travel together, so grouping them keeps
+/// `run_fixture_exclusion_test` within the argument-count budget while still
+/// naming both pieces explicitly.
+struct FixtureFactory {
+    /// Builds the fixture project for the configuration mechanism under test.
+    create: fn(&str, bool) -> anyhow::Result<FixtureProject>,
+    /// Labels the mechanism (for example `"crate"` or `"path"`) so a creation
+    /// failure identifies which fixture could not be built.
+    kind: &'static str,
+}
+
 /// Shared driver for exclusion integration tests.
-fn run_exclusion_test(
+fn run_fixture_exclusion_test(
     crate_name: &str,
     is_excluded: bool,
     expectation: Expectation,
+    factory: FixtureFactory,
 ) -> anyhow::Result<()> {
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_fixture_project(crate_name, is_excluded)
-        .context("failed to create fixture project")?;
-    assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation)
-}
-
-/// Shared driver for module-path exclusion integration tests.
-fn run_path_exclusion_test(
-    crate_name: &str,
-    is_module_excluded: bool,
-    expectation: Expectation,
-) -> anyhow::Result<()> {
-    let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_path_fixture_project(crate_name, is_module_excluded)
-        .context("failed to create path fixture project")?;
+    let fixture = (factory.create)(crate_name, is_excluded)
+        .with_context(|| format!("failed to create {} fixture project", factory.kind))?;
     assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation)
 }
 
@@ -299,7 +301,15 @@ fn exclusion_crates_behaviour_test(
     #[case] is_excluded: bool,
     #[case] expected: Expectation,
 ) -> anyhow::Result<()> {
-    run_exclusion_test(crate_name, is_excluded, expected)
+    run_fixture_exclusion_test(
+        crate_name,
+        is_excluded,
+        expected,
+        FixtureFactory {
+            create: create_fixture_project,
+            kind: "crate",
+        },
+    )
 }
 
 #[rstest]
@@ -326,7 +336,15 @@ fn exclusion_paths_behaviour_test(
     #[case] is_module_excluded: bool,
     #[case] expected: Expectation,
 ) -> anyhow::Result<()> {
-    run_path_exclusion_test(crate_name, is_module_excluded, expected)
+    run_fixture_exclusion_test(
+        crate_name,
+        is_module_excluded,
+        expected,
+        FixtureFactory {
+            create: create_path_fixture_project,
+            kind: "path",
+        },
+    )
 }
 
 /// Runs `cargo dylint` against the fixture and counts diagnostics.
