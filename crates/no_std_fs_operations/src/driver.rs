@@ -2,10 +2,11 @@
 //! `std::fs` operations.
 
 use crate::diagnostics::emit_diagnostic;
+use crate::exclusion::PathExclusions;
 use crate::usage::{
     StdFsUsage, UsageCategory, classify_def_id, classify_qpath, classify_res, label_is_std_fs,
 };
-use log::{info, warn};
+use log::{debug, info, warn};
 use rustc_hir as hir;
 use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
@@ -14,6 +15,7 @@ use rustc_span::{Span, sym};
 use serde::Deserialize;
 use std::collections::HashSet;
 use whitaker::SharedConfig;
+use whitaker_common::SimplePath;
 use whitaker_common::i18n::Localizer;
 use whitaker_common::i18n::get_localizer_for_lint;
 
@@ -28,9 +30,16 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// ```toml
 /// [no_std_fs_operations]
 /// excluded_crates = ["my_cli_app", "test_utilities"]
+/// excluded_paths = ["my_app::legacy_io", "my_app::bin::migrate"]
 /// ```
 ///
-/// Use Rust crate names (underscores), not Cargo package names (hyphens).
+/// `excluded_crates` exempts an entire crate; `excluded_paths` exempts an
+/// individual module (and everything nested beneath it). Both use Rust
+/// identifiers (underscores), not Cargo package names (hyphens). Each
+/// `excluded_paths` entry is a fully qualified path anchored at the crate
+/// identifier and matches on segment boundaries, so `my_app::legacy_io`
+/// exempts `my_app::legacy_io` and its descendants but never a sibling such as
+/// `my_app::legacy_io_utils`.
 ///
 /// # Strict Validation
 ///
@@ -47,6 +56,7 @@ const LINT_NAME: &str = "no_std_fs_operations";
 /// # use std::collections::HashSet;
 /// let config = NoStdFsConfig {
 ///     excluded_crates: HashSet::from(["my_cli_app".to_owned()]),
+///     excluded_paths: HashSet::new(),
 /// };
 /// assert!(config.is_excluded("my_cli_app"));
 /// assert!(!config.is_excluded("other_crate"));
@@ -56,11 +66,21 @@ const LINT_NAME: &str = "no_std_fs_operations";
 pub struct NoStdFsConfig {
     /// Crate names excluded from the lint. These crates are allowed to use
     /// `std::fs` operations without triggering diagnostics.
-    #[serde(deserialize_with = "deserialize_excluded_crates")]
+    #[serde(deserialize_with = "deserialize_string_set")]
     pub excluded_crates: HashSet<String>,
+    /// Module paths excluded from the lint. Items within these modules (and
+    /// their descendants) are allowed to use `std::fs` operations without
+    /// triggering diagnostics. Entries are fully qualified paths anchored at
+    /// the crate identifier, matched on segment boundaries.
+    #[serde(deserialize_with = "deserialize_string_set")]
+    pub excluded_paths: HashSet<String>,
 }
 
-fn deserialize_excluded_crates<'de, D>(deserializer: D) -> Result<HashSet<String>, D::Error>
+/// Deserialize a TOML array of strings into a `HashSet`.
+///
+/// Shared by `excluded_crates` and `excluded_paths` so both fields accept the
+/// same `["a", "b"]` array form and reject non-array or non-string input.
+fn deserialize_string_set<'de, D>(deserializer: D) -> Result<HashSet<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -80,6 +100,7 @@ impl NoStdFsConfig {
     /// # use std::collections::HashSet;
     /// let config = NoStdFsConfig {
     ///     excluded_crates: HashSet::from(["my_cli".to_owned(), "test_utils".to_owned()]),
+    ///     excluded_paths: HashSet::new(),
     /// };
     ///
     /// assert!(config.is_excluded("my_cli"));
@@ -89,11 +110,18 @@ impl NoStdFsConfig {
     pub fn is_excluded(&self, crate_name: &str) -> bool {
         self.excluded_crates.contains(crate_name)
     }
+
+    /// Build the module-path exclusion set from `excluded_paths`.
+    #[must_use]
+    pub(crate) fn path_exclusions(&self) -> PathExclusions {
+        PathExclusions::new(&self.excluded_paths)
+    }
 }
 
 pub struct NoStdFsOperations {
     localizer: Localizer,
     excluded: bool,
+    path_exclusions: PathExclusions,
 }
 
 impl Default for NoStdFsOperations {
@@ -101,6 +129,7 @@ impl Default for NoStdFsOperations {
         Self {
             localizer: Localizer::new(None),
             excluded: false,
+            path_exclusions: PathExclusions::default(),
         }
     }
 }
@@ -122,11 +151,17 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         let crate_name = crate_name_sym.as_str();
 
         self.excluded = config.is_excluded(crate_name);
+        self.path_exclusions = config.path_exclusions();
 
         if self.excluded {
             info!(
                 target: LINT_NAME,
                 "crate `{crate_name}` is excluded from no_std_fs_operations lint"
+            );
+        } else if !self.path_exclusions.is_empty() {
+            debug!(
+                target: LINT_NAME,
+                "crate `{crate_name}` has module-path exclusions configured for no_std_fs_operations"
             );
         }
     }
@@ -136,9 +171,13 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
             return;
         }
         if let hir::ItemKind::Use(path, ..) = item.kind {
+            let site = LintSite {
+                hir_id: item.hir_id(),
+                span: path.span,
+            };
             for res in path.res.present_items() {
                 let usage = classify_res(cx, res, UsageCategory::Import);
-                self.emit_optional(cx, path.span, usage);
+                self.emit_optional(cx, site, usage);
             }
         }
     }
@@ -147,14 +186,18 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         if self.should_skip() {
             return;
         }
+        let site = LintSite {
+            hir_id: expr.hir_id,
+            span: expr.span,
+        };
         match &expr.kind {
             hir::ExprKind::Path(qpath) => {
                 let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
-                self.emit_optional(cx, expr.span, usage);
+                self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::Struct(qpath, ..) => {
                 let usage = classify_qpath(cx, qpath, expr.hir_id, UsageCategory::Call);
-                self.emit_optional(cx, expr.span, usage);
+                self.emit_optional(cx, site, usage);
             }
             hir::ExprKind::MethodCall(segment, receiver, ..) => {
                 let mut usage = cx
@@ -166,7 +209,7 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
                     usage = self.receiver_usage_for_method(cx, receiver, segment.ident.as_str());
                 }
 
-                self.emit_optional(cx, expr.span, usage);
+                self.emit_optional(cx, site, usage);
             }
             _ => {}
         }
@@ -178,9 +221,27 @@ impl<'tcx> LateLintPass<'tcx> for NoStdFsOperations {
         }
         if let hir::TyKind::Path(qpath) = &ty.kind {
             let usage = classify_qpath(cx, qpath, ty.hir_id, UsageCategory::Type);
-            self.emit_optional(cx, ty.span, usage);
+            self.emit_optional(
+                cx,
+                LintSite {
+                    hir_id: ty.hir_id,
+                    span: ty.span,
+                },
+                usage,
+            );
         }
     }
+}
+
+/// The HIR location of a candidate `std::fs` usage.
+///
+/// Bundling the node's `HirId` with its span keeps `emit_optional` to a single
+/// site argument: the `HirId` resolves the enclosing module path and the span
+/// anchors the emitted diagnostic.
+#[derive(Clone, Copy)]
+struct LintSite {
+    hir_id: hir::HirId,
+    span: Span,
 }
 
 impl NoStdFsOperations {
@@ -190,13 +251,30 @@ impl NoStdFsOperations {
         self.excluded
     }
 
-    fn emit_optional(&self, cx: &LateContext<'_>, span: Span, usage: Option<StdFsUsage>) {
+    fn emit_optional(&self, cx: &LateContext<'_>, site: LintSite, usage: Option<StdFsUsage>) {
         if self.should_skip() {
             return;
         }
-        if let Some(usage) = usage {
-            self.emit(cx, span, usage);
+        let Some(usage) = usage else {
+            return;
+        };
+        // Resolve the enclosing item's path only for genuine `std::fs` hits
+        // (rare), and only when path exclusions are configured, so the common
+        // path pays no lookup cost.
+        if self.is_path_excluded(cx, site.hir_id) {
+            return;
         }
+        self.emit(cx, site.span, usage);
+    }
+
+    /// Returns `true` when the item enclosing `hir_id` falls within a
+    /// configured `excluded_paths` entry.
+    fn is_path_excluded(&self, cx: &LateContext<'_>, hir_id: hir::HirId) -> bool {
+        if self.path_exclusions.is_empty() {
+            return false;
+        }
+        self.path_exclusions
+            .excludes(&enclosing_item_path(cx, hir_id))
     }
 
     fn emit(&self, cx: &LateContext<'_>, span: Span, usage: StdFsUsage) {
@@ -228,6 +306,29 @@ impl NoStdFsOperations {
         let operation = format!("{label}::{method}");
         Some(StdFsUsage::new(operation, UsageCategory::Call))
     }
+}
+
+/// Resolve the fully qualified path of the item enclosing `hir_id`.
+///
+/// The path is anchored at the crate identifier (for example
+/// `my_app::legacy_io::reader`), matching the convention used by
+/// `excluded_paths` entries. `def_path_str` renders the local crate root as the
+/// `crate` keyword rather than the crate name, so the path is assembled from the
+/// crate name plus the named def-path segments instead. Unnamed segments (such
+/// as `impl` blocks or closures) carry no module identity and are skipped.
+fn enclosing_item_path(cx: &LateContext<'_>, hir_id: hir::HirId) -> SimplePath {
+    let owner = cx.tcx.hir_get_parent_item(hir_id).to_def_id();
+    let def_path = cx.tcx.def_path(owner);
+    let mut segments = Vec::with_capacity(def_path.data.len() + 1);
+    segments.push(cx.tcx.crate_name(owner.krate).to_string());
+    segments.extend(
+        def_path
+            .data
+            .iter()
+            .filter_map(|segment| segment.data.get_opt_name())
+            .map(|name| name.to_string()),
+    );
+    SimplePath::new(segments)
 }
 
 /// Trait for loading lint configuration, enabling dependency injection for tests.

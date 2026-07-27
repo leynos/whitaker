@@ -8,6 +8,10 @@ mod behaviour;
 mod diagnostics;
 #[cfg(feature = "dylint-driver")]
 mod driver;
+#[cfg(feature = "dylint-driver")]
+mod exclusion;
+#[cfg(all(feature = "dylint-driver", test))]
+mod exclusion_behaviour;
 #[cfg(all(feature = "dylint-driver", test))]
 mod tests;
 #[cfg(feature = "dylint-driver")]
