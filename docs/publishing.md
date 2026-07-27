@@ -2,8 +2,8 @@
 
 This guide explains how to publish the Whitaker installer to
 [crates.io](https://crates.io). The installer is published under the crate name
-[whitaker-installer](https://crates.io/crates/whitaker-installer) and depends
-on the shared support crate
+[whitaker-installer](https://crates.io/crates/whitaker-installer)
+and depends on the shared support crate
 [whitaker-common](https://crates.io/crates/whitaker-common).
 
 ## Preconditions
@@ -40,16 +40,15 @@ Before building the lint libraries, `publish-check` provisions the pinned
 Dylint tools by delegating to `scripts/install-dylint-tools.sh`. Host-tool
 installs run under the toolchain named by `DYLINT_TOOLS_TOOLCHAIN` (default
 `stable`), because the dylint 6.0.1 lockfile requires a newer rustc than the
-repository's pinned nightly provides. The script
-compares any installed `cargo-dylint` against `CARGO_DYLINT_VERSION`, and
-checks `dylint-link` via `cargo install --list` (`dylint-link` is a linker
-shim whose `--version` is forwarded to `cc`, so it cannot be probed directly).
-Tools that are missing or mismatched are installed into an isolated, per-run
-temporary root; the Makefile prepends that root's `bin/` directory to `PATH`
-only when it exists, so the pinned versions take precedence without touching
-any system-wide install. If either install fails, the script exits non-zero
-and the gate fails fast rather than proceeding with stale or absent tools.
-This behaviour is covered by
+repository's pinned nightly provides. The script compares any installed
+`cargo-dylint` against `CARGO_DYLINT_VERSION`, and checks `dylint-link` via
+`cargo install --list` (`dylint-link` is a linker shim whose `--version` is
+forwarded to `cc`, so it cannot be probed directly). Tools that are missing or
+mismatched are installed into an isolated, per-run temporary root; the Makefile
+prepends that root's `bin/` directory to `PATH` only when it exists, so the
+pinned versions take precedence without touching any system-wide install. If
+either install fails, the script exits non-zero and the gate fails fast rather
+than proceeding with stale or absent tools. This behaviour is covered by
 `tests/workflows/test_install_dylint_tools.py`.
 
 To validate the installer archive path used by the release workflow on the

@@ -14,11 +14,11 @@ ExecPlan is implemented, the lint will walk every strict `#[rstest]` test in
 the crate, recognize local helper calls inside those tests, classify each
 positional argument as either a fixture-local binding, a stable literal, a
 stable constant path, or unsupported, and record one
-`whitaker_common::rstest::ArgFingerprint` per call. The lint pass keeps
-records in a deterministic `BTreeMap<String, Vec<CallSiteRecord>>`, keyed by
-callee definition path. Its Visitor traverses nested and deferred closure
-bodies while preserving closure-span fallback context, ready for roadmap item
-8.2.3 to apply thresholds and emit diagnostics.
+`whitaker_common::rstest::ArgFingerprint` per call. The lint pass keeps records
+in a deterministic `BTreeMap<String, Vec<CallSiteRecord>>`, keyed by callee
+definition path. Its Visitor traverses nested and deferred closure bodies while
+preserving closure-span fallback context, ready for roadmap item 8.2.3 to apply
+thresholds and emit diagnostics.
 
 The observable outcome of 8.2.2 is therefore structural rather than diagnostic.
 A maintainer can:
@@ -138,10 +138,9 @@ This plan was approved before implementation started.
   one inner `#[test] fn case_N()` per case. The same helper call therefore
   appears `N` times even though the user wrote it once. Counting the generated
   sites separately would distort 8.2.3 thresholds. Severity: high. Likelihood:
-  high. Mitigation: key the call-site map on the callee definition path and
-  the user-editable call-site location, while keeping the source `DefId` on
-  each record. Compare via the source span returned by recovery before
-  deduplicating.
+  high. Mitigation: key the call-site map on the callee definition path and the
+  user-editable call-site location, while keeping the source `DefId` on each
+  record. Compare via the source span returned by recovery before deduplicating.
 
 - Risk: callee resolution returns no `DefId` when the call goes through a
   trait method, a generic function whose instantiation is not yet known, or a
@@ -244,16 +243,17 @@ This plan was approved before implementation started.
   assertions.
 - [x] (2026-06-04T03:37:16Z) Revalidated after the CodeRabbit fixes with
   `cargo nextest run -p rstest_helper_should_be_fixture --all-targets --all-features`,
-  `make check-fmt`, `make lint`, `make test`, and `make markdownlint`; the full
-  workspace test run again executed 1459 tests with 1459 passed and 3 skipped.
+  `make check-fmt`, `make lint`, `make test`, and `make markdownlint`; the
+  full workspace test run again executed 1459 tests with 1459 passed and 3
+  skipped.
 - [x] (2026-06-04T04:09:23Z) Addressed the valid trivial CodeRabbit style
   finding by collapsing the trybuild fixture function to a single-line simple
   return, rejected an equivalent macro fixture form because it produces an
   `unused_braces` compiler warning under the macro expansion, and revalidated
   with focused nextest, `make check-fmt`, `make lint`, and `make test`.
 - [x] (2026-06-04T04:12:23Z) Documented the intentional `static` argument path
-  in the zero-diagnostic UI fixture after CodeRabbit suggested normalizing it
-  to `const`; the fixture keeps both forms so the collector exercises constant
+  in the zero-diagnostic UI fixture after CodeRabbit suggested normalizing it to
+  `const`; the fixture keeps both forms so the collector exercises constant
   and static definition paths in one pass case.
 - [x] (2026-06-04T04:43:04Z) Re-ran
   `coderabbit review --agent --dir crates/rstest_helper_should_be_fixture`
@@ -277,8 +277,9 @@ This plan was approved before implementation started.
   commits to origin, and updated draft PR
   [#235](https://github.com/leynos/whitaker/pull/235).
 - [x] (2026-06-16T00:00:00Z) Consolidated duplicate-call and distinct-span
-  storage outcomes in the parameterized `collector_records_calls_by_source_span`
-  unit test, preserving the existing semantics.
+  storage outcomes in the parameterized
+  `collector_records_calls_by_source_span` unit test, preserving the existing
+  semantics.
 - [x] (2026-06-16T00:00:00Z) Moved the `check_fn` call-site collection body
   into the private `collect_call_sites` helper so the `LateLintPass`
   implementation now delegates with one statement and the collection boundary
@@ -394,11 +395,10 @@ Each completed item should be timestamped, e.g.,
   2026-06-04.
 
 - Decision: Keep the final refactor private to the lint crate and avoid public
-  API changes. Rationale: the duplicated setup lived entirely in collector
-  unit and behaviour tests, and moving `check_fn` logic into
-  `collect_call_sites` improves the internal driver shape without changing
-  lint registration, configuration, or observable diagnostics. Author/Date:
-  Codex / 2026-06-16.
+  API changes. Rationale: the duplicated setup lived entirely in collector unit
+  and behaviour tests, and moving `check_fn` logic into `collect_call_sites`
+  improves the internal driver shape without changing lint registration,
+  configuration, or observable diagnostics. Author/Date: Codex / 2026-06-16.
 
 ## Outcomes & retrospective
 
@@ -413,16 +413,16 @@ emission remain cleanly scoped to roadmap item 8.2.3.
 The main design choices held: compiler-aware lowering stayed inside
 `crates/rstest_helper_should_be_fixture`, the pure fingerprint model in
 `whitaker_common::rstest` did not gain rustc dependencies, and conservative
-unsupported handling avoids recording uncertain helper evidence. The final
-test refactor reduced duplicated setup in the unit and BDD coverage without
-altering semantics, and the driver now exposes a private collection helper
-that 8.2.3 can extend without growing `check_fn`.
+unsupported handling avoids recording uncertain helper evidence. The final test
+refactor reduced duplicated setup in the unit and BDD coverage without altering
+semantics, and the driver now exposes a private collection helper that 8.2.3
+can extend without growing `check_fn`.
 
 Validation covered the focused lint crate, full workspace gates during the
 implementation milestones, documentation linting, Mermaid diagram validation,
-and scoped CodeRabbit reviews with 0 unresolved findings. The one follow-up
-for 8.2.3 is to keep using the existing collector records as passive evidence
-and add aggregation thresholds and diagnostics without changing the 8.2.2
+and scoped CodeRabbit reviews with 0 unresolved findings. The one follow-up for
+8.2.3 is to keep using the existing collector records as passive evidence and
+add aggregation thresholds and diagnostics without changing the 8.2.2
 fingerprint or source-span deduplication semantics.
 
 ## Context and orientation
@@ -542,10 +542,10 @@ pure pieces and one adapter:
    `ArgFingerprint`, the source test `DefId`, and the recovered user-editable
    call span.
 2. `pub(crate) struct CallSiteCollector` stores records in a
-   `BTreeMap<String, Vec<CallSiteRecord>>`, where the string key is the
-   callee definition path from `tcx.def_path_str(callee_def_id)`. It
-   deduplicates with a private `CallSiteLocation` stored in a `BTreeSet`, so
-   `#[case]`-generated siblings collapse into one record.
+   `BTreeMap<String, Vec<CallSiteRecord>>`, where the string key is the callee
+   definition path from `tcx.def_path_str(callee_def_id)`. It deduplicates with
+   a private `CallSiteLocation` stored in a `BTreeSet`, so `#[case]`-generated
+   siblings collapse into one record.
 3. `pub(crate) fn lower_arg_atom<'tcx>(...) -> ArgAtom` is the compiler-aware
    HIR-to-`ArgAtom` adapter. It uses `HashSet<rustc_hir::HirId>` fixture-local
    ID collection, matches `Res::Local(binding_id)` bindings against those IDs,
@@ -596,9 +596,9 @@ Unit tests in this stage cover pure helpers only:
 - deduplication — recording the same `(callee, source-span)` twice keeps a
   single record and adds nothing on the second call;
 - `lower_arg_atom` mapping tests — drive the adapter from synthetic HIR
-  fixtures only where unavoidable, reserve pure model properties for
-  `ArgAtom`/`ArgFingerprint`, and cover the adapter through compiled or UI
-  tests that exercise `LateContext`.
+  fixtures only where unavoidable, reserve pure model properties for `ArgAtom`/
+  `ArgFingerprint`, and cover the adapter through compiled or UI tests that
+  exercise `LateContext`.
 
 The `lower_arg_atom` and `resolve_local_callee` adapters need a `LateContext`
 to function, so they should be exercised by compiled or UI tests (Stage E)
@@ -834,8 +834,8 @@ The implementation is accepted when all of the following are true:
   documented APIs and at least the documented unit tests pass.
 - `RstestHelperShouldBeFixture` accumulates a non-empty collection state
   when a synthetic test crate contains a `#[rstest]` test calling a local
-  helper, demonstrated through the Cargo-backed
-  `collection_zero_diagnostic` UI harness.
+  helper, demonstrated through the Cargo-backed `collection_zero_diagnostic` UI
+  harness.
 - Calling the same helper twice from the same source location (whether
   reached directly or via `#[case]`-generated companions) yields exactly one
   collected record.
@@ -933,8 +933,8 @@ Wyvern design-coherence findings (summary):
 Firecrawl findings (summary):
 
 The source-backed findings below rely on the rstest documentation[^1], Dylint
-documentation[^2], rustc nightly documentation[^3], and the prior-art
-research[^4].
+documentation[^2], rustc nightly documentation[^3], and the prior-art research
+[^4].
 
 ```plaintext
 - rstest 0.26 provider-driven parameter attributes:

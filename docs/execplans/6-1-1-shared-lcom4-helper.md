@@ -1,9 +1,8 @@
 # Add shared LCOM4 cohesion helper (roadmap 6.1.1)
 
-This execution plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This execution plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -26,8 +25,8 @@ bundles unrelated responsibilities.
 
 The helper is a **pure library module** (`common/src/lcom4.rs`) that receives
 pre-extracted method metadata (names, accessed fields, and called methods as
-plain strings) and returns connected component counts. It does **not** depend
-on `rustc_private` or any HIR types — the HIR traversal that populates
+plain strings) and returns connected component counts. It does **not** depend on
+`rustc_private` or any HIR types — the HIR traversal that populates
 `MethodInfo` is a separate task (roadmap 6.1.2).
 
 This separation matches the project's established pattern: `complexity_signal`

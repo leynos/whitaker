@@ -1,9 +1,8 @@
 # Publish installer dependency binaries from repository releases
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -236,12 +235,12 @@ Relevant existing files:
   Dependency-check/install orchestration. It verifies `cargo-dylint` by running
   `cargo dylint --version` and never executes `dylint-link` as a health check.
   A repository-release `dylint-link` is accepted once the verified install
-  pipeline succeeds: pinned asset naming, checksum verification, expected-member
-  extraction, and executable-permission (launch-eligibility) setup. A
-  Cargo-managed `dylint-link` is instead verified by two independent checks: an
-  executable resolves on `PATH` (honouring Windows `PATHEXT`), and Cargo's
-  recorded installed version for the package matches the expected version.
-  Missing tools are installed with `cargo binstall` or `cargo install`.
+  pipeline succeeds: pinned asset naming, checksum verification,
+  expected-member extraction, and executable-permission (launch-eligibility)
+  setup. A Cargo-managed `dylint-link` is instead verified by two independent
+  checks: an executable resolves on `PATH` (honouring Windows `PATHEXT`), and
+  Cargo's recorded installed version for the package matches the expected
+  version. Missing tools are installed with `cargo binstall` or `cargo install`.
 - `installer/src/cli.rs`
   Existing installer flags. No new user-facing flag is required by the task,
   but this file may need a small addition only if implementation decides to
@@ -317,8 +316,8 @@ Acceptance for Stage A:
 
 ### Stage B: Introduce a Rust domain model for dependency binaries
 
-Add a small Rust module subtree under `installer/src/dependency_binaries/`.
-Keep `deps.rs` as the orchestration boundary, but move data modelling and
+Add a small Rust module subtree under `installer/src/dependency_binaries/`. Keep
+`deps.rs` as the orchestration boundary, but move data modelling and
 repository-install mechanics into this new subtree.
 
 Recommended responsibilities:
@@ -353,9 +352,9 @@ Acceptance for Stage B:
 
 ### Stage C: Extend release packaging for dependency binaries
 
-Reuse the `installer_packaging` pattern to build archives for `cargo-dylint`
-and `dylint-link`. Do not leave archive creation as ad hoc shell inside
-workflow YAML.
+Reuse the `installer_packaging` pattern to build archives for `cargo-dylint` and
+`dylint-link`. Do not leave archive creation as ad hoc shell inside workflow
+YAML.
 
 Recommended implementation:
 

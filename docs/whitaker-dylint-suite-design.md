@@ -251,15 +251,15 @@ Utilities shared by lints:
 
 ## 3) Seven core lints (specs + sketches)
 
-| Crate                         | Kind            | Summary                                                                                                                 | Level |
-| ----------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- | ----- |
-| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                    | warn  |
-| `no_expect_outside_tests`     | restriction     | Ban `.expect(…)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item).   | deny  |
-| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                     | warn  |
-| `module_must_have_inner_docs` | pedantic        | Every module must start with a `//!` inner doc comment.                                                                 | warn  |
-| `conditional_max_n_branches`  | style           | Flag conditionals with more than the configured number of predicate branches; encourage decomposition.                  | warn  |
-| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.        | warn  |
-| `module_max_lines`            | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                       | warn  |
+| Crate                         | Kind            | Summary                                                                                                               | Level |
+| ----------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------- | ----- |
+| `function_attrs_follow_docs`  | style           | Outer doc comments on functions must precede other outer attributes.                                                  | warn  |
+| `no_expect_outside_tests`     | restriction     | Ban `.expect(…)` on `Option`/`Result` outside test/doctest contexts (per effective visibility of the enclosing item). | deny  |
+| `public_fn_must_have_docs`    | pedantic        | Publicly exported functions require at least one outer doc comment.                                                   | warn  |
+| `module_must_have_inner_docs` | pedantic        | Every module must start with a `//!` inner doc comment.                                                               | warn  |
+| `conditional_max_n_branches`  | style           | Flag conditionals with more than the configured number of predicate branches; encourage decomposition.                | warn  |
+| `test_must_not_have_example`  | style           | Test functions (e.g. `#[test]`, `#[tokio::test]`) must not ship example blocks or `# Examples` headings in docs.      | warn  |
+| `module_max_lines`            | maintainability | Flag modules whose span exceeds 400 lines; encourage decomposition or submodules.                                     | warn  |
 
 ### Per-lint crate scaffolding
 
@@ -333,19 +333,19 @@ Implementation details:
   span, whether the attribute is a doc comment (via `doc_str`), and whether it
   is outer by reading the attribute style (`AttrStyle`). It accepts `Unparsed`
   attributes directly, and `Parsed` attribute kinds whose user-written span is
-  recoverable through `parsed_attribute_span`'s whitelist — `DocComment` is
-  one such parsed kind, handled the same way as `Inline` and `MustUse` — so
-  those attributes keep participating in ordering. `Parsed` kinds outside the
+  recoverable through `parsed_attribute_span`'s whitelist — `DocComment` is one
+  such parsed kind, handled the same way as `Inline` and `MustUse` — so those
+  attributes keep participating in ordering. `Parsed` kinds outside the
   whitelist return `None` and are excluded, whether they carry no span at all
   (such as `Cold`) or carry one that the ordering check deliberately does not
   recover (such as `AllowInternalUnsafe`). Inner attributes remain excluded
   from the ordering check in line with the implementation.
 - `attribute_within_item` decides whether an attribute belongs to the item
   being checked. Because modern nightlies exclude outer attributes from the
-  item's HIR span — they sit immediately before it rather than inside it —
-  the check accepts a span either contained within the item span (older
-  compiler behaviour, and inner attributes) or preceding it (outer attributes
-  on current nightlies).
+  item's HIR span — they sit immediately before it rather than inside it — the
+  check accepts a span either contained within the item span (older compiler
+  behaviour, and inner attributes) or preceding it (outer attributes on current
+  nightlies).
 - `FunctionKind` labels free functions, inherent methods, and trait methods so
   diagnostics mention the affected item type explicitly.
 - Diagnostics now rely on `LateContext::emit_spanned_lint`, highlighting the
@@ -439,7 +439,8 @@ flowchart TD
     NotTest --> ApplyNonTestRules["Apply no_expect_outside_tests rules (disallow .expect(…) here)"]
 ```
 
-*Figure 2: Flowchart showing how function items are classified as tests during linting.*
+*Figure 2: Flowchart showing how function items are classified as tests during
+linting.*
 
 Behaviour-driven unit tests exercise the summarizer in isolation, covering
 plain functions, explicit test attributes, modules guarded by `cfg(test)`, and
@@ -476,8 +477,7 @@ appears at all (including a lone inner attribute), it falls back to
 wrapper also maps to `MissingDocs`. The shared span helpers from
 `whitaker::hir` supply consistent ranges for inline and file modules. Localized
 strings pull from `common/locales/*/module_must_have_inner_docs.ftl`, passing
-the
-module name via the Fluent argument map, and fall back to a deterministic
+the module name via the Fluent argument map, and fall back to a deterministic
 English message whenever localization fails.
 
 **Testing.** Unit tests (rstest) and `rstest-bdd` scenarios exercise the
@@ -485,8 +485,8 @@ snippet classifier, covering happy paths, missing docs, inner attributes that
 precede documentation, outer-doc-only modules, `cfg_attr`-injected docs,
 whitespace-tolerant `#![ doc = "" ]` syntax, and false-positive rejection for
 attributes such as `#![allow(undocumented_unsafe_blocks)]` or
-`#![documentation = "…"]`. UI fixtures capture inline modules, file modules
-(via `#[path = "…"]`), and macro-generated modules to prove that macro output
+`#![documentation = "…"]`. UI fixtures capture inline modules, file modules (via
+`#[path = "…"]`), and macro-generated modules to prove that macro output
 remains exempt. A Welsh (`cy`) UI smoke test asserts that diagnostics localize
 correctly under `DYLINT_LOCALE=cy`.
 
@@ -503,8 +503,8 @@ match guard conditions. Inline expressions such as
 contribute to the Complex Method smell. Encourage encapsulation via a
 well-named helper or a local variable.
 
-**Rationale.** Teams often accrete guard clauses by bolting additional
-`&&`/`||`/`!` terms into a conditional. The logic becomes entangled with
+**Rationale.** Teams often accrete guard clauses by bolting additional `&&`/
+`||` /`!` terms into a conditional. The logic becomes entangled with
 control-flow, harming readability and reuse. Extracting the predicate makes the
 rule explicit, improves testability, and reduces accidental duplication.
 
@@ -533,16 +533,15 @@ the internal nodes of the predicate tree.
 
 **Positions checked.**
 
-- `if <cond> { … }` where `<cond>` is not an `ExprKind::Let` (i.e. exclude `if
-  let`).
+- `if <cond> { … }` where `<cond>` is not an `ExprKind::Let` (i.e. exclude
+  `if let`).
 - `while <cond> { … }` with the same exclusion for `while let`.
 - `match` guards represented in HIR as `Guard::If(<cond>)`.
 
 **Algorithm.** Traverse the HIR expression and compute the number of branches:
 
 <!-- markdownlint-disable MD033 -->
-<pre><code>count_branches(e) =
-  if e is Binary(And|Or, lhs, rhs):
+<pre><code>count_branches(e) = if e is Binary(And|Or, lhs, rhs):
     count_branches(lhs) + count_branches(rhs)
   if e is Unary(Not, inner):
     count_branches(inner)
@@ -557,10 +556,9 @@ Emit a diagnostic when `count_branches(e) > max_branches`, where the default
 **Implementation sketch (`src/lib.rs`).**
 
 <!-- markdownlint-disable MD033 MD013 -->
-<pre><code class="language-rust">use dylint_linting::{declare_late_lint, impl_late_lint};
-use rustc_hir as hir;
-use rustc_hir::{BinOpKind, Expr, ExprKind, Guard, UnOp};
-use rustc_lint::{LateContext, LateLintPass};
+<pre><code class="language-rust">use dylint_linting::{declare_late_lint,
+impl_late_lint}; use rustc_hir as hir; use rustc_hir::{BinOpKind, Expr,
+ExprKind, Guard, UnOp}; use rustc_lint::{LateContext, LateLintPass};
 
 declare_late_lint!(
     pub CONDITIONAL_MAX_N_BRANCHES,
@@ -595,8 +593,7 @@ impl_late_lint! {
             _ => {}
         }
     }
-}
-</code></pre>
+} </code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 The runtime implementation tracks the configured limit, loads localization via
@@ -624,8 +621,8 @@ struct Config {
 }
 ```
 
-Read via `dylint_linting::config_or_default` and honour crate-level overrides
-in `dylint.toml`.
+Read via `dylint_linting::config_or_default` and honour crate-level overrides in
+`dylint.toml`.
 
 **False positives / limitations.**
 
@@ -639,14 +636,13 @@ in `dylint.toml`.
 **UI tests.**
 
 <!-- markdownlint-disable MD033 -->
-<pre><code>crates/conditional_max_n_branches/ui/
-├─ fail_if_three_branches.rs  # default limit hit via three-way conjunction
-├─ fail_while_guard.rs        # `while` guard with nested disjunction
-├─ fail_match_guard.rs        # match guard with three branches
-├─ fail_configured_limit.rs   # `max_branches = 1` highlights two-branch cond
-├─ pass_if_two_branches.rs    # default limit allows two branches
-├─ pass_custom_limit.rs       # raised limit accepts three branches
-└─ pass_if_let.rs             # pattern guards remain out of scope
+<pre><code>crates/conditional_max_n_branches/ui/ ├─ fail_if_three_branches.rs
+# default limit hit via three-way conjunction ├─ fail_while_guard.rs        #
+`while` guard with nested disjunction ├─ fail_match_guard.rs        # match
+guard with three branches ├─ fail_configured_limit.rs   # `max_branches = 1`
+highlights two-branch cond ├─ pass_if_two_branches.rs    # default limit allows
+two branches ├─ pass_custom_limit.rs       # raised limit accepts three
+branches └─ pass_if_let.rs             # pattern guards remain out of scope
 </code></pre>
 <!-- markdownlint-enable MD033 -->
 
@@ -774,49 +770,36 @@ returns.
 ### Crate layout
 
 <!-- markdownlint-disable MD033 -->
-<pre><code>crates/no_unwrap_or_else_panic/
-├─ Cargo.toml
-├─ src/
-│  ├─ lib.rs               # feature gating, public surface
-│  ├─ context.rs           # context detection (tests/main/doctest)
-│  ├─ policy.rs            # pure decision logic (unit tested)
-│  ├─ panic_detector.rs    # shared panic + unwrap/expect detector
-│  └─ diagnostics.rs       # localization + emission
-└─ ui/
-   ├─ bad_unwrap_or_else_panic.rs      # direct panic
-   ├─ bad_unwrap_or_else_panic_any.rs  # panic_any
-   ├─ bad_unwrap_or_else_unwrap.rs     # inner unwrap panic
-   ├─ bad_main.rs                      # main panics without allow
-   ├─ bad_in_test.rs                   # test context denied
-   ├─ ok_in_test.rs                    # safe fallback in tests
-   ├─ ok_main_allowed.rs               # allow_in_main config
-   ├─ ok_map_err.rs                    # propagates errors
-   ├─ ok_unwrap_or_else_safe.rs        # safe fallback
-   ├─ ok_plain_unwrap.rs               # plain unwrap allowed
-   ├─ ok_plain_expect.rs               # plain expect allowed
-   └─ ok_custom_unwrap_or_else.rs      # non-Option/Result receiver ignored
-</code></pre>
+<pre><code>crates/no_unwrap_or_else_panic/ ├─ Cargo.toml ├─ src/ │  ├─ lib.rs
+# feature gating, public surface │  ├─ context.rs           #
+context detection (tests/main/doctest) │  ├─ policy.rs            # pure
+decision logic (unit tested) │  ├─ panic_detector.rs    # shared panic +
+unwrap/expect detector │  └─ diagnostics.rs       # localization + emission └─
+ui/ ├─ bad_unwrap_or_else_panic.rs      # direct panic ├─
+bad_unwrap_or_else_panic_any.rs  # panic_any ├─ bad_unwrap_or_else_unwrap.rs
+# inner unwrap panic ├─ bad_main.rs                      # main panics
+without allow ├─ bad_in_test.rs                   # test context denied ├─
+ok_in_test.rs                    # safe fallback in tests ├─ ok_main_allowed.rs
+# allow_in_main config ├─ ok_map_err.rs                    #
+propagates errors ├─ ok_unwrap_or_else_safe.rs        # safe fallback ├─
+ok_plain_unwrap.rs               # plain unwrap allowed ├─ ok_plain_expect.rs
+# plain expect allowed └─ ok_custom_unwrap_or_else.rs      #
+non-Option/Result receiver ignored </code></pre>
 <!-- markdownlint-enable MD033 -->
 
 ### `Cargo.toml`
 
 <!-- markdownlint-disable MD033 MD013 -->
-<pre><code class="language-toml">[package]
-name = "no_unwrap_or_else_panic"
-version = "0.1.0"
-edition = "2024"
+<pre><code class="language-toml">[package] name = "no_unwrap_or_else_panic"
+version = "0.1.0" edition = "2024"
 
-[lib]
-crate-type = ["cdylib"]
+[lib] crate-type = ["cdylib"]
 
-[dependencies]
-dylint_linting = { workspace = true }
-common = { path = "../../common" }
-serde = { version = "1", features = ["derive"] }
-clippy_utils = { workspace = true, optional = true }
+[dependencies] dylint_linting = { workspace = true } common = { path =
+"../../common" } serde = { version = "1", features = ["derive"] } clippy_utils
+= { workspace = true, optional = true }
 
-[features]
-dylint-driver = [
+[features] dylint-driver = [
     "dep:dylint_linting",
     "dep:log",
     "dep:rustc_ast",
@@ -826,12 +809,9 @@ dylint-driver = [
     "dep:rustc_span",
     "dep:serde",
     "dep:whitaker",
-]
-clippy = ["dylint-driver", "dep:clippy_utils"]
+] clippy = ["dylint-driver", "dep:clippy_utils"]
 
-[dev-dependencies]
-dylint_testing = { workspace = true }
-</code></pre>
+[dev-dependencies] dylint_testing = { workspace = true } </code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 > `dylint-driver` gates rustc_private linkage; tests build without it to avoid
@@ -891,11 +871,9 @@ Pair each `.rs` with a `.stderr` expectation using `dylint_testing::ui_test`.
   separately when the policy fits.
 
 <!-- markdownlint-disable MD033 MD013 -->
-<pre><code class="language-toml">[workspace.metadata.dylint]
-libraries = [
+<pre><code class="language-toml">[workspace.metadata.dylint] libraries = [
     { git = "https://example.com/your/repo.git", pattern = "crates/no_unwrap_or_else_panic" },
-]
-</code></pre>
+] </code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 ### CI and build matrix
@@ -927,8 +905,8 @@ libraries = [
   fallbacks are permitted inside `main`; the default keeps panics forbidden.
 - Panic detection prefers `clippy_utils::macros::is_panic` when the optional
   `clippy` feature is enabled and falls back to matching well-known panic paths
-  (e.g. `core::panicking::panic_fmt` and `std::rt::panic_fmt`) plus
-  `unwrap`/`expect` on `Option`/`Result` receivers.
+  (e.g. `core::panicking::panic_fmt` and `std::rt::panic_fmt`) plus `unwrap`/
+  `expect` on `Option`/`Result` receivers.
 - Behavioural coverage relies on `rstest-bdd` scenarios that assert lint
   decisions across production, test, doctest, and `main` contexts; UI tests
   document both the enforced and allowed configurations.
@@ -941,37 +919,38 @@ dependency so their individual dylint entrypoints stay dormant while the
 combined pass exposes a single `register_lints` symbol.
 
 <!-- markdownlint-disable MD033 MD013 -->
-<pre><code class="language-toml">[package]
-name = "whitaker_suite"
-version = "0.1.0"
-edition = "2024"
+<pre><code class="language-toml">[package] name = "whitaker_suite" version =
+"0.1.0" edition = "2024"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+[lib] crate-type = ["cdylib", "rlib"]
 
-[dependencies]
-dylint_linting = { workspace = true }
-function_attrs_follow_docs = { path = "../crates/function_attrs_follow_docs", features = ["dylint-driver", "constituent"] }
-no_expect_outside_tests = { path = "../crates/no_expect_outside_tests", features = ["dylint-driver", "constituent"] }
-module_must_have_inner_docs = { path = "../crates/module_must_have_inner_docs", features = ["dylint-driver", "constituent"] }
-conditional_max_n_branches = { path = "../crates/conditional_max_n_branches", features = ["dylint-driver", "constituent"] }
-module_max_lines = { path = "../crates/module_max_lines", features = ["dylint-driver", "constituent"] }
-no_unwrap_or_else_panic = { path = "../crates/no_unwrap_or_else_panic", features = ["dylint-driver", "constituent"] }
-no_std_fs_operations = { path = "../crates/no_std_fs_operations", features = ["dylint-driver", "constituent"] }
+[dependencies] dylint_linting = { workspace = true } function_attrs_follow_docs
+= { path = "../crates/function_attrs_follow_docs", features = ["dylint-driver",
+"constituent"] } no_expect_outside_tests = { path =
+"../crates/no_expect_outside_tests", features = ["dylint-driver",
+"constituent"] } module_must_have_inner_docs = { path =
+"../crates/module_must_have_inner_docs", features = ["dylint-driver",
+"constituent"] } conditional_max_n_branches = { path =
+"../crates/conditional_max_n_branches", features = ["dylint-driver",
+"constituent"] } module_max_lines = { path = "../crates/module_max_lines",
+features = ["dylint-driver", "constituent"] } no_unwrap_or_else_panic = { path
+= "../crates/no_unwrap_or_else_panic", features = ["dylint-driver",
+"constituent"] } no_std_fs_operations = { path =
+"../crates/no_std_fs_operations", features = ["dylint-driver", "constituent"] }
 </code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 <!-- markdownlint-disable MD033 MD013 -->
-<pre><code class="language-rust">use conditional_max_n_branches::ConditionalMaxNBranches;
-use dylint_linting::{declare_combined_late_lint_pass, dylint_library};
-use function_attrs_follow_docs::FunctionAttrsFollowDocs;
-use module_max_lines::ModuleMaxLines;
-use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
-use no_expect_outside_tests::NoExpectOutsideTests;
-use no_std_fs_operations::NoStdFsOperations;
-use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
-use rustc_lint::{LateLintPass, LintStore};
-use rustc_session::Session;
+<pre><code class="language-rust">use
+conditional_max_n_branches::ConditionalMaxNBranches; use
+dylint_linting::{declare_combined_late_lint_pass, dylint_library}; use
+function_attrs_follow_docs::FunctionAttrsFollowDocs; use
+module_max_lines::ModuleMaxLines; use
+module_must_have_inner_docs::ModuleMustHaveInnerDocs; use
+no_expect_outside_tests::NoExpectOutsideTests; use
+no_std_fs_operations::NoStdFsOperations; use
+no_unwrap_or_else_panic::NoUnwrapOrElsePanic; use rustc_lint::{LateLintPass,
+LintStore}; use rustc_session::Session;
 
 dylint_library!();
 
@@ -998,8 +977,7 @@ pub extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
         no_std_fs_operations::NO_STD_FS_OPERATIONS,
     ]);
     store.register_late_pass(|_| Box::new(SuitePass));
-}
-</code></pre>
+} </code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 Re-export `register_suite_lints` and `suite_lint_decls` so tests and
@@ -1257,13 +1235,9 @@ highlight the top two intervals in the diagnostic.
 **Configuration** (via `dylint.toml`).
 
 <!-- markdownlint-disable MD033 MD013 -->
-<pre><code class="language-toml">[bumpy_road_function]
-threshold = 2.5
-window = 3
-min_bump_lines = 2
-include_closures = false
-weights = { depth = 1.0, predicate = 0.5, flow = 0.5 }
-</code></pre>
+<pre><code class="language-toml">[bumpy_road_function] threshold = 2.5 window =
+3 min_bump_lines = 2 include_closures = false weights = { depth = 1.0,
+predicate = 0.5, flow = 0.5 } </code></pre>
 <!-- markdownlint-enable MD033 MD013 -->
 
 **Diagnostics and guidance.** The lint recommends extracting helper functions
@@ -1586,8 +1560,7 @@ used by the installer itself.
   alongside the archives.
 - Extend `.github/workflows/rolling-release.yml` so dependency binaries are
   rebuilt only when `installer/dependency-binaries.toml` changes on `main`, or
-  when the workflow is run manually with
-  `force_dependency_binary_rebuild=true`.
+  when the workflow is run manually with `force_dependency_binary_rebuild=true`.
 - Extend `.github/workflows/release.yml` so tagged releases publish the same
   dependency-binary archives and provenance document next to the
   `whitaker-installer` archives.

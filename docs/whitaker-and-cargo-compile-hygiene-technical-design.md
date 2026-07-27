@@ -17,14 +17,14 @@ Whitaker, a **Dylint-based** lint suite that runs inside `rustc` and enforces
 (a) **architectural boundaries** (including a hexagonal “domain / inbound /
 outbound” rule-set modelled on the existing Wildside architecture lint) and (b)
 **compile-time hygiene** rules that are best expressed at the **source/HIR**
-level. [^1][^4]
+level.[^1][^4]
 
 `cargo-compile-hygiene`, a **Cargo-aware tool** (a `cargo` custom subcommand)
 that consumes `Cargo.toml` plus `cargo metadata` output to enforce compile-time
 hygiene rules that are best expressed at the **package/target/dependency
 graph** level (integration test target budgets, heavy dependency gating,
 duplicate version hotspots, TLS backend multiplicity, and package boundary
-purity). [^2][^1]
+purity).[^2][^1]
 
 Both tools share configuration via `Cargo.toml` workspace metadata (and
 optionally `dylint.toml`/`whitaker.toml`-style tables for Dylint), enabling a
@@ -32,16 +32,16 @@ single policy source of truth (layer definitions, forbidden dependencies,
 feature “islands”, thresholds). Cargo explicitly supports third-party tooling
 via (a) `cargo metadata`, (b) stable JSON message formats, and (c) custom
 subcommands, and it also supports manifest metadata intended for external
-tools. [^2]
+tools.[^2]
 
 The design is driven by the concrete failures seen in Axinite and Gauss:
 repeated link/compile work due to many integration test crates, always-compiled
 heavy optional dependencies, duplicate dependency stacks, and package boundary
-contamination (notably UI dependencies leaking into “core” layers). [^4]
+contamination (notably UI dependencies leaking into “core” layers).[^4]
 
 Non-goals: debuginfo/profile tuning (explicitly out of scope), UI feature
 auditing, and whole-workspace async-trait migration auditing (both explicitly
-excluded). [^4]
+excluded).[^4]
 
 ## 2. Problem statement and goals
 
@@ -53,20 +53,20 @@ stacks; and architectural layering decays until a change in one corner forces
 costly recompilation everywhere. Axinite’s investigation quantified these
 effects: hundreds of crates in the graph, many integration test binaries, and
 heavy dependencies contributing significant compile-time and link-time
-overhead. [^4]
+overhead.[^4]
 
 Cargo’s own documentation highlights one of the major mechanisms: **each file
 under `tests/` is compiled as a separate crate**, and Cargo explicitly notes
 that “a lot of integration tests” can be inefficient and suggests consolidating
 into fewer targets split into modules. This aligns with Axinite’s measured
 link-time bottleneck and the consolidation plan that reduced test binaries
-substantially. [^2][^4]
+substantially.[^2][^4]
 
 Gauss’s work shows the dual: even if the “clean build” remains dominated by
 heavy upstream GUI dependencies, **package boundaries enable selective
 compilation** (`cargo test -p gauss-core`) that avoids pulling UI dependencies
 when working on pure model/SVG logic. This is fundamentally a package graph
-property, not a source-only property. [^4]
+property, not a source-only property.[^4]
 
 The goals therefore separate cleanly into two enforcement planes:
 
@@ -75,18 +75,18 @@ The goals therefore separate cleanly into two enforcement planes:
   optional deps; feature-gated “islands” remain bounded; UI test harness macros
   do not appear in non-app crates). This is Whitaker’s remit, implemented as
   Dylint lints. Dylint runs lints loaded from dynamic libraries, and—like
-  Clippy—operates by registering lint passes with `rustc`. [^1]
+  Clippy—operates by registering lint passes with `rustc`.[^1]
 
 - **Plane B (workspace graph / Cargo metadata):** enforce packaging-and-graph
   constraints (how many test targets; duplicate versions; heavy dependency
   “optionality”; TLS backend multiplicity; package boundary purity). This is
   `cargo-compile-hygiene`’s remit, implemented using `cargo metadata`’s JSON.
-  Cargo recommends using `--format-version` to stabilize expectations. [^2]
+  Cargo recommends using `--format-version` to stabilize expectations.[^2]
 
 A critical design constraint: Dylint’s lints rely on `rustc` internal APIs (as
 Clippy does), so Whitaker must be versioned and maintained with the Rust
 toolchain; Dylint’s design amortizes cost by grouping lints by compiler version
-and sharing intermediate compilation results. [^1]
+and sharing intermediate compilation results.[^1]
 
 ## 3. Configuration, taxonomy, and developer experience
 
@@ -96,32 +96,32 @@ Cargo explicitly allows third-party tools to store configuration in
 `Cargo.toml` via `package.metadata` (and, by extension, workspace metadata),
 and Cargo ignores those metadata keys rather than warning about them. This
 provides the canonical place to define Whitaker/cargo-compile-hygiene policy
-without inventing a bespoke file format. [^2]
+without inventing a bespoke file format.[^2]
 
 Dylint also supports **workspace metadata**: a workspace can declare the Dylint
 libraries it should be linted with under `workspace.metadata.dylint.libraries`
 in `Cargo.toml` or `dylint.toml`. Dylint will download/build those entries
-similarly to dependencies. [^1]
+similarly to dependencies.[^1]
 
 Whitaker should therefore adopt a two-tier configuration model:
 
 - **Tool wiring:** `[workspace.metadata.dylint]` declares the Whitaker Dylint
-  library location (path or git) as Dylint expects. [^1]
+  library location (path or git) as Dylint expects.[^1]
 - **Policy:** `[workspace.metadata.whitaker]` (or
   `[workspace.metadata.whitaker.*]`) stores shared policy consumed by both
   Whitaker and `cargo-compile-hygiene`. This keeps Dylint’s own metadata
-  namespace reserved for Dylint configuration. [^2][^1]
+  namespace reserved for Dylint configuration.[^2][^1]
 - **Per-lint tunables:** either (a) keep them under
   `[workspace.metadata.whitaker.lints.<lint>]`, or (b) expose a Dylint-native
   `dylint.toml` configuration table keyed by library name, as Dylint supports
   configurable libraries. For multi-lint libraries, Dylint’s `dylint_linting`
-  utilities require an explicit `register_lints` and `init_config` call. [^1]
+  utilities require an explicit `register_lints` and `init_config` call.[^1]
 
 ### 3.2 Whitaker lint namespaces and naming conventions
 
 Rust tool lints conventionally use a `tool::lint_name` namespace (e.g.,
 `clippy::…`). The `rustc_session::declare_tool_lint!` macro directly encodes
-this `tool :: NAME, Level, desc` shape. [^3]
+this `tool :: NAME, Level, desc` shape.[^3]
 
 Whitaker should use **one tool namespace**: `whitaker::…`. Because tool lints
 do not support multi-segment namespaces beyond the tool name, Whitaker
@@ -135,39 +135,39 @@ namespaces should be encoded as prefixes in the lint name:
 Discovery/navigation guidance:
 
 - `cargo dylint list …` is the primary “what lints exist?” interface (Dylint’s
-  own docs use `cargo dylint … list`). [^1]
+  own docs use `cargo dylint … list`).[^1]
 - Whitaker should create **lint groups** (registering groups with rustc’s lint
   store) analogous to `clippy::all` and Clippy’s category approach, enabling
   “turn on everything in CI” without manually listing dozens of lints. (This is
   a design choice; rustc supports lint grouping machinery via the lint store
-  model described in the compiler dev guide.) [^3]
+  model described in the compiler dev guide.)[^3]
 - Default “developer local” guidance: enable `whitaker::arch_*` and
   `whitaker::hygiene_*` at `warn` locally, escalate in CI. Rust supports
-  multiple lint levels and configuration via attributes and CLI flags. [^3]
+  multiple lint levels and configuration via attributes and CLI flags.[^3]
 
 ### 3.3 Severity levels and build gating
 
 Rustc defines several lint levels (`allow`, `expect`, `warn`, `force-warn`,
 `deny`, `forbid`). “Forbid” prevents lowering the level via attributes (subject
-to lint capping). [^3]
+to lint capping).[^3]
 
 Whitaker should standardize on three policy severities (mapped onto rustc
 levels):
 
 - **hard policy (default `deny`):** architectural boundary violations that
   should never ship (e.g., a “domain” layer importing infrastructure crates, or
-  `gauss-core` importing `gpui`). These should fail CI by default. [^3][^4]
+  `gauss-core` importing `gpui`). These should fail CI by default.[^3][^4]
 - **soft policy (default `warn`):** compile-time hygiene issues that merit
   action but may have local exceptions (e.g., a public API uses an optional dep
-  type in a non-critical surface; a feature-island rule triggers in
-  transitional code). [^3][^4]
+  type in a non-critical surface; a feature-island rule triggers in transitional
+  code).[^3][^4]
 - **advisory (default `allow` or `warn` behind a group):** low-confidence
   suggestions such as `async_trait_clear_misuse`, which should not block merges
-  and should avoid warning fatigue. [^3][^4]
+  and should avoid warning fatigue.[^3][^4]
 
 This separation aligns with the Rust community’s broader warning-fatigue
 concerns: warnings should remain meaningful and not drown developers; hard
-failures should be reserved for clear architectural contracts. [^3]
+failures should be reserved for clear architectural contracts.[^3]
 
 ### 3.4 Feature-matrix and “unknown lint” ergonomics
 
@@ -175,21 +175,21 @@ Dylint passes `--cfg=dylint_lib="LIBRARY_NAME"` during lint runs, enabling
 `cfg_attr`-based suppression without “unknown lint” warnings when Dylint is not
 running. Dylint documents both the mechanism and the limitation: this does
 **not** work for pre-expansion lints, where the workaround is
-`#[allow(unknown_lints)]`. [^1]
+`#[allow(unknown_lints)]`.[^1]
 
 Whitaker should codify a convention:
 
 - For **early/late** Whitaker lints: allow suppressions using
-  `#[cfg_attr(dylint_lib = "whitaker", allow(whitaker::…))]`. [^1]
+  `#[cfg_attr(dylint_lib = "whitaker", allow(whitaker::…))]`.[^1]
 - For **pre-expansion** Whitaker lints (notably `ui_test_macro_outside_app` and
   likely `async_trait_clear_misuse` if it keys off attribute macros): suppress
   with `#[allow(unknown_lints)] #[allow(whitaker::…)]` and document this as a
-  rare escape hatch. [^1]
+  rare escape hatch.[^1]
 
 For workspaces using recent rustc, Dylint’s docs also note `unexpected_cfg`
 warnings and provide a workspace-level `.toml` snippet to whitelist
 `cfg(dylint_lib, values(any()))`. Whitaker should include this in the standard
-rollout. [^1]
+rollout.[^1]
 
 ## 4. Whitaker lint suite design
 
@@ -199,7 +199,7 @@ Whitaker is a **single Dylint library** named `whitaker` (crate name
 `whitaker_lints` or similar), exporting multiple lints. Because Dylint’s macro
 helpers vary between single-lint libraries and multi-lint libraries, Whitaker
 should implement an explicit `register_lints(sess, lint_store)` and call
-`dylint_linting::init_config(sess)` before reading configuration. [^1]
+`dylint_linting::init_config(sess)` before reading configuration.[^1]
 
 Whitaker will implement a mixture of:
 
@@ -209,11 +209,11 @@ Whitaker will implement a mixture of:
   where resolution suffices.
 - **Pre-expansion lints** for rules that must observe attribute-macro syntax
   prior to expansion. Dylint’s tooling explicitly supports
-  `declare_pre_expansion_lint!` / `impl_pre_expansion_lint!`. [^1][^3]
+  `declare_pre_expansion_lint!` / `impl_pre_expansion_lint!`.[^1][^3]
 
 Rustc/Clippy guidance: a `LateLintPass` has access to type and symbol
 information that an `EarlyLintPass` does not. Most “semantic” lints should be
-late. [^3]
+late.[^3]
 
 ### 4.2 Common configuration schema shapes
 
@@ -257,7 +257,7 @@ islands = [
 app_packages = ["gauss"] # only the app crate may contain gpui::test
 ```
 
-This uses Cargo’s manifest metadata facility for tool configuration. [^2]
+This uses Cargo’s manifest metadata facility for tool configuration.[^2]
 
 Where per-lint tunables need a Dylint-native `dylint.toml`, Whitaker can also
 expose:
@@ -270,7 +270,7 @@ policy_version = 1
 ```
 
 Dylint supports configurable libraries via `dylint.toml` keyed by library name,
-and `dylint_linting` provides config parsing helpers. [^1]
+and `dylint_linting` provides config parsing helpers.[^1]
 
 ### 4.3 Lint designs
 
@@ -282,19 +282,19 @@ needs, config examples, diagnostics, autofix feasibility, and test plan.
 Purpose: enforce that specific layers (defined by package + path prefix) do not
 reference specific external crates. This is the “external-crate half” of
 Wildside’s architecture lint, and it is also useful for compile-time hygiene
-(“heavy deps should not be imported by most of the codebase”). [^4]
+(“heavy deps should not be imported by most of the codebase”).[^4]
 
 Scope: counts *resolved* uses of external crates in paths (`use`, type paths,
 expression paths), within files that Whitaker maps into a configured layer.
 Should operate at crate scope across all targets selected by the invocation
-(`--all-targets` recommended). [^2][^1][^3]
+(`--all-targets` recommended).[^2][^1][^3]
 
 False-positive risks:
 
 - Lexical path scanning (as Wildside currently does via `syn`) can misclassify
   local modules named like external crates or fail to resolve renamed imports.
-  Whitaker should prefer rustc name resolution (HIR `Res`) where possible.
-  [^4][^3]
+  Whitaker should prefer rustc name resolution (HIR `Res`) where possible.[^4]
+  [^3]
 - Re-exports: a layer might legitimately depend on a local façade crate that
   re-exports a forbidden crate; policy must decide whether to forbid the façade
   or the underlying crate.
@@ -302,7 +302,7 @@ False-positive risks:
 Phase and type info:
 
 - Recommended: **Late lint** to use HIR and resolution. Late lints run on HIR
-  and have full type/symbol information; early lints do not. [^3]
+  and have full type/symbol information; early lints do not.[^3]
 - HIR needs: path resolution (`Res::Def` / crate root), span-to-file mapping
   for layer inference.
 
@@ -330,13 +330,13 @@ Autofix feasibility:
   layers, introducing adapters) are semantic and project-specific. Provide
   “guidance-only” suggestions (Applicability: `MaybeIncorrect`), not
   `MachineApplicable`. This matches Clippy’s general caution where suggestions
-  may be non-trivial. [^3]
+  may be non-trivial.[^3]
 
 Test plan:
 
 - Use Dylint UI testing harness (`dylint_uitesting`) to verify diagnostics and
   spans; the crate is designed to run compiletest-style UI tests for Dylint
-  libraries. [^1]
+  libraries.[^1]
 - Sample tests (positive/negative):
   - **OK:** a domain file imports `crate::domain::…` and `serde`.
   - **Fail:** a domain file imports `diesel::prelude::*`.
@@ -350,7 +350,7 @@ Purpose: prevent public API surfaces from exposing types from dependencies that
 are intended to be optional/feature-gated. This directly supports
 feature-gating plans like Axinite’s `docker` gating, where
 `SandboxError::Docker` and `ContainerRunner` currently leak `bollard` in public
-shapes. [^4]
+shapes.[^4]
 
 Scope:
 
@@ -371,7 +371,7 @@ Phase and type info:
 
 - Must be **Late lint**, because it must understand the *types* of signatures
   and where those types are defined. Late lints have access to `LateContext`
-  and typeck results; early lints do not. [^3]
+  and typeck results; early lints do not.[^3]
 - Needs:
   - `LateContext::tcx` to map `Ty`/`AdtDef`/`DefId` to defining crate.
   - Possibly HIR traversal to find public items and gather their exposed `Ty`s.
@@ -420,7 +420,7 @@ Test plan:
     feature).
   - A private function leaking optional type should not trigger.
 - Include regression tests derived from Axinite’s identified leakage points to
-  ensure the lint matches real patterns. [^4]
+  ensure the lint matches real patterns.[^4]
 
 #### 4.3.3 `whitaker::hygiene_feature_island_breach`
 
@@ -428,7 +428,7 @@ Purpose: enforce that “heavy optional” subsystems remain confined to configu
 **feature islands**: code that depends on a heavy crate (or its transitive
 surface) must live under specific paths/modules and be guarded by
 `#[cfg(feature="…")]` as required. This operationalizes Axinite’s `wasm`
-(wasmtime) and `docker` (bollard) feature-gating plans. [^4]
+(wasmtime) and `docker` (bollard) feature-gating plans.[^4]
 
 Scope:
 
@@ -509,7 +509,7 @@ Purpose: enforce that UI integration testing harnesses (specifically
 `#[gpui::test]`) remain confined to app crates, preventing UI dependencies from
 creeping into pure crates and forcing expensive UI compilation during
 logic-only work. This supports Gauss’s package split goals and test relocation
-goals, where core/SVG crates must not pull GPUI. [^4]
+goals, where core/SVG crates must not pull GPUI.[^4]
 
 Scope:
 
@@ -529,7 +529,7 @@ Phase and type info:
 - Recommended: **Pre-expansion lint**, because the rule is about the presence
   of an attribute macro before it is expanded away. Dylint tooling explicitly
   supports pre-expansion lints (`declare_pre_expansion_lint!` /
-  `impl_pre_expansion_lint!`). [^1]
+  `impl_pre_expansion_lint!`).[^1]
 - Type info: not required; attribute syntax is sufficient.
 
 Config example:
@@ -557,9 +557,9 @@ Test plan:
   - In a non-app crate, a function annotated `#[gpui::test]` should trigger.
   - In the app crate, the same should not trigger.
 - Include a regression test using Gauss-like crate names: `gauss-core`
-  containing a `#[gpui::test]` should fail. [^4]
+  containing a `#[gpui::test]` should fail.[^4]
 - Document suppression mechanics for pre-expansion lints
-  (`#[allow(unknown_lints)]`) per Dylint guidance. [^1]
+  (`#[allow(unknown_lints)]`) per Dylint guidance.[^1]
 
 #### 4.3.5 `whitaker::arch_hexagonal_layer_boundary` (internal + external rules)
 
@@ -571,7 +571,7 @@ inside Whitaker/Dylint:
 - forbid **external framework/infrastructure crates** per layer (e.g., domain
   must not depend on `diesel`, `utoipa`, `actix_web`, etc.)
 - infer layer membership from file path under a configured root, mirroring
-  Wildside’s `backend/src/{domain,inbound,outbound}/…` convention. [^4]
+  Wildside’s `backend/src/{domain,inbound,outbound}/…` convention.[^4]
 
 This lint is the primary “architectural boundary” mechanism;
 `forbidden_external_crate_in_layer` is effectively its external-only subset and
@@ -589,9 +589,9 @@ Wildside baseline behaviour:
   indicates an internal module root (`crate::domain`, `backend::outbound`,
   etc.) or an external crate root (first segment not
   `crate/self/super/backend`). It then compares against per-layer forbidden
-  roots and emits one violation per file per unique message. [^4]
+  roots and emits one violation per file per unique message.[^4]
 - It infers layer from the first path component under `backend/src` and errors
-  if it cannot infer. [^4]
+  if it cannot infer.[^4]
 - Its unit tests demonstrate both internal and external violations.
   [^4]
 
@@ -601,7 +601,7 @@ False-positive/false-negative risks (and how Whitaker improves):
   local modules shadowing crate names. A rustc-based lint can use HIR
   resolution to identify whether a path resolves to an external crate or a
   local module. Late linting provides symbol information not available in early
-  passes. [^3]
+  passes.[^3]
 - Conversely, macro-generated imports may appear only after expansion; since
   the intent is “architectural reality”, Whitaker should run post-expansion
   (early/late), not pre-expansion, so it sees the actual expanded module graph.
@@ -609,8 +609,8 @@ False-positive/false-negative risks (and how Whitaker improves):
 Phase and type info:
 
 - Recommended: **Late lint** for best precision (HIR + resolution). The
-  boundary rule is structural, but resolution accuracy matters enough to
-  justify late. [^3]
+  boundary rule is structural, but resolution accuracy matters enough to justify
+  late.[^3]
 - Type info: not required, but symbol resolution is highly desirable.
 
 Config example (Wildside-equivalent policy):
@@ -662,7 +662,7 @@ Purpose: provide low-confidence, non-blocking guidance where `#[async_trait]`
 usage is locally migratable to native async traits, without attempting
 whole-workspace auditing (explicitly excluded). The Axinite audit found that
 native async traits are not object-safe and that most uses are blocked by
-`dyn Trait` call sites; only a small subset was verified migratable. [^4]
+`dyn Trait` call sites; only a small subset was verified migratable.[^4]
 
 Scope:
 
@@ -677,16 +677,16 @@ False-positive risks:
 
 - Trait-object usage may exist in downstream crates, or behind feature gates,
   or in rarely compiled targets. Without whole-workspace analysis, the lint
-  must remain advisory and conservative. [^4]
+  must remain advisory and conservative.[^4]
 - `async-trait` imposes a default `Send` bound behaviour; native async traits
   do not automatically impose equivalent bounds, so naive migration guidance
-  can be wrong. The migration plan explicitly calls this out as a risk. [^4]
+  can be wrong. The migration plan explicitly calls this out as a risk.[^4]
 
 Phase and type info:
 
 - Detection of `#[async_trait]` likely requires **pre-expansion linting**
   (attribute macro), because the attribute macro expands away. Dylint supports
-  pre-expansion lints. [^1]
+  pre-expansion lints.[^1]
 - To check local `dyn Trait` usage robustly, use a **late pass** as a
   second-stage analysis: record candidate traits in pre-expansion, then in late
   lint evaluate whether there are `TyKind::Dynamic` uses referencing that
@@ -725,7 +725,7 @@ Test plan:
   - Same trait used as `Box<dyn Foo>` → no advisory.
   - A public dyn-backed trait listed in `ignore_traits` → no advisory.
 - Include a regression check that the lint does not trigger on known dyn-heavy
-  patterns (consistent with Axinite’s classification). [^4]
+  patterns (consistent with Axinite’s classification).[^4]
 
 ## 5. cargo-compile-hygiene design
 
@@ -733,7 +733,7 @@ Test plan:
 
 Cargo explicitly supports third-party tooling via custom subcommands, and it
 provides `cargo metadata` for machine-readable workspace structure and
-dependency graphs. [^2]
+dependency graphs.[^2]
 
 Therefore, implement as a `cargo` plugin:
 
@@ -741,7 +741,7 @@ Therefore, implement as a `cargo` plugin:
 - User-facing invocation: `cargo compile-hygiene …`
 - Implementation language: Rust, using the `cargo_metadata` crate to parse
   `cargo metadata` output. Cargo docs recommend `--format-version`, and the
-  `cargo_metadata` crate is the standard Rust API for parsing the JSON. [^2]
+  `cargo_metadata` crate is the standard Rust API for parsing the JSON.[^2]
 
 ### 5.2 Commands and CLI UX
 
@@ -764,7 +764,7 @@ Core flags:
   `cargo metadata` / to `cargo` feature selection, used to model feature-matrix
   behaviour)
 - `--target …` and `--filter-platform …` where applicable (Cargo supports
-  `--filter-platform` for `cargo metadata`). [^2]
+  `--filter-platform` for `cargo metadata`).[^2]
 
 ### 5.3 Inputs and data sources
 
@@ -774,14 +774,14 @@ Primary inputs:
   member discovery).
 - `cargo metadata --format-version 1` output (packages, targets, resolved
   dependency graph). Cargo documents the JSON output and recommends
-  `--format-version`. [^2]
+  `--format-version`.[^2]
 
 Secondary inputs (optional enhancements; not required for initial MVP):
 
 - `cargo tree -d` for human debugging, but the tool should not shell out; it
   should compute duplicates directly from metadata. Cargo’s docs explain that
-  duplicates matter for build time and show how `--duplicates` highlights them.
-  [^2]
+  duplicates matter for build time and show how `--duplicates` highlights
+  them.[^2]
 
 ### 5.4 Checks
 
@@ -799,14 +799,14 @@ Why it matters:
 
 - Cargo compiles each integration test file as a separate crate/executable, and
   Cargo notes that many such crates can be inefficient and recommends
-  consolidating into fewer targets split into modules. [^2]
+  consolidating into fewer targets split into modules.[^2]
 - Axinite’s measured hot path was “re-links N test binaries,” and its
   consolidation plan reduces test binaries by grouping modules under fewer
-  harnesses. [^4]
+  harnesses.[^4]
 - Gauss’s consolidation plan shows the organizational vs compile-time
   trade-off: a naming convention improves discoverability but does not reduce
   target count, so this check should focus on target counts rather than file
-  naming aesthetics. [^4]
+  naming aesthetics.[^4]
 
 Implementation sketch:
 
@@ -828,7 +828,7 @@ ignore = [
 Outputs:
 
 - Human report includes top offending packages, counts, and suggested
-  consolidation strategy referencing Cargo’s recommended approach. [^2]
+  consolidation strategy referencing Cargo’s recommended approach.[^2]
 
 #### 5.4.2 `heavy_dependency_not_optional`
 
@@ -842,7 +842,7 @@ Why it matters:
 
 - Axinite identified heavyweight always-compiled dependencies (e.g., wasmtime
   ecosystem, bollard) and proposed feature gating to make them optional for
-  developers not working on those areas. [^4]
+  developers not working on those areas.[^4]
 
 Implementation sketch:
 
@@ -883,9 +883,9 @@ Why it matters:
 
 - Cargo’s own docs note that avoiding building a package multiple times can
   benefit build times and executable sizes, and `cargo tree --duplicates`
-  exists to identify duplicates. [^2]
+  exists to identify duplicates.[^2]
 - Axinite observed many duplicated core stacks (HTTP/TLS and other ecosystem
-  crates) due to a heavy dependency pulling an older stack. [^4]
+  crates) due to a heavy dependency pulling an older stack.[^4]
 
 Implementation sketch:
 
@@ -917,14 +917,14 @@ Outputs:
 What it checks:
 
 - Whether both major TLS backend stacks are present in the build graph at once
-  (heuristic: presence of both `rustls`-family packages and
-  `native-tls`/`openssl-sys`).
+  (heuristic: presence of both `rustls`-family packages and `native-tls`/
+  `openssl-sys`).
 
 Why it matters:
 
 - Axinite identified both rustls and native-tls being compiled due to
   conflicting reqwest feature selections, and noted that native-tls can pull in
-  C compilation (openssl-sys), increasing build time variability and cost. [^4]
+  C compilation (openssl-sys), increasing build time variability and cost.[^4]
 
 Implementation sketch:
 
@@ -942,7 +942,7 @@ Feature-matrix note:
   no-default-features+selected minimal, all-features), mirroring the same
   invocation patterns used for build/test. (Cargo issues discuss how resolved
   features may be aggregated across workspace members, so treat
-  per-configuration runs as the unit of truth.) [^2]
+  per-configuration runs as the unit of truth.)[^2]
 
 Config schema example:
 
@@ -971,7 +971,7 @@ Why it matters:
 
 - Gauss’s crate split explicitly requires `gauss-core` and `gauss-svg` to
   remain GPUI-independent; the split’s value depends on preventing UI deps from
-  re-entering core crates. [^4]
+  re-entering core crates.[^4]
 
 Implementation sketch:
 
@@ -1029,7 +1029,7 @@ CI integration:
   - 1 if any `deny` findings (or configured levels) exist.
 
 This aligns with standard CLI tooling expectations and Cargo subcommand
-ergonomics. [^2]
+ergonomics.[^2]
 
 ## 6. Integration, CI, and rollout
 
@@ -1060,12 +1060,11 @@ Caption: Toolchain flow for Whitaker Dylint checks and `cargo-compile-hygiene`.
 
 Dylint runs lints from dynamic libraries by registering them with `rustc` via a
 driver; its architecture mirrors the “driver wraps rustc” model used by Clippy,
-and it shares compilation work across lints compiled for the same toolchain.
-[^1]
+and it shares compilation work across lints compiled for the same toolchain.[^1]
 
 Cargo-compile-hygiene uses Cargo’s external tool facilities: custom subcommands
 plus `cargo metadata` JSON. Cargo recommends passing `--format-version` because
-output can evolve. [^2]
+output can evolve.[^2]
 
 ### 6.2 Invocation patterns and feature-matrix handling
 
@@ -1078,7 +1077,7 @@ enforce under a feature matrix aligned with existing project practices:
 - **all-features** (ensures full product surface still compiles)
 
 This mirrors Axinite’s gating plans and is a necessary companion to feature
-islands. [^4]
+islands.[^4]
 
 Example CI (pseudo-commands):
 
@@ -1098,24 +1097,24 @@ cargo compile-hygiene check --all-features --features "test-helpers"
 Cargo’s own documentation explains integration targets and `tests/` behaviour;
 running with `--all-targets` ensures non-default targets
 (examples/tests/benches) are included, matching the practical locations where
-boundary violations often hide. [^2][^3]
+boundary violations often hide.[^2][^3]
 
 ### 6.3 Comparison table: what belongs where
 
-| Check / policy                                        | Whitaker (Dylint) | cargo-compile-hygiene | Repo-specific checker | Rationale                                                                                               |
-| ----------------------------------------------------- | ----------------- | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `forbidden_external_crate_in_layer`                   | Yes               | No                    | No                    | Needs per-use resolution and file/layer mapping inside rustc; best expressed as a lint. [^3]            |
-| `public_api_leaks_optional_dep`                       | Yes               | No                    | No                    | Requires type-level inspection of exported signatures; late lint. [^3]                                  |
-| `feature_island_breach`                               | Yes               | No                    | No                    | Needs source location + cfg context; best enforced in lint passes. [^1]                                 |
-| `ui_test_macro_outside_app`                           | Yes               | No                    | No                    | Detects attribute macro usage; requires pre-expansion linting. [^1]                                     |
-| `hexagonal_layer_boundary`                            | Yes               | No                    | No                    | Architectural boundary rule-set; Dylint improves Wildside’s lexical approach via resolution. [^4][^3]   |
-| `async_trait_clear_misuse` (advisory)                 | Yes               | No                    | No                    | Code-level advisory; whole-workspace audit excluded. [^4]                                               |
-| `integration_target_budget`                           | No                | Yes                   | No                    | Depends on targets and package graph; Cargo metadata. [^2]                                              |
-| `heavy_dependency_not_optional`                       | No                | Yes                   | No                    | Depends on resolved dependency graph + optionality. [^2]                                                |
-| `duplicate_major_version_hotspots`                    | No                | Yes                   | No                    | Graph-level duplicate analysis; matches `cargo tree --duplicates` intent. [^2]                          |
-| `tls_backend_multiplicity`                            | No                | Yes                   | No                    | Graph-level presence of TLS stacks; depends on resolved deps per feature config. [^4]                   |
-| `package_boundary_purity`                             | No                | Yes                   | No                    | Package dependency purity is a Cargo graph property; complements Whitaker. [^4]                         |
-| Redundant `make` pipelines (e.g., `check` + `clippy`) | No                | No                    | Yes                   | Not a Rust/Cargo semantic issue; a repo build orchestration issue. [^4]                                 |
+| Check / policy                                        | Whitaker (Dylint) | cargo-compile-hygiene | Repo-specific checker | Rationale                                                                                             |
+| ----------------------------------------------------- | ----------------- | --------------------- | --------------------- | ----------------------------------------------------------------------------------------------------- |
+| `forbidden_external_crate_in_layer`                   | Yes               | No                    | No                    | Needs per-use resolution and file/layer mapping inside rustc; best expressed as a lint. [^3]          |
+| `public_api_leaks_optional_dep`                       | Yes               | No                    | No                    | Requires type-level inspection of exported signatures; late lint. [^3]                                |
+| `feature_island_breach`                               | Yes               | No                    | No                    | Needs source location + cfg context; best enforced in lint passes. [^1]                               |
+| `ui_test_macro_outside_app`                           | Yes               | No                    | No                    | Detects attribute macro usage; requires pre-expansion linting. [^1]                                   |
+| `hexagonal_layer_boundary`                            | Yes               | No                    | No                    | Architectural boundary rule-set; Dylint improves Wildside’s lexical approach via resolution. [^4][^3] |
+| `async_trait_clear_misuse` (advisory)                 | Yes               | No                    | No                    | Code-level advisory; whole-workspace audit excluded. [^4]                                             |
+| `integration_target_budget`                           | No                | Yes                   | No                    | Depends on targets and package graph; Cargo metadata. [^2]                                            |
+| `heavy_dependency_not_optional`                       | No                | Yes                   | No                    | Depends on resolved dependency graph + optionality. [^2]                                              |
+| `duplicate_major_version_hotspots`                    | No                | Yes                   | No                    | Graph-level duplicate analysis; matches `cargo tree --duplicates` intent. [^2]                        |
+| `tls_backend_multiplicity`                            | No                | Yes                   | No                    | Graph-level presence of TLS stacks; depends on resolved deps per feature config. [^4]                 |
+| `package_boundary_purity`                             | No                | Yes                   | No                    | Package dependency purity is a Cargo graph property; complements Whitaker. [^4]                       |
+| Redundant `make` pipelines (e.g., `check` + `clippy`) | No                | No                    | Yes                   | Not a Rust/Cargo semantic issue; a repo build orchestration issue. [^4]                               |
 
 *Table: Ownership split between Whitaker lints and `cargo-compile-hygiene`
 checks.*
@@ -1169,7 +1168,7 @@ Caption: Delivery sequence for foundation work, Whitaker MVP lints,
 The emphasis is to land hard-boundary lints early (architectural contracts) and
 keep compile-time hygiene checks initially as warning/reporting, then promote
 once noise is understood. This matches the risk profile implied by Rust lint
-levels and the desire to avoid warning fatigue. [^3]
+levels and the desire to avoid warning fatigue.[^3]
 
 ## 7. Migration guidance for Axinite and Gauss
 
@@ -1177,7 +1176,7 @@ levels and the desire to avoid warning fatigue. [^3]
 
 Axinite’s build-time investigation identifies: many integration test binaries;
 always-compiled heavy dependencies intended to be optional (wasmtime, bollard,
-pdf); duplicate dependency stacks; and TLS backend multiplicity. [^4]
+pdf); duplicate dependency stacks; and TLS backend multiplicity.[^4]
 
 A practical migration sequence:
 
@@ -1185,13 +1184,13 @@ A practical migration sequence:
    Configure budgets and heavy deps list but do not fail CI immediately. Record
    a baseline report for default features and the minimal feature set. (Cargo
    supports external tools and versioned metadata output; use
-   `--format-version 1`.) [^2]
+   `--format-version 1`.)[^2]
 
 2. **Enforce `integration_target_budget`**  
    Set a target budget that reflects post-consolidation expectations. Axinite
    already has a plan that reduced test binaries substantially by grouping into
    fewer harnesses. Make the budget slightly above the achieved count to allow
-   small growth. [^4]
+   small growth.[^4]
 
    Example config:
 
@@ -1204,7 +1203,7 @@ A practical migration sequence:
    Whitaker Axinite has explicit feature-gating plans for wasmtime (`wasm`) and
    bollard (`docker`). Implement the Cargo feature gates, then add Whitaker’s
    `feature_island_breach` and `public_api_leaks_optional_dep` to prevent
-   regressions. [^4]
+   regressions.[^4]
 
    Example islands config:
 
@@ -1222,52 +1221,52 @@ A practical migration sequence:
 4. **Enable `tls_backend_multiplicity`**  
    Once feature sets stabilize, that check should fail in CI for default
    features if the project intends to standardize on one TLS backend. Axinite
-   explicitly observed dual stacks due to conflicting reqwest defaults. [^4]
+   explicitly observed dual stacks due to conflicting reqwest defaults.[^4]
 
 5. **Duplicate hotspots tracked as advisory, not “must fix”**
    Axinite’s duplicate stacks are partly upstream (libsql pulling older
    ecosystems). `duplicate_major_version_hotspots` should surface and rank
    duplicates, while CI failures remain disabled unless a realistic remediation
    path exists. Cargo’s docs frame duplicates as something to identify and
-   investigate; they do not guarantee easy resolution. [^2][^4]
+   investigate; they do not guarantee easy resolution.[^2][^4]
 
 6. **Keep async-trait migration lint advisory**  
    Axinite’s own audit shows most async-trait uses are blocked by trait-object
    patterns; enforce neither a deny lint nor a cargo-level audit (excluded).
-   Only ship `async_trait_clear_misuse` as advisory with a conservative mode.
-   [^4]
+   Only ship `async_trait_clear_misuse` as advisory with a conservative
+   mode.[^4]
 
 ### 7.2 Gauss migration steps (concrete)
 
 Gauss’s crate split is complete and establishes a clear graph: `gauss` (app)
 depends on `gauss-core` and `gauss-svg`, and `gauss-svg` depends on
-`gauss-core`, with the goal that core/SVG do not compile GPUI. [^4]
+`gauss-core`, with the goal that core/SVG do not compile GPUI.[^4]
 
 A Gauss-focused migration sequence:
 
 1. **Lock package boundary purity in cargo-compile-hygiene**  
    Immediately set `package_boundary_purity` rules for `gauss-core` and
    `gauss-svg` to forbid `gpui`, `gpui-component`, and `accesskit`
-   transitively. This preserves the primary benefit of the split. [^4]
+   transitively. This preserves the primary benefit of the split.[^4]
 
 2. **Add Whitaker UI test macro confinement**  
    Enforce `ui_test_macro_outside_app` so `#[gpui::test]` can never appear
    outside the app crate, consistent with planned test relocation and crate
-   purity. [^4]
+   purity.[^4]
 
 3. **Integration test target budgets treated cautiously**
    Gauss’s integration-test consolidation plan ended up preserving target
    counts for pragmatic reasons (naming convention instead of module
    consolidation). If build-time reduction later matters more than isolation,
    budgets can reflect a desired future state, and the tool’s reporting can
-   drive an incremental consolidation project. [^4]
+   drive an incremental consolidation project.[^4]
 
 4. **Add architectural lints only where architecture is explicit**  
    If Gauss has explicit layer boundaries akin to Wildside’s
    domain/inbound/outbound model, adopt `hexagonal_layer_boundary`. Otherwise,
    keep Whitaker’s layering rules focused on “GPUI must not leak into core/SVG”
    and on optional heavy features (if any). Wildside’s success rests on
-   path-based layer inference and explicit forbidden root lists. [^4]
+   path-based layer inference and explicit forbidden root lists.[^4]
 
 ### 7.3 Example combined config snippets
 
@@ -1307,7 +1306,7 @@ native_markers = ["native-tls", "openssl-sys"]
 These examples deliberately leave numeric thresholds adjustable; they
 illustrate the default shape rather than asserting a single “correct” budget.
 Cargo’s manifest metadata mechanism exists precisely to support that sort of
-tool configuration. [^2]
+tool configuration.[^2]
 
 ## 8. References
 

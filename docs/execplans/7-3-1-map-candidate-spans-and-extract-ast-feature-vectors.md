@@ -86,8 +86,8 @@ escalation, not a workaround.
   the source still legitimately selects `SOURCE_FILE` and intentionally lowers
   the complete file through `lower_span`. The smallest-covering selection
   descends from the root via a bounded pending-stack worklist over covering
-  children, enforcing the `MAX_AST_NODES` node budget and `MAX_AST_DEPTH`
-  depth budget.
+  children, enforcing the `MAX_AST_NODES` node budget and `MAX_AST_DEPTH` depth
+  budget.
 - **Toolchain bump (Stage 0).** This item bumps `rust-toolchain.toml` from
   `nightly-2025-09-18` (rustc 1.92.0-nightly) to **`nightly-2026-05-28`**
   (rustc ≈ 1.9x-nightly, comfortably ≥ 1.95) as a prerequisite Stage 0, landing
@@ -536,8 +536,8 @@ invariance over equal contribution multisets. Green follow-up gates:
   root and remains part of the branch diff history through the parser pin.
 - Observation: Stage G attempted the required broad `make fmt` documentation
   formatting pass. It still fails on pre-existing Markdown issues in unrelated
-  execplans, so unrelated formatter churn was reverted and the final scoped tree
-  is guarded by `make markdownlint`.
+  execplans, so unrelated formatter churn was reverted and the final scoped
+  tree is guarded by `make markdownlint`.
 - Observation: the Stage G CodeRabbit follow-up widened the Verus AST sidecar
   from `5` to `8` verified obligations by adding `matching_count`,
   `same_contribution_multiset`, and the general fold-count invariance lemma.
@@ -670,8 +670,8 @@ Decisions already taken while drafting this plan:
   Rationale: the public API remains unchanged for normal builds, while
   `cargo kani --no-default-features` can verify the parser-free clone-detector
   harnesses on Kani's older pinned rustc. The no-parser `lower_span` stub
-  returns `AstError::ParserUnavailable`; it exists only to keep the public module
-  shape available when the parser dependency is disabled. Date/Author:
+  returns `AstError::ParserUnavailable`; it exists only to keep the public
+  module shape available when the parser dependency is disabled. Date/Author:
   2026-06-16, implementation.
 - Decision: **Do not add a new ADR for 7.3.1.** Rationale: the lowered-IR
   boundary is a local adapter decision already captured in the clone-detector
@@ -1124,14 +1124,13 @@ expected reason; `cargo build -p whitaker_clones_core` compiles the skeleton;
 
 On the `nightly-2026-05-28` channel (rustc ≥ 1.95), select the `ra_ap_syntax`
 snapshot dated near the new nightly and exact-pin it to `=0.0.334`. Add that
-dependency to
-`[workspace.dependencies]` with the documented-reason comment, and
+dependency to `[workspace.dependencies]` with the documented-reason comment, and
 `{ workspace = true }` to `whitaker_clones_core`. Run
 `cargo build -p whitaker_clones_core` under `-D warnings`, pinning at most
 three offending transitive crates with `--precise` (escalate if more are
 needed). Commit `Cargo.toml` and `Cargo.lock` together; record the resolved
-transitive set (including exact `rowan`/`ra_ap_parser` versions) in Surprises
-& Discoveries.
+transitive set (including exact `rowan`/`ra_ap_parser` versions) in Surprises &
+Discoveries.
 
 Go/no-go: if no contemporaneous snapshot builds cleanly, **stop and escalate**
 (Tolerances). Otherwise proceed. Validation: a throwaway `lowering.rs` line
@@ -1236,9 +1235,8 @@ Kani (`src/ast/kani.rs`, `#[cfg(kani)]`): harnesses over a bounded synthetic
 it — note the recursive state space is `branching^depth`, unlike the existing
 flat `LshIndex` harnesses; the resolved bound is `KANI_AST_UNWIND = 5`
 (`KANI_AST_MAX_DEPTH + 2`), applied per-harness via `#[kani::unwind(5)]`.
-Harnesses:
-`verify_smallest_covering_node_selects_minimal_range` (over the factored
-`cover::select_smallest_covering`, with `kani::assume(n >= 2)` so the
+Harnesses: `verify_smallest_covering_node_selects_minimal_range` (over the
+factored `cover::select_smallest_covering`, with `kani::assume(n >= 2)` so the
 minimality postcondition has something to bite on: result covers the target and
 no covering candidate is strictly smaller); a **separate**
 `verify_smallest_covering_root_fallback` for the `n == 0`/no-cover path (do not
@@ -1272,8 +1270,8 @@ pin budget, the escalation trigger, and the note that `PARSER_SCHEMA_VERSION`
 and any `ast_hashes` cache must be invalidated on a re-pin — so the next
 toolchain-bump author does not re-derive Stages 0/B from scratch. Confirm
 `Cargo.lock` is committed and that the CI build leaves `CARGO_LOCKED` empty by
-default so callers opt into `--locked` explicitly. Assess whether
-the lowered-IR boundary or the proof strategy warrants a new ADR; if so, author
+default so callers opt into `--locked` explicitly. Assess whether the
+lowered-IR boundary or the proof strategy warrants a new ADR; if so, author
 `docs/adr-004-*.md` per the style guide and reference it from the design doc
 (record the decision either way). Run `make check-fmt`, `make lint`,
 `make test`, then the proof targets, then `make markdownlint` for the docs.
@@ -1283,9 +1281,9 @@ the draft PR references this ExecPlan.
 
 ## Concrete steps
 
-Run all commands from the worktree root for this checkout.
-Follow `AGENTS.md`: run gates sequentially (not in parallel) to benefit from
-the build cache, and `tee` long outputs to a log under `/tmp`.
+Run all commands from the worktree root for this checkout. Follow `AGENTS.md`:
+run gates sequentially (not in parallel) to benefit from the build cache, and
+`tee` long outputs to a log under `/tmp`.
 
 ```bash,ignore
 # Stage 0 toolchain bump: set channel then install + verify the whole suite.
@@ -1423,19 +1421,18 @@ proves success.
 Revision 4 (2026-07-20) — applied post-implementation review feedback. The
 `build.rs` workspace-manifest read moved off `std::fs` onto a capability-scoped
 `cap_std` helper (`build_support::read_workspace_manifest`), keeping all
-build-script filesystem access `std::fs`/`std::path`-free. The span→node
-mapping (`select_covering_node`) now uses an explicit pending-stack worklist
-over `node.children()`, pruned to only those children covering the target span
-and bounded by the node/depth budgets, and parser-`ERROR` detection folded
-into the single lowering descent (`LoweringLimits::lower`) so the selected
-subtree is no longer traversed a second time. The new
-`no_unwrap_or_else_panic` aliased-test-crate fixture dropped its crate-wide
-`allow(unknown_lints)`; the `deny(no_unwrap_or_else_panic)` and a narrowly
-scoped `allow(unknown_lints)` now sit on the single subject item (plain rustc
-does not register the Dylint lint when it builds the example as a `--test`
-target), and each remaining `#[expect(dead_code)]` carries a harness-only
-justification plus a roadmap 2.2.9 link tracking migration to
-`#[whitaker_support::dylint_expect(...)]`.
+build-script filesystem access `std::fs`/`std::path`-free. The span→node mapping
+(`select_covering_node`) now uses an explicit pending-stack worklist over
+`node.children()`, pruned to only those children covering the target span and
+bounded by the node/depth budgets, and parser-`ERROR` detection folded into the
+single lowering descent (`LoweringLimits::lower`) so the selected subtree is no
+longer traversed a second time. The new `no_unwrap_or_else_panic`
+aliased-test-crate fixture dropped its crate-wide `allow(unknown_lints)`; the
+`deny(no_unwrap_or_else_panic)` and a narrowly scoped `allow(unknown_lints)`
+now sit on the single subject item (plain rustc does not register the Dylint
+lint when it builds the example as a `--test` target), and each remaining
+`#[expect(dead_code)]` carries a harness-only justification plus a roadmap
+2.2.9 link tracking migration to `#[whitaker_support::dylint_expect(...)]`.
 
 Revision 3 (2026-06-09) — added a prerequisite **Stage 0 toolchain bump** to
 `nightly-2026-05-28` at the user's direction (folded into this item as its own
@@ -1473,5 +1470,5 @@ Revision 1 (2026-06-09) — initial draft. Produced with a planning agent team
 testing/verification strands) and informed by `firecrawl` research into the
 current `ra_ap_syntax` API and MSRV constraints.
 
-Historical note: the Stage B empirical version pin was carried as
-`0.0.PINNED` during drafting and resolved before completion of this plan.
+Historical note: the Stage B empirical version pin was carried as `0.0.PINNED`
+during drafting and resolved before completion of this plan.

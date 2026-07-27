@@ -1,9 +1,8 @@
 # Verify `build_adjacency` with Kani (roadmap 6.4.5)
 
-This Execution Plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -159,8 +158,8 @@ Observable success after implementation:
   from `detect_communities`, which makes colocated verification harnesses the
   least invasive way to call it.
 - `build_similarity_edges` already enforces the key input invariants that make
-  6.4.5 tractable: each edge is unique, `left < right`, the endpoints are
-  within `vectors.len()`, and `weight > 0`.
+  6.4.5 tractable: each edge is unique, `left < right`, the endpoints are within
+  `vectors.len()`, and `weight > 0`.
 - There is no existing Kani script, Make target, or repository-local install
   workflow, so 6.4.5 must establish that sidecar from scratch.
 - The repository already has the right pattern for proof sidecars in the Verus
@@ -190,9 +189,9 @@ Observable success after implementation:
   cargo-plugin mode. The driver also expects a `toolchain/` directory symlinked
   to the matching nightly rustc/cargo installation.
 - `kani-compiler` is dynamically linked against the toolchain's
-  `libLLVM`, so `LD_LIBRARY_PATH` must include `<install>/toolchain/lib`.
-  CBMC's `goto-cc` invokes `gcc` via `execvp`, requiring `CC` and `PATH` to
-  include the system C compiler.
+  `libLLVM`, so `LD_LIBRARY_PATH` must include `<install>/toolchain/lib`. CBMC's
+  `goto-cc` invokes `gcc` via `execvp`, requiring `CC` and `PATH` to include
+  the system C compiler.
 - Rust's standard `sort_by` generates deeply nested loop structures that
   cause CBMC state-space explosion. With `MAX_NODES=4` and `MAX_EDGES=6`, a
   single harness did not complete within a 5-minute wall-clock budget. Reducing

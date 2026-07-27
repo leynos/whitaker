@@ -132,8 +132,8 @@ rules from the design document.
 - Decision: place evaluation in `common/src/brain_type_metrics/evaluation.rs`
   rather than in a lint crate. Rationale: the evaluation logic is pure (no
   `rustc_private`), independently testable, and reusable by `brain_trait`.
-  Keeping it in `common` follows the same pattern as `cohesion_components()`
-  and `weighted_methods_count()`. Date/Author: 2026-02-25 / DevBoxer.
+  Keeping it in `common` follows the same pattern as `cohesion_components()` and
+  `weighted_methods_count()`. Date/Author: 2026-02-25 / DevBoxer.
 
 - Decision: change `TypeMetrics` field from `brain_method_names: Vec<String>`
   to `brain_methods: Vec<MethodMetrics>`. Rationale: the design doc diagnostic
@@ -243,8 +243,8 @@ pub struct TypeMetrics {
 ```
 
 `TypeMetrics` currently stores only brain method names (`Vec<String>`). The
-design document's diagnostic format requires per-method CC and LOC values
-(e.g., `` `parse_all` (CC=31, LOC=140) ``), so this field must change to
+design document's diagnostic format requires per-method CC and LOC values (e.g.,
+`` `parse_all` (CC=31, LOC=140) ``), so this field must change to
 `Vec<MethodMetrics>`.
 
 ### Design specification

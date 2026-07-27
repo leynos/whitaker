@@ -517,12 +517,12 @@ calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint,
-loads configuration defaults, and passively collects local helper calls
-inside strict `#[rstest]` tests, fingerprinting fixture-local, literal,
-`const`, and `static` arguments for later aggregation. The lint remains
-diagnostic-silent: threshold evaluation and actionable diagnostics are
-tracked by 8.2.3, while UI pass/fail coverage is tracked by 8.2.4.
+This lint is experimental. The current implementation registers the lint, loads
+configuration defaults, and passively collects local helper calls inside strict
+`#[rstest]` tests, fingerprinting fixture-local, literal, `const`, and `static`
+arguments for later aggregation. The lint remains diagnostic-silent: threshold
+evaluation and actionable diagnostics are tracked by 8.2.3, while UI pass/fail
+coverage is tracked by 8.2.4.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
@@ -557,8 +557,8 @@ deny repeated non-provider helper invocations across `#[rstest]` tests when
 they meet or exceed both `min_calls` and `min_distinct_tests`. The
 `require_identical_fixture_arg_names` setting controls whether candidate
 fixture arguments must use the same names, and `use_source_callee_fallback`
-controls whether source-callsite recovery may be used for macro-expanded
-callee locations.
+controls whether source-callsite recovery may be used for macro-expanded callee
+locations.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### How to fix
@@ -695,8 +695,8 @@ interpolated-only `panic!` fallbacks are permitted there.
 
 Whitaker's experimental clone detector runs in two passes. Pass A is a token
 scan over the workspace; Pass B lifts each candidate span into an abstract
-syntax tree (AST) substrate that later scoring will consume. This release
-ships the Pass B substrate only — it does not yet report clones (see below).
+syntax tree (AST) substrate that later scoring will consume. This release ships
+the Pass B substrate only — it does not yet report clones (see below).
 
 **What the substrate does.** Given a source file and a candidate byte range,
 `lower_span` validates a non-empty, UTF-8-aligned `ByteSpan`, parses the
@@ -718,13 +718,13 @@ deterministic set of features:
 **Schema-versioned hashes.** Every canonical hash mixes in
 `PARSER_SCHEMA_VERSION`, which is tied to the pinned parser snapshot. A
 parser-schema change therefore changes every hash by design, intentionally
-invalidating persisted snapshots and caches so stale AST fingerprints are
-never reused across incompatible parser versions.
+invalidating persisted snapshots and caches so stale AST fingerprints are never
+reused across incompatible parser versions.
 
 **Parser feature.** `whitaker_clones_core` enables its exact-pinned
 `ra_ap_syntax` parser adapter through the default `parser` feature. The feature
-is on by default; building the crate with it disabled makes `lower_span`
-return `AstError::ParserUnavailable` instead of lowering anything.
+is on by default; building the crate with it disabled makes `lower_span` return
+`AstError::ParserUnavailable` instead of lowering anything.
 
 **Not yet emitted.** Type-3 clone scoring and SARIF Run 1 emission are deferred
 to roadmap item 7.3.2. This release builds and exposes the AST substrate only;

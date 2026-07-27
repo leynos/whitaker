@@ -15,8 +15,8 @@ Whitaker itself. For using Whitaker lints in a project, see the
   cargo install cargo-dylint dylint-link
   ```
 
-  (`make publish-check` provisions these automatically at the pinned
-  versions; see [Pre-publish validation](publishing.md#pre-publish-validation).)
+  (`make publish-check` provisions these automatically at the pinned versions;
+  see [Pre-publish validation](publishing.md#pre-publish-validation).)
 
 CI also installs or provides job-specific tools such as `cargo-nextest`, `bun`,
 `uv`, Mermaid CLI, and Nixie before running the targets that need them. Local
@@ -185,15 +185,15 @@ pushing to catch installer regressions early.
 
 ### Workflow pins and Dependabot
 
-Dependabot owns the upgrade of GitHub Actions and reusable workflows,
-including calls into `leynos/shared-actions`. Contract tests that assert a
-caller's exact commit SHA create a lockstep dependency: every time Dependabot
-opens a bump PR, the test fails until a human edits the pinned constant to
-match. That defeats the purpose of automated dependency updates and turns a
-routine bump into a manual chore.
+Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
+calls into `leynos/shared-actions`. Contract tests that assert a caller's exact
+commit SHA create a lockstep dependency: every time Dependabot opens a bump PR,
+the test fails until a human edits the pinned constant to match. That defeats
+the purpose of automated dependency updates and turns a routine bump into a
+manual chore.
 
-Contract tests may still verify the *shape* of a reusable-workflow caller.
-They must not verify the specific SHA value.
+Contract tests may still verify the *shape* of a reusable-workflow caller. They
+must not verify the specific SHA value.
 
 - Do assert the workflow references the correct reusable workflow path.
 - Do assert the ref is pinned to a full 40-character commit SHA, not a
@@ -356,8 +356,8 @@ parser adapter and several parser-agnostic domain modules:
   smallest covering syntax node, and lowers that node into the owned
   `NormalizedTree` representation.
 - `tree.rs` owns the lowered domain types: `NormalizedTree`,
-  `NormalizedNode`, `KindId`, `Depth`, `LeafClass`, and `ByteSpan`. `KindId`
-  is an in-memory token and must not be persisted.
+  `NormalizedNode`, `KindId`, `Depth`, `LeafClass`, and `ByteSpan`. `KindId` is
+  an in-memory token and must not be persisted.
 - `hash.rs` owns `AstHash` and `canonical_hash`.
 - `features.rs`, `hash.rs`, and `cover.rs` operate only on the lowered domain
   types. They must not depend on parser crates or import the adapter module.
@@ -561,8 +561,7 @@ parser APIs, snapshots, and proof tooling.
 
 1. Change `rust-toolchain.toml` to the target pinned nightly channel.
 2. Install or refresh the required components:
-   `rustup component add rust-src rustfmt clippy rustc-dev
-   llvm-tools-preview`.
+   `rustup component add rust-src rustfmt clippy rustc-dev llvm-tools-preview`.
 3. Rebuild the whole workspace with the newly pinned channel before making
    feature changes. Fix `clippy_utils`, lint-crate, and `rustc_private` API
    drift in the production code rather than suppressing warnings.
@@ -592,8 +591,8 @@ parser APIs, snapshots, and proof tooling.
    `ra_ap_syntax = "=0.0.334"` with the `parser` feature wired through
    `whitaker_clones_core`. Loose pins, invalid specifiers, or a missing
    workspace dependency must fail the re-pin attempt. If more than three
-   transitive crates need manual `cargo update --precise` pins, stop and
-   record the mismatch.
+   transitive crates need manual `cargo update --precise` pins, stop and record
+   the mismatch.
 3. Keep parser imports confined to `src/ast/lowering.rs`. If a parser API
    change tempts domain code to import `ra_ap_syntax`, update the lowered
    `NormalizedTree` boundary instead.
@@ -954,8 +953,8 @@ The dependency-install path is split into focused modules under
 1. Attempt the repository-hosted dependency archive for the current target.
 2. Verify the installed tool is now usable. `cargo-dylint` is checked by
    running `cargo dylint --version`. A repository-release `dylint-link` is
-   accepted on the strength of its install pipeline and is never executed;
-   see "Why `dylint-link` is never probed" below.
+   accepted on the strength of its install pipeline and is never executed; see
+   "Why `dylint-link` is never probed" below.
 3. If the repository download reports `NotFound`, skip `cargo binstall` and
    fall back directly to `cargo install`.
 4. For other repository failures, fall back to `cargo binstall` when available
@@ -992,10 +991,10 @@ fallback, including the direct missing-asset path, invokes
 recorded in `installer/dependency-binaries.toml` instead of silently using the
 latest upstream release.
 
-`update_status_after_install()` delegates the local-install re-check decision
-to `should_refresh_companions()`. That helper returns `true` only when the install
-outcome was not `RepositoryRelease` and `dylint-link` is still missing, so the
-code checks for a resolvable `dylint-link` binary only after local
+`update_status_after_install()` delegates the local-install re-check decision to
+`should_refresh_companions()`. That helper returns `true` only when the
+install outcome was not `RepositoryRelease` and `dylint-link` is still missing,
+so the code checks for a resolvable `dylint-link` binary only after local
 `cargo-dylint` installs and does not re-check it when the pre-built repository
 artefact was used or when `dylint-link` was already present.
 
@@ -1284,16 +1283,16 @@ shared helpers, both in `crates/function_attrs_follow_docs/src/driver.rs`:
   therefore recovers the user-written span per kind through an explicit
   whitelist (`DocComment`, `Ignore`, `Inline`, `MustUse`, `Naked`, `NoMangle`,
   `Optimize`, `TargetFeature`, `TrackCaller`). Kinds outside the whitelist
-  return `None` and drop out of the ordering check — some carry no span at
-  all (`Cold`, `Used`), others carry one that is deliberately not recovered
-  yet (`AllowInternalUnsafe`, `Deprecated`). When the pin advances and a
-  variant changes shape, extend or adjust the whitelist rather than matching
-  spanless kinds.
+  return `None` and drop out of the ordering check — some carry no span at all
+  (`Cold`, `Used`), others carry one that is deliberately not recovered yet
+  (`AllowInternalUnsafe`, `Deprecated`). When the pin advances and a variant
+  changes shape, extend or adjust the whitelist rather than matching spanless
+  kinds.
 - **Item boundaries.** Modern nightlies exclude outer attributes from the
-  item's HIR span, so `attribute_within_item` accepts an attribute span that
-  is either contained within the item span (older behaviour, and inner
-  attributes) or ends at or before the item's start (outer attributes on
-  current nightlies). Dummy item spans are treated as vacuously in-bounds.
+  item's HIR span, so `attribute_within_item` accepts an attribute span that is
+  either contained within the item span (older behaviour, and inner attributes)
+  or ends at or before the item's start (outer attributes on current
+  nightlies). Dummy item spans are treated as vacuously in-bounds.
 
 Unit coverage for both rules lives in
 `crates/function_attrs_follow_docs/src/tests/order_detection.rs`
@@ -1616,12 +1615,12 @@ fixture-based test setup used by the staged-suite coverage.
 #### Shared UI harness environment guards
 
 Workspace-level UI harness tests that mutate process-wide environment variables
-must use `whitaker_common::test_support::EnvVarGuard`. Use
-`EnvVarGuard::set` to install a temporary value and `EnvVarGuard::remove` to
-make a variable absent for the duration of a test. The guard acquires
-`env_test_guard()` only while it captures, mutates, or restores the variable;
-it must not hold that mutex while a runner callback executes, because the
-callback may need its own guarded environment setup.
+must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
+to install a temporary value and `EnvVarGuard::remove` to make a variable
+absent for the duration of a test. The guard acquires `env_test_guard()` only
+while it captures, mutates, or restores the variable; it must not hold that
+mutex while a runner callback executes, because the callback may need its own
+guarded environment setup.
 
 `whitaker::testing::ui::run_with_runner` applies a specialized guard before
 invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
@@ -1635,14 +1634,14 @@ Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
 can run test binaries in separate processes, so a plain in-process `Mutex` is
 not sufficient for those examples. A directory becomes eligible for stale
-recovery only after it has aged past 30 minutes, and stale cleanup removes
-that age-eligible lock directory only after successfully acquiring the
-lifetime owner-liveness lock. If stale cleanup sees `NotFound`, it treats the
-directory as already removed rather than as a failed recovery attempt, and
-the live lock path still waits indefinitely in production while the tests keep
-the bounded timeout. A sidecar advisory lock serializes ownership transitions,
-and the directory's owner token prevents an original holder from deleting a
-successor after stale recovery.
+recovery only after it has aged past 30 minutes, and stale cleanup removes that
+age-eligible lock directory only after successfully acquiring the lifetime
+owner-liveness lock. If stale cleanup sees `NotFound`, it treats the directory
+as already removed rather than as a failed recovery attempt, and the live lock
+path still waits indefinitely in production while the tests keep the bounded
+timeout. A sidecar advisory lock serializes ownership transitions, and the
+directory's owner token prevents an original holder from deleting a successor
+after stale recovery.
 
 ### Configuration constant patterns
 
@@ -1916,9 +1915,9 @@ than a shared adapter. The collector stores passive call-site evidence in
 deterministic `BTreeMap` order keyed by `tcx.def_path_str(callee_def_id)`,
 deduplicates entries with a private `CallSiteLocation`, and preserves the raw
 `DefId` in each record for later diagnostics. The late pass only records local
-function or associated-function callees inside strict `#[rstest]` tests,
-drops call sites whose spans cannot recover to user-editable source, and
-lowers arguments conservatively to fixture-local, literal, constant path, or
+function or associated-function callees inside strict `#[rstest]` tests, drops
+call sites whose spans cannot recover to user-editable source, and lowers
+arguments conservatively to fixture-local, literal, constant path, or
 unsupported atoms.
 
 Future rstest lints should promote this adapter out of

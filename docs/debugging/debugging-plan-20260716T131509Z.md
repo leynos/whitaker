@@ -41,9 +41,9 @@ Concurrent example harnesses may interfere while Dylint builds its driver.
 ## Intended fix boundary
 
 If H1 survives, make the existing runner environment guard clear and restore
-`RUSTC_WRAPPER` on every platform while retaining the Windows-only
-`VCPKG_ROOT` adjustment. Add a Linux-capable regression test around
-`run_with_runner`; do not disable sccache for the wider CI step.
+`RUSTC_WRAPPER` on every platform while retaining the Windows-only `VCPKG_ROOT`
+adjustment. Add a Linux-capable regression test around `run_with_runner`; do
+not disable sccache for the wider CI step.
 
 ## Validation
 

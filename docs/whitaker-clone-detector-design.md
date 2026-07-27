@@ -668,9 +668,9 @@ cargo whitaker clones report --in target/whitaker/clones.refined.sarif --html
    counts, and an `AstHash` seeded with `PARSER_SCHEMA_VERSION`. Weighted
    histograms are derived from the exact counts using a dyadic fixed-point
    scale of `2^63`, so weights stay nonzero through depth 63 and become zero
-   beyond that. Equality and snapshot tests are deterministic and do not
-   depend on floating-point ordering or platform behaviour. The public hash
-   output remains opaque hexadecimal, not a raw `u64`.
+   beyond that. Equality and snapshot tests are deterministic and do not depend
+   on floating-point ordering or platform behaviour. The public hash output
+   remains opaque hexadecimal, not a raw `u64`.
 
 4. **`ra_ap_syntax` is exact-pinned and gated behind the default parser
    feature.** The 7.3.1 implementation pins `ra_ap_syntax` to `=0.0.334` and

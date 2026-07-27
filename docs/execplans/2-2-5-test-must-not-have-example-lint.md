@@ -1,9 +1,8 @@
 # Implement `test_must_not_have_example` lint (roadmap 2.2.5)
 
-This execution plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This execution plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -364,7 +363,7 @@ as complete in `docs/roadmap.md`:
 
 - change
   `- [ ] 2.2.5. Implement test_must_not_have_example covering code-fence heuristics.`
-   to `[x]`.
+  to `[x]`.
 
 Acceptance for Stage H: roadmap reflects the shipped state.
 
