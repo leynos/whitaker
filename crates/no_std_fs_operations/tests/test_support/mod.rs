@@ -20,46 +20,62 @@ impl FixtureProject {
     }
 }
 
+/// Selects which suppression mechanism a fixture exercises.
+///
+/// The two mechanisms differ in both the `dylint.toml` key they configure and
+/// the shape of the generated source, so the fixture builders branch on this.
+#[derive(Clone, Copy)]
+pub(super) enum FixtureKind {
+    /// Crate-wide suppression via `excluded_crates`, with a flat source module.
+    CrateExclusion,
+    /// Module-path suppression via `excluded_paths`, with `std::fs` usage nested
+    /// inside an excludable `guarded` module.
+    PathExclusion,
+}
+
+impl FixtureKind {
+    /// Short label naming the mechanism, used in error context.
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::CrateExclusion => "crate",
+            Self::PathExclusion => "path",
+        }
+    }
+}
+
 /// Creates a temporary fixture project for verifying exclusion behaviour.
+///
+/// `kind` selects both the `dylint.toml` configuration and the fixture source:
+/// [`FixtureKind::CrateExclusion`] pairs `excluded_crates` with a flat module,
+/// while [`FixtureKind::PathExclusion`] pairs `excluded_paths` with `std::fs`
+/// usage nested inside a `guarded` module (exercising module-path suppression
+/// end to end). `is_excluded` toggles whether the mechanism actually lists the
+/// fixture.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// let fixture = create_fixture_project("excluded_test_crate", true)?;
+/// let fixture = create_fixture_project(
+///     "excluded_test_crate",
+///     FixtureKind::CrateExclusion,
+///     true,
+/// )?;
 /// assert!(fixture.root().join("dylint.toml").exists());
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub(super) fn create_fixture_project(
     crate_name: &str,
+    kind: FixtureKind,
     is_excluded: bool,
 ) -> anyhow::Result<FixtureProject> {
+    let source = match kind {
+        FixtureKind::CrateExclusion => fixture_source(crate_name),
+        FixtureKind::PathExclusion => fixture_module_source(crate_name),
+    };
     write_fixture_project(
         crate_name,
-        &fixture_dylint_config(crate_name, is_excluded),
-        &fixture_source(crate_name),
-    )
-}
-
-/// Creates a fixture whose `std::fs` usage lives inside a nested module.
-///
-/// When `is_module_excluded` is set, the module's path is listed under
-/// `excluded_paths`, exercising the module-path scoped suppression end to end.
-///
-/// # Examples
-///
-/// ```ignore
-/// let fixture = create_path_fixture_project("path_excluded_crate", true)?;
-/// assert!(fixture.root().join("dylint.toml").exists());
-/// # Ok::<(), anyhow::Error>(())
-/// ```
-pub(super) fn create_path_fixture_project(
-    crate_name: &str,
-    is_module_excluded: bool,
-) -> anyhow::Result<FixtureProject> {
-    write_fixture_project(
-        crate_name,
-        &fixture_path_dylint_config(crate_name, is_module_excluded),
-        &fixture_module_source(crate_name),
+        &fixture_dylint_config(crate_name, kind, is_excluded),
+        &source,
     )
 }
 
@@ -103,38 +119,26 @@ fn write_fixture_project(
     })
 }
 
-fn fixture_dylint_config(crate_name: &str, is_excluded: bool) -> String {
-    let excluded_crates = toml::Value::Array(if is_excluded {
-        vec![toml::Value::String(crate_name.to_owned())]
+/// Builds a `dylint.toml` for the given suppression mechanism.
+///
+/// [`FixtureKind::CrateExclusion`] lists `crate_name` under `excluded_crates`;
+/// [`FixtureKind::PathExclusion`] lists the fixture's `guarded` module
+/// (`<crate>::guarded`) under `excluded_paths`. Entries are serialized through
+/// `toml::Value` so crate names remain safely escaped, and an empty array is
+/// emitted when `is_excluded` is false.
+fn fixture_dylint_config(crate_name: &str, kind: FixtureKind, is_excluded: bool) -> String {
+    let (key, entry) = match kind {
+        FixtureKind::CrateExclusion => ("excluded_crates", crate_name.to_owned()),
+        FixtureKind::PathExclusion => ("excluded_paths", format!("{crate_name}::guarded")),
+    };
+
+    let values = toml::Value::Array(if is_excluded {
+        vec![toml::Value::String(entry)]
     } else {
         Vec::new()
     });
 
-    format!(
-        concat!(
-            "[no_std_fs_operations]\n",
-            "excluded_crates = {excluded_crates}\n",
-        ),
-        excluded_crates = excluded_crates
-    )
-}
-
-/// Builds a `dylint.toml` that optionally excludes the fixture's `guarded`
-/// module by path (`<crate>::guarded`).
-fn fixture_path_dylint_config(crate_name: &str, is_module_excluded: bool) -> String {
-    let excluded_paths = toml::Value::Array(if is_module_excluded {
-        vec![toml::Value::String(format!("{crate_name}::guarded"))]
-    } else {
-        Vec::new()
-    });
-
-    format!(
-        concat!(
-            "[no_std_fs_operations]\n",
-            "excluded_paths = {excluded_paths}\n",
-        ),
-        excluded_paths = excluded_paths
-    )
+    format!("[no_std_fs_operations]\n{key} = {values}\n")
 }
 
 fn fixture_source(crate_name: &str) -> String {
@@ -204,15 +208,12 @@ fn fixture_module_source(crate_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        create_fixture_project, create_path_fixture_project, fixture_dylint_config,
-        fixture_path_dylint_config,
-    };
+    use super::{FixtureKind, create_fixture_project, fixture_dylint_config};
 
     #[test]
     fn dylint_config_escapes_crate_names_as_toml_values() {
         let crate_name = "crate\"]\ninjected = true\n[other";
-        let config = fixture_dylint_config(crate_name, true);
+        let config = fixture_dylint_config(crate_name, FixtureKind::CrateExclusion, true);
         let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
 
         assert_eq!(
@@ -228,7 +229,7 @@ mod tests {
     #[test]
     fn fixture_manifest_escapes_crate_names_as_toml_values() -> anyhow::Result<()> {
         let crate_name = "crate\"]\ninjected = true\n[other";
-        let fixture = create_fixture_project(crate_name, true)?;
+        let fixture = create_fixture_project(crate_name, FixtureKind::CrateExclusion, true)?;
         let manifest = std::fs::read_to_string(fixture.root().join("Cargo.toml"))?;
         let parsed: toml::Value = toml::from_str(&manifest)?;
 
@@ -249,7 +250,7 @@ mod tests {
 
     #[test]
     fn path_config_lists_the_guarded_module_when_excluded() {
-        let config = fixture_path_dylint_config("my_app", true);
+        let config = fixture_dylint_config("my_app", FixtureKind::PathExclusion, true);
         let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
 
         assert_eq!(
@@ -262,7 +263,7 @@ mod tests {
 
     #[test]
     fn path_config_omits_exclusions_when_not_excluded() {
-        let config = fixture_path_dylint_config("my_app", false);
+        let config = fixture_dylint_config("my_app", FixtureKind::PathExclusion, false);
         let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
 
         assert!(
@@ -275,7 +276,8 @@ mod tests {
 
     #[test]
     fn path_fixture_confines_filesystem_access_to_the_guarded_module() -> anyhow::Result<()> {
-        let fixture = create_path_fixture_project("path_fixture_crate", true)?;
+        let fixture =
+            create_fixture_project("path_fixture_crate", FixtureKind::PathExclusion, true)?;
         let source = std::fs::read_to_string(fixture.root().join("src/lib.rs"))?;
 
         // The std::fs usage must sit under the module the config excludes so the
