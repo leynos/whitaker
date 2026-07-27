@@ -8,7 +8,7 @@ use super::checksum::{
 use super::installer::DependencyBinaryInstallError;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
+use cap_std::fs_utf8::{Dir, File};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use tracing::{debug, instrument, warn};
@@ -100,25 +100,25 @@ pub(super) fn download_from_urls(
     // Acquire the parent-directory capability up front so every archive read and
     // write flows through it (never ambient `std::fs`); validation happens here,
     // before any HTTP request.
-    let (destination, dir, archive_name) = open_download_destination(destination)?;
-    download_archive(agent, archive_url, &dir, &archive_name)?;
+    let destination = open_download_destination(destination)?;
+    destination.download_archive(agent, archive_url)?;
     // Any failure after the archive is written removes it, so a retry never sees
     // a partial or unverified file.
     let expected_checksum = fetch_expected_checksum(agent, checksum_url)
-        .inspect_err(|_| remove_partial_archive(&dir, &archive_name))?;
+        .inspect_err(|_| destination.remove_partial_archive())?;
 
     // Re-open the written archive and verify it; `verify_archive_checksum`
     // consumes the reader, closing the handle before any cleanup below.
-    let archive = dir.open(&archive_name).inspect_err(|error| {
+    let archive = destination.open_archive().inspect_err(|error| {
         warn!(
             category = CATEGORY_CAPABILITY,
-            archive_name = %archive_name,
+            archive_name = %destination.archive_name,
             error = %error,
             "failed to reopen archive for verification",
         );
-        remove_partial_archive(&dir, &archive_name);
+        destination.remove_partial_archive();
     })?;
-    match verify_archive_checksum(archive, destination.as_std_path(), &expected_checksum) {
+    match verify_archive_checksum(archive, destination.path.as_std_path(), &expected_checksum) {
         Ok(()) => {
             debug!(
                 category = CATEGORY_CHECKSUM,
@@ -136,26 +136,79 @@ pub(super) fn download_from_urls(
                 "archive checksum verification failed",
             );
             // Remove the unverified archive so a retry never observes stale data.
-            remove_partial_archive(&dir, &archive_name);
+            destination.remove_partial_archive();
             Err(error)
         }
     }
 }
 
-/// Remove a partial or unverified archive; a cleanup failure is only logged.
-fn remove_partial_archive(dir: &Dir, archive_name: &str) {
-    if let Err(error) = dir.remove_file(archive_name) {
-        warn!(
-            category = CATEGORY_CAPABILITY,
-            archive_name = %archive_name,
-            error = %error,
-            "failed to remove archive after a download failure",
-        );
+/// A validated archive destination — UTF-8 path, capability-scoped parent
+/// directory, and archive file name — bundled so archive operations do not
+/// thread repeated `&str`/`&Dir` parameters.
+struct DownloadDestination {
+    path: Utf8PathBuf,
+    dir: Dir,
+    archive_name: String,
+}
+
+impl DownloadDestination {
+    /// Fetch the archive at `url` and write it into the capability directory,
+    /// removing a partial file if the write fails. Fetch failures map through
+    /// [`map_ureq_error`]; capability-create and write failures propagate.
+    fn download_archive(
+        &self,
+        agent: &ureq::Agent,
+        url: &str,
+    ) -> Result<(), DependencyBinaryInstallError> {
+        let response = agent
+            .get(url)
+            .call()
+            .map_err(|error| map_ureq_error(url, &error))
+            .inspect_err(|error| {
+                warn!(category = CATEGORY_FETCH, url = %url, error = %error, "archive fetch failed");
+            })?;
+        let mut file = self.dir.create(&self.archive_name).inspect_err(|error| {
+            warn!(
+                category = CATEGORY_CAPABILITY,
+                archive_name = %self.archive_name,
+                error = %error,
+                "failed to create archive file",
+            );
+        })?;
+        let mut body = response.into_body();
+        let reader = body.as_reader();
+        let copy_result = copy_capped(reader, &mut file, MAX_ARCHIVE_BYTES, url);
+        drop(file);
+        if let Err(error) = copy_result {
+            warn!(category = CATEGORY_WRITE, url = %url, error = %error, "failed to write archive to disk");
+            // Remove the partially written archive so a retry starts clean.
+            self.remove_partial_archive();
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Reopen the written archive through the capability for verification.
+    fn open_archive(&self) -> io::Result<File> {
+        self.dir.open(&self.archive_name)
+    }
+
+    /// Remove a partial or unverified archive; a cleanup failure is only logged.
+    fn remove_partial_archive(&self) {
+        if let Err(error) = self.dir.remove_file(&self.archive_name) {
+            warn!(
+                category = CATEGORY_CAPABILITY,
+                archive_name = %self.archive_name,
+                error = %error,
+                "failed to remove archive after a download failure",
+            );
+        }
     }
 }
 
 /// Validate `destination` as UTF-8 and open its parent directory as a
-/// capability, returning owned values so the caller has no borrowed lifetimes.
+/// capability, returning an owned [`DownloadDestination`] so the caller has no
+/// borrowed lifetimes.
 ///
 /// # Errors
 ///
@@ -164,8 +217,8 @@ fn remove_partial_archive(dir: &Dir, archive_name: &str) {
 /// propagates capability-open failures from [`open_destination_dir`].
 fn open_download_destination(
     destination: &Path,
-) -> Result<(Utf8PathBuf, Dir, String), DependencyBinaryInstallError> {
-    let destination = Utf8Path::from_path(destination).ok_or_else(|| {
+) -> Result<DownloadDestination, DependencyBinaryInstallError> {
+    let path = Utf8Path::from_path(destination).ok_or_else(|| {
         warn!(
             category = CATEGORY_UTF8,
             "destination archive path is not valid UTF-8",
@@ -175,68 +228,19 @@ fn open_download_destination(
             "destination archive path is not valid UTF-8",
         )
     })?;
-    let (dir, archive_name) = open_destination_dir(destination).inspect_err(|error| {
+    let (dir, archive_name) = open_destination_dir(path).inspect_err(|error| {
         warn!(
             category = CATEGORY_CAPABILITY,
-            destination = %destination,
+            destination = %path,
             error = %error,
             "failed to open destination directory",
         );
     })?;
-    Ok((destination.to_owned(), dir, archive_name.to_owned()))
-}
-
-/// Fetch the archive at `url` and write it into `dir` as `archive_name`.
-///
-/// The response body is streamed only into the handle returned by `dir.create`,
-/// which is dropped before returning.
-///
-/// # Errors
-///
-/// Returns a mapped [`map_ureq_error`] failure when the fetch fails, and
-/// propagates capability-create and write failures.
-fn download_archive(
-    agent: &ureq::Agent,
-    url: &str,
-    dir: &Dir,
-    archive_name: &str,
-) -> Result<(), DependencyBinaryInstallError> {
-    let response = agent
-        .get(url)
-        .call()
-        .map_err(|error| map_ureq_error(url, &error))
-        .inspect_err(|error| {
-            warn!(
-                category = CATEGORY_FETCH,
-                url = %url,
-                error = %error,
-                "archive fetch failed",
-            );
-        })?;
-    let mut file = dir.create(archive_name).inspect_err(|error| {
-        warn!(
-            category = CATEGORY_CAPABILITY,
-            archive_name = %archive_name,
-            error = %error,
-            "failed to create archive file",
-        );
-    })?;
-    let mut body = response.into_body();
-    let reader = body.as_reader();
-    let copy_result = copy_capped(reader, &mut file, MAX_ARCHIVE_BYTES, url);
-    drop(file);
-    if let Err(error) = copy_result {
-        warn!(
-            category = CATEGORY_WRITE,
-            url = %url,
-            error = %error,
-            "failed to write archive to disk",
-        );
-        // Remove the partially written archive so a retry starts clean.
-        remove_partial_archive(dir, archive_name);
-        return Err(error);
-    }
-    Ok(())
+    Ok(DownloadDestination {
+        path: path.to_owned(),
+        dir,
+        archive_name: archive_name.to_owned(),
+    })
 }
 
 /// Copy at most `max_bytes` from `reader` into `writer`; an over-cap response
