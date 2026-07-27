@@ -72,12 +72,14 @@ impl DownloadHarness {
     }
 }
 
-/// Start a local server for `routes` and a temp destination for the archive.
-///
-/// This is a plain constructor rather than an `#[fixture]` because the route
-/// table varies per test and depends on test-local data, which rstest's
-/// fixture injection cannot supply.
-fn download_harness(routes: HashMap<String, CannedResponse>) -> DownloadHarness {
+/// Supply a running local server for `routes` plus a temp destination for the
+/// archive. Each test builds its own route-specific payloads, so this fixture is
+/// invoked directly with those routes; the `#[default]` keeps rstest from
+/// treating `routes` as a required sub-fixture.
+#[fixture]
+fn download_harness(
+    #[default(HashMap::new())] routes: HashMap<String, CannedResponse>,
+) -> DownloadHarness {
     let server = LocalServer::start(routes);
     let temp = TempDir::new().expect("create temp dir");
     let destination = temp.path().join("archive.tgz");
