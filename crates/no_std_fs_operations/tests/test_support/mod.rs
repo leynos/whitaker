@@ -280,10 +280,25 @@ mod tests {
             create_fixture_project("path_fixture_crate", FixtureKind::PathExclusion, true)?;
         let source = std::fs::read_to_string(fixture.root().join("src/lib.rs"))?;
 
-        // The std::fs usage must sit under the module the config excludes so the
-        // integration test genuinely exercises path-scoped suppression.
-        assert!(source.contains("pub mod guarded"), "source was:\n{source}");
-        assert!(source.contains("std::fs::File"), "source was:\n{source}");
+        // The fixture must declare the module the config excludes.
+        let guarded_start = source.find("pub mod guarded").unwrap_or_else(|| {
+            panic!("fixture should declare a guarded module, source was:\n{source}")
+        });
+
+        // The `std::fs` usage must be the *only* one, and must sit inside the
+        // guarded module. Otherwise a passing exclusion test could reflect an
+        // accidental global suppression (or a stray crate-root usage) rather
+        // than genuine module-scoped suppression.
+        let fs_usages: Vec<usize> = source.match_indices("std::fs").map(|(i, _)| i).collect();
+        assert_eq!(
+            fs_usages.len(),
+            1,
+            "expected exactly one std::fs usage, source was:\n{source}"
+        );
+        assert!(
+            fs_usages[0] > guarded_start,
+            "the std::fs usage must sit inside the guarded module, source was:\n{source}"
+        );
         Ok(())
     }
 }

@@ -105,6 +105,7 @@ fn legacy_config_without_excluded_paths_still_parses() {
 #[rstest]
 #[case::wrong_type(r#"excluded_paths = "not_an_array""#)]
 #[case::wrong_element_type(r#"excluded_paths = [1, 2, 3]"#)]
+#[case::mixed_element_types(r#"excluded_paths = ["my_app::legacy_io", 1]"#)]
 fn config_rejects_invalid_excluded_paths(#[case] toml: &str) {
     assert!(
         toml::from_str::<NoStdFsConfig>(toml).is_err(),
