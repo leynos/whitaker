@@ -20,6 +20,9 @@ use cap_std::fs_utf8::Dir;
 use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+// `io` is only referenced by the `#[cfg(unix)]` non-UTF-8 tests (`io::ErrorKind`);
+// `Read` is used across platforms for `read_to_end`.
+#[cfg(unix)]
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;

@@ -1,7 +1,7 @@
 error[E0277]: the trait bound `Sha256: std::io::Write` is not satisfied
   --> tests/ui/hasher_io_write.rs:15:27
    |
-15 |     io::copy(&mut reader, &mut hasher).unwrap();
+15 |     io::copy(&mut reader, &mut hasher).expect("copying into Sha256");
    |     --------              ^^^^^^^^^^^ the trait `std::io::Write` is not implemented for `Sha256`
    |     |
    |     required by a bound introduced by this call

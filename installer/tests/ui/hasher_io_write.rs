@@ -12,6 +12,6 @@ fn main() {
     let mut hasher = Sha256::new();
     let data: &[u8] = b"abc";
     let mut reader = data;
-    io::copy(&mut reader, &mut hasher).unwrap();
+    io::copy(&mut reader, &mut hasher).expect("copying into Sha256");
     let _ = hasher.finalize();
 }

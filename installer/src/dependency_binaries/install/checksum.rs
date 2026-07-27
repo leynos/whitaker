@@ -6,7 +6,7 @@
 //! module stays focused. Checksum tracing reuses the shared bounded
 //! [`super::downloader::CATEGORY_CHECKSUM`] category.
 
-use super::downloader::{CATEGORY_CHECKSUM, map_ureq_error};
+use super::downloader::CATEGORY_CHECKSUM;
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
 use sha2::{Digest, Sha256};
@@ -17,6 +17,20 @@ use tracing::{debug, warn};
 
 // Bounded `checksum_state` field value marking a successfully parsed digest.
 const CHECKSUM_STATE_PARSED: &str = "parsed";
+
+/// Map `ureq` failures into semantic dependency-installer errors. Shared with
+/// `super::downloader`, which maps archive-fetch failures the same way.
+pub(super) fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallError {
+    match error {
+        ureq::Error::StatusCode(404 | 410) => DependencyBinaryInstallError::NotFound {
+            url: url.to_owned(),
+        },
+        other => DependencyBinaryInstallError::Download {
+            url: url.to_owned(),
+            reason: other.to_string(),
+        },
+    }
+}
 
 /// Fetch the `.sha256` sidecar at `checksum_url` and return the expected digest.
 ///
@@ -82,13 +96,13 @@ pub(super) fn fetch_expected_checksum(
     Ok(expected)
 }
 
-/// Extract the digest token (first whitespace-delimited field of the first
-/// line) from a checksum-file body, returning `None` for an empty, blank, or
-/// otherwise tokenless body.
+/// Extract the SHA-256 digest token (first whitespace-delimited field of the
+/// first line) from a checksum-file body, returning `None` unless it is exactly
+/// 64 ASCII hexadecimal digits. This rejects empty, blank, truncated, non-hex,
+/// and HTML-error bodies so the caller surfaces its `Download` error.
 fn parse_checksum_token(body: &str) -> Option<&str> {
-    body.lines()
-        .next()
-        .and_then(|line| line.split_whitespace().next())
+    let token = body.lines().next()?.split_whitespace().next()?;
+    (token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(token)
 }
 
 /// Compute the lowercase-hex SHA-256 digest of `reader`.
@@ -159,17 +173,45 @@ mod tests {
         file.reopen().expect("reopen temp file")
     }
 
+    #[rstest]
+    #[case(404, true)]
+    #[case(410, true)]
+    #[case(403, false)]
+    #[case(500, false)]
+    fn map_ureq_error_maps_status_codes(#[case] status: u16, #[case] is_not_found: bool) {
+        let error = map_ureq_error(
+            "https://example.test/archive.tgz",
+            &ureq::Error::StatusCode(status),
+        );
+
+        if is_not_found {
+            assert!(matches!(
+                error,
+                DependencyBinaryInstallError::NotFound { .. }
+            ));
+        } else {
+            assert!(matches!(
+                error,
+                DependencyBinaryInstallError::Download { .. }
+            ));
+        }
+    }
+
     #[test]
-    fn parse_checksum_token_returns_the_first_field_of_the_first_line() {
-        let body = "abc123def456  whitaker-tool.tgz\nignored second line\n";
-        assert_eq!(parse_checksum_token(body), Some("abc123def456"));
+    fn parse_checksum_token_returns_a_valid_64_hex_digest() {
+        let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        let body = format!("{digest}  whitaker-tool.tgz\nignored second line\n");
+        assert_eq!(parse_checksum_token(&body), Some(digest));
     }
 
     #[rstest]
-    #[case("")]
-    #[case("   \n")]
-    #[case("\n\n")]
-    fn parse_checksum_token_returns_none_for_an_empty_or_blank_body(#[case] body: &str) {
+    #[case::empty("")]
+    #[case::blank("   \n")]
+    #[case::blank_lines("\n\n")]
+    #[case::truncated("abc123  whitaker-tool.tgz\n")]
+    #[case::non_hex("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz1  x\n")]
+    #[case::html("<html><body>404 Not Found</body></html>\n")]
+    fn parse_checksum_token_rejects_a_malformed_body(#[case] body: &str) {
         assert_eq!(parse_checksum_token(body), None);
     }
 

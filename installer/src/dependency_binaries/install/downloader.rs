@@ -2,31 +2,32 @@
 
 use crate::artefact::download::HttpDownloader;
 
-use super::checksum::{fetch_expected_checksum, verify_archive_checksum};
+use super::checksum::{fetch_expected_checksum, map_ureq_error, verify_archive_checksum};
 use super::installer::DependencyBinaryInstallError;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
-use std::io;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use tracing::{debug, instrument, warn};
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
-// Bounded `category` field on every boundary event, kept stable so operators
-// can aggregate failures without unbounded cardinality: `utf8`, `capability`
-// (a `cap_std` dir op), `fetch` (network), `write` (archive-to-disk), and
-// `checksum` (retrieval/parse/verify, shared with `super::checksum`).
+/// Maximum archive size accepted, so a runaway response cannot fill the disk.
+const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
+
+// Bounded `category` field on every boundary event, kept stable so operators can
+// aggregate failures without unbounded cardinality: `utf8`, `capability` (cap_std
+// dir op), `fetch` (network), `write` (archive-to-disk), `checksum` (shared).
 const CATEGORY_UTF8: &str = "utf8";
 const CATEGORY_CAPABILITY: &str = "capability";
 const CATEGORY_FETCH: &str = "fetch";
 const CATEGORY_WRITE: &str = "write";
-// Shared with `super::checksum`, which emits the same category on its own
-// checksum boundary events.
+// Shared with `super::checksum`, which emits this category on its own events.
 pub(super) const CATEGORY_CHECKSUM: &str = "checksum";
 
-// Bounded `checksum_state` field values marking the checksum-processing stage
-// the orchestrator reports (the `parsed` state is emitted by `super::checksum`).
+// Bounded `checksum_state` values the orchestrator reports (`parsed` is emitted
+// by `super::checksum`).
 const CHECKSUM_STATE_MISMATCH: &str = "mismatch";
 const CHECKSUM_STATE_VERIFIED: &str = "verified";
 
@@ -221,8 +222,8 @@ fn download_archive(
         );
     })?;
     let mut body = response.into_body();
-    let mut reader = body.as_reader();
-    let copy_result = io::copy(&mut reader, &mut file);
+    let reader = body.as_reader();
+    let copy_result = copy_capped(reader, &mut file, MAX_ARCHIVE_BYTES, url);
     drop(file);
     if let Err(error) = copy_result {
         warn!(
@@ -233,7 +234,25 @@ fn download_archive(
         );
         // Remove the partially written archive so a retry starts clean.
         remove_partial_archive(dir, archive_name);
-        return Err(error.into());
+        return Err(error);
+    }
+    Ok(())
+}
+
+/// Copy at most `max_bytes` from `reader` into `writer`; an over-cap response
+/// becomes a `Download` error rather than being written in full.
+fn copy_capped(
+    mut reader: impl Read,
+    writer: &mut impl Write,
+    max_bytes: u64,
+    url: &str,
+) -> Result<(), DependencyBinaryInstallError> {
+    let copied = io::copy(&mut reader.by_ref().take(max_bytes), writer)?;
+    if copied == max_bytes && reader.read(&mut [0u8; 1])? > 0 {
+        return Err(DependencyBinaryInstallError::Download {
+            url: url.to_owned(),
+            reason: format!("archive exceeds the maximum of {max_bytes} bytes"),
+        });
     }
     Ok(())
 }
@@ -262,52 +281,28 @@ fn open_destination_dir(destination: &Utf8Path) -> io::Result<(Dir, &str)> {
     Ok((dir, archive_name))
 }
 
-/// Map `ureq` failures into semantic dependency-installer errors.
-pub(super) fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallError {
-    match error {
-        ureq::Error::StatusCode(404 | 410) => DependencyBinaryInstallError::NotFound {
-            url: url.to_owned(),
-        },
-        other => DependencyBinaryInstallError::Download {
-            url: url.to_owned(),
-            reason: other.to_string(),
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! Tests for downloader error mapping and archive checksum verification.
 
     use super::*;
     use crate::hex::to_lower_hex;
-    use rstest::rstest;
     use sha2::{Digest, Sha256};
     use std::io::Write;
     use tempfile::TempDir;
 
-    #[rstest]
-    #[case(404, true)]
-    #[case(410, true)]
-    #[case(403, false)]
-    #[case(500, false)]
-    fn map_ureq_error_maps_status_codes(#[case] status: u16, #[case] is_not_found: bool) {
-        let error = map_ureq_error(
-            "https://example.test/archive.tgz",
-            &ureq::Error::StatusCode(status),
+    // The under-cap success path is covered end to end by the local-server
+    // boundary tests; this exercises the over-cap rejection they cannot.
+    #[test]
+    fn copy_capped_rejects_a_body_exceeding_the_limit() {
+        let url = "https://example.test/a.tgz";
+        let error = copy_capped(&[0u8; 100][..], &mut Vec::new(), 8, url)
+            .expect_err("an over-cap body must be rejected");
+        assert!(
+            matches!(&error, DependencyBinaryInstallError::Download { url: u, reason }
+                if u == url && reason.contains("exceeds the maximum")),
+            "unexpected error: {error:?}",
         );
-
-        if is_not_found {
-            assert!(matches!(
-                error,
-                DependencyBinaryInstallError::NotFound { .. }
-            ));
-        } else {
-            assert!(matches!(
-                error,
-                DependencyBinaryInstallError::Download { .. }
-            ));
-        }
     }
 
     #[test]
