@@ -27,14 +27,18 @@ pub(crate) struct PathExclusions {
 impl PathExclusions {
     /// Build the exclusion set from configured path strings.
     ///
-    /// Entries that parse to zero segments (for example an empty string or a
-    /// bare `::`) are discarded, since they would otherwise match every item
-    /// and silently disable the lint.
+    /// Malformed entries are rejected before parsing, not compacted: an empty
+    /// string, a bare `::`, or a syntactically incomplete path such as
+    /// `my_app::` (leading, trailing, or repeated separators) is discarded. This
+    /// matters because `SimplePath::parse` silently drops empty segments, so
+    /// `my_app::` would otherwise collapse to the crate-root prefix `my_app` and
+    /// suppress the lint across the whole crate — the opposite of the narrow,
+    /// module-scoped exclusion the entry was meant to express.
     pub(crate) fn new(paths: &HashSet<String>) -> Self {
         let mut prefixes: Vec<SimplePath> = paths
             .iter()
+            .filter(|path| is_well_formed_path(path.as_str()))
             .map(|path| SimplePath::parse(path))
-            .filter(|path| !path.segments().is_empty())
             .collect();
         // A deterministic order keeps behaviour reproducible across runs and
         // makes any debug logging of the prefixes stable.
@@ -63,6 +67,16 @@ impl PathExclusions {
     }
 }
 
+/// Returns `true` when `path` is a syntactically complete `::`-delimited path.
+///
+/// A well-formed entry has one or more non-empty segments and no leading,
+/// trailing, or repeated separators. A bare crate name (a single segment) is
+/// well formed and legitimately exempts the whole crate; only entries whose raw
+/// structure would lose a segment during parsing are rejected.
+fn is_well_formed_path(path: &str) -> bool {
+    !path.is_empty() && path.split("::").all(|segment| !segment.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::PathExclusions;
@@ -86,8 +100,8 @@ mod tests {
 
     #[test]
     fn configuration_of_only_blank_entries_reports_empty() {
-        // Blank and separator-only entries parse to zero segments and are
-        // dropped, so they never disable the lint wholesale.
+        // Blank and separator-only entries are rejected as malformed, so they
+        // never disable the lint wholesale.
         assert!(exclusions(&["", "::"]).is_empty());
     }
 
@@ -123,5 +137,30 @@ mod tests {
         let exclusions = exclusions(&["", "my_app::legacy_io"]);
         assert!(!exclusions.excludes(&SimplePath::parse("other_app::network")));
         assert!(exclusions.excludes(&SimplePath::parse("my_app::legacy_io::reader")));
+    }
+
+    #[rstest]
+    #[case::trailing_separator("my_app::")]
+    #[case::leading_separator("::my_app")]
+    #[case::repeated_separator("my_app::::legacy_io")]
+    #[case::only_separators("::")]
+    #[case::empty("")]
+    fn malformed_entries_are_rejected(#[case] entry: &str) {
+        // A malformed entry must be dropped rather than compacted; otherwise a
+        // trailing `::` would widen `my_app::` into the crate-root prefix
+        // `my_app` and disable the lint across the whole crate.
+        assert!(
+            exclusions(&[entry]).is_empty(),
+            "entry {entry:?} should be rejected"
+        );
+    }
+
+    #[test]
+    fn incomplete_path_does_not_widen_to_crate_root() {
+        // Regression guard for the specific `my_app::` widening hazard: it must
+        // not suppress unrelated items in `my_app`.
+        let exclusions = exclusions(&["my_app::"]);
+        assert!(!exclusions.excludes(&SimplePath::parse("my_app::network")));
+        assert!(!exclusions.excludes(&SimplePath::parse("my_app")));
     }
 }

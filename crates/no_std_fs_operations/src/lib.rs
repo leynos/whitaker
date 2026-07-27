@@ -5,6 +5,8 @@
 #[cfg(all(feature = "dylint-driver", test))]
 mod behaviour;
 #[cfg(feature = "dylint-driver")]
+mod config;
+#[cfg(feature = "dylint-driver")]
 mod diagnostics;
 #[cfg(feature = "dylint-driver")]
 mod driver;
@@ -16,6 +18,8 @@ mod exclusion_behaviour;
 mod tests;
 #[cfg(feature = "dylint-driver")]
 mod usage;
+#[cfg(feature = "dylint-driver")]
+pub use config::NoStdFsConfig;
 #[cfg(feature = "dylint-driver")]
 pub use driver::*;
 
