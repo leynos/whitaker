@@ -2,7 +2,9 @@
 
 use crate::artefact::download::HttpDownloader;
 
-use super::checksum::{fetch_expected_checksum, map_ureq_error, verify_archive_checksum};
+use super::checksum::{
+    CATEGORY_CHECKSUM, fetch_expected_checksum, map_ureq_error, verify_archive_checksum,
+};
 use super::installer::DependencyBinaryInstallError;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
@@ -17,14 +19,12 @@ const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
 
 // Bounded `category` field on every boundary event, kept stable so operators can
-// aggregate failures without unbounded cardinality: `utf8`, `capability` (cap_std
-// dir op), `fetch` (network), `write` (archive-to-disk), `checksum` (shared).
+// aggregate failures without unbounded cardinality. `checksum` is owned by
+// `super::checksum` (imported above); the rest are local:
 const CATEGORY_UTF8: &str = "utf8";
 const CATEGORY_CAPABILITY: &str = "capability";
 const CATEGORY_FETCH: &str = "fetch";
 const CATEGORY_WRITE: &str = "write";
-// Shared with `super::checksum`, which emits this category on its own events.
-pub(super) const CATEGORY_CHECKSUM: &str = "checksum";
 
 // Bounded `checksum_state` values the orchestrator reports (`parsed` is emitted
 // by `super::checksum`).

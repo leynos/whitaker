@@ -199,15 +199,22 @@ fn download_from_urls_accepts_an_uppercase_checksum_sidecar(agent: ureq::Agent) 
 }
 
 #[rstest]
-fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url(agent: ureq::Agent) {
-    // A blank sidecar has no token; the workflow maps the pure parser's `None`
-    // to a URL-bearing `Download` error identifying the checksum endpoint.
+#[case::blank("   \n")]
+#[case::non_hex("not-a-valid-hex-token  archive.tgz\n")]
+#[case::html("<html><body>404 Not Found</body></html>\n")]
+fn download_from_urls_rejects_a_malformed_checksum_sidecar(
+    agent: ureq::Agent,
+    #[case] sidecar: &str,
+) {
+    // A blank, non-hex, or HTML-error sidecar has no valid 64-hex token; the
+    // workflow maps the parser's `None` to a URL-bearing `Download` error before
+    // any verification.
     let archive_bytes = b"whitaker dependency archive payload".to_vec();
     let mut routes = HashMap::new();
     routes.insert("/archive.tgz".to_owned(), CannedResponse::ok(archive_bytes));
     routes.insert(
         "/archive.tgz.sha256".to_owned(),
-        CannedResponse::ok(b"   \n".to_vec()),
+        CannedResponse::ok(sidecar.as_bytes().to_vec()),
     );
     let harness = download_harness(routes);
     let checksum_url = harness.checksum_url();
@@ -218,7 +225,7 @@ fn download_from_urls_reports_an_empty_checksum_sidecar_with_its_url(agent: ureq
         &checksum_url,
         &harness.destination,
     )
-    .expect_err("a blank checksum sidecar must fail");
+    .expect_err("a malformed checksum sidecar must fail");
 
     match error {
         DependencyBinaryInstallError::Download { url, reason } => {

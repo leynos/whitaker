@@ -3,10 +3,10 @@
 //! These helpers fetch the `.sha256` sidecar, parse its digest token, stream a
 //! bounded SHA-256 over an archive reader, and compare the two. They are kept
 //! separate from the download orchestration in [`super::downloader`] so each
-//! module stays focused. Checksum tracing reuses the shared bounded
-//! [`super::downloader::CATEGORY_CHECKSUM`] category.
+//! module stays focused. The bounded [`CATEGORY_CHECKSUM`] tracing category is
+//! owned here and imported by `downloader`, keeping the module dependency
+//! one-way.
 
-use super::downloader::CATEGORY_CHECKSUM;
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
 use sha2::{Digest, Sha256};
@@ -14,6 +14,10 @@ use std::io;
 use std::io::Read;
 use std::path::Path;
 use tracing::{debug, warn};
+
+/// Bounded `category` field for every checksum boundary event. Owned here so the
+/// module dependency stays one-way (`downloader` imports this; not vice versa).
+pub(super) const CATEGORY_CHECKSUM: &str = "checksum";
 
 // Bounded `checksum_state` field value marking a successfully parsed digest.
 const CHECKSUM_STATE_PARSED: &str = "parsed";
@@ -227,15 +231,41 @@ mod tests {
         );
     }
 
+    /// A reader that yields at most `chunk` bytes per `read` and counts calls,
+    /// so a test can prove the stream is consumed in bounded increments.
+    struct ChunkedReader<'a> {
+        data: &'a [u8],
+        chunk: usize,
+        reads: usize,
+    }
+
+    impl Read for ChunkedReader<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.reads += 1;
+            let take = self.data.len().min(self.chunk).min(buf.len());
+            buf[..take].copy_from_slice(&self.data[..take]);
+            self.data = &self.data[take..];
+            Ok(take)
+        }
+    }
+
     #[test]
-    fn compute_sha256_hashes_content_larger_than_the_buffer() {
-        // Exercise the buffered read loop across several 8192-byte reads: the
-        // chunked digest must equal a single-shot digest of the same bytes.
+    fn compute_sha256_consumes_the_stream_in_bounded_reads() {
+        // A payload spanning several 8192-byte buffers, served in small chunks so
+        // the hasher must issue many `read` calls; the streamed digest must still
+        // equal a single-shot digest of the same bytes.
         let payload = vec![0xa5_u8; 8192 * 3 + 17];
-        let file = temp_file_with(&payload);
-        assert_eq!(
-            compute_sha256(read_handle(&file)).expect("hash archive stream"),
-            to_lower_hex(&Sha256::digest(&payload)),
+        let mut reader = ChunkedReader {
+            data: &payload,
+            chunk: 1000,
+            reads: 0,
+        };
+        let digest = compute_sha256(&mut reader).expect("hash archive stream");
+        assert_eq!(digest, to_lower_hex(&Sha256::digest(&payload)));
+        assert!(
+            reader.reads > 1,
+            "expected multiple bounded reads, got {}",
+            reader.reads,
         );
     }
 
