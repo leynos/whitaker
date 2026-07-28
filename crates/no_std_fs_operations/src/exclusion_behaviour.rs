@@ -71,31 +71,19 @@ fn then_reported(world: &WorldCell) {
 }
 
 #[scenario(path = "tests/features/path_exclusion.feature", index = 0)]
-fn scenario_nested_child_suppressed(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_nested_child_suppressed(world: WorldCell) {}
 
 #[scenario(path = "tests/features/path_exclusion.feature", index = 1)]
-fn scenario_exact_module_suppressed(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_exact_module_suppressed(world: WorldCell) {}
 
 #[scenario(path = "tests/features/path_exclusion.feature", index = 2)]
-fn scenario_sibling_reported(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_sibling_reported(world: WorldCell) {}
 
 #[scenario(path = "tests/features/path_exclusion.feature", index = 3)]
-fn scenario_unrelated_reported(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_unrelated_reported(world: WorldCell) {}
 
 #[scenario(path = "tests/features/path_exclusion.feature", index = 4)]
-fn scenario_crate_root_suppresses_all(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_crate_root_suppresses_all(world: WorldCell) {}
 
 #[scenario(path = "tests/features/path_exclusion.feature", index = 5)]
-fn scenario_no_exclusions_reports(world: WorldCell) {
-    let _ = world;
-}
+fn scenario_no_exclusions_reports(world: WorldCell) {}

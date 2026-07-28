@@ -89,6 +89,8 @@ pub(crate) fn localised_messages(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for diagnostic message sanitization (Fluent isolation marks).
+
     use super::sanitize_message;
 
     #[test]

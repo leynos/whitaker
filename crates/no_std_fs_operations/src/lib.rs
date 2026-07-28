@@ -25,6 +25,9 @@ pub use driver::*;
 
 #[cfg(not(feature = "dylint-driver"))]
 mod stub {
+    //! Placeholder compiled when the `dylint-driver` feature is off, so the
+    //! crate still builds without the `rustc_private` toolchain internals.
+
     #[expect(
         dead_code,
         reason = "Exposed only when built without the `dylint-driver` feature"

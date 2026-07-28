@@ -110,6 +110,10 @@ fn bounded_entry(entry: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for `PathExclusions`: malformed-entry rejection, segment-wise
+    //! prefix matching (example-based and property-based), and the bounded
+    //! rendering used when warning about rejected entries.
+
     use super::PathExclusions;
     use proptest::prelude::*;
     use rstest::rstest;

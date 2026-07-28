@@ -2,6 +2,9 @@
 #![deny(no_std_fs_operations)]
 
 mod capability_fs {
+    //! Mock capability-style filesystem types standing in for `cap_std`/`camino`
+    //! so the fixture exercises the compliant path without those dependencies.
+
     #[derive(Default)]
     pub struct Dir;
 

@@ -70,7 +70,7 @@ pub(super) fn create_fixture_project(
 ) -> anyhow::Result<FixtureProject> {
     let source = match kind {
         FixtureKind::CrateExclusion => fixture_source(crate_name),
-        FixtureKind::PathExclusion => fixture_module_source(crate_name),
+        FixtureKind::PathExclusion => fixture_module_source(),
     };
     write_fixture_project(
         crate_name,
@@ -178,10 +178,10 @@ fn fixture_source(crate_name: &str) -> String {
 /// The modules carry inner doc comments so the fixture stays clean under the
 /// other Whitaker lints that share the `DYLINT_LIBRARY_PATH` during the run;
 /// only `no_std_fs_operations` behaviour is under test here.
-fn fixture_module_source(crate_name: &str) -> String {
-    // `crate_name` is accepted for parity with the other source generators and
-    // to keep call sites uniform, even though this body needs no interpolation.
-    let _ = crate_name;
+fn fixture_module_source() -> String {
+    // Unlike `fixture_source`, this body needs no crate-name interpolation: the
+    // guarded module is a fixed skeleton whose only variable part (the excluded
+    // path) lives in the `dylint.toml` produced by `fixture_dylint_config`.
     concat!(
         "//! Temporary fixture crate for `no_std_fs_operations` path exclusion tests.\n",
         "\n",
@@ -208,6 +208,10 @@ fn fixture_module_source(crate_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the fixture builders: TOML-safe escaping of crate names in the
+    //! generated manifest and `dylint.toml`, and confinement of `std::fs` usage
+    //! to the excluded `guarded` module for path-exclusion fixtures.
+
     use super::{FixtureKind, create_fixture_project, fixture_dylint_config};
 
     #[test]
