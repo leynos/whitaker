@@ -636,7 +636,7 @@ identifier, and it matches on segment boundaries: `my_app::legacy_io` exempts
 that module and everything nested beneath it (for example
 `my_app::legacy_io::reader`), but never a sibling such as
 `my_app::legacy_io_utils`. Reach for this when only a bounded corner of a crate
-needs ambient filesystem access while the rest stays under the capability
+needs ambient filesystem access, while the rest stays under the capability
 policy.
 
 > **Note:** For both options, use Rust identifiers (underscores), not Cargo

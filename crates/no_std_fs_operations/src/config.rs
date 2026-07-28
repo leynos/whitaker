@@ -120,7 +120,8 @@ impl NoStdFsConfig {
 /// let mut mock = MockConfigReader::new();
 /// mock.expect_read_config()
 ///     .returning(|_| Ok(Some(NoStdFsConfig {
-///         excluded_crates: vec!["my_crate".to_owned()],
+///         excluded_crates: HashSet::from(["my_crate".to_owned()]),
+///         excluded_paths: HashSet::new(),
 ///     })));
 ///
 /// let config = load_configuration_with_reader(&mock);
