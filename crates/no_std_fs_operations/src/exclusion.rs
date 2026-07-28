@@ -6,8 +6,14 @@
 //! ordinary unit and behavioural tests; the driver supplies the enclosing item
 //! path resolved from the HIR.
 
+use crate::config::LINT_NAME;
+use log::warn;
 use std::collections::HashSet;
 use whitaker_common::SimplePath;
+
+/// Maximum length of a malformed entry echoed into a warning, so a pathological
+/// configuration value cannot produce an unbounded log line.
+const MAX_LOGGED_ENTRY_LEN: usize = 64;
 
 /// Set of module-path prefixes whose items are exempt from the lint.
 ///
@@ -35,11 +41,22 @@ impl PathExclusions {
     /// suppress the lint across the whole crate — the opposite of the narrow,
     /// module-scoped exclusion the entry was meant to express.
     pub(crate) fn new(paths: &HashSet<String>) -> Self {
-        let mut prefixes: Vec<SimplePath> = paths
-            .iter()
-            .filter(|path| is_well_formed_path(path.as_str()))
-            .map(|path| SimplePath::parse(path))
-            .collect();
+        let mut prefixes: Vec<SimplePath> = Vec::with_capacity(paths.len());
+        for path in paths {
+            if is_well_formed_path(path.as_str()) {
+                prefixes.push(SimplePath::parse(path));
+            } else {
+                // Surface the rejection so a silently ignored typo (for example
+                // `my_app::`) is discoverable in the logs. The entry is quoted
+                // and length-bounded so a pathological value cannot flood or
+                // corrupt the log line.
+                warn!(
+                    target: LINT_NAME,
+                    "ignoring malformed `excluded_paths` entry {}",
+                    bounded_entry(path)
+                );
+            }
+        }
         // A deterministic order keeps behaviour reproducible across runs and
         // makes any debug logging of the prefixes stable.
         prefixes.sort_by(|left, right| left.segments().cmp(right.segments()));
@@ -77,9 +94,24 @@ fn is_well_formed_path(path: &str) -> bool {
     !path.is_empty() && path.split("::").all(|segment| !segment.is_empty())
 }
 
+/// Render a malformed entry for a warning: quoted (so control characters are
+/// escaped rather than emitted raw) and truncated to a bounded length.
+fn bounded_entry(entry: &str) -> String {
+    if entry.len() <= MAX_LOGGED_ENTRY_LEN {
+        return format!("{entry:?}");
+    }
+    // Truncate on a character boundary so the slice stays valid UTF-8.
+    let mut end = MAX_LOGGED_ENTRY_LEN;
+    while !entry.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{:?}… ({} bytes total)", &entry[..end], entry.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::PathExclusions;
+    use proptest::prelude::*;
     use rstest::rstest;
     use std::collections::HashSet;
     use whitaker_common::SimplePath;
@@ -162,5 +194,60 @@ mod tests {
         let exclusions = exclusions(&["my_app::"]);
         assert!(!exclusions.excludes(&SimplePath::parse("my_app::network")));
         assert!(!exclusions.excludes(&SimplePath::parse("my_app")));
+    }
+
+    #[test]
+    fn bounded_entry_quotes_short_values() {
+        assert_eq!(super::bounded_entry("my_app::"), "\"my_app::\"");
+    }
+
+    #[test]
+    fn bounded_entry_truncates_long_multibyte_values_safely() {
+        // A long multi-byte value must truncate on a char boundary (no panic)
+        // and report the full byte length. `€` is three bytes, so the 64-byte
+        // cap falls mid-character and exercises the boundary back-off.
+        let entry = "€".repeat(100);
+        let rendered = super::bounded_entry(&entry);
+        assert!(rendered.contains("bytes total"), "rendered: {rendered}");
+        assert!(rendered.contains("300"), "rendered: {rendered}");
+        assert!(rendered.len() < entry.len(), "rendered: {rendered}");
+    }
+
+    // Segments are drawn from a small alphabet with mixed lengths (`b` and `bc`
+    // both occur), so the generator frequently produces same-length and longer
+    // item paths that share segment *text* with a prefix but differ at a segment
+    // boundary — exactly the `a::b` vs `a::bc` hazard segment-wise matching must
+    // reject.
+    fn segment() -> impl Strategy<Value = String> {
+        "[a-c]{1,3}"
+    }
+
+    proptest! {
+        #[test]
+        fn excludes_matches_segment_wise_prefix_oracle(
+            configured in prop::collection::vec(
+                prop::collection::vec(segment(), 1..=3),
+                0..=4,
+            ),
+            item in prop::collection::vec(segment(), 0..=5),
+        ) {
+            // `::`-joining non-empty segments yields well-formed paths that
+            // parse back to the same segments, so the exclusion set mirrors the
+            // generated prefixes.
+            let paths: HashSet<String> = configured
+                .iter()
+                .map(|segments| segments.join("::"))
+                .collect();
+            let exclusions = PathExclusions::new(&paths);
+            let item_path = SimplePath::new(item.clone());
+
+            // Oracle: excluded iff some configured prefix is a genuine
+            // segment-wise prefix of the item path.
+            let expected = configured.iter().any(|prefix| {
+                prefix.len() <= item.len() && item[..prefix.len()] == prefix[..]
+            });
+
+            prop_assert_eq!(exclusions.excludes(&item_path), expected);
+        }
     }
 }

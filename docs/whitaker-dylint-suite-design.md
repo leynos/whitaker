@@ -770,13 +770,14 @@ suppresses the diagnostic, while any surviving usage is reported through `emit`.
 ```mermaid
 sequenceDiagram
     participant Driver as NoStdFsOperations
+    participant Config as NoStdFsConfig
     participant LateContext
     participant PathExcl as PathExclusions
     participant SimplePath
 
     Note over Driver,LateContext: During check_crate
-    Driver->>NoStdFsConfig: path_exclusions()
-    NoStdFsConfig-->>Driver: PathExclusions
+    Driver->>Config: path_exclusions()
+    Config-->>Driver: PathExclusions
 
     Note over Driver,LateContext: Later, during check_expr/check_item/check_ty
     Driver->>Driver: emit_optional(LateContext, LintSite, Option_StdFsUsage_)
@@ -794,11 +795,12 @@ sequenceDiagram
             SimplePath-->>Driver: SimplePath
             Driver->>PathExcl: excludes(&SimplePath)
             PathExcl-->>Driver: bool
-            alt excludes == true
-                Driver-->>Driver: return (suppressed)
-            end
         end
-        Driver->>Driver: emit(LateContext, Span, StdFsUsage)
+        alt is_path_excluded
+            Driver-->>Driver: return (suppressed)
+        else not excluded
+            Driver->>Driver: emit(LateContext, Span, StdFsUsage)
+        end
     end
 ```
 

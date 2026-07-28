@@ -39,6 +39,7 @@ anyhow = "1.0"
 cargo_metadata = { workspace = true }
 insta = { workspace = true }
 mockall = { workspace = true }
+proptest = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
