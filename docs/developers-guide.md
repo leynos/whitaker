@@ -36,19 +36,24 @@ This executes unit, behaviour, and UI harness tests. The shared target enables
 ### Integration tests for lint exclusion behaviour
 
 The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
-the `excluded_crates` configuration. These integration tests invoke
+the `excluded_crates` and `excluded_paths` configuration. These integration
+tests invoke
 `cargo dylint` in a subprocess, so they exercise the full lint-loading and
 configuration path, rather than only unit-level helpers.
 
-Fixture projects are generated at runtime using `create_fixture_project`, which
-writes a `Cargo.toml`, `dylint.toml`, and `src/lib.rs` into a `TempDir` and
-returns a `FixtureProject` handle. The `FixtureProject` owns the `TempDir` so
-the directory is cleaned up automatically when the handle is dropped. Passing
-`is_excluded: true` writes `excluded_crates = ["<crate_name>"]` into
-`dylint.toml`; `false` writes an empty list. Each fixture `Cargo.toml` contains
-an empty `[workspace]` table (omitted here for brevity) so Cargo treats the
-fixture as its own workspace root and does not resolve upwards to the enclosing
-Whitaker workspace.
+Fixture projects are generated at runtime using
+`create_fixture_project(crate_name, kind, is_excluded)`, which writes a
+`Cargo.toml`, `dylint.toml`, and `src/lib.rs` into a `TempDir` and returns a
+`FixtureProject` handle. The `FixtureProject` owns the `TempDir` so the
+directory is cleaned up automatically when the handle is dropped. The
+`FixtureKind` enum selects which suppression mechanism the fixture exercises:
+`CrateExclusion` pairs a flat source module with `excluded_crates`, while
+`PathExclusion` nests the `std::fs` usage inside a `guarded` module and
+configures `excluded_paths = ["<crate_name>::guarded"]`. Passing
+`is_excluded: true` lists the fixture under the relevant key; `false` writes an
+empty list. Each fixture `Cargo.toml` contains an empty `[workspace]` table
+(omitted here for brevity) so Cargo treats the fixture as its own workspace
+root and does not resolve upwards to the enclosing Whitaker workspace.
 
 The harness centres on `run_cargo_dylint`, which executes
 `cargo dylint --all -- --message-format json` with `DYLINT_LIBRARY_PATH` set to
@@ -58,11 +63,15 @@ during the run. `diagnostic_count` then parses the JSON message stream with
 `code.code` is `no_std_fs_operations`, which keeps the assertions tied to the
 lint's structured diagnostics instead of brittle text matching.
 
-The shared helper `run_exclusion_test(crate_name, is_excluded, expectation)`
+The shared helper
+`run_fixture_exclusion_test(crate_name, is_excluded, expectation, kind)`
 resolves the lint library path via a `OnceLock`-cached `build_lint_library`
-call, creates the fixture project, and delegates to `assert_fixture_behaviour`.
-Both parametrized cases in `exclusion_crates_behaviour_test` delegate to this
-helper.
+call, creates the fixture project for the given `FixtureKind`, and delegates to
+`assert_fixture_behaviour`. Two parametrized `#[rstest]` functions drive it and
+are kept separate so the crate-wide and module-path mechanisms have their own
+clearly named coverage: `exclusion_crates_behaviour_test` passes
+`FixtureKind::CrateExclusion`, and `exclusion_paths_behaviour_test` passes
+`FixtureKind::PathExclusion`.
 
 The tests are annotated with `#[serial]` from `serial_test`, and the
 repository-level nextest contract also requires them to match the
@@ -81,11 +90,27 @@ cargo test -p no_std_fs_operations --test integration_exclusion -- --ignored
 cargo nextest run -p no_std_fs_operations --test integration_exclusion --run-ignored ignored-only
 ```
 
-The parametrized `#[rstest]` case `exclusion_crates_behaviour_test` covers both
-fixture configurations. For each case it asserts the subprocess exit status and
-the `no_std_fs_operations` diagnostic count, so the test verifies both the
-success path for excluded crates (zero diagnostics, exit 0) and the failure
-path for non-excluded crates (one or more diagnostics, non-zero exit).
+Each parametrized case asserts the subprocess exit status and the
+`no_std_fs_operations` diagnostic count, so the tests verify both the success
+path for excluded targets (zero diagnostics, exit 0) and the failure path for
+non-excluded targets (one or more diagnostics, non-zero exit). The
+path-exclusion fixture places its only `std::fs` usage inside `guarded::reader`,
+so a passing excluded case also confirms that the exclusion is scoped to the
+module and reaches descendants, rather than reflecting an accidental crate-wide
+suppression.
+
+Keep the `cargo dylint` integration tests thin: they exist to confirm the
+wiring (config loading, HIR path resolution, and diagnostic suppression) end to
+end, not to re-check every matching edge case. The module-path matching itself
+lives in the rustc-free `PathExclusions` type (`src/exclusion.rs`), which the
+lint pass consults per candidate usage. Because it is independent of `rustc`, it
+is covered cheaply and exhaustively by unit tests, a `proptest` property test
+against a segment-wise-prefix oracle, and the `path_exclusion.feature`
+behavioural scenarios — including the malformed-entry rejection that stops
+`my_app::` from collapsing into a crate-wide exclusion. The configuration schema
+and loading live in `src/config.rs` (`NoStdFsConfig`, the `ConfigReader` seam),
+kept separate from the lint pass in `src/driver.rs` so each file stays within
+the repository's size and single-responsibility limits.
 
 ### Fixture-based harness regressions
 

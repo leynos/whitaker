@@ -26,7 +26,7 @@ use serial_test::serial;
 
 mod test_support;
 
-use test_support::create_fixture_project;
+use test_support::{FixtureKind, create_fixture_project};
 
 const LINT_CRATE_NAME: &str = "no_std_fs_operations";
 
@@ -252,14 +252,18 @@ struct Expectation {
 }
 
 /// Shared driver for exclusion integration tests.
-fn run_exclusion_test(
+///
+/// `kind` selects the configuration mechanism under test and labels the fixture
+/// so a creation failure identifies which fixture could not be built.
+fn run_fixture_exclusion_test(
     crate_name: &str,
     is_excluded: bool,
     expectation: Expectation,
+    kind: FixtureKind,
 ) -> anyhow::Result<()> {
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_fixture_project(crate_name, is_excluded)
-        .context("failed to create fixture project")?;
+    let fixture = create_fixture_project(crate_name, kind, is_excluded)
+        .with_context(|| format!("failed to create {} fixture project", kind.label()))?;
     assert_fixture_behaviour(fixture.root(), &lint_library_path, crate_name, expectation)
 }
 
@@ -287,7 +291,44 @@ fn exclusion_crates_behaviour_test(
     #[case] is_excluded: bool,
     #[case] expected: Expectation,
 ) -> anyhow::Result<()> {
-    run_exclusion_test(crate_name, is_excluded, expected)
+    run_fixture_exclusion_test(
+        crate_name,
+        is_excluded,
+        expected,
+        FixtureKind::CrateExclusion,
+    )
+}
+
+#[rstest]
+#[case(
+    "path_excluded_crate",
+    true,
+    Expectation {
+        should_emit_diagnostics: false,
+        should_succeed: true,
+    }
+)]
+#[case(
+    "path_included_crate",
+    false,
+    Expectation {
+        should_emit_diagnostics: true,
+        should_succeed: false,
+    }
+)]
+#[ignore = "requires cargo-dylint and built lint library"]
+#[serial]
+fn exclusion_paths_behaviour_test(
+    #[case] crate_name: &str,
+    #[case] is_module_excluded: bool,
+    #[case] expected: Expectation,
+) -> anyhow::Result<()> {
+    run_fixture_exclusion_test(
+        crate_name,
+        is_module_excluded,
+        expected,
+        FixtureKind::PathExclusion,
+    )
 }
 
 /// Runs `cargo dylint` against the fixture and counts diagnostics.
@@ -345,8 +386,12 @@ fn assert_fixture_behaviour(
 #[serial]
 fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
     let lint_library_path = lint_library_path().context("failed to build lint library")?;
-    let fixture = create_fixture_project("non_excluded_crate_snap", false)
-        .context("failed to create fixture project")?;
+    let fixture = create_fixture_project(
+        "non_excluded_crate_snap",
+        FixtureKind::CrateExclusion,
+        false,
+    )
+    .context("failed to create fixture project")?;
 
     let result = run_cargo_dylint(fixture.root(), &lint_library_path)
         .context("failed to run cargo dylint")?;

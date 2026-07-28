@@ -739,6 +739,75 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   operation label supplied via `{ $operation }`. The note explains why ambient
   access is disallowed and the help recommends `cap_std::fs` + `camino`.
 
+**Configuration and suppression.**
+
+- Two `dylint.toml` options relax the lint without editing source:
+  `excluded_crates` exempts an entire crate, and `excluded_paths` exempts
+  individual modules and their descendants. Each `excluded_paths` entry is a
+  fully qualified path anchored at the crate identifier and matched on segment
+  boundaries, so `my_app::legacy_io` exempts that module and everything nested
+  beneath it but never a sibling such as `my_app::legacy_io_utils`.
+- The pass loads both options during `check_crate`: `excluded_crates`
+  short-circuits every callback through `should_skip`, while `excluded_paths` is
+  parsed into a rustc-free `PathExclusions` set. Module-path exclusion is
+  resolved lazily in `is_path_excluded`, and only for genuine `std::fs` hits
+  when `excluded_paths` is non-empty, so the common path pays no lookup cost.
+- The enclosing item's path is assembled from the crate name plus its def-path
+  segments rather than `def_path_str`, which renders the local crate root as the
+  `crate` keyword instead of the crate name, and is then compared segment-wise
+  by `PathExclusions::excludes`.
+
+For screen readers: the following sequence diagram traces a single `std::fs`
+finding through `emit_optional`. During `check_crate`, `NoStdFsOperations`
+obtains a `PathExclusions` set from `NoStdFsConfig`. Later, when `check_expr`,
+`check_item`, or `check_ty` calls `emit_optional`, the pass returns early if the
+crate is skipped or the usage is absent. Otherwise it calls `is_path_excluded`:
+when no path exclusions are configured it returns false immediately; otherwise it
+builds a `SimplePath` for the enclosing item via `enclosing_item_path` and asks
+`PathExclusions::excludes` whether that path is covered. A covered path
+suppresses the diagnostic, while any surviving usage is reported through `emit`.
+
+```mermaid
+sequenceDiagram
+    participant Driver as NoStdFsOperations
+    participant Config as NoStdFsConfig
+    participant LateContext
+    participant PathExcl as PathExclusions
+    participant SimplePath
+
+    Note over Driver,LateContext: During check_crate
+    Driver->>Config: path_exclusions()
+    Config-->>Driver: PathExclusions
+
+    Note over Driver,LateContext: Later, during check_expr/check_item/check_ty
+    Driver->>Driver: emit_optional(LateContext, LintSite, Option_StdFsUsage_)
+    alt should_skip()
+        Driver-->>Driver: return
+    else usage is None
+        Driver-->>Driver: return
+    else usage is Some
+        Driver->>Driver: is_path_excluded(LateContext, hir::HirId)
+        alt path_exclusions.is_empty()
+            Driver-->>Driver: false
+        else exclusions configured
+            Driver->>LateContext: enclosing_item_path(LateContext, hir::HirId)
+            LateContext-->>SimplePath: build SimplePath
+            SimplePath-->>Driver: SimplePath
+            Driver->>PathExcl: excludes(&SimplePath)
+            PathExcl-->>Driver: bool
+        end
+        alt is_path_excluded
+            Driver-->>Driver: return (suppressed)
+        else not excluded
+            Driver->>Driver: emit(LateContext, Span, StdFsUsage)
+        end
+    end
+```
+
+*Figure 3: Sequence of the module-path suppression decision within
+`emit_optional`, from loading `PathExclusions` in `check_crate` to the final
+`emit` for any usage that survives the exclusion checks.*
+
 **Tests.**
 
 - Unit tests cover the operation classifier, ensuring paths such as

@@ -34,6 +34,11 @@ fn config_default_has_empty_excluded_crates() {
     assert!(NoStdFsConfig::default().excluded_crates.is_empty());
 }
 
+#[test]
+fn config_default_has_empty_excluded_paths() {
+    assert!(NoStdFsConfig::default().excluded_paths.is_empty());
+}
+
 #[rstest]
 #[case::empty_config(r#""#, &[])]
 #[case::empty_excluded(r#"excluded_crates = []"#, &[])]
@@ -47,6 +52,86 @@ fn config_deserializes_excluded_crates(#[case] toml: &str, #[case] expected: &[&
             .iter()
             .map(|s| (*s).to_owned())
             .collect::<HashSet<_>>()
+    );
+}
+
+#[rstest]
+#[case::empty_config(r#""#, &[])]
+#[case::empty_excluded(r#"excluded_paths = []"#, &[])]
+#[case::single_path(r#"excluded_paths = ["my_app::legacy_io"]"#, &["my_app::legacy_io"])]
+#[case::multiple_paths(
+    r#"excluded_paths = ["my_app::legacy_io", "my_app::bin::migrate"]"#,
+    &["my_app::legacy_io", "my_app::bin::migrate"]
+)]
+fn config_deserializes_excluded_paths(#[case] toml: &str, #[case] expected: &[&str]) {
+    let config: NoStdFsConfig = toml::from_str(toml).expect("valid TOML");
+    assert_eq!(
+        config.excluded_paths,
+        expected
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<HashSet<_>>()
+    );
+}
+
+#[test]
+fn config_deserializes_both_exclusion_kinds_together() {
+    // A configuration mixing both fields must parse without either field
+    // shadowing the other.
+    let toml = r#"
+        excluded_crates = ["helper_crate"]
+        excluded_paths = ["my_app::legacy_io"]
+    "#;
+    let config: NoStdFsConfig = toml::from_str(toml).expect("valid TOML");
+    assert_eq!(
+        config.excluded_crates,
+        HashSet::from(["helper_crate".to_owned()])
+    );
+    assert_eq!(
+        config.excluded_paths,
+        HashSet::from(["my_app::legacy_io".to_owned()])
+    );
+}
+
+#[test]
+fn legacy_config_without_excluded_paths_still_parses() {
+    // Backward compatibility: existing configs that predate `excluded_paths`
+    // must continue to parse, leaving the new field empty.
+    let config: NoStdFsConfig = toml::from_str(r#"excluded_crates = ["foo"]"#).expect("valid TOML");
+    assert_eq!(config.excluded_crates, HashSet::from(["foo".to_owned()]));
+    assert!(config.excluded_paths.is_empty());
+}
+
+#[rstest]
+#[case::wrong_type(r#"excluded_paths = "not_an_array""#)]
+#[case::wrong_element_type(r#"excluded_paths = [1, 2, 3]"#)]
+#[case::mixed_element_types(r#"excluded_paths = ["my_app::legacy_io", 1]"#)]
+fn config_rejects_invalid_excluded_paths(#[case] toml: &str) {
+    assert!(
+        toml::from_str::<NoStdFsConfig>(toml).is_err(),
+        "expected error for: {toml}"
+    );
+}
+
+#[rstest]
+#[case::within_excluded_module(&["my_app::legacy_io"], "my_app::legacy_io::reader", true)]
+#[case::exact_excluded_module(&["my_app::legacy_io"], "my_app::legacy_io", true)]
+#[case::sibling_not_excluded(&["my_app::legacy_io"], "my_app::legacy_io_utils", false)]
+#[case::unrelated_not_excluded(&["my_app::legacy_io"], "my_app::network", false)]
+#[case::no_paths_configured(&[], "my_app::legacy_io", false)]
+fn path_exclusions_reflect_configuration(
+    #[case] configured: &[&str],
+    #[case] item: &str,
+    #[case] expected: bool,
+) {
+    let config = NoStdFsConfig {
+        excluded_crates: HashSet::new(),
+        excluded_paths: configured.iter().map(|s| (*s).to_owned()).collect(),
+    };
+    let exclusions = config.path_exclusions();
+    assert_eq!(
+        exclusions.excludes(&whitaker_common::SimplePath::parse(item)),
+        expected
     );
 }
 
@@ -85,6 +170,7 @@ fn is_excluded_matches_correctly(
 ) {
     let config = NoStdFsConfig {
         excluded_crates: excluded.iter().map(|s| (*s).to_owned()).collect(),
+        excluded_paths: HashSet::new(),
     };
     assert_eq!(config.is_excluded(query), expected);
 }
@@ -93,6 +179,7 @@ fn is_excluded_matches_correctly(
 fn load_configuration_returns_config_when_present() {
     let config = NoStdFsConfig {
         excluded_crates: HashSet::from(["my_crate".to_owned()]),
+        excluded_paths: HashSet::new(),
     };
     let mut mock = MockConfigReader::new();
     mock.expect_read_config()

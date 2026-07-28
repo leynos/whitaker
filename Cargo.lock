@@ -1945,6 +1945,7 @@ dependencies = [
  "insta",
  "log",
  "mockall",
+ "proptest",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
