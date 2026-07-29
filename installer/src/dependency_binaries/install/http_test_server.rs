@@ -146,15 +146,13 @@ fn serve_connection(
             Err(_) => break,
         }
     }
-    requested
-        .lock()
-        .expect("lock requested paths")
-        .push(path.clone());
-
+    // Resolve the route first — the returned references borrow `routes`, not
+    // `path` — so the owned `path` can then move into the request log.
     let (status_line, body, declared_len): (&str, &[u8], usize) = match routes.get(&path) {
         Some(response) => (response.status_line, &response.body, response.declared_len),
         None => ("404 Not Found", b"not found", b"not found".len()),
     };
+    requested.lock().expect("lock requested paths").push(path);
     let header = format!(
         concat!(
             "HTTP/1.1 {}\r\n",

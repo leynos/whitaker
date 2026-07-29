@@ -220,18 +220,18 @@ fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ur
     // body read fails part-way through `io::copy` — after the archive file has
     // been created. The partial file must not survive.
     let partial = b"partial payload".to_vec();
+    // Derive the sidecar before `partial` moves into the route table. It is
+    // well-formed so the run fails purely on the truncated archive body and not
+    // on a missing checksum route; it is never actually fetched.
+    let sidecar = format!("{}  archive.tgz\n", to_lower_hex(&Sha256::digest(&partial)));
     let mut routes = HashMap::new();
     routes.insert(
         "/archive.tgz".to_owned(),
-        CannedResponse::truncated(partial.clone(), 8192),
+        CannedResponse::truncated(partial, 8192),
     );
-    // A well-formed sidecar, so the run fails purely on the truncated archive
-    // body and not on a missing checksum route. It is never actually fetched.
     routes.insert(
         "/archive.tgz.sha256".to_owned(),
-        CannedResponse::ok(
-            format!("{}  archive.tgz\n", to_lower_hex(&Sha256::digest(&partial))).into_bytes(),
-        ),
+        CannedResponse::ok(sidecar.into_bytes()),
     );
     let harness = download_harness(routes);
 
