@@ -219,20 +219,44 @@ fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ur
     // The server advertises more bytes than it sends and then closes, so the
     // body read fails part-way through `io::copy` — after the archive file has
     // been created. The partial file must not survive.
+    let partial = b"partial payload".to_vec();
     let mut routes = HashMap::new();
     routes.insert(
         "/archive.tgz".to_owned(),
-        CannedResponse::truncated(b"partial payload".to_vec(), 8192),
+        CannedResponse::truncated(partial.clone(), 8192),
+    );
+    // A well-formed sidecar, so the run fails purely on the truncated archive
+    // body and not on a missing checksum route. It is never actually fetched.
+    routes.insert(
+        "/archive.tgz.sha256".to_owned(),
+        CannedResponse::ok(
+            format!("{}  archive.tgz\n", to_lower_hex(&Sha256::digest(&partial))).into_bytes(),
+        ),
     );
     let harness = download_harness(routes);
 
-    download_from_urls(
+    let error = download_from_urls(
         &agent,
         &harness.archive_url(),
         &harness.checksum_url(),
         &harness.destination,
     )
     .expect_err("a truncated archive response must fail");
+
+    // Prove the run reached the write phase before asserting on cleanup: the
+    // archive was requested, and the failure is an I/O error from the body copy
+    // rather than a fetch-stage error. Otherwise an earlier failure would
+    // satisfy the absence assertion vacuously.
+    assert!(
+        harness
+            .requested_paths()
+            .contains(&"/archive.tgz".to_owned()),
+        "the archive endpoint must have been requested",
+    );
+    assert!(
+        matches!(error, DependencyBinaryInstallError::Io(_)),
+        "expected an I/O failure from the body copy, got {error:?}",
+    );
 
     assert!(
         !harness.destination_dir().exists("archive.tgz"),
