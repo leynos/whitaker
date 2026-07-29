@@ -967,11 +967,37 @@ The dependency-install path is split into focused modules under
 
 - `metadata.rs` computes target-specific archive names, binary names, and the
   exact archive member path
-- `downloader.rs` resolves rolling-release asset URLs and downloads archives
+- `downloader.rs` resolves rolling-release asset URLs, downloads the
+  archive, re-opens it through the capability, and orchestrates the
+  checksum-verification call
+- `checksum.rs` fetches and parses the `.sha256` sidecar, then verifies the
+  SHA-256 checksum: `compute_sha256` streams the archive in fixed-size
+  chunks and renders the digest with `to_lower_hex`, and
+  `verify_archive_checksum` compares it against the expected value
 - `extractor.rs` extracts the exact packaged member into a temporary file and
   atomically renames it into the local bin directory
 - `installer.rs` orchestrates directory discovery, download, extraction, and
   executable permission fixes
+
+`downloader.rs` performs all archive filesystem I/O through a
+capability-scoped `cap_std::fs_utf8::Dir` rather than ambient `std::fs`.
+`open_download_destination` first converts the destination to a
+`camino::Utf8Path`, rejecting a non-UTF-8 path up front with an
+`io::ErrorKind::InvalidInput` error. It then calls `open_destination_dir`,
+which opens the destination's parent via
+`Dir::open_ambient_dir(parent, ambient_authority())`; this is the single
+point where the `ambient_authority()` grant bootstraps the capability. Every
+subsequent archive operation — create, write, and re-open for checksum
+verification — goes through that `Dir` handle.
+
+The crate-level `installer/src/hex.rs` module (not part of the
+`install/` subdirectory above) provides `to_lower_hex`, which renders bytes
+as lowercase hex. It exists because `sha2` 0.11 changed `Sha256::finalize()`
+to return `hybrid_array::Array<u8, _>`, which does not implement
+`LowerHex`, and `Sha256` no longer implements `io::Write`, so neither
+`format!("{:x}", digest)` nor `io::copy(reader, &mut hasher)` compile
+against it any more. `to_lower_hex` is shared by `downloader.rs`,
+`artefact/packaging.rs`, and the `sha256_hex` test helper.
 
 `installer/src/deps.rs` drives the high-level fallback order:
 
