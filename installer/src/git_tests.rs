@@ -150,6 +150,20 @@ fn fetch_ref_retrieves_a_new_tag() {
 }
 
 #[test]
+fn fetch_ref_resolves_a_new_remote_branch() {
+    let fx = git_fixture();
+    let source = Utf8PathBuf::try_from(fx._source.path().to_owned()).expect("UTF-8 path");
+    git(&source, &["checkout", "-b", "release-candidate"]);
+    let branch_commit = commit_file(&source, "c.txt", "three", "branch commit");
+
+    assert!(resolve_commit(&fx.clone, "release-candidate").is_err());
+    let fetched_commit =
+        fetch_ref(&fx.clone, "release-candidate").expect("fetch new remote branch");
+
+    assert_eq!(fetched_commit, branch_commit);
+}
+
+#[test]
 fn clone_repository_error_includes_operation() {
     let err = InstallerError::Git {
         operation: "clone",

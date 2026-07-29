@@ -202,9 +202,9 @@ fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<String> {
     let commit = match crate::git::resolve_commit(repo, git_ref) {
         Ok(commit) => commit,
         Err(_) => {
-            // The ref is not known locally; fetch it once, then resolve again.
-            crate::git::fetch_ref(repo, git_ref)?;
-            crate::git::resolve_commit(repo, git_ref)?
+            // A fetched branch may exist only as a remote-tracking ref, so use
+            // the commit Git recorded for the explicit fetch.
+            crate::git::fetch_ref(repo, git_ref)?
         }
     };
     crate::git::checkout_detached(repo, &commit)?;

@@ -76,13 +76,15 @@ pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
 /// Fetches a specific ref (and all tags) from `origin` into the repository.
 ///
 /// Used to recover when a pinned ref cannot be resolved from the existing
-/// clone. Runs `git fetch origin <refspec> --tags`.
+/// clone. Runs `git fetch origin <refspec> --tags`, then resolves `FETCH_HEAD`
+/// to return the exact commit fetched for the requested ref.
 ///
 /// # Errors
 ///
 /// Returns `InstallerError::Git` if the fetch fails or times out.
-pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<()> {
-    run_git_checked(&["fetch", "origin", refspec, "--tags"], Some(repo), "fetch")
+pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
+    run_git_checked(&["fetch", "origin", refspec, "--tags"], Some(repo), "fetch")?;
+    resolve_commit(repo, "FETCH_HEAD")
 }
 
 /// Checks out a commit as a detached HEAD.
