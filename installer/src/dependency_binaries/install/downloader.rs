@@ -252,7 +252,8 @@ fn copy_capped(
     url: &str,
 ) -> Result<(), DependencyBinaryInstallError> {
     let copied = io::copy(&mut reader.by_ref().take(max_bytes), writer)?;
-    if copied == max_bytes && reader.read(&mut [0u8; 1])? > 0 {
+    // Probe via `io::copy`, not a bare `read`, so `Interrupted` is retried.
+    if copied == max_bytes && io::copy(&mut reader.by_ref().take(1), &mut io::sink())? > 0 {
         return Err(DependencyBinaryInstallError::Download {
             url: url.to_owned(),
             reason: format!("archive exceeds the maximum of {max_bytes} bytes"),

@@ -121,15 +121,18 @@ fn parse_checksum_token(body: &str) -> Option<&str> {
 ///
 /// Reads the stream in fixed-size chunks so inputs of any size hash with a
 /// bounded buffer. The caller owns opening and scoping the underlying handle,
-/// keeping this a pure transformation over the byte stream.
+/// keeping this a pure transformation over the byte stream. An `Interrupted`
+/// read is retried, matching `read_to_end` and `io::copy`.
 fn compute_sha256(mut reader: impl Read) -> io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
     loop {
-        let bytes_read = reader.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
+        let bytes_read = match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(bytes_read) => bytes_read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
         hasher.update(&buffer[..bytes_read]);
     }
     Ok(to_lower_hex(&hasher.finalize()))
@@ -245,16 +248,41 @@ mod tests {
         data: &'a [u8],
         chunk: usize,
         reads: usize,
+        /// Number of leading reads that fail with `Interrupted` before data flows.
+        pending_interrupts: usize,
     }
 
     impl Read for ChunkedReader<'_> {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.reads += 1;
+            if self.pending_interrupts > 0 {
+                self.pending_interrupts -= 1;
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"));
+            }
             let take = self.data.len().min(self.chunk).min(buf.len());
             buf[..take].copy_from_slice(&self.data[..take]);
             self.data = &self.data[take..];
             Ok(take)
         }
+    }
+
+    #[test]
+    fn compute_sha256_retries_after_an_interrupted_read() {
+        // `Read::read` may return `Interrupted` (EINTR) without any data. The
+        // loop must retry rather than surface it, as `read_to_end`/`io::copy` do.
+        let mut reader = ChunkedReader {
+            data: b"abc",
+            chunk: 8192,
+            reads: 0,
+            pending_interrupts: 1,
+        };
+        assert_eq!(
+            compute_sha256(&mut reader).expect("an interrupted read must be retried"),
+            concat!(
+                "ba7816bf8f01cfea414140de5dae2223",
+                "b00361a396177a9cb410ff61f20015ad",
+            ),
+        );
     }
 
     #[test]
@@ -267,6 +295,7 @@ mod tests {
             data: &payload,
             chunk: 1000,
             reads: 0,
+            pending_interrupts: 0,
         };
         let digest = compute_sha256(&mut reader).expect("hash archive stream");
         assert_eq!(digest, to_lower_hex(&Sha256::digest(&payload)));
