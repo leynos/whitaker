@@ -22,6 +22,12 @@ pub(super) const CATEGORY_CHECKSUM: &str = "checksum";
 // Bounded `checksum_state` field value marking a successfully parsed digest.
 const CHECKSUM_STATE_PARSED: &str = "parsed";
 
+/// Maximum `.sha256` sidecar size read into memory. A sidecar line is a 64-hex
+/// digest plus a file name (~80 bytes), so this leaves ample headroom while
+/// tightening `ureq`'s 10 MiB default well below anything that could pressure
+/// memory.
+const CHECKSUM_MAX_BYTES: u64 = 64 * 1024;
+
 /// Map `ureq` failures into semantic dependency-installer errors. Shared with
 /// `super::downloader`, which maps archive-fetch failures the same way.
 pub(super) fn map_ureq_error(url: &str, error: &ureq::Error) -> DependencyBinaryInstallError {
@@ -63,6 +69,8 @@ pub(super) fn fetch_expected_checksum(
         })?;
     let checksum_body = checksum_response
         .into_body()
+        .into_with_config()
+        .limit(CHECKSUM_MAX_BYTES)
         .read_to_string()
         .map_err(|error| DependencyBinaryInstallError::Download {
             url: checksum_url.to_owned(),

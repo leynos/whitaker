@@ -14,17 +14,30 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-/// One canned HTTP/1.1 response body served for a matched path.
+/// One canned HTTP/1.1 response body served for a matched path. `declared_len`
+/// is the advertised `Content-Length`, which normally matches `body`.
 pub(super) struct CannedResponse {
     status_line: &'static str,
     body: Vec<u8>,
+    declared_len: usize,
 }
 
 impl CannedResponse {
     pub(super) fn ok(body: Vec<u8>) -> Self {
         Self {
             status_line: "200 OK",
+            declared_len: body.len(),
             body,
+        }
+    }
+
+    /// Advertise `declared_len` bytes but send only `body` before closing, so
+    /// the client fails part-way through reading the response body.
+    pub(super) fn truncated(body: Vec<u8>, declared_len: usize) -> Self {
+        Self {
+            status_line: "200 OK",
+            body,
+            declared_len,
         }
     }
 }
@@ -138,9 +151,9 @@ fn serve_connection(
         .expect("lock requested paths")
         .push(path.clone());
 
-    let (status_line, body): (&str, &[u8]) = match routes.get(&path) {
-        Some(response) => (response.status_line, &response.body),
-        None => ("404 Not Found", b"not found"),
+    let (status_line, body, declared_len): (&str, &[u8], usize) = match routes.get(&path) {
+        Some(response) => (response.status_line, &response.body, response.declared_len),
+        None => ("404 Not Found", b"not found", b"not found".len()),
     };
     let header = format!(
         concat!(
@@ -149,8 +162,7 @@ fn serve_connection(
             "Content-Type: application/octet-stream\r\n",
             "Connection: close\r\n\r\n",
         ),
-        status_line,
-        body.len(),
+        status_line, declared_len,
     );
     let _ = stream.write_all(header.as_bytes());
     let _ = stream.write_all(body);

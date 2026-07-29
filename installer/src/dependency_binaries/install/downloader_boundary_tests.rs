@@ -177,6 +177,70 @@ fn download_from_urls_reports_a_checksum_mismatch(agent: ureq::Agent) {
 }
 
 #[rstest]
+fn download_from_urls_rejects_an_oversized_checksum_sidecar(agent: ureq::Agent) {
+    // A sidecar far larger than any real digest line must be refused by the
+    // checksum body cap rather than read into memory in full.
+    let archive_bytes = b"whitaker dependency archive payload".to_vec();
+    let mut routes = HashMap::new();
+    routes.insert("/archive.tgz".to_owned(), CannedResponse::ok(archive_bytes));
+    routes.insert(
+        "/archive.tgz.sha256".to_owned(),
+        CannedResponse::ok(vec![b'a'; 128 * 1024]),
+    );
+    let harness = download_harness(routes);
+
+    let error = download_from_urls(
+        &agent,
+        &harness.archive_url(),
+        &harness.checksum_url(),
+        &harness.destination,
+    )
+    .expect_err("an oversized checksum sidecar must fail");
+
+    // The body cap must reject this while reading, before the whole sidecar is
+    // buffered. Without the cap the body would be read in full and only then
+    // rejected by the parser, so the parse message distinguishes the two.
+    match error {
+        DependencyBinaryInstallError::Download { reason, .. } => assert_ne!(
+            reason, "empty or invalid checksum file",
+            "sidecar must fail at the read cap, not after being buffered in full",
+        ),
+        other => panic!("expected a Download error, got {other:?}"),
+    }
+
+    assert!(
+        !harness.destination_dir().exists("archive.tgz"),
+        "archive must be removed after an oversized checksum sidecar",
+    );
+}
+
+#[rstest]
+fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ureq::Agent) {
+    // The server advertises more bytes than it sends and then closes, so the
+    // body read fails part-way through `io::copy` — after the archive file has
+    // been created. The partial file must not survive.
+    let mut routes = HashMap::new();
+    routes.insert(
+        "/archive.tgz".to_owned(),
+        CannedResponse::truncated(b"partial payload".to_vec(), 8192),
+    );
+    let harness = download_harness(routes);
+
+    download_from_urls(
+        &agent,
+        &harness.archive_url(),
+        &harness.checksum_url(),
+        &harness.destination,
+    )
+    .expect_err("a truncated archive response must fail");
+
+    assert!(
+        !harness.destination_dir().exists("archive.tgz"),
+        "partial archive must be removed after a write failure",
+    );
+}
+
+#[rstest]
 fn download_from_urls_accepts_an_uppercase_checksum_sidecar(agent: ureq::Agent) {
     // Serve the correct digest in UPPER CASE: the download must still verify,
     // proving `fetch_expected_checksum` normalizes the sidecar token to lower
