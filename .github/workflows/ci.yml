@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
+        uses: leynos/shared-actions/.github/actions/setup-rust@19a7f5d1b8d5c1b2236c39720a5744492b3fc129
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
@@ -54,7 +54,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: github.event_name == 'pull_request' && env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@19a7f5d1b8d5c1b2236c39720a5744492b3fc129
         with:
           format: lcov
           mode: check
@@ -77,7 +77,7 @@ jobs:
         run: scripts/check-verus-fragment-id-bridge.sh
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
+        uses: leynos/shared-actions/.github/actions/setup-rust@19a7f5d1b8d5c1b2236c39720a5744492b3fc129
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
@@ -100,7 +100,7 @@ jobs:
           mmdc --version
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
           version: '0.11.19'
 
@@ -150,7 +150,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
+        uses: leynos/shared-actions/.github/actions/setup-rust@19a7f5d1b8d5c1b2236c39720a5744492b3fc129
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@db22c42b5af88356329b9a8056bb2c2f026d5a10
