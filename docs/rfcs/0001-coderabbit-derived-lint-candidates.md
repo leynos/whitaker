@@ -52,7 +52,7 @@ excluded:
   (roadmap 2.2.4).
 
 The remaining clusters require either explicit Clippy configuration or a new
-owner. The table below summarises them; the sections that follow specify the
+owner. The table below summarizes them; the sections that follow specify the
 enforcement paths.
 
 | Cluster                                                    | Findings | Severity profile  | Candidate lint                               |
@@ -100,8 +100,8 @@ propagation surfaces the failing step and preserves the source error.
 
 Detection sketch: within test contexts (reusing the context detection in
 `common`), flag functions bearing `#[given]`, `#[when]`, `#[then]`, or
-`#[fixture]` attributes (and, configurably, `fn` items only called from such
-functions) whose return type is not `Result` and whose body contains a
+`#[fixture]` attributes (and, when configured, `fn` items only called from
+such functions) whose return type is not `Result` and whose body contains a
 panicking construct. The lint composes with the existing
 `no_expect_outside_tests`, which deliberately permits `expect` in tests; this
 lint narrows that permission for step and fixture functions specifically.
@@ -207,13 +207,13 @@ overlaps substantially with the clone detector pipeline (roadmap §7), which
 will already surface Type-2 duplicates in test code, and with the `rstest`
 hygiene family (roadmap §8). Deferred pending experience with those suites; if
 clone-detector output proves too coarse for test-specific advice, this can be
-revisited as a specialised consumer of the same fingerprints.
+revisited as a specialized consumer of the same fingerprints.
 
 ## Compatibility and migration
 
 `test_helper_must_return_result` follows the established Whitaker delivery
 pattern: a dedicated lint crate with UI tests (roadmap 2.1.1), Fluent
-localisation entries (roadmap §2.3), and feature-gated wiring into
+localization entries (roadmap §2.3), and feature-gated wiring into
 `whitaker_suite`. It should launch as experimental, mirroring the promotion
 path defined for the `rstest` hygiene lints (roadmap 8.5.4).
 
