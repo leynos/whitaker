@@ -140,6 +140,14 @@ clone recovers from the detached checkout).
   refreshed in `cli.rs`. Full gates green.
 - [x] (2026-07-08) Manual end-to-end validation transcript recorded under
   `Artifacts`; platform clone restored to `main` by the recovery run.
+- [x] (2026-08-01) Review follow-up replaced direct `InstallerError::Git`
+  construction checks with failures driven through `clone_repository` and
+  `update_repository`, and added a real-Git pin, detach, reattach, and update
+  lifecycle test.
+- [x] (2026-08-01) Added two proptest properties for accepted 7–40 character
+  SHA prefixes and rejection after changing a prefix nibble.
+- [x] (2026-08-01) Full review gates passed: formatting, tests, type-checking,
+  linting, Markdown, and Mermaid validation.
 
 ## Surprises & discoveries
 
@@ -217,6 +225,23 @@ clone recovers from the detached checkout).
   confirmation. The plan's single "Pinning ... (SHORT_SHA)" line was split
   because the short SHA is only known after the pin resolves.
   Date/Author: 2026-07-08, agent.
+- Decision (architecture): `installer/src/git.rs` owns
+  `WHITAKER_REPO_URL`, because it is the only module that uses the value to
+  perform repository operations. `installer/src/workspace.rs` re-exports the
+  constant only to preserve its existing public path; new internal callers
+  import it from `git.rs`.
+  Rationale: this keeps the dependency direction one-way: workspace
+  orchestration calls git operations, while the git module does not depend on
+  workspace orchestration.
+  Date/Author: 2026-08-01, agent.
+- Decision (verification): use proptest for the pure SHA-prefix invariant and
+  real Git repositories for detached-HEAD recovery. Do not add Kani or Verus
+  coverage for Git subprocess state.
+  Rationale: Kani cannot directly model the external Git process and
+  filesystem lifecycle, so a harness would test a stand-in rather than the
+  shipped implementation. No mathematical lemma is claimed, so Verus is not
+  applicable. The real-Git lifecycle test exercises the production functions.
+  Date/Author: 2026-08-01, agent.
 
 ## Outcomes & retrospective
 
@@ -244,6 +269,13 @@ context structs surfaced literal constructors in the binary's own test modules
 (`install_flow/tests.rs`, `tests/fast_path.rs`) that `cargo test --lib` did not
 compile; an early `cargo check --all-targets` sweep catches these.
 
+The 2026-08-01 review follow-up strengthens the real-Git failure and lifecycle
+coverage, adds SHA-prefix property tests, and removes the workspace-to-git
+module cycle. `make check-fmt`, `make typecheck`, and `make lint` passed; lint
+included rustdoc and Clippy with warnings denied. `make test` passed all 1,481
+tests, with 3 skipped and 1 slow. `make markdownlint` checked 70 files with 0
+errors, and `make nixie` reported all diagrams valid.
+
 ## Context and orientation
 
 The repository is a Cargo workspace (`Cargo.toml` members: `common`,
@@ -264,13 +296,15 @@ relative to the repository root:
   `try_fast_path_installation` (prebuilt download, then a test-only staged
   suite path), (4) source build via `pipeline::perform_build`, (5) wrapper
   scripts and metrics.
-- `installer/src/workspace.rs` — `WHITAKER_REPO_URL`, `WorkspaceAction`
-  (`UseCurrentDir` / `CloneTo` / `UpdateAt` / `UseExisting`),
+- `installer/src/workspace.rs` — the compatibility re-export of
+  `WHITAKER_REPO_URL`, `WorkspaceAction` (`UseCurrentDir` / `CloneTo` /
+  `UpdateAt` / `UseExisting`),
   `decide_workspace_action(cwd, clone_dir, update)`, and
   `ensure_workspace(dirs, update)` which executes the action.
-- `installer/src/git.rs` — `clone_repository`, `update_repository`, and the
-  private `run_git_with_timeout(args, working_dir, operation)` helper (5-min
-  timeout, threaded pipe draining). All new git operations reuse this helper.
+- `installer/src/git.rs` — the owning definition of `WHITAKER_REPO_URL`,
+  `clone_repository`, `update_repository`, and the private
+  `run_git_with_timeout(args, working_dir, operation)` helper (5-min timeout,
+  threaded pipe draining). All new git operations reuse this helper.
 - `installer/src/prebuilt.rs` — `PrebuiltConfig` (target, toolchain,
   destination, quiet), `attempt_prebuilt`, and the private `run_pipeline`
   that downloads the manifest, validates toolchain and target, downloads and
@@ -313,12 +347,11 @@ Stage B — red tests. Add failing tests before each implementation slice:
 1. `installer/src/cli_tests.rs`: parsing `--ref v0.2.5` populates
    `InstallArgs::git_ref`; absence leaves it `None`; `--ref` is accepted both
    bare and under the `install` subcommand.
-2. `installer/src/git.rs` tests (new, using real `git` against `TempDir`
-   fixtures — create a source repository with two commits and a tag, clone
-   it, then exercise the new functions): `resolve_commit` resolves a tag and
-   a SHA and errors on garbage; `checkout_detached` leaves HEAD at the
-   commit; `ensure_default_branch` reattaches a detached clone so that a
-   subsequent `update_repository` succeeds.
+2. `installer/src/git_tests.rs` tests use real `git` against `TempDir`
+   fixtures. They cover tag, branch, and SHA resolution; invalid refs; detached
+   checkout; tag and remote-branch fetches; branch no-op behaviour; real clone
+   and pull failures; and the full pin, detach, remote advance, reattach, and
+   update lifecycle.
 3. `installer/src/workspace.rs` tests: `decide_workspace_action` outcomes
    are unchanged; a new decision-level test that a ref plus
    `UseCurrentDir` yields the refusal error.
@@ -344,7 +377,8 @@ Stage C — implementation, in five small commits:
    constructors that fail to compile.
 2. Git helpers in `installer/src/git.rs`: `resolve_commit(repo, refspec) ->
    Result<String>` (`git rev-parse --verify <refspec>^{commit}`),
-   `fetch_ref(repo, refspec)` (`git fetch origin <refspec> --tags`),
+   `fetch_ref(repo, refspec) -> Result<String>`
+   (`git fetch origin <refspec> --tags`, then resolve `FETCH_HEAD`),
    `checkout_detached(repo, commit)` (`git checkout --detach <commit>`), and
    `ensure_default_branch(repo)` (no-op when already on a branch; otherwise
    discover the default branch per Stage A and check it out). All through
@@ -355,10 +389,10 @@ Stage C — implementation, in five small commits:
    `UseCurrentDir` with a ref → the refusal error; on `CloneTo` → clone then
    pin; on `UpdateAt` → `ensure_default_branch` then pull then pin; on
    `UseExisting` with a ref → pin without pulling. "Pin" means: try
-   `resolve_commit`; on failure `fetch_ref` once and retry; then
-   `checkout_detached`. Crucially, `UpdateAt` with *no* ref also calls
-   `ensure_default_branch` first, fixing the recovery risk. Return both the
-   workspace path and the resolved commit SHA (a small
+   `resolve_commit`; on failure `fetch_ref` once and use its resolved
+   `FETCH_HEAD`; then `checkout_detached`. Crucially, even an unpinned
+   `UpdateAt` calls `ensure_default_branch` first, fixing the recovery risk.
+   Return both the workspace path and the resolved commit SHA (a small
    `WorkspaceCheckout { root: Utf8PathBuf, pinned_commit: Option<String> }`
    struct) so `main.rs` can hand the SHA to the prebuilt path.
 4. Prebuilt: add `expected_git_sha: Option<&'a str>` to `PrebuiltConfig`,
@@ -446,7 +480,9 @@ Acceptance is behavioural:
 6. `make test` passes with the new unit and behaviour tests; each new test
    demonstrably failed first (Red evidence retained in the tee'd logs under
    `/tmp/test-whitaker-issue-271.out` and summarized in `Artifacts`).
-7. `make check-fmt`, `make lint` (clippy plus the dylint suite), and
+7. The SHA-prefix proptest properties accept every generated valid 7–40
+   character prefix and reject a generated prefix with one changed nibble.
+8. `make check-fmt`, `make lint` (clippy plus the dylint suite), and
    `make markdownlint` pass.
 
 BDD specification driving slice 5 of Stage B (final wording may be adjusted
@@ -502,6 +538,18 @@ Red/Green evidence (gate logs under `/tmp/*-whitaker-issue-271*.out`):
 - Full suite green each slice: final `make test` reported 1472 tests run,
   1472 passed, 3 skipped.
 
+Review follow-up test inventory (full gates passed):
+
+- `installer/src/git_tests.rs` has nine real-Git tests. The lifecycle test pins
+  through `workspace::pin_to_ref`, confirms detached HEAD, advances the remote,
+  reattaches through `ensure_default_branch`, pulls through
+  `update_repository`, and confirms the new commit on `main`.
+- The clone and update error tests invoke `clone_repository` and
+  `update_repository` against failing repositories before inspecting their
+  semantic `InstallerError::Git` fields.
+- `installer/src/prebuilt_tests.rs` has two proptest properties covering valid
+  manifest prefixes and a mismatched prefix across the supported SHA lengths.
+
 Manual smoke test (Stage D), run against tag `v0.2.4`
 (commit `8512ee63a212abd175c31501a57e10a713881873`):
 
@@ -523,7 +571,9 @@ Manual smoke test (Stage D), run against tag `v0.2.4`
 
 ## Interfaces and dependencies
 
-No new crate dependencies. At completion the following must exist:
+No new third-party package is introduced. The installer adds the workspace's
+existing `proptest` package as a development dependency. At completion the
+following must exist:
 
 In `installer/src/cli.rs`:
 
@@ -540,11 +590,16 @@ In `installer/src/git.rs` (all `pub`, all routed through
 `run_git_with_timeout`):
 
 ```rust
+pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
 pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String>;
-pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<()>;
+pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String>;
 pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()>;
 pub fn ensure_default_branch(repo: &Utf8Path) -> Result<()>;
 ```
+
+`installer/src/workspace.rs` publicly re-exports `WHITAKER_REPO_URL` for
+compatibility. The git module remains the owner, and new internal callers must
+use `crate::git::WHITAKER_REPO_URL`.
 
 In `installer/src/workspace.rs` (signature change, the one sanctioned
 breaking change; all in-repo callers updated in the same commit):
@@ -576,3 +631,12 @@ pub struct PrebuiltConfig<'a> {
 `WorkspaceCheckout` into `PrebuiltInstallationContext` and on into
 `PrebuiltConfig`. `installer/src/output.rs`'s `DryRunInfo` gains a
 `git_ref: Option<&'a str>` field rendered in `display_text`.
+
+## Revision note (2026-08-01)
+
+Review follow-up clarified that `installer/src/git.rs` owns the repository URL
+and `installer/src/workspace.rs` keeps only a compatibility re-export. It also
+records the live real-Git lifecycle and failure tests, the two SHA-prefix
+properties, the Kani and Verus scope decision, and `fetch_ref`'s
+commit-returning signature. Full-gate validation passed with the results
+recorded in `Outcomes & retrospective`.

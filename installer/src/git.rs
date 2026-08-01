@@ -5,7 +5,6 @@
 //! configurable timeout to prevent hangs on network issues.
 
 use crate::error::{InstallerError, Result};
-use crate::workspace::WHITAKER_REPO_URL;
 use camino::Utf8Path;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
@@ -13,6 +12,9 @@ use wait_timeout::ChildExt;
 
 /// Default timeout for git operations (5 minutes).
 const GIT_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Repository URL for cloning Whitaker.
+pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
 
 /// Clones the Whitaker repository to the specified target directory.
 ///

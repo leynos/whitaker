@@ -8,7 +8,9 @@ use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
 /// Repository URL for cloning Whitaker.
-pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
+///
+/// Re-exported from [`crate::git`] to preserve the existing public path.
+pub use crate::git::WHITAKER_REPO_URL;
 
 /// Expected package name in Cargo.toml to identify a Whitaker workspace.
 const WHITAKER_PACKAGE_NAME: &str = "whitaker";
@@ -198,7 +200,7 @@ fn pin_if_requested(repo: &Utf8Path, git_ref: Option<&str>) -> Result<Option<Str
 }
 
 /// Resolves and checks out `git_ref` as a detached HEAD, fetching on a miss.
-fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<String> {
+pub(super) fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<String> {
     let commit = match crate::git::resolve_commit(repo, git_ref) {
         Ok(commit) => commit,
         Err(_) => {

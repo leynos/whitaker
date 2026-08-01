@@ -119,13 +119,23 @@ fn checkout_detached_leaves_head_at_commit() {
 }
 
 #[test]
-fn ensure_default_branch_reattaches_so_update_succeeds() {
+fn pinned_checkout_reattaches_for_unpinned_update() {
     let fx = git_fixture();
-    checkout_detached(&fx.clone, &fx.first).expect("checkout detached");
+    let pinned_commit = crate::workspace::pin_to_ref(&fx.clone, "v1").expect("pin checkout to v1");
+    assert_eq!(pinned_commit, fx.first);
+    assert_eq!(
+        git(&fx.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "HEAD"
+    );
+
+    let source = Utf8PathBuf::try_from(fx._source.path().to_owned()).expect("UTF-8 path");
+    let third = commit_file(&source, "c.txt", "three", "third");
+
     ensure_default_branch(&fx.clone).expect("reattach to default branch");
-    assert_eq!(git(&fx.clone, &["symbolic-ref", "HEAD"]), "refs/heads/main");
-    // A pull now succeeds because HEAD is on a branch again.
     update_repository(&fx.clone).expect("update after reattach");
+
+    assert_eq!(git(&fx.clone, &["symbolic-ref", "HEAD"]), "refs/heads/main");
+    assert_eq!(git(&fx.clone, &["rev-parse", "HEAD"]), third);
 }
 
 #[test]
@@ -165,22 +175,32 @@ fn fetch_ref_resolves_a_new_remote_branch() {
 
 #[test]
 fn clone_repository_error_includes_operation() {
-    let err = InstallerError::Git {
-        operation: "clone",
-        message: "test error".to_owned(),
+    let target = TempDir::new().expect("clone target temp dir");
+    std::fs::write(target.path().join("occupied"), b"occupied").expect("write target file");
+    let target_path = Utf8PathBuf::try_from(target.path().to_owned()).expect("UTF-8 path");
+
+    let err = clone_repository(&target_path).expect_err("clone into non-empty target should fail");
+
+    let InstallerError::Git { operation, message } = err else {
+        panic!("expected Git error, got {err:?}");
     };
-    let msg = err.to_string();
-    assert!(msg.contains("clone"));
-    assert!(msg.contains("test error"));
+    assert_eq!(operation, "clone");
+    assert!(!message.is_empty(), "expected Git stderr");
 }
 
 #[test]
 fn update_repository_error_includes_operation() {
-    let err = InstallerError::Git {
-        operation: "pull",
-        message: "not a git repository".to_owned(),
+    let repo = TempDir::new().expect("non-repository temp dir");
+    let repo_path = Utf8PathBuf::try_from(repo.path().to_owned()).expect("UTF-8 path");
+
+    let err = update_repository(&repo_path).expect_err("pull outside a repository should fail");
+
+    let InstallerError::Git { operation, message } = err else {
+        panic!("expected Git error, got {err:?}");
     };
-    let msg = err.to_string();
-    assert!(msg.contains("pull"));
-    assert!(msg.contains("not a git repository"));
+    assert_eq!(operation, "pull");
+    assert!(
+        message.contains("not a git repository"),
+        "stderr: {message}"
+    );
 }

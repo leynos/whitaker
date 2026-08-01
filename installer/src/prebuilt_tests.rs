@@ -4,6 +4,8 @@ use super::*;
 use crate::artefact::download::MockArtefactDownloader;
 use crate::artefact::extraction::MockArtefactExtractor;
 use crate::test_utils::{prebuilt_manifest_json, sha256_hex};
+use proptest::prelude::*;
+use proptest::test_runner::TestCaseError;
 use rstest::rstest;
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
@@ -15,6 +17,65 @@ const MATCHING_COMMIT: &str = "abc1234000000000000000000000000000000ab";
 
 /// A full 40-hex commit SHA that does not share the manifest's prefix.
 const MISMATCHED_COMMIT: &str = "deadbeef00000000000000000000000000000000";
+
+fn commit_sha_strategy() -> impl Strategy<Value = String> {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+    prop::collection::vec(0_u8..16, 40).prop_map(|nibbles| {
+        nibbles
+            .into_iter()
+            .map(|nibble| char::from(HEX_DIGITS[usize::from(nibble)]))
+            .collect()
+    })
+}
+
+fn manifest_with_git_sha(git_sha: &str) -> serde_json::Result<Manifest> {
+    serde_json::from_value(serde_json::json!({
+        "git_sha": git_sha,
+        "schema_version": 1,
+        "toolchain": TOOLCHAIN,
+        "target": TARGET,
+        "generated_at": "2026-02-03T00:00:00Z",
+        "files": ["libwhitaker_suite.so"],
+        "sha256": "a".repeat(64),
+    }))
+}
+
+proptest! {
+    #[test]
+    fn git_sha_prefixes_across_supported_lengths_are_accepted(
+        commit in commit_sha_strategy(),
+        prefix_len in 7_usize..=40,
+    ) {
+        let manifest = manifest_with_git_sha(&commit[..prefix_len])
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        prop_assert!(validate_git_sha(&manifest, Some(&commit)).is_ok());
+    }
+
+    #[test]
+    fn changed_nibble_in_git_sha_prefix_is_rejected(
+        commit in commit_sha_strategy(),
+        prefix_len in 7_usize..=40,
+    ) {
+        let mut manifest_sha = commit[..prefix_len].to_owned();
+        let replacement = if manifest_sha.starts_with('0') { "1" } else { "0" };
+        manifest_sha.replace_range(..1, replacement);
+        let manifest = manifest_with_git_sha(&manifest_sha)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        match validate_git_sha(&manifest, Some(&commit)) {
+            Err(PrebuiltError::GitShaMismatch { manifest, expected }) => {
+                prop_assert_eq!(manifest, manifest_sha);
+                prop_assert_eq!(expected, commit);
+            }
+            other => {
+                return Err(TestCaseError::fail(format!(
+                    "expected GitShaMismatch, got {other:?}"
+                )));
+            }
+        }
+    }
+}
 
 fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     PrebuiltConfig {
