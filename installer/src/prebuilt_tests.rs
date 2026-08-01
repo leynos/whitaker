@@ -4,9 +4,11 @@ use super::*;
 use crate::artefact::download::MockArtefactDownloader;
 use crate::artefact::extraction::MockArtefactExtractor;
 use crate::test_utils::{prebuilt_manifest_json, sha256_hex};
+use cap_std::{ambient_authority, fs::Dir};
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
 use rstest::rstest;
+use std::path::Path;
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
@@ -38,6 +40,24 @@ fn manifest_with_git_sha(git_sha: &str) -> serde_json::Result<Manifest> {
         "files": ["libwhitaker_suite.so"],
         "sha256": "a".repeat(64),
     }))
+}
+
+/// Writes a test file relative to a capability rooted at its parent directory.
+fn write_test_file(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "test file path has no parent directory",
+        )
+    })?;
+    let file_name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "test file path has no file name",
+        )
+    })?;
+    let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
+    dir.write(file_name, contents)
 }
 
 proptest! {
@@ -97,11 +117,13 @@ fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
         .returning(move |_| Ok(manifest_json.clone()));
     downloader
         .expect_download_archive()
-        .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
+        .returning(|_filename, dest| {
+            write_test_file(dest, FAKE_ARCHIVE).map_err(DownloadError::Io)
+        });
     let mut extractor = MockArtefactExtractor::new();
     extractor.expect_extract().returning(|_archive, dest| {
         let source_name = "libwhitaker_suite.so".to_owned();
-        std::fs::write(dest.join(&source_name), b"fake").expect("write extracted file");
+        write_test_file(&dest.join(&source_name), b"fake").expect("write extracted file");
         Ok(vec![source_name])
     });
     (downloader, extractor)

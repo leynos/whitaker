@@ -145,32 +145,35 @@ pub fn ensure_workspace(
         WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => {
             // UseCurrentDir is guaranteed refless by `ensure_ref_allowed`;
             // UseExisting pins without pulling, per the `--no-update` contract.
-            let pinned_commit = pin_if_requested(&dir, git_ref)?;
-            Ok(WorkspaceCheckout {
-                root: dir,
-                pinned_commit,
-            })
+            finalize_workspace_checkout(dir, git_ref)
         }
         WorkspaceAction::CloneTo(dir) => {
             crate::git::clone_repository(&dir)?;
-            let pinned_commit = pin_if_requested(&dir, git_ref)?;
-            Ok(WorkspaceCheckout {
-                root: dir,
-                pinned_commit,
-            })
+            finalize_workspace_checkout(dir, git_ref)
         }
         WorkspaceAction::UpdateAt(dir) => {
             // Reattach before pulling so a prior detached pin cannot break the
             // update, even when no new ref is requested.
             crate::git::ensure_default_branch(&dir)?;
             crate::git::update_repository(&dir)?;
-            let pinned_commit = pin_if_requested(&dir, git_ref)?;
-            Ok(WorkspaceCheckout {
-                root: dir,
-                pinned_commit,
-            })
+            finalize_workspace_checkout(dir, git_ref)
         }
     }
+}
+
+/// Applies an optional pin and constructs the resulting workspace checkout.
+///
+/// This helper only owns the common tail after workspace setup. Cloning,
+/// updating, and reattachment remain responsibilities of [`ensure_workspace`].
+fn finalize_workspace_checkout(
+    root: Utf8PathBuf,
+    git_ref: Option<&str>,
+) -> Result<WorkspaceCheckout> {
+    let pinned_commit = pin_if_requested(&root, git_ref)?;
+    Ok(WorkspaceCheckout {
+        root,
+        pinned_commit,
+    })
 }
 
 /// Refuses `--ref` when the current directory is itself a Whitaker workspace.

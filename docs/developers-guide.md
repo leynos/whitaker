@@ -1883,6 +1883,10 @@ commands that inspect output or interpret a non-zero status must continue to use
 in `git_tests.rs`, keeping the production adapter focused. The helpers in
 `workspace_progress.rs` only render operator messages at the CLI edge and must
 not clone, update, or pin the checkout themselves.
+`workspace::finalize_workspace_checkout` is called only from
+`ensure_workspace` action arms after each arm's current-directory, clone, or
+update setup. It may combine optional pinning with `WorkspaceCheckout`
+construction; it must not clone, update, or reattach a repository.
 
 Behaviour-test support follows the same ownership rule.
 `behaviour_cli::support::output_for_assertions` combines scenario-skip handling

@@ -43,8 +43,10 @@ clone recovers from the detached checkout).
 
 ## Constraints
 
-- Default behaviour with no `--ref` must be byte-for-byte unchanged: rolling
-  prebuilt download first, default-branch clone/pull fallback.
+- With no `--ref`, ordinary operation must continue to try the rolling prebuilt
+  download first, then use the default-branch clone/pull fallback. If a prior
+  pinned installation left the managed clone detached, the no-ref path may
+  reattach it to the default branch before performing the unpinned update.
 - The public crate API additions must be additive; no existing public
   function signatures in `whitaker_installer` may change in a way that breaks
   the behaviour tests' existing imports, except where the plan names the
@@ -52,8 +54,10 @@ clone recovers from the detached checkout).
 - The installer must never mutate a user's own working tree: if the current
   directory is itself a Whitaker workspace, `--ref` must fail with a clear
   error rather than checking anything out.
-- No new external dependencies. Git operations continue to go through
-  `installer/src/git.rs` with the existing 5-minute timeout discipline.
+- No new runtime external dependencies. Test support may directly declare the
+  already-resolved `cap-std` crate solely for capability-scoped fixture writes.
+  Git operations continue to go through `installer/src/git.rs` with the
+  existing 5-minute timeout discipline.
 - All work follows the repository gates: `make check-fmt`, `make lint`,
   `make test`, `make markdownlint` must pass before each commit.
 - Commit messages follow the file-based workflow (`git commit -F`), no AI
@@ -139,7 +143,7 @@ clone recovers from the detached checkout).
   (new "Pinning the suite" subsection) and `README.md`; `--help` examples
   refreshed in `cli.rs`. Full gates green.
 - [x] (2026-07-08) Manual end-to-end validation transcript recorded under
-  `Artifacts`; platform clone restored to `main` by the recovery run.
+  `Artefacts`; platform clone restored to `main` by the recovery run.
 - [x] (2026-08-01) Review follow-up replaced direct `InstallerError::Git`
   construction checks with failures driven through `clone_repository` and
   `update_repository`, and added a real-Git pin, detach, reattach, and update
@@ -148,6 +152,26 @@ clone recovers from the detached checkout).
   SHA prefixes and rejection after changing a prefix nibble.
 - [x] (2026-08-01) Full review gates passed: formatting, tests, type-checking,
   linting, Markdown, and Mermaid validation.
+- [x] (2026-08-01) Verified the latest review findings. The full-SHA-only
+  proposal was rejected because rolling producers record abbreviated SHAs; the
+  fixture, Git recovery and pinning, capability-write, helper-boundary, and
+  documentation findings remained valid.
+- [x] (2026-08-01) Converted `git_fixture` to an injected `rstest` fixture;
+  added real-Git coverage for missing `origin/HEAD` repair and fetch-on-miss
+  pinning; extracted `finalize_workspace_checkout`; routed prebuilt test writes
+  through a directory capability; and applied the documentation corrections.
+- [x] (2026-08-01) Final review validation passed: `make check-fmt`
+  (`/tmp/final-current-check-fmt-7b3c543c-issue-271-ref-pinned-installation.out`);
+  `make test`, 1,482/1,482 passed and 3 skipped
+  (`/tmp/final-current-test-7b3c543c-issue-271-ref-pinned-installation.out`);
+  `make typecheck`
+  (`/tmp/final-current-typecheck-7b3c543c-issue-271-ref-pinned-installation.out`);
+  and `make lint` (`cargo doc` + Clippy)
+  (`/tmp/final-current-lint-7b3c543c-issue-271-ref-pinned-installation.out`).
+  Markdownlint reported 0 errors
+  (`/tmp/final-current-markdownlint-7b3c543c-issue-271-ref-pinned-installation.out`),
+  and Nixie validated all diagrams
+  (`/tmp/final-current-nixie-7b3c543c-issue-271-ref-pinned-installation.out`).
 
 ## Surprises & discoveries
 
@@ -242,6 +266,29 @@ clone recovers from the detached checkout).
   shipped implementation. No mathematical lemma is claimed, so Verus is not
   applicable. The real-Git lifecycle test exercises the production functions.
   Date/Author: 2026-08-01, agent.
+- Decision (review scope): `workspace::finalize_workspace_checkout` is called
+  only from `ensure_workspace` action arms after their setup operations. It may
+  combine optional pinning with `WorkspaceCheckout` construction only. Clone,
+  update, and detached-head reattachment operations remain in
+  `ensure_workspace` so its match arms continue to make repository state
+  transitions explicit.
+  Rationale: this removes repeated result construction without hiding the
+  orchestration that distinguishes the workspace setup paths.
+  Date/Author: 2026-08-01, review feedback.
+- Decision (review provenance): retain prefix-tolerant pinned-prebuilt
+  validation and its existing proptest properties; do not require a full
+  manifest object ID in this review pass.
+  Rationale: both rolling-release producers record `git rev-parse --short HEAD`
+  and `GitSha` accepts 7–40 hexadecimal characters. Exact equality would reject
+  every current abbreviated rolling manifest, disabling valid prebuilt reuse.
+  Date/Author: 2026-08-01, agent.
+- Decision (review tests): inject the shared real-Git repository through an
+  `rstest` fixture, exercise missing-default-ref recovery and remote-only
+  pinning through production flows, and use a `cap_std::fs::Dir` rooted at each
+  test file's parent for mock writes.
+  Rationale: these changes test Git's actual ref behaviour, remove repeated
+  fixture setup, and keep filesystem authority scoped to temporary test data.
+  Date/Author: 2026-08-01, agent.
 
 ## Outcomes & retrospective
 
@@ -251,7 +298,7 @@ Delivered across six commits on `issue-271-ref-pinned-installation`: the CLI
 `expected_git_sha` gating, dry-run/progress messaging, and documentation. All
 gates (`check-fmt`, `lint`, `test`, `markdownlint`) passed before each commit;
 the final `make test` ran 1472 tests (1472 passed, 3 skipped). Every new test
-failed first for the intended reason (see `Artifacts`). The manual smoke test
+failed first for the intended reason (see `Artefacts`). The manual smoke test
 exercised the pin, the in-workspace refusal, the toolchain-embedded staged
 filename, and the detached-HEAD recovery end-to-end against tag `v0.2.4`.
 
@@ -268,6 +315,17 @@ prebuilt fast path for every pin. (2) Adding a field to `PrebuiltConfig` and the
 context structs surfaced literal constructors in the binary's own test modules
 (`install_flow/tests.rs`, `tests/fast_path.rs`) that `cargo test --lib` did not
 compile; an early `cargo check --all-targets` sweep catches these.
+
+The latest review follow-up now contains the minimal valid changes: reusable
+`rstest` Git setup, real-Git regressions for default-branch repair and
+fetch-on-miss pinning, capability-scoped prebuilt fixture writes, a private
+checkout finalizer with an explicit orchestration boundary, and terminology
+corrections. The test-only `cap-std` declaration makes an already-resolved
+crate available directly to the installer tests; no runtime dependency was
+added. The requested full-SHA-only comparison remains deliberately
+unimplemented because it conflicts with the rolling manifest format. Final
+validation passed: 1,482/1,482 tests passed with 3 skipped, and formatting,
+type-checking, Cargo documentation, Clippy, Markdownlint, and Nixie were clean.
 
 The 2026-08-01 review follow-up strengthens the real-Git failure and lifecycle
 coverage, adds SHA-prefix property tests, and removes the workspace-to-git
@@ -479,7 +537,7 @@ Acceptance is behavioural:
    from source; when they match, the prebuilt path is used.
 6. `make test` passes with the new unit and behaviour tests; each new test
    demonstrably failed first (Red evidence retained in the tee'd logs under
-   `/tmp/test-whitaker-issue-271.out` and summarized in `Artifacts`).
+   `/tmp/test-whitaker-issue-271.out` and summarized in `Artefacts`).
 7. The SHA-prefix proptest properties accept every generated valid 7–40
    character prefix and reject a generated prefix with one changed nibble.
 8. `make check-fmt`, `make lint` (clippy plus the dylint suite), and
@@ -518,7 +576,7 @@ detached, `git -C ~/.local/share/whitaker checkout main` restores it by
 hand. If a gate fails mid-commit, fix and re-run the gate; never commit over
 a red gate.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Red/Green evidence (gate logs under `/tmp/*-whitaker-issue-271*.out`):
 
@@ -640,3 +698,12 @@ records the live real-Git lifecycle and failure tests, the two SHA-prefix
 properties, the Kani and Verus scope decision, and `fetch_ref`'s
 commit-returning signature. Full-gate validation passed with the results
 recorded in `Outcomes & retrospective`.
+
+## Revision note (2026-08-01, latest review pass)
+
+This revision uses “artefacts” consistently and clarifies that ordinary no-ref
+behaviour remains rolling while allowing recovery from a detached clone left
+by a prior pin. It records the verified finding dispositions, the implemented
+test and helper changes, and the reason full-SHA-only validation was rejected.
+Final validation passed, including 1,482/1,482 tests with 3 skipped, formatting,
+type-checking, Cargo documentation, Clippy, Markdownlint, and Nixie.

@@ -133,7 +133,7 @@ pub struct DryRunInfo<'a> {
     pub jobs: Option<usize>,
     /// Crates to be built.
     pub crates: &'a [CrateName],
-    /// The commit SHA or tag the suite is pinned to, if any.
+    /// The commit-ish the suite is pinned to, if any.
     pub git_ref: Option<&'a str>,
 }
 

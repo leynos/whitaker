@@ -2,6 +2,7 @@
 
 use super::*;
 use camino::Utf8PathBuf;
+use rstest::{fixture, rstest};
 use std::process::Command;
 use tempfile::TempDir;
 
@@ -51,6 +52,7 @@ struct GitFixture {
 }
 
 /// Build a source repo (two commits, tag `v1` on the first) and clone it.
+#[fixture]
 fn git_fixture() -> GitFixture {
     let source = TempDir::new().expect("source temp dir");
     let source_path = Utf8PathBuf::try_from(source.path().to_owned()).expect("UTF-8 source path");
@@ -80,97 +82,135 @@ fn git_fixture() -> GitFixture {
     }
 }
 
-#[test]
-fn resolve_commit_resolves_tag_branch_and_sha() {
-    let fx = git_fixture();
+#[rstest]
+fn resolve_commit_resolves_tag_branch_and_sha(git_fixture: GitFixture) {
     assert_eq!(
-        resolve_commit(&fx.clone, "v1").expect("resolve tag"),
-        fx.first
+        resolve_commit(&git_fixture.clone, "v1").expect("resolve tag"),
+        git_fixture.first
     );
     assert_eq!(
-        resolve_commit(&fx.clone, "main").expect("resolve branch"),
-        fx.second
+        resolve_commit(&git_fixture.clone, "main").expect("resolve branch"),
+        git_fixture.second
     );
     assert_eq!(
-        resolve_commit(&fx.clone, &fx.second).expect("resolve sha"),
-        fx.second
+        resolve_commit(&git_fixture.clone, &git_fixture.second).expect("resolve sha"),
+        git_fixture.second
     );
 }
 
-#[test]
-fn resolve_commit_errors_on_garbage() {
-    let fx = git_fixture();
-    let err = resolve_commit(&fx.clone, "definitely-not-a-ref").expect_err("expected error");
+#[rstest]
+fn resolve_commit_errors_on_garbage(git_fixture: GitFixture) {
+    let err =
+        resolve_commit(&git_fixture.clone, "definitely-not-a-ref").expect_err("expected error");
     assert!(matches!(err, InstallerError::Git { .. }), "got {err:?}");
 }
 
-#[test]
-fn checkout_detached_leaves_head_at_commit() {
-    let fx = git_fixture();
-    checkout_detached(&fx.clone, &fx.first).expect("checkout detached");
-    assert_eq!(git(&fx.clone, &["rev-parse", "HEAD"]), fx.first);
+#[rstest]
+fn checkout_detached_leaves_head_at_commit(git_fixture: GitFixture) {
+    checkout_detached(&git_fixture.clone, &git_fixture.first).expect("checkout detached");
+    assert_eq!(
+        git(&git_fixture.clone, &["rev-parse", "HEAD"]),
+        git_fixture.first
+    );
     // A detached HEAD has no symbolic ref.
     let symbolic = Command::new("git")
         .args(["symbolic-ref", "-q", "HEAD"])
-        .current_dir(fx.clone.as_std_path())
+        .current_dir(git_fixture.clone.as_std_path())
         .output()
         .expect("spawn symbolic-ref");
     assert!(!symbolic.status.success(), "expected detached HEAD");
 }
 
-#[test]
-fn pinned_checkout_reattaches_for_unpinned_update() {
-    let fx = git_fixture();
-    let pinned_commit = crate::workspace::pin_to_ref(&fx.clone, "v1").expect("pin checkout to v1");
-    assert_eq!(pinned_commit, fx.first);
+#[rstest]
+fn pinned_checkout_reattaches_for_unpinned_update(git_fixture: GitFixture) {
+    let pinned_commit =
+        crate::workspace::pin_to_ref(&git_fixture.clone, "v1").expect("pin checkout to v1");
+    assert_eq!(pinned_commit, git_fixture.first);
     assert_eq!(
-        git(&fx.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        git(&git_fixture.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
         "HEAD"
     );
 
-    let source = Utf8PathBuf::try_from(fx._source.path().to_owned()).expect("UTF-8 path");
+    let source = Utf8PathBuf::try_from(git_fixture._source.path().to_owned()).expect("UTF-8 path");
     let third = commit_file(&source, "c.txt", "three", "third");
 
-    ensure_default_branch(&fx.clone).expect("reattach to default branch");
-    update_repository(&fx.clone).expect("update after reattach");
+    ensure_default_branch(&git_fixture.clone).expect("reattach to default branch");
+    update_repository(&git_fixture.clone).expect("update after reattach");
 
-    assert_eq!(git(&fx.clone, &["symbolic-ref", "HEAD"]), "refs/heads/main");
-    assert_eq!(git(&fx.clone, &["rev-parse", "HEAD"]), third);
+    assert_eq!(
+        git(&git_fixture.clone, &["symbolic-ref", "HEAD"]),
+        "refs/heads/main"
+    );
+    assert_eq!(git(&git_fixture.clone, &["rev-parse", "HEAD"]), third);
 }
 
-#[test]
-fn ensure_default_branch_is_noop_on_a_branch() {
-    let fx = git_fixture();
-    ensure_default_branch(&fx.clone).expect("noop on branch");
-    assert_eq!(git(&fx.clone, &["symbolic-ref", "HEAD"]), "refs/heads/main");
+#[rstest]
+fn ensure_default_branch_is_noop_on_a_branch(git_fixture: GitFixture) {
+    ensure_default_branch(&git_fixture.clone).expect("noop on branch");
+    assert_eq!(
+        git(&git_fixture.clone, &["symbolic-ref", "HEAD"]),
+        "refs/heads/main"
+    );
 }
 
-#[test]
-fn fetch_ref_retrieves_a_new_tag() {
-    let fx = git_fixture();
+#[rstest]
+fn ensure_default_branch_repairs_missing_remote_head(git_fixture: GitFixture) {
+    checkout_detached(&git_fixture.clone, &git_fixture.first).expect("checkout detached");
+    git(
+        &git_fixture.clone,
+        &["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"],
+    );
+
+    ensure_default_branch(&git_fixture.clone).expect("repair and reattach default branch");
+
+    assert_eq!(
+        git(&git_fixture.clone, &["symbolic-ref", "HEAD"]),
+        "refs/heads/main"
+    );
+    assert_eq!(
+        git(
+            &git_fixture.clone,
+            &["symbolic-ref", "refs/remotes/origin/HEAD"]
+        ),
+        "refs/remotes/origin/main"
+    );
+}
+
+#[rstest]
+fn fetch_ref_retrieves_a_new_tag(git_fixture: GitFixture) {
     // Add a third commit and tag it in the source, after the clone was made.
-    let source = Utf8PathBuf::try_from(fx._source.path().to_owned()).expect("UTF-8 path");
+    let source = Utf8PathBuf::try_from(git_fixture._source.path().to_owned()).expect("UTF-8 path");
     let third = commit_file(&source, "c.txt", "three", "third");
     git(&source, &["tag", "v2"]);
 
     // The clone cannot resolve the new tag until it fetches.
-    assert!(resolve_commit(&fx.clone, "v2").is_err());
-    fetch_ref(&fx.clone, "v2").expect("fetch new tag");
-    assert_eq!(resolve_commit(&fx.clone, "v2").expect("resolve v2"), third);
+    assert!(resolve_commit(&git_fixture.clone, "v2").is_err());
+    fetch_ref(&git_fixture.clone, "v2").expect("fetch new tag");
+    assert_eq!(
+        resolve_commit(&git_fixture.clone, "v2").expect("resolve v2"),
+        third
+    );
 }
 
-#[test]
-fn fetch_ref_resolves_a_new_remote_branch() {
-    let fx = git_fixture();
-    let source = Utf8PathBuf::try_from(fx._source.path().to_owned()).expect("UTF-8 path");
+#[rstest]
+fn pin_to_ref_fetches_and_checks_out_a_new_remote_branch(git_fixture: GitFixture) {
+    let source = Utf8PathBuf::try_from(git_fixture._source.path().to_owned()).expect("UTF-8 path");
     git(&source, &["checkout", "-b", "release-candidate"]);
     let branch_commit = commit_file(&source, "c.txt", "three", "branch commit");
 
-    assert!(resolve_commit(&fx.clone, "release-candidate").is_err());
-    let fetched_commit =
-        fetch_ref(&fx.clone, "release-candidate").expect("fetch new remote branch");
+    assert!(resolve_commit(&git_fixture.clone, "release-candidate").is_err());
+    let pinned_commit = crate::workspace::pin_to_ref(&git_fixture.clone, "release-candidate")
+        .expect("fetch and pin new remote branch");
 
-    assert_eq!(fetched_commit, branch_commit);
+    assert_eq!(pinned_commit, branch_commit);
+    assert_eq!(
+        git(&git_fixture.clone, &["rev-parse", "HEAD"]),
+        branch_commit
+    );
+    assert_eq!(
+        git(&git_fixture.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "HEAD"
+    );
 }
 
 #[test]
