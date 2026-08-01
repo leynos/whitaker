@@ -100,8 +100,8 @@ propagation surfaces the failing step and preserves the source error.
 
 Detection sketch: within test contexts (reusing the context detection in
 `common`), flag functions bearing `#[given]`, `#[when]`, `#[then]`, or
-`#[fixture]` attributes (and, when configured, `fn` items only called from
-such functions) whose return type is not `Result` and whose body contains a
+`#[fixture]` attributes (and, when configured, `fn` items only called from such
+functions) whose return type is not `Result` and whose body contains a
 panicking construct. The lint composes with the existing
 `no_expect_outside_tests`, which deliberately permits `expect` in tests; this
 lint narrows that permission for step and fixture functions specifically.
@@ -242,6 +242,84 @@ centrally model Whitaker's sanctioned environment boundaries with
 context-sensitive remediation. Whitaker candidates are restricted to those
 residual behaviours. Where Clippy covers a cluster, this RFC excludes that arm
 rather than duplicating it.
+
+#### Worked configuration in Whitaker
+
+Whitaker can trial both Clippy mechanisms without adding a lint crate. The root
+package defines its own Clippy levels in `Cargo.toml`. The installer and clone
+core crates already inherit the workspace lint table through their
+`[lints] workspace = true` declarations. Add both restriction lints at both
+scopes:
+
+```toml
+# Cargo.toml
+[lints.clippy]
+# Existing entries omitted.
+missing_assert_message = "deny"
+disallowed_methods = "deny"
+
+[workspace.lints.clippy]
+missing_assert_message = "deny"
+disallowed_methods = "deny"
+```
+
+This focused trial covers the root package and those inheriting members. To
+enforce the policy across every workspace member, migrate the remaining
+manifests to workspace lint inheritance or add the same two levels to their
+existing package-local `[lints.clippy]` tables. Cargo workspace lints are
+opt-in; declaring `[workspace.lints.clippy]` alone does not change members that
+do not inherit it.
+
+Then declare the forbidden environment operations in the repository-root
+`clippy.toml`. The reasons appear in diagnostics and state the intended
+replacement policy:
+
+```toml
+# clippy.toml
+disallowed-methods = [
+  { path = "std::env::var", reason = "inject an environment reader" },
+  { path = "std::env::var_os", reason = "inject an environment reader" },
+  { path = "std::env::vars", reason = "inject an environment reader" },
+  { path = "std::env::vars_os", reason = "inject an environment reader" },
+  { path = "std::env::set_var", reason = "use a stub environment in tests" },
+  { path = "std::env::remove_var", reason = "use a stub environment in tests" },
+]
+```
+
+With that configuration, `make lint` rejects both representative findings:
+
+```rust,ignore
+fn validate_output(output: &str) {
+    assert!(!output.is_empty());
+}
+
+fn deployment_mode() -> Option<String> {
+    std::env::var("DEPLOYMENT_MODE").ok()
+}
+```
+
+The first function must add a custom assertion message. The second must receive
+an injected environment reader instead of consulting process-global state. A
+real composition-root adapter that implements the injected reader may require
+one tightly scoped expectation because it is the sanctioned ambient boundary:
+
+```rust,ignore
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root supplies the injectable environment adapter"
+)]
+fn deployment_mode_from_process() -> Option<String> {
+    std::env::var("DEPLOYMENT_MODE").ok()
+}
+```
+
+Whitaker denies bare `allow` attributes, so the reasoned `expect` documents the
+exception and also fails when the disallowed call disappears. This trial covers
+missing assertion messages and direct calls exactly. It does not check whether
+an `Err(...)` payload contains both expected and actual values, assign
+different severity to reads and mutations, or provide centrally configured
+module exemptions; only those residual requirements remain candidates for
+Whitaker.
 
 ### Option B: keep enforcement in CodeRabbit
 
