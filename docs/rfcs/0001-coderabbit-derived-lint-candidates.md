@@ -11,10 +11,11 @@
 A corpus of 192 CodeRabbit review findings was analysed, of which 83 target
 Rust source files. Recurring finding patterns that are mechanical enough to
 detect, not already covered by Clippy or rustc, and not already scheduled in
-`docs/roadmap.md` were distilled into seven candidate lints. Three candidates
-are recommended for immediate scheduling: `test_helper_must_return_result`,
-`assertion_missing_message`, and `no_std_env_operations`. Two further
-candidates are recommended as follow-ups, and two are recorded but deferred.
+`docs/roadmap.md` were distilled into seven candidate enforcement paths. One
+lint, `test_helper_must_return_result`, is recommended for immediate
+scheduling. Two paths require Clippy-first evaluation before Whitaker adds only
+the unmatched behaviour. Two further candidates are recommended as follow-ups,
+and two are recorded but deferred.
 
 ## Problem
 
@@ -50,18 +51,19 @@ excluded:
   `module_must_have_inner_docs` (roadmap 2.2.3) and `public_fn_must_have_docs`
   (roadmap 2.2.4).
 
-The remaining clusters have no scheduled owner. The table below summarises
-them; the sections that follow specify the candidates.
+The remaining clusters require either explicit Clippy configuration or a new
+owner. The table below summarises them; the sections that follow specify the
+enforcement paths.
 
-| Cluster                                                    | Findings | Severity profile  | Candidate lint                    |
-| ---------------------------------------------------------- | -------- | ----------------- | --------------------------------- |
-| Test steps and helpers panic instead of returning `Result` | 7        | all major         | `test_helper_must_return_result`  |
-| Assertions and mismatch arms omit diagnostic context       | 5        | minor and trivial | `assertion_missing_message`       |
-| Direct process-environment access or mutation              | 4        | major and trivial | `no_std_env_operations`           |
-| Error type or context erased at propagation sites          | 5        | mixed             | `error_context_discarded`         |
-| `drop()` used to silence unused-variable warnings          | 2        | major and trivial | `no_drop_to_silence_unused`       |
-| Fallible calls between resource acquisition and guard      | 3        | all major         | `fallible_gap_before_guard`       |
-| Near-identical tests differing only in literals            | 3        | all trivial       | `parameterizable_duplicate_tests` |
+| Cluster                                                    | Findings | Severity profile  | Candidate lint                               |
+| ---------------------------------------------------------- | -------- | ----------------- | -------------------------------------------- |
+| Test steps and helpers panic instead of returning `Result` | 7        | all major         | `test_helper_must_return_result`             |
+| Assertions and mismatch arms omit diagnostic context       | 5        | minor and trivial | Clippy plus `assertion_context_incomplete`   |
+| Direct process-environment access or mutation              | 4        | major and trivial | Clippy plus possible `no_std_env_operations` |
+| Error type or context erased at propagation sites          | 5        | mixed             | `error_context_discarded`                    |
+| `drop()` used to silence unused-variable warnings          | 2        | major and trivial | `no_drop_to_silence_unused`                  |
+| Fallible calls between resource acquisition and guard      | 3        | all major         | `fallible_gap_before_guard`                  |
+| Near-identical tests differing only in literals            | 3        | all trivial       | `parameterizable_duplicate_tests`            |
 
 _Table 1: Unscheduled Rust finding clusters in the CodeRabbit corpus._
 
@@ -85,7 +87,7 @@ _Table 1: Unscheduled Rust finding clusters in the CodeRabbit corpus._
 
 ## Proposed lints
 
-### Tier 1: recommended for immediate scheduling
+### Tier 1: immediate and Clippy-first candidates
 
 #### `test_helper_must_return_result`
 
@@ -114,25 +116,23 @@ Two later findings in the same corpus (items asking for `.expect()` over
 `Result` return is unavailable. The lint should therefore emit a suggestion to
 change the signature, not merely to reword the panic.
 
-#### `assertion_missing_message`
+#### `assertion_context_incomplete`
 
 Five findings report assertions or error arms that fail without enough context
-to diagnose: `assert!`/`assert_eq!` calls with no message argument in helper
-functions, and mismatch branches that report the actual value but omit the
-expected one. The reviewer remedy is uniform: include both expected and actual
-values in the failure payload.
+to diagnose. Clippy's `missing_assert_message` already covers `assert!`,
+`assert_eq!`, and `assert_ne!` calls without a custom panic message. Consumers
+should enable that lint rather than duplicate its macro detection in Whitaker.
 
-Detection sketch: in test contexts, flag `assert!` invocations whose condition
-involves a comparison but which carry no message argument, and `assert_eq!`/
-`assert_ne!` without a message when the operands are non-trivial expressions
-(that is, not both literals or plain identifiers — a heuristic to keep noise
-down in short unit tests). A second arm of the lint targets `format!`-style
-error construction inside `Err(...)` returns in assertion helpers where only
-one of the compared bindings appears in the format string.
+The unmatched behaviour is narrower: mismatch branches and `format!`-style
+error construction inside `Err(...)` returns where only one of the expected and
+actual bindings appears in the failure payload. A possible
+`assertion_context_incomplete` lint should target only that semantic imbalance.
+Before implementation, probe the corpus with `missing_assert_message` enabled
+and retain only findings that survive that screen.
 
-Configuration: severity per arm, and a threshold for what counts as a trivial
-operand. The macro-expansion span helpers from roadmap 8.1.2 apply here to
-avoid firing inside third-party assertion macros.
+Configuration: severity per failure-construction shape. The macro-expansion
+span helpers from roadmap 8.1.2 apply where a surviving case originates in a
+third-party assertion helper.
 
 #### `no_std_env_operations`
 
@@ -147,23 +147,20 @@ threads. The lint therefore targets the mechanism in all contexts, not only in
 tests, mirroring how `no_std_fs_operations` pushes filesystem access behind
 injectable handles.
 
-Detection sketch: flag resolved calls to `std::env::var`, `var_os`, `vars`,
-`vars_os`, `set_var`, and `remove_var`, using the resolved-path classifier
-pattern established by `no_std_fs_operations` (`def_path_str` plus parsed
-segments, so aliased imports are still caught). The compile-time `env!` and
-`option_env!` macros are out of scope. The remedy differs by context, and the
-diagnostic help text should too: in production code, accept an environment
-handle (for example `&dyn mockable::Env`, with `DefaultEnv` supplied at the
-composition root); in test code, construct a stub such as `MockEnv` rather
-than mutating the process environment.
+Clippy's `disallowed_methods` can already reject resolved calls such as
+`std::env::var`, including aliased imports. Consumers should first configure it
+for `var`, `var_os`, `vars`, `vars_os`, `set_var`, and `remove_var`; the
+compile-time `env!` and `option_env!` macros remain out of scope.
 
-Configuration: `allowed_paths` (module prefixes exempt from the lint — the
-composition root, binary `main`, the module implementing the handle against
-the real environment, and any sanctioned test guard such as
-`test_helpers::env_guard`), a per-operation severity split (mutation via
-`set_var`/`remove_var` is process-global and racy, so deny by default; reads
-via `var`/`var_os` warn by default), and the existing `excluded_crates`
-convention.
+A Whitaker-specific `no_std_env_operations` lint is justified only for policy
+that the Clippy configuration and narrowly scoped `allow` attributes cannot
+express adequately: centrally configured module-boundary exemptions,
+operation-specific severity, and context-sensitive remediation. Production
+diagnostics would recommend an environment handle (for example
+`&dyn mockable::Env`, with `DefaultEnv` supplied at the composition root),
+while test diagnostics would recommend a stub such as `MockEnv` rather than
+process-global mutation. The implementation decision must follow a downstream
+trial of `disallowed_methods`, not precede it.
 
 ### Tier 2: recommended as follow-ups
 
@@ -214,31 +211,37 @@ revisited as a specialised consumer of the same fingerprints.
 
 ## Compatibility and migration
 
-All Tier 1 candidates follow the established Whitaker delivery pattern: a
-dedicated lint crate with UI tests (roadmap 2.1.1), Fluent localisation entries
-(roadmap §2.3), and feature-gated wiring into `whitaker_suite`. Each should
-launch as experimental, mirroring the promotion path defined for the `rstest`
-hygiene lints (roadmap 8.5.4), because two of the three
-(`assertion_missing_message` in particular) rely on noise heuristics that need
-tuning against real repositories before default enablement.
+`test_helper_must_return_result` follows the established Whitaker delivery
+pattern: a dedicated lint crate with UI tests (roadmap 2.1.1), Fluent
+localisation entries (roadmap §2.3), and feature-gated wiring into
+`whitaker_suite`. It should launch as experimental, mirroring the promotion
+path defined for the `rstest` hygiene lints (roadmap 8.5.4).
+
+The assertion and environment paths begin as Clippy configuration trials.
+Whitaker lint crates should be scheduled only after corpus and downstream
+results demonstrate residual behaviour that Clippy cannot express.
 
 `test_helper_must_return_result` must be sequenced after the shared `rstest`
 detection helpers (roadmap 8.1.1), which it reuses for step-attribute
-recognition. `no_std_env_operations` reuses the resolved-path classifier
-approach from `no_std_fs_operations` — which serves as its implementation
-template — and has no new infrastructure dependencies.
+recognition. If the Clippy trial justifies `no_std_env_operations`, it can
+reuse the resolved-path classifier approach from `no_std_fs_operations`.
 
 ## Alternatives considered
 
 ### Option A: rely on Clippy restriction lints
 
-Clippy offers adjacent lints (`missing_errors_doc`, `drop_non_drop`,
-`unwrap_used`). None covers the Tier 1 clusters: Clippy has no notion of BDD
-step functions, no assertion-message requirement scoped to helpers, and no
-environment-access restriction that steers towards an injectable handle with a
-sanctioned-boundary allowlist.
-Where Clippy does cover a cluster, this RFC excludes it rather than duplicating
-it.
+Clippy offers adjacent and directly applicable lints. `missing_assert_message`
+checks assertion macros without custom panic messages, and `disallowed_methods`
+can reject configured environment calls such as `std::env::var`. Those
+mechanisms should be enabled and evaluated before a new Whitaker lint is
+implemented.
+
+Clippy still has no notion of BDD step-function fallibility, does not compare
+the expected and actual bindings carried by a constructed error, and cannot
+centrally model Whitaker's sanctioned environment boundaries with
+context-sensitive remediation. Whitaker candidates are restricted to those
+residual behaviours. Where Clippy covers a cluster, this RFC excludes that arm
+rather than duplicating it.
 
 ### Option B: keep enforcement in CodeRabbit
 
@@ -251,32 +254,31 @@ findings that dominate the non-mechanical remainder of the corpus.
 
 ### Option C: one umbrella "test hygiene" lint
 
-Bundling the Tier 1 candidates into a single lint would reduce crate count but
-conflate unrelated policies, preventing consumers from adopting one without the
-others and complicating configuration. The suite already prices in
-one-crate-per-lint; the candidates stay separate.
+Bundling the Tier 1 enforcement paths into a single lint would conflate
+unrelated policies, duplicate Clippy, and prevent consumers from adopting one
+without the others. The residual Whitaker candidates stay separate.
 
 ## Open questions
 
 - Should `test_helper_must_return_result` extend to helpers reachable only
   from step functions (call-graph analysis), or stay attribute-scoped in its
   first iteration?
-- What operand-triviality heuristic keeps `assertion_missing_message` quiet
-  on idiomatic short unit tests without missing the helper-function cases the
-  corpus exhibits?
-- Should `no_std_env_operations` name `mockable::Env` in its help text as the
-  blessed handle, or keep the suggestion crate-neutral and let configuration
-  supply the preferred trait path?
+- After enabling `missing_assert_message`, how many corpus findings remain for
+  `assertion_context_incomplete`, and do they share a reliable expected/actual
+  binding shape?
+- Can scoped `allow(clippy::disallowed_methods)` attributes document all
+  sanctioned environment boundaries without excessive repetition, or is a
+  central `allowed_paths` model still warranted?
 
 ## Recommendation
 
-Schedule the three Tier 1 lints as a new roadmap step, sequenced after the
-shared helpers in roadmap 8.1. Two are test-hygiene lints;
-`no_std_env_operations` is broader, enforcing the injectable-environment
-pattern across production and test code alike. Take
-`error_context_discarded` and `no_drop_to_silence_unused` as Tier 2 follow-ups
-once the Tier 1 lints have shipped and their noise characteristics are
-understood. Record the two deferred candidates against their blocking
-infrastructure (roadmap §9 for `fallible_gap_before_guard`, roadmap §7 and §8
-experience for `parameterizable_duplicate_tests`) and revisit when that work
-lands.
+Schedule `test_helper_must_return_result` after the shared helpers in roadmap
+8.1. Configure and trial Clippy's `missing_assert_message` and
+`disallowed_methods` before scheduling either `assertion_context_incomplete` or
+`no_std_env_operations`; any Whitaker implementation must cover only the
+residual semantic or boundary-aware behaviour. Take `error_context_discarded`
+and `no_drop_to_silence_unused` as Tier 2 follow-ups once the Tier 1 work is
+complete and its noise characteristics are understood. Record the two deferred
+candidates against their blocking infrastructure (roadmap §9 for
+`fallible_gap_before_guard`, roadmap §7 and §8 experience for
+`parameterizable_duplicate_tests`) and revisit when that work lands.

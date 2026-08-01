@@ -939,24 +939,31 @@
 
 ## 13. CodeRabbit-derived lint candidates
 
-### 13.1. Immediate candidates
+### 13.1. Immediate and Clippy-first candidates
 
 - [ ] 13.1.1. Implement `test_helper_must_return_result` for test steps and
-  helpers that panic instead of propagating failure through `Result`. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
-  recommended for immediate scheduling. Requires 8.1.1 and 8.1.2.
-- [ ] 13.1.2. Implement `assertion_missing_message` for test assertions and
-  mismatch branches that omit the expected and actual diagnostic context. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
-  recommended for immediate scheduling. Requires 8.1.2.
-- [ ] 13.1.3. Implement `no_std_env_operations` for direct process-environment
-  access or mutation outside explicitly sanctioned boundaries, steering
-  callers towards injectable environment handles. See
-  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
-  recommended for immediate scheduling. Requires 2.1.1.
-- [ ] 13.1.4. Add the immediate candidates to the experimental suite, localize
-  their diagnostics, document their configuration, and define promotion
-  criteria based on false-positive tuning across downstream repositories.
+  helpers that panic instead of propagating failure through `Result`. See [RFC
+  0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1: recommended
+  for immediate scheduling.
+  Requires 8.1.1 and 8.1.2.
+- [ ] 13.1.2. Enable and trial Clippy's `missing_assert_message` against the
+  source corpus, then implement `assertion_context_incomplete` only for
+  surviving mismatch branches whose error payload omits either expected or
+  actual context. See [RFC
+  0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1: immediate and
+  Clippy-first candidates.
+  Requires 8.1.2.
+- [ ] 13.1.3. Trial Clippy's `disallowed_methods` for direct environment calls,
+  then implement `no_std_env_operations` only if centrally configured boundary
+  exemptions, operation-specific severity, or context-sensitive remediation
+  remain unmet. See [RFC
+  0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1: immediate and
+  Clippy-first candidates.
+  Requires 2.1.1.
+- [ ] 13.1.4. Add implemented candidates to the experimental suite, localize
+  their diagnostics, document Clippy prerequisites and configuration, and
+  define promotion criteria based on false-positive tuning across downstream
+  repositories.
   Requires 2.3.4, 13.1.1, 13.1.2, and 13.1.3.
 
 ### 13.2. Follow-up candidates
