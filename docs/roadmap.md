@@ -78,6 +78,11 @@
   suppressions narrowly scoped to the item they justify. See
   [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Migration plan. Requires
   1.3.3.
+- [ ] 2.2.10. Implement `string_continuation_style` as a post-expansion early
+  lint, including source-preserving `concat!()` suggestions, format-capture and
+  literal-context exemptions, localized diagnostics, and suite integration.
+  See [RFC 0002](rfcs/0002-string-continuation-style.md). Requires 2.1.1 and
+  2.3.4.
 
 ### 2.3. Localization enablement
 
@@ -931,3 +936,49 @@
   [Whitaker and cargo-compile-hygiene technical design](whitaker-and-cargo-compile-hygiene-technical-design.md)
   §Severity levels and build gating and §Integration, CI, and rollout.
   Requires 12.4.1.
+
+## 13. CodeRabbit-derived lint candidates
+
+### 13.1. Immediate candidates
+
+- [ ] 13.1.1. Implement `test_helper_must_return_result` for test steps and
+  helpers that panic instead of propagating failure through `Result`. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
+  recommended for immediate scheduling. Requires 8.1.1 and 8.1.2.
+- [ ] 13.1.2. Implement `assertion_missing_message` for test assertions and
+  mismatch branches that omit the expected and actual diagnostic context. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
+  recommended for immediate scheduling. Requires 8.1.2.
+- [ ] 13.1.3. Implement `no_std_env_operations` for direct process-environment
+  access or mutation outside explicitly sanctioned boundaries, steering
+  callers towards injectable environment handles. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
+  recommended for immediate scheduling. Requires 2.1.1.
+- [ ] 13.1.4. Add the immediate candidates to the experimental suite, localize
+  their diagnostics, document their configuration, and define promotion
+  criteria based on false-positive tuning across downstream repositories.
+  Requires 2.3.4, 13.1.1, 13.1.2, and 13.1.3.
+
+### 13.2. Follow-up candidates
+
+- [ ] 13.2.1. Implement `error_context_discarded` for mechanically provable
+  error-type or context erasure at propagation sites. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 2:
+  recommended as follow-ups. Requires 13.1.4.
+- [ ] 13.2.2. Implement `no_drop_to_silence_unused` for `drop(binding)` calls
+  used only to suppress an otherwise-unused parameter. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 2:
+  recommended as follow-ups. Requires 1.3.3 and 13.1.4.
+
+### 13.3. Deferred candidates
+
+- [ ] 13.3.1. Reassess and, if the ownership analysis supports a sufficiently
+  precise rule, implement `fallible_gap_before_guard` for fallible operations
+  between resource acquisition and guard construction. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
+  but deferred. Requires 9.1.4.
+- [ ] 13.3.2. Reassess and, if existing duplicate detection is too coarse for
+  test-specific guidance, implement `parameterizable_duplicate_tests` using
+  the established clone fingerprints. See
+  [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 3: recorded
+  but deferred. Requires 7.5.1 and 8.5.4.
