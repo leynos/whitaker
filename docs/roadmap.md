@@ -941,10 +941,12 @@
 
 ### 13.1. Immediate and Clippy-first candidates
 
-- [ ] 13.1.1. Implement `test_helper_must_return_result` for test steps and
-  helpers that panic instead of propagating failure through `Result`. See
+- [ ] 13.1.1. Implement `test_helper_must_return_result` for configured
+  test-step and fixture functions that panic instead of propagating failure
+  through `Result`. Control analysis of plain helper functions called from
+  those functions through configuration. See
   [RFC 0001](rfcs/0001-coderabbit-derived-lint-candidates.md) §Tier 1:
-  recommended for immediate scheduling. Requires 8.1.1 and 8.1.2.
+  immediate and Clippy-first candidates. Requires 8.1.1 and 8.1.2.
 - [ ] 13.1.2. Enable and trial Clippy's `missing_assert_message` against the
   source corpus, then implement `assertion_context_incomplete` only for
   surviving mismatch branches whose error payload omits either expected or

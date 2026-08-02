@@ -10,12 +10,12 @@
 
 A corpus of 192 CodeRabbit review findings was analysed, of which 83 target
 Rust source files. Recurring finding patterns that are mechanical enough to
-detect, not already covered by Clippy or rustc, and not already scheduled in
-`docs/roadmap.md` were distilled into seven candidate enforcement paths. One
-lint, `test_helper_must_return_result`, is recommended for immediate
-scheduling. Two paths require Clippy-first evaluation before Whitaker adds only
-the unmatched behaviour. Two further candidates are recommended as follow-ups,
-and two are recorded but deferred.
+detect, whose residual behaviour is not fully covered by Clippy or rustc, and
+that are not already scheduled in `docs/roadmap.md` were distilled into seven
+candidate enforcement paths. One lint, `test_helper_must_return_result`, is
+recommended for immediate scheduling. Two paths require Clippy-first evaluation
+before Whitaker adds only the unmatched behaviour. Two further candidates are
+recommended as follow-ups, and two are recorded but deferred.
 
 ## Problem
 
