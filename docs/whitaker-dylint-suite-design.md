@@ -748,8 +748,8 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
   boundaries, so `my_app::legacy_io` exempts that module and everything nested
   beneath it but never a sibling such as `my_app::legacy_io_utils`.
 - The pass loads both options during `check_crate`: `excluded_crates`
-  short-circuits every callback through `should_skip`, while `excluded_paths` is
-  parsed into a rustc-free `PathExclusions` set. Module-path exclusion is
+  short-circuits every callback through `should_skip`, while `excluded_paths`
+  is parsed into a rustc-free `PathExclusions` set. Module-path exclusion is
   resolved lazily in `is_path_excluded`, and only for genuine `std::fs` hits
   when `excluded_paths` is non-empty, so the common path pays no lookup cost.
 - The enclosing item's path is assembled from the crate name plus its def-path
@@ -760,12 +760,13 @@ qualified paths (`std::fs::read_to_string`) and items pulled in via
 For screen readers: the following sequence diagram traces a single `std::fs`
 finding through `emit_optional`. During `check_crate`, `NoStdFsOperations`
 obtains a `PathExclusions` set from `NoStdFsConfig`. Later, when `check_expr`,
-`check_item`, or `check_ty` calls `emit_optional`, the pass returns early if the
-crate is skipped or the usage is absent. Otherwise it calls `is_path_excluded`:
-when no path exclusions are configured it returns false immediately; otherwise it
-builds a `SimplePath` for the enclosing item via `enclosing_item_path` and asks
-`PathExclusions::excludes` whether that path is covered. A covered path
-suppresses the diagnostic, while any surviving usage is reported through `emit`.
+`check_item`, or `check_ty` calls `emit_optional`, the pass returns early if
+the crate is skipped or the usage is absent. Otherwise it calls
+`is_path_excluded`: when no path exclusions are configured it returns false
+immediately; otherwise it builds a `SimplePath` for the enclosing item via
+`enclosing_item_path` and asks `PathExclusions::excludes` whether that path is
+covered. A covered path suppresses the diagnostic, while any surviving usage is
+reported through `emit`.
 
 ```mermaid
 sequenceDiagram

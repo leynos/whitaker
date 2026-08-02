@@ -37,9 +37,8 @@ This executes unit, behaviour, and UI harness tests. The shared target enables
 
 The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
 the `excluded_crates` and `excluded_paths` configuration. These integration
-tests invoke
-`cargo dylint` in a subprocess, so they exercise the full lint-loading and
-configuration path, rather than only unit-level helpers.
+tests invoke `cargo dylint` in a subprocess, so they exercise the full
+lint-loading and configuration path, rather than only unit-level helpers.
 
 Fixture projects are generated at runtime using
 `create_fixture_project(crate_name, kind, is_excluded)`, which writes a
@@ -94,23 +93,23 @@ Each parametrized case asserts the subprocess exit status and the
 `no_std_fs_operations` diagnostic count, so the tests verify both the success
 path for excluded targets (zero diagnostics, exit 0) and the failure path for
 non-excluded targets (one or more diagnostics, non-zero exit). The
-path-exclusion fixture places its only `std::fs` usage inside `guarded::reader`,
-so a passing excluded case also confirms that the exclusion is scoped to the
-module and reaches descendants, rather than reflecting an accidental crate-wide
-suppression.
+path-exclusion fixture places its only `std::fs` usage inside
+`guarded::reader`, so a passing excluded case also confirms that the exclusion
+is scoped to the module and reaches descendants, rather than reflecting an
+accidental crate-wide suppression.
 
 Keep the `cargo dylint` integration tests thin: they exist to confirm the
 wiring (config loading, HIR path resolution, and diagnostic suppression) end to
 end, not to re-check every matching edge case. The module-path matching itself
 lives in the rustc-free `PathExclusions` type (`src/exclusion.rs`), which the
-lint pass consults per candidate usage. Because it is independent of `rustc`, it
-is covered cheaply and exhaustively by unit tests, a `proptest` property test
-against a segment-wise-prefix oracle, and the `path_exclusion.feature`
+lint pass consults per candidate usage. Because it is independent of `rustc`,
+it is covered cheaply and exhaustively by unit tests, a `proptest` property
+test against a segment-wise-prefix oracle, and the `path_exclusion.feature`
 behavioural scenarios — including the malformed-entry rejection that stops
-`my_app::` from collapsing into a crate-wide exclusion. The configuration schema
-and loading live in `src/config.rs` (`NoStdFsConfig`, the `ConfigReader` seam),
-kept separate from the lint pass in `src/driver.rs` so each file stays within
-the repository's size and single-responsibility limits.
+`my_app::` from collapsing into a crate-wide exclusion. The configuration
+schema and loading live in `src/config.rs` (`NoStdFsConfig`, the `ConfigReader`
+seam), kept separate from the lint pass in `src/driver.rs` so each file stays
+within the repository's size and single-responsibility limits.
 
 ### Fixture-based harness regressions
 
@@ -971,33 +970,33 @@ The dependency-install path is split into focused modules under
   archive, re-opens it through the capability, and orchestrates the
   checksum-verification call
 - `checksum.rs` fetches and parses the `.sha256` sidecar, then verifies the
-  SHA-256 checksum: `compute_sha256` streams the archive in fixed-size
-  chunks and renders the digest with `to_lower_hex`, and
-  `verify_archive_checksum` compares it against the expected value
+  SHA-256 checksum: `compute_sha256` streams the archive in fixed-size chunks
+  and renders the digest with `to_lower_hex`, and `verify_archive_checksum`
+  compares it against the expected value
 - `extractor.rs` extracts the exact packaged member into a temporary file and
   atomically renames it into the local bin directory
 - `installer.rs` orchestrates directory discovery, download, extraction, and
   executable permission fixes
 
-`downloader.rs` performs all archive filesystem I/O through a
-capability-scoped `cap_std::fs_utf8::Dir` rather than ambient `std::fs`.
+`downloader.rs` performs all archive filesystem I/O through a capability-scoped
+`cap_std::fs_utf8::Dir` rather than ambient `std::fs`.
 `open_download_destination` first converts the destination to a
 `camino::Utf8Path`, rejecting a non-UTF-8 path up front with an
 `io::ErrorKind::InvalidInput` error. It then calls `open_destination_dir`,
 which opens the destination's parent via
-`Dir::open_ambient_dir(parent, ambient_authority())`; this is the single
-point where the `ambient_authority()` grant bootstraps the capability. Every
+`Dir::open_ambient_dir(parent, ambient_authority())`; this is the single point
+where the `ambient_authority()` grant bootstraps the capability. Every
 subsequent archive operation — create, write, and re-open for checksum
 verification — goes through that `Dir` handle.
 
-The crate-level `installer/src/hex.rs` module (not part of the
-`install/` subdirectory above) provides `to_lower_hex`, which renders bytes
-as lowercase hex. It exists because `sha2` 0.11 changed `Sha256::finalize()`
-to return `hybrid_array::Array<u8, _>`, which does not implement
-`LowerHex`, and `Sha256` no longer implements `io::Write`, so neither
-`format!("{:x}", digest)` nor `io::copy(reader, &mut hasher)` compile
-against it any more. `to_lower_hex` is shared by `downloader.rs`,
-`artefact/packaging.rs`, and the `sha256_hex` test helper.
+The crate-level `installer/src/hex.rs` module (not part of the `install/`
+subdirectory above) provides `to_lower_hex`, which renders bytes as lowercase
+hex. It exists because `sha2` 0.11 changed `Sha256::finalize()` to return
+`hybrid_array::Array<u8, _>`, which does not implement `LowerHex`, and `Sha256`
+no longer implements `io::Write`, so neither `format!("{:x}", digest)` nor
+`io::copy(reader, &mut hasher)` compile against it any more. `to_lower_hex` is
+shared by `downloader.rs`, `artefact/packaging.rs`, and the `sha256_hex` test
+helper.
 
 `installer/src/deps.rs` drives the high-level fallback order:
 

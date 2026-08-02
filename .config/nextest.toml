@@ -4,13 +4,14 @@
 # CI always uses the ci profile.
 # ---------------------------------------------------------------------------
 [profile.default]
-# These Dylint fixture examples are executed by `tests/ui.rs::run_example`.
-# `--all-targets` would otherwise make Nextest discover and spawn them redundantly.
-default-filter = "not (binary(behaviour_toolchain) | binary(behaviour_cli) | (package(rstest_helper_should_be_fixture) & (binary(bootstrap_zero_diagnostic) | binary(collection_zero_diagnostic))))"
+# Dylint fixture examples are executed by their UI harnesses. `--all-targets`
+# would otherwise make Nextest discover and spawn them redundantly, racing the
+# harnesses that rebuild the same binaries.
+default-filter = "not (binary(behaviour_toolchain) | binary(behaviour_cli) | kind(example))"
 
 # CI profile — run the full suite including slow installer tests.
 [profile.ci]
-default-filter = "not (package(rstest_helper_should_be_fixture) & (binary(bootstrap_zero_diagnostic) | binary(collection_zero_diagnostic)))"
+default-filter = "not kind(example)"
 
 # Serialise dylint UI tests that build lint libraries and use
 # `#[serial]`.  nextest runs each test in its own process, so the
