@@ -2,6 +2,7 @@
 
 use super::*;
 use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use std::process::Command;
 use tempfile::TempDir;
@@ -23,7 +24,9 @@ fn git(dir: &Utf8Path, args: &[&str]) -> String {
 
 /// Commit the given file content in `dir` and return the resulting SHA.
 fn commit_file(dir: &Utf8Path, name: &str, contents: &str, message: &str) -> String {
-    std::fs::write(dir.join(name).as_std_path(), contents).expect("write fixture file");
+    let directory =
+        Dir::open_ambient_dir(dir, ambient_authority()).expect("open fixture directory");
+    directory.write(name, contents).expect("write fixture file");
     git(dir, &["add", "."]);
     git(
         dir,
@@ -119,6 +122,28 @@ fn checkout_detached_leaves_head_at_commit(git_fixture: GitFixture) {
         .output()
         .expect("spawn symbolic-ref");
     assert!(!symbolic.status.success(), "expected detached HEAD");
+}
+
+#[rstest]
+fn unpinned_no_update_preserves_detached_commit_gate(git_fixture: GitFixture) {
+    crate::workspace::pin_to_ref(&git_fixture.clone, "v1").expect("pin initial install");
+
+    let checkout = crate::workspace::finalize_workspace_checkout(
+        git_fixture.clone.clone(),
+        None,
+        crate::workspace::WorkspaceAction::UseExisting(git_fixture.clone.clone()),
+    )
+    .expect("reuse detached checkout without updating");
+
+    assert_eq!(checkout.pinned_commit, None);
+    assert_eq!(
+        checkout.detached_commit.as_deref(),
+        Some(git_fixture.first.as_str())
+    );
+    assert_eq!(
+        checkout.expected_git_sha(),
+        Some(git_fixture.first.as_str())
+    );
 }
 
 #[rstest]
@@ -249,8 +274,12 @@ fn pin_to_ref_falls_back_to_a_local_ref_offline(git_fixture: GitFixture) {
 #[test]
 fn clone_repository_error_includes_operation() {
     let target = TempDir::new().expect("clone target temp dir");
-    std::fs::write(target.path().join("occupied"), b"occupied").expect("write target file");
-    let target_path = Utf8PathBuf::try_from(target.path().to_owned()).expect("UTF-8 path");
+    let target_path = Utf8PathBuf::try_from(target.path().to_owned()).expect("UTF-8 target path");
+    let target_dir = Dir::open_ambient_dir(&target_path, ambient_authority())
+        .expect("open clone target directory");
+    target_dir
+        .write("occupied", b"occupied")
+        .expect("write target file");
 
     let err = clone_repository(&target_path).expect_err("clone into non-empty target should fail");
 

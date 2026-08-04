@@ -76,6 +76,7 @@ mod tests {
         WorkspaceCheckout {
             root: root.clone(),
             pinned_commit: Some(COMMIT.to_owned()),
+            detached_commit: None,
             action: WorkspaceAction::UseExisting(root),
         }
     }

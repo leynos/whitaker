@@ -224,6 +224,26 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
     });
 }
 
+#[test]
+fn unsupported_ref_is_rejected_before_dependency_install() {
+    let args = InstallArgs {
+        git_ref: Some("v0.2.5".to_owned()),
+        ..InstallArgs::default()
+    };
+    let mut stderr = Vec::new();
+    let mut installer_was_called = false;
+
+    let action = WorkspaceAction::UseCurrentDir(Utf8PathBuf::from("/workspace/whitaker"));
+    let error = ensure_dependencies_after_ref_validation(&args, &action, &mut stderr, |_, _| {
+        installer_was_called = true;
+        Ok(())
+    })
+    .expect_err("current workspace must reject a pinned ref");
+
+    assert!(matches!(error, InstallerError::RefUnsupported { .. }));
+    assert!(!installer_was_called);
+}
+
 #[derive(Debug, Clone)]
 struct TestBaseDirs {
     home_dir: Option<PathBuf>,

@@ -109,6 +109,20 @@ pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
     run_git_checked(&["checkout", "--detach", commit], Some(repo), "checkout")
 }
 
+/// Returns the detached HEAD commit, or `None` when HEAD names a branch.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if HEAD is detached but cannot be resolved.
+pub fn detached_head_commit(repo: &Utf8Path) -> Result<Option<String>> {
+    let symbolic =
+        run_git_with_timeout(&["symbolic-ref", "-q", "HEAD"], Some(repo), "symbolic-ref")?;
+    if symbolic.status.success() {
+        return Ok(None);
+    }
+    resolve_commit(repo, "HEAD").map(Some)
+}
+
 /// Reattaches the repository to its default branch when HEAD is detached.
 ///
 /// A previous pinned install may leave the platform clone on a detached HEAD,

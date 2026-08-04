@@ -17,8 +17,11 @@ fn parse_git_ref(value: &str) -> Result<String, String> {
     if value.starts_with('-') {
         return Err("ref must not begin with '-'".to_owned());
     }
-    if value.chars().any(char::is_whitespace) {
-        return Err("ref must not contain whitespace".to_owned());
+    if value
+        .chars()
+        .any(|character| character.is_whitespace() || character.is_control())
+    {
+        return Err("ref must not contain whitespace or control characters".to_owned());
     }
     Ok(value.to_owned())
 }

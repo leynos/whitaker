@@ -13,6 +13,9 @@ use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebu
 use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
 use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
 
+#[path = "behaviour_prebuilt/pinned_ref.rs"]
+mod pinned_ref;
+
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 const DEFAULT_TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -205,20 +208,6 @@ fn given_destination_path_conflict(world: &mut PrebuiltWorld) {
     world.force_destination_conflict = true;
 }
 
-#[given("the pinned commit does not match the manifest git SHA")]
-fn given_pinned_commit_mismatch(world: &mut PrebuiltWorld) {
-    // The shared test manifest records git_sha "abc1234"; this full SHA does
-    // not share that prefix, so the pinned install cannot reuse the artefact.
-    world.expected_git_sha = Some("deadbeef00000000000000000000000000000000".to_owned());
-}
-
-#[given("the pinned commit matches the manifest git SHA")]
-fn given_pinned_commit_matches(world: &mut PrebuiltWorld) {
-    // The shared test manifest records git_sha "abc1234"; this full SHA
-    // preserves that prefix and may reuse the rolling artefact.
-    world.expected_git_sha = Some("abc12340000000000000000000000000000000ab".to_owned());
-}
-
 #[when("prebuilt download is attempted")]
 fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
     let toolchain = world
@@ -401,21 +390,5 @@ fn scenario_toolchain_mismatch(world: PrebuiltWorld) {
     name = "Build-only flag skips prebuilt"
 )]
 fn scenario_build_only(world: PrebuiltWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/prebuilt_download.feature",
-    name = "Prebuilt is skipped when the pinned ref does not match"
-)]
-fn scenario_pinned_ref_mismatch(world: PrebuiltWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/prebuilt_download.feature",
-    name = "Prebuilt succeeds when the pinned ref matches"
-)]
-fn scenario_pinned_ref_match(world: PrebuiltWorld) {
     let _ = world;
 }

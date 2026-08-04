@@ -44,6 +44,7 @@ fn cli_parses_ref_flag_under_install_subcommand() {
 #[case::leading_hyphen("--ref=-release")]
 #[case::embedded_space("--ref=release candidate")]
 #[case::leading_space("--ref= release-candidate")]
+#[case::ansi_escape("--ref=release\u{1b}[31m")]
 fn cli_rejects_invalid_ref_values(#[case] git_ref: &str) {
     assert!(
         Cli::try_parse_from(["whitaker-installer", git_ref]).is_err(),
