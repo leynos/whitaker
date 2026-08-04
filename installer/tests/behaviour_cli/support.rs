@@ -5,7 +5,8 @@ mod pinned_ref;
 
 pub(super) use pinned_ref::{
     assert_pinned_ref_output_is_shown, assert_ref_unsupported_message_is_shown,
-    configure_dry_run_with_pinned_ref, configure_ref_in_workspace,
+    configure_dry_run_ref_in_workspace, configure_dry_run_with_pinned_ref,
+    configure_ref_in_workspace,
 };
 
 use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
@@ -29,6 +30,8 @@ pub(super) struct CliWorld {
     toolchain: RefCell<Option<String>>,
     // Keep temp_dir alive for the lifetime of the scenario.
     temp_dir: RefCell<Option<TempDir>>,
+    // Use an external working directory for scenarios that may pin a ref.
+    working_dir: RefCell<Option<TempDir>>,
 }
 
 #[fixture]
@@ -99,6 +102,12 @@ pub(super) fn setup_temp_dir(cli_world: &CliWorld) -> String {
     let target_dir = temp_dir.path().to_string_lossy().to_string();
     cli_world.temp_dir.replace(Some(temp_dir));
     target_dir
+}
+
+pub(super) fn use_external_working_dir(cli_world: &CliWorld) {
+    cli_world.working_dir.replace(Some(
+        TempDir::new().expect("failed to create working directory"),
+    ));
 }
 
 fn detect_host_target() -> Option<String> {
@@ -209,7 +218,12 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
     let args = cli_world.args.borrow();
     let mut command = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     command.args(args.iter());
-    command.current_dir(workspace_root());
+    let working_dir = cli_world.working_dir.borrow();
+    command.current_dir(
+        working_dir
+            .as_ref()
+            .map_or_else(workspace_root, |dir| dir.path().to_owned()),
+    );
     if cli_world.should_use_test_staged_suite.get() {
         command.env(TEST_STAGE_SUITE_ENV, "1");
     }

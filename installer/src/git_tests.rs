@@ -182,10 +182,17 @@ fn fetch_ref_retrieves_a_new_tag(git_fixture: GitFixture) {
     let source = Utf8PathBuf::try_from(git_fixture._source.path().to_owned()).expect("UTF-8 path");
     let third = commit_file(&source, "c.txt", "three", "third");
     git(&source, &["tag", "v2"]);
+    commit_file(&source, "d.txt", "four", "unrelated tag commit");
+    git(&source, &["tag", "unrelated"]);
 
     // The clone cannot resolve the new tag until it fetches.
     assert!(resolve_commit(&git_fixture.clone, "v2").is_err());
-    fetch_ref(&git_fixture.clone, "v2").expect("fetch new tag");
+    let fetched = fetch_ref(&git_fixture.clone, "v2").expect("fetch new tag");
+    assert_eq!(fetched, third);
+    assert_eq!(
+        resolve_commit(&git_fixture.clone, PINNED_REF).expect("resolve private pinned ref"),
+        third
+    );
     assert_eq!(
         resolve_commit(&git_fixture.clone, "v2").expect("resolve v2"),
         third
@@ -207,6 +214,32 @@ fn pin_to_ref_fetches_and_checks_out_a_new_remote_branch(git_fixture: GitFixture
         git(&git_fixture.clone, &["rev-parse", "HEAD"]),
         branch_commit
     );
+    assert_eq!(
+        git(&git_fixture.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "HEAD"
+    );
+}
+
+#[rstest]
+fn pin_to_ref_prefers_an_updated_remote_branch(git_fixture: GitFixture) {
+    let source = Utf8PathBuf::try_from(git_fixture._source.path().to_owned()).expect("UTF-8 path");
+    let third = commit_file(&source, "c.txt", "three", "third");
+
+    let pinned_commit = crate::workspace::pin_to_ref(&git_fixture.clone, "main")
+        .expect("fetch and pin updated main");
+
+    assert_eq!(pinned_commit, third);
+    assert_eq!(git(&git_fixture.clone, &["rev-parse", "HEAD"]), third);
+}
+
+#[rstest]
+fn pin_to_ref_falls_back_to_a_local_ref_offline(git_fixture: GitFixture) {
+    git(&git_fixture.clone, &["remote", "remove", "origin"]);
+
+    let pinned_commit = crate::workspace::pin_to_ref(&git_fixture.clone, "v1")
+        .expect("pin locally available tag while offline");
+
+    assert_eq!(pinned_commit, git_fixture.first);
     assert_eq!(
         git(&git_fixture.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
         "HEAD"

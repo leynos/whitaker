@@ -39,3 +39,8 @@ fn scenario_pin_the_suite_to_a_ref_in_dry_run(cli_world: CliWorld) {
 fn scenario_refuse_ref_inside_a_whitaker_workspace(cli_world: CliWorld) {
     let _ = cli_world;
 }
+
+#[scenario(path = "tests/features/installer.feature", index = 25)]
+fn scenario_refuse_ref_during_dry_run_inside_a_whitaker_workspace(cli_world: CliWorld) {
+    let _ = cli_world;
+}

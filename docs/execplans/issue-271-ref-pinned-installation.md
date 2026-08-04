@@ -88,14 +88,13 @@ clone recovers from the detached checkout).
   Severity: high. Likelihood: certain without mitigation.
   Mitigation: the update path must reattach the clone to the default branch
   before pulling (Stage C step 3). This is a required behaviour, tested.
-- Risk: the prebuilt manifest's `git_sha` format (full versus abbreviated
-  SHA) is not yet confirmed, so SHA comparison against a resolved ref could
-  mismatch.
-  Severity: medium. Likelihood: medium.
-  Mitigation: Stage A confirms the format from
-  `installer/src/artefact/git_sha.rs` and the release workflow; comparison
-  uses prefix-tolerant matching only if the manifest stores an abbreviated
-  SHA, otherwise exact equality.
+- Risk (resolved in Stage A): the prebuilt manifest's `git_sha` format could
+  have made comparison against a resolved ref incorrect. Stage A confirmed
+  that current rolling producers emit abbreviated SHAs.
+  Severity: medium. Likelihood: resolved.
+  Resolution: require the resolved full commit SHA to start with the
+  manifest's abbreviated SHA. Exact full-SHA equality remains rejected while
+  the producer contract is abbreviated.
 - Risk: tags in the whitaker repository may not exist for every released
   installer version, making `--ref v0.2.5` fail for users.
   Severity: low (documentation issue, not a code defect).
@@ -129,15 +128,16 @@ clone recovers from the detached checkout).
   functions) → green (8 real-git TempDir tests). See
   <https://github.com/leynos/whitaker/commit/a7de0ba03ecc5e20bc4c128b11f013dd9fe8edc2>.
 - [x] (2026-07-08) Stage B/C slice 3: workspace plumbing — `WorkspaceCheckout`,
-  `ensure_workspace(dirs, update, git_ref)`, `RefUnsupported`, pin-on-miss
-  fetch, `ensure_default_branch` before every update. Red (E0425/E0599) → green.
+  `ensure_workspace(dirs, update, git_ref)`, `RefUnsupported`, requested-ref
+  fetching with local fallback, and `ensure_default_branch` before every
+  update. Red (E0425/E0599) → green.
   See
   <https://github.com/leynos/whitaker/commit/ded3ac53dd40feee95f4e0d698053b0d019876b0>.
 - [x] (2026-07-08) Stage B/C slice 4: prebuilt `expected_git_sha` validation
   (prefix-tolerant) threaded through the fast path. Red (mismatch returned
   Success) → green (3 unit + 1 BDD). Commit c65281c.
 - [x] (2026-07-08) Stage B/C slice 5: dry-run `git_ref` field, pinning progress
-  message, 2 CLI BDD scenarios (pinned dry-run, refuse in workspace). Red
+  messages, 2 CLI BDD scenarios (pinned dry-run, refuse in workspace). Red
   (missing "Pinned ref:" line) → green. Commit 4caa7d6.
 - [x] (2026-07-08) Stage D: documented `--ref` in `docs/users-guide.md`
   (new "Pinning the suite" subsection) and `README.md`; `--help` examples
@@ -157,10 +157,10 @@ clone recovers from the detached checkout).
   fixture, Git recovery and pinning, capability-write, helper-boundary, and
   documentation findings remained valid.
 - [x] (2026-08-01) Converted `git_fixture` to an injected `rstest` fixture;
-  added real-Git coverage for missing `origin/HEAD` repair and fetch-on-miss
-  pinning; extracted `finalize_workspace_checkout`; routed prebuilt test writes
-  through a directory capability; and applied the documentation corrections.
-- [x] (2026-08-01) Final review validation passed: `make check-fmt`
+  added real-Git coverage for missing `origin/HEAD` repair and fetched pinning;
+  extracted `finalize_workspace_checkout`; routed prebuilt test writes through
+  a directory capability; and applied the documentation corrections.
+- [x] (2026-08-01) Historical review validation passed: `make check-fmt`
   (`/tmp/final-current-check-fmt-7b3c543c-issue-271-ref-pinned-installation.out`);
   `make test`, 1,482/1,482 passed and 3 skipped
   (`/tmp/final-current-test-7b3c543c-issue-271-ref-pinned-installation.out`);
@@ -172,6 +172,20 @@ clone recovers from the detached checkout).
   (`/tmp/final-current-markdownlint-7b3c543c-issue-271-ref-pinned-installation.out`),
   and Nixie validated all diagrams
   (`/tmp/final-current-nixie-7b3c543c-issue-271-ref-pinned-installation.out`).
+- [x] (2026-08-04) Rebased onto `origin/main` and verified the latest review
+  findings. The implementation now fetches a requested ref into a dedicated
+  local ref before resolving it, falling back to local resolution only when
+  fetch fails; `WorkspaceCheckout` carries the selected `WorkspaceAction` so
+  progress reporting uses the action that was actually performed.
+- [x] (2026-08-04) Final post-rebase validation passed: `make check-fmt`
+  (`/tmp/issue271-rebase-final-check-fmt.log`); `make test`, 1,688/1,688
+  passed, 5 skipped, and 7 slow (`/tmp/issue271-rebase-final-test.log`);
+  `make typecheck` (`/tmp/issue271-rebase-final-typecheck.log`); and
+  `make lint`, including Cargo documentation and Clippy
+  (`/tmp/issue271-rebase-final-lint.log`). Markdownlint initially found one
+  extra blank line; after the Scribe correction it passed 76 files with 0
+  errors (`/tmp/issue271-rebase-docfix-markdownlint.log`). Nixie passed 76
+  files and 15 Mermaid diagrams (`/tmp/issue271-rebase-docfix-nixie.log`).
 
 ## Surprises & discoveries
 
@@ -195,6 +209,10 @@ clone recovers from the detached checkout).
   `test_utils::prebuilt_manifest_json` hardcodes `"git_sha":"abc1234"`. The
   prebuilt SHA-match tests therefore key off that literal: a full SHA beginning
   `abc1234…` matches; any other value is a mismatch.
+- (2026-08-04, review pass) Resolving `FETCH_HEAD` after a fetch is ambiguous
+  when Git records more than one fetched object. Fetching the requested
+  refspec into `refs/whitaker/pinned-ref` gives pinning a stable name to resolve
+  regardless of unrelated tags.
 
 ## Decision log
 
@@ -212,11 +230,13 @@ clone recovers from the detached checkout).
   therefore not reproducible pins; the documentation says so.
   Date/Author: 2026-07-08, agent.
 - Decision: `--ref` composes with `--no-update` rather than conflicting.
-  With both flags, the installer resolves the ref against the existing clone
-  without fetching; it fetches only when the ref cannot be resolved locally.
+  With both flags, the installer first attempts to fetch the requested ref into
+  its dedicated local ref. If fetching fails, it resolves an already-available
+  local ref or SHA, preserving offline pinned installs.
   Rationale: "use my existing clone, offline, at this ref" is a coherent and
-  useful request; fetch-on-miss keeps the common pinned-CI path working.
-  Date/Author: 2026-07-08, agent.
+  useful request; fetch-first avoids silently pinning a stale local branch,
+  while local fallback preserves the offline case.
+  Date/Author: 2026-08-04, review feedback.
 - Decision: with `--ref`, the prebuilt fast path is attempted only when the
   resolved commit SHA matches the rolling manifest's `git_sha`; any mismatch
   falls back to a source build of the pinned commit. Without `--ref`,
@@ -244,11 +264,11 @@ clone recovers from the detached checkout).
   for the intended reason (recorded in Progress and Artefacts).
   Date/Author: 2026-07-08, agent.
 - Decision (implementation): the user sees two messages when pinning — a
-  pre-checkout `Pinning Whitaker suite to REF...` progress line and, after the
-  detached checkout resolves, a `Pinned Whitaker suite to REF (SHORT_SHA).`
-  confirmation. The plan's single "Pinning ... (SHORT_SHA)" line was split
-  because the short SHA is only known after the pin resolves.
-  Date/Author: 2026-07-08, agent.
+  `Pinning Whitaker suite to REF...` progress line followed by a `Pinned
+  Whitaker suite to REF (SHORT_SHA).` confirmation. Workspace preparation
+  resolves the pin before reporting; the messages remain separate to preserve
+  the established progress output while confirming the resolved short SHA.
+  Date/Author: 2026-08-04, review feedback.
 - Decision (architecture): `installer/src/git.rs` owns
   `WHITAKER_REPO_URL`, because it is the only module that uses the value to
   perform repository operations. `installer/src/workspace.rs` re-exports the
@@ -289,6 +309,14 @@ clone recovers from the detached checkout).
   Rationale: these changes test Git's actual ref behaviour, remove repeated
   fixture setup, and keep filesystem authority scoped to temporary test data.
   Date/Author: 2026-08-01, agent.
+- Decision (review progress): `ensure_workspace` returns the selected
+  `WorkspaceAction` in `WorkspaceCheckout`; the reporter renders that recorded
+  action after setup rather than recomputing it from the current directory and
+  clone path. Pinning retains its two messages: `Pinning Whitaker suite to
+  REF...` and, after resolution, `Pinned Whitaker suite to REF (SHORT_SHA).`
+  Rationale: reporting the executed action prevents filesystem state changes
+  from making the displayed action diverge from the action that was selected.
+  Date/Author: 2026-08-04, review feedback.
 
 ## Outcomes & retrospective
 
@@ -297,8 +325,9 @@ Delivered across six commits on `issue-271-ref-pinned-installation`: the CLI
 (`WorkspaceCheckout` + `ensure_workspace(dirs, update, git_ref)`), prebuilt
 `expected_git_sha` gating, dry-run/progress messaging, and documentation. All
 gates (`check-fmt`, `lint`, `test`, `markdownlint`) passed before each commit;
-the final `make test` ran 1472 tests (1472 passed, 3 skipped). Every new test
-failed first for the intended reason (see `Artefacts`). The manual smoke test
+the historical initial-implementation `make test` snapshot ran 1,472 tests
+(1,472 passed, 3 skipped). Every new test failed first for the intended reason
+(see `Artefacts`). The manual smoke test
 exercised the pin, the in-workspace refusal, the toolchain-embedded staged
 filename, and the detached-HEAD recovery end-to-end against tag `v0.2.4`.
 
@@ -317,22 +346,35 @@ context structs surfaced literal constructors in the binary's own test modules
 compile; an early `cargo check --all-targets` sweep catches these.
 
 The latest review follow-up now contains the minimal valid changes: reusable
-`rstest` Git setup, real-Git regressions for default-branch repair and
-fetch-on-miss pinning, capability-scoped prebuilt fixture writes, a private
+`rstest` Git setup, real-Git regressions for default-branch repair and fetched
+pinning, capability-scoped prebuilt fixture writes, a private
 checkout finalizer with an explicit orchestration boundary, and terminology
 corrections. The test-only `cap-std` declaration makes an already-resolved
 crate available directly to the installer tests; no runtime dependency was
 added. The requested full-SHA-only comparison remains deliberately
-unimplemented because it conflicts with the rolling manifest format. Final
-validation passed: 1,482/1,482 tests passed with 3 skipped, and formatting,
-type-checking, Cargo documentation, Clippy, Markdownlint, and Nixie were clean.
+unimplemented because it conflicts with the rolling manifest format. A
+historical review snapshot reported 1,482/1,482 tests passed with 3 skipped;
+formatting, type-checking, Cargo documentation, Clippy, Markdownlint, and Nixie
+were clean.
 
 The 2026-08-01 review follow-up strengthens the real-Git failure and lifecycle
 coverage, adds SHA-prefix property tests, and removes the workspace-to-git
 module cycle. `make check-fmt`, `make typecheck`, and `make lint` passed; lint
-included rustdoc and Clippy with warnings denied. `make test` passed all 1,481
-tests, with 3 skipped and 1 slow. `make markdownlint` checked 70 files with 0
-errors, and `make nixie` reported all diagrams valid.
+included rustdoc and Clippy with warnings denied. That historical pre-rebase
+`make test` result was 1,481 tests passed, with 3 skipped and 1 slow.
+`make markdownlint` checked 70 files with 0 errors, and `make nixie` reported
+all diagrams valid.
+
+The 2026-08-04 review pass makes pinning fetch the requested ref into a
+dedicated local ref before resolving it, with local resolution as the offline
+fallback. It also records the selected `WorkspaceAction` in
+`WorkspaceCheckout`, so progress output describes the operation that
+`ensure_workspace` actually selected. The exact-full-SHA proposal remains
+rejected because current rolling producers emit abbreviated SHAs. The
+authoritative final `make test` result is 1,688/1,688 passed, with 5 skipped
+and 7 slow. Formatting, type-checking, Cargo documentation, Clippy,
+Markdownlint, and Nixie also passed; the final documentation checks covered 76
+files and 15 Mermaid diagrams.
 
 ## Context and orientation
 
@@ -358,7 +400,10 @@ relative to the repository root:
   `WHITAKER_REPO_URL`, `WorkspaceAction` (`UseCurrentDir` / `CloneTo` /
   `UpdateAt` / `UseExisting`),
   `decide_workspace_action(cwd, clone_dir, update)`, and
-  `ensure_workspace(dirs, update)` which executes the action.
+  `resolve_workspace_action(dirs, update)`. The latter selects from the live
+  environment, while `ensure_workspace(dirs, update, git_ref)` executes that
+  action and returns it in `WorkspaceCheckout` with the root and optional
+  pinned commit.
 - `installer/src/git.rs` — the owning definition of `WHITAKER_REPO_URL`,
   `clone_repository`, `update_repository`, and the private
   `run_git_with_timeout(args, working_dir, operation)` helper (5-min timeout,
@@ -436,7 +481,8 @@ Stage C — implementation, in five small commits:
 2. Git helpers in `installer/src/git.rs`: `resolve_commit(repo, refspec) ->
    Result<String>` (`git rev-parse --verify <refspec>^{commit}`),
    `fetch_ref(repo, refspec) -> Result<String>`
-   (`git fetch origin <refspec> --tags`, then resolve `FETCH_HEAD`),
+   (fetch the requested refspec into `refs/whitaker/pinned-ref`, then resolve
+   that dedicated ref),
    `checkout_detached(repo, commit)` (`git checkout --detach <commit>`), and
    `ensure_default_branch(repo)` (no-op when already on a branch; otherwise
    discover the default branch per Stage A and check it out). All through
@@ -447,21 +493,23 @@ Stage C — implementation, in five small commits:
    `UseCurrentDir` with a ref → the refusal error; on `CloneTo` → clone then
    pin; on `UpdateAt` → `ensure_default_branch` then pull then pin; on
    `UseExisting` with a ref → pin without pulling. "Pin" means: try
-   `resolve_commit`; on failure `fetch_ref` once and use its resolved
-   `FETCH_HEAD`; then `checkout_detached`. Crucially, even an unpinned
+   `fetch_ref` first; if fetching fails, try `resolve_commit` locally; then
+   `checkout_detached`. Crucially, even an unpinned
    `UpdateAt` calls `ensure_default_branch` first, fixing the recovery risk.
-   Return both the workspace path and the resolved commit SHA (a small
-   `WorkspaceCheckout { root: Utf8PathBuf, pinned_commit: Option<String> }`
-   struct) so `main.rs` can hand the SHA to the prebuilt path.
+   Return the selected action, workspace path, and resolved commit SHA in
+   `WorkspaceCheckout` so `main.rs` can hand the SHA to the prebuilt path and
+   render progress from the action that was actually selected.
 4. Prebuilt: add `expected_git_sha: Option<&'a str>` to `PrebuiltConfig`,
    validate in `run_pipeline` after the target check using the Stage A
    comparison rule, and thread the value from `run_install` through
    `PrebuiltInstallationContext` and `try_prebuilt_installation`. Update the
    fixed-signature `AttemptPrebuiltFn` type alias and hooks in
    `install_flow.rs` as needed.
-5. Dry run and messaging: add the ref to `DryRunInfo` and its
-   `display_text`; in `ensure_whitaker_workspace`'s progress messages, print
-   `Pinning Whitaker suite to REF (SHORT_SHA)...` when a ref is given.
+5. Dry run and messaging: add the ref to `DryRunInfo` and its `display_text`.
+   After workspace setup, pinning progress prints `Pinning Whitaker suite to
+   REF...`, followed by `Pinned Whitaker suite to REF (SHORT_SHA).`
+   Workspace-action progress is rendered from `WorkspaceCheckout.action`
+   rather than by repeating the action-selection inputs.
 
 Stage D — documentation and closure: document `--ref` in
 `docs/users-guide.md` (a "Pinning the suite" subsection: what it accepts,
@@ -593,8 +641,8 @@ Red/Green evidence (gate logs under `/tmp/*-whitaker-issue-271*.out`):
 - Slice 5 (dry-run/messaging): red — `dry_run_display_includes_ref_when_pinned`
   failed (no `Pinned ref:` line); green 2 output tests + the pinned dry-run and
   in-workspace refusal CLI BDD scenarios pass.
-- Full suite green each slice: final `make test` reported 1472 tests run,
-  1472 passed, 3 skipped.
+- Full suite green each slice: the historical initial-implementation
+  `make test` snapshot reported 1,472 tests run, 1,472 passed, and 3 skipped.
 
 Review follow-up test inventory (full gates passed):
 
@@ -666,7 +714,13 @@ breaking change; all in-repo callers updated in the same commit):
 pub struct WorkspaceCheckout {
     pub root: Utf8PathBuf,
     pub pinned_commit: Option<String>,
+    pub action: WorkspaceAction,
 }
+
+pub fn resolve_workspace_action(
+    dirs: &dyn BaseDirs,
+    update: bool,
+) -> Result<WorkspaceAction>;
 
 pub fn ensure_workspace(
     dirs: &dyn BaseDirs,
@@ -705,5 +759,18 @@ This revision uses “artefacts” consistently and clarifies that ordinary no-r
 behaviour remains rolling while allowing recovery from a detached clone left
 by a prior pin. It records the verified finding dispositions, the implemented
 test and helper changes, and the reason full-SHA-only validation was rejected.
-Final validation passed, including 1,482/1,482 tests with 3 skipped, formatting,
-type-checking, Cargo documentation, Clippy, Markdownlint, and Nixie.
+That historical review validation included 1,482/1,482 tests with 3 skipped,
+plus formatting, type-checking, Cargo documentation, Clippy, Markdownlint, and
+Nixie.
+
+## Revision note (2026-08-04, rebase review pass)
+
+This revision marks the abbreviated-SHA risk resolved by Stage A, labels the
+1,472, 1,482, and 1,481 test snapshots as historical, and records the
+authoritative final result of 1,688/1,688 passed, with 5 skipped and 7 slow. It
+synchronizes the plan with fetch-first pinning through a dedicated local ref
+and local fallback on fetch failure, action-carrying `WorkspaceCheckout`, and
+progress rendered from the selected action. It also records the implemented
+two-message pinning output, reaffirms that exact full-SHA validation is
+incompatible with abbreviated rolling producers, and records the clean final
+formatting, type-checking, lint, Markdownlint, and Nixie results.

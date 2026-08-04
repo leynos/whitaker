@@ -146,3 +146,9 @@ Feature: Whitaker lint library installer
     When the installer CLI is run
     Then the CLI exits with an error
     And a ref-unsupported message is shown
+
+  Scenario: Refuse --ref during dry-run inside a Whitaker workspace
+    Given the installer is invoked with dry-run and a ref from a Whitaker workspace
+    When the installer CLI is run
+    Then the CLI exits with an error
+    And a ref-unsupported message is shown

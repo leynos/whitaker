@@ -1,6 +1,9 @@
 //! Pinned-ref setup and assertions for installer CLI behaviour scenarios.
 
-use super::{CliWorld, ensure_required_toolchain_available, output_for_assertions, setup_temp_dir};
+use super::{
+    CliWorld, ensure_required_toolchain_available, output_for_assertions, setup_temp_dir,
+    use_external_working_dir,
+};
 
 /// The ref used by the pinned-install CLI scenarios.
 const SCENARIO_REF: &str = "v0.2.5";
@@ -11,12 +14,21 @@ pub(crate) fn configure_dry_run_with_pinned_ref(cli_world: &CliWorld) {
     };
 
     let target_dir = setup_temp_dir(cli_world);
+    use_external_working_dir(cli_world);
     cli_world.args.replace(vec![
         "--dry-run".to_owned(),
         "--toolchain".to_owned(),
         channel,
         "--target-dir".to_owned(),
         target_dir,
+        "--ref".to_owned(),
+        SCENARIO_REF.to_owned(),
+    ]);
+}
+
+pub(crate) fn configure_dry_run_ref_in_workspace(cli_world: &CliWorld) {
+    cli_world.args.replace(vec![
+        "--dry-run".to_owned(),
         "--ref".to_owned(),
         SCENARIO_REF.to_owned(),
     ]);

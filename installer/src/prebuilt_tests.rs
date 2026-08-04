@@ -15,7 +15,7 @@ const TARGET: &str = "x86_64-unknown-linux-gnu";
 const TOOLCHAIN: &str = "nightly-2026-05-28";
 
 /// A full 40-hex commit SHA beginning with the test manifest's `abc1234`.
-const MATCHING_COMMIT: &str = "abc1234000000000000000000000000000000ab";
+const MATCHING_COMMIT: &str = "abc12340000000000000000000000000000000ab";
 
 /// A full 40-hex commit SHA that does not share the manifest's prefix.
 const MISMATCHED_COMMIT: &str = "deadbeef00000000000000000000000000000000";
@@ -107,7 +107,7 @@ fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     }
 }
 
-/// Build a happy-path config plus mocks, overriding only `expected_git_sha`.
+/// Construct downloader and extractor mocks for the successful prebuilt path.
 fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
     let fake_sha = sha256_hex(FAKE_ARCHIVE);
     let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
@@ -203,23 +203,7 @@ fn test_fallback_scenario(
 fn happy_path_returns_success() {
     let (_temp, destination_dir) = destination_dir();
     let config = base_config(&destination_dir);
-    let fake_sha = sha256_hex(FAKE_ARCHIVE);
-    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
-
-    let mut downloader = MockArtefactDownloader::new();
-    downloader
-        .expect_download_manifest()
-        .returning(move |_| Ok(manifest_json.clone()));
-    downloader
-        .expect_download_archive()
-        .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
-
-    let mut extractor = MockArtefactExtractor::new();
-    extractor.expect_extract().returning(|_archive, dest| {
-        let source_name = "libwhitaker_suite.so".to_owned();
-        std::fs::write(dest.join(&source_name), b"fake").expect("write extracted file");
-        Ok(vec![source_name])
-    });
+    let (downloader, extractor) = success_mocks();
 
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);

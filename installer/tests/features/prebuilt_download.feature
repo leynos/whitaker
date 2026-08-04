@@ -58,3 +58,11 @@ Feature: Prebuilt artefact download and verification
     When prebuilt download is attempted
     Then the prebuilt result is fallback
     And the fallback reason mentions "SHA mismatch"
+
+  Scenario: Prebuilt succeeds when the pinned ref matches
+    Given a valid manifest for target "x86_64-unknown-linux-gnu"
+    And a matching archive with correct checksum
+    And the pinned commit matches the manifest git SHA
+    When prebuilt download is attempted
+    Then the prebuilt result is success
+    And the staging path uses toolchain, target, and lib directories

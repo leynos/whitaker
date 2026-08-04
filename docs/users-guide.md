@@ -207,9 +207,10 @@ The pin composes with the other flags:
   the pinned commit from source. Because the pinned commit supplies its own
   `rust-toolchain.toml`, the staged libraries are named for that commit's
   toolchain channel.
-- **`--no-update`.** With `--ref <REF> --no-update` the installer resolves the
-  ref against the existing clone without fetching, and only fetches when the
-  ref cannot be resolved locally. This keeps offline, pinned installs working.
+- **`--no-update`.** With `--ref <REF> --no-update` the installer skips the
+  default-branch update but still attempts to fetch the requested ref. If that
+  fetch fails, it falls back to a ref or SHA already available in the existing
+  clone, so offline pinned installs continue to work.
 
 `--ref` is refused when the current directory is itself a Whitaker workspace,
 because checking out a commit there could destroy uncommitted work. Run the

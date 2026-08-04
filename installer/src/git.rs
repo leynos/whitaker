@@ -16,6 +16,9 @@ const GIT_TIMEOUT: Duration = Duration::from_secs(300);
 /// Repository URL for cloning Whitaker.
 pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
 
+/// Private ref used to identify the commit fetched for a requested pin.
+const PINNED_REF: &str = "refs/whitaker/pinned-ref";
+
 /// Clones the Whitaker repository to the specified target directory.
 ///
 /// Creates the parent directories if they do not exist. The operation has
@@ -78,15 +81,20 @@ pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
 /// Fetches a specific ref (and all tags) from `origin` into the repository.
 ///
 /// Used to recover when a pinned ref cannot be resolved from the existing
-/// clone. Runs `git fetch origin <refspec> --tags`, then resolves `FETCH_HEAD`
-/// to return the exact commit fetched for the requested ref.
+/// clone. The requested ref is force-updated into a private local ref so the
+/// returned commit cannot be confused with another entry fetched by `--tags`.
 ///
 /// # Errors
 ///
 /// Returns `InstallerError::Git` if the fetch fails or times out.
 pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
-    run_git_checked(&["fetch", "origin", refspec, "--tags"], Some(repo), "fetch")?;
-    resolve_commit(repo, "FETCH_HEAD")
+    let pinned_refspec = format!("+{refspec}:{PINNED_REF}");
+    run_git_checked(
+        &["fetch", "origin", &pinned_refspec, "--tags"],
+        Some(repo),
+        "fetch",
+    )?;
+    resolve_commit(repo, PINNED_REF)
 }
 
 /// Checks out a commit as a detached HEAD.

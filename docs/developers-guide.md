@@ -1872,7 +1872,6 @@ This skips building entirely, providing faster lint runs during development.
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
 
-
 #### Private helper boundaries
 
 Installer helpers remain private to the module that owns their side effects.
@@ -1882,11 +1881,16 @@ commands that inspect output or interpret a non-zero status must continue to use
 `run_git_with_timeout` directly. Real-Git regression fixtures and tests belong
 in `git_tests.rs`, keeping the production adapter focused. The helpers in
 `workspace_progress.rs` only render operator messages at the CLI edge and must
-not clone, update, or pin the checkout themselves.
+not clone, update, pin, or rediscover the checkout themselves.
+`workspace::resolve_workspace_action` owns the environment-dependent action
+selection and is shared with dry-run validation. `ensure_workspace` performs
+that action and returns it in `WorkspaceCheckout`; `report_workspace_progress`
+must render from this recorded action instead of recomputing repository state.
 `workspace::finalize_workspace_checkout` is called only from
 `ensure_workspace` action arms after each arm's current-directory, clone, or
 update setup. It may combine optional pinning with `WorkspaceCheckout`
-construction; it must not clone, update, or reattach a repository.
+construction and record the supplied action; it must not select an action or
+clone, update, or reattach a repository.
 
 Behaviour-test support follows the same ownership rule.
 `behaviour_cli::support::output_for_assertions` combines scenario-skip handling

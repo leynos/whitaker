@@ -212,6 +212,13 @@ fn given_pinned_commit_mismatch(world: &mut PrebuiltWorld) {
     world.expected_git_sha = Some("deadbeef00000000000000000000000000000000".to_owned());
 }
 
+#[given("the pinned commit matches the manifest git SHA")]
+fn given_pinned_commit_matches(world: &mut PrebuiltWorld) {
+    // The shared test manifest records git_sha "abc1234"; this full SHA
+    // preserves that prefix and may reuse the rolling artefact.
+    world.expected_git_sha = Some("abc12340000000000000000000000000000000ab".to_owned());
+}
+
 #[when("prebuilt download is attempted")]
 fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
     let toolchain = world
@@ -402,5 +409,13 @@ fn scenario_build_only(world: PrebuiltWorld) {
     name = "Prebuilt is skipped when the pinned ref does not match"
 )]
 fn scenario_pinned_ref_mismatch(world: PrebuiltWorld) {
+    let _ = world;
+}
+
+#[scenario(
+    path = "tests/features/prebuilt_download.feature",
+    name = "Prebuilt succeeds when the pinned ref matches"
+)]
+fn scenario_pinned_ref_match(world: PrebuiltWorld) {
     let _ = world;
 }

@@ -9,6 +9,20 @@ use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 
+/// Validate a commit-ish supplied to `--ref` without normalizing it.
+fn parse_git_ref(value: &str) -> Result<String, String> {
+    if value.is_empty() {
+        return Err("ref must not be empty".to_owned());
+    }
+    if value.starts_with('-') {
+        return Err("ref must not begin with '-'".to_owned());
+    }
+    if value.chars().any(char::is_whitespace) {
+        return Err("ref must not contain whitespace".to_owned());
+    }
+    Ok(value.to_owned())
+}
+
 /// Install Whitaker Dylint lint libraries.
 #[derive(Parser, Debug)]
 #[command(name = "whitaker-installer")]
@@ -140,7 +154,7 @@ pub struct InstallArgs {
     pub is_build_only: bool,
 
     /// Install the lint suite at a specific commit SHA or tag [default: rolling].
-    #[arg(long = "ref", value_name = "REF")]
+    #[arg(long = "ref", value_name = "REF", value_parser = parse_git_ref)]
     pub git_ref: Option<String>,
 }
 

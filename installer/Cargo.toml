@@ -78,7 +78,6 @@ zip = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]
-cap-std = { workspace = true }
 libc = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }

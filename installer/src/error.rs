@@ -106,10 +106,12 @@ pub enum InstallerError {
     },
 
     /// Pinning a ref is not supported for the current directory workspace.
-    #[error("{message}")]
+    #[error(
+        "cannot pin --ref {git_ref}: the current directory is itself a Whitaker workspace; run the installer from outside a checkout to pin the suite"
+    )]
     RefUnsupported {
-        /// The refusal message, naming the requested ref.
-        message: String,
+        /// The requested ref that cannot be pinned in the current workspace.
+        git_ref: String,
     },
 
     /// A Cargo.toml file could not be parsed during workspace detection.
@@ -238,8 +240,8 @@ impl Clone for InstallerError {
             Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
                 reason: reason.clone(),
             },
-            Self::RefUnsupported { message } => Self::RefUnsupported {
-                message: message.clone(),
+            Self::RefUnsupported { git_ref } => Self::RefUnsupported {
+                git_ref: git_ref.clone(),
             },
             Self::InvalidCargoToml { path, reason } => Self::InvalidCargoToml {
                 path: path.clone(),

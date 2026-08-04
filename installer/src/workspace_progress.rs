@@ -1,37 +1,24 @@
 //! Operator-facing progress messages for managed workspace operations.
 //!
-//! This module keeps CLI reporting separate from checkout mutation. It predicts
-//! the action before installation and reports the resolved pin afterwards.
+//! This module keeps CLI reporting separate from checkout mutation. It reports
+//! the action recorded by workspace preparation and the resolved pin.
 
-use camino::Utf8PathBuf;
 use std::io::Write;
 use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::output::write_stderr_line;
-use whitaker_installer::workspace::{
-    WorkspaceAction, WorkspaceCheckout, clone_directory, decide_workspace_action,
-};
+use whitaker_installer::workspace::{WorkspaceAction, WorkspaceCheckout};
 
-/// Reports the workspace action and requested pin before the operation starts.
+/// Reports the workspace action and requested pin selected during preparation.
 pub(super) fn report_workspace_progress(
     args: &InstallArgs,
-    dirs: &dyn BaseDirs,
+    checkout: &WorkspaceCheckout,
     stderr: &mut dyn Write,
 ) {
     if args.quiet {
         return;
     }
-    let Some(clone_dir) = clone_directory(dirs) else {
-        return;
-    };
-    let Some(cwd) = std::env::current_dir()
-        .ok()
-        .and_then(|path| Utf8PathBuf::try_from(path).ok())
-    else {
-        return;
-    };
 
-    match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
+    match &checkout.action {
         WorkspaceAction::CloneTo(dir) => {
             write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
         }
@@ -74,4 +61,48 @@ pub(super) fn report_pinned_checkout(
 fn short_commit(commit: &str) -> &str {
     let end = commit.len().min(12);
     &commit[..end]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+    use rstest::rstest;
+
+    const COMMIT: &str = "abc1234567890000000000000000000000000000";
+
+    fn pinned_checkout() -> WorkspaceCheckout {
+        let root = Utf8PathBuf::from("/managed/whitaker");
+        WorkspaceCheckout {
+            root: root.clone(),
+            pinned_commit: Some(COMMIT.to_owned()),
+            action: WorkspaceAction::UseExisting(root),
+        }
+    }
+
+    #[rstest]
+    #[case::requested_ref(Some("v0.2.5"), "Pinned Whitaker suite to v0.2.5 (abc123456789).\n")]
+    #[case::commit_fallback(
+        None,
+        "Pinned Whitaker suite to abc1234567890000000000000000000000000000 (abc123456789).\n"
+    )]
+    fn pinned_checkout_reports_exact_message(
+        #[case] git_ref: Option<&str>,
+        #[case] expected: &str,
+    ) {
+        let mut output = Vec::new();
+
+        report_pinned_checkout(false, git_ref, &pinned_checkout(), &mut output);
+
+        assert_eq!(String::from_utf8(output).expect("UTF-8 output"), expected);
+    }
+
+    #[test]
+    fn pinned_checkout_is_silent_in_quiet_mode() {
+        let mut output = Vec::new();
+
+        report_pinned_checkout(true, Some("v0.2.5"), &pinned_checkout(), &mut output);
+
+        assert!(output.is_empty());
+    }
 }

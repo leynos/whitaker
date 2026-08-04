@@ -32,7 +32,7 @@ use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::toolchain::Toolchain;
-use whitaker_installer::workspace::WorkspaceCheckout;
+use whitaker_installer::workspace::{WorkspaceAction, WorkspaceCheckout};
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 fn main() {
@@ -172,9 +172,16 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
 
 /// Runs in dry-run mode, showing configuration without side effects.
 fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()> {
-    use whitaker_installer::workspace::resolve_workspace_path;
+    use whitaker_installer::workspace::{ensure_ref_allowed, resolve_workspace_action};
 
-    let workspace_root = resolve_workspace_path(dirs)?;
+    let action = resolve_workspace_action(dirs, !args.no_update)?;
+    ensure_ref_allowed(&action, args.git_ref.as_deref())?;
+    let workspace_root = match action {
+        WorkspaceAction::UseCurrentDir(dir)
+        | WorkspaceAction::CloneTo(dir)
+        | WorkspaceAction::UpdateAt(dir)
+        | WorkspaceAction::UseExisting(dir) => dir,
+    };
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     toolchain.verify_installed()?;
@@ -227,9 +234,8 @@ fn ensure_whitaker_workspace(
     use whitaker_installer::workspace::ensure_workspace;
 
     let git_ref = args.git_ref.as_deref();
-    workspace_progress::report_workspace_progress(args, dirs, stderr);
-
     let checkout = ensure_workspace(dirs, !args.no_update, git_ref)?;
+    workspace_progress::report_workspace_progress(args, &checkout, stderr);
     workspace_progress::report_pinned_checkout(args.quiet, git_ref, &checkout, stderr);
     Ok(checkout)
 }

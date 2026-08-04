@@ -39,6 +39,29 @@ fn cli_parses_ref_flag_under_install_subcommand() {
     }
 }
 
+#[rstest]
+#[case::empty("--ref=")]
+#[case::leading_hyphen("--ref=-release")]
+#[case::embedded_space("--ref=release candidate")]
+#[case::leading_space("--ref= release-candidate")]
+fn cli_rejects_invalid_ref_values(#[case] git_ref: &str) {
+    assert!(
+        Cli::try_parse_from(["whitaker-installer", git_ref]).is_err(),
+        "expected {git_ref:?} to be rejected"
+    );
+}
+
+#[rstest]
+#[case::tag("v0.2.5")]
+#[case::sha("1a2b3c4d")]
+#[case::branch("release/candidate")]
+#[case::revision_expression("main~2")]
+fn cli_preserves_valid_ref_values(#[case] git_ref: &str) {
+    let cli = Cli::try_parse_from(["whitaker-installer", "--ref", git_ref])
+        .expect("valid commit-ish should parse");
+    assert_eq!(cli.install.git_ref.as_deref(), Some(git_ref));
+}
+
 #[test]
 fn cli_parses_target_dir() {
     let cli = Cli::parse_from(["whitaker-installer", "-t", "/tmp/dylint"]);
