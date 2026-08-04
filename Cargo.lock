@@ -933,9 +933,9 @@ dependencies = [
 
 [[package]]
 name = "fluent-template-macros"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6b1dac7e7f07f8a60aa844f616bede13deeffaf24e9e35ae9e4979a7dac4a5c"
+checksum = "ff6dd017985e1ee7940ec294498b5ca7ae413341c76c1f677c5d8a76ab163d13"
 dependencies = [
  "flume",
  "ignore",
@@ -947,9 +947,9 @@ dependencies = [
 
 [[package]]
 name = "fluent-templates"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d48ac2b8e7c3a2198fc584af78e674d15dacdede8a6cebb686c844713f7d0ba"
+checksum = "dfdb7905767cfbcd4c1cef52d8008e51d8c8eab70722f13260e11d30ad400bd9"
 dependencies = [
  "fluent-bundle",
  "fluent-langneg",
