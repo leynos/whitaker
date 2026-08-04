@@ -4,11 +4,98 @@ use super::*;
 use crate::artefact::download::MockArtefactDownloader;
 use crate::artefact::extraction::MockArtefactExtractor;
 use crate::test_utils::{prebuilt_manifest_json, sha256_hex};
+use cap_std::{ambient_authority, fs::Dir};
+use proptest::prelude::*;
+use proptest::test_runner::TestCaseError;
 use rstest::rstest;
+use std::path::Path;
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 const TOOLCHAIN: &str = "nightly-2026-05-28";
+
+/// A full 40-hex commit SHA beginning with the test manifest's `abc1234`.
+const MATCHING_COMMIT: &str = "abc12340000000000000000000000000000000ab";
+
+/// A full 40-hex commit SHA that does not share the manifest's prefix.
+const MISMATCHED_COMMIT: &str = "deadbeef00000000000000000000000000000000";
+
+fn commit_sha_strategy() -> impl Strategy<Value = String> {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+    prop::collection::vec(0_u8..16, 40).prop_map(|nibbles| {
+        nibbles
+            .into_iter()
+            .map(|nibble| char::from(HEX_DIGITS[usize::from(nibble)]))
+            .collect()
+    })
+}
+
+fn manifest_with_git_sha(git_sha: &str) -> serde_json::Result<Manifest> {
+    serde_json::from_value(serde_json::json!({
+        "git_sha": git_sha,
+        "schema_version": 1,
+        "toolchain": TOOLCHAIN,
+        "target": TARGET,
+        "generated_at": "2026-02-03T00:00:00Z",
+        "files": ["libwhitaker_suite.so"],
+        "sha256": "a".repeat(64),
+    }))
+}
+
+/// Writes a test file relative to a capability rooted at its parent directory.
+fn write_test_file(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "test file path has no parent directory",
+        )
+    })?;
+    let file_name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "test file path has no file name",
+        )
+    })?;
+    let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
+    dir.write(file_name, contents)
+}
+
+proptest! {
+    #[test]
+    fn git_sha_prefixes_across_supported_lengths_are_accepted(
+        commit in commit_sha_strategy(),
+        prefix_len in 7_usize..=40,
+    ) {
+        let manifest = manifest_with_git_sha(&commit[..prefix_len])
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        prop_assert!(validate_git_sha(&manifest, Some(&commit)).is_ok());
+    }
+
+    #[test]
+    fn changed_nibble_in_git_sha_prefix_is_rejected(
+        commit in commit_sha_strategy(),
+        prefix_len in 7_usize..=40,
+    ) {
+        let mut manifest_sha = commit[..prefix_len].to_owned();
+        let replacement = if manifest_sha.starts_with('0') { "1" } else { "0" };
+        manifest_sha.replace_range(..1, replacement);
+        let manifest = manifest_with_git_sha(&manifest_sha)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        match validate_git_sha(&manifest, Some(&commit)) {
+            Err(PrebuiltError::GitShaMismatch { manifest, expected }) => {
+                prop_assert_eq!(manifest, manifest_sha);
+                prop_assert_eq!(expected, commit);
+            }
+            other => {
+                return Err(TestCaseError::fail(format!(
+                    "expected GitShaMismatch, got {other:?}"
+                )));
+            }
+        }
+    }
+}
 
 fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     PrebuiltConfig {
@@ -16,7 +103,66 @@ fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
         toolchain: TOOLCHAIN,
         destination_dir,
         quiet: true,
+        expected_git_sha: None,
     }
+}
+
+/// Construct downloader and extractor mocks for the successful prebuilt path.
+fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
+    let fake_sha = sha256_hex(FAKE_ARCHIVE);
+    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
+    let mut downloader = MockArtefactDownloader::new();
+    downloader
+        .expect_download_manifest()
+        .returning(move |_| Ok(manifest_json.clone()));
+    downloader
+        .expect_download_archive()
+        .returning(|_filename, dest| {
+            write_test_file(dest, FAKE_ARCHIVE).map_err(DownloadError::Io)
+        });
+    let mut extractor = MockArtefactExtractor::new();
+    extractor.expect_extract().returning(|_archive, dest| {
+        let source_name = "libwhitaker_suite.so".to_owned();
+        write_test_file(&dest.join(&source_name), b"fake").expect("write extracted file");
+        Ok(vec![source_name])
+    });
+    (downloader, extractor)
+}
+
+#[test]
+fn expected_git_sha_mismatch_returns_fallback() {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        expected_git_sha: Some(MISMATCHED_COMMIT),
+        ..base_config(&destination_dir)
+    };
+    let (downloader, extractor) = success_mocks();
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    match result {
+        PrebuiltResult::Fallback { reason } => {
+            assert!(reason.contains("SHA mismatch"), "reason: {reason}");
+        }
+        other => panic!("expected Fallback, got {other:?}"),
+    }
+}
+
+#[rstest]
+#[case::matching_commit(Some(MATCHING_COMMIT))]
+#[case::unpinned(None)]
+fn matching_or_unpinned_git_sha_returns_success(#[case] expected_git_sha: Option<&str>) {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        expected_git_sha,
+        ..base_config(&destination_dir)
+    };
+    let (downloader, extractor) = success_mocks();
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    assert!(
+        matches!(result, PrebuiltResult::Success { .. }),
+        "expected Success, got {result:?}"
+    );
 }
 
 fn destination_dir() -> (tempfile::TempDir, Utf8PathBuf) {
@@ -57,23 +203,7 @@ fn test_fallback_scenario(
 fn happy_path_returns_success() {
     let (_temp, destination_dir) = destination_dir();
     let config = base_config(&destination_dir);
-    let fake_sha = sha256_hex(FAKE_ARCHIVE);
-    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
-
-    let mut downloader = MockArtefactDownloader::new();
-    downloader
-        .expect_download_manifest()
-        .returning(move |_| Ok(manifest_json.clone()));
-    downloader
-        .expect_download_archive()
-        .returning(|_filename, dest| std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io));
-
-    let mut extractor = MockArtefactExtractor::new();
-    extractor.expect_extract().returning(|_archive, dest| {
-        let source_name = "libwhitaker_suite.so".to_owned();
-        std::fs::write(dest.join(&source_name), b"fake").expect("write extracted file");
-        Ok(vec![source_name])
-    });
+    let (downloader, extractor) = success_mocks();
 
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);

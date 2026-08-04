@@ -6,12 +6,14 @@
 
 mod install_flow;
 mod staged_suite;
+mod workspace_progress;
 
 #[cfg(test)]
 use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
     MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
-    ensure_dylint_tools_with_executor, try_prebuilt_installation, write_install_metrics,
+    ensure_dependencies_after_ref_validation, ensure_dylint_tools_with_executor,
+    try_prebuilt_installation, write_install_metrics,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
@@ -31,6 +33,7 @@ use whitaker_installer::resolution::{
     CrateResolutionOptions, resolve_crates, validate_crate_names,
 };
 use whitaker_installer::toolchain::Toolchain;
+use whitaker_installer::workspace::{WorkspaceAction, WorkspaceCheckout};
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 fn main() {
@@ -75,6 +78,7 @@ fn try_fast_path_installation(
         dirs: context.dirs,
         requested_crates: context.requested_crates,
         toolchain_channel: context.toolchain.channel(),
+        expected_git_sha: context.expected_git_sha,
     };
     if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
         return Ok(Some((staging_path, InstallMode::Download)));
@@ -91,9 +95,8 @@ fn try_fast_path_installation(
 
 /// Runs the install command to build and stage lint libraries.
 ///
-/// Workflow: (1) check/install Dylint dependencies, (2) locate/clone workspace,
-/// (3) resolve crates from CLI flags, (4) build in release mode, (5) stage
-/// libraries with toolchain-suffixed names, (6) generate wrapper script.
+/// Validates the request, prepares dependencies and a workspace, then installs
+/// the selected lint libraries and wrapper scripts.
 ///
 /// # Errors
 ///
@@ -106,13 +109,11 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         return run_dry(args, &dirs, stderr);
     }
     let install_started = Instant::now();
-    // Step 1: Check and install Dylint dependencies if needed
-    if !args.skip_deps {
-        ensure_dylint_tools(args.quiet, stderr)?;
-    }
-    // Step 2: Ensure workspace is available (clone if needed)
-    let workspace_root = ensure_whitaker_workspace(args, &dirs, stderr)?;
-    // Step 3: Resolve crates and toolchain
+    // Reject unsafe pin requests before dependency installation can mutate the host.
+    validate_ref_then_ensure_dependencies(args, &dirs, stderr, ensure_dylint_tools)?;
+    let workspace = ensure_whitaker_workspace(args, &dirs, stderr)?;
+    let expected_git_sha = workspace.expected_git_sha().map(str::to_owned);
+    let workspace_root = workspace.root;
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     ensure_toolchain_installed(
@@ -122,13 +123,13 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         stderr,
     )?;
     let target_dir = determine_target_dir(args.target_dir.as_deref())?;
-    // Step 3.5: Attempt prebuilt download or staged-suite fast path.
     let fast_path_context = FastPathContext {
         args,
         dirs: &dirs,
         requested_crates: &requested_crates,
         toolchain: &toolchain,
         target_dir: &target_dir,
+        expected_git_sha: expected_git_sha.as_deref(),
     };
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
@@ -151,7 +152,6 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         experimental: args.experimental,
         quiet: args.quiet,
     };
-    // Step 4: Build and stage
     let build_results = perform_build(&context, &requested_crates, stderr)?;
     let staging_path = stage_libraries(&context, &build_results, stderr)?;
     // Step 5: Generate wrapper scripts if requested
@@ -167,9 +167,16 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
 
 /// Runs in dry-run mode, showing configuration without side effects.
 fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> Result<()> {
-    use whitaker_installer::workspace::resolve_workspace_path;
+    use whitaker_installer::workspace::{ensure_ref_allowed, resolve_workspace_action};
 
-    let workspace_root = resolve_workspace_path(dirs)?;
+    let action = resolve_workspace_action(dirs, !args.no_update)?;
+    ensure_ref_allowed(&action, args.git_ref.as_deref())?;
+    let workspace_root = match action {
+        WorkspaceAction::UseCurrentDir(dir)
+        | WorkspaceAction::CloneTo(dir)
+        | WorkspaceAction::UpdateAt(dir)
+        | WorkspaceAction::UseExisting(dir) => dir,
+    };
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
     toolchain.verify_installed()?;
@@ -185,9 +192,26 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         no_update: args.no_update,
         jobs: args.jobs,
         crates: &requested_crates,
+        git_ref: args.git_ref.as_deref(),
     };
     write_stderr_line(stderr, info.display_text());
     Ok(())
+}
+
+/// Validates a pin request before permitting dependency installation.
+fn validate_ref_then_ensure_dependencies<F>(
+    args: &InstallArgs,
+    dirs: &dyn BaseDirs,
+    stderr: &mut dyn Write,
+    ensure_dependencies: F,
+) -> Result<()>
+where
+    F: FnOnce(bool, &mut dyn Write) -> Result<()>,
+{
+    use whitaker_installer::workspace::resolve_workspace_action;
+
+    let action = resolve_workspace_action(dirs, !args.no_update)?;
+    ensure_dependencies_after_ref_validation(args, &action, stderr, ensure_dependencies)
 }
 
 fn determine_dry_run_target_dir(
@@ -217,34 +241,14 @@ fn ensure_whitaker_workspace(
     args: &InstallArgs,
     dirs: &dyn BaseDirs,
     stderr: &mut dyn Write,
-) -> Result<Utf8PathBuf> {
-    use whitaker_installer::workspace::{
-        WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
-    };
+) -> Result<WorkspaceCheckout> {
+    use whitaker_installer::workspace::ensure_workspace;
 
-    if !args.quiet
-        && let Some(clone_dir) = clone_directory(dirs)
-    {
-        let cwd = std::env::current_dir()
-            .ok()
-            .and_then(|p| Utf8PathBuf::try_from(p).ok());
-
-        let Some(cwd) = cwd else {
-            return ensure_workspace(dirs, !args.no_update);
-        };
-
-        match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
-            WorkspaceAction::CloneTo(dir) => {
-                write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
-            }
-            WorkspaceAction::UpdateAt(dir) => {
-                write_stderr_line(stderr, format!("Updating Whitaker repository at {dir}..."));
-            }
-            WorkspaceAction::UseCurrentDir(_) | WorkspaceAction::UseExisting(_) => {}
-        }
-    }
-
-    ensure_workspace(dirs, !args.no_update)
+    let git_ref = args.git_ref.as_deref();
+    let checkout = ensure_workspace(dirs, !args.no_update, git_ref)?;
+    workspace_progress::report_workspace_progress(args, &checkout, stderr);
+    workspace_progress::report_pinned_checkout(args.quiet, git_ref, &checkout, stderr);
+    Ok(checkout)
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.
@@ -307,6 +311,7 @@ struct FastPathContext<'a> {
     requested_crates: &'a [CrateName],
     toolchain: &'a Toolchain,
     target_dir: &'a Utf8PathBuf,
+    expected_git_sha: Option<&'a str>,
 }
 
 /// Finalize installation and record aggregate installer metrics.

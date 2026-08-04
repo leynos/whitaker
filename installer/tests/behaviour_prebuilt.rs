@@ -13,6 +13,9 @@ use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebu
 use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
 use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
 
+#[path = "behaviour_prebuilt/pinned_ref.rs"]
+mod pinned_ref;
+
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 const DEFAULT_TOOLCHAIN: &str = "nightly-2026-05-28";
@@ -115,6 +118,7 @@ struct PrebuiltWorld {
     should_attempt_prebuilt: Option<bool>,
     force_destination_conflict: bool,
     attempted_destination: Option<Utf8PathBuf>,
+    expected_git_sha: Option<String>,
 }
 
 #[fixture]
@@ -229,6 +233,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
         toolchain,
         destination_dir: &destination_dir,
         quiet: true,
+        expected_git_sha: world.expected_git_sha.as_deref(),
     };
 
     let manifest_behaviour = world

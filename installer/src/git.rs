@@ -5,7 +5,6 @@
 //! configurable timeout to prevent hangs on network issues.
 
 use crate::error::{InstallerError, Result};
-use crate::workspace::WHITAKER_REPO_URL;
 use camino::Utf8Path;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
@@ -13,6 +12,12 @@ use wait_timeout::ChildExt;
 
 /// Default timeout for git operations (5 minutes).
 const GIT_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Repository URL for cloning Whitaker.
+pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
+
+/// Private ref used to identify the commit fetched for a requested pin.
+const PINNED_REF: &str = "refs/whitaker/pinned-ref";
 
 /// Clones the Whitaker repository to the specified target directory.
 ///
@@ -28,21 +33,11 @@ pub fn clone_repository(target: &Utf8Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let output = run_git_with_timeout(
+    run_git_checked(
         &["clone", WHITAKER_REPO_URL, target.as_str()],
         None,
         "clone",
-    )?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(InstallerError::Git {
-            operation: "clone",
-            message: stderr.trim().to_owned(),
-        });
-    }
-
-    Ok(())
+    )
 }
 
 /// Updates an existing Whitaker repository by pulling the latest changes.
@@ -54,17 +49,160 @@ pub fn clone_repository(target: &Utf8Path) -> Result<()> {
 ///
 /// Returns `InstallerError::Git` if the pull fails or times out.
 pub fn update_repository(repo: &Utf8Path) -> Result<()> {
-    let output = run_git_with_timeout(&["pull"], Some(repo), "pull")?;
+    run_git_checked(&["pull"], Some(repo), "pull")
+}
+
+/// Resolves a commit-ish (SHA, tag, or branch) to a full commit SHA.
+///
+/// Runs `git rev-parse --verify <refspec>^{commit}` in the repository so that
+/// only expressions naming an existing commit succeed; annotated tags are
+/// peeled to the commit they point at.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if the ref cannot be resolved or the command
+/// times out.
+pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
+    let peeled = format!("{refspec}^{{commit}}");
+    let output =
+        run_git_with_timeout(&["rev-parse", "--verify", &peeled], Some(repo), "rev-parse")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(InstallerError::Git {
-            operation: "pull",
-            message: stderr.trim().to_owned(),
+            operation: "rev-parse",
+            message: format!("could not resolve ref '{refspec}': {}", stderr.trim()),
         });
     }
 
-    Ok(())
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+/// Fetches a specific ref (and all tags) from `origin` into the repository.
+///
+/// Used to recover when a pinned ref cannot be resolved from the existing
+/// clone. The requested ref is force-updated into a private local ref so the
+/// returned commit cannot be confused with another entry fetched by `--tags`.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if the fetch fails or times out.
+pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
+    let pinned_refspec = format!("+{refspec}:{PINNED_REF}");
+    run_git_checked(
+        &["fetch", "origin", &pinned_refspec, "--tags"],
+        Some(repo),
+        "fetch",
+    )?;
+    resolve_commit(repo, PINNED_REF)
+}
+
+/// Checks out a commit as a detached HEAD.
+///
+/// Runs `git checkout --detach <commit>`, leaving the working tree at exactly
+/// the given commit without moving any branch.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if the checkout fails or times out.
+pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
+    run_git_checked(&["checkout", "--detach", commit], Some(repo), "checkout")
+}
+
+/// Returns the detached HEAD commit, or `None` when HEAD names a branch.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if HEAD is detached but cannot be resolved.
+pub fn detached_head_commit(repo: &Utf8Path) -> Result<Option<String>> {
+    let symbolic =
+        run_git_with_timeout(&["symbolic-ref", "-q", "HEAD"], Some(repo), "symbolic-ref")?;
+    if symbolic.status.success() {
+        return Ok(None);
+    }
+    resolve_commit(repo, "HEAD").map(Some)
+}
+
+/// Reattaches the repository to its default branch when HEAD is detached.
+///
+/// A previous pinned install may leave the platform clone on a detached HEAD,
+/// which makes a later `git pull` fail. This restores a branch checkout so that
+/// subsequent updates succeed. It is a no-op when HEAD is already on a branch.
+///
+/// The default branch is discovered from `origin/HEAD`
+/// (`git rev-parse --abbrev-ref origin/HEAD`, e.g. `origin/main`); when an older
+/// clone lacks that symbolic ref, `git remote set-head origin --auto` restores
+/// it before retrying.
+///
+/// # Errors
+///
+/// Returns `InstallerError::Git` if the default branch cannot be determined or
+/// checked out.
+pub fn ensure_default_branch(repo: &Utf8Path) -> Result<()> {
+    // When HEAD already names a branch, there is nothing to reattach.
+    let symbolic =
+        run_git_with_timeout(&["symbolic-ref", "-q", "HEAD"], Some(repo), "symbolic-ref")?;
+    if symbolic.status.success() {
+        return Ok(());
+    }
+
+    let branch = default_branch_name(repo)?;
+    run_git_checked(&["checkout", &branch], Some(repo), "checkout")
+}
+
+/// Discovers the remote default branch name (without the `origin/` prefix).
+fn default_branch_name(repo: &Utf8Path) -> Result<String> {
+    if let Some(branch) = read_default_branch(repo)? {
+        return Ok(branch);
+    }
+
+    // An older clone may lack origin/HEAD; ask git to repopulate it, then retry.
+    let _ = run_git_with_timeout(
+        &["remote", "set-head", "origin", "--auto"],
+        Some(repo),
+        "remote",
+    )?;
+
+    read_default_branch(repo)?.ok_or_else(|| InstallerError::Git {
+        operation: "rev-parse",
+        message: "could not determine default branch from origin/HEAD".to_owned(),
+    })
+}
+
+/// Reads `origin/HEAD` and returns the bare branch name, if present.
+fn read_default_branch(repo: &Utf8Path) -> Result<Option<String>> {
+    let output = run_git_with_timeout(
+        &["rev-parse", "--abbrev-ref", "origin/HEAD"],
+        Some(repo),
+        "rev-parse",
+    )?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    Ok(value
+        .strip_prefix("origin/")
+        .map(ToOwned::to_owned)
+        .filter(|branch| !branch.is_empty()))
+}
+
+/// Runs a Git command whose successful output is intentionally discarded.
+fn run_git_checked(
+    args: &[&str],
+    working_dir: Option<&Utf8Path>,
+    operation: &'static str,
+) -> Result<()> {
+    let output = run_git_with_timeout(args, working_dir, operation)?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(InstallerError::Git {
+        operation,
+        message: stderr.trim().to_owned(),
+    })
 }
 
 /// Runs a git command with a timeout.
@@ -149,28 +287,5 @@ fn run_git_with_timeout(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn clone_repository_error_includes_operation() {
-        let err = InstallerError::Git {
-            operation: "clone",
-            message: "test error".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("clone"));
-        assert!(msg.contains("test error"));
-    }
-
-    #[test]
-    fn update_repository_error_includes_operation() {
-        let err = InstallerError::Git {
-            operation: "pull",
-            message: "not a git repository".to_owned(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("pull"));
-        assert!(msg.contains("not a git repository"));
-    }
-}
+#[path = "git_tests.rs"]
+mod tests;

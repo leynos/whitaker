@@ -25,6 +25,24 @@ use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+use whitaker_installer::workspace::{WorkspaceAction, ensure_ref_allowed};
+
+/// Validates a ref before invoking the dependency installer.
+pub(crate) fn ensure_dependencies_after_ref_validation<F>(
+    args: &InstallArgs,
+    action: &WorkspaceAction,
+    stderr: &mut dyn Write,
+    ensure_dependencies: F,
+) -> Result<()>
+where
+    F: FnOnce(bool, &mut dyn Write) -> Result<()>,
+{
+    ensure_ref_allowed(action, args.git_ref.as_deref())?;
+    if !args.skip_deps {
+        ensure_dependencies(args.quiet, stderr)?;
+    }
+    Ok(())
+}
 
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,
@@ -83,6 +101,8 @@ pub(crate) struct PrebuiltInstallationContext<'a> {
     pub(crate) requested_crates: &'a [CrateName],
     /// Toolchain channel resolved for this install.
     pub(crate) toolchain_channel: &'a str,
+    /// Resolved pinned commit SHA, when installing at a specific `--ref`.
+    pub(crate) expected_git_sha: Option<&'a str>,
 }
 
 /// Context for recording one successful install in aggregate metrics.
@@ -181,6 +201,7 @@ fn try_prebuilt_installation_with(
         toolchain: context.toolchain_channel,
         destination_dir: &destination_dir,
         quiet: context.args.quiet,
+        expected_git_sha: context.expected_git_sha,
     };
 
     let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
