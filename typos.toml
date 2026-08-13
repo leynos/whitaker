@@ -34,6 +34,11 @@ extend-exclude = [
 [default]
 locale = "en-gb"
 extend-ignore-re = [
+    "-fuse-ld=mold",
+    "mold linker",
+    "Cranelift \\+ mold",
+    "Cranelift and mold",
+    "`mold`",
     "(?m)^                        \\.context\\(\"failed to serialise diagnostic for snapshot\"\\),$",
     "(?m)^                Ok\\(parsed\\) => assert_eq!\\(artifact, parsed\\),$",
     "(?m)^                \\.artifact_location$",
@@ -1724,7 +1729,6 @@ extend-ignore-re = [
 "modularizers" = "modularizers"
 "modularizes" = "modularizes"
 "modularizing" = "modularizing"
-"mold" = "mold"
 "monetisable" = "monetizable"
 "monetisably" = "monetizably"
 "monetisation" = "monetization"
