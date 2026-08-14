@@ -34,11 +34,6 @@ extend-exclude = [
 [default]
 locale = "en-gb"
 extend-ignore-re = [
-    "-fuse-ld=mold",
-    "mold linker",
-    "Cranelift \\+ mold",
-    "Cranelift and mold",
-    "`mold`",
     "(?m)^                        \\.context\\(\"failed to serialise diagnostic for snapshot\"\\),$",
     "(?m)^                Ok\\(parsed\\) => assert_eq!\\(artifact, parsed\\),$",
     "(?m)^                \\.artifact_location$",
@@ -280,8 +275,13 @@ extend-ignore-re = [
     "(?m)^use whitaker_common::i18n::\\{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer\\};$",
     "(?m)^use whitaker_common::i18n::normalise_locale;$",
     "(?s)```.*?```",
+    "-fuse-ld=mold",
+    "Cranelift \\+ mold",
+    "Cranelift and mold",
     "\\brust-analyzer\\b",
     "`[^`\\n]+`",
+    "`mold`",
+    "mold linker",
 ]
 
 [default.extend-words]
