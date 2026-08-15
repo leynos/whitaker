@@ -52,12 +52,11 @@ pub struct PrebuiltConfig<'a> {
     pub destination_dir: &'a Utf8Path,
     /// When true, suppress progress output.
     pub quiet: bool,
-    /// When set, require the manifest git SHA to prefix this pinned commit.
+    /// When set, require an exact full-object-ID match in the manifest.
     ///
-    /// The rolling manifest records an abbreviated SHA, so a pinned install may
-    /// only reuse the prebuilt artefact when the resolved full commit SHA
-    /// begins with the manifest's abbreviated SHA; any mismatch falls back to a
-    /// source build of the pinned commit.
+    /// Pinned installs may only reuse a prebuilt artefact whose manifest names
+    /// the resolved full commit SHA exactly; abbreviated provenance falls back
+    /// to a source build. Rolling installations leave this unset.
     pub expected_git_sha: Option<&'a str>,
 }
 
@@ -208,18 +207,17 @@ fn validate_target(manifest: &Manifest, expected: &str) -> Result<(), PrebuiltEr
     Ok(())
 }
 
-/// Validate that the manifest git SHA prefixes the pinned commit, if pinned.
+/// Validate exact full-object-ID provenance for a pinned installation.
 ///
-/// The rolling manifest records an abbreviated SHA, so a pinned install may
-/// reuse the prebuilt artefact only when the resolved full commit begins with
-/// the manifest's abbreviated SHA. When no commit is pinned this is a no-op,
-/// leaving the default rolling behaviour unchanged.
+/// An abbreviated manifest SHA is suitable for rolling installations only.
+/// Pinned installations require a full object ID equal to the resolved commit.
+/// When no commit is pinned this is a no-op, preserving rolling behaviour.
 fn validate_git_sha(manifest: &Manifest, expected: Option<&str>) -> Result<(), PrebuiltError> {
     let Some(expected) = expected else {
         return Ok(());
     };
     let manifest_sha = manifest.git_sha().as_str();
-    if !expected.starts_with(manifest_sha) {
+    if manifest_sha.len() != 40 || manifest_sha != expected {
         return Err(PrebuiltError::GitShaMismatch {
             manifest: manifest_sha.to_owned(),
             expected: expected.to_owned(),
