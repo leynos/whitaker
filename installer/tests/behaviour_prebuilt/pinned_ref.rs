@@ -1,7 +1,8 @@
 //! Pinned-ref BDD steps and scenarios for prebuilt installation.
 
-use super::{PrebuiltWorld, world};
+use super::{DEFAULT_TOOLCHAIN, FAKE_ARCHIVE, ManifestBehaviour, PrebuiltWorld, world};
 use rstest_bdd_macros::{given, scenario};
+use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
 
 #[given("the pinned commit does not match the manifest git SHA")]
 fn given_pinned_commit_mismatch(world: &mut PrebuiltWorld) {
@@ -10,7 +11,16 @@ fn given_pinned_commit_mismatch(world: &mut PrebuiltWorld) {
 
 #[given("the pinned commit matches the manifest git SHA")]
 fn given_pinned_commit_matches(world: &mut PrebuiltWorld) {
-    world.expected_git_sha = Some("abc12340000000000000000000000000000000ab".to_owned());
+    let commit = "abc12340000000000000000000000000000000ab";
+    world.expected_git_sha = Some(commit.to_owned());
+    world.manifest_behaviour = Some(ManifestBehaviour::Ok(
+        prebuilt_manifest_json(
+            DEFAULT_TOOLCHAIN,
+            super::DEFAULT_TARGET,
+            sha256_hex(FAKE_ARCHIVE),
+        )
+        .replacen("abc1234", commit, 1),
+    ));
 }
 
 #[scenario(

@@ -62,24 +62,49 @@ fn write_test_file(path: &Path, contents: &[u8]) -> std::io::Result<()> {
 
 proptest! {
     #[test]
-    fn git_sha_prefixes_across_supported_lengths_are_accepted(
+    fn equal_full_git_shas_are_accepted(
         commit in commit_sha_strategy(),
-        prefix_len in 7_usize..=40,
     ) {
-        let manifest = manifest_with_git_sha(&commit[..prefix_len])
+        let manifest = manifest_with_git_sha(&commit)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         prop_assert!(validate_git_sha(&manifest, Some(&commit)).is_ok());
     }
 
     #[test]
-    fn changed_nibble_in_git_sha_prefix_is_rejected(
+    fn abbreviated_manifest_git_shas_are_rejected_for_pinned_installs(
         commit in commit_sha_strategy(),
-        prefix_len in 7_usize..=40,
+        prefix_len in 7_usize..40,
     ) {
-        let mut manifest_sha = commit[..prefix_len].to_owned();
-        let replacement = if manifest_sha.starts_with('0') { "1" } else { "0" };
-        manifest_sha.replace_range(..1, replacement);
+        let manifest_sha = &commit[..prefix_len];
+        let manifest = manifest_with_git_sha(manifest_sha)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        match validate_git_sha(&manifest, Some(&commit)) {
+            Err(PrebuiltError::GitShaMismatch { manifest, expected }) => {
+                prop_assert_eq!(manifest, manifest_sha);
+                prop_assert_eq!(expected, commit);
+            }
+            other => {
+                return Err(TestCaseError::fail(format!(
+                    "expected GitShaMismatch, got {other:?}"
+                )));
+            }
+        }
+    }
+
+    #[test]
+    fn distinct_full_git_shas_sharing_a_prefix_are_rejected(
+        commit in commit_sha_strategy(),
+        shared_prefix_len in 7_usize..40,
+    ) {
+        let mut manifest_sha = commit.clone();
+        let replacement = if manifest_sha.as_bytes()[shared_prefix_len] == b'0' {
+            "1"
+        } else {
+            "0"
+        };
+        manifest_sha.replace_range(shared_prefix_len..=shared_prefix_len, replacement);
         let manifest = manifest_with_git_sha(&manifest_sha)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
@@ -109,8 +134,14 @@ fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
 
 /// Construct downloader and extractor mocks for the successful prebuilt path.
 fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
+    success_mocks_with_git_sha("abc1234")
+}
+
+/// Construct successful mocks with the supplied manifest provenance.
+fn success_mocks_with_git_sha(git_sha: &str) -> (MockArtefactDownloader, MockArtefactExtractor) {
     let fake_sha = sha256_hex(FAKE_ARCHIVE);
-    let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
+    let manifest_json =
+        prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha).replacen("abc1234", git_sha, 1);
     let mut downloader = MockArtefactDownloader::new();
     downloader
         .expect_download_manifest()
@@ -147,13 +178,27 @@ fn expected_git_sha_mismatch_returns_fallback() {
     }
 }
 
-#[rstest]
-#[case::matching_commit(Some(MATCHING_COMMIT))]
-#[case::unpinned(None)]
-fn matching_or_unpinned_git_sha_returns_success(#[case] expected_git_sha: Option<&str>) {
+#[test]
+fn matching_full_git_sha_returns_success() {
     let (_temp, destination_dir) = destination_dir();
     let config = PrebuiltConfig {
-        expected_git_sha,
+        expected_git_sha: Some(MATCHING_COMMIT),
+        ..base_config(&destination_dir)
+    };
+    let (downloader, extractor) = success_mocks_with_git_sha(MATCHING_COMMIT);
+    let mut stderr = Vec::new();
+    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+    assert!(
+        matches!(result, PrebuiltResult::Success { .. }),
+        "expected Success, got {result:?}"
+    );
+}
+
+#[test]
+fn unpinned_git_sha_returns_success_with_an_abbreviated_manifest_sha() {
+    let (_temp, destination_dir) = destination_dir();
+    let config = PrebuiltConfig {
+        expected_git_sha: None,
         ..base_config(&destination_dir)
     };
     let (downloader, extractor) = success_mocks();
