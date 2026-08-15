@@ -81,6 +81,76 @@ mod tests {
         }
     }
 
+    fn checkout(action: WorkspaceAction) -> WorkspaceCheckout {
+        WorkspaceCheckout {
+            root: Utf8PathBuf::from("/managed/whitaker"),
+            pinned_commit: None,
+            detached_commit: None,
+            action,
+        }
+    }
+
+    #[rstest]
+    #[case::clone(
+        WorkspaceAction::CloneTo(Utf8PathBuf::from("/managed/whitaker")),
+        "Cloning Whitaker repository to /managed/whitaker...\n"
+    )]
+    #[case::update(
+        WorkspaceAction::UpdateAt(Utf8PathBuf::from("/managed/whitaker")),
+        "Updating Whitaker repository at /managed/whitaker...\n"
+    )]
+    fn workspace_progress_reports_exact_action_message(
+        #[case] action: WorkspaceAction,
+        #[case] expected: &str,
+    ) {
+        let mut output = Vec::new();
+
+        report_workspace_progress(&InstallArgs::default(), &checkout(action), &mut output);
+
+        assert_eq!(String::from_utf8(output).expect("UTF-8 output"), expected);
+    }
+
+    #[test]
+    fn workspace_progress_reports_requested_pin_message() {
+        let args = InstallArgs {
+            git_ref: Some("v0.2.5".to_owned()),
+            ..InstallArgs::default()
+        };
+        let mut output = Vec::new();
+
+        report_workspace_progress(
+            &args,
+            &checkout(WorkspaceAction::UseExisting(Utf8PathBuf::from(
+                "/managed/whitaker",
+            ))),
+            &mut output,
+        );
+
+        assert_eq!(
+            String::from_utf8(output).expect("UTF-8 output"),
+            "Pinning Whitaker suite to v0.2.5...\n"
+        );
+    }
+
+    #[test]
+    fn workspace_progress_is_silent_in_quiet_mode() {
+        let args = InstallArgs {
+            quiet: true,
+            ..InstallArgs::default()
+        };
+        let mut output = Vec::new();
+
+        report_workspace_progress(
+            &args,
+            &checkout(WorkspaceAction::CloneTo(Utf8PathBuf::from(
+                "/managed/whitaker",
+            ))),
+            &mut output,
+        );
+
+        assert!(output.is_empty());
+    }
+
     #[rstest]
     #[case::requested_ref(Some("v0.2.5"), "Pinned Whitaker suite to v0.2.5 (abc123456789).\n")]
     #[case::commit_fallback(

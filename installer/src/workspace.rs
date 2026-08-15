@@ -6,6 +6,7 @@
 use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use tracing::debug;
 
 /// Repository URL for cloning Whitaker.
 ///
@@ -251,7 +252,16 @@ fn pin_if_requested(repo: &Utf8Path, git_ref: Option<&str>) -> Result<Option<Str
 pub(super) fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<String> {
     let commit = match crate::git::fetch_ref(repo, git_ref) {
         Ok(commit) => commit,
-        Err(fetch_error) => crate::git::resolve_commit(repo, git_ref).map_err(|_| fetch_error)?,
+        Err(fetch_error) => {
+            debug!(
+                operation = "resolve",
+                refspec = git_ref,
+                attempt = "local_fallback",
+                error = %fetch_error,
+                "remote pin fetch failed; resolving locally"
+            );
+            crate::git::resolve_commit(repo, git_ref).map_err(|_| fetch_error)?
+        }
     };
     crate::git::checkout_detached(repo, &commit)?;
     Ok(commit)

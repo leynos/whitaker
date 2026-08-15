@@ -234,18 +234,54 @@ mod tests {
         }
     }
 
-    #[rstest]
-    fn dry_run_display_includes_ref_when_pinned() {
-        let crates = vec![CrateName::from("whitaker_suite")];
-        let text = dry_run_info(Some("v0.2.5"), &crates).display_text();
-        assert!(text.contains("Pinned ref: v0.2.5"), "output: {text}");
-    }
-
-    #[rstest]
-    fn dry_run_display_omits_ref_when_unpinned() {
+    #[test]
+    fn dry_run_display_matches_default_format() {
         let crates = vec![CrateName::from("whitaker_suite")];
         let text = dry_run_info(None, &crates).display_text();
-        assert!(!text.contains("Pinned ref:"), "output: {text}");
+
+        assert_eq!(
+            text,
+            concat!(
+                "Dry run - no files will be modified\n\n",
+                "Workspace root: /home/user/whitaker\n",
+                "Toolchain: nightly-2025-01-15\n",
+                "Target directory: /home/user/.local/share/dylint/lib\n",
+                "Verbosity level: 0\n",
+                "Quiet: false\n",
+                "Skip deps: false\n",
+                "Skip wrapper: false\n",
+                "No update: false\n\n",
+                "Crates to build:\n",
+                "  - whitaker_suite"
+            )
+        );
+    }
+
+    #[test]
+    fn dry_run_display_matches_pinned_format() {
+        let crates = vec![CrateName::from("whitaker_suite")];
+        let mut info = dry_run_info(Some("v0.2.5"), &crates);
+        info.jobs = Some(4);
+        let text = info.display_text();
+
+        assert_eq!(
+            text,
+            concat!(
+                "Dry run - no files will be modified\n\n",
+                "Workspace root: /home/user/whitaker\n",
+                "Toolchain: nightly-2025-01-15\n",
+                "Target directory: /home/user/.local/share/dylint/lib\n",
+                "Verbosity level: 0\n",
+                "Quiet: false\n",
+                "Skip deps: false\n",
+                "Skip wrapper: false\n",
+                "No update: false\n",
+                "Pinned ref: v0.2.5\n",
+                "Parallel jobs: 4\n\n",
+                "Crates to build:\n",
+                "  - whitaker_suite"
+            )
+        );
     }
 
     #[rstest]

@@ -8,6 +8,7 @@ use crate::error::{InstallerError, Result};
 use camino::Utf8Path;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
+use tracing::{debug, warn};
 use wait_timeout::ChildExt;
 
 /// Default timeout for git operations (5 minutes).
@@ -63,6 +64,10 @@ pub fn update_repository(repo: &Utf8Path) -> Result<()> {
 /// Returns `InstallerError::Git` if the ref cannot be resolved or the command
 /// times out.
 pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
+    debug!(
+        operation = "rev-parse",
+        refspec, "resolving requested Git ref"
+    );
     let peeled = format!("{refspec}^{{commit}}");
     let output =
         run_git_with_timeout(&["rev-parse", "--verify", &peeled], Some(repo), "rev-parse")?;
@@ -88,6 +93,12 @@ pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
 ///
 /// Returns `InstallerError::Git` if the fetch fails or times out.
 pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
+    debug!(
+        operation = "fetch",
+        refspec,
+        attempt = "remote",
+        "fetching requested Git ref"
+    );
     let pinned_refspec = format!("+{refspec}:{PINNED_REF}");
     run_git_checked(
         &["fetch", "origin", &pinned_refspec, "--tags"],
@@ -106,6 +117,12 @@ pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
 ///
 /// Returns `InstallerError::Git` if the checkout fails or times out.
 pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
+    debug!(
+        operation = "checkout",
+        commit,
+        attempt = "detached",
+        "checking out pinned commit"
+    );
     run_git_checked(&["checkout", "--detach", commit], Some(repo), "checkout")
 }
 
@@ -146,6 +163,11 @@ pub fn ensure_default_branch(repo: &Utf8Path) -> Result<()> {
         return Ok(());
     }
 
+    debug!(
+        operation = "checkout",
+        attempt = "default_branch_recovery",
+        "reattaching detached checkout"
+    );
     let branch = default_branch_name(repo)?;
     run_git_checked(&["checkout", &branch], Some(repo), "checkout")
 }
@@ -157,12 +179,22 @@ fn default_branch_name(repo: &Utf8Path) -> Result<String> {
     }
 
     // An older clone may lack origin/HEAD; ask git to repopulate it, then retry.
+    debug!(
+        operation = "remote",
+        attempt = "repair_origin_head",
+        "repairing origin default branch reference"
+    );
     let _ = run_git_with_timeout(
         &["remote", "set-head", "origin", "--auto"],
         Some(repo),
         "remote",
     )?;
 
+    debug!(
+        operation = "rev-parse",
+        attempt = "retry_origin_head",
+        "retrying default branch discovery"
+    );
     read_default_branch(repo)?.ok_or_else(|| InstallerError::Git {
         operation: "rev-parse",
         message: "could not determine default branch from origin/HEAD".to_owned(),
@@ -271,6 +303,11 @@ fn run_git_with_timeout(
         }
         None => {
             // Timeout - kill the process and wait for threads to finish
+            warn!(
+                operation,
+                timeout_seconds = GIT_TIMEOUT.as_secs(),
+                "git operation timed out"
+            );
             let _ = child.kill();
             let _ = child.wait();
             let _ = stdout_thread.join();
