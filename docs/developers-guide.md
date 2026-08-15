@@ -2566,6 +2566,22 @@ This skips building entirely, providing faster lint runs during development.
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
 
+
+#### Public Git operation APIs
+
+The `whitaker_installer::git` module exposes the following Git operations. They
+all accept a UTF-8 repository path and return the installer's `Result` type;
+each operation is bounded by the module's five-minute Git timeout. Use these
+functions for the managed clone workflow, not to mutate a user's current
+Whitaker checkout.
+
+| API | Purpose | Usage constraints |
+| --- | --- | --- |
+| `resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String>` | Resolves a local commit-ish (SHA, tag, or branch) to its full commit SHA and peels annotated tags. | Does not fetch. Call it when the ref is expected to exist locally, or after `fetch_ref` has populated the clone. |
+| `fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String>` | Fetches the requested ref and tags from `origin`, records the result in the private `refs/whitaker/pinned-ref` ref, and returns its full commit SHA. | Use it to refresh a requested pin before checkout. It force-updates only the private pin ref; it does not move the current branch or check out the result. |
+| `checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()>` | Checks out exactly `commit` with a detached `HEAD`. | Use only for the installer-managed clone after resolving the requested ref. The workspace layer must reject pinning in the user's current Whitaker workspace first. |
+| `ensure_default_branch(repo: &Utf8Path) -> Result<()>` | Reattaches a detached clone to the branch named by `origin/HEAD`; repairs a missing `origin/HEAD` with `git remote set-head origin --auto`. | Call before `update_repository` when a previous pin may have detached the managed clone. It is a no-op when `HEAD` already names a branch and does not pull changes itself. |
+
 #### `resolve_additional_components`
 
 ```rust
