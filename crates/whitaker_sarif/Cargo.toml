@@ -24,6 +24,5 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 tempfile = { workspace = true }
 
-[lints.clippy]
-expect_used = "deny"
-unwrap_used = "deny"
+[lints]
+workspace = true

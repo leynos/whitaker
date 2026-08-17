@@ -52,3 +52,6 @@ rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fi
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
+
+[lints]
+workspace = true

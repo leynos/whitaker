@@ -46,6 +46,5 @@ rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 temp-env = { workspace = true }
 
-[lints.clippy]
-expect_used = "deny"
-unwrap_used = "deny"
+[lints]
+workspace = true
