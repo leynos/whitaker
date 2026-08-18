@@ -1,4 +1,4 @@
-//! Behaviour-driven coverage for MinHash and LSH candidate generation.
+//! Behaviour-driven coverage for `MinHash` and LSH candidate generation.
 //!
 //! Keep this harness in sync with `tests/features/min_hash_lsh.feature`.
 

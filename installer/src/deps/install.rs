@@ -25,14 +25,14 @@ pub(super) struct InstallContext<'a> {
 
 pub(super) fn install_missing_tools(
     executor: &dyn CommandExecutor,
-    status: &DylintToolStatus,
+    status: DylintToolStatus,
     stderr: &mut dyn Write,
     context: &InstallContext<'_>,
 ) -> Result<()> {
-    let mut remaining_status = *status;
+    let mut remaining_status = status;
 
-    for tool in DEPENDENCY_TOOLS.iter() {
-        if !should_install_tool(&remaining_status, tool) {
+    for tool in &DEPENDENCY_TOOLS {
+        if !should_install_tool(remaining_status, tool) {
             continue;
         }
 
@@ -49,11 +49,13 @@ pub(super) fn repository_install_context<'a>(
     target: Option<&'a TargetTriple>,
 ) -> Option<RepositoryInstallContext<'a>> {
     match (dirs, installer, target) {
-        (Some(dirs), Some(installer), Some(target)) => Some(RepositoryInstallContext {
-            dirs,
-            installer,
-            target,
-        }),
+        (Some(base_dirs), Some(binary_installer), Some(target_triple)) => {
+            Some(RepositoryInstallContext {
+                dirs: base_dirs,
+                installer: binary_installer,
+                target: target_triple,
+            })
+        }
         _ => None,
     }
 }
@@ -66,7 +68,7 @@ pub(super) fn cargo_fallback_mode(executor: &dyn CommandExecutor) -> InstallMode
     }
 }
 
-pub(super) fn should_install_tool(status: &DylintToolStatus, tool: &DependencyTool) -> bool {
+pub(super) fn should_install_tool(status: DylintToolStatus, tool: &DependencyTool) -> bool {
     if tool == &CARGO_DYLINT_TOOL {
         !status.cargo_dylint
     } else if tool == &DYLINT_LINK_TOOL {
@@ -107,7 +109,7 @@ pub(super) fn install_tool(
                 write_message(
                     stderr,
                     context.quiet,
-                    format!("Installed {} from repository release.", tool.package),
+                    &format!("Installed {} from repository release.", tool.package),
                 );
                 return Ok(InstallOutcome::RepositoryRelease);
             }
@@ -115,7 +117,7 @@ pub(super) fn install_tool(
                 write_message(
                     stderr,
                     context.quiet,
-                    format!(
+                    &format!(
                         "Repository install for {} failed verification; falling back to Cargo.",
                         tool.package
                     ),
@@ -126,7 +128,7 @@ pub(super) fn install_tool(
                 write_message(
                     stderr,
                     context.quiet,
-                    format!(
+                    &format!(
                         "Repository install for {} unavailable: {error}. Falling back to Cargo.",
                         tool.package
                     ),
@@ -136,7 +138,7 @@ pub(super) fn install_tool(
                 write_message(
                     stderr,
                     context.quiet,
-                    format!(
+                    &format!(
                         "Repository install for {} unavailable: {error}. Falling back to Cargo.",
                         tool.package
                     ),
@@ -169,7 +171,7 @@ struct CargoInstallPlan<'a> {
 }
 
 impl<'a> CargoInstallPlan<'a> {
-    fn new(tool: &'a DependencyTool) -> Self {
+    const fn new(tool: &'a DependencyTool) -> Self {
         Self {
             tool,
             version: None,
@@ -177,14 +179,14 @@ impl<'a> CargoInstallPlan<'a> {
         }
     }
 
-    fn with_version(self, version: &'a str) -> Self {
+    const fn with_version(self, version: &'a str) -> Self {
         Self {
             version: Some(version),
             ..self
         }
     }
 
-    fn skip_binstall(self) -> Self {
+    const fn skip_binstall(self) -> Self {
         Self {
             skip_binstall: true,
             ..self
@@ -206,7 +208,7 @@ fn install_tool_with_cargo(
         write_message(
             stderr,
             context.quiet,
-            format!(
+            &format!(
                 "cargo binstall failed for {}; falling back to cargo install.",
                 cargo_install_plan.tool.package
             ),
@@ -240,7 +242,7 @@ fn try_binstall(
     write_message(
         stderr,
         quiet,
-        format!(
+        &format!(
             "Installed {} with cargo binstall.",
             cargo_install_plan.tool.package
         ),
@@ -255,18 +257,21 @@ fn run_cargo_install(
     quiet: bool,
 ) -> Result<InstallOutcome> {
     let mut args = vec!["install"];
-    let success_message = if let Some(version) = cargo_install_plan.version {
-        args.extend(["--locked", "--version", version]);
-        format!(
-            "Installed {} from source with cargo install.",
-            cargo_install_plan.tool.package
-        )
-    } else {
-        format!(
-            "Installed {} with cargo install.",
-            cargo_install_plan.tool.package
-        )
-    };
+    let success_message = cargo_install_plan.version.map_or_else(
+        || {
+            format!(
+                "Installed {} with cargo install.",
+                cargo_install_plan.tool.package
+            )
+        },
+        |version| {
+            args.extend(["--locked", "--version", version]);
+            format!(
+                "Installed {} from source with cargo install.",
+                cargo_install_plan.tool.package
+            )
+        },
+    );
     args.push(cargo_install_plan.tool.package);
 
     let output = executor.run("cargo", &args)?;
@@ -288,7 +293,7 @@ fn run_cargo_install(
         });
     }
 
-    write_message(stderr, quiet, success_message);
+    write_message(stderr, quiet, &success_message);
     Ok(InstallOutcome::CargoInstall)
 }
 
@@ -328,11 +333,13 @@ pub(super) fn command_error_message(output: &Output) -> String {
     }
 }
 
-pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: String) {
+pub(super) fn write_message(stderr: &mut dyn Write, quiet: bool, message: &str) {
     if quiet {
         return;
     }
-    let _ = writeln!(stderr, "{message}");
+    // Progress output is best effort; a failed stderr write must not
+    // abort the installation.
+    drop(writeln!(stderr, "{message}"));
 }
 
 pub(super) fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: &[&str]) -> bool {
@@ -341,7 +348,7 @@ pub(super) fn command_succeeds(executor: &dyn CommandExecutor, cmd: &str, args: 
         .is_ok_and(|output| output.status.success())
 }
 
-fn should_refresh_companions(outcome: InstallOutcome, status: &DylintToolStatus) -> bool {
+fn should_refresh_companions(outcome: InstallOutcome, status: DylintToolStatus) -> bool {
     outcome != InstallOutcome::RepositoryRelease && !status.dylint_link
 }
 
@@ -354,7 +361,7 @@ fn update_status_after_install(
     if tool == &CARGO_DYLINT_TOOL {
         status.cargo_dylint = true;
 
-        if should_refresh_companions(outcome, status) {
+        if should_refresh_companions(outcome, *status) {
             // Installing cargo-dylint locally can also provide dylint-link.
             status.dylint_link = is_tool_installed(executor, &DYLINT_LINK_TOOL);
         }

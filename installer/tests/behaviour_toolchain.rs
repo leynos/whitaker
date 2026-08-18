@@ -6,7 +6,7 @@
 //! The tests include:
 //! - Dry-run scenarios that test toolchain detection (skipped if toolchain missing)
 //! - Install scenarios that exercise auto-install using an isolated rustup
-//!   environment (RUSTUP_HOME/CARGO_HOME set to temp directories)
+//!   environment (`RUSTUP_HOME/CARGO_HOME` set to temp directories)
 //! - Failure scenarios that test error handling with a non-existent toolchain
 
 mod prebuilt_markers;
@@ -19,7 +19,7 @@ use toolchain_steps::{ToolchainWorld, world};
 // Import step definitions so rstest-bdd's scenario macro can discover them.
 // These imports appear unused to clippy because they're consumed by macro
 // expansion, not direct source-level calls.
-#[allow(unused_imports)]
+#[expect(unused_imports)]
 use toolchain_steps::{
     given_auto_detect_toolchain, given_auto_detect_toolchain_install,
     given_auto_detect_toolchain_quiet, given_isolated_rustup_auto_install,

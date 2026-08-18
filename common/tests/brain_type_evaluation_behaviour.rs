@@ -184,13 +184,13 @@ fn then_disposition_deny(world: &EvaluationWorld) {
     reason = "primary message is required for this behaviour test"
 )]
 fn then_primary_message_contains(world: &EvaluationWorld, text: String) {
-    let msg = world.primary_message.borrow();
-    let msg = msg
+    let message_ref = world.primary_message.borrow();
+    let message = message_ref
         .as_deref()
         .expect("primary message must be formatted first");
     assert!(
-        msg.contains(&text),
-        "expected primary message to contain '{text}', got: {msg}"
+        message.contains(&text),
+        "expected primary message to contain '{text}', got: {message}"
     );
 }
 

@@ -111,9 +111,8 @@ exec cargo dylint "$@"
         r#"#!/usr/bin/env bash
 set -euo pipefail
 export DYLINT_LIBRARY_PATH="{library_path}"
-cargo dylint list --color never | awk -v suite="{suite_crate}" '$0 ~ "^" suite "([[:space:]]|$)" {{ print }}'
-"#,
-        suite_crate = SUITE_CRATE,
+cargo dylint list --color never | awk -v suite="{SUITE_CRATE}" '$0 ~ "^" suite "([[:space:]]|$)" {{ print }}'
+"#
     );
     write_unix_script(&whitaker_ls_path, &whitaker_ls_content)?;
 
@@ -158,12 +157,11 @@ cargo dylint @args
     let whitaker_ls_path = bin_dir.join("whitaker-ls.ps1");
     let whitaker_ls_content = format!(
         r#"$env:DYLINT_LIBRARY_PATH = "{library_path}"
-$suite = "{suite_crate}"
+$suite = "{SUITE_CRATE}"
 cargo dylint list --color never | Where-Object {{
     $_ -match ("^\\s*" + [regex]::Escape($suite) + "(\\s|$)")
 }}
-"#,
-        suite_crate = SUITE_CRATE,
+"#
     );
 
     std::fs::write(&whitaker_ls_path, whitaker_ls_content)
@@ -175,11 +173,11 @@ cargo dylint list --color never | Where-Object {{
 /// Checks if a directory is in the PATH environment variable.
 fn is_directory_in_path(dir: &Path) -> bool {
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).any(|p| p == dir))
-        .unwrap_or(false)
+        .is_some_and(|path| std::env::split_paths(&path).any(|p| p == dir))
 }
 
 /// Returns instructions for adding a directory to PATH.
+#[must_use]
 pub fn path_instructions(bin_dir: &Path) -> String {
     #[cfg(unix)]
     {

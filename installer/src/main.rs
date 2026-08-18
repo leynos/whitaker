@@ -24,7 +24,7 @@ use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
 use whitaker_installer::install_metrics::InstallMode;
 use whitaker_installer::list::{determine_target_dir, run_list};
-use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
+use whitaker_installer::output::{DryRunInfo, DryRunSkips, ShellSnippet, write_stderr_line};
 use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
 use whitaker_installer::prebuilt_path::prebuilt_library_dir;
 use whitaker_installer::resolution::{
@@ -54,7 +54,7 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
 }
 
 /// Returns the set of additional rustup components requested by the CLI flags.
-fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
+const fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
     if args.cranelift {
         &["rustc-codegen-cranelift"]
     } else {
@@ -180,9 +180,11 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         target_dir: &target_dir,
         verbosity: args.verbosity,
         quiet: args.quiet,
-        skip_deps: args.skip_deps,
-        skip_wrapper: args.skip_wrapper,
-        no_update: args.no_update,
+        skips: DryRunSkips {
+            deps: args.skip_deps,
+            wrapper: args.skip_wrapper,
+            update: args.no_update,
+        },
         jobs: args.jobs,
         crates: &requested_crates,
     };

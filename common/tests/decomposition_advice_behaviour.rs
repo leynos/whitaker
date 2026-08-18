@@ -28,7 +28,7 @@ impl std::str::FromStr for CsvList {
             .filter(|v| !v.is_empty())
             .map(ToOwned::to_owned)
             .collect();
-        Ok(CsvList(items))
+        Ok(Self(items))
     }
 }
 
@@ -46,7 +46,7 @@ fn world() -> DecompositionWorld {
     DecompositionWorld::default()
 }
 
-fn create_method_builder(world: &DecompositionWorld, method_name: &str) {
+fn create_method_builder(world: &DecompositionWorld, method_name: &str) -> usize {
     let mut next_method_id = world.next_method_id.borrow_mut();
     let method_id = *next_method_id;
     *next_method_id += 1;
@@ -61,6 +61,17 @@ fn create_method_builder(world: &DecompositionWorld, method_name: &str) {
         .entry(method_name.to_owned())
         .or_default()
         .push(method_id);
+    method_id
+}
+
+/// Returns the identifier of the most recently created builder for
+/// `method_name`, if any.
+fn lookup_method_id(world: &DecompositionWorld, method_name: &str) -> Option<usize> {
+    world
+        .method_ids_by_name
+        .borrow()
+        .get(method_name)
+        .and_then(|ids| ids.last().copied())
 }
 
 fn with_method_builder(
@@ -68,27 +79,8 @@ fn with_method_builder(
     method_name: &str,
     update: impl FnOnce(&mut MethodProfileBuilder),
 ) {
-    let method_id = world
-        .method_ids_by_name
-        .borrow()
-        .get(method_name)
-        .and_then(|ids| ids.last().copied());
-
-    let method_id = match method_id {
-        Some(method_id) => method_id,
-        None => {
-            create_method_builder(world, method_name);
-            let method_id = world
-                .method_ids_by_name
-                .borrow()
-                .get(method_name)
-                .and_then(|ids| ids.last().copied());
-            let Some(method_id) = method_id else {
-                panic!("method id must exist after creation");
-            };
-            method_id
-        }
-    };
+    let method_id = lookup_method_id(world, method_name)
+        .unwrap_or_else(|| create_method_builder(world, method_name));
 
     let mut methods = world.methods.borrow_mut();
     let Some(builder) = methods.get_mut(&method_id) else {
@@ -101,8 +93,8 @@ fn with_suggestions(
     world: &DecompositionWorld,
     assert_fn: impl FnOnce(&[DecompositionSuggestion]) -> Result<(), String>,
 ) -> Result<(), String> {
-    let suggestions = world.suggestions.borrow();
-    let Some(suggestions) = suggestions.as_ref() else {
+    let suggestions_ref = world.suggestions.borrow();
+    let Some(suggestions) = suggestions_ref.as_ref() else {
         return Err(String::from(
             "suggestions must be generated before running assertions",
         ));
@@ -153,13 +145,8 @@ fn duplicate_method_names_use_distinct_builders() {
 }
 
 #[given("decomposition analysis for a {kind} named {name}")]
-fn given_context(
-    world: &DecompositionWorld,
-    kind: SubjectKind,
-    name: String,
-) -> Result<(), String> {
+fn given_context(world: &DecompositionWorld, kind: SubjectKind, name: String) {
     *world.context.borrow_mut() = Some(DecompositionContext::new(name, kind));
-    Ok(())
 }
 
 #[given("a method named {name}")]
@@ -275,8 +262,7 @@ fn then_matching_suggestion(
                 .map(|s| format!("{}:{}:{:?}", s.label(), s.extraction_kind(), s.methods()))
                 .collect::<Vec<_>>();
             Err(format!(
-                "missing {kind} suggestion labelled {label} containing methods {:?}; actual suggestions: {:?}",
-                expected_methods, actual
+                "missing {kind} suggestion labelled {label} containing methods {expected_methods:?}; actual suggestions: {actual:?}"
             ))
         }
     })

@@ -35,7 +35,7 @@ fn repository_verification_call_skips_executor_for_dylint_link(#[case] verificat
 fn expected_calls_include_repository_probe_for_cargo_dylint() {
     let calls = expected_calls(
         "cargo-dylint",
-        ExpectedCallConfig {
+        &ExpectedCallConfig {
             is_binstall_available: false,
             has_repository_context: true,
             is_repository_asset_missing: false,
@@ -55,7 +55,7 @@ fn expected_calls_include_repository_probe_for_cargo_dylint() {
 fn expected_calls_omit_executor_verification_for_dylint_link() {
     let calls = expected_calls(
         "dylint-link",
-        ExpectedCallConfig {
+        &ExpectedCallConfig {
             is_binstall_available: false,
             has_repository_context: true,
             is_repository_asset_missing: false,

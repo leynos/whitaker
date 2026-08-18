@@ -39,7 +39,9 @@ impl Stager {
         let test_path = staging_dir.join(".whitaker-installer-test");
         match fs::write(&test_path, b"test") {
             Ok(()) => {
-                let _ = fs::remove_file(&test_path);
+                // Removing the probe file is best effort; a leftover probe
+                // does not affect staging correctness.
+                drop(fs::remove_file(&test_path));
                 Ok(())
             }
             Err(e) => Err(InstallerError::TargetNotWritable {
@@ -123,7 +125,7 @@ impl Stager {
 /// directory. This function creates a `directories_next::BaseDirs` instance and
 /// calls its `data_local_dir()` method to obtain the base path (for example,
 /// `~/.local/share` on many Linux distributions, `~/Library/Application Support`
-/// on macOS, and the Local AppData directory on Windows). The installer appends
+/// on macOS, and the local `AppData` directory on Windows). The installer appends
 /// `dylint/lib` under that directory.
 #[must_use]
 pub fn default_target_dir() -> Option<Utf8PathBuf> {

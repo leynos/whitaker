@@ -68,7 +68,7 @@ fn run_packaging(world: &mut PackagingWorld) {
         generated_at: GeneratedAt::new("2026-02-11T00:00:00Z"),
     };
 
-    match package_artefact(params) {
+    match package_artefact(&params) {
         Ok(output) => world.output = Some(output),
         Err(e) => world.packaging_error = Some(e),
     }

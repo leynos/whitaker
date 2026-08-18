@@ -141,19 +141,15 @@ mod staging_failure {
         // permissions. If we can unexpectedly create a file in the staging
         // directory, mark assertions as skipped for this scenario.
         let probe_path = stager.staging_path().as_std_path().join("write-probe");
-        match std::fs::OpenOptions::new()
+        if let Ok(file) = std::fs::OpenOptions::new()
             .create_new(true)
             .write(true)
-            .open(&probe_path)
-        {
-            Ok(file) => {
-                drop(file);
-                let _ = std::fs::remove_file(&probe_path);
-                staging_failure_world.skip_assertions.set(true);
-            }
-            Err(_) => {
-                // Expected: directory is not writable, continue.
-            }
+            .open(&probe_path) {
+            drop(file);
+            let _ = std::fs::remove_file(&probe_path);
+            staging_failure_world.skip_assertions.set(true);
+        } else {
+            // Expected: directory is not writable, continue.
         }
 
         let result = stager.prepare();
@@ -168,9 +164,7 @@ mod staging_failure {
 
         // Skip this assertion when running as root (uid 0) since root can bypass
         // filesystem permissions. This is similar to how CI containers often run.
-        // SAFETY: `libc::geteuid()` is a simple FFI call with no preconditions;
-        // it returns the effective user ID without modifying any state.
-        if unsafe { libc::geteuid() } == 0 {
+        if rustix::process::geteuid().is_root() {
             return;
         }
 

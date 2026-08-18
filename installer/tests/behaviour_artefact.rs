@@ -43,20 +43,18 @@ fn world() -> ArtefactWorld {
     ArtefactWorld::default()
 }
 
-/// Helper to assert that an error option contains a specific ArtefactError variant.
+/// Helper to assert that an error option contains a specific `ArtefactError` variant.
 fn assert_error_matches<F>(error: &Option<ArtefactError>, field_name: &str, predicate: F)
 where
     F: FnOnce(&ArtefactError) -> bool,
 {
     assert!(
         error.is_some(),
-        "expected {} validation to fail",
-        field_name
+        "expected {field_name} validation to fail"
     );
     assert!(
         predicate(error.as_ref().expect("checked above")),
-        "error variant mismatch for {}",
-        field_name
+        "error variant mismatch for {field_name}"
     );
 }
 

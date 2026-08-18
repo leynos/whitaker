@@ -109,6 +109,7 @@ fn determine_scan_roots(cli_target: Option<&Utf8Path>) -> Result<Vec<Utf8PathBuf
 /// - The path is not valid UTF-8
 /// - No `rust-toolchain.toml` file exists
 /// - The toolchain file cannot be parsed
+#[must_use]
 pub fn detect_active_toolchain() -> Option<String> {
     let cwd = match std::env::current_dir() {
         Ok(path) => path,

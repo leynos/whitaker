@@ -115,7 +115,7 @@ fn package_artefact_produces_valid_archive(
         generated_at: GeneratedAt::new("2026-02-11T10:00:00Z"),
     };
 
-    let output = package_artefact(params).expect("packaging succeeds");
+    let output = package_artefact(&params).expect("packaging succeeds");
     assert!(output.archive_path.exists());
 
     let expected_name = ArtefactName::new(sample_git_sha, sample_toolchain, sample_target);
@@ -150,7 +150,7 @@ fn package_artefact_rejects_empty_files(temp_dir: TempDir) {
         generated_at: GeneratedAt::new("2026-02-11T10:00:00Z"),
     };
 
-    let result = package_artefact(params);
+    let result = package_artefact(&params);
     assert!(matches!(
         result.expect_err("expected error"),
         PackagingError::EmptyFileList
@@ -172,7 +172,7 @@ fn package_artefact_fails_when_library_file_missing(temp_dir: TempDir) {
         generated_at: GeneratedAt::new("2026-02-11T10:00:00Z"),
     };
 
-    let result = package_artefact(params);
+    let result = package_artefact(&params);
     assert!(result.is_err(), "expected error for missing library file");
     assert!(
         matches!(result.expect_err("checked above"), PackagingError::Io(_)),
@@ -202,7 +202,7 @@ fn archive_name_follows_adr_convention(
         generated_at: GeneratedAt::new("2026-02-11T00:00:00Z"),
     };
 
-    let output = package_artefact(params).expect("packaging");
+    let output = package_artefact(&params).expect("packaging");
     let expected = ArtefactName::new(sample_git_sha, sample_toolchain, sample_target);
     assert_eq!(
         output
@@ -232,7 +232,7 @@ fn create_test_package(temp_dir: &TempDir) -> PackageOutput {
         generated_at: GeneratedAt::new("2026-02-11T12:00:00Z"),
     };
 
-    package_artefact(params).expect("packaging")
+    package_artefact(&params).expect("packaging")
 }
 
 #[rstest]
@@ -278,7 +278,7 @@ fn packaging_produces_deterministic_digest(temp_dir: TempDir) {
             output_dir,
             generated_at: GeneratedAt::new("2026-02-12T10:00:00Z"),
         };
-        let output = package_artefact(params).expect("packaging");
+        let output = package_artefact(&params).expect("packaging");
         digests.push(output.manifest.sha256().as_str().to_owned());
     }
     assert_eq!(

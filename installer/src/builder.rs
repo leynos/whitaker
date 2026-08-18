@@ -63,7 +63,7 @@ pub struct Builder {
 impl Builder {
     /// Create a new builder with the given configuration.
     #[must_use]
-    pub fn new(config: BuildConfig) -> Self {
+    pub const fn new(config: BuildConfig) -> Self {
         Self { config }
     }
 
@@ -186,7 +186,7 @@ impl Builder {
     /// This method is primarily useful for testing to verify that the correct
     /// configuration was constructed.
     #[must_use]
-    pub fn config(&self) -> &BuildConfig {
+    pub const fn config(&self) -> &BuildConfig {
         &self.config
     }
 }

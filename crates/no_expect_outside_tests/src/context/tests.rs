@@ -457,7 +457,7 @@ fn convert_attribute_handles_parsed_must_use() {
     // Should return a placeholder "parsed" path instead of panicking.
     assert_eq!(
         attribute.path().segments(),
-        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_string()]
+        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_owned()]
     );
     assert_eq!(attribute.kind(), AttributeKind::Outer);
 }

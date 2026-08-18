@@ -3649,6 +3649,7 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.20",
  "unic-langid",
@@ -3664,12 +3665,12 @@ dependencies = [
  "directories-next",
  "flate2",
  "fs2",
- "libc",
  "log",
  "mockall",
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
@@ -3746,6 +3747,7 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "test_must_not_have_example",
+ "whitaker-common",
 ]
 
 [[package]]

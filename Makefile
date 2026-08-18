@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -53,6 +53,13 @@ DYLINT_LINK_VERSION ?= 6.0.1
 # needs a newer rustc than the repository's pinned nightly provides.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
+WHITAKER ?= whitaker
+# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
+# crates, the aggregated suite, and the whitaker root crate all require
+# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
+# that `cargo dylint`'s plain check build cannot provide, so the suite runs
+# over the support crates that build as ordinary libraries.
+WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -148,9 +155,15 @@ target/%/$(APP): ## Build binary in debug or release mode
 	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
 	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
-lint: ## Run Clippy with warnings denied
+lint: lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint suite
+
+lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
 	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+
+lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(WHITAKER_PACKAGES) --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

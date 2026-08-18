@@ -21,7 +21,7 @@ pub use crate::version::Version;
 
 use crate::binstall_metadata::{DEFAULT_PKG_FMT, WINDOWS_PKG_FMT};
 use std::fs;
-use std::io::{Read, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -191,7 +191,7 @@ pub fn archive_format(target: &TargetTriple) -> ArchiveFormat {
 /// not exist, or [`InstallerPackagingError::Io`] /
 /// [`InstallerPackagingError::Zip`] on archive creation failures.
 pub fn package_installer(
-    params: InstallerPackageParams,
+    params: &InstallerPackageParams,
 ) -> Result<InstallerPackageOutput, InstallerPackagingError> {
     if !params.binary_path.is_file() {
         return Err(InstallerPackagingError::BinaryNotFound(
@@ -234,8 +234,8 @@ fn create_tgz_archive(
 
     let archive_entry_path = format!("{inner_dir}/{bin_name}");
     archive.append_path_with_name(binary_path, &archive_entry_path)?;
-    let gz_encoder = archive.into_inner()?;
-    gz_encoder.finish()?;
+    let finished_encoder = archive.into_inner()?;
+    finished_encoder.finish()?;
 
     Ok(())
 }
@@ -256,14 +256,7 @@ fn create_zip_archive(
     zip_writer.start_file(&archive_entry_path, options)?;
 
     let mut binary_file = fs::File::open(binary_path)?;
-    let mut buffer = [0u8; 8192];
-    loop {
-        let bytes_read = binary_file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        zip_writer.write_all(&buffer[..bytes_read])?;
-    }
+    io::copy(&mut binary_file, &mut zip_writer)?;
 
     zip_writer.finish()?;
     Ok(())

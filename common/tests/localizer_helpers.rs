@@ -14,7 +14,7 @@ use whitaker_common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
     get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
 };
-use whitaker_common::test_support::LocaleOverride;
+use whitaker_common::test_support::with_locale;
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -33,7 +33,7 @@ struct HelperWorld {
     fallback: RefCell<Option<DiagnosticMessageSet>>,
     result: RefCell<Option<DiagnosticMessageSet>>,
     emitter: RecordingEmitter,
-    environment_override: RefCell<Option<LocaleOverride>>,
+    environment_locale: RefCell<Option<String>>,
     _guard: MutexGuard<'static, ()>,
 }
 
@@ -51,19 +51,13 @@ impl HelperWorld {
             fallback: RefCell::new(None),
             result: RefCell::new(None),
             emitter: RecordingEmitter::default(),
-            environment_override: RefCell::new(None),
+            environment_locale: RefCell::new(None),
             _guard: guard,
         }
     }
 
     fn set_environment(&self, value: Option<String>) {
-        let mut guard = self.environment_override.borrow_mut();
-        guard.take();
-        let override_guard = match value {
-            Some(locale) => LocaleOverride::set(locale.as_str()),
-            None => LocaleOverride::clear(),
-        };
-        *guard = Some(override_guard);
+        *self.environment_locale.borrow_mut() = value;
     }
 
     fn set_configuration(&self, locale: Option<String>) {
@@ -72,7 +66,10 @@ impl HelperWorld {
 
     fn request_localizer(&self, lint: &str) {
         let config = self.configuration.borrow();
-        let localizer = get_localizer_for_lint(lint, config.as_deref());
+        let environment = self.environment_locale.borrow();
+        let localizer = with_locale(environment.as_deref(), || {
+            get_localizer_for_lint(lint, config.as_deref())
+        });
         self.localizer.borrow_mut().replace(localizer);
     }
 
@@ -86,7 +83,11 @@ impl HelperWorld {
 
     fn assert_locale(&self, expected: &str) {
         let localizer = self.ensure_localizer();
-        assert_eq!(localizer.locale(), expected);
+        assert_eq!(
+            localizer.locale(),
+            expected,
+            "expected resolved locale `{expected}`"
+        );
     }
 
     fn set_message_key(&self, key: String) {
@@ -128,7 +129,7 @@ impl HelperWorld {
         args.insert(Cow::Borrowed("subject"), FluentValue::from("functions"));
         args.insert(
             Cow::Borrowed("attribute"),
-            FluentValue::from("#[inline]".to_string()),
+            FluentValue::from("#[inline]".to_owned()),
         );
         *self.arguments.borrow_mut() = args;
     }
@@ -185,7 +186,7 @@ fn given_env_cleared(world: &HelperWorld) {
 
 #[given("DYLINT_LOCALE is {locale}")]
 fn given_env(world: &HelperWorld, locale: String) {
-    world.set_environment(Some(unquote(&locale).to_string()));
+    world.set_environment(Some(unquote(&locale).to_owned()));
 }
 
 #[given("no configuration locale is provided")]
@@ -195,7 +196,7 @@ fn given_no_config(world: &HelperWorld) {
 
 #[given("the configuration locale is {locale}")]
 fn given_config(world: &HelperWorld, locale: String) {
-    world.set_configuration(Some(unquote(&locale).to_string()));
+    world.set_configuration(Some(unquote(&locale).to_owned()));
 }
 
 #[when("I request the localizer for {lint}")]
@@ -216,12 +217,12 @@ fn given_fallback(world: &HelperWorld) {
 
 #[given("a missing message key {key} is requested")]
 fn given_missing_key(world: &HelperWorld, key: String) {
-    world.set_message_key(unquote(&key).to_string());
+    world.set_message_key(unquote(&key).to_owned());
 }
 
 #[given("a message key {key} is requested")]
 fn given_message_key(world: &HelperWorld, key: String) {
-    world.set_message_key(unquote(&key).to_string());
+    world.set_message_key(unquote(&key).to_owned());
 }
 
 #[given("I prepare arguments for the doc attribute diagnostic")]
@@ -242,23 +243,37 @@ fn when_resolve_messages(world: &HelperWorld) {
 #[then("the fallback primary message contains {snippet}")]
 fn then_fallback_primary(world: &HelperWorld, snippet: String) {
     let messages = world.resolved_messages();
-    let snippet = unquote(&snippet);
-    assert!(messages.primary().contains(snippet));
+    let expected_snippet = unquote(&snippet);
+    assert!(
+        messages.primary().contains(expected_snippet),
+        "expected fallback primary message to contain `{expected_snippet}`"
+    );
 }
 
 #[then("a delayed bug is recorded mentioning {snippet}")]
 fn then_bug_recorded(world: &HelperWorld, snippet: String) {
     let messages = world.recorded_messages();
-    let snippet = unquote(&snippet);
-    assert!(!messages.is_empty());
-    assert!(messages.iter().any(|message| message.contains(snippet)));
+    let expected_snippet = unquote(&snippet);
+    assert!(
+        !messages.is_empty(),
+        "expected at least one delayed bug to be recorded"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains(expected_snippet)),
+        "expected a recorded bug mentioning `{expected_snippet}`"
+    );
 }
 
 #[then("the resolved primary message contains {snippet}")]
 fn then_primary_message(world: &HelperWorld, snippet: String) {
     let messages = world.resolved_messages();
-    let snippet = unquote(&snippet);
-    assert!(messages.primary().contains(snippet));
+    let expected_snippet = unquote(&snippet);
+    assert!(
+        messages.primary().contains(expected_snippet),
+        "expected resolved primary message to contain `{expected_snippet}`"
+    );
 }
 
 #[then("no delayed bug is recorded")]
@@ -303,8 +318,7 @@ fn invalid_locale_warns_and_falls_back() {
     let mut warned = false;
     while let Some(record) = logger.pop() {
         if record
-            .args()
-            .to_string()
+            .args().to_owned()
             .contains("unsupported DYLINT_LOCALE `xx-XX`")
         {
             warned = true;

@@ -80,7 +80,7 @@ pub enum DependencyBinaryInstallError {
 impl DependencyBinaryInstallError {
     /// Returns `true` when the failure is caused by a missing repository asset.
     #[must_use]
-    pub(crate) fn is_not_found(&self) -> bool {
+    pub(crate) const fn is_not_found(&self) -> bool {
         matches!(self, Self::NotFound { .. })
     }
 }

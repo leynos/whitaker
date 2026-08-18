@@ -39,12 +39,11 @@ impl I18nFixture {
         *self.outcome.borrow_mut() = Some(result);
     }
 
-    fn result(&self) -> Result<String, I18nError> {
-        self.outcome
-            .borrow()
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| panic!("lookup should have been performed"))
+    /// Returns the stored lookup outcome, or `None` when no lookup has
+    /// been performed yet. Callers assert on the absence themselves so
+    /// this accessor stays panic-free.
+    fn result(&self) -> Option<Result<String, I18nError>> {
+        self.outcome.borrow().as_ref().cloned()
     }
 }
 
@@ -52,14 +51,14 @@ fn lint_count_from_key(key: &str) -> Option<(String, u32)> {
     let suffix = " with lint count ";
     let (base, count) = key.rsplit_once(suffix)?;
     let value = count.trim().parse().ok()?;
-    Some((base.to_string(), value))
+    Some((base.to_owned(), value))
 }
 
 fn branch_count_from_key(key: &str) -> Option<(String, u32)> {
     let suffix = " with branches ";
     let (base, count) = key.rsplit_once(suffix)?;
     let value = count.trim().parse().ok()?;
-    Some((base.to_string(), value))
+    Some((base.to_owned(), value))
 }
 
 #[fixture]
@@ -93,7 +92,7 @@ fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
         let mut args = default_arguments();
         args.insert(
             Cow::Borrowed("branches"),
-            FluentValue::from(branches as i64),
+            FluentValue::from(i64::from(branches)),
         );
         let phrase = branch_phrase(localizer.locale(), branches as usize);
         args.insert(
@@ -107,7 +106,7 @@ fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
 
     if let Some((base_key, lint_count)) = lint_count_from_key(&key) {
         let mut args: Arguments<'static> = HashMap::new();
-        args.insert(Cow::Borrowed("lint"), FluentValue::from(lint_count as i64));
+        args.insert(Cow::Borrowed("lint"), FluentValue::from(i64::from(lint_count)));
         let result = localizer.attribute_with_args(&base_key, &attribute, &args);
         fixture.store_message(result);
         return;
@@ -121,33 +120,41 @@ fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
 #[then("the resolved locale is {expected}")]
 fn then_locale(fixture: &I18nFixture, expected: String) {
     let localizer = fixture.ensure_localizer();
-    assert_eq!(localizer.locale(), expected);
+    assert_eq!(
+        localizer.locale(),
+        expected,
+        "expected resolved locale `{expected}`"
+    );
 }
 
 #[then("the loader reports fallback usage")]
 fn then_fallback_used(fixture: &I18nFixture) {
     let localizer = fixture.ensure_localizer();
-    assert!(localizer.used_fallback());
+    assert!(
+        localizer.used_fallback(),
+        "expected the loader to report fallback usage"
+    );
 }
 
 #[then("the message contains {snippet}")]
 fn then_contains(fixture: &I18nFixture, snippet: String) {
     let message = fixture
         .result()
+        .unwrap_or_else(|| panic!("lookup should have been performed"))
         .unwrap_or_else(|error| panic!("message should resolve: {error}"));
-    let message = strip_isolation_marks(&message);
-    let snippet = strip_isolation_marks(&snippet);
+    let cleaned_message = strip_isolation_marks(&message);
+    let cleaned_snippet = strip_isolation_marks(&snippet);
     assert!(
-        message.contains(snippet.as_ref()),
-        "expected `{message}` to contain `{snippet}`",
+        cleaned_message.contains(cleaned_snippet.as_ref()),
+        "expected `{cleaned_message}` to contain `{cleaned_snippet}`",
     );
 }
 
 #[then("localization fails with a missing message error")]
 fn then_missing(fixture: &I18nFixture) {
     match fixture.result() {
-        Err(I18nError::MissingMessage { .. }) => {}
-        other => panic!("unexpected result: {other:?}", other = other),
+        Some(Err(I18nError::MissingMessage { .. })) => {}
+        other => panic!("unexpected result: {other:?}"),
     }
 }
 
@@ -224,12 +231,12 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("foo with lint count 42", Some(("foo".to_string(), 42)))]
+    #[case("foo with lint count 42", Some(("foo".to_owned(), 42)))]
     #[case("foo with lint 42", None)]
     #[case("foo with lint count ", None)]
     #[case("foo with lint count abc", None)]
     #[case("", None)]
-    #[case(" with lint count 10", Some(("".to_string(), 10)))]
+    #[case(" with lint count 10", Some((String::new(), 10)))]
     fn lint_count_from_key_parsing(#[case] input: &str, #[case] expected: Option<(String, u32)>) {
         assert_eq!(lint_count_from_key(input), expected);
     }

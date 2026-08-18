@@ -9,6 +9,7 @@ pub mod complexity_signal;
 pub mod context;
 pub mod decomposition_advice;
 pub mod diagnostics;
+pub mod dylint_entry;
 pub mod expr;
 pub mod i18n;
 pub mod lcom4;

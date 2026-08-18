@@ -15,7 +15,7 @@ use dylint_testing::ui::Test;
 use rstest::rstest;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use whitaker_common::test_support::{EnvVarGuard, run_test_runner};
+use whitaker_common::test_support::{run_test_runner, with_env_var};
 
 use harness_lock::ExampleHarnessLock;
 
@@ -102,17 +102,18 @@ impl ExampleHarness {
     /// Runs `example` with the collection-summary env var pointed at a fresh
     /// path, returning the appended summary text.
     ///
-    /// The env-var guard and the harness lock are both held across the run and
-    /// the read, and the summary file is removed before returning, so no
-    /// concurrently scheduled run can append to the same path mid-read.
+    /// The scoped env override and the harness lock are both held across the
+    /// run and the read, and the summary file is removed before returning, so
+    /// no concurrently scheduled run can append to the same path mid-read.
     fn collect_summary(&self, example: &str) -> String {
         let summary_path = unique_summary_path();
-        let _guard = EnvVarGuard::set(COLLECTION_SUMMARY_ENV, summary_path.as_os_str());
-        self.run_example(example);
-        let summary =
-            std::fs::read_to_string(&summary_path).expect("collection summary should be written");
-        let _ = std::fs::remove_file(&summary_path);
-        summary
+        with_env_var(COLLECTION_SUMMARY_ENV, summary_path.as_os_str(), || {
+            self.run_example(example);
+            let summary = std::fs::read_to_string(&summary_path)
+                .expect("collection summary should be written");
+            let _ = std::fs::remove_file(&summary_path);
+            summary
+        })
     }
 }
 

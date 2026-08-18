@@ -99,9 +99,11 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     target_dir: &target,
 ///     verbosity: 0,
 ///     quiet: false,
-///     skip_deps: false,
-///     skip_wrapper: false,
-///     no_update: false,
+///     skips: whitaker_installer::output::DryRunSkips {
+///         deps: false,
+///         wrapper: false,
+///         update: false,
+///     },
 ///     jobs: None,
 ///     crates: &crates,
 /// };
@@ -122,16 +124,23 @@ pub struct DryRunInfo<'a> {
     pub verbosity: u8,
     /// Whether quiet mode is enabled.
     pub quiet: bool,
-    /// Whether dependency installation is skipped.
-    pub skip_deps: bool,
-    /// Whether wrapper script generation is skipped.
-    pub skip_wrapper: bool,
-    /// Whether repository updates are disabled.
-    pub no_update: bool,
+    /// Which installation steps are skipped.
+    pub skips: DryRunSkips,
     /// Optional parallel job count.
     pub jobs: Option<usize>,
     /// Crates to be built.
     pub crates: &'a [CrateName],
+}
+
+/// Step-skipping flags reported in dry-run output.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DryRunSkips {
+    /// Whether dependency installation is skipped.
+    pub deps: bool,
+    /// Whether wrapper script generation is skipped.
+    pub wrapper: bool,
+    /// Whether repository updates are disabled.
+    pub update: bool,
 }
 
 impl DryRunInfo<'_> {
@@ -146,9 +155,9 @@ impl DryRunInfo<'_> {
             format!("Target directory: {}", self.target_dir),
             format!("Verbosity level: {}", self.verbosity),
             format!("Quiet: {}", self.quiet),
-            format!("Skip deps: {}", self.skip_deps),
-            format!("Skip wrapper: {}", self.skip_wrapper),
-            format!("No update: {}", self.no_update),
+            format!("Skip deps: {}", self.skips.deps),
+            format!("Skip wrapper: {}", self.skips.wrapper),
+            format!("No update: {}", self.skips.update),
         ];
 
         if let Some(jobs) = self.jobs {

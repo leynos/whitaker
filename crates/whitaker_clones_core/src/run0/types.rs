@@ -73,19 +73,19 @@ impl TokenFragment {
 
     /// Returns the source artifact URI used in SARIF output.
     #[must_use]
-    pub fn file_uri(&self) -> &str {
+    pub const fn file_uri(&self) -> &str {
         self.file_uri.as_str()
     }
 
     /// Returns the original source text used for byte-range mapping.
     #[must_use]
-    pub fn source_text(&self) -> &str {
+    pub const fn source_text(&self) -> &str {
         self.source_text.as_str()
     }
 
     /// Returns the retained token fingerprints for this fragment.
     #[must_use]
-    pub fn retained_fingerprints(&self) -> &[Fingerprint] {
+    pub const fn retained_fingerprints(&self) -> &[Fingerprint] {
         self.retained_fingerprints.as_slice()
     }
 }
@@ -160,13 +160,13 @@ impl TokenPassConfig {
 
     /// Returns the SARIF producer name.
     #[must_use]
-    pub fn tool_name(&self) -> &str {
+    pub const fn tool_name(&self) -> &str {
         self.tool_name.as_str()
     }
 
     /// Returns the SARIF producer version.
     #[must_use]
-    pub fn tool_version(&self) -> &str {
+    pub const fn tool_version(&self) -> &str {
         self.tool_version.as_str()
     }
 

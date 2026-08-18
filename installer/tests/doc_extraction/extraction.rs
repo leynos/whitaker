@@ -52,8 +52,8 @@ fn accumulate_toml_line(line: &str, current_block: &mut String) {
 /// key = "value"
 /// ```
 /// "#;
-/// let blocks = extract_toml_blocks(markdown);
-/// assert_eq!(blocks.len(), 1);
+/// let blocks = `extract_toml_blocks(markdown)`;
+/// `assert_eq!(blocks.len()`, 1);
 /// assert!(!blocks[0].contains("# A comment"));
 /// ```
 pub fn extract_toml_blocks(markdown: &str) -> Vec<String> {

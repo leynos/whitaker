@@ -45,26 +45,39 @@ impl DependencyBinaryInstaller for AlwaysNotFoundRepositoryInstaller {
 }
 
 /// Writes a fake binary at `path` that exits successfully.
+///
+/// # Errors
+///
+/// Returns any I/O error raised while writing the binary or setting its
+/// permissions.
 #[cfg(any(test, feature = "test-support"))]
-pub fn write_fake_binary(path: &Path, is_executable: bool) {
-    write_fake_binary_with_status(path, is_executable, 0);
+pub fn write_fake_binary(path: &Path, is_executable: bool) -> std::io::Result<()> {
+    write_fake_binary_with_status(path, is_executable, 0)
 }
 
 /// Writes a fake binary at `path` that exits with the supplied status code.
+///
+/// # Errors
+///
+/// Returns any I/O error raised while writing the binary or setting its
+/// permissions.
 #[cfg(any(test, feature = "test-support"))]
-pub fn write_fake_binary_with_status(path: &Path, is_executable: bool, exit_code: i32) {
-    fs::write(path, fake_binary_contents(exit_code)).expect("write fake binary");
+pub fn write_fake_binary_with_status(
+    path: &Path,
+    is_executable: bool,
+    exit_code: i32,
+) -> std::io::Result<()> {
+    fs::write(path, fake_binary_contents(exit_code))?;
     #[cfg(unix)]
     {
         let mode = if is_executable { 0o755 } else { 0o644 };
-        let mut permissions = fs::metadata(path)
-            .expect("read fake binary metadata")
-            .permissions();
+        let mut permissions = fs::metadata(path)?.permissions();
         permissions.set_mode(mode);
-        fs::set_permissions(path, permissions).expect("set fake binary permissions");
+        fs::set_permissions(path, permissions)?;
     }
     #[cfg(not(unix))]
     let _ = is_executable;
+    Ok(())
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -80,28 +93,46 @@ fn fake_binary_contents(exit_code: i32) -> Vec<u8> {
 }
 
 /// Runs a closure with `PATH` pointing at one or more fake directories.
+///
+/// # Errors
+///
+/// Returns an I/O error when the fake directories cannot be created, the
+/// `setup` closure fails, or the fake `PATH` cannot be joined.
 #[cfg(any(test, feature = "test-support"))]
-pub fn with_fake_path<T>(setup: impl FnOnce(&[PathBuf]), run: impl FnOnce() -> T) -> T {
+pub fn with_fake_path<T>(
+    setup: impl FnOnce(&[PathBuf]) -> std::io::Result<()>,
+    run: impl FnOnce() -> T,
+) -> std::io::Result<T> {
     let _guard = env_test_guard();
-    let temp_dirs = [
-        tempfile::tempdir().expect("create temp dir"),
-        tempfile::tempdir().expect("create temp dir"),
-    ];
+    let temp_dirs = [tempfile::tempdir()?, tempfile::tempdir()?];
     let path_dirs = temp_dirs
         .iter()
         .map(|dir| dir.path().to_path_buf())
         .collect::<Vec<_>>();
-    setup(&path_dirs);
+    setup(&path_dirs)?;
     let path = std::env::join_paths(path_dirs.iter().map(PathBuf::as_path))
-        .expect("join fake PATH directories");
-    temp_env::with_var("PATH", Some(path), run)
+        .map_err(std::io::Error::other)?;
+    Ok(temp_env::with_var("PATH", Some(path), run))
 }
 
 /// Runs a closure with `PATH` containing a fake executable in the first entry.
+///
+/// # Errors
+///
+/// Returns an I/O error when the fake `PATH` cannot be prepared or the fake
+/// binary cannot be written.
 #[cfg(any(test, feature = "test-support"))]
-pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -> T {
+pub fn with_fake_binary_on_path<T>(
+    binary_name: &str,
+    run: impl FnOnce() -> T,
+) -> std::io::Result<T> {
     with_fake_path(
-        |directories| write_fake_binary(&path_binary_location(&directories[0], binary_name), true),
+        |directories| {
+            let first_dir = directories.first().ok_or_else(|| {
+                std::io::Error::other("fake PATH should contain at least one directory")
+            })?;
+            write_fake_binary(&path_binary_location(first_dir, binary_name), true)
+        },
         run,
     )
 }
@@ -109,6 +140,7 @@ pub fn with_fake_binary_on_path<T>(binary_name: &str, run: impl FnOnce() -> T) -
 /// Joins `binary_name` onto `directory` with the platform executable suffix,
 /// so directly probed fakes are runnable on Windows as well as Unix.
 #[cfg(any(test, feature = "test-support"))]
+#[must_use]
 pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     #[cfg(windows)]
     {
@@ -139,6 +171,7 @@ pub struct ExpectedCallConfig<'a> {
 }
 
 /// Creates an expected call for checking cargo-binstall availability.
+#[must_use]
 pub fn binstall_version_check(is_binstall_available: bool) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -152,6 +185,7 @@ pub fn binstall_version_check(is_binstall_available: bool) -> ExpectedCall {
 }
 
 /// Creates an expected call for checking cargo-binstall with a fixed result.
+#[must_use]
 pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -161,6 +195,7 @@ pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCal
 }
 
 /// Creates an expected call for installing a tool with cargo-binstall.
+#[must_use]
 pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
     let version = dependency_version(tool);
     ExpectedCall {
@@ -171,6 +206,7 @@ pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedC
 }
 
 /// Creates an expected call for installing a tool with cargo install.
+#[must_use]
 pub fn cargo_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -196,14 +232,17 @@ fn cargo_source_install(
 /// # Panics
 ///
 /// Panics when the manifest cannot be parsed or the tool is unknown.
+#[must_use]
 pub fn dependency_version(tool: &str) -> &'static str {
-    find_dependency_binary(tool)
-        .expect("dependency manifest should parse")
-        .map(|dependency| dependency.version())
-        .unwrap_or_else(|| panic!("unexpected tool: {tool}"))
+    match find_dependency_binary(tool) {
+        Ok(Some(dependency)) => dependency.version(),
+        Ok(None) => panic!("unexpected tool: {tool}"),
+        Err(error) => panic!("dependency manifest should parse: {error}"),
+    }
 }
 
 /// Successful `cargo dylint --version` output reporting the manifest version.
+#[must_use]
 pub fn cargo_dylint_version_output() -> Output {
     stdout_output(format!(
         "cargo-dylint {}\n",
@@ -213,12 +252,14 @@ pub fn cargo_dylint_version_output() -> Output {
 
 /// Expected `cargo install --list` call reporting the manifest-pinned
 /// `dylint-link` version.
+#[must_use]
 pub fn dylint_link_install_list_check() -> ExpectedCall {
     dylint_link_install_list_check_with_version(dependency_version("dylint-link"))
 }
 
 /// Expected `cargo install --list` call reporting the given `dylint-link`
 /// version.
+#[must_use]
 pub fn dylint_link_install_list_check_with_version(version: &str) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -230,6 +271,7 @@ pub fn dylint_link_install_list_check_with_version(version: &str) -> ExpectedCal
 }
 
 /// Creates an expected call for verifying repository installation.
+#[must_use]
 pub fn repository_verification_call(tool: &str, verification_fails: bool) -> Option<ExpectedCall> {
     match tool {
         "cargo-dylint" => Some(ExpectedCall {
@@ -313,16 +355,13 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
         return calls;
     }
     // binstall failed and cargo install also fails
-    if let Some(message) = cfg.cargo_install_failure.as_deref() {
-        let cargo_call = repo_aware_cargo_install(
+    cfg.cargo_install_failure.as_deref().map_or_else(Vec::new, |message| {
+        vec![repo_aware_cargo_install(
             cfg.tool_static,
             cfg.has_repository_context,
             Ok(failure_output(message)),
-        );
-        vec![cargo_call]
-    } else {
-        vec![]
-    }
+        )]
+    })
 }
 
 fn source_install_fallback_calls(
@@ -383,10 +422,7 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
     let install_call = ExpectedCall {
         cmd: "cargo",
         args,
-        result: Ok(match failure_message {
-            Some(message) => failure_output(message),
-            None => success_output(),
-        }),
+        result: Ok(failure_message.map_or_else(success_output, failure_output)),
     };
 
     let mut calls = vec![install_call];
@@ -403,7 +439,8 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
 }
 
 /// Builds the complete list of expected calls for a dependency binary test scenario.
-pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
+#[must_use]
+pub fn expected_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
     let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
     if config.should_verify_repository_install {
@@ -416,11 +453,12 @@ pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<Expecte
         }
     }
 
-    calls.extend(cargo_fallback_calls(tool, &config));
+    calls.extend(cargo_fallback_calls(tool, config));
     calls
 }
 
 /// Creates an expected call for verifying cargo-dylint installation.
+#[must_use]
 pub fn cargo_dylint_check() -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -430,6 +468,7 @@ pub fn cargo_dylint_check() -> ExpectedCall {
 }
 
 /// Creates an expected call for verifying cargo-dylint with a fixed result.
+#[must_use]
 pub fn cargo_dylint_check_with_result(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",

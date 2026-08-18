@@ -153,9 +153,7 @@ fn set_modified_time(path: &Path, seconds_since_epoch: u64) {
         .metadata()
         .expect("rlib fixture metadata should be readable")
         .accessed();
-    let times = existing_accessed
-        .map(|accessed| std::fs::FileTimes::new().set_accessed(accessed))
-        .unwrap_or_else(|_| std::fs::FileTimes::new())
+    let times = existing_accessed.map_or_else(|_| std::fs::FileTimes::new(), |accessed| std::fs::FileTimes::new().set_accessed(accessed))
         .set_modified(modified);
     file.set_times(times)
         .expect("rlib fixture modified time should be set");

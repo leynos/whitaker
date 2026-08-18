@@ -89,7 +89,7 @@ impl AdjacencyReport {
     /// assert_eq!(report.node_count(), 4);
     /// ```
     #[must_use]
-    pub fn node_count(&self) -> usize {
+    pub const fn node_count(&self) -> usize {
         self.node_count
     }
 
@@ -166,7 +166,11 @@ impl AdjacencyReport {
     pub fn is_sorted(&self) -> bool {
         self.neighbours
             .iter()
-            .all(|bucket| bucket.windows(2).all(|pair| pair[0].0 <= pair[1].0))
+            .all(|bucket| {
+                bucket
+                    .windows(2)
+                    .all(|pair| matches!(pair, [(left, _), (right, _)] if left <= right))
+            })
     }
 }
 

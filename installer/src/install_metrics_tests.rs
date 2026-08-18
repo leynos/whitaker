@@ -26,8 +26,8 @@ fn metrics_path_fixture() -> MetricsPathFixture {
 #[test]
 fn zero_state_rates_are_zero() {
     let metrics = InstallMetrics::default();
-    assert_eq!(metrics.download_rate(), 0.0);
-    assert_eq!(metrics.build_rate(), 0.0);
+    assert_eq!(metrics.download_rate_permille(), 0, "zero-state download rate");
+    assert_eq!(metrics.build_rate_permille(), 0, "zero-state build rate");
 }
 
 #[test]
@@ -40,8 +40,8 @@ fn record_install_updates_counts_and_duration() {
     assert_eq!(metrics.download_installs(), 1);
     assert_eq!(metrics.build_installs(), 1);
     assert_eq!(metrics.total_install_duration(), Duration::from_secs(2));
-    assert!((metrics.download_rate() - 0.5).abs() < f64::EPSILON);
-    assert!((metrics.build_rate() - 0.5).abs() < f64::EPSILON);
+    assert_eq!(metrics.download_rate_permille(), 500, "download rate permille");
+    assert_eq!(metrics.build_rate_permille(), 500, "build rate permille");
 }
 
 #[rstest]

@@ -193,7 +193,7 @@ fn ancestor_function_is_test<'tcx>(
         })
 }
 
-fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>) -> bool {
+fn is_in_tests_directory(cx: &LateContext<'_>) -> bool {
     cx.tcx.sess.local_crate_source_file().is_some_and(|source| {
         is_integration_test_crate_root(source.path(RemapPathScopeComponents::DIAGNOSTICS))
     })
@@ -233,7 +233,7 @@ fn is_likely_test_function<'tcx>(
         || is_in_tests_directory(cx)
 }
 
-fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {
+fn is_in_cfg_test_module(cx: &LateContext<'_>, hir_id: hir::HirId) -> bool {
     cx.tcx.hir_parent_iter(hir_id).any(|(ancestor_id, node)| {
         let hir::Node::Item(item) = node else {
             return false;

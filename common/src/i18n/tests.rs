@@ -20,9 +20,9 @@ fn resolves_locales(#[case] input: Option<&str>, #[case] expected: &str, #[case]
 #[test]
 fn enumerates_available_locales() {
     let locales = available_locales();
-    assert!(locales.contains(&"en-GB".to_string()));
-    assert!(locales.contains(&"cy".to_string()));
-    assert!(locales.contains(&"gd".to_string()));
+    assert!(locales.contains(&"en-GB".to_owned()));
+    assert!(locales.contains(&"cy".to_owned()));
+    assert!(locales.contains(&"gd".to_owned()));
 }
 
 #[test]

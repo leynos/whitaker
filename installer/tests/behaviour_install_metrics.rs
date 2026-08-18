@@ -9,7 +9,6 @@ use whitaker_installer::install_metrics::{
     InstallMetrics, InstallMode, RecordOutcome, record_install_at_path,
 };
 
-const FLOAT_RATE_TOLERANCE: f64 = 1e-6;
 
 #[derive(Default)]
 struct InstallMetricsWorld {
@@ -115,25 +114,23 @@ fn then_build_installs(world: &mut InstallMetricsWorld, expected: u64) {
     assert_eq!(metrics.build_installs(), expected);
 }
 
-#[then("download rate is {expected:f64}")]
-fn then_download_rate(world: &mut InstallMetricsWorld, expected: f64) {
+#[then("download rate is {expected:u64} permille")]
+fn then_download_rate(world: &mut InstallMetricsWorld, expected: u64) {
     let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert!(
-        (metrics.download_rate() - expected).abs() < FLOAT_RATE_TOLERANCE,
-        "expected {}, got {}",
+    assert_eq!(
+        metrics.download_rate_permille(),
         expected,
-        metrics.download_rate()
+        "download rate permille mismatch"
     );
 }
 
-#[then("build rate is {expected:f64}")]
-fn then_build_rate(world: &mut InstallMetricsWorld, expected: f64) {
+#[then("build rate is {expected:u64} permille")]
+fn then_build_rate(world: &mut InstallMetricsWorld, expected: u64) {
     let metrics = world.in_memory_metrics.as_ref().expect("metrics available");
-    assert!(
-        (metrics.build_rate() - expected).abs() < FLOAT_RATE_TOLERANCE,
-        "expected {}, got {}",
+    assert_eq!(
+        metrics.build_rate_permille(),
         expected,
-        metrics.build_rate()
+        "build rate permille mismatch"
     );
 }
 

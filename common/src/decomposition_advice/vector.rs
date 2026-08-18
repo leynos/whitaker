@@ -27,7 +27,7 @@ pub(crate) enum FeatureCategory {
 }
 
 impl FeatureCategory {
-    fn prefix(self) -> &'static str {
+    const fn prefix(self) -> &'static str {
         match self {
             Self::Domain => "domain",
             Self::Field => "field",
@@ -37,7 +37,7 @@ impl FeatureCategory {
         }
     }
 
-    fn weight(self) -> u64 {
+    const fn weight(self) -> u64 {
         match self {
             Self::Domain => DOMAIN_WEIGHT,
             Self::Field => FIELD_WEIGHT,
@@ -47,7 +47,7 @@ impl FeatureCategory {
         }
     }
 
-    pub(crate) fn label_priority(self) -> usize {
+    pub(crate) const fn label_priority(self) -> usize {
         match self {
             Self::Domain => 0,
             Self::Field => 1,
@@ -70,7 +70,7 @@ struct FeatureIdentity {
 }
 
 impl FeatureMetadata {
-    pub(crate) fn category(&self) -> FeatureCategory {
+    pub(crate) const fn category(&self) -> FeatureCategory {
         self.category
     }
 
@@ -91,11 +91,11 @@ impl MethodFeatureVector {
         &self.method_name
     }
 
-    pub(crate) fn weights(&self) -> &BTreeMap<String, u64> {
+    pub(crate) const fn weights(&self) -> &BTreeMap<String, u64> {
         &self.weights
     }
 
-    pub(crate) fn metadata(&self) -> &BTreeMap<String, FeatureMetadata> {
+    pub(crate) const fn metadata(&self) -> &BTreeMap<String, FeatureMetadata> {
         &self.metadata
     }
 
@@ -342,16 +342,20 @@ fn type_identity(type_name: &str) -> FeatureIdentity {
 }
 
 fn should_split_before(chars: &[char], index: usize) -> bool {
-    if index == 0 {
+    let Some(previous_index) = index.checked_sub(1) else {
         return false;
-    }
+    };
 
-    let current = chars[index];
+    let Some(&current) = chars.get(index) else {
+        return false;
+    };
     if !current.is_uppercase() {
         return false;
     }
 
-    let previous = chars[index - 1];
+    let Some(&previous) = chars.get(previous_index) else {
+        return false;
+    };
     previous.is_lowercase()
         || chars
             .get(index + 1)

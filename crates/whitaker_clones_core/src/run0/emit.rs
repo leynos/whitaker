@@ -197,25 +197,25 @@ fn compact_span(region: &whitaker_sarif::Region) -> String {
         region.end_line.unwrap_or(region.start_line),
         region
             .end_column
-            .unwrap_or(region.start_column.unwrap_or(1))
+            .unwrap_or_else(|| region.start_column.unwrap_or(1))
     )
 }
 
-fn profile_number(profile: NormProfile) -> &'static str {
+const fn profile_number(profile: NormProfile) -> &'static str {
     match profile {
         NormProfile::T1 => "1",
         NormProfile::T2 => "2",
     }
 }
 
-fn profile_name(profile: NormProfile) -> &'static str {
+const fn profile_name(profile: NormProfile) -> &'static str {
     match profile {
         NormProfile::T1 => "T1",
         NormProfile::T2 => "T2",
     }
 }
 
-fn profile_sort_key(profile: NormProfile) -> u8 {
+const fn profile_sort_key(profile: NormProfile) -> u8 {
     match profile {
         NormProfile::T1 => 1,
         NormProfile::T2 => 2,
@@ -295,9 +295,23 @@ fn token_hash(left: &TokenFragment, right: &TokenFragment) -> String {
 
     let mut hasher = Sha256::new();
     for value in values {
-        hasher.update(value.to_be_bytes());
+        hasher.update(u64_big_endian_bytes(value));
     }
     digest_hex(hasher.finalize())
+}
+
+/// Serializes a `u64` as big-endian bytes with explicit masks and shifts.
+///
+/// The digest contract fixes the byte order, so the decomposition is spelled
+/// out here rather than delegated to an endianness-specific method.
+fn u64_big_endian_bytes(value: u64) -> [u8; 8] {
+    let mut bytes = [0_u8; 8];
+    let mut remaining = value;
+    for slot in bytes.iter_mut().rev() {
+        *slot = (remaining & 0xff) as u8;
+        remaining >>= 8;
+    }
+    bytes
 }
 
 fn digest_hex(bytes: impl AsRef<[u8]>) -> String {

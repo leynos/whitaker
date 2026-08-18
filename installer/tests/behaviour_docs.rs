@@ -136,7 +136,7 @@ fn get_config_integer(table: &Table, section: &str, key: &str) -> i64 {
     table
         .get(section)
         .and_then(|s| s.get(key))
-        .and_then(|v| v.as_integer())
+        .and_then(toml::Value::as_integer)
         .unwrap_or_else(|| panic!("expected {section}.{key} to be an integer"))
 }
 
@@ -266,7 +266,7 @@ fn then_no_unwrap_or_else_panic_allow_in_main_present(toml_world: &TomlWorld) {
     let allow_in_main = table
         .get("no_unwrap_or_else_panic")
         .and_then(|t| t.get("allow_in_main"))
-        .and_then(|v| v.as_bool())
+        .and_then(toml::Value::as_bool)
         .expect("expected no_unwrap_or_else_panic.allow_in_main boolean");
 
     assert!(

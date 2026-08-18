@@ -32,6 +32,7 @@ experimental-rstest-helper-should-be-fixture = [
 ]
 
 [dependencies]
+whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }

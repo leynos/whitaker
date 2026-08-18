@@ -17,7 +17,7 @@ enum MethodSide {
 }
 
 impl MethodSide {
-    fn key(self) -> &'static str {
+    const fn key(self) -> &'static str {
         match self {
             Self::Left => "left",
             Self::Right => "right",

@@ -14,13 +14,23 @@
 /// allocation.
 #[must_use]
 pub(crate) fn to_lower_hex(bytes: &[u8]) -> String {
-    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut hex = String::with_capacity(bytes.len() * 2);
     for &byte in bytes {
-        hex.push(char::from(HEX_DIGITS[usize::from(byte >> 4)]));
-        hex.push(char::from(HEX_DIGITS[usize::from(byte & 0x0f)]));
+        hex.push(nibble_to_hex(byte >> 4));
+        hex.push(nibble_to_hex(byte & 0x0f));
     }
     hex
+}
+
+/// Map the low four bits of `nibble` to a lowercase hexadecimal digit.
+fn nibble_to_hex(nibble: u8) -> char {
+    let masked = nibble & 0x0f;
+    let ascii = if masked < 10 {
+        b'0' + masked
+    } else {
+        b'a' + (masked - 10)
+    };
+    char::from(ascii)
 }
 
 #[cfg(test)]

@@ -187,7 +187,7 @@ impl Manifest {
     /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
     /// ```
     #[must_use]
-    pub fn new(provenance: ManifestProvenance, content: ManifestContent) -> Self {
+    pub const fn new(provenance: ManifestProvenance, content: ManifestContent) -> Self {
         Self {
             provenance,
             content,
@@ -203,7 +203,7 @@ impl Manifest {
     /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
     /// ```
     #[must_use]
-    pub fn git_sha(&self) -> &GitSha {
+    pub const fn git_sha(&self) -> &GitSha {
         &self.provenance.git_sha
     }
 
@@ -216,7 +216,7 @@ impl Manifest {
     /// assert_eq!(u32::from(manifest.schema_version()), 1);
     /// ```
     #[must_use]
-    pub fn schema_version(&self) -> SchemaVersion {
+    pub const fn schema_version(&self) -> SchemaVersion {
         self.provenance.schema_version
     }
 
@@ -229,7 +229,7 @@ impl Manifest {
     /// assert_eq!(manifest.toolchain().as_str(), "nightly-2026-05-28");
     /// ```
     #[must_use]
-    pub fn toolchain(&self) -> &ToolchainChannel {
+    pub const fn toolchain(&self) -> &ToolchainChannel {
         &self.provenance.toolchain
     }
 
@@ -242,7 +242,7 @@ impl Manifest {
     /// assert_eq!(manifest.target().as_str(), "x86_64-unknown-linux-gnu");
     /// ```
     #[must_use]
-    pub fn target(&self) -> &TargetTriple {
+    pub const fn target(&self) -> &TargetTriple {
         &self.provenance.target
     }
 
@@ -255,7 +255,7 @@ impl Manifest {
     /// assert_eq!(manifest.generated_at().as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
-    pub fn generated_at(&self) -> &GeneratedAt {
+    pub const fn generated_at(&self) -> &GeneratedAt {
         &self.content.generated_at
     }
 
@@ -281,7 +281,7 @@ impl Manifest {
     /// assert_eq!(manifest.sha256().as_str().len(), 64);
     /// ```
     #[must_use]
-    pub fn sha256(&self) -> &Sha256Digest {
+    pub const fn sha256(&self) -> &Sha256Digest {
         &self.content.sha256
     }
 }

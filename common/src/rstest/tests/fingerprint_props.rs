@@ -15,7 +15,8 @@ proptest! {
         for name in &names {
             let slot = norm.local_slot(name.as_str());
             if !seen.contains(name) {
-                let expected = seen.len() as u32;
+                let expected = u32::try_from(seen.len())
+                    .expect("at most 32 generated names, so the count fits in u32");
                 prop_assert_eq!(
                     slot.index(),
                     expected,
@@ -37,7 +38,7 @@ proptest! {
     ) {
         let mut norm = ParagraphNormalizer::new();
         for p in &prefix {
-            let _ = norm.local_slot(p.as_str());
+            let _prefix_slot = norm.local_slot(p.as_str());
         }
         let first = norm.local_slot(name.as_str());
         let second = norm.local_slot(name.as_str());

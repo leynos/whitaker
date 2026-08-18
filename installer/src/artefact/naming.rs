@@ -51,7 +51,7 @@ pub struct ArtefactName {
 impl ArtefactName {
     /// Create an artefact name from validated components.
     #[must_use]
-    pub fn new(git_sha: GitSha, toolchain: ToolchainChannel, target: TargetTriple) -> Self {
+    pub const fn new(git_sha: GitSha, toolchain: ToolchainChannel, target: TargetTriple) -> Self {
         Self {
             git_sha,
             toolchain,
@@ -61,19 +61,19 @@ impl ArtefactName {
 
     /// Return the git SHA component.
     #[must_use]
-    pub fn git_sha(&self) -> &GitSha {
+    pub const fn git_sha(&self) -> &GitSha {
         &self.git_sha
     }
 
     /// Return the toolchain channel component.
     #[must_use]
-    pub fn toolchain(&self) -> &ToolchainChannel {
+    pub const fn toolchain(&self) -> &ToolchainChannel {
         &self.toolchain
     }
 
     /// Return the target triple component.
     #[must_use]
-    pub fn target(&self) -> &TargetTriple {
+    pub const fn target(&self) -> &TargetTriple {
         &self.target
     }
 

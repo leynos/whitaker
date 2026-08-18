@@ -54,13 +54,13 @@ impl LabelPropagationReport {
 
     /// Returns the number of propagation passes performed.
     #[must_use]
-    pub fn iteration_count(&self) -> usize {
+    pub const fn iteration_count(&self) -> usize {
         self.runtime.iteration_count
     }
 
     /// Returns `true` when the graph contains at least one active node.
     #[must_use]
-    pub fn has_active_nodes(&self) -> bool {
+    pub const fn has_active_nodes(&self) -> bool {
         self.has_active_nodes
     }
 

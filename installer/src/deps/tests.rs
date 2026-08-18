@@ -1,6 +1,7 @@
 //! Tests for Dylint tool dependency installation and fallback behaviour.
 
 use super::*;
+use super::install::{InstallMode, install_tool};
 use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
 use crate::installer_packaging::TargetTriple;
 use crate::test_utils::dependency_binary_helpers::{
@@ -57,7 +58,7 @@ fn install_dylint_tools_uses_repository_release_first() {
             dylint_link: true,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect("repository install should succeed");
 
@@ -89,7 +90,7 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
             dylint_link: true,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect("cargo binstall fallback should succeed");
 
@@ -123,7 +124,7 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
             dylint_link: true,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect("cargo install fallback should succeed");
 
@@ -153,7 +154,7 @@ fn install_dylint_tools_falls_back_when_repository_verification_fails() {
             dylint_link: true,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect("fallback after verification failure should succeed");
 
@@ -186,7 +187,7 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
             dylint_link: true,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect_err("install should fail after all fallbacks");
 
@@ -226,7 +227,7 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
             dylint_link: true,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect("source build should succeed");
 
@@ -270,10 +271,11 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
                 dylint_link: false,
             },
             &mut stderr,
-            install_options(&repository_installer, false),
+            &install_options(&repository_installer, false),
         )
         .expect("cargo-dylint source build should satisfy both tools");
-    });
+    })
+    .expect("prepare fake PATH");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Installed cargo-dylint from source with cargo install."));
@@ -293,7 +295,7 @@ fn staged_unrunnable_dylint_link() -> std::io::Result<(tempfile::TempDir, PathBu
         dir.path(),
         "dylint-link",
     );
-    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1);
+    crate::test_utils::dependency_binary_helpers::write_fake_binary_with_status(&path, true, 1)?;
     Ok((dir, path))
 }
 
@@ -323,7 +325,7 @@ fn install_dylint_tools_accepts_repository_dylint_link_without_executing_it() {
             dylint_link: false,
         },
         &mut stderr,
-        install_options(&repository_installer, false),
+        &install_options(&repository_installer, false),
     )
     .expect("repository install should satisfy dylint-link");
 
@@ -365,10 +367,11 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
                 dylint_link: false,
             },
             &mut stderr,
-            install_options(&repository_installer, false),
+            &install_options(&repository_installer, false),
         )
         .expect("binstall fallback should succeed");
-    });
+    })
+    .expect("prepare fake PATH");
 
     let output = String::from_utf8(stderr).expect("stderr should be UTF-8");
     assert!(output.contains("Repository install for dylint-link unavailable"));

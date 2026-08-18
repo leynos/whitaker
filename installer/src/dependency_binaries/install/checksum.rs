@@ -95,7 +95,7 @@ pub(super) fn fetch_expected_checksum(
         );
         DependencyBinaryInstallError::Download {
             url: checksum_url.to_owned(),
-            reason: "empty or invalid checksum file".to_string(),
+            reason: "empty or invalid checksum file".to_owned(),
         }
     })?;
     let expected = token.to_ascii_lowercase();
@@ -133,7 +133,10 @@ fn compute_sha256(mut reader: impl Read) -> io::Result<String> {
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error),
         };
-        hasher.update(&buffer[..bytes_read]);
+        let chunk = buffer
+            .get(..bytes_read)
+            .ok_or_else(|| io::Error::other("reader returned an out-of-range byte count"))?;
+        hasher.update(chunk);
     }
     Ok(to_lower_hex(&hasher.finalize()))
 }
@@ -159,7 +162,7 @@ pub(super) fn verify_archive_checksum(
     if actual_checksum != expected {
         return Err(DependencyBinaryInstallError::Checksum {
             archive: archive.to_path_buf(),
-            expected: expected.to_string(),
+            expected: expected.to_owned(),
             actual: actual_checksum,
         });
     }

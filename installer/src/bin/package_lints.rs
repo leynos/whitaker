@@ -128,7 +128,7 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
         generated_at: GeneratedAt::new(timestamp),
     };
 
-    let output = package_artefact(params)?;
+    let output = package_artefact(&params)?;
     let manifest_json = generate_manifest_json(&output.manifest)?;
     let out_dir = output.archive_path.parent().expect("archive has parent");
     let manifest_filename = format!("manifest-{}.json", output.manifest.target());
@@ -187,7 +187,7 @@ fn validate_iso8601(ts: &str) -> Result<(), PackageCliError> {
     Ok(())
 }
 
-fn has_valid_length(b: &[u8]) -> bool {
+const fn has_valid_length(b: &[u8]) -> bool {
     b.len() == 20
 }
 
@@ -226,7 +226,7 @@ fn format_epoch_secs(epoch_secs: u64) -> String {
 ///
 /// Adapted from Howard Hinnant's `civil_from_days` algorithm, which is
 /// public domain and widely used in C++ `<chrono>` implementations.
-fn civil_from_epoch(epoch_secs: u64) -> (u32, u32, u32) {
+const fn civil_from_epoch(epoch_secs: u64) -> (u32, u32, u32) {
     let z = (epoch_secs / 86_400) as i64 + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097) as u64; // day of era [0, 146_096]

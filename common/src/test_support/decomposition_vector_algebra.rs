@@ -64,7 +64,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.left_dot_right(), 40);
     /// ```
     #[must_use]
-    pub fn left_dot_right(self) -> u64 {
+    pub const fn left_dot_right(self) -> u64 {
         self.left_dot_right
     }
 
@@ -94,7 +94,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.right_dot_left(), 40);
     /// ```
     #[must_use]
-    pub fn right_dot_left(self) -> u64 {
+    pub const fn right_dot_left(self) -> u64 {
         self.right_dot_left
     }
 
@@ -124,7 +124,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.left_norm_squared(), 44);
     /// ```
     #[must_use]
-    pub fn left_norm_squared(self) -> u64 {
+    pub const fn left_norm_squared(self) -> u64 {
         self.left_norm_squared
     }
 
@@ -154,7 +154,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.right_norm_squared(), 44);
     /// ```
     #[must_use]
-    pub fn right_norm_squared(self) -> u64 {
+    pub const fn right_norm_squared(self) -> u64 {
         self.right_norm_squared
     }
 }

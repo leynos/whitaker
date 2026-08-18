@@ -25,6 +25,7 @@ use std::process::{ExitStatus, Output};
 /// assert!(!failure.success());
 /// ```
 #[cfg(unix)]
+#[must_use]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
 
@@ -45,6 +46,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
 /// assert!(!failure.success());
 /// ```
 #[cfg(windows)]
+#[must_use]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
 
@@ -63,6 +65,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
 /// assert!(output.stdout.is_empty());
 /// assert!(output.stderr.is_empty());
 /// ```
+#[must_use]
 pub fn success_output() -> Output {
     Output {
         status: exit_status(0),
@@ -104,11 +107,11 @@ pub fn stdout_output(stdout: impl AsRef<str>) -> Output {
 /// assert_eq!(output.stderr, b"command failed");
 /// ```
 pub fn failure_output(stderr: impl AsRef<str>) -> Output {
-    let stderr = stderr.as_ref();
+    let stderr_text = stderr.as_ref();
     Output {
         status: exit_status(1),
         stdout: Vec::new(),
-        stderr: stderr.as_bytes().to_vec(),
+        stderr: stderr_text.as_bytes().to_vec(),
     }
 }
 
@@ -135,6 +138,7 @@ impl BaseDirs for StubDirs {
 
 /// Compute the SHA-256 hex digest of a byte slice for test fixtures.
 #[cfg(any(test, feature = "test-support"))]
+#[must_use]
 pub fn sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     crate::hex::to_lower_hex(&Sha256::digest(data))
@@ -147,9 +151,9 @@ pub fn prebuilt_manifest_json(
     target: impl AsRef<str>,
     sha256: impl AsRef<str>,
 ) -> String {
-    let toolchain = toolchain.as_ref();
-    let target = target.as_ref();
-    let sha256 = sha256.as_ref();
+    let toolchain_value = toolchain.as_ref();
+    let target_value = target.as_ref();
+    let sha256_value = sha256.as_ref();
     format!(
         concat!(
             r#"{{"git_sha":"abc1234","schema_version":1,"#,
@@ -159,9 +163,9 @@ pub fn prebuilt_manifest_json(
             r#""files":["libwhitaker_suite.so"],"#,
             r#""sha256":"{sha256}"}}"#,
         ),
-        toolchain = toolchain,
-        target = target,
-        sha256 = sha256,
+        toolchain = toolchain_value,
+        target = target_value,
+        sha256 = sha256_value,
     )
 }
 
@@ -237,6 +241,7 @@ impl StubExecutor {
     ///     },
     /// ]);
     /// ```
+    #[must_use]
     pub fn new(expected: Vec<ExpectedCall>) -> Self {
         Self {
             expected: RefCell::new(expected.into()),

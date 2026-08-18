@@ -38,11 +38,17 @@ pub use self::vector_algebra::{MethodVectorAlgebraReport, method_vector_algebra}
 ///
 /// assert_eq!(profile.name(), "parse_tokens");
 /// ```
+#[derive(Clone, Copy)]
 pub struct MethodInput<'a> {
+    /// Method name recorded on the resulting profile.
     pub name: &'a str,
+    /// Struct fields the method accesses.
     pub fields: &'a [&'a str],
+    /// Types that appear in the method signature.
     pub signature_types: &'a [&'a str],
+    /// Types bound locally within the method body.
     pub local_types: &'a [&'a str],
+    /// External domains (modules or crates) the method touches.
     pub domains: &'a [&'a str],
 }
 
