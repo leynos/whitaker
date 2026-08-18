@@ -7,9 +7,10 @@
 #[cfg(feature = "dylint-driver")]
 extern crate rustc_driver;
 
+use std::path::Path;
+
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
-use std::path::Path;
 use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test_runner};
 
 #[test]
@@ -21,7 +22,8 @@ fn ui() {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
         )
     });
 }

@@ -1,7 +1,8 @@
 //! Unit tests for [`super::CognitiveComplexityBuilder`].
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 // ---------------------------------------------------------------------------
 // Individual increment types — non-expansion

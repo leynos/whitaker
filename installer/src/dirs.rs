@@ -73,7 +73,8 @@ pub trait BaseDirs {
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
-/// let data_dir = dirs.whitaker_data_dir()
+/// let data_dir = dirs
+///     .whitaker_data_dir()
 ///     .expect("could not determine data directory");
 /// println!("Whitaker data at: {}", data_dir.display());
 /// ```
@@ -101,9 +102,7 @@ impl SystemBaseDirs {
 }
 
 impl BaseDirs for SystemBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        Some(self.user_dirs.home_dir().to_owned())
-    }
+    fn home_dir(&self) -> Option<PathBuf> { Some(self.user_dirs.home_dir().to_owned()) }
 
     fn bin_dir(&self) -> Option<PathBuf> {
         #[cfg(unix)]
@@ -113,9 +112,7 @@ impl BaseDirs for SystemBaseDirs {
         self.home_dir().map(|h| h.join(".local").join("bin"))
     }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        Some(self.project_dirs.data_dir().to_owned())
-    }
+    fn whitaker_data_dir(&self) -> Option<PathBuf> { Some(self.project_dirs.data_dir().to_owned()) }
 }
 
 #[cfg(test)]

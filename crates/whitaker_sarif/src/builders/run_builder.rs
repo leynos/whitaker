@@ -1,8 +1,10 @@
 //! Builder for [`Run`] objects.
 
-use crate::model::descriptor::ReportingDescriptor;
-use crate::model::result::SarifResult;
-use crate::model::run::{Artifact, Invocation, Run, Tool, ToolComponent};
+use crate::model::{
+    descriptor::ReportingDescriptor,
+    result::SarifResult,
+    run::{Artifact, Invocation, Run, Tool, ToolComponent},
+};
 
 /// Fluent builder for constructing a [`Run`].
 ///
@@ -50,7 +52,10 @@ impl RunBuilder {
     /// let run = RunBuilder::new("tool", "1.0")
     ///     .with_information_uri("https://example.com")
     ///     .build();
-    /// assert_eq!(run.tool.driver.information_uri.as_deref(), Some("https://example.com"));
+    /// assert_eq!(
+    ///     run.tool.driver.information_uri.as_deref(),
+    ///     Some("https://example.com")
+    /// );
     /// ```
     #[must_use]
     pub fn with_information_uri(mut self, uri: impl Into<String>) -> Self {
@@ -81,7 +86,7 @@ impl RunBuilder {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_sarif::{RunBuilder, ResultBuilder};
+    /// use whitaker_sarif::{ResultBuilder, RunBuilder};
     ///
     /// let result = ResultBuilder::new("WHK001")
     ///     .with_message("clone")
@@ -101,7 +106,7 @@ impl RunBuilder {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_sarif::{RunBuilder, Invocation};
+    /// use whitaker_sarif::{Invocation, RunBuilder};
     ///
     /// let run = RunBuilder::new("tool", "1.0")
     ///     .with_invocation(Invocation {
@@ -122,7 +127,7 @@ impl RunBuilder {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_sarif::{RunBuilder, Artifact, ArtifactLocation};
+    /// use whitaker_sarif::{Artifact, ArtifactLocation, RunBuilder};
     ///
     /// let run = RunBuilder::new("tool", "1.0")
     ///     .with_artifact(Artifact {
@@ -175,14 +180,13 @@ impl RunBuilder {
 mod tests {
     //! Unit tests for [`RunBuilder`] construction and method chaining.
 
-    use super::*;
-    use crate::rules::all_rules;
     use rstest::{fixture, rstest};
 
+    use super::*;
+    use crate::rules::all_rules;
+
     #[fixture]
-    fn builder() -> RunBuilder {
-        RunBuilder::new("tool", "1.0")
-    }
+    fn builder() -> RunBuilder { RunBuilder::new("tool", "1.0") }
 
     #[rstest]
     fn builds_run_with_tool(builder: RunBuilder) {

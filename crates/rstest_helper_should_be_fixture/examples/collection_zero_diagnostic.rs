@@ -50,9 +50,7 @@ struct Builder<'a> {
 }
 
 impl Builder<'_> {
-    fn build(&self, suffix: &str) -> String {
-        format!("{}-{suffix}", self.fixture)
-    }
+    fn build(&self, suffix: &str) -> String { format!("{}-{suffix}", self.fixture) }
 }
 
 #[rstest]
@@ -67,9 +65,7 @@ fn rstest_helper_call_collection_stays_silent(fixture: &str) {
     assert_eq!(built, "fixture-suffix");
 }
 
-const fn nested_helper(fixture: &str) -> &str {
-    fixture
-}
+const fn nested_helper(fixture: &str) -> &str { fixture }
 
 #[rstest]
 #[case("first")]

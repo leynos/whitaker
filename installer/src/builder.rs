@@ -3,18 +3,28 @@
 //! This module provides utilities to build Dylint lint crates in release mode
 //! with the required features enabled.
 
-use crate::error::{InstallerError, Result};
-use crate::toolchain::Toolchain;
-use camino::Utf8PathBuf;
 use std::process::Command;
+
+use camino::Utf8PathBuf;
 
 // Re-export from submodules for backwards compatibility
 pub use crate::crate_name::CrateName;
-pub use crate::resolution::{
-    CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, is_known_crate,
-    resolve_crates, validate_crate_names,
+use crate::{
+    error::{InstallerError, Result},
+    toolchain::Toolchain,
 };
-pub use crate::workspace::find_workspace_root;
+pub use crate::{
+    resolution::{
+        CrateResolutionOptions,
+        EXPERIMENTAL_LINT_CRATES,
+        LINT_CRATES,
+        SUITE_CRATE,
+        is_known_crate,
+        resolve_crates,
+        validate_crate_names,
+    },
+    workspace::find_workspace_root,
+};
 
 /// Configuration for the build process.
 #[derive(Debug, Clone)]
@@ -63,9 +73,7 @@ pub struct Builder {
 impl Builder {
     /// Create a new builder with the given configuration.
     #[must_use]
-    pub const fn new(config: BuildConfig) -> Self {
-        Self { config }
-    }
+    pub const fn new(config: BuildConfig) -> Self { Self { config } }
 
     /// Build a single lint crate.
     ///
@@ -186,15 +194,11 @@ impl Builder {
     /// This method is primarily useful for testing to verify that the correct
     /// configuration was constructed.
     #[must_use]
-    pub const fn config(&self) -> &BuildConfig {
-        &self.config
-    }
+    pub const fn config(&self) -> &BuildConfig { &self.config }
 }
 
 impl CrateBuilder for Builder {
-    fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> {
-        self.build_all(crates)
-    }
+    fn build_all(&self, crates: &[CrateName]) -> Result<Vec<BuildResult>> { self.build_all(crates) }
 }
 
 /// Return the platform-specific library file extension (including the dot).
@@ -229,8 +233,9 @@ pub const fn library_prefix() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     #[fixture]
     fn builder() -> Builder {

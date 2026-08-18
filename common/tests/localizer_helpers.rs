@@ -3,18 +3,30 @@
 //! Scenarios validate locale resolution and fallback handling so lints can
 //! depend on deterministic localization outcomes.
 
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    sync::{Mutex, MutexGuard},
+};
+
 use logtest::Logger;
 use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::borrow::Cow;
-use std::cell::RefCell;
-use std::sync::{Mutex, MutexGuard};
-use whitaker_common::i18n::testing::RecordingEmitter;
-use whitaker_common::i18n::{
-    Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+use whitaker_common::{
+    i18n::{
+        Arguments,
+        DiagnosticMessageSet,
+        FluentValue,
+        Localizer,
+        MessageKey,
+        MessageResolution,
+        get_localizer_for_lint,
+        noop_reporter,
+        safe_resolve_message_set,
+        testing::RecordingEmitter,
+    },
+    test_support::with_locale,
 };
-use whitaker_common::test_support::with_locale;
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -90,9 +102,7 @@ impl HelperWorld {
         );
     }
 
-    fn set_message_key(&self, key: String) {
-        self.message_key.borrow_mut().replace(key);
-    }
+    fn set_message_key(&self, key: String) { self.message_key.borrow_mut().replace(key); }
 
     fn set_fallback_messages(&self) {
         let fallback = DiagnosticMessageSet::new(
@@ -116,13 +126,9 @@ impl HelperWorld {
             .clone()
     }
 
-    fn ensure_arguments(&self) -> Arguments<'static> {
-        self.arguments.borrow().clone()
-    }
+    fn ensure_arguments(&self) -> Arguments<'static> { self.arguments.borrow().clone() }
 
-    fn clear_arguments(&self) {
-        *self.arguments.borrow_mut() = Arguments::default();
-    }
+    fn clear_arguments(&self) { *self.arguments.borrow_mut() = Arguments::default(); }
 
     fn prepare_doc_arguments(&self) {
         let mut args: Arguments<'static> = Arguments::default();
@@ -169,20 +175,14 @@ impl HelperWorld {
             .unwrap_or_else(|| panic!("diagnostic messages should be resolved"))
     }
 
-    fn recorded_messages(&self) -> Vec<String> {
-        self.emitter.recorded_messages()
-    }
+    fn recorded_messages(&self) -> Vec<String> { self.emitter.recorded_messages() }
 }
 
 #[fixture]
-fn world() -> HelperWorld {
-    HelperWorld::new()
-}
+fn world() -> HelperWorld { HelperWorld::new() }
 
 #[given("DYLINT_LOCALE is not set")]
-fn given_env_cleared(world: &HelperWorld) {
-    world.set_environment(None);
-}
+fn given_env_cleared(world: &HelperWorld) { world.set_environment(None); }
 
 #[given("DYLINT_LOCALE is {locale}")]
 fn given_env(world: &HelperWorld, locale: String) {
@@ -190,9 +190,7 @@ fn given_env(world: &HelperWorld, locale: String) {
 }
 
 #[given("no configuration locale is provided")]
-fn given_no_config(world: &HelperWorld) {
-    world.set_configuration(None);
-}
+fn given_no_config(world: &HelperWorld) { world.set_configuration(None); }
 
 #[given("the configuration locale is {locale}")]
 fn given_config(world: &HelperWorld, locale: String) {
@@ -206,14 +204,10 @@ fn when_request_localizer(world: &HelperWorld, lint: String) {
 }
 
 #[then("the resolved locale is {locale}")]
-fn then_locale(world: &HelperWorld, locale: String) {
-    world.assert_locale(unquote(&locale));
-}
+fn then_locale(world: &HelperWorld, locale: String) { world.assert_locale(unquote(&locale)); }
 
 #[given("fallback messages are defined")]
-fn given_fallback(world: &HelperWorld) {
-    world.set_fallback_messages();
-}
+fn given_fallback(world: &HelperWorld) { world.set_fallback_messages(); }
 
 #[given("a missing message key {key} is requested")]
 fn given_missing_key(world: &HelperWorld, key: String) {
@@ -226,19 +220,13 @@ fn given_message_key(world: &HelperWorld, key: String) {
 }
 
 #[given("I prepare arguments for the doc attribute diagnostic")]
-fn given_doc_arguments(world: &HelperWorld) {
-    world.prepare_doc_arguments();
-}
+fn given_doc_arguments(world: &HelperWorld) { world.prepare_doc_arguments(); }
 
 #[given("I do not prepare arguments for the doc attribute diagnostic")]
-fn given_no_doc_arguments(world: &HelperWorld) {
-    world.clear_arguments();
-}
+fn given_no_doc_arguments(world: &HelperWorld) { world.clear_arguments(); }
 
 #[when("I resolve the diagnostic message set")]
-fn when_resolve_messages(world: &HelperWorld) {
-    world.resolve_messages();
-}
+fn when_resolve_messages(world: &HelperWorld) { world.resolve_messages(); }
 
 #[then("the fallback primary message contains {snippet}")]
 fn then_fallback_primary(world: &HelperWorld, snippet: String) {
@@ -282,29 +270,19 @@ fn then_no_bug(world: &HelperWorld) {
 }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 0)]
-fn scenario_fallback_to_default(world: HelperWorld) {
-    let _ = world;
-}
+fn scenario_fallback_to_default(world: HelperWorld) { let _ = world; }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 1)]
-fn scenario_environment_locale(world: HelperWorld) {
-    let _ = world;
-}
+fn scenario_environment_locale(world: HelperWorld) { let _ = world; }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 2)]
-fn scenario_localization_fallback(world: HelperWorld) {
-    let _ = world;
-}
+fn scenario_localization_fallback(world: HelperWorld) { let _ = world; }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 3)]
-fn scenario_localization_success(world: HelperWorld) {
-    let _ = world;
-}
+fn scenario_localization_success(world: HelperWorld) { let _ = world; }
 
 #[scenario("tests/features/localizer_helpers.feature", index = 4)]
-fn scenario_interpolation_failure(world: HelperWorld) {
-    let _ = world;
-}
+fn scenario_interpolation_failure(world: HelperWorld) { let _ = world; }
 
 #[test]
 fn invalid_locale_warns_and_falls_back() {
@@ -318,7 +296,8 @@ fn invalid_locale_warns_and_falls_back() {
     let mut warned = false;
     while let Some(record) = logger.pop() {
         if record
-            .args().to_owned()
+            .args()
+            .to_owned()
             .contains("unsupported DYLINT_LOCALE `xx-XX`")
         {
             warned = true;

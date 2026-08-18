@@ -7,17 +7,17 @@
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use whitaker_installer::artefact::error::ArtefactError;
-use whitaker_installer::artefact::git_sha::GitSha;
-use whitaker_installer::artefact::manifest::{
-    GeneratedAt, Manifest, ManifestContent, ManifestProvenance,
+use whitaker_installer::artefact::{
+    error::ArtefactError,
+    git_sha::GitSha,
+    manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance},
+    naming::ArtefactName,
+    schema_version::SchemaVersion,
+    sha256_digest::Sha256Digest,
+    target::TargetTriple,
+    toolchain_channel::ToolchainChannel,
+    verification::{VerificationFailureAction, VerificationPolicy},
 };
-use whitaker_installer::artefact::naming::ArtefactName;
-use whitaker_installer::artefact::schema_version::SchemaVersion;
-use whitaker_installer::artefact::sha256_digest::Sha256Digest;
-use whitaker_installer::artefact::target::TargetTriple;
-use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
-use whitaker_installer::artefact::verification::{VerificationFailureAction, VerificationPolicy};
 
 // ---------------------------------------------------------------------------
 // World types
@@ -39,19 +39,14 @@ struct ArtefactWorld {
 }
 
 #[fixture]
-fn world() -> ArtefactWorld {
-    ArtefactWorld::default()
-}
+fn world() -> ArtefactWorld { ArtefactWorld::default() }
 
 /// Helper to assert that an error option contains a specific `ArtefactError` variant.
 fn assert_error_matches<F>(error: &Option<ArtefactError>, field_name: &str, predicate: F)
 where
     F: FnOnce(&ArtefactError) -> bool,
 {
-    assert!(
-        error.is_some(),
-        "expected {field_name} validation to fail"
-    );
+    assert!(error.is_some(), "expected {field_name} validation to fail");
     assert!(
         predicate(error.as_ref().expect("checked above")),
         "error variant mismatch for {field_name}"
@@ -209,62 +204,46 @@ fn then_action_is_fallback(world: &mut ArtefactWorld) {
     path = "tests/features/artefact_policy.feature",
     name = "Construct artefact name from valid components"
 )]
-fn scenario_construct_artefact_name(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_construct_artefact_name(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject unsupported target triple"
 )]
-fn scenario_reject_unsupported_target(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_unsupported_target(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Accept all five supported target triples"
 )]
-fn scenario_accept_all_supported_targets(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_accept_all_supported_targets(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject invalid git SHA"
 )]
-fn scenario_reject_invalid_git_sha(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_invalid_git_sha(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject empty toolchain channel"
 )]
-fn scenario_reject_empty_channel(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_empty_channel(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Construct manifest with all fields"
 )]
-fn scenario_construct_manifest(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_construct_manifest(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Default verification policy requires checksum"
 )]
-fn scenario_default_verification_policy(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_default_verification_policy(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Verification failure triggers fallback"
 )]
-fn scenario_verification_failure_fallback(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_verification_failure_fallback(world: ArtefactWorld) { let _ = world; }

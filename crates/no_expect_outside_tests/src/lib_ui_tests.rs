@@ -1,11 +1,14 @@
 //! Additional UI-style regressions that need compiler flags or example-target
 //! support beyond the basic `ui/` source fixtures.
 
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
+
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 use rstest::rstest;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use temp_env::with_vars_unset;
 use whitaker_common::test_support::{env_test_guard, prepare_fixture, run_test_runner};
 
@@ -85,7 +88,11 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
         run_test_runner(spec.name, || {
             let _guard = env_test_guard();
             with_vars_unset(
-                ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"],
+                [
+                    "RUSTC_WRAPPER",
+                    "RUSTC_WORKSPACE_WRAPPER",
+                    "CARGO_BUILD_RUSTC_WRAPPER",
+                ],
                 || {
                     let mut test = Test::example(crate_name, spec.name);
                     test.rustc_flags(spec.rustc_flags);
@@ -96,7 +103,8 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
     });
@@ -150,9 +158,8 @@ fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{} regression should execute without diffs: \
-             RunnerFailure {{ crate_name: \"{crate_name}\", \
-             directory: \"{directory}\", message: {error:?} }}",
+            "{} regression should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
     });

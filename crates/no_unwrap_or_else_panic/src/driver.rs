@@ -1,18 +1,22 @@
 //! Lint wiring that flags panicking `unwrap_or_else` fallbacks.
 
-use crate::LINT_NAME;
-use crate::context::ContextSummary;
-use crate::diagnostics::emit_diagnostic;
-use crate::panic_detector::{closure_panics, receiver_is_option_or_result};
-use crate::policy::{LintPolicy, should_flag};
+use std::collections::HashSet;
+
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
-use std::collections::HashSet;
 use whitaker::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
+
+use crate::{
+    LINT_NAME,
+    context::ContextSummary,
+    diagnostics::emit_diagnostic,
+    panic_detector::{closure_panics, receiver_is_option_or_result},
+    policy::{LintPolicy, should_flag},
+};
 
 dylint_linting::impl_late_lint! {
     pub NO_UNWRAP_OR_ELSE_PANIC,
@@ -28,9 +32,7 @@ struct Config {
 }
 
 impl Config {
-    fn resolved_allow_in_main(&self) -> bool {
-        self.allow_in_main.unwrap_or(false)
-    }
+    fn resolved_allow_in_main(&self) -> bool { self.allow_in_main.unwrap_or(false) }
 }
 
 /// Lint pass that inspects `unwrap_or_else` fallbacks for panics.

@@ -4,15 +4,18 @@
 //! messages from Fluent bundles, along with supporting types for arguments
 //! and lookup errors.
 
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
 use fluent_templates::{Loader, fluent_bundle::FluentValue};
 use thiserror::Error;
 
-use super::locales::supports_locale;
-use super::{FALLBACK_LANGUAGE, FALLBACK_LITERAL, LOADER, LanguageIdentifier};
+use super::{
+    FALLBACK_LANGUAGE,
+    FALLBACK_LITERAL,
+    LOADER,
+    LanguageIdentifier,
+    locales::supports_locale,
+};
 
 /// `HashMap` wrapper used when passing Fluent arguments to lookups.
 pub type Arguments<'a> = HashMap<Cow<'a, str>, FluentValue<'a>>;
@@ -46,7 +49,7 @@ impl Localizer {
     /// Create a localizer for `locale`, falling back to [`crate::i18n::FALLBACK_LOCALE`].
     ///
     /// ```
-    /// use whitaker_common::i18n::{available_locales, Localizer};
+    /// use whitaker_common::i18n::{Localizer, available_locales};
     ///
     /// let locale = Localizer::new(Some("cy"));
     /// assert!(available_locales().contains(&"cy".to_string()));
@@ -79,21 +82,15 @@ impl Localizer {
 
     /// Return the resolved locale identifier.
     #[must_use]
-    pub const fn language(&self) -> &LanguageIdentifier {
-        &self.language
-    }
+    pub const fn language(&self) -> &LanguageIdentifier { &self.language }
 
     /// Return the resolved locale as a string slice.
     #[must_use]
-    pub fn locale(&self) -> &str {
-        &self.language_tag
-    }
+    pub fn locale(&self) -> &str { &self.language_tag }
 
     /// Whether the fallback locale was used.
     #[must_use]
-    pub const fn used_fallback(&self) -> bool {
-        self.fallback_used
-    }
+    pub const fn used_fallback(&self) -> bool { self.fallback_used }
 
     /// Fetch the translated message for `key`.
     ///
@@ -101,9 +98,7 @@ impl Localizer {
     ///
     /// Returns [`I18nError::MissingMessage`] when `key` is not defined for the
     /// resolved locale.
-    pub fn message(&self, key: &str) -> Result<String, I18nError> {
-        self.lookup(key, None, None)
-    }
+    pub fn message(&self, key: &str) -> Result<String, I18nError> { self.lookup(key, None, None) }
 
     /// Fetch the translated message with Fluent arguments.
     ///

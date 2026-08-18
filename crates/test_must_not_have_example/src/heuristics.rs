@@ -86,8 +86,9 @@ fn is_code_fence(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{DocExampleViolation, detect_example_violation};
     use rstest::rstest;
+
+    use super::{DocExampleViolation, detect_example_violation};
 
     #[rstest]
     #[case("No examples here.", None)]

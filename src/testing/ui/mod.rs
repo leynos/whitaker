@@ -12,8 +12,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
-use self::toolchain::{CrateName, ensure_toolchain_library};
 use whitaker_common::test_support::with_env_var_removed;
+
+use self::toolchain::{CrateName, ensure_toolchain_library};
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -185,8 +186,8 @@ pub fn run_with_runner(
 ///
 /// On Windows, one additional environment variable needs temporary adjustment:
 ///
-/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
-///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
+/// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the variable is
+///   otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
 /// The scoped mutations are serialized by `temp_env`'s re-entrant global lock,
 /// so runner closures that perform their own scoped environment setup nest

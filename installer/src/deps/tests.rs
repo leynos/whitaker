@@ -1,15 +1,30 @@
 //! Tests for Dylint tool dependency installation and fallback behaviour.
 
-use super::*;
-use super::install::{InstallMode, install_tool};
-use crate::dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller};
-use crate::installer_packaging::TargetTriple;
-use crate::test_utils::dependency_binary_helpers::{
-    binstall_install, binstall_version_check_with_result, cargo_dylint_check,
-    cargo_dylint_check_with_result, dylint_link_install_list_check, with_fake_binary_on_path,
-};
-use crate::test_utils::{ExpectedCall, StubDirs, StubExecutor, failure_output, success_output};
 use std::path::PathBuf;
+
+use super::{
+    install::{InstallMode, install_tool},
+    *,
+};
+use crate::{
+    dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller},
+    installer_packaging::TargetTriple,
+    test_utils::{
+        ExpectedCall,
+        StubDirs,
+        StubExecutor,
+        dependency_binary_helpers::{
+            binstall_install,
+            binstall_version_check_with_result,
+            cargo_dylint_check,
+            cargo_dylint_check_with_result,
+            dylint_link_install_list_check,
+            with_fake_binary_on_path,
+        },
+        failure_output,
+        success_output,
+    },
+};
 
 fn install_options<'a>(
     repository_installer: &'a dyn DependencyBinaryInstaller,

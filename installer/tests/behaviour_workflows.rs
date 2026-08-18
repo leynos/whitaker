@@ -3,14 +3,16 @@
 //! These scenarios test the --skip-deps, --no-update, and --skip-wrapper flags
 //! added to support standalone installation without a pre-cloned repository.
 
+use std::{
+    cell::{Cell, RefCell},
+    path::PathBuf,
+    process::{Command, Output},
+};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
-use std::process::{Command, Output};
 use tempfile::TempDir;
-use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
-use whitaker_installer::toolchain::parse_toolchain_channel;
+use whitaker_installer::{test_support::TEST_STAGE_SUITE_ENV, toolchain::parse_toolchain_channel};
 
 #[derive(Default)]
 struct WorkflowWorld {
@@ -23,9 +25,7 @@ struct WorkflowWorld {
 }
 
 #[fixture]
-fn world() -> WorkflowWorld {
-    WorkflowWorld::default()
-}
+fn world() -> WorkflowWorld { WorkflowWorld::default() }
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
@@ -59,9 +59,7 @@ fn is_toolchain_installed(channel: &str) -> bool {
 
 fn skip_scenario_when_toolchain_missing(world: &WorkflowWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
-        eprintln!(
-            "Skipping scenario because rustup toolchain '{channel}' is not installed."
-        );
+        eprintln!("Skipping scenario because rustup toolchain '{channel}' is not installed.");
         world.skip_assertions.set(true);
         rstest_bdd::skip!(
             "rustup toolchain '{channel}' is not installed.",
@@ -121,14 +119,10 @@ fn given_dry_run_with_flag(world: &WorkflowWorld, flag: &str) {
 }
 
 #[given("the installer is invoked with dry-run and skip-deps")]
-fn given_dry_run_skip_deps(world: &WorkflowWorld) {
-    given_dry_run_with_flag(world, "--skip-deps");
-}
+fn given_dry_run_skip_deps(world: &WorkflowWorld) { given_dry_run_with_flag(world, "--skip-deps"); }
 
 #[given("the installer is invoked with dry-run and no-update")]
-fn given_dry_run_no_update(world: &WorkflowWorld) {
-    given_dry_run_with_flag(world, "--no-update");
-}
+fn given_dry_run_no_update(world: &WorkflowWorld) { given_dry_run_with_flag(world, "--no-update"); }
 
 #[given("the installer is invoked with dry-run and skip-wrapper")]
 fn given_dry_run_skip_wrapper(world: &WorkflowWorld) {
@@ -252,21 +246,13 @@ fn then_output_includes_library_path_instructions(world: &WorkflowWorld) {
 // ---------------------------------------------------------------------------
 
 #[scenario(path = "tests/features/installer.feature", index = 15)]
-fn scenario_dry_run_skip_deps(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_skip_deps(world: WorkflowWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 16)]
-fn scenario_dry_run_no_update(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_no_update(world: WorkflowWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 17)]
-fn scenario_dry_run_skip_wrapper(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_dry_run_skip_wrapper(world: WorkflowWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 18)]
-fn scenario_skip_wrapper_outputs_shell_snippet(world: WorkflowWorld) {
-    let _ = world;
-}
+fn scenario_skip_wrapper_outputs_shell_snippet(world: WorkflowWorld) { let _ = world; }

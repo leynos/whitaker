@@ -1,10 +1,12 @@
 //! Behaviour-driven tests for shared configuration loading.
 
-use std::any::Any;
-use std::cell::RefCell;
-use std::convert::Infallible;
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::str::FromStr;
+use std::{
+    any::Any,
+    cell::RefCell,
+    convert::Infallible,
+    panic::{AssertUnwindSafe, catch_unwind},
+    str::FromStr,
+};
 
 mod support;
 
@@ -15,14 +17,10 @@ use whitaker::SharedConfig;
 use whitaker_common::i18n::normalise_locale;
 
 #[fixture]
-fn config_source() -> RefCell<Option<String>> {
-    RefCell::new(None)
-}
+fn config_source() -> RefCell<Option<String>> { RefCell::new(None) }
 
 #[fixture]
-fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> {
-    RefCell::new(None)
-}
+fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> { RefCell::new(None) }
 
 fn panic_message(payload: Box<dyn Any + Send>) -> String {
     match payload.downcast::<String>() {
@@ -50,15 +48,11 @@ impl FromStr for ErrorSnippet {
 }
 
 impl AsRef<str> for ErrorSnippet {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
+    fn as_ref(&self) -> &str { self.0.as_str() }
 }
 
 impl ErrorSnippet {
-    fn into_inner(self) -> String {
-        self.0
-    }
+    fn into_inner(self) -> String { self.0 }
 }
 
 #[given("no configuration state has been prepared")]
@@ -71,9 +65,7 @@ fn reset_state(
 }
 
 #[given("no workspace configuration overrides are provided")]
-fn no_overrides(config_source: &RefCell<Option<String>>) {
-    config_source.borrow_mut().take();
-}
+fn no_overrides(config_source: &RefCell<Option<String>>) { config_source.borrow_mut().take(); }
 
 #[given("the workspace config sets the module max line limit to {value}")]
 fn override_max_lines(config_source: &RefCell<Option<String>>, value: usize) {

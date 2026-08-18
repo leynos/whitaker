@@ -5,12 +5,15 @@
 //! correctly invokes the builder with the provided crates, and that
 //! `stage_libraries` correctly stages build results.
 
-use super::{PipelineContext, build_config_from_context, perform_build_with};
-use crate::builder::{BuildResult, MockCrateBuilder};
-use crate::crate_name::CrateName;
-use crate::toolchain::Toolchain;
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
+
+use super::{PipelineContext, build_config_from_context, perform_build_with};
+use crate::{
+    builder::{BuildResult, MockCrateBuilder},
+    crate_name::CrateName,
+    toolchain::Toolchain,
+};
 
 // -------------------------------------------------------------------------
 // Common trait for test context providers
@@ -88,9 +91,7 @@ impl PipelineContextProvider for TestContext {
 
 /// Returns a default TestContext with owned paths and default settings for pipeline unit tests.
 #[fixture]
-fn test_ctx() -> TestContext {
-    TestContext::new()
-}
+fn test_ctx() -> TestContext { TestContext::new() }
 
 // -------------------------------------------------------------------------
 // build_config_from_context tests

@@ -3,16 +3,30 @@
 mod fingerprint;
 mod fingerprint_props;
 
+use std::collections::BTreeSet;
+
+use rstest::rstest;
+
 use super::{
-    ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
-    SpanRecoveryFrame, UserEditableSpan, classify_rstest_parameter, fixture_local_names,
-    is_rstest_fixture, is_rstest_fixture_with, is_rstest_test, is_rstest_test_with,
+    ExpansionTrace,
+    ParameterBinding,
+    RstestDetectionOptions,
+    RstestParameter,
+    RstestParameterKind,
+    SpanRecoveryFrame,
+    UserEditableSpan,
+    classify_rstest_parameter,
+    fixture_local_names,
+    is_rstest_fixture,
+    is_rstest_fixture_with,
+    is_rstest_test,
+    is_rstest_test_with,
     recover_user_editable_span,
 };
-use crate::attributes::{Attribute, AttributeKind, AttributePath};
-use crate::span::{SourceLocation, SourceSpan};
-use rstest::rstest;
-use std::collections::BTreeSet;
+use crate::{
+    attributes::{Attribute, AttributeKind, AttributePath},
+    span::{SourceLocation, SourceSpan},
+};
 
 fn outer(path: &str) -> Attribute {
     Attribute::new(AttributePath::from(path), AttributeKind::Outer)

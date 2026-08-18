@@ -4,9 +4,11 @@
 //! that users can add to their shell profile to enable Dylint library discovery,
 //! as well as dry-run information formatting.
 
-use crate::crate_name::CrateName;
-use camino::Utf8Path;
 use std::io::Write;
+
+use camino::Utf8Path;
+
+use crate::crate_name::CrateName;
 
 /// Write a line to stderr, ignoring write failures.
 ///
@@ -39,9 +41,7 @@ impl ShellSnippet {
     /// use camino::Utf8PathBuf;
     /// use whitaker_installer::output::ShellSnippet;
     ///
-    /// let path = Utf8PathBuf::from(
-    ///     "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release"
-    /// );
+    /// let path = Utf8PathBuf::from("/home/user/.local/share/dylint/lib/nightly-2025-01-15/release");
     /// let snippet = ShellSnippet::new(&path);
     ///
     /// assert!(snippet.bash.contains("DYLINT_LIBRARY_PATH"));
@@ -86,8 +86,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// ```
 /// use camino::Utf8PathBuf;
-/// use whitaker_installer::crate_name::CrateName;
-/// use whitaker_installer::output::DryRunInfo;
+/// use whitaker_installer::{crate_name::CrateName, output::DryRunInfo};
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");
 /// let target = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
@@ -176,9 +175,10 @@ impl DryRunInfo<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     /// Shared fixture providing a test library path.
     #[fixture]
@@ -188,9 +188,7 @@ mod tests {
 
     /// Shared fixture providing a shell snippet for the test path.
     #[fixture]
-    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet {
-        ShellSnippet::new(&test_path)
-    }
+    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet { ShellSnippet::new(&test_path) }
 
     #[rstest]
     fn snippet_contains_path(test_snippet: ShellSnippet, test_path: Utf8PathBuf) {

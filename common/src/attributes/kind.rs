@@ -21,9 +21,7 @@ impl AttributeKind {
     /// assert!(!AttributeKind::Outer.is_inner());
     /// ```
     #[must_use]
-    pub const fn is_inner(self) -> bool {
-        matches!(self, Self::Inner)
-    }
+    pub const fn is_inner(self) -> bool { matches!(self, Self::Inner) }
 
     /// Returns `true` when the attribute is an outer attribute.
     ///
@@ -36,7 +34,5 @@ impl AttributeKind {
     /// assert!(!AttributeKind::Inner.is_outer());
     /// ```
     #[must_use]
-    pub const fn is_outer(self) -> bool {
-        matches!(self, Self::Outer)
-    }
+    pub const fn is_outer(self) -> bool { matches!(self, Self::Outer) }
 }

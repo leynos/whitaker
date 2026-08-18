@@ -1,7 +1,8 @@
 //! Unit tests for brain trait metric collection.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 fn mixed_items() -> Vec<TraitItemMetrics> {
     vec![

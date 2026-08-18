@@ -3,6 +3,7 @@
 //! that keep suites aligned and readable.
 
 use std::borrow::Cow;
+
 use whitaker_common::i18n::{Arguments, FluentValue};
 
 const UNICODE_ISOLATION_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];

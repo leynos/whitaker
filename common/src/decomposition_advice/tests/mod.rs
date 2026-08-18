@@ -6,15 +6,22 @@ mod propagation;
 mod test_fixtures;
 mod vector_algebra;
 
-use self::test_fixtures::{
-    ExpectedSuggestion, MethodInput, assert_suggestion, assert_type_decomposition_is_empty,
-    parser_serde_fs_fixture, profile,
-};
-use super::community::{build_similarity_edges, detect_communities};
-use super::profile::{DecompositionContext, SubjectKind};
-use super::suggestion::{SuggestedExtractionKind, suggest_decomposition};
-use super::vector::{build_feature_vector, dot_product, identifier_keywords};
 use std::str::FromStr;
+
+use self::test_fixtures::{
+    ExpectedSuggestion,
+    MethodInput,
+    assert_suggestion,
+    assert_type_decomposition_is_empty,
+    parser_serde_fs_fixture,
+    profile,
+};
+use super::{
+    community::{build_similarity_edges, detect_communities},
+    profile::{DecompositionContext, SubjectKind},
+    suggestion::{SuggestedExtractionKind, suggest_decomposition},
+    vector::{build_feature_vector, dot_product, identifier_keywords},
+};
 
 #[test]
 fn identifier_keywords_split_camel_case_and_remove_stop_words() {

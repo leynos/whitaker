@@ -1,10 +1,14 @@
 //! Coverage for dependency artefact selection and related test fixtures.
 
-use super::dependency_rlib;
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime},
+};
+
 use rstest::{fixture, rstest};
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+
+use super::dependency_rlib;
 
 /// A temporary directory that is removed automatically when dropped.
 #[derive(Debug)]
@@ -50,9 +54,7 @@ const TIED_ARTEFACTS: [ArtefactSpec<'static>; 2] = [
 /// rstest fixture that creates a uniquely named temporary directory for a
 /// selection test.
 #[fixture]
-fn selection_directory() -> TemporaryDirectory {
-    TemporaryDirectory::new("selection")
-}
+fn selection_directory() -> TemporaryDirectory { TemporaryDirectory::new("selection") }
 
 /// Creates `artefacts` inside `directory`, sets their modification times, then
 /// invokes `dependency_rlib` and returns both the expected and selected paths
@@ -122,15 +124,11 @@ impl TemporaryDirectory {
     }
 
     /// Returns the path to the temporary directory.
-    fn path(&self) -> &Path {
-        &self.0
-    }
+    fn path(&self) -> &Path { &self.0 }
 }
 
 impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
+    fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
 }
 
 /// Creates an empty `.rlib` fixture file at `directory/file_name` and returns
@@ -153,7 +151,11 @@ fn set_modified_time(path: &Path, seconds_since_epoch: u64) {
         .metadata()
         .expect("rlib fixture metadata should be readable")
         .accessed();
-    let times = existing_accessed.map_or_else(|_| std::fs::FileTimes::new(), |accessed| std::fs::FileTimes::new().set_accessed(accessed))
+    let times = existing_accessed
+        .map_or_else(
+            |_| std::fs::FileTimes::new(),
+            |accessed| std::fs::FileTimes::new().set_accessed(accessed),
+        )
         .set_modified(modified);
     file.set_times(times)
         .expect("rlib fixture modified time should be set");

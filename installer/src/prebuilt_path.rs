@@ -7,8 +7,10 @@
 
 use camino::Utf8PathBuf;
 
-use crate::dirs::BaseDirs;
-use crate::error::{InstallerError, Result};
+use crate::{
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+};
 
 /// Build the canonical prebuilt library destination directory.
 ///
@@ -45,10 +47,12 @@ pub fn prebuilt_library_dir(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
+    use rstest::rstest;
+
     use super::*;
     use crate::dirs::MockBaseDirs;
-    use rstest::rstest;
-    use std::path::PathBuf;
 
     #[test]
     fn prebuilt_library_dir_builds_expected_path() {
@@ -88,8 +92,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn prebuilt_library_dir_rejects_non_utf8_data_dir() {
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
         let mut dirs = MockBaseDirs::new();
         dirs.expect_whitaker_data_dir().return_once(|| {

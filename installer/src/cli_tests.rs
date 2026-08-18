@@ -1,7 +1,8 @@
 //! Tests for installer CLI parsing and default behaviours.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[test]
 fn cli_parses_defaults() {

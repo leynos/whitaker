@@ -63,21 +63,15 @@ impl LineSegment {
 
     /// Returns the first line covered by the segment (inclusive).
     #[must_use]
-    pub const fn start_line(self) -> usize {
-        self.start_line
-    }
+    pub const fn start_line(self) -> usize { self.start_line }
 
     /// Returns the last line covered by the segment (inclusive).
     #[must_use]
-    pub const fn end_line(self) -> usize {
-        self.end_line
-    }
+    pub const fn end_line(self) -> usize { self.end_line }
 
     /// Returns the per-line contribution.
     #[must_use]
-    pub const fn value(self) -> f64 {
-        self.value
-    }
+    pub const fn value(self) -> f64 { self.value }
 }
 
 /// Errors emitted when constructing a [`LineSegment`].
@@ -131,7 +125,8 @@ pub enum SignalBuildError {
 
     /// A segment does not intersect the function's line range.
     #[error(
-        "segment lies outside function range (segment={segment_start}..={segment_end}, function={function_start}..={function_end})"
+        "segment lies outside function range (segment={segment_start}..={segment_end}, \
+         function={function_start}..={function_end})"
     )]
     SegmentOutsideFunctionRange {
         /// One-based first line covered by the offending segment.
@@ -221,12 +216,11 @@ fn accumulate_signal_from_diff(diff: &[f64], len: usize) -> Vec<f64> {
 ///
 /// # Errors
 ///
-/// - Returns [`SignalBuildError::FunctionLineRangeMustBeOneBased`] when the
-///   provided range includes line `0`.
-/// - Returns [`SignalBuildError::FunctionStartAfterEnd`] when the range is
-///   inverted.
-/// - Returns [`SignalBuildError::SegmentOutsideFunctionRange`] when any segment
-///   does not overlap the function range.
+/// - Returns [`SignalBuildError::FunctionLineRangeMustBeOneBased`] when the provided range includes
+///   line `0`.
+/// - Returns [`SignalBuildError::FunctionStartAfterEnd`] when the range is inverted.
+/// - Returns [`SignalBuildError::SegmentOutsideFunctionRange`] when any segment does not overlap
+///   the function range.
 ///
 /// # Examples
 ///
@@ -346,8 +340,8 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
     for idx in 0..signal.len() {
         let start = idx.saturating_sub(half_window);
         let end = (idx + half_window).min(last_index);
-        let sum = prefix.get(end + 1).copied().unwrap_or(0.0)
-            - prefix.get(start).copied().unwrap_or(0.0);
+        let sum =
+            prefix.get(end + 1).copied().unwrap_or(0.0) - prefix.get(start).copied().unwrap_or(0.0);
         let count = u32::try_from(end - start + 1).map_or_else(|_| f64::from(u32::MAX), f64::from);
         smoothed.push(sum / count);
     }
@@ -357,8 +351,9 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     fn rasterize_signal_accumulates_overlapping_segments() {

@@ -4,9 +4,7 @@
 //! supporting assets into a temporary workspace so UI harnesses only need to
 //! focus on executing the lint runner.
 
-use std::fs;
-use std::io;
-use std::path::Path;
+use std::{fs, io, path::Path};
 
 const MAX_DIRECTORY_DEPTH: usize = 64;
 
@@ -19,10 +17,10 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::test_support::fixtures::copy_fixture;
-/// use std::fs;
-/// use std::path::PathBuf;
+/// use std::{fs, path::PathBuf};
+///
 /// use tempfile::tempdir;
+/// use whitaker_common::test_support::fixtures::copy_fixture;
 ///
 /// # fn demo() -> std::io::Result<()> {
 /// let fixtures = tempdir()?;
@@ -77,9 +75,10 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::test_support::fixtures::copy_directory;
 /// use std::fs;
+///
 /// use tempfile::tempdir;
+/// use whitaker_common::test_support::fixtures::copy_directory;
 ///
 /// # fn demo() -> std::io::Result<()> {
 /// let source = tempdir()?;
@@ -170,11 +169,15 @@ fn depth_limit_error(path: &Path) -> io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::fs;
-    use std::io;
-    use std::path::{Path, PathBuf};
+    use std::{
+        fs,
+        io,
+        path::{Path, PathBuf},
+    };
+
     use tempfile::{TempDir, tempdir};
+
+    use super::*;
 
     #[test]
     fn copy_fixture_clones_support_assets() {

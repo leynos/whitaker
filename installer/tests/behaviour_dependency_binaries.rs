@@ -1,25 +1,31 @@
 //! Behaviour tests for dependency-binary installation and provenance output.
 
+use std::path::{Path, PathBuf};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::path::Path;
-use std::path::PathBuf;
 use temp_env::with_var;
-use whitaker_installer::dependency_binaries::{
-    DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
-    required_dependency_binaries,
-};
-use whitaker_installer::dependency_packaging::render_provenance_markdown;
-use whitaker_installer::deps::{
-    DependencyInstallOptions, DylintToolStatus, install_dylint_tools_with_options,
-};
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::test_support::env_test_guard;
-use whitaker_installer::test_utils::{
-    StubDirs, StubExecutor,
-    dependency_binary_helpers::{
-        ExpectedCallConfig, expected_calls, path_binary_location, write_fake_binary,
+use whitaker_installer::{
+    dependency_binaries::{
+        DependencyBinary,
+        DependencyBinaryInstallError,
+        DependencyBinaryInstaller,
+        required_dependency_binaries,
+    },
+    dependency_packaging::render_provenance_markdown,
+    deps::{DependencyInstallOptions, DylintToolStatus, install_dylint_tools_with_options},
+    dirs::BaseDirs,
+    installer_packaging::TargetTriple,
+    test_support::env_test_guard,
+    test_utils::{
+        StubDirs,
+        StubExecutor,
+        dependency_binary_helpers::{
+            ExpectedCallConfig,
+            expected_calls,
+            path_binary_location,
+            write_fake_binary,
+        },
     },
 };
 
@@ -90,9 +96,7 @@ struct DependencyBinaryWorld {
 }
 
 #[fixture]
-fn world() -> DependencyBinaryWorld {
-    DependencyBinaryWorld::default()
-}
+fn world() -> DependencyBinaryWorld { DependencyBinaryWorld::default() }
 
 #[given("the missing tool is \"{tool}\"")]
 fn given_missing_tool(world: &mut DependencyBinaryWorld, tool: String) {
@@ -308,19 +312,13 @@ fn then_provenance_contains(world: &mut DependencyBinaryWorld, expected: String)
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 0)]
-fn scenario_install_cargo_dylint_from_repository(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_install_cargo_dylint_from_repository(world: DependencyBinaryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 1)]
-fn scenario_install_dylint_link_from_repository(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_install_dylint_link_from_repository(world: DependencyBinaryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 2)]
-fn scenario_repository_falls_back_to_binstall(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_repository_falls_back_to_binstall(world: DependencyBinaryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 3)]
 fn scenario_repository_and_binstall_and_cargo_all_fail(world: DependencyBinaryWorld) {
@@ -345,21 +343,13 @@ fn scenario_repository_verification_failure_uses_binstall(world: DependencyBinar
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 7)]
-fn scenario_unsupported_target_uses_binstall(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_unsupported_target_uses_binstall(world: DependencyBinaryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 8)]
-fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_repository_success_without_binstall(world: DependencyBinaryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 9)]
-fn scenario_provenance_lists_both_dependencies(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_provenance_lists_both_dependencies(world: DependencyBinaryWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 10)]
-fn scenario_dylint_link_missing_after_install_fails(world: DependencyBinaryWorld) {
-    let _ = world;
-}
+fn scenario_dylint_link_missing_after_install_fails(world: DependencyBinaryWorld) { let _ = world; }

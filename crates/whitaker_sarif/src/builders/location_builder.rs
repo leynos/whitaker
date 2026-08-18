@@ -1,7 +1,9 @@
 //! Builders for [`Location`] and [`Region`] objects.
 
-use crate::error::SarifError;
-use crate::model::location::{ArtifactLocation, Location, PhysicalLocation, Region};
+use crate::{
+    error::SarifError,
+    model::location::{ArtifactLocation, Location, PhysicalLocation, Region},
+};
 
 /// Fluent builder for constructing a [`Region`].
 ///
@@ -161,7 +163,12 @@ impl RegionBuilder {
 /// use whitaker_sarif::{LocationBuilder, RegionBuilder};
 ///
 /// let loc = LocationBuilder::new("src/main.rs")
-///     .with_region(RegionBuilder::new(10).with_end_line(15).build().expect("valid region"))
+///     .with_region(
+///         RegionBuilder::new(10)
+///             .with_end_line(15)
+///             .build()
+///             .expect("valid region"),
+///     )
 ///     .build();
 /// assert_eq!(loc.physical_location.artifact_location.uri, "src/main.rs");
 /// ```
@@ -214,9 +221,10 @@ impl LocationBuilder {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::error::SarifError;
-    use rstest::rstest;
 
     #[test]
     fn region_builder_minimal() {

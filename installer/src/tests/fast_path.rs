@@ -1,12 +1,15 @@
 //! Tests for fast-path installer helper behaviour.
 
-use super::*;
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use temp_env::with_var_unset;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::test_support::{TEST_STAGE_SUITE_ENV, env_test_guard};
-use whitaker_installer::toolchain::Toolchain;
+use whitaker_installer::{
+    crate_name::CrateName,
+    test_support::{TEST_STAGE_SUITE_ENV, env_test_guard},
+    toolchain::Toolchain,
+};
+
+use super::*;
 
 struct FastPathFixture {
     args: InstallArgs,

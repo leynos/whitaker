@@ -1,11 +1,13 @@
 //! Unit tests for brain type diagnostic formatting.
 
-use super::*;
-use crate::brain_type_metrics::TypeMetricsBuilder;
-use crate::brain_type_metrics::evaluation::BrainTypeDisposition;
-use crate::decomposition_advice::SubjectKind;
-use crate::test_support::decomposition::{decomposition_suggestions, parser_serde_fs_fixture};
 use rstest::rstest;
+
+use super::*;
+use crate::{
+    brain_type_metrics::{TypeMetricsBuilder, evaluation::BrainTypeDisposition},
+    decomposition_advice::SubjectKind,
+    test_support::decomposition::{decomposition_suggestions, parser_serde_fs_fixture},
+};
 
 // ---------------------------------------------------------------------------
 // Diagnostic — primary message (one brain method)

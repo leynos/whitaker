@@ -5,29 +5,29 @@
 //! runs without the network. The server helper lives here (not in `downloader.rs`)
 //! to keep that module within its size budget; it is test support for these cases.
 
-use super::downloader::download_from_urls;
+// `io` is only referenced by the `#[cfg(unix)]` non-UTF-8 tests (`io::ErrorKind`);
+// `Read` is used across platforms for `read_to_end`.
+#[cfg(unix)]
+use std::io;
+use std::{collections::HashMap, io::Read, path::PathBuf, time::Duration};
+
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
+use rstest::{fixture, rstest};
+use sha2::{Digest, Sha256};
+use tempfile::TempDir;
+
 // Only the non-UTF-8 production-path test (gated `#[cfg(unix)]`) drives the
 // trait and concrete downloader; keep these imports on the same gate so other
 // platforms do not see them as unused.
 #[cfg(unix)]
 use super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
-use super::http_test_server::{CannedResponse, LocalServer};
-use super::installer::DependencyBinaryInstallError;
+use super::{
+    downloader::download_from_urls,
+    http_test_server::{CannedResponse, LocalServer},
+    installer::DependencyBinaryInstallError,
+};
 use crate::hex::to_lower_hex;
-use camino::Utf8Path;
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
-use rstest::{fixture, rstest};
-use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-// `io` is only referenced by the `#[cfg(unix)]` non-UTF-8 tests (`io::ErrorKind`);
-// `Read` is used across platforms for `read_to_end`.
-#[cfg(unix)]
-use std::io;
-use std::io::Read;
-use std::path::PathBuf;
-use std::time::Duration;
-use tempfile::TempDir;
 
 /// A short-timeout agent fixture for driving the local server.
 #[fixture]
@@ -47,17 +47,11 @@ struct DownloadHarness {
 }
 
 impl DownloadHarness {
-    fn archive_url(&self) -> String {
-        self.server.url("/archive.tgz")
-    }
+    fn archive_url(&self) -> String { self.server.url("/archive.tgz") }
 
-    fn checksum_url(&self) -> String {
-        self.server.url("/archive.tgz.sha256")
-    }
+    fn checksum_url(&self) -> String { self.server.url("/archive.tgz.sha256") }
 
-    fn requested_paths(&self) -> Vec<String> {
-        self.server.requested_paths()
-    }
+    fn requested_paths(&self) -> Vec<String> { self.server.requested_paths() }
 
     /// Open the destination's parent directory as a capability, for asserting on
     /// the written archive.

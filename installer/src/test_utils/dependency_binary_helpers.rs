@@ -1,18 +1,5 @@
 //! Test helpers for dependency binary installation tests.
 
-use crate::dependency_binaries::find_dependency_binary;
-#[cfg(any(test, feature = "test-support"))]
-use crate::dependency_binaries::{
-    DependencyBinary, DependencyBinaryInstallError, DependencyBinaryInstaller,
-};
-#[cfg(any(test, feature = "test-support"))]
-use crate::dirs::BaseDirs;
-use crate::error::Result;
-#[cfg(any(test, feature = "test-support"))]
-use crate::installer_packaging::TargetTriple;
-#[cfg(any(test, feature = "test-support"))]
-use crate::test_support::env_test_guard;
-use crate::test_utils::{ExpectedCall, failure_output, stdout_output, success_output};
 #[cfg(any(test, feature = "test-support"))]
 use std::fs;
 #[cfg(all(any(test, feature = "test-support"), unix))]
@@ -20,6 +7,24 @@ use std::os::unix::fs::PermissionsExt;
 #[cfg(any(test, feature = "test-support"))]
 use std::path::{Path, PathBuf};
 use std::process::Output;
+
+#[cfg(any(test, feature = "test-support"))]
+use crate::dependency_binaries::{
+    DependencyBinary,
+    DependencyBinaryInstallError,
+    DependencyBinaryInstaller,
+};
+#[cfg(any(test, feature = "test-support"))]
+use crate::dirs::BaseDirs;
+#[cfg(any(test, feature = "test-support"))]
+use crate::installer_packaging::TargetTriple;
+#[cfg(any(test, feature = "test-support"))]
+use crate::test_support::env_test_guard;
+use crate::{
+    dependency_binaries::find_dependency_binary,
+    error::Result,
+    test_utils::{ExpectedCall, failure_output, stdout_output, success_output},
+};
 
 /// Repository installer test double that always reports a missing archive.
 #[cfg(any(test, feature = "test-support"))]
@@ -355,13 +360,15 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
         return calls;
     }
     // binstall failed and cargo install also fails
-    cfg.cargo_install_failure.as_deref().map_or_else(Vec::new, |message| {
-        vec![repo_aware_cargo_install(
-            cfg.tool_static,
-            cfg.has_repository_context,
-            Ok(failure_output(message)),
-        )]
-    })
+    cfg.cargo_install_failure
+        .as_deref()
+        .map_or_else(Vec::new, |message| {
+            vec![repo_aware_cargo_install(
+                cfg.tool_static,
+                cfg.has_repository_context,
+                Ok(failure_output(message)),
+            )]
+        })
 }
 
 fn source_install_fallback_calls(

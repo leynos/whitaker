@@ -7,13 +7,13 @@
 //! owned here and imported by `downloader`, keeping the module dependency
 //! one-way.
 
+use std::{io, io::Read, path::Path};
+
+use sha2::{Digest, Sha256};
+use tracing::{debug, warn};
+
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
-use sha2::{Digest, Sha256};
-use std::io;
-use std::io::Read;
-use std::path::Path;
-use tracing::{debug, warn};
 
 /// Bounded `category` field for every checksum boundary event. Owned here so the
 /// module dependency stays one-way (`downloader` imports this; not vice versa).
@@ -173,10 +173,12 @@ pub(super) fn verify_archive_checksum(
 mod tests {
     //! Tests for checksum parsing, streaming SHA-256, and verification.
 
-    use super::*;
-    use rstest::rstest;
     use std::io::Write;
+
+    use rstest::rstest;
     use tempfile::NamedTempFile;
+
+    use super::*;
 
     /// Write `contents` to a fresh temp file and return the handle.
     fn temp_file_with(contents: &[u8]) -> NamedTempFile {
@@ -187,9 +189,7 @@ mod tests {
     }
 
     /// Reopen `file` as a fresh read handle for streaming into the hasher.
-    fn read_handle(file: &NamedTempFile) -> impl Read {
-        file.reopen().expect("reopen temp file")
-    }
+    fn read_handle(file: &NamedTempFile) -> impl Read { file.reopen().expect("reopen temp file") }
 
     #[rstest]
     #[case(404, true)]

@@ -1,10 +1,15 @@
 //! Unit tests for decomposition diagnostic-note rendering.
 
 use super::format_diagnostic_note;
-use crate::decomposition_advice::{DecompositionContext, MethodProfile, SubjectKind};
-use crate::test_support::decomposition::{
-    MethodInput, decomposition_suggestions, parser_serde_fs_fixture, profile,
-    transport_trait_fixture,
+use crate::{
+    decomposition_advice::{DecompositionContext, MethodProfile, SubjectKind},
+    test_support::decomposition::{
+        MethodInput,
+        decomposition_suggestions,
+        parser_serde_fs_fixture,
+        profile,
+        transport_trait_fixture,
+    },
 };
 
 fn parser_serde_fs_suggestions() -> (
@@ -176,6 +181,7 @@ fn format_diagnostic_note_caps_methods_per_suggestion() {
     let rendered = render_note("Reporter", SubjectKind::Type, &methods);
 
     assert!(rendered.contains(
-        "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more methods"
+        "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more \
+         methods"
     ));
 }

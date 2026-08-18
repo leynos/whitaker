@@ -12,11 +12,13 @@
 //! These tests are marked `#[ignore]` by default because they require external
 //! dependencies. Run with `--ignored` to execute.
 
-use std::env;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::{
+    env,
+    io::Cursor,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 
 use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
@@ -234,7 +236,8 @@ fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Val
 #[expect(
     clippy::useless_asref,
     clippy::redundant_closure,
-    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert &Result<PathBuf, Error> into Result<PathBuf, Error>"
+    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert \
+              &Result<PathBuf, Error> into Result<PathBuf, Error>"
 )]
 fn lint_library_path() -> anyhow::Result<PathBuf> {
     static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
@@ -400,7 +403,8 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .with_context(|| {
             format!(
-                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo output\nstderr:\n{}",
+                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo \
+                 output\nstderr:\n{}",
                 result.stderr
             )
         })?;

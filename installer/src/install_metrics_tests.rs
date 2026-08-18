@@ -1,12 +1,15 @@
 //! Unit tests for installer metrics persistence and aggregation.
 
-use crate::install_metrics::{
-    InstallMetrics, InstallMetricsError, InstallMode, record_install_at_path,
-};
+use std::{io::ErrorKind, path::PathBuf, time::Duration};
+
 use rstest::{fixture, rstest};
-use std::io::ErrorKind;
-use std::path::PathBuf;
-use std::time::Duration;
+
+use crate::install_metrics::{
+    InstallMetrics,
+    InstallMetricsError,
+    InstallMode,
+    record_install_at_path,
+};
 
 struct MetricsPathFixture {
     _temp_dir: tempfile::TempDir,
@@ -26,7 +29,11 @@ fn metrics_path_fixture() -> MetricsPathFixture {
 #[test]
 fn zero_state_rates_are_zero() {
     let metrics = InstallMetrics::default();
-    assert_eq!(metrics.download_rate_permille(), 0, "zero-state download rate");
+    assert_eq!(
+        metrics.download_rate_permille(),
+        0,
+        "zero-state download rate"
+    );
     assert_eq!(metrics.build_rate_permille(), 0, "zero-state build rate");
 }
 
@@ -40,7 +47,11 @@ fn record_install_updates_counts_and_duration() {
     assert_eq!(metrics.download_installs(), 1);
     assert_eq!(metrics.build_installs(), 1);
     assert_eq!(metrics.total_install_duration(), Duration::from_secs(2));
-    assert_eq!(metrics.download_rate_permille(), 500, "download rate permille");
+    assert_eq!(
+        metrics.download_rate_permille(),
+        500,
+        "download rate permille"
+    );
     assert_eq!(metrics.build_rate_permille(), 500, "build rate permille");
 }
 

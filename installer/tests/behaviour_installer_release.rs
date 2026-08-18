@@ -4,13 +4,21 @@
 //! archives matching the binstall `pkg-url` and `bin-dir` templates for
 //! all supported targets, and that error paths are handled correctly.
 
+use std::path::PathBuf;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::path::PathBuf;
-use whitaker_installer::binstall_metadata;
-use whitaker_installer::installer_packaging::{
-    self, ArchiveFormat, InstallerPackageOutput, InstallerPackageParams, InstallerPackagingError,
-    TargetTriple, Version,
+use whitaker_installer::{
+    binstall_metadata,
+    installer_packaging::{
+        self,
+        ArchiveFormat,
+        InstallerPackageOutput,
+        InstallerPackageParams,
+        InstallerPackagingError,
+        TargetTriple,
+        Version,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -30,9 +38,7 @@ struct InstallerReleaseWorld {
 }
 
 #[fixture]
-fn world() -> InstallerReleaseWorld {
-    InstallerReleaseWorld::default()
-}
+fn world() -> InstallerReleaseWorld { InstallerReleaseWorld::default() }
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -90,14 +96,10 @@ fn attempt_packaging(world: &mut InstallerReleaseWorld) {
 }
 
 #[when("the installer is packaged")]
-fn when_installer_packaged(world: &mut InstallerReleaseWorld) {
-    attempt_packaging(world);
-}
+fn when_installer_packaged(world: &mut InstallerReleaseWorld) { attempt_packaging(world); }
 
 #[when("packaging is attempted")]
-fn when_packaging_attempted(world: &mut InstallerReleaseWorld) {
-    attempt_packaging(world);
-}
+fn when_packaging_attempted(world: &mut InstallerReleaseWorld) { attempt_packaging(world); }
 
 #[then("the archive filename is \"{expected}\"")]
 fn then_archive_filename_is(world: &mut InstallerReleaseWorld, expected: String) {
@@ -198,46 +200,34 @@ fn read_zip_entries(path: &std::path::Path) -> Vec<String> {
     path = "tests/features/installer_release.feature",
     name = "Archive filename uses tgz for Linux target"
 )]
-fn scenario_archive_filename_tgz(world: InstallerReleaseWorld) {
-    let _ = world;
-}
+fn scenario_archive_filename_tgz(world: InstallerReleaseWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/installer_release.feature",
     name = "Archive filename uses zip for Windows target"
 )]
-fn scenario_archive_filename_zip(world: InstallerReleaseWorld) {
-    let _ = world;
-}
+fn scenario_archive_filename_zip(world: InstallerReleaseWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/installer_release.feature",
     name = "Archive contains correct directory structure for Unix"
 )]
-fn scenario_archive_structure_unix(world: InstallerReleaseWorld) {
-    let _ = world;
-}
+fn scenario_archive_structure_unix(world: InstallerReleaseWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/installer_release.feature",
     name = "Windows archive contains exe binary"
 )]
-fn scenario_archive_structure_windows(world: InstallerReleaseWorld) {
-    let _ = world;
-}
+fn scenario_archive_structure_windows(world: InstallerReleaseWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/installer_release.feature",
     name = "Archive filename matches binstall pkg-url template"
 )]
-fn scenario_binstall_url_match(world: InstallerReleaseWorld) {
-    let _ = world;
-}
+fn scenario_binstall_url_match(world: InstallerReleaseWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/installer_release.feature",
     name = "Packaging rejects missing binary"
 )]
-fn scenario_packaging_rejects_missing(world: InstallerReleaseWorld) {
-    let _ = world;
-}
+fn scenario_packaging_rejects_missing(world: InstallerReleaseWorld) { let _ = world; }

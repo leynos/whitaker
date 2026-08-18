@@ -7,8 +7,9 @@ pub type AttributePath = SimplePath;
 
 #[cfg(test)]
 mod tests {
-    use super::AttributePath;
     use rstest::rstest;
+
+    use super::AttributePath;
 
     #[rstest]
     fn parses_paths() {

@@ -1,14 +1,26 @@
 //! Tests for PATH-based dependency-binary discovery helpers.
 
-use super::*;
-use crate::test_support::env_test_guard;
-use crate::test_utils::dependency_binary_helpers::{
-    cargo_dylint_check, cargo_dylint_check_with_result, dylint_link_install_list_check,
-    dylint_link_install_list_check_with_version, with_fake_binary_on_path, with_fake_path,
-    write_fake_binary, write_fake_binary_with_status,
-};
-use crate::test_utils::{ExpectedCall, StubExecutor, stdout_output};
 use temp_env::with_vars_unset;
+
+use super::*;
+use crate::{
+    test_support::env_test_guard,
+    test_utils::{
+        ExpectedCall,
+        StubExecutor,
+        dependency_binary_helpers::{
+            cargo_dylint_check,
+            cargo_dylint_check_with_result,
+            dylint_link_install_list_check,
+            dylint_link_install_list_check_with_version,
+            with_fake_binary_on_path,
+            with_fake_path,
+            write_fake_binary,
+            write_fake_binary_with_status,
+        },
+        stdout_output,
+    },
+};
 
 #[test]
 fn check_dylint_tools_reports_installed_tools() {

@@ -69,7 +69,7 @@ impl Default for Settings {
 /// # Examples
 ///
 /// ```
-/// use bumpy_road_function::analysis::{normalise_settings, Settings, Weights};
+/// use bumpy_road_function::analysis::{Settings, Weights, normalise_settings};
 ///
 /// let settings = Settings {
 ///     threshold: -1.0,
@@ -97,9 +97,7 @@ pub fn normalise_settings(settings: Settings) -> Settings {
         }
     }
 
-    const fn is_valid_window(window: usize) -> bool {
-        window != 0 && (window & 1) == 1
-    }
+    const fn is_valid_window(window: usize) -> bool { window != 0 && (window & 1) == 1 }
 
     let defaults = Settings::default();
     let threshold = if settings.threshold.is_finite() && settings.threshold >= 0.0 {
@@ -141,21 +139,15 @@ pub struct BumpInterval {
 impl BumpInterval {
     /// First index covered by the bump (inclusive).
     #[must_use]
-    pub const fn start_index(self) -> usize {
-        self.start_index
-    }
+    pub const fn start_index(self) -> usize { self.start_index }
 
     /// Last index covered by the bump (inclusive).
     #[must_use]
-    pub const fn end_index(self) -> usize {
-        self.end_index
-    }
+    pub const fn end_index(self) -> usize { self.end_index }
 
     /// Number of samples spanned by the bump.
     #[must_use]
-    pub const fn len(self) -> usize {
-        self.end_index - self.start_index + 1
-    }
+    pub const fn len(self) -> usize { self.end_index - self.start_index + 1 }
 
     /// Returns `true` when the interval contains no samples.
     ///
@@ -163,15 +155,11 @@ impl BumpInterval {
     /// retained defensively so callers can validate values originating from
     /// other sources.
     #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.start_index > self.end_index
-    }
+    pub const fn is_empty(self) -> bool { self.start_index > self.end_index }
 
     /// Area above the threshold used for ranking bumps.
     #[must_use]
-    pub const fn area_above_threshold(self) -> f64 {
-        self.area_above_threshold
-    }
+    pub const fn area_above_threshold(self) -> f64 { self.area_above_threshold }
 }
 
 /// Mutable state maintained during bump detection.
@@ -194,9 +182,7 @@ impl BumpDetectionContext {
         }
     }
 
-    fn into_intervals(self) -> Vec<BumpInterval> {
-        self.intervals
-    }
+    fn into_intervals(self) -> Vec<BumpInterval> { self.intervals }
 }
 
 /// Detects bump intervals in the smoothed signal.

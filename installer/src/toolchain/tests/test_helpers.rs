@@ -1,8 +1,8 @@
 //! Test helpers for toolchain tests.
 
+use std::{cell::RefCell, process::ExitStatus};
+
 use super::*;
-use std::cell::RefCell;
-use std::process::ExitStatus;
 
 #[cfg(unix)]
 pub fn exit_status(code: i32) -> ExitStatus {

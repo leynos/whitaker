@@ -1,17 +1,27 @@
 //! Download support for repository-hosted dependency-binary archives.
 
-use crate::artefact::download::HttpDownloader;
-
-use super::checksum::{
-    CATEGORY_CHECKSUM, fetch_expected_checksum, map_ureq_error, verify_archive_checksum,
+use std::{
+    io::{self, Read, Write},
+    path::Path,
 };
-use super::installer::DependencyBinaryInstallError;
+
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, File};
-use std::io::{self, Read, Write};
-use std::path::Path;
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, File},
+};
 use tracing::{debug, instrument, warn};
+
+use super::{
+    checksum::{
+        CATEGORY_CHECKSUM,
+        fetch_expected_checksum,
+        map_ureq_error,
+        verify_archive_checksum,
+    },
+    installer::DependencyBinaryInstallError,
+};
+use crate::artefact::download::HttpDownloader;
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
@@ -194,9 +204,7 @@ impl DownloadDestination {
     }
 
     /// Reopen the written archive through the capability for verification.
-    fn open_archive(&self) -> io::Result<File> {
-        self.dir.open(&self.archive_name)
-    }
+    fn open_archive(&self) -> io::Result<File> { self.dir.open(&self.archive_name) }
 
     /// Remove a partial or unverified archive; a cleanup failure is only logged.
     fn remove_partial_archive(&self) {
@@ -295,11 +303,13 @@ fn open_destination_dir(destination: &Utf8Path) -> io::Result<(Dir, &str)> {
 mod tests {
     //! Tests for downloader error mapping and archive checksum verification.
 
+    use std::io::Write;
+
+    use sha2::{Digest, Sha256};
+    use tempfile::TempDir;
+
     use super::*;
     use crate::hex::to_lower_hex;
-    use sha2::{Digest, Sha256};
-    use std::io::Write;
-    use tempfile::TempDir;
 
     // The under-cap success path is covered end to end by the local-server
     // boundary tests; this exercises the over-cap rejection they cannot.

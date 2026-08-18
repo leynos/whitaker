@@ -31,10 +31,7 @@ use rustc_span::sym;
 
 /// Summarize the context for a given HIR node.
 #[cfg(feature = "dylint-driver")]
-pub(crate) fn summarise_context(
-    cx: &LateContext<'_>,
-    hir_id: hir::HirId,
-) -> ContextSummary {
+pub(crate) fn summarise_context(cx: &LateContext<'_>, hir_id: hir::HirId) -> ContextSummary {
     let mut entries = Vec::new();
     let mut has_cfg_test = false;
 
@@ -166,8 +163,7 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
         return false;
     }
 
-    attr.meta_item_list()
-        .is_some_and(check_cfg_attr_for_test)
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
 }
 
 #[cfg(feature = "dylint-driver")]
@@ -210,14 +206,12 @@ fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool 
     }
 
     if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .is_some_and(|items| {
-                items
-                    .iter()
-                    .cloned()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            });
+        return meta.meta_item_list().is_some_and(|items| {
+            items
+                .iter()
+                .cloned()
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
     }
 
     meta.meta_item_list()

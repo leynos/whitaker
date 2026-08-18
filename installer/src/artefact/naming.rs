@@ -3,10 +3,9 @@
 //! Constructs deterministic archive names in the format specified by ADR-001:
 //! `whitaker-lints-<git_sha>-<toolchain>-<target>.tar.zst`.
 
-use super::git_sha::GitSha;
-use super::target::TargetTriple;
-use super::toolchain_channel::ToolchainChannel;
 use std::fmt;
+
+use super::{git_sha::GitSha, target::TargetTriple, toolchain_channel::ToolchainChannel};
 
 /// The fixed prefix for all artefact archive names.
 const ARTEFACT_PREFIX: &str = "whitaker-lints";
@@ -22,10 +21,12 @@ const ARTEFACT_EXTENSION: &str = ".tar.zst";
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::artefact::naming::ArtefactName;
-/// use whitaker_installer::artefact::git_sha::GitSha;
-/// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
-/// use whitaker_installer::artefact::target::TargetTriple;
+/// use whitaker_installer::artefact::{
+///     git_sha::GitSha,
+///     naming::ArtefactName,
+///     target::TargetTriple,
+///     toolchain_channel::ToolchainChannel,
+/// };
 ///
 /// let sha: GitSha = "abc1234".try_into().expect("valid git SHA");
 /// let toolchain: ToolchainChannel = "nightly-2026-05-28"
@@ -61,27 +62,19 @@ impl ArtefactName {
 
     /// Return the git SHA component.
     #[must_use]
-    pub const fn git_sha(&self) -> &GitSha {
-        &self.git_sha
-    }
+    pub const fn git_sha(&self) -> &GitSha { &self.git_sha }
 
     /// Return the toolchain channel component.
     #[must_use]
-    pub const fn toolchain(&self) -> &ToolchainChannel {
-        &self.toolchain
-    }
+    pub const fn toolchain(&self) -> &ToolchainChannel { &self.toolchain }
 
     /// Return the target triple component.
     #[must_use]
-    pub const fn target(&self) -> &TargetTriple {
-        &self.target
-    }
+    pub const fn target(&self) -> &TargetTriple { &self.target }
 
     /// Return the filename as a string without consuming the value.
     #[must_use]
-    pub fn filename(&self) -> String {
-        self.to_string()
-    }
+    pub fn filename(&self) -> String { self.to_string() }
 }
 
 impl fmt::Display for ArtefactName {
@@ -96,8 +89,9 @@ impl fmt::Display for ArtefactName {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     #[fixture]
     fn sample_name() -> ArtefactName {

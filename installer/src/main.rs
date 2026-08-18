@@ -7,31 +7,36 @@
 mod install_flow;
 mod staged_suite;
 
+use std::{io::Write, time::Instant};
+
+use camino::{Utf8Path, Utf8PathBuf};
+use clap::Parser;
+use whitaker_installer::{
+    cli::{Cli, Command, InstallArgs},
+    crate_name::CrateName,
+    deps::SystemCommandExecutor,
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+    install_metrics::InstallMode,
+    list::{determine_target_dir, run_list},
+    output::{DryRunInfo, DryRunSkips, ShellSnippet, write_stderr_line},
+    pipeline::{PipelineContext, perform_build, stage_libraries},
+    prebuilt_path::prebuilt_library_dir,
+    resolution::{CrateResolutionOptions, resolve_crates, validate_crate_names},
+    toolchain::Toolchain,
+    wrapper::{generate_wrapper_scripts, path_instructions},
+};
+
 #[cfg(test)]
 use crate::install_flow::ensure_dylint_tools_with_options;
 use crate::install_flow::{
-    MetricsWriteContext, PrebuiltInstallationContext, detect_host_target,
-    ensure_dylint_tools_with_executor, try_prebuilt_installation, write_install_metrics,
+    MetricsWriteContext,
+    PrebuiltInstallationContext,
+    detect_host_target,
+    ensure_dylint_tools_with_executor,
+    try_prebuilt_installation,
+    write_install_metrics,
 };
-use camino::{Utf8Path, Utf8PathBuf};
-use clap::Parser;
-use std::io::Write;
-use std::time::Instant;
-use whitaker_installer::cli::{Cli, Command, InstallArgs};
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::SystemCommandExecutor;
-use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::install_metrics::InstallMode;
-use whitaker_installer::list::{determine_target_dir, run_list};
-use whitaker_installer::output::{DryRunInfo, DryRunSkips, ShellSnippet, write_stderr_line};
-use whitaker_installer::pipeline::{PipelineContext, perform_build, stage_libraries};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-use whitaker_installer::resolution::{
-    CrateResolutionOptions, resolve_crates, validate_crate_names,
-};
-use whitaker_installer::toolchain::Toolchain;
-use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 fn main() {
     let cli = Cli::parse();
@@ -221,7 +226,10 @@ fn ensure_whitaker_workspace(
     stderr: &mut dyn Write,
 ) -> Result<Utf8PathBuf> {
     use whitaker_installer::workspace::{
-        WorkspaceAction, clone_directory, decide_workspace_action, ensure_workspace,
+        WorkspaceAction,
+        clone_directory,
+        decide_workspace_action,
+        ensure_workspace,
     };
 
     if !args.quiet

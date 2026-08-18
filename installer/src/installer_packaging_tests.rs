@@ -1,10 +1,11 @@
 //! Unit tests for installer binary archive packaging.
 
+use std::{fs, io::Read};
+
+use rstest::rstest;
+
 use super::*;
 use crate::binstall_metadata;
-use rstest::rstest;
-use std::fs;
-use std::io::Read;
 
 // ---------------------------------------------------------------------------
 // Shared fixtures

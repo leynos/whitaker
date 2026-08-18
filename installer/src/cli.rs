@@ -4,10 +4,10 @@
 //! from the main entrypoint to keep the binary small and focused on
 //! orchestration.
 
-use crate::crate_name::CrateName;
-use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
+
+use crate::{crate_name::CrateName, resolution::EXPERIMENTAL_LINT_CRATES};
 
 /// Install Whitaker Dylint lint libraries.
 #[derive(Parser, Debug)]
@@ -155,15 +155,13 @@ impl InstallArgs {
     ///
     /// Prebuilt artefacts are skipped when:
     /// - `--build-only` is set, or
-    /// - experimental lint behaviour is requested, either via
-    ///   `--experimental` (suite build) or explicit experimental crates when
-    ///   the experimental crate list is non-empty.
+    /// - experimental lint behaviour is requested, either via `--experimental` (suite build) or
+    ///   explicit experimental crates when the experimental crate list is non-empty.
     ///
     /// # Examples
     ///
     /// ```
-    /// use whitaker_installer::cli::InstallArgs;
-    /// use whitaker_installer::crate_name::CrateName;
+    /// use whitaker_installer::{cli::InstallArgs, crate_name::CrateName};
     ///
     /// let requested = vec![CrateName::from("whitaker_suite")];
     ///

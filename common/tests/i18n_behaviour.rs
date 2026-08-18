@@ -4,11 +4,10 @@
 //! missing message handling to ensure lint crates can rely on predictable
 //! diagnostics across locales.
 
+use std::{borrow::Cow, cell::RefCell, collections::HashMap};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::borrow::Cow;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use whitaker_common::i18n::{Arguments, FluentValue, I18nError, Localizer, branch_phrase};
 
 #[path = "support/i18n_helpers.rs"]
@@ -23,9 +22,7 @@ struct I18nFixture {
 }
 
 impl I18nFixture {
-    fn set_locale(&self, locale: Option<String>) {
-        *self.locale.borrow_mut() = locale;
-    }
+    fn set_locale(&self, locale: Option<String>) { *self.locale.borrow_mut() = locale; }
 
     fn ensure_localizer(&self) -> Localizer {
         let locale = self.locale.borrow().clone();
@@ -62,19 +59,13 @@ fn branch_count_from_key(key: &str) -> Option<(String, u32)> {
 }
 
 #[fixture]
-fn fixture() -> I18nFixture {
-    I18nFixture::default()
-}
+fn fixture() -> I18nFixture { I18nFixture::default() }
 
 #[given("no locale preference")]
-fn given_no_locale(fixture: &I18nFixture) {
-    fixture.set_locale(None);
-}
+fn given_no_locale(fixture: &I18nFixture) { fixture.set_locale(None); }
 
 #[given("the locale preference {locale}")]
-fn given_locale(fixture: &I18nFixture, locale: String) {
-    fixture.set_locale(Some(locale));
-}
+fn given_locale(fixture: &I18nFixture, locale: String) { fixture.set_locale(Some(locale)); }
 
 #[when("I request the message for {key}")]
 fn when_message(fixture: &I18nFixture, key: String) {
@@ -106,7 +97,10 @@ fn when_attribute(fixture: &I18nFixture, attribute: String, key: String) {
 
     if let Some((base_key, lint_count)) = lint_count_from_key(&key) {
         let mut args: Arguments<'static> = HashMap::new();
-        args.insert(Cow::Borrowed("lint"), FluentValue::from(i64::from(lint_count)));
+        args.insert(
+            Cow::Borrowed("lint"),
+            FluentValue::from(i64::from(lint_count)),
+        );
         let result = localizer.attribute_with_args(&base_key, &attribute, &args);
         fixture.store_message(result);
         return;
@@ -159,76 +153,51 @@ fn then_missing(fixture: &I18nFixture) {
 }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 0)]
-fn scenario_falls_back(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_falls_back(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 1)]
-fn scenario_secondary_locale(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_secondary_locale(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 2)]
-fn scenario_gaelic_plural(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_gaelic_plural(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 3)]
-fn scenario_welsh_lint_count_zero(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_zero(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 4)]
-fn scenario_welsh_lint_count_large(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_large(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 5)]
-fn scenario_welsh_lint_count_one(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_one(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 6)]
-fn scenario_welsh_lint_count_two(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_two(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 7)]
-fn scenario_welsh_lint_count_three(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_three(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 8)]
-fn scenario_welsh_lint_count_six(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_six(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 9)]
-fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_lint_count_eleven(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 10)]
-fn scenario_attribute_falls_back(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_attribute_falls_back(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 11)]
-fn scenario_missing_message(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_missing_message(fixture: I18nFixture) { let _ = fixture; }
 
 #[scenario(path = "tests/features/i18n_loader.feature", index = 12)]
-fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) {
-    let _ = fixture;
-}
+fn scenario_welsh_conditional_note_lenition(fixture: I18nFixture) { let _ = fixture; }
 
 #[cfg(test)]
 mod tests {
     //! Validates lint count key parsing so attribute helpers feed deterministic
     //! arguments into i18n scenarios.
-    use super::lint_count_from_key;
     use rstest::rstest;
+
+    use super::lint_count_from_key;
 
     #[rstest]
     #[case("foo with lint count 42", Some(("foo".to_owned(), 42)))]

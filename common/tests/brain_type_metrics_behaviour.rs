@@ -1,10 +1,15 @@
 //! Behaviour-driven coverage for brain type metric collection.
 
+use std::cell::{Cell, RefCell};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
 use whitaker_common::brain_type_metrics::{
-    ForeignReferenceSet, MethodMetrics, TypeMetricsBuilder, brain_methods, foreign_reach_count,
+    ForeignReferenceSet,
+    MethodMetrics,
+    TypeMetricsBuilder,
+    brain_methods,
+    foreign_reach_count,
     weighted_methods_count,
 };
 
@@ -48,9 +53,7 @@ impl Default for MetricsWorld {
 }
 
 #[fixture]
-fn world() -> MetricsWorld {
-    MetricsWorld::default()
-}
+fn world() -> MetricsWorld { MetricsWorld::default() }
 
 // --- Helpers ---
 
@@ -84,9 +87,7 @@ fn given_method(world: &MetricsWorld, name: String, cc: usize, loc: usize) {
 }
 
 #[given("the brain method CC threshold is {threshold}")]
-fn given_cc_threshold(world: &MetricsWorld, threshold: usize) {
-    world.cc_threshold.set(threshold);
-}
+fn given_cc_threshold(world: &MetricsWorld, threshold: usize) { world.cc_threshold.set(threshold); }
 
 #[given("the brain method LOC threshold is {threshold}")]
 fn given_loc_threshold(world: &MetricsWorld, threshold: usize) {
@@ -94,9 +95,7 @@ fn given_loc_threshold(world: &MetricsWorld, threshold: usize) {
 }
 
 #[given("the LCOM4 value is {value}")]
-fn given_lcom4(world: &MetricsWorld, value: usize) {
-    world.lcom4.set(Some(value));
-}
+fn given_lcom4(world: &MetricsWorld, value: usize) { world.lcom4.set(Some(value)); }
 
 #[given("the foreign reach count is {count}")]
 fn given_foreign_reach_count(world: &MetricsWorld, count: usize) {
@@ -206,14 +205,10 @@ fn then_type_wmc(world: &MetricsWorld, value: usize) {
 }
 
 #[then("the type has {n} brain method")]
-fn then_type_brain_count_singular(world: &MetricsWorld, n: usize) {
-    assert_brain_count(world, n);
-}
+fn then_type_brain_count_singular(world: &MetricsWorld, n: usize) { assert_brain_count(world, n); }
 
 #[then("the type has {n} brain methods")]
-fn then_type_brain_count_plural(world: &MetricsWorld, n: usize) {
-    assert_brain_count(world, n);
-}
+fn then_type_brain_count_plural(world: &MetricsWorld, n: usize) { assert_brain_count(world, n); }
 
 #[then("the type LCOM4 is {value}")]
 fn then_type_lcom4(world: &MetricsWorld, value: usize) {
@@ -236,51 +231,31 @@ fn then_foreign_reach(world: &MetricsWorld, count: usize) {
 // here.
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 0)]
-fn scenario_wmc_sum(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_wmc_sum(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 1)]
-fn scenario_brain_method_qualifies(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_brain_method_qualifies(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 2)]
-fn scenario_below_both_thresholds(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_below_both_thresholds(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 3)]
-fn scenario_only_cc_threshold(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_only_cc_threshold(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 4)]
-fn scenario_only_loc_threshold(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_only_loc_threshold(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 5)]
-fn scenario_empty_type_zero_wmc(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_empty_type_zero_wmc(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 6)]
-fn scenario_type_metrics_aggregate(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_type_metrics_aggregate(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 7)]
-fn scenario_foreign_refs_deduplicated(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_foreign_refs_deduplicated(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 8)]
-fn scenario_macro_expanded_foreign_filtered(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_macro_expanded_foreign_filtered(world: MetricsWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_metrics.feature", index = 9)]
-fn scenario_foreign_reach_convenience(world: MetricsWorld) {
-    let _ = world;
-}
+fn scenario_foreign_reach_convenience(world: MetricsWorld) { let _ = world; }

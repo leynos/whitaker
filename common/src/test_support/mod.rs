@@ -6,30 +6,37 @@
 //!
 //! ## Available helpers
 //!
-//! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and
-//!   support directories) into isolated workspaces for dylint UI harnesses.
-//! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and
-//!   behaviour tests.
-//! - [`env_test_guard`]: Serializes tests that temporarily mutate process-wide
-//!   environment variables.
-//! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint
-//!   UI tests with consistent panic handling.
-//! - [`with_locale`], [`with_env_var`], and [`with_env_var_removed`]: Scope
-//!   temporary environment mutations (such as `DYLINT_LOCALE` overrides) to a
-//!   callback so tests cannot leak global state between cases.
+//! - [`fixtures`]: Copies UI fixtures (source files, `.stderr` expectations and support
+//!   directories) into isolated workspaces for dylint UI harnesses.
+//! - [`decomposition`]: Reusable decomposition-advice fixtures for unit and behaviour tests.
+//! - [`env_test_guard`]: Serializes tests that temporarily mutate process-wide environment
+//!   variables.
+//! - [`ui`]: Discovers fixtures, prepares isolated workspaces, and runs dylint UI tests with
+//!   consistent panic handling.
+//! - [`with_locale`], [`with_env_var`], and [`with_env_var_removed`]: Scope temporary environment
+//!   mutations (such as `DYLINT_LOCALE` overrides) to a callback so tests cannot leak global state
+//!   between cases.
 
 pub mod decomposition;
 pub mod fixtures;
 pub mod ui;
 
-pub use fixtures::{copy_directory, copy_fixture};
-pub use ui::{
-    FixtureEnvironment, discover_fixtures, prepare_fixture, read_directory_config,
-    read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
+use std::{
+    ffi::OsStr,
+    sync::{Mutex, MutexGuard, OnceLock},
 };
 
-use std::ffi::OsStr;
-use std::sync::{Mutex, MutexGuard, OnceLock};
+pub use fixtures::{copy_directory, copy_fixture};
+pub use ui::{
+    FixtureEnvironment,
+    discover_fixtures,
+    prepare_fixture,
+    read_directory_config,
+    read_fixture_config,
+    resolve_fixture_config,
+    run_fixtures_with,
+    run_test_runner,
+};
 
 /// Serializes tests that mutate process-wide environment variables.
 ///

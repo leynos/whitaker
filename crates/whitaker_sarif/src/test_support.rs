@@ -4,9 +4,11 @@
 //! It exists solely to avoid duplicating test helper logic between the
 //! `merge::tests` unit tests and the `tests/` integration tests.
 
-use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder};
-use crate::merge::WHITAKER_FRAGMENT_KEY;
-use crate::model::result::{Level, SarifResult};
+use crate::{
+    builders::{LocationBuilder, RegionBuilder, ResultBuilder},
+    merge::WHITAKER_FRAGMENT_KEY,
+    model::result::{Level, SarifResult},
+};
 
 /// Builds a [`SarifResult`] with a fingerprint, location, and region.
 ///

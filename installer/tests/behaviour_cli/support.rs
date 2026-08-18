@@ -1,15 +1,21 @@
 //! Shared fixtures, command helpers, and assertions for CLI behaviour tests.
 
-use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
+use std::{
+    cell::{Cell, Ref, RefCell},
+    path::{Path, PathBuf},
+    process::{Command, Output},
+};
+
 use rstest::fixture;
-use std::cell::{Cell, Ref, RefCell};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
 use tempfile::TempDir;
-use whitaker_installer::dirs::SystemBaseDirs;
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
-use whitaker_installer::toolchain::parse_toolchain_channel;
+use whitaker_installer::{
+    dirs::SystemBaseDirs,
+    prebuilt_path::prebuilt_library_dir,
+    test_support::TEST_STAGE_SUITE_ENV,
+    toolchain::parse_toolchain_channel,
+};
+
+use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
 
 #[derive(Default)]
 pub(super) struct CliWorld {
@@ -24,9 +30,7 @@ pub(super) struct CliWorld {
 }
 
 #[fixture]
-pub(super) fn cli_world() -> CliWorld {
-    CliWorld::default()
-}
+pub(super) fn cli_world() -> CliWorld { CliWorld::default() }
 
 pub(super) fn workspace_root() -> PathBuf {
     PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
@@ -61,11 +65,13 @@ pub(super) fn is_toolchain_installed(channel: &str) -> bool {
 fn skip_scenario_when_toolchain_missing(cli_world: &CliWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         eprintln!(
-            "Skipping scenario because rustup toolchain '{channel}' is not installed. Install this toolchain to run these tests."
+            "Skipping scenario because rustup toolchain '{channel}' is not installed. Install \
+             this toolchain to run these tests."
         );
         cli_world.skip_assertions.set(true);
         rstest_bdd::skip!(
-            "rustup toolchain '{channel}' is not installed. Install this toolchain to run these tests.",
+            "rustup toolchain '{channel}' is not installed. Install this toolchain to run these \
+             tests.",
             channel = channel
         );
     }
@@ -275,11 +281,13 @@ pub(super) fn assert_unknown_lint_message_is_shown(cli_world: &CliWorld) {
 
     assert!(
         !stderr.contains("Dry run - no files will be modified"),
-        "dry-run configuration output should not be printed on unknown-lint error, stderr: {stderr}"
+        "dry-run configuration output should not be printed on unknown-lint error, stderr: \
+         {stderr}"
     );
     assert!(
         !stderr.contains("Crates to build:"),
-        "dry-run configuration output should not be printed on unknown-lint error, stderr: {stderr}"
+        "dry-run configuration output should not be printed on unknown-lint error, stderr: \
+         {stderr}"
     );
     assert!(
         stderr.contains("lint crate nonexistent_lint not found"),
@@ -297,11 +305,13 @@ pub(super) fn assert_experimental_lint_opt_in_message_is_shown(cli_world: &CliWo
 
     assert!(
         !stderr.contains("Dry run - no files will be modified"),
-        "dry-run configuration output should not be printed on experimental-lint error, stderr: {stderr}"
+        "dry-run configuration output should not be printed on experimental-lint error, stderr: \
+         {stderr}"
     );
     assert!(
         !stderr.contains("Crates to build:"),
-        "dry-run configuration output should not be printed on experimental-lint error, stderr: {stderr}"
+        "dry-run configuration output should not be printed on experimental-lint error, stderr: \
+         {stderr}"
     );
     assert!(
         stderr.contains(
@@ -326,7 +336,8 @@ pub(super) fn assert_experimental_lint_dry_run_output_is_shown(cli_world: &CliWo
         !stderr.contains(
             "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
         ),
-        "experimental opt-in error should not be printed when --experimental is set, stderr: {stderr}"
+        "experimental opt-in error should not be printed when --experimental is set, stderr: \
+         {stderr}"
     );
 }
 
@@ -361,8 +372,8 @@ pub(super) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
         let matches = matching_files(&prebuilt_path, &needle);
         assert!(
             !matches.is_empty(),
-            "prebuilt marker found in stderr but no library matching \
-             '{needle}' in {prebuilt_path:?}, entries={:?}",
+            "prebuilt marker found in stderr but no library matching '{needle}' in \
+             {prebuilt_path:?}, entries={:?}",
             matching_files(&prebuilt_path, ""),
         );
         return;
@@ -375,9 +386,8 @@ pub(super) fn assert_suite_library_is_staged(cli_world: &CliWorld) {
 
     assert!(
         matches.len() == 1,
-        "expected exactly one suite library matching '{needle}' in \
-         {staging_dir:?}, matches={matches:?}, entries={:?}, \
-         stdout={}, stderr={stderr}",
+        "expected exactly one suite library matching '{needle}' in {staging_dir:?}, \
+         matches={matches:?}, entries={:?}, stdout={}, stderr={stderr}",
         matching_files(&staging_dir, ""),
         String::from_utf8_lossy(&output.stdout),
     );

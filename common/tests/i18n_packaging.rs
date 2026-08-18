@@ -6,12 +6,14 @@
 
 #[cfg(unix)]
 mod unix {
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
-    use whitaker_common::i18n::packaged_fallback_locale_path;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process::Command,
+    };
 
     use tempfile::{Builder, TempDir};
+    use whitaker_common::i18n::packaged_fallback_locale_path;
 
     #[test]
     fn fluent_bundles_are_included_in_the_package_tarball() {

@@ -3,14 +3,15 @@
 //! This module provides utilities to scan the staging directory and parse
 //! library filenames to extract lint metadata.
 
-use std::collections::BTreeMap;
-use std::io;
+use std::{collections::BTreeMap, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::builder::{library_extension, library_prefix};
-use crate::crate_name::CrateName;
-use crate::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+use crate::{
+    builder::{library_extension, library_prefix},
+    crate_name::CrateName,
+    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
+};
 
 /// Metadata about an installed lint library.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,9 +34,7 @@ pub struct InstalledLints {
 impl InstalledLints {
     /// Returns true if no lints are installed.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.by_toolchain.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.by_toolchain.is_empty() }
 }
 
 /// Scan the staging directory for installed libraries.
@@ -183,8 +182,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::scanner::lints_for_library;
-/// use whitaker_installer::crate_name::CrateName;
+/// use whitaker_installer::{crate_name::CrateName, scanner::lints_for_library};
 ///
 /// let suite_lints = lints_for_library(&CrateName::from("whitaker_suite"));
 /// assert!(suite_lints.len() > 1);
@@ -206,8 +204,7 @@ pub fn lints_for_library(crate_name: &CrateName) -> Vec<&'static str> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::scanner::lints_for_library_with_experimental;
-/// use whitaker_installer::crate_name::CrateName;
+/// use whitaker_installer::{crate_name::CrateName, scanner::lints_for_library_with_experimental};
 ///
 /// let lints = lints_for_library_with_experimental(&CrateName::from("whitaker_suite"), true);
 /// assert!(lints.contains(&"bumpy_road_function"));
@@ -239,9 +236,10 @@ pub fn lints_for_library_with_experimental(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
     use tempfile::TempDir;
+
+    use super::*;
 
     /// Skip test execution on non-Linux platforms where library extensions differ.
     macro_rules! skip_unless_linux {
