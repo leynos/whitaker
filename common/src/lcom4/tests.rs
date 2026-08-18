@@ -11,7 +11,7 @@ fn method_with_fields() -> fn(&str, &[&str]) -> MethodInfo {
     |name: &str, fields: &[&str]| -> MethodInfo {
         MethodInfo::new(
             name,
-            fields.iter().map(|s| (*s).to_string()).collect(),
+            fields.iter().map(|s| (*s).to_owned()).collect(),
             BTreeSet::new(),
         )
     }
@@ -23,7 +23,7 @@ fn method_with_calls() -> fn(&str, &[&str]) -> MethodInfo {
         MethodInfo::new(
             name,
             BTreeSet::new(),
-            calls.iter().map(|s| (*s).to_string()).collect(),
+            calls.iter().map(|s| (*s).to_owned()).collect(),
         )
     }
 }
@@ -33,8 +33,8 @@ fn method_with_fields_and_calls() -> fn(&str, &[&str], &[&str]) -> MethodInfo {
     |name: &str, fields: &[&str], calls: &[&str]| -> MethodInfo {
         MethodInfo::new(
             name,
-            fields.iter().map(|s| (*s).to_string()).collect(),
-            calls.iter().map(|s| (*s).to_string()).collect(),
+            fields.iter().map(|s| (*s).to_owned()).collect(),
+            calls.iter().map(|s| (*s).to_owned()).collect(),
         )
     }
 }

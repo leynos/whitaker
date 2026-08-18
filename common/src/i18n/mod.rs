@@ -35,15 +35,18 @@ static_loader! {
     };
 }
 
+/// Locale tag used when no supported locale is requested (`en-GB`).
 pub const FALLBACK_LOCALE: &str = FALLBACK_LITERAL;
 pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 
 /// Return the crate-local Fluent resource root used by packaging and tests.
+#[must_use]
 pub fn locales_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(LOCALES_DIR_NAME)
 }
 
 /// Return the relative path inside the package tarball for a locale bundle.
+#[must_use]
 pub fn packaged_locale_path(locale: &str, file: &str) -> PathBuf {
     PathBuf::from(format!(
         "{}-{}",
@@ -56,6 +59,7 @@ pub fn packaged_locale_path(locale: &str, file: &str) -> PathBuf {
 }
 
 /// Return the default packaged locale path for Whitaker diagnostics.
+#[must_use]
 pub fn packaged_fallback_locale_path() -> PathBuf {
     packaged_locale_path(FALLBACK_LOCALE, LOCALES_FTL_FILE)
 }

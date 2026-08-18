@@ -256,7 +256,7 @@ impl Cli {
     /// install arguments. Callers should check `self.command` before calling
     /// this method if the `List` case needs different handling.
     #[must_use]
-    pub fn install_args(&self) -> &InstallArgs {
+    pub const fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
             Some(Command::List(_)) | None => &self.install,

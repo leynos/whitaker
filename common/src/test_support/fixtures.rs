@@ -34,6 +34,12 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the fixture or stderr path lacks a usable
+/// file name, or when copying the fixture, its `.stderr` expectation, or a
+/// support directory fails.
 pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path) -> io::Result<()> {
     let file_name = source
         .file_name()
@@ -84,6 +90,12 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when `source` is not a directory, when a symlink
+/// is encountered, when nesting exceeds `MAX_DIRECTORY_DEPTH`, or when any
+/// underlying filesystem operation fails.
 pub fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
     copy_directory_with_depth(source, destination, MAX_DIRECTORY_DEPTH)
 }
@@ -102,8 +114,8 @@ fn copy_directory_with_depth(
     ensure_not_symlink(source, metadata.file_type())?;
 
     fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
+    for entry_result in fs::read_dir(source)? {
+        let entry = entry_result?;
         let entry_path = entry.path();
         let file_type = entry_path.symlink_metadata()?.file_type();
 

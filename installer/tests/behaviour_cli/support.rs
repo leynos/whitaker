@@ -55,8 +55,7 @@ pub(super) fn is_toolchain_installed(channel: &str) -> bool {
     Command::new("rustup")
         .args(["run", channel, "rustc", "--version"])
         .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|output| output.status.success())
 }
 
 fn skip_scenario_when_toolchain_missing(cli_world: &CliWorld, channel: &str) {
@@ -111,7 +110,7 @@ fn expected_prebuilt_target_dir(toolchain: &str) -> Option<String> {
     let host_target = detect_host_target()?;
     prebuilt_library_dir(&dirs, toolchain, &host_target)
         .ok()
-        .map(|path| path.into_string())
+        .map(camino::Utf8PathBuf::into_string)
 }
 
 fn matching_files(dir: &Path, substring: &str) -> Vec<String> {

@@ -54,15 +54,13 @@ fn is_toolchain_installed(channel: &str) -> bool {
     Command::new("rustup")
         .args(["run", channel, "rustc", "--version"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 fn skip_scenario_when_toolchain_missing(world: &WorkflowWorld, channel: &str) {
     if !is_toolchain_installed(channel) {
         eprintln!(
-            "Skipping scenario because rustup toolchain '{}' is not installed.",
-            channel
+            "Skipping scenario because rustup toolchain '{channel}' is not installed."
         );
         world.skip_assertions.set(true);
         rstest_bdd::skip!(

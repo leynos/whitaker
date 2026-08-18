@@ -14,7 +14,7 @@ const UNICODE_ISOLATION_MARKS: [char; 2] = ['\u{2068}', '\u{2069}'];
 /// let cleaned = strip_isolation_marks("\u{2068}42\u{2069}");
 /// assert_eq!(cleaned, "42");
 /// ```
-pub fn strip_isolation_marks<'a>(text: &'a str) -> Cow<'a, str> {
+pub fn strip_isolation_marks(text: &str) -> Cow<'_, str> {
     if text
         .chars()
         .any(|character| UNICODE_ISOLATION_MARKS.contains(&character))
@@ -67,7 +67,7 @@ pub fn default_arguments() -> Arguments<'static> {
 /// assert!(should_skip_line(" attribute = value"));
 /// assert!(!should_skip_line("identifier = value"));
 /// ```
-pub fn should_skip_line(line: &str) -> bool {
+pub const fn should_skip_line(line: &str) -> bool {
     matches!(line.as_bytes().first(), Some(b' ' | b'\t'))
 }
 
@@ -96,7 +96,7 @@ pub fn extract_identifier(line: &str) -> Option<String> {
     if id.is_empty() {
         return None;
     }
-    Some(id.to_string())
+    Some(id.to_owned())
 }
 
 #[cfg(test)]
@@ -115,7 +115,7 @@ mod tests {
     fn extract_identifier_handles_basic_messages() {
         assert_eq!(
             extract_identifier("message-id = Value"),
-            Some("message-id".to_string())
+            Some("message-id".to_owned())
         );
     }
 
@@ -130,7 +130,7 @@ mod tests {
     fn extract_identifier_handles_multiple_equals() {
         assert_eq!(
             extract_identifier("message = part = extra"),
-            Some("message".to_string())
+            Some("message".to_owned())
         );
     }
 

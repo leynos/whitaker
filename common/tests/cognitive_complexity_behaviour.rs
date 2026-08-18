@@ -80,7 +80,7 @@ fn given_push_nesting_expanded(world: &CcWorld) {
 
 #[given("nesting is popped")]
 fn given_pop_nesting(world: &CcWorld) {
-    with_builder(world, |b| b.pop_nesting());
+    with_builder(world, whitaker_common::CognitiveComplexityBuilder::pop_nesting);
 }
 
 // --- When steps ---

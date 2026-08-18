@@ -32,13 +32,13 @@ pub struct SchemaVersion(u32);
 impl SchemaVersion {
     /// Return the current (latest) schema version.
     #[must_use]
-    pub fn current() -> Self {
+    pub const fn current() -> Self {
         Self(CURRENT_MAX)
     }
 
     /// Return the inner version number.
     #[must_use]
-    pub fn as_u32(self) -> u32 {
+    pub const fn as_u32(self) -> u32 {
         self.0
     }
 }

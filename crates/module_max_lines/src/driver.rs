@@ -93,7 +93,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     }
 }
 
-fn evaluate_module(lines: usize, limit: usize, from_macro: bool) -> ModuleDisposition {
+const fn evaluate_module(lines: usize, limit: usize, from_macro: bool) -> ModuleDisposition {
     if from_macro {
         ModuleDisposition::Ignore
     } else if lines > limit {
@@ -110,8 +110,7 @@ fn load_configuration() -> usize {
         Err(error) => {
             debug!(
                 target: LINT_NAME,
-                "failed to parse `{}` configuration: {error}; using defaults",
-                LINT_NAME
+                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
             );
             ModuleMaxLinesConfig::default().max_lines
         }
@@ -169,12 +168,12 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
         MODULE_MAX_LINES,
         info.ident.span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
+            lint.primary_message(messages.primary().to_owned());
             lint.span_note(
                 module_header_span(info.item_span, info.ident.span),
-                messages.note().to_string(),
+                messages.note().to_owned(),
             );
-            lint.help(messages.help().to_string());
+            lint.help(messages.help().to_owned());
         }),
     );
 }

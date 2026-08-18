@@ -1747,23 +1747,24 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-#### Shared UI harness environment guards
 
-Workspace-level UI harness tests that mutate process-wide environment variables
-must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
-to install a temporary value and `EnvVarGuard::remove` to make a variable
-absent for the duration of a test. The guard acquires `env_test_guard()` only
-while it captures, mutates, or restores the variable; it must not hold that
-mutex while a runner callback executes, because the callback may need its own
-guarded environment setup.
+#### Shared UI harness environment overrides
 
-`whitaker::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. On every platform it clears `RUSTC_WRAPPER` only
-while the runner needs bare `rustc` invocations for
-`dylint_testing::Test::example`. On Windows it also sets `VCPKG_ROOT` to
-`C:\vcpkg` when that directory exists and the variable is otherwise absent.
-Restoration uses the same shared environment mutex, but the runner callback
-itself executes without holding that mutex to avoid nested-lock deadlocks.
+Workspace-level UI harness tests that mutate process-wide environment
+variables must use the scoped helpers in `whitaker_common::test_support`:
+`with_env_var` installs a temporary value, `with_env_var_removed` makes a
+variable absent, and `with_locale` overrides (or clears) `DYLINT_LOCALE` for
+the duration of a callback. The helpers delegate to `temp_env`, whose
+re-entrant global lock serializes scoped mutations while permitting nesting
+from the same thread, and every prior value is restored when the callback
+returns or panics. The workspace forbids `unsafe` code, so tests must never
+call `std::env::set_var`/`remove_var` directly.
+
+`whitaker::testing::ui::run_with_runner` wraps the Dylint UI runner in the
+same scoped helpers. On every platform it clears `RUSTC_WRAPPER` while the
+runner needs bare `rustc` invocations for `dylint_testing::Test::example`. On
+Windows it also sets `VCPKG_ROOT` to `C:\vcpkg` when that directory exists
+and the variable is otherwise absent.
 
 Example-based UI tests in `rstest_helper_should_be_fixture` also use a
 cross-process directory lock under the system temporary directory. `nextest`
@@ -2087,6 +2088,18 @@ It can be promoted to standard by:
 2. Adding the lint dependency to the suite `dylint-driver` feature in
    `suite/Cargo.toml`
 3. Updating documentation to reflect the change
+
+
+### Suite entry point
+
+Dylint resolves a library's lints through an exported `register_lints`
+symbol, which requires `#[unsafe(no_mangle)]`. The workspace forbids in-crate
+`unsafe` code, so the suite declares its entry point through
+`whitaker_common::declare_dylint_register_entry!`, which expands the unsafe
+attribute from an external macro — the same escape hatch
+`dylint_linting::impl_late_lint!` relies on for single-lint crates. The macro
+is reserved for Dylint driver crates; it must not be used for any other
+symbol export.
 
 ## Creating a New Lint
 

@@ -232,7 +232,7 @@ fn then_first_fingerprint_spans(world: &TokenPassWorld, start: usize, end: usize
 fn then_retained_hashes_are(world: &TokenPassWorld, hashes: String) {
     let expected = hashes
         .split_whitespace()
-        .map(|value| value.parse::<u64>())
+        .map(str::parse::<u64>)
         .collect::<Result<Vec<_>, _>>()
         .expect("expected hash list should be valid");
 

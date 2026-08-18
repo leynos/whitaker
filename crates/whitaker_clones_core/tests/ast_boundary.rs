@@ -142,7 +142,7 @@ fn non_comment_lexemes(contents: &str) -> Vec<&str> {
         .collect()
 }
 
-fn is_non_comment_lexeme(kind: TokenKind) -> bool {
+const fn is_non_comment_lexeme(kind: TokenKind) -> bool {
     !matches!(
         kind,
         TokenKind::Whitespace
@@ -190,7 +190,7 @@ fn imports_crate(import: &[&str], forbidden: &str) -> bool {
                 index
                     .checked_sub(1)
                     .and_then(|previous| import.get(previous)),
-                None | Some(&"::") | Some(&"{") | Some(&",")
+                None | Some(&"::" | &"{" | &",")
             )
     })
 }

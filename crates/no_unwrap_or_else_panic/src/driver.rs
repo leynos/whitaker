@@ -98,7 +98,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
             return;
         };
 
-        let summary = summarise_context_with_harness(
+        let summary = summarize_context_with_harness(
             cx,
             expr.hir_id,
             self.is_test_harness,
@@ -114,8 +114,8 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
     }
 }
 
-fn is_inside_harness_test_function<'tcx>(
-    cx: &LateContext<'tcx>,
+fn is_inside_harness_test_function(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> bool {
@@ -134,8 +134,8 @@ fn is_inside_harness_test_function<'tcx>(
 
 /// Summarizes the lint context for an expression, merging attribute-based and
 /// harness-based test detection into a single immutable result.
-fn summarise_context_with_harness<'tcx>(
-    cx: &LateContext<'tcx>,
+fn summarize_context_with_harness(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     is_test_harness: bool,
     harness_test_functions: &HashSet<hir::HirId>,
@@ -147,7 +147,7 @@ fn summarise_context_with_harness<'tcx>(
     summary
 }
 
-fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
+const fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
     match expr.kind {
         ExprKind::Closure(hir::Closure { body, .. }) => Some(*body),
         _ => None,

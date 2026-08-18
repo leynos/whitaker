@@ -108,7 +108,7 @@ pub enum ManifestError {
 
 impl From<toml::de::Error> for ManifestError {
     fn from(error: toml::de::Error) -> Self {
-        ManifestError::ParseError(error.to_string())
+        Self::ParseError(error.to_string())
     }
 }
 
@@ -123,7 +123,7 @@ impl From<toml::de::Error> for ManifestError {
 /// assert!(contents.contains("dependency_binaries"));
 /// ```
 #[must_use]
-pub fn manifest_contents() -> &'static str {
+pub const fn manifest_contents() -> &'static str {
     include_str!("../../dependency-binaries.toml")
 }
 
@@ -201,8 +201,8 @@ pub fn parse_manifest(contents: &str) -> Result<Vec<DependencyBinary>, ManifestE
     let mut seen_packages = std::collections::HashSet::new();
     for dependency in &manifest.dependency_binaries {
         let package = dependency.package();
-        if !seen_packages.insert(package.to_string()) {
-            return Err(ManifestError::DuplicatePackage(package.to_string()));
+        if !seen_packages.insert(package.to_owned()) {
+            return Err(ManifestError::DuplicatePackage(package.to_owned()));
         }
     }
 

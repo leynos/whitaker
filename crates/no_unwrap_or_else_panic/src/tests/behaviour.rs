@@ -17,7 +17,7 @@ struct DecisionWorld {
 }
 
 impl DecisionWorld {
-    fn evaluate(&self) -> bool {
+    const fn evaluate(&self) -> bool {
         let policy = LintPolicy::new(self.allow_in_main.get());
         should_flag(
             &policy,

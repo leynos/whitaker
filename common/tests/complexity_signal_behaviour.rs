@@ -119,10 +119,36 @@ fn parse_f64_list(values: &str) -> Vec<f64> {
         .collect()
 }
 
+/// Maximum permitted distance between two floats in units of least precision.
+const MAX_ULP_DISTANCE: u64 = 4;
+
+/// Maps a float to a monotonically ordered integer for ULP comparison.
+///
+/// Negative values have their bits inverted and non-negative values have the
+/// sign bit set, so the resulting integers order the same way as the floats.
+const fn monotonic_bits(value: f64) -> u64 {
+    let bits = value.to_bits();
+    if (bits & (1 << 63)) != 0 {
+        !bits
+    } else {
+        bits | (1 << 63)
+    }
+}
+
+/// Returns the distance between two floats in units of least precision, or
+/// `None` when either value is NaN.
+const fn ulp_distance(left: f64, right: f64) -> Option<u64> {
+    if left.is_nan() || right.is_nan() {
+        return None;
+    }
+    Some(monotonic_bits(left).abs_diff(monotonic_bits(right)))
+}
+
 /// Asserts that two floating-point vectors are equal within a tiny tolerance.
 ///
 /// This helper is intended for deterministic test values that may experience
-/// insignificant rounding differences.
+/// insignificant rounding differences. Comparison uses units of least
+/// precision (ULPs), which avoids floating-point arithmetic in the test.
 fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
     assert_eq!(
         actual.len(),
@@ -132,11 +158,12 @@ fn assert_vec_approx_eq(actual: &[f64], expected: &[f64]) {
         actual_len = actual.len()
     );
 
-    for (idx, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
-        let delta = (actual - expected).abs();
+    for (idx, (actual_value, expected_value)) in actual.iter().zip(expected.iter()).enumerate() {
+        let distance = ulp_distance(*actual_value, *expected_value);
         assert!(
-            delta <= 1e-12,
-            "expected element {idx} to be {expected}, got {actual} (delta {delta})",
+            distance.is_some_and(|ulps| ulps <= MAX_ULP_DISTANCE),
+            "expected element {idx} to be {expected_value}, got {actual_value} \
+             (ULP distance {distance:?})",
         );
     }
 }
@@ -178,13 +205,16 @@ fn then_built_signal(world: &SignalWorld, expected: String) {
     let actual = world
         .built_signal()
         .unwrap_or_else(|error| panic!("signal build should succeed: {error}"));
-    let expected = parse_f64_list(&expected);
-    assert_vec_approx_eq(&actual, &expected);
+    let expected_values = parse_f64_list(&expected);
+    assert_vec_approx_eq(&actual, &expected_values);
 }
 
 #[then("signal building fails")]
 fn then_build_fails(world: &SignalWorld) {
-    assert!(world.built_signal().is_err());
+    assert!(
+        world.built_signal().is_err(),
+        "expected signal building to fail"
+    );
 }
 
 #[then("the smoothed signal equals {expected}")]
@@ -192,13 +222,16 @@ fn then_smoothed_signal(world: &SignalWorld, expected: String) {
     let actual = world
         .smoothed_signal()
         .unwrap_or_else(|error| panic!("smoothing should succeed: {error}"));
-    let expected = parse_f64_list(&expected);
-    assert_vec_approx_eq(&actual, &expected);
+    let expected_values = parse_f64_list(&expected);
+    assert_vec_approx_eq(&actual, &expected_values);
 }
 
 #[then("smoothing fails")]
 fn then_smoothing_fails(world: &SignalWorld) {
-    assert!(world.smoothed_signal().is_err());
+    assert!(
+        world.smoothed_signal().is_err(),
+        "expected smoothing to fail"
+    );
 }
 
 #[scenario(path = "tests/features/complexity_signal.feature", index = 0)]

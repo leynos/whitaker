@@ -24,13 +24,13 @@ pub fn prebuilt_library_dir(
     toolchain: &str,
     target: &str,
 ) -> Result<Utf8PathBuf> {
-    let base_dir = dirs
+    let data_dir = dirs
         .whitaker_data_dir()
         .ok_or_else(|| InstallerError::StagingFailed {
             reason: "could not determine Whitaker data directory".to_owned(),
         })?;
     let base_dir =
-        Utf8PathBuf::from_path_buf(base_dir).map_err(|path| InstallerError::StagingFailed {
+        Utf8PathBuf::from_path_buf(data_dir).map_err(|path| InstallerError::StagingFailed {
             reason: format!(
                 "Whitaker data directory is not valid UTF-8: {}",
                 path.display()

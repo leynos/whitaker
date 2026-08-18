@@ -19,11 +19,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 // The example harness lock coordinates separate nextest processes. Windows CI
 // can legitimately hold it for several minutes, so only remove directories
 // old enough to be abandoned by a crashed process.
-const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
+const EXAMPLE_HARNESS_LOCK_STALE_AFTER: Duration = Duration::from_mins(30);
 // Bound the default `acquire()` wait so a wedged live owner surfaces a timeout
 // instead of polling forever. It exceeds the stale-recovery window so genuinely
 // abandoned locks are reclaimed before this ceiling is reached.
-const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(31 * 60);
+const EXAMPLE_HARNESS_LOCK_ACQUIRE_TIMEOUT: Duration = Duration::from_mins(31);
 const EXAMPLE_HARNESS_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const EXAMPLE_HARNESS_LOCK_OWNER_FILENAME: &str = "owner";
 const EXAMPLE_HARNESS_LOCK_LIVENESS_EXTENSION: &str = "owner-lock";
@@ -237,7 +237,7 @@ fn make_example_harness_lock_stale(path: &Path) {
 }
 
 #[rstest]
-#[case(Duration::from_secs(60), false)]
+#[case(Duration::from_mins(1), false)]
 #[case(EXAMPLE_HARNESS_LOCK_STALE_AFTER + Duration::from_secs(1), true)]
 fn example_harness_lock_stale_policy(#[case] age: Duration, #[case] expected: bool) {
     let now = SystemTime::now();

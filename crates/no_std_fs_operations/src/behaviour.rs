@@ -24,7 +24,7 @@ impl LocalizationWorld {
         self.operation = operation.to_owned();
     }
 
-    fn mark_failure(&mut self) {
+    const fn mark_failure(&mut self) {
         self.failing = true;
     }
 
@@ -114,7 +114,7 @@ fn then_failure(world: &WorldCell, key: String) {
     let borrow = world.borrow();
     match borrow.error() {
         I18nError::MissingMessage { key: missing, .. } => {
-            assert_eq!(missing, &key.trim_matches('"'))
+            assert_eq!(missing, &key.trim_matches('"'));
         }
     }
 }

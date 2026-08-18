@@ -35,7 +35,7 @@ pub(super) enum FixtureKind {
 
 impl FixtureKind {
     /// Short label naming the mechanism, used in error context.
-    pub(super) fn label(self) -> &'static str {
+    pub(super) const fn label(self) -> &'static str {
         match self {
             Self::CrateExclusion => "crate",
             Self::PathExclusion => "path",

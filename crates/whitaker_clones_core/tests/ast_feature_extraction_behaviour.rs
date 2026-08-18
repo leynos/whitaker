@@ -33,7 +33,7 @@ impl SnippetName {
         }
     }
 
-    fn source(self) -> &'static str {
+    const fn source(self) -> &'static str {
         match self {
             Self::AddFunction => "fn add(a: i32, b: i32) -> i32 { a + b }",
             Self::AddExpression => "a + b",
@@ -61,7 +61,7 @@ impl ExpectedKind {
         }
     }
 
-    fn syntax_kind(self) -> SyntaxKind {
+    const fn syntax_kind(self) -> SyntaxKind {
         match self {
             Self::BinExpr => SyntaxKind::BIN_EXPR,
             Self::SourceFile => SyntaxKind::SOURCE_FILE,

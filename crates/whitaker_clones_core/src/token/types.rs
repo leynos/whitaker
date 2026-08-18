@@ -108,10 +108,9 @@ impl TryFrom<usize> for ShingleSize {
     type Error = TokenPassError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        match NonZeroUsize::new(value) {
-            Some(value) => Ok(Self(value)),
-            None => Err(TokenPassError::ZeroShingleSize),
-        }
+        NonZeroUsize::new(value)
+            .ok_or(TokenPassError::ZeroShingleSize)
+            .map(Self)
     }
 }
 
@@ -131,10 +130,9 @@ impl TryFrom<usize> for WinnowWindow {
     type Error = TokenPassError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        match NonZeroUsize::new(value) {
-            Some(value) => Ok(Self(value)),
-            None => Err(TokenPassError::ZeroWinnowWindow),
-        }
+        NonZeroUsize::new(value)
+            .ok_or(TokenPassError::ZeroWinnowWindow)
+            .map(Self)
     }
 }
 

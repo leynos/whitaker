@@ -1,4 +1,4 @@
-//! Unit tests for MinHash and LSH candidate generation.
+//! Unit tests for `MinHash` and LSH candidate generation.
 
 use rstest::{fixture, rstest};
 
@@ -104,8 +104,8 @@ fn config_rejects_invalid_inputs(#[case] case: ((usize, usize), IndexError)) {
 
 #[rstest]
 #[case((1, MINHASH_SIZE))]
-#[case((2, MINHASH_SIZE / 2))]
-#[case((4, MINHASH_SIZE / 4))]
+#[case((2, MINHASH_SIZE.div_euclid(2)))]
+#[case((4, MINHASH_SIZE.div_euclid(4)))]
 #[case((32, 4))]
 fn config_accepts_valid_inputs(#[case] case: (usize, usize)) {
     let (bands, rows) = case;
@@ -234,7 +234,8 @@ fn canonical_ordering_across_multiple_pairs_and_bands(
     shared_signature: MinHashSignature,
     distinct_signature: MinHashSignature,
 ) {
-    let config = LshConfig::new(4, MINHASH_SIZE / 4).expect("LSH config should validate");
+    let config =
+        LshConfig::new(4, MINHASH_SIZE.div_euclid(4)).expect("LSH config should validate");
 
     let mut forward = LshIndex::new(config);
     forward.insert(&fragment_ids.alpha, &shared_signature);

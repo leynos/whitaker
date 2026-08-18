@@ -51,7 +51,7 @@ impl TargetTriple {
 
     /// Return the full list of supported target triples.
     #[must_use]
-    pub fn supported() -> &'static [&'static str] {
+    pub const fn supported() -> &'static [&'static str] {
         SUPPORTED_TARGETS
     }
 

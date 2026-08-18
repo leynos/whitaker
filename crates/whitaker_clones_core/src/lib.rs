@@ -7,7 +7,7 @@
 //! - `k`-shingling over normalized token streams.
 //! - 64-bit Rabin-Karp rolling hashes for shingles.
 //! - Winnowing to retain stable representative fingerprints.
-//! - Deterministic MinHash sketches over retained fingerprints.
+//! - Deterministic `MinHash` sketches over retained fingerprints.
 //! - Locality-sensitive hashing (LSH) candidate generation.
 //! - Token-pass acceptance and SARIF Run 0 emission for accepted pairs.
 

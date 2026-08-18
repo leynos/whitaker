@@ -66,7 +66,11 @@ fn record_foreign_ref(world: &MetricsWorld, path: &str, is_from_expansion: bool)
 }
 
 fn assert_brain_count(world: &MetricsWorld, n: usize) {
-    assert_eq!(world.type_metrics_brain_count.get(), Some(n));
+    assert_eq!(
+        world.type_metrics_brain_count.get(),
+        Some(n),
+        "expected {n} brain methods to be recorded"
+    );
 }
 
 // --- Given steps ---

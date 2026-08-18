@@ -10,7 +10,13 @@ use crate::model::result::{Level, SarifResult};
 
 /// Builds a [`SarifResult`] with a fingerprint, location, and region.
 ///
-/// Panics on builder failure; intended only for test code.
+/// Intended only for test code.
+///
+/// # Panics
+///
+/// Panics if the region or result builder rejects its inputs, which indicates
+/// a defect in the test fixture rather than a recoverable condition.
+#[must_use]
 pub fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
     let region = match RegionBuilder::new(line).with_end_line(line + 5).build() {
         Ok(r) => r,

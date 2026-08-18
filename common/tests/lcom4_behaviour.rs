@@ -22,7 +22,7 @@ impl LcomWorld {
         self.result.set(Some(cohesion_components(&methods)));
     }
 
-    fn result(&self) -> Option<usize> {
+    const fn result(&self) -> Option<usize> {
         self.result.get()
     }
 }

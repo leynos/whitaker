@@ -91,7 +91,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 .cloned()
                 .ok_or(CliError::UnknownPackage(package))?;
             let target = TargetTriple::try_from(target.as_str())?;
-            let output = package_dependency_binary(DependencyPackageParams {
+            let output = package_dependency_binary(&DependencyPackageParams {
                 dependency,
                 target,
                 binary_path,

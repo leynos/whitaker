@@ -30,8 +30,8 @@ fn world() -> TraitMetricsWorld {
 }
 
 fn with_metrics(world: &TraitMetricsWorld, assert_fn: impl FnOnce(&TraitMetrics)) {
-    let metrics = world.metrics.borrow();
-    match metrics.as_ref() {
+    let metrics_ref = world.metrics.borrow();
+    match metrics_ref.as_ref() {
         Some(metrics) => assert_fn(metrics),
         None => panic!("metrics must be built before running assertions"),
     }
@@ -124,35 +124,55 @@ fn when_metrics_are_built(world: &TraitMetricsWorld) {
 #[then("total trait items is {count}")]
 fn then_total_trait_items(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.total_item_count(), count);
+        assert_eq!(
+            metrics.total_item_count(),
+            count,
+            "expected total trait item count of {count}"
+        );
     });
 }
 
 #[then("required method count is {count}")]
 fn then_required_method_count(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.required_method_count(), count);
+        assert_eq!(
+            metrics.required_method_count(),
+            count,
+            "expected required method count of {count}"
+        );
     });
 }
 
 #[then("default method count is {count}")]
 fn then_default_method_count(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.default_method_count(), count);
+        assert_eq!(
+            metrics.default_method_count(),
+            count,
+            "expected default method count of {count}"
+        );
     });
 }
 
 #[then("default method CC sum is {sum}")]
 fn then_default_method_cc_sum(world: &TraitMetricsWorld, sum: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.default_method_cc_sum(), sum);
+        assert_eq!(
+            metrics.default_method_cc_sum(),
+            sum,
+            "expected default method CC sum of {sum}"
+        );
     });
 }
 
 #[then("implementor burden is {count}")]
 fn then_implementor_burden(world: &TraitMetricsWorld, count: usize) {
     with_metrics(world, |metrics| {
-        assert_eq!(metrics.implementor_burden(), count);
+        assert_eq!(
+            metrics.implementor_burden(),
+            count,
+            "expected implementor burden of {count}"
+        );
     });
 }
 

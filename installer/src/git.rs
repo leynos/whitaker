@@ -12,7 +12,7 @@ use std::time::Duration;
 use wait_timeout::ChildExt;
 
 /// Default timeout for git operations (5 minutes).
-const GIT_TIMEOUT: Duration = Duration::from_secs(300);
+const GIT_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// Clones the Whitaker repository to the specified target directory.
 ///
@@ -98,53 +98,52 @@ fn run_git_with_timeout(
         stdout_pipe
             .map(std::io::read_to_string)
             .transpose()
-            .map(|opt| opt.unwrap_or_default())
+            .map(Option::unwrap_or_default)
     });
     let stderr_thread = std::thread::spawn(move || -> std::io::Result<String> {
         stderr_pipe
             .map(std::io::read_to_string)
             .transpose()
-            .map(|opt| opt.unwrap_or_default())
+            .map(Option::unwrap_or_default)
     });
 
-    match child.wait_timeout(GIT_TIMEOUT)? {
-        Some(status) => {
-            // Command completed within timeout - collect output from threads
-            let stdout = stdout_thread
-                .join()
-                .map_err(|_| InstallerError::Git {
-                    operation,
-                    message: "failed to read stdout".to_owned(),
-                })?
-                .unwrap_or_default();
-            let stderr = stderr_thread
-                .join()
-                .map_err(|_| InstallerError::Git {
-                    operation,
-                    message: "failed to read stderr".to_owned(),
-                })?
-                .unwrap_or_default();
-
-            Ok(Output {
-                status,
-                stdout: stdout.into_bytes(),
-                stderr: stderr.into_bytes(),
-            })
-        }
-        None => {
-            // Timeout - kill the process and wait for threads to finish
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_thread.join();
-            let _ = stderr_thread.join();
-            Err(InstallerError::Git {
+    if let Some(status) = child.wait_timeout(GIT_TIMEOUT)? {
+        // Command completed within timeout - collect output from threads
+        let stdout = stdout_thread
+            .join()
+            .map_err(|_| InstallerError::Git {
                 operation,
-                message: format!(
-                    "operation timed out after {} seconds",
-                    GIT_TIMEOUT.as_secs()
-                ),
-            })
-        }
+                message: "failed to read stdout".to_owned(),
+            })?
+            .unwrap_or_default();
+        let stderr = stderr_thread
+            .join()
+            .map_err(|_| InstallerError::Git {
+                operation,
+                message: "failed to read stderr".to_owned(),
+            })?
+            .unwrap_or_default();
+
+        Ok(Output {
+            status,
+            stdout: stdout.into_bytes(),
+            stderr: stderr.into_bytes(),
+        })
+    } else {
+        // Timeout - kill the process and wait for the reader threads to
+        // finish. Each result is discarded deliberately: the operation has
+        // already failed, so cleanup is best effort.
+        drop(child.kill());
+        drop(child.wait());
+        drop(stdout_thread.join());
+        drop(stderr_thread.join());
+        Err(InstallerError::Git {
+            operation,
+            message: format!(
+                "operation timed out after {} seconds",
+                GIT_TIMEOUT.as_secs()
+            ),
+        })
     }
 }
 

@@ -25,7 +25,7 @@ struct ExampleHarnessRun<'a> {
 
 impl<'a> ExampleHarnessRun<'a> {
     /// Creates a run spec using the default `--test` harness flag.
-    fn new(name: &'a str, label: &'a str) -> Self {
+    const fn new(name: &'a str, label: &'a str) -> Self {
         Self {
             name,
             label,
@@ -35,7 +35,7 @@ impl<'a> ExampleHarnessRun<'a> {
 
     /// Creates a run spec with caller-supplied rustc flags (no defaults
     /// applied).
-    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+    const fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
         Self {
             name,
             label,
@@ -252,7 +252,7 @@ fn dependency_rlib_matches(deps_dir: &Path, prefix: &str) -> Result<Vec<Dependen
             })?;
             dependency_rlib_candidate(entry.path(), prefix)
         })
-        .filter_map(|candidate| candidate.transpose())
+        .filter_map(std::result::Result::transpose)
         .collect()
 }
 

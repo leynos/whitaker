@@ -51,7 +51,7 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
                         &bin_dir,
                         &format!("{}-{}", dependency.package(), target),
                     );
-                    write_fake_binary(&installed_path, true);
+                    write_fake_binary(&installed_path, true)?;
                     Ok(installed_path)
                 },
             ),
@@ -167,7 +167,7 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
     ) && !world.is_unsupported_target;
     StubExecutor::new(expected_calls(
         tool,
-        ExpectedCallConfig {
+        &ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
             has_repository_context: !world.is_unsupported_target,
             is_repository_asset_missing,
@@ -190,7 +190,7 @@ fn run_install_with_dylint_link_on_path(
         let dylint_link_path = bin_dir.join("dylint-link.cmd");
         #[cfg(not(windows))]
         let dylint_link_path = bin_dir.join("dylint-link");
-        write_fake_binary(&dylint_link_path, true);
+        write_fake_binary(&dylint_link_path, true).expect("write fake dylint-link");
     }
     with_var("PATH", Some(bin_dir), run_install)
 }
@@ -227,7 +227,7 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             &executor,
             &status,
             &mut world.stderr,
-            DependencyInstallOptions {
+            &DependencyInstallOptions {
                 dirs: &dirs,
                 repository_installer: &repository_installer,
                 target,

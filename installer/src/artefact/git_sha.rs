@@ -131,10 +131,10 @@ fn validate_git_sha(value: &str) -> Result<()> {
         .chars()
         .find(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase())
     {
-        let reason = if !bad.is_ascii_hexdigit() {
-            format!("non-hex character '{bad}'")
-        } else {
+        let reason = if bad.is_ascii_hexdigit() {
             "SHA must be lowercase".to_owned()
+        } else {
+            format!("non-hex character '{bad}'")
         };
         return Err(ArtefactError::InvalidGitSha {
             value: value.to_owned(),

@@ -28,7 +28,7 @@ struct ExpectedTraitMetrics {
     burden: usize,
 }
 
-fn assert_trait_metrics(metrics: &TraitMetrics, expected: ExpectedTraitMetrics) {
+fn assert_trait_metrics(metrics: &TraitMetrics, expected: &ExpectedTraitMetrics) {
     assert_eq!(metrics.trait_name(), expected.name);
     assert_eq!(metrics.total_item_count(), expected.total);
     assert_eq!(metrics.required_method_count(), expected.required);
@@ -132,7 +132,7 @@ fn builder_builds_mixed_trait_metrics() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 4,
             required: 1,
@@ -153,7 +153,7 @@ fn builder_add_item_supports_prebuilt_entries() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Renderer",
             total: 2,
             required: 1,
@@ -175,7 +175,7 @@ fn builder_filters_macro_expanded_default_methods() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 2,
             required: 1,
@@ -206,7 +206,7 @@ fn empty_trait_has_zeroed_metrics() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "EmptyTrait",
             total: 0,
             required: 0,

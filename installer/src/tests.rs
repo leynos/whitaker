@@ -118,12 +118,13 @@ fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
-        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, &options);
 
         assert!(result.is_ok());
         assert!(stderr.is_empty());
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[rstest]
@@ -163,7 +164,7 @@ fn ensure_dylint_tools_installs_missing_tools(
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet);
-        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, &options);
 
         assert!(result.is_ok());
         let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
@@ -183,7 +184,8 @@ fn ensure_dylint_tools_installs_missing_tools(
             );
         }
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[rstest]
@@ -211,7 +213,7 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
 
         let mut stderr = Vec::new();
         let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
-        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, options)
+        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, &options)
             .expect_err("expected install failure");
 
         assert!(matches!(
@@ -221,7 +223,8 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
                     && message == "cargo install failed"
         ));
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[derive(Debug, Clone)]
@@ -272,8 +275,7 @@ fn write_install_metrics_prints_summary_and_persists_metrics() {
     let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
     assert!(
         metrics_path.exists(),
-        "expected metrics file at {:?}",
-        metrics_path
+        "expected metrics file at {metrics_path:?}"
     );
 }
 

@@ -182,7 +182,7 @@ fn read_of_absent_manifest_reports_not_found() -> Result<(), Box<dyn std::error:
 proptest! {
     #[test]
     fn exact_version_accepts_only_non_empty_exact_pins(
-        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just("".to_owned())],
+        prefix in prop_oneof![Just("=".to_owned()), Just("^".to_owned()), Just(String::new())],
         suffix in "[A-Za-z0-9._-]{0,32}",
     ) {
         let requirement = format!("{prefix}{suffix}");

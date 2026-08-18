@@ -49,14 +49,13 @@ fn when_register_suite(world: &RegistrationWorld) {
     let registration = catch_unwind(AssertUnwindSafe(|| {
         register_suite_lints(&mut world.store.borrow_mut());
     }))
-    .map(|_| ())
     .map_err(|panic| {
         if let Some(message) = panic.downcast_ref::<&str>() {
-            (*message).to_string()
+            (*message).to_owned()
         } else if let Some(message) = panic.downcast_ref::<String>() {
             message.clone()
         } else {
-            "registration panicked with a non-string payload".to_string()
+            "registration panicked with a non-string payload".to_owned()
         }
     });
 
@@ -83,7 +82,7 @@ fn then_names_match(world: &RegistrationWorld) {
         .iter()
         .map(|lint| lint.name_lower())
         .collect();
-    let expected: Vec<String> = suite_lint_names().map(str::to_string).collect();
+    let expected: Vec<String> = suite_lint_names().map(str::to_owned).collect();
 
     assert_eq!(registered, expected);
 }
@@ -94,7 +93,7 @@ fn then_decls_align() {
         .iter()
         .map(|lint| lint.name_lower())
         .collect();
-    let expected: Vec<String> = suite_lint_names().map(str::to_string).collect();
+    let expected: Vec<String> = suite_lint_names().map(str::to_owned).collect();
 
     assert_eq!(declared, expected);
 }

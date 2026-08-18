@@ -57,8 +57,8 @@ pub fn scan_installed(target_dir: &Utf8Path) -> io::Result<InstalledLints> {
     }
 
     // Iterate over toolchain subdirectories
-    for entry in target_dir.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in target_dir.read_dir_utf8()? {
+        let entry = entry_result?;
         let toolchain_path = entry.path();
 
         if !toolchain_path.is_dir() {
@@ -84,8 +84,8 @@ fn scan_toolchain_layouts(
     if release_path.is_dir() {
         libraries.extend(scan_toolchain_release(&release_path, toolchain)?);
     }
-    for entry in toolchain_path.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in toolchain_path.read_dir_utf8()? {
+        let entry = entry_result?;
         if !entry.path().is_dir() || entry.file_name() == "release" {
             continue;
         }
@@ -99,8 +99,8 @@ fn scan_toolchain_layouts(
 }
 
 fn contains_libraries_in_layout(lib_path: &Utf8Path) -> io::Result<bool> {
-    for entry in lib_path.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in lib_path.read_dir_utf8()? {
+        let entry = entry_result?;
         if entry.path().is_file() && parse_library_filename(entry.file_name()).is_some() {
             return Ok(true);
         }
@@ -115,8 +115,8 @@ fn scan_toolchain_release(
 ) -> io::Result<Vec<InstalledLibrary>> {
     let mut libraries = Vec::new();
 
-    for entry in release_path.read_dir_utf8()? {
-        let entry = entry?;
+    for entry_result in release_path.read_dir_utf8()? {
+        let entry = entry_result?;
         let file_name = entry.file_name();
 
         if let Some((crate_name, parsed_toolchain)) = parse_library_filename(file_name) {
@@ -161,9 +161,7 @@ pub fn parse_library_filename(filename: &str) -> Option<(CrateName, String)> {
     let without_ext = without_prefix.strip_suffix(extension)?;
 
     // Split on @ to get crate name and toolchain
-    let at_pos = without_ext.find('@')?;
-    let crate_name = &without_ext[..at_pos];
-    let toolchain = &without_ext[at_pos + 1..];
+    let (crate_name, toolchain) = without_ext.split_once('@')?;
 
     if crate_name.is_empty() || toolchain.is_empty() {
         return None;

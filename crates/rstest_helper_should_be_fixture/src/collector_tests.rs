@@ -34,7 +34,7 @@ fn collector_iterates_callees_in_definition_path_order() {
 
     let keys = collector
         .iter()
-        .map(|(callee, _)| callee.to_string())
+        .map(|(callee, _)| callee.to_owned())
         .collect::<Vec<_>>();
 
     assert_eq!(keys, ["crate::a_helper", "crate::z_helper"]);
@@ -111,7 +111,7 @@ fn collector_orders_large_single_callee_bucket_by_span() {
 #[test]
 fn literal_lowering_records_const_lit_atom() {
     assert_eq!(
-        literal_text_atom("\"literal\"".to_string()),
+        literal_text_atom("\"literal\"".to_owned()),
         ArgAtom::const_lit("\"literal\""),
     );
 }
@@ -162,7 +162,7 @@ fn location_with_hir_id(
     hir_local_id: u32,
 ) -> CallSiteLocation {
     CallSiteLocation::new(
-        callee.to_string(),
+        callee.to_owned(),
         source_file(),
         Span::with_root_ctxt(lo, hi),
         ItemLocalId::from_u32(hir_local_id),
@@ -170,7 +170,7 @@ fn location_with_hir_id(
 }
 
 fn source_file() -> FileName {
-    FileName::Custom("src/lib.rs".to_string())
+    FileName::Custom("src/lib.rs".to_owned())
 }
 
 proptest! {
@@ -236,7 +236,7 @@ fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
                 .iter()
                 .map(|record| (record.span.lo().0, record.span.hi().0))
                 .collect();
-            (callee.to_string(), spans)
+            (callee.to_owned(), spans)
         })
         .collect()
 }

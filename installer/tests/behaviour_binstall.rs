@@ -41,8 +41,8 @@ fn world() -> BinstallWorld {
 
 #[given("the installer Cargo.toml is loaded")]
 fn given_cargo_toml_loaded(world: &mut BinstallWorld) {
-    let table = load_cargo_toml();
-    world.binstall_table = Some(extract_binstall_table(&table));
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    world.binstall_table = Some(extract_binstall_table(&table).expect("extract binstall table"));
 }
 
 #[given("target \"{target}\" and version \"{version}\"")]

@@ -21,17 +21,23 @@ pub struct FixtureEnvironment {
 
 impl FixtureEnvironment {
     /// Returns the root directory containing the cloned fixture files.
+    #[must_use]
     pub fn workdir(&self) -> &Path {
         &self.workdir
     }
 
     /// Moves the optional `dylint.toml` contents out of the environment.
-    pub fn take_config(&mut self) -> Option<String> {
+    pub const fn take_config(&mut self) -> Option<String> {
         self.config.take()
     }
 }
 
 /// Discovers `.rs` fixtures inside `directory`, returning the paths unsorted.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the glob pattern is invalid or a matched
+/// path cannot be read.
 pub fn discover_fixtures(directory: &Utf8Path) -> io::Result<Vec<PathBuf>> {
     let pattern = directory.join("*.rs").to_string();
     let walker = glob(&pattern).map_err(|error| io::Error::other(error.to_string()))?;
@@ -48,6 +54,10 @@ pub fn discover_fixtures(directory: &Utf8Path) -> io::Result<Vec<PathBuf>> {
 }
 
 /// Runs fixtures discovered under `directory` using the provided `runner`.
+///
+/// # Errors
+///
+/// Returns the first error produced by fixture discovery or by `runner`.
 pub fn run_fixtures_with<F>(
     crate_name: &str,
     directory: &Utf8Path,
@@ -67,6 +77,11 @@ where
 }
 
 /// Copies `source` into a temporary directory, including stderr/config files.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the temporary directory cannot be created or
+/// the fixture files cannot be copied or read.
 pub fn prepare_fixture(directory: &Utf8Path, source: &Path) -> io::Result<FixtureEnvironment> {
     let tempdir = tempdir()?;
     copy_fixture(directory.as_std_path(), source, tempdir.path())?;
@@ -79,31 +94,48 @@ pub fn prepare_fixture(directory: &Utf8Path, source: &Path) -> io::Result<Fixtur
 }
 
 /// Executes `runner`, capturing unwinds into deterministic error strings.
+///
+/// # Errors
+///
+/// Returns the panic payload rendered as `"<fixture>: <message>"` when the
+/// runner unwinds.
 pub fn run_test_runner<F>(fixture_name: &str, runner: F) -> Result<(), String>
 where
     F: FnOnce(),
 {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(runner)).map_err(|payload| match payload
-        .downcast::<String>(
-    ) {
-        Ok(message) => format!("{fixture_name}: {message}"),
-        Err(payload) => match payload.downcast::<&'static str>() {
-            Ok(message) => format!("{fixture_name}: {message}"),
-            Err(_) => format!("{fixture_name}: dylint UI tests panicked without a message"),
-        },
-    })
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(runner))
+        .map_err(|payload| format!("{fixture_name}: {}", panic_message(payload)))
 }
 
-/// Resolves the configuration content for `source`, preferring per-fixture files.
-pub fn resolve_fixture_config(directory: &Utf8Path, source: &Path) -> io::Result<Option<String>> {
-    if let Some(config) = read_fixture_config(source)? {
-        Ok(Some(config))
-    } else {
-        read_directory_config(directory)
+/// Renders a panic payload as a human-readable message.
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    match payload.downcast::<String>() {
+        Ok(message) => *message,
+        Err(other_payload) => other_payload.downcast::<&'static str>().map_or_else(
+            |_| String::from("dylint UI tests panicked without a message"),
+            |message| (*message).to_owned(),
+        ),
     }
 }
 
+/// Resolves the configuration content for `source`, preferring per-fixture files.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when either configuration file cannot be read.
+pub fn resolve_fixture_config(directory: &Utf8Path, source: &Path) -> io::Result<Option<String>> {
+    read_fixture_config(source)?.map_or_else(
+        || read_directory_config(directory),
+        |config| Ok(Some(config)),
+    )
+}
+
 /// Loads `case.dylint.toml` for a fixture when present.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the fixture has no usable file stem or the
+/// configuration file cannot be read.
 pub fn read_fixture_config(source: &Path) -> io::Result<Option<String>> {
     let stem = source
         .file_stem()
@@ -119,6 +151,11 @@ pub fn read_fixture_config(source: &Path) -> io::Result<Option<String>> {
 }
 
 /// Loads `ui/dylint.toml` style directory-level configuration when present.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the configuration file exists but cannot be
+/// read.
 pub fn read_directory_config(directory: &Utf8Path) -> io::Result<Option<String>> {
     let path = directory.as_std_path().join("dylint.toml");
     if path.exists() {
@@ -150,14 +187,14 @@ mod tests {
             let name = source
                 .file_name()
                 .and_then(|value| value.to_str())
-                .ok_or_else(|| "utf8 file name".to_string())?
+                .ok_or_else(|| "utf8 file name".to_owned())?
                 .to_owned();
             visited.push(name);
             Ok(())
         })
         .expect("fixtures run");
 
-        assert_eq!(visited, vec!["a.rs".to_string(), "b.rs".to_string()]);
+        assert_eq!(visited, vec!["a.rs".to_owned(), "b.rs".to_owned()]);
     }
 
     #[test]
@@ -171,7 +208,8 @@ mod tests {
         fixtures.sort();
 
         assert_eq!(fixtures.len(), 1);
-        assert!(fixtures[0].ends_with("first.rs"));
+        let discovered = fixtures.first().expect("one fixture should be discovered");
+        assert!(discovered.ends_with("first.rs"));
     }
 
     #[test]

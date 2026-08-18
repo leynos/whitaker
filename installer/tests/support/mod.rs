@@ -27,16 +27,15 @@ pub fn pinned_toolchain_channel() -> String {
 
 /// Checks if a toolchain is installed on the host system.
 ///
-/// Sanitizes rustup environment by always setting RUSTUP_AUTO_INSTALL=0 and
-/// RUSTUP_TOOLCHAIN to prevent host settings from leaking into tests.
+/// Sanitizes rustup environment by always setting `RUSTUP_AUTO_INSTALL=0` and
+/// `RUSTUP_TOOLCHAIN` to prevent host settings from leaking into tests.
 pub fn is_toolchain_installed(channel: &str) -> bool {
     Command::new("rustup")
         .args(["run", channel, "rustc", "--version"])
         .env("RUSTUP_AUTO_INSTALL", "0")
         .env_remove("RUSTUP_TOOLCHAIN")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Checks if a toolchain is installed in an isolated rustup environment.
@@ -55,8 +54,7 @@ pub fn is_toolchain_installed_in_env(
         .env("RUSTUP_AUTO_INSTALL", "0")
         .env_remove("RUSTUP_TOOLCHAIN")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Result of setting up an isolated rustup environment.
@@ -68,10 +66,10 @@ pub struct IsolatedRustupEnv {
 /// Initializes an isolated rustup environment by running `rustup show`.
 ///
 /// This creates necessary settings files that rustup expects to exist.
-/// The function sets RUSTUP_AUTO_INSTALL=0 to prevent auto-installing any
-/// toolchain during initialization, clears RUSTUP_TOOLCHAIN to avoid
+/// The function sets `RUSTUP_AUTO_INSTALL=0` to prevent auto-installing any
+/// toolchain during initialization, clears `RUSTUP_TOOLCHAIN` to avoid
 /// rust-toolchain.toml files affecting initialization, and runs from
-/// rustup_home as a current directory to prevent rustup from walking up
+/// `rustup_home` as a current directory to prevent rustup from walking up
 /// to the workspace and discovering a project's rust-toolchain.toml
 /// (which would affect toolchain selection).
 fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
@@ -114,8 +112,7 @@ fn parse_rustup_location_output(output: &std::process::Output) -> String {
         .lines()
         .next()
         .expect("rustup not found in PATH")
-        .trim()
-        .to_string()
+        .trim().to_owned()
 }
 
 /// Locates the system rustup binary path.
@@ -137,7 +134,7 @@ fn find_system_rustup() -> String {
     parse_rustup_location_output(&output)
 }
 
-/// Installs rustup into the isolated cargo_bin directory.
+/// Installs rustup into the isolated `cargo_bin` directory.
 #[cfg(unix)]
 fn install_rustup_to_cargo_bin(rustup_path: &str, cargo_bin: &Path) {
     std::os::unix::fs::symlink(rustup_path, cargo_bin.join("rustup"))
@@ -150,7 +147,7 @@ fn install_rustup_to_cargo_bin(rustup_path: &str, cargo_bin: &Path) {
         .expect("failed to copy rustup to CARGO_HOME/bin");
 }
 
-/// Sets up isolated RUSTUP_HOME and CARGO_HOME directories for testing.
+/// Sets up isolated `RUSTUP_HOME` and `CARGO_HOME` directories for testing.
 ///
 /// This ensures the auto-install code path is exercised regardless of host state.
 /// The function initializes rustup in the isolated environment and makes the system

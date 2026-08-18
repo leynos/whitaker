@@ -30,7 +30,7 @@ struct ExampleHarnessRun<'a> {
 #[cfg(not(windows))]
 impl<'a> ExampleHarnessRun<'a> {
     /// Creates a run spec using the default `--test` harness flag.
-    fn new(name: &'a str, label: &'a str) -> Self {
+    const fn new(name: &'a str, label: &'a str) -> Self {
         Self {
             name,
             label,
@@ -40,7 +40,7 @@ impl<'a> ExampleHarnessRun<'a> {
 
     /// Creates a run spec with caller-supplied rustc flags (no defaults
     /// applied).
-    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+    const fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
         Self {
             name,
             label,

@@ -44,7 +44,7 @@ struct StubDownloader {
 }
 
 impl StubDownloader {
-    fn new(manifest: ManifestBehaviour, archive: ArchiveBehaviour) -> Self {
+    const fn new(manifest: ManifestBehaviour, archive: ArchiveBehaviour) -> Self {
         Self {
             manifest: Mutex::new(Some(manifest)),
             archive: Mutex::new(Some(archive)),

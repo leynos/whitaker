@@ -49,7 +49,7 @@ impl InstallMetrics {
     /// assert_eq!(metrics.total_installs(), 1);
     /// ```
     #[must_use]
-    pub fn total_installs(&self) -> u64 {
+    pub const fn total_installs(&self) -> u64 {
         self.total_installs
     }
 
@@ -66,7 +66,7 @@ impl InstallMetrics {
     /// assert_eq!(metrics.download_installs(), 1);
     /// ```
     #[must_use]
-    pub fn download_installs(&self) -> u64 {
+    pub const fn download_installs(&self) -> u64 {
         self.download_installs
     }
 
@@ -83,7 +83,7 @@ impl InstallMetrics {
     /// assert_eq!(metrics.build_installs(), 1);
     /// ```
     #[must_use]
-    pub fn build_installs(&self) -> u64 {
+    pub const fn build_installs(&self) -> u64 {
         self.build_installs
     }
 
@@ -101,36 +101,36 @@ impl InstallMetrics {
     /// );
     /// ```
     #[must_use]
-    pub fn total_install_duration(&self) -> Duration {
+    pub const fn total_install_duration(&self) -> Duration {
         Duration::from_millis(self.total_install_millis)
     }
 
-    /// Returns `download_installs / total_installs`.
+    /// Returns `download_installs / total_installs` in permille (0–1000).
     ///
     /// # Examples
     ///
     /// ```
     /// use whitaker_installer::install_metrics::InstallMetrics;
     ///
-    /// assert_eq!(InstallMetrics::default().download_rate(), 0.0);
+    /// assert_eq!(InstallMetrics::default().download_rate_permille(), 0);
     /// ```
     #[must_use]
-    pub fn download_rate(&self) -> f64 {
-        rate(self.download_installs, self.total_installs)
+    pub const fn download_rate_permille(&self) -> u64 {
+        rate_permille(self.download_installs, self.total_installs)
     }
 
-    /// Returns `build_installs / total_installs`.
+    /// Returns `build_installs / total_installs` in permille (0–1000).
     ///
     /// # Examples
     ///
     /// ```
     /// use whitaker_installer::install_metrics::InstallMetrics;
     ///
-    /// assert_eq!(InstallMetrics::default().build_rate(), 0.0);
+    /// assert_eq!(InstallMetrics::default().build_rate_permille(), 0);
     /// ```
     #[must_use]
-    pub fn build_rate(&self) -> f64 {
-        rate(self.build_installs, self.total_installs)
+    pub const fn build_rate_permille(&self) -> u64 {
+        rate_permille(self.build_installs, self.total_installs)
     }
 
     /// Records one successful install event.
@@ -179,17 +179,19 @@ impl InstallMetrics {
     /// ```
     #[must_use]
     pub fn summary_line(&self) -> String {
+        let download_percent = format_permille_as_percent(self.download_rate_permille());
+        let build_percent = format_permille_as_percent(self.build_rate_permille());
         format!(
             concat!(
-                "Install metrics: download {}/{} ({:.1}%), build {}/{} ({:.1}%), ",
+                "Install metrics: download {}/{} ({}%), build {}/{} ({}%), ",
                 "total installation time {}"
             ),
             self.download_installs,
             self.total_installs,
-            self.download_rate() * 100.0,
+            download_percent,
             self.build_installs,
             self.total_installs,
-            self.build_rate() * 100.0,
+            build_percent,
             format_duration(self.total_install_duration()),
         )
     }
@@ -204,18 +206,23 @@ pub struct RecordOutcome {
 impl RecordOutcome {
     /// Returns the updated aggregate metrics.
     #[must_use]
-    pub fn metrics(&self) -> &InstallMetrics {
+    pub const fn metrics(&self) -> &InstallMetrics {
         &self.metrics
     }
 
     /// Returns true when a malformed metrics file was reset to defaults.
     #[must_use]
-    pub fn recovered_from_corrupt_file(&self) -> bool {
+    pub const fn recovered_from_corrupt_file(&self) -> bool {
         self.recovered_from_corrupt_file
     }
 }
 
 /// Records one successful install in Whitaker's metrics store.
+///
+/// # Errors
+///
+/// Returns an [`InstallMetricsError`] when the data directory is missing or
+/// the metrics file cannot be created, locked, read, or written.
 pub fn record_install(
     dirs: &dyn BaseDirs,
     mode: InstallMode,
@@ -226,6 +233,11 @@ pub fn record_install(
 }
 
 /// Records one successful install at an explicit metrics file path.
+///
+/// # Errors
+///
+/// Returns an [`InstallMetricsError`] when the metrics directory or file
+/// cannot be created, or the file cannot be locked, read, or written.
 pub fn record_install_at_path(
     metrics_path: &Path,
     mode: InstallMode,
@@ -309,10 +321,10 @@ fn load_metrics(
         return Ok((InstallMetrics::default(), false));
     }
 
-    match serde_json::from_str::<InstallMetrics>(&content) {
-        Ok(metrics) => Ok((metrics, false)),
-        Err(_) => Ok((InstallMetrics::default(), true)),
-    }
+    serde_json::from_str::<InstallMetrics>(&content).map_or_else(
+        |_| Ok((InstallMetrics::default(), true)),
+        |metrics| Ok((metrics, false)),
+    )
 }
 
 fn persist_metrics(
@@ -333,12 +345,19 @@ fn persist_metrics(
         })
 }
 
-fn rate(part: u64, whole: u64) -> f64 {
+/// Returns `part / whole` in permille (parts per thousand), or zero when
+/// `whole` is zero. The product saturates rather than overflowing.
+const fn rate_permille(part: u64, whole: u64) -> u64 {
     if whole == 0 {
-        0.0
+        0
     } else {
-        part as f64 / whole as f64
+        part.saturating_mul(1000).div_euclid(whole)
     }
+}
+
+/// Renders a permille value as a percentage with one decimal place.
+fn format_permille_as_percent(permille: u64) -> String {
+    format!("{}.{}", permille.div_euclid(10), permille.rem_euclid(10))
 }
 
 fn duration_to_millis(duration: Duration) -> u64 {
@@ -348,9 +367,9 @@ fn duration_to_millis(duration: Duration) -> u64 {
 fn format_duration(duration: Duration) -> String {
     let total_seconds = duration.as_secs();
     let millis = duration.subsec_millis();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
+    let hours = total_seconds.div_euclid(3600);
+    let minutes = total_seconds.rem_euclid(3600).div_euclid(60);
+    let seconds = total_seconds.rem_euclid(60);
 
     if should_format_with_hours(hours) {
         return format!("{hours}h {minutes}m {seconds}.{millis:03}s");
@@ -361,10 +380,10 @@ fn format_duration(duration: Duration) -> String {
     format!("{seconds}.{millis:03}s")
 }
 
-fn should_format_with_hours(hours: u64) -> bool {
+const fn should_format_with_hours(hours: u64) -> bool {
     hours > 0
 }
 
-fn should_format_with_minutes(minutes: u64) -> bool {
+const fn should_format_with_minutes(minutes: u64) -> bool {
     minutes > 0
 }

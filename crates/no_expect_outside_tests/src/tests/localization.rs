@@ -1,4 +1,4 @@
-//! BDD-style localization tests for no_expect_outside_tests diagnostic
+//! BDD-style localization tests for `no_expect_outside_tests` diagnostic
 //! messages.
 //!
 //! Exercises localization scenarios including locale selection, receiver type
@@ -25,7 +25,7 @@ fn unquote(value: &str) -> &str {
 
 fn format_receiver(receiver: &str) -> String {
     if receiver.is_empty() || receiver.starts_with('`') {
-        receiver.to_string()
+        receiver.to_owned()
     } else {
         format!("`{receiver}`")
     }
@@ -65,7 +65,7 @@ impl LocalizationWorld {
 
     fn set_function(&self, name: Option<&str>) {
         let mut summary = self.summary.borrow_mut();
-        summary.function_name = name.map(ToString::to_string);
+        summary.function_name = name.map(str::to_owned);
     }
 
     fn record_result(&self, value: Result<NoExpectMessages, I18nError>) {

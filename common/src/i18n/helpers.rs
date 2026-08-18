@@ -54,8 +54,7 @@ pub fn get_localizer_for_lint(lint_name: &str, configuration_locale: Option<&str
 pub fn branch_phrase(locale: &str, branches: usize) -> String {
     match locale
         .split_once('-')
-        .map(|(lang, _)| lang)
-        .unwrap_or(locale)
+        .map_or(locale, |(lang, _)| lang)
     {
         "cy" => welsh_branch_phrase(branches),
         "gd" => gaelic_branch_phrase(branches),

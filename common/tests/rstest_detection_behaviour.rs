@@ -123,7 +123,7 @@ fn given_fixture_local_parameter(world: &DetectionWorld) {
 #[given("a parameter named case_input annotated with case")]
 fn given_provider_parameter(world: &DetectionWorld) {
     world.set_parameter(RstestParameter::new(
-        ParameterBinding::Ident("case_input".to_string()),
+        ParameterBinding::Ident("case_input".to_owned()),
         vec![Attribute::new(
             AttributePath::from("case"),
             AttributeKind::Outer,
@@ -155,7 +155,7 @@ fn given_rstest_and_allow(world: &DetectionWorld) {
 #[given("a parameter annotated with a custom provider attribute")]
 fn given_custom_provider_parameter(world: &DetectionWorld) {
     world.set_parameter(RstestParameter::new(
-        ParameterBinding::Ident("custom_value".to_string()),
+        ParameterBinding::Ident("custom_value".to_owned()),
         vec![Attribute::new(
             AttributePath::from("custom::provider"),
             AttributeKind::Outer,
@@ -213,7 +213,7 @@ fn then_fixture_local(world: &DetectionWorld) {
     assert_eq!(
         *world.parameter_kind.borrow(),
         Some(RstestParameterKind::FixtureLocal {
-            name: "db".to_string()
+            name: "db".to_owned()
         })
     );
 }
@@ -238,7 +238,7 @@ fn then_unsupported(world: &DetectionWorld) {
 fn then_fixture_names(world: &DetectionWorld) {
     assert_eq!(
         *world.fixture_names.borrow(),
-        Some(BTreeSet::from(["db".to_string()]))
+        Some(BTreeSet::from(["db".to_owned()]))
     );
 }
 

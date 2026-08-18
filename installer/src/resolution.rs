@@ -68,8 +68,7 @@ pub fn resolve_crates(
         // Assumes names have been validated via validate_crate_names().
         debug!(
             target: "whitaker_installer::resolution",
-            "using explicit lint crate selection: {:?}",
-            specific_lints
+            "using explicit lint crate selection: {specific_lints:?}"
         );
         return specific_lints.to_vec();
     }

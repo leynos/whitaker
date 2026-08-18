@@ -49,26 +49,25 @@ fn seed_hash() -> u64 {
 }
 
 fn hash_node(seed: u64, node: &NormalizedNode) -> u64 {
-    let mut pending = vec![(node, 0, hash_node_header(seed, node))];
-    loop {
-        let Some((current, child_index, _)) = pending.last_mut() else {
-            unreachable!("hash_node seeds pending with one node and returns before it empties")
-        };
-        if let Some(child) = current.children().get(*child_index) {
-            *child_index += 1;
+    // Pop-based traversal keeps every stack access provably in bounds: each
+    // iteration pops the top entry, either revisits it with the next child
+    // pushed on top, or folds its completed hash into the parent. The final
+    // completed hash is the root's, so the loop needs no unreachable arms.
+    let mut pending = vec![(node, 0_usize, hash_node_header(seed, node))];
+    let mut completed_hash = 0_u64;
+    while let Some((current, child_index, current_hash)) = pending.pop() {
+        if let Some(child) = current.children().get(child_index) {
+            pending.push((current, child_index.saturating_add(1), current_hash));
             pending.push((child, 0, hash_node_header(seed, child)));
             continue;
         }
 
-        let Some((_, _, completed_hash)) = pending.pop() else {
-            unreachable!("hash_node pops the node it just observed through last_mut")
-        };
+        completed_hash = current_hash;
         if let Some((_, _, parent_hash)) = pending.last_mut() {
-            *parent_hash = mix_u64(*parent_hash, completed_hash);
-        } else {
-            return completed_hash;
+            *parent_hash = mix_u64(*parent_hash, current_hash);
         }
     }
+    completed_hash
 }
 
 fn hash_node_header(mut hash: u64, node: &NormalizedNode) -> u64 {
@@ -83,7 +82,7 @@ fn child_count(node: &NormalizedNode) -> u64 {
     u64::try_from(node.children().len()).unwrap_or(u64::MAX)
 }
 
-fn leaf_tag(leaf: Option<LeafClass>) -> u8 {
+const fn leaf_tag(leaf: Option<LeafClass>) -> u8 {
     match leaf {
         Some(LeafClass::Ident) => b'i',
         Some(LeafClass::Literal) => b'l',

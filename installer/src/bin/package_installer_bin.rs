@@ -66,7 +66,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
         output_dir: cli.output_dir,
     };
 
-    let output = package_installer(params)?;
+    let output = package_installer(&params)?;
     println!("Created {}", output.archive_path.display());
     Ok(())
 }

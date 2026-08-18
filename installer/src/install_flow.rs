@@ -65,7 +65,7 @@ pub(crate) fn ensure_dylint_tools_with_executor(
 pub(crate) fn ensure_dylint_tools_with_options(
     executor: &dyn CommandExecutor,
     stderr: &mut dyn Write,
-    options: DependencyInstallOptions<'_>,
+    options: &DependencyInstallOptions<'_>,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
     ensure_dylint_tools_core(options.quiet, stderr, status.all_installed(), |stderr| {

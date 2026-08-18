@@ -114,7 +114,7 @@ fn builder_default_trait_matches_new() {
 #[case("brain method present but cohesive (LCOM4=1)", 80, 1, 1)]
 #[case("brain method and low cohesion but low WMC", 30, 1, 2)]
 fn evaluate_pass_cases(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] wmc: usize,
     #[case] brain_count: usize,
     #[case] lcom4: usize,
@@ -123,7 +123,8 @@ fn evaluate_pass_cases(
     let thresholds = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_type(&metrics, &thresholds),
-        BrainTypeDisposition::Pass
+        BrainTypeDisposition::Pass,
+        "case: {label}"
     );
 }
 
@@ -136,7 +137,7 @@ fn evaluate_pass_cases(
 #[case("above warn below deny", 80, 1, 2)]
 #[case("just below WMC deny", 99, 1, 2)]
 fn evaluate_warn_cases(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] wmc: usize,
     #[case] brain_count: usize,
     #[case] lcom4: usize,
@@ -145,7 +146,8 @@ fn evaluate_warn_cases(
     let thresholds = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_type(&metrics, &thresholds),
-        BrainTypeDisposition::Warn
+        BrainTypeDisposition::Warn,
+        "case: {label}"
     );
 }
 
@@ -160,7 +162,7 @@ fn evaluate_warn_cases(
 #[case("deny supersedes warn", 100, 1, 3)]
 #[case("all deny triggers active", 100, 2, 3)]
 fn evaluate_deny_cases(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] wmc: usize,
     #[case] brain_count: usize,
     #[case] lcom4: usize,
@@ -169,7 +171,8 @@ fn evaluate_deny_cases(
     let thresholds = BrainTypeThresholdsBuilder::new().build();
     assert_eq!(
         evaluate_brain_type(&metrics, &thresholds),
-        BrainTypeDisposition::Deny
+        BrainTypeDisposition::Deny,
+        "case: {label}"
     );
 }
 
@@ -227,7 +230,7 @@ fn exact_brain_method_deny_count_triggers_deny() {
 #[case("below custom threshold", 2, false)]
 #[case("at custom threshold boundary", 3, true)]
 fn custom_brain_method_deny_count_boundary(
-    #[case] _label: &str,
+    #[case] label: &str,
     #[case] brain_count: usize,
     #[case] should_deny: bool,
 ) {
@@ -240,8 +243,8 @@ fn custom_brain_method_deny_count_boundary(
 
     let disposition = evaluate_brain_type(&metrics, &thresholds);
     if should_deny {
-        assert_eq!(disposition, BrainTypeDisposition::Deny);
+        assert_eq!(disposition, BrainTypeDisposition::Deny, "case: {label}");
     } else {
-        assert_ne!(disposition, BrainTypeDisposition::Deny);
+        assert_ne!(disposition, BrainTypeDisposition::Deny, "case: {label}");
     }
 }

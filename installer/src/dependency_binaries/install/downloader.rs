@@ -100,25 +100,30 @@ pub(super) fn download_from_urls(
     // Acquire the parent-directory capability up front so every archive read and
     // write flows through it (never ambient `std::fs`); validation happens here,
     // before any HTTP request.
-    let destination = open_download_destination(destination)?;
-    destination.download_archive(agent, archive_url)?;
+    let destination_handle = open_download_destination(destination)?;
+    destination_handle.download_archive(agent, archive_url)?;
     // Any failure after the archive is written removes it, so a retry never sees
     // a partial or unverified file.
     let expected_checksum = fetch_expected_checksum(agent, checksum_url)
-        .inspect_err(|_| destination.remove_partial_archive())?;
+        .inspect_err(|_| destination_handle.remove_partial_archive())?;
 
     // Re-open the written archive and verify it; `verify_archive_checksum`
     // consumes the reader, closing the handle before any cleanup below.
-    let archive = destination.open_archive().inspect_err(|error| {
+    let archive = destination_handle.open_archive().inspect_err(|error| {
         warn!(
             category = CATEGORY_CAPABILITY,
-            archive_name = %destination.archive_name,
+            archive_name = %destination_handle.archive_name,
             error = %error,
             "failed to reopen archive for verification",
         );
-        destination.remove_partial_archive();
+        destination_handle.remove_partial_archive();
     })?;
-    match verify_archive_checksum(archive, destination.path.as_std_path(), &expected_checksum) {
+    let verification = verify_archive_checksum(
+        archive,
+        destination_handle.path.as_std_path(),
+        &expected_checksum,
+    );
+    match verification {
         Ok(()) => {
             debug!(
                 category = CATEGORY_CHECKSUM,
@@ -136,7 +141,7 @@ pub(super) fn download_from_urls(
                 "archive checksum verification failed",
             );
             // Remove the unverified archive so a retry never observes stale data.
-            destination.remove_partial_archive();
+            destination_handle.remove_partial_archive();
             Err(error)
         }
     }
