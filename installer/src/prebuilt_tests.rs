@@ -1,10 +1,12 @@
 //! Unit tests for prebuilt artefact orchestration.
 
-use super::*;
-use crate::artefact::download::MockArtefactDownloader;
-use crate::artefact::extraction::MockArtefactExtractor;
-use crate::test_utils::{prebuilt_manifest_json, sha256_hex};
 use rstest::rstest;
+
+use super::*;
+use crate::{
+    artefact::{download::MockArtefactDownloader, extraction::MockArtefactExtractor},
+    test_utils::{prebuilt_manifest_json, sha256_hex},
+};
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const TARGET: &str = "x86_64-unknown-linux-gnu";

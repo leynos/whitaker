@@ -1,7 +1,10 @@
 //! Tests for dependency binary helper fixtures and expected call builders.
 
 use crate::test_utils::dependency_binary_helpers::{
-    ExpectedCallConfig, dependency_version, expected_calls, repository_verification_call,
+    ExpectedCallConfig,
+    dependency_version,
+    expected_calls,
+    repository_verification_call,
 };
 
 #[test]

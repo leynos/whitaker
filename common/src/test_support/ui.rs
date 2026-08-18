@@ -4,13 +4,17 @@
 //! clone them into an isolated workspace, and execute each case via
 //! `dylint_testing` while capturing panics into deterministic error messages.
 
-use crate::test_support::copy_fixture;
+use std::{
+    fs,
+    io,
+    path::{Path, PathBuf},
+};
+
 use camino::Utf8Path;
 use glob::glob;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
+
+use crate::test_support::copy_fixture;
 
 /// Temporary workspace prepared for a single UI fixture run.
 pub struct FixtureEnvironment {
@@ -22,14 +26,10 @@ pub struct FixtureEnvironment {
 impl FixtureEnvironment {
     /// Returns the root directory containing the cloned fixture files.
     #[must_use]
-    pub fn workdir(&self) -> &Path {
-        &self.workdir
-    }
+    pub fn workdir(&self) -> &Path { &self.workdir }
 
     /// Moves the optional `dylint.toml` contents out of the environment.
-    pub const fn take_config(&mut self) -> Option<String> {
-        self.config.take()
-    }
+    pub const fn take_config(&mut self) -> Option<String> { self.config.take() }
 }
 
 /// Discovers `.rs` fixtures inside `directory`, returning the paths unsorted.
@@ -167,9 +167,11 @@ pub fn read_directory_config(directory: &Utf8Path) -> io::Result<Option<String>>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use camino::Utf8PathBuf;
     use std::fs;
+
+    use camino::Utf8PathBuf;
+
+    use super::*;
 
     fn utf8_path(buf: &Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(buf.to_path_buf()).expect("utf8 path")

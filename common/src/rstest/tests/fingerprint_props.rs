@@ -1,7 +1,8 @@
 //! Property tests for shared `rstest` fingerprint data models.
 
-use crate::rstest::{ArgAtom, ArgFingerprint, LocalSlot, ParagraphNormalizer};
 use proptest::prelude::*;
+
+use crate::rstest::{ArgAtom, ArgFingerprint, LocalSlot, ParagraphNormalizer};
 
 proptest! {
     /// Slot indices are assigned in strict first-appearance order: the first

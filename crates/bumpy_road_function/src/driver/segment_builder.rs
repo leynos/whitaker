@@ -5,13 +5,13 @@
 
 use std::ops::RangeInclusive;
 
-use crate::analysis::Settings;
 use rustc_hir as hir;
 use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::LateContext;
-use rustc_span::source_map::SourceMap;
-use rustc_span::{DesugaringKind, Span};
+use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
+
+use crate::analysis::Settings;
 
 pub(super) struct SegmentBuilder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
@@ -160,7 +160,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             self.cx.tcx.sess.dcx().span_delayed_bug(
                 span,
                 format!(
-                    "bumpy-road segment lines lie outside function range (segment={segment_start}..={segment_end}, function={function_start}..={function_end})",
+                    "bumpy-road segment lines lie outside function range \
+                     (segment={segment_start}..={segment_end}, \
+                     function={function_start}..={function_end})",
                     segment_start = lines.start(),
                     segment_end = lines.end(),
                     function_start = self.function_lines.start(),
@@ -186,13 +188,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
 }
 
 impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for SegmentBuilder<'_, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
-        Self::visit_expr(self, expr);
-    }
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) { Self::visit_expr(self, expr); }
 
-    fn visit_block(&mut self, block: &'tcx hir::Block<'tcx>) {
-        Self::visit_block(self, block);
-    }
+    fn visit_block(&mut self, block: &'tcx hir::Block<'tcx>) { Self::visit_block(self, block); }
 }
 
 fn extract_while_components<'hir>(

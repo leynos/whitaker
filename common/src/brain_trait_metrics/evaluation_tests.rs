@@ -1,8 +1,9 @@
 //! Unit tests for brain trait threshold evaluation.
 
+use rstest::rstest;
+
 use super::*;
 use crate::brain_trait_metrics::TraitMetricsBuilder;
-use rstest::rstest;
 
 // ---------------------------------------------------------------------------
 // Helper: build TraitMetrics with the desired shape

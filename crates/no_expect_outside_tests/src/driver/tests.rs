@@ -1,11 +1,13 @@
 //! Unit tests for test attribute detection helpers in the driver module.
 
-use super::*;
+use std::path::Path;
+
 use rstest::rstest;
 use rustc_ast::AttrStyle;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
-use std::path::Path;
+
+use super::*;
 
 // -------------------------------------------------------------------------
 // Test fixtures for HIR attributes
@@ -166,36 +168,32 @@ fn has_test_like_hir_attributes_accepts_additional_test_attributes() {
 //
 // Behavioural coverage is achieved through:
 //
-// 1. UI tests for attribute detection (is_test_attribute,
-//    has_test_like_hir_attributes):
+// 1. UI tests for attribute detection (is_test_attribute, has_test_like_hir_attributes):
 //    - pass_expect_in_test.rs, pass_expect_in_rstest.rs, pass_expect_in_tokio_test.rs
 //    - These verify that test attributes are recognized without the fallback
 //
 // 2. UI tests for arbitrary cfg(test) ancestry detection:
 //    - pass_expect_in_test_module.rs, pass_expect_in_tests_module.rs
-//    - These verify that `#[cfg(test)]` module ancestry marks nested contexts
-//      as test-only regardless of the exact module-name heuristic
-//    - fail_expect_in_file_backed_non_test_fn.rs confirms the ancestry does
-//      not leak into ordinary top-level functions next to a file-backed test
-//      module
+//    - These verify that `#[cfg(test)]` module ancestry marks nested contexts as test-only
+//      regardless of the exact module-name heuristic
+//    - fail_expect_in_file_backed_non_test_fn.rs confirms the ancestry does not leak into ordinary
+//      top-level functions next to a file-backed test module
 //
 // 3. Example-based regression coverage for the `rustc --test` harness path:
-//    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]`
-//      example target under `--test`, placing `.expect(...)` calls inside
-//      nested closure and async-block bodies so the parent walk and sibling
-//      const descriptor fallback are both exercised.
+//    - `pass_expect_in_tokio_test_harness` compiles a real `#[tokio::test]` example target under
+//      `--test`, placing `.expect(...)` calls inside nested closure and async-block bodies so the
+//      parent walk and sibling const descriptor fallback are both exercised.
 //    - `pass_expect_in_tokio_nonstandard_module_harness` and
-//      `pass_expect_in_tokio_path_module_harness` cover non-standard module
-//      names and `#[path]`-loaded Tokio tests under the harness path.
-//    - `pass_expect_in_tokio_path_module_harness_no_config` keeps the
-//      `cfg(test)` ancestor walk as the load-bearing path for file-backed
-//      Tokio tests without extra configuration.
-//    - `fail_expect_in_tokio_crate_non_test_fn` verifies that configured
-//      Tokio test attributes remain scoped to actual test functions.
+//      `pass_expect_in_tokio_path_module_harness` cover non-standard module names and
+//      `#[path]`-loaded Tokio tests under the harness path.
+//    - `pass_expect_in_tokio_path_module_harness_no_config` keeps the `cfg(test)` ancestor walk as
+//      the load-bearing path for file-backed Tokio tests without extra configuration.
+//    - `fail_expect_in_tokio_crate_non_test_fn` verifies that configured Tokio test attributes
+//      remain scoped to actual test functions.
 //
-// 4. Real-world validation: The lint is used on this repository's own
-//    integration tests (compiled with --test), validating the fallback works
-//    correctly for `cfg(test)` ancestry checks and harness-based recovery.
+// 4. Real-world validation: The lint is used on this repository's own integration tests (compiled
+//    with --test), validating the fallback works correctly for `cfg(test)` ancestry checks and
+//    harness-based recovery.
 //
 // The remaining helper with isolated unit coverage is straightforward:
 // - extract_function_item: matches `hir::Node::Item` values whose kind is `Fn`

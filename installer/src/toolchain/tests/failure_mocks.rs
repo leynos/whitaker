@@ -2,8 +2,12 @@
 
 use super::*;
 use crate::toolchain::tests::test_helpers::{
-    ToolchainInstallExpectation, expect_rustc_version, expect_toolchain_install,
-    matches_multi_component_add, output_with_status, output_with_stderr,
+    ToolchainInstallExpectation,
+    expect_rustc_version,
+    expect_toolchain_install,
+    matches_multi_component_add,
+    output_with_status,
+    output_with_stderr,
 };
 
 /// Describes the type of installation failure being tested.
@@ -35,9 +39,7 @@ pub(super) struct ToolchainChannel<'a>(pub(super) &'a str);
 
 impl<'a> ToolchainChannel<'a> {
     /// Returns the inner channel string slice (e.g. `"nightly-2026-05-28"`).
-    pub(super) fn as_str(self) -> &'a str {
-        self.0
-    }
+    pub(super) fn as_str(self) -> &'a str { self.0 }
 }
 
 /// The exact stderr string emitted by the mock when a toolchain installation
@@ -122,8 +124,7 @@ fn setup_toolchain_unusable_failure_mocks(
 ///
 /// # Arguments
 ///
-/// - `runner` - Mock command runner that receives the expected `rustup` and
-///   `rustc` calls.
+/// - `runner` - Mock command runner that receives the expected `rustup` and `rustc` calls.
 /// - `seq` - Mockall sequence enforcing the order of expected commands.
 /// - `channel` - Toolchain channel being installed or checked.
 /// - `setup` - Failure mode and additional components to model.
@@ -215,8 +216,7 @@ fn is_component_install_failed(
 ///
 /// - `err` - Installer error returned by the code under test.
 /// - `channel` - Toolchain channel expected in the error payload.
-/// - `setup` - Failure mode and additional components that define the expected
-///   error shape.
+/// - `setup` - Failure mode and additional components that define the expected error shape.
 ///
 /// # Panics
 ///

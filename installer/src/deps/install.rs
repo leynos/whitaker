@@ -1,14 +1,21 @@
 //! Install orchestration types and helpers for dependency tools.
 
-use crate::dependency_binaries::{DependencyBinaryInstaller, find_dependency_binary};
-use crate::error::{InstallerError, Result};
-use crate::installer_packaging::TargetTriple;
-use std::io::Write;
-use std::process::Output;
+use std::{io::Write, process::Output};
 
 use super::{
-    CARGO_DYLINT_TOOL, CommandExecutor, DEPENDENCY_TOOLS, DYLINT_LINK_TOOL, DependencyTool,
-    DylintToolStatus, is_binstall_available, is_tool_installed,
+    CARGO_DYLINT_TOOL,
+    CommandExecutor,
+    DEPENDENCY_TOOLS,
+    DYLINT_LINK_TOOL,
+    DependencyTool,
+    DylintToolStatus,
+    is_binstall_available,
+    is_tool_installed,
+};
+use crate::{
+    dependency_binaries::{DependencyBinaryInstaller, find_dependency_binary},
+    error::{InstallerError, Result},
+    installer_packaging::TargetTriple,
 };
 
 pub(super) struct RepositoryInstallContext<'a> {

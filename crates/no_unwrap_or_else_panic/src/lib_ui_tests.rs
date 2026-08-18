@@ -1,11 +1,11 @@
 //! UI harness for `no_unwrap_or_else_panic` fixtures.
 
+use std::{fs, io, path::Path};
+
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 #[cfg(not(windows))]
 use rstest::rstest;
-use std::path::Path;
-use std::{fs, io};
 #[cfg(not(windows))]
 use temp_env::with_vars_unset;
 #[cfg(not(windows))]
@@ -58,7 +58,8 @@ fn ui() {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
         )
     });
 }
@@ -93,7 +94,8 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
     });

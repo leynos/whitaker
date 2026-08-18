@@ -3,15 +3,15 @@
 //! These scenarios cover staged filename conventions and non-writable target
 //! handling.
 
-use camino::Utf8PathBuf;
-use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
 #[cfg(unix)]
 use std::cell::Cell;
 use std::cell::RefCell;
+
+use camino::Utf8PathBuf;
+use rstest::fixture;
+use rstest_bdd_macros::{given, scenario, then, when};
 use tempfile::TempDir;
-use whitaker_installer::builder::CrateName;
-use whitaker_installer::stager::Stager;
+use whitaker_installer::{builder::CrateName, stager::Stager};
 
 // ---------------------------------------------------------------------------
 // Staging world
@@ -25,9 +25,7 @@ struct StagingWorld {
 }
 
 #[fixture]
-fn staging_world() -> StagingWorld {
-    StagingWorld::default()
-}
+fn staging_world() -> StagingWorld { StagingWorld::default() }
 
 #[given("a built library")]
 fn given_built_library(staging_world: &StagingWorld) {
@@ -77,11 +75,12 @@ use staging_failure::staging_failure_world;
 
 #[cfg(unix)]
 mod staging_failure {
-    use super::*;
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
+    use std::{fs, os::unix::fs::PermissionsExt};
+
     use tempfile::TempDir;
     use whitaker_installer::error::InstallerError;
+
+    use super::*;
 
     pub struct StagingFailureWorld {
         stager: RefCell<Option<Stager>>,
@@ -103,9 +102,7 @@ mod staging_failure {
     }
 
     #[fixture]
-    pub fn staging_failure_world() -> StagingFailureWorld {
-        StagingFailureWorld::default()
-    }
+    pub fn staging_failure_world() -> StagingFailureWorld { StagingFailureWorld::default() }
 
     #[given("a non-writable staging directory")]
     pub fn given_non_writable_dir(staging_failure_world: &StagingFailureWorld) {
@@ -144,7 +141,8 @@ mod staging_failure {
         if let Ok(file) = std::fs::OpenOptions::new()
             .create_new(true)
             .write(true)
-            .open(&probe_path) {
+            .open(&probe_path)
+        {
             drop(file);
             let _ = std::fs::remove_file(&probe_path);
             staging_failure_world.skip_assertions.set(true);
@@ -182,9 +180,7 @@ mod staging_failure {
 // ---------------------------------------------------------------------------
 
 #[scenario(path = "tests/features/installer.feature", index = 10)]
-fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) {
-    let _ = staging_world;
-}
+fn scenario_stage_with_toolchain_suffix(staging_world: StagingWorld) { let _ = staging_world; }
 
 #[cfg(unix)]
 #[scenario(path = "tests/features/installer.feature", index = 11)]

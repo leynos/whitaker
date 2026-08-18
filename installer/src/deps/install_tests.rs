@@ -1,10 +1,12 @@
 //! Tests for dependency-install status refresh behaviour.
 
+use rstest::rstest;
+
 use super::*;
 use crate::test_utils::dependency_binary_helpers::{
-    dylint_link_install_list_check, with_fake_binary_on_path,
+    dylint_link_install_list_check,
+    with_fake_binary_on_path,
 };
-use rstest::rstest;
 
 #[rstest]
 #[case(InstallOutcome::CargoBinstall)]

@@ -1,10 +1,12 @@
 //! Configuration for the `no_std_fs_operations` lint: the settings schema and
 //! the `dylint.toml` loading path, kept separate from the lint pass itself.
 
-use crate::exclusion::PathExclusions;
+use std::collections::HashSet;
+
 use log::warn;
 use serde::Deserialize;
-use std::collections::HashSet;
+
+use crate::exclusion::PathExclusions;
 
 /// Lint name used for `dylint.toml` lookups, diagnostic codes, and log targets.
 pub(crate) const LINT_NAME: &str = "no_std_fs_operations";

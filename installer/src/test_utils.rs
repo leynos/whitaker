@@ -1,15 +1,17 @@
 //! Shared test utilities for the installer crate.
 
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    path::PathBuf,
+    process::{ExitStatus, Output},
+};
+
 #[cfg(any(test, feature = "test-support"))]
 use crate::deps::CommandExecutor;
-use crate::dirs::BaseDirs;
 #[cfg(any(test, feature = "test-support"))]
 use crate::error::InstallerError;
-use crate::error::Result;
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::process::{ExitStatus, Output};
+use crate::{dirs::BaseDirs, error::Result};
 
 /// Creates an `ExitStatus` from an exit code (Unix implementation).
 ///
@@ -123,17 +125,11 @@ pub struct StubDirs {
 }
 
 impl BaseDirs for StubDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
+    fn home_dir(&self) -> Option<PathBuf> { None }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
+    fn bin_dir(&self) -> Option<PathBuf> { self.bin_dir.clone() }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        None
-    }
+    fn whitaker_data_dir(&self) -> Option<PathBuf> { None }
 }
 
 /// Compute the SHA-256 hex digest of a byte slice for test fixtures.
@@ -204,18 +200,20 @@ pub struct ExpectedCall {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::deps::CommandExecutor;
-/// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+/// use whitaker_installer::{
+///     deps::CommandExecutor,
+///     test_utils::{ExpectedCall, StubExecutor, success_output},
+/// };
 ///
-/// let executor = StubExecutor::new(vec![
-///     ExpectedCall {
-///         cmd: "cargo",
-///         args: vec!["--version"],
-///         result: Ok(success_output()),
-///     },
-/// ]);
+/// let executor = StubExecutor::new(vec![ExpectedCall {
+///     cmd: "cargo",
+///     args: vec!["--version"],
+///     result: Ok(success_output()),
+/// }]);
 ///
-/// let output = executor.run("cargo", &["--version"]).expect("command failed");
+/// let output = executor
+///     .run("cargo", &["--version"])
+///     .expect("command failed");
 /// assert!(output.status.success());
 ///
 /// executor.assert_finished();
@@ -233,13 +231,11 @@ impl StubExecutor {
     /// ```
     /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
     ///
-    /// let executor = StubExecutor::new(vec![
-    ///     ExpectedCall {
-    ///         cmd: "cargo",
-    ///         args: vec!["build"],
-    ///         result: Ok(success_output()),
-    ///     },
-    /// ]);
+    /// let executor = StubExecutor::new(vec![ExpectedCall {
+    ///     cmd: "cargo",
+    ///     args: vec!["build"],
+    ///     result: Ok(success_output()),
+    /// }]);
     /// ```
     #[must_use]
     pub fn new(expected: Vec<ExpectedCall>) -> Self {
@@ -257,16 +253,16 @@ impl StubExecutor {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_installer::deps::CommandExecutor;
-    /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+    /// use whitaker_installer::{
+    ///     deps::CommandExecutor,
+    ///     test_utils::{ExpectedCall, StubExecutor, success_output},
+    /// };
     ///
-    /// let executor = StubExecutor::new(vec![
-    ///     ExpectedCall {
-    ///         cmd: "cargo",
-    ///         args: vec!["test"],
-    ///         result: Ok(success_output()),
-    ///     },
-    /// ]);
+    /// let executor = StubExecutor::new(vec![ExpectedCall {
+    ///     cmd: "cargo",
+    ///     args: vec!["test"],
+    ///     result: Ok(success_output()),
+    /// }]);
     ///
     /// // Execute the expected command
     /// let _ = executor.run("cargo", &["test"]);

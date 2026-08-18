@@ -1,18 +1,15 @@
 //! Unit tests for the artefact packaging module.
 
-use super::*;
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
-#[fixture]
-fn temp_dir() -> TempDir {
-    TempDir::new().expect("temp dir creation succeeds")
-}
+use super::*;
 
 #[fixture]
-fn sample_git_sha() -> GitSha {
-    GitSha::try_from("abc1234").expect("valid sha")
-}
+fn temp_dir() -> TempDir { TempDir::new().expect("temp dir creation succeeds") }
+
+#[fixture]
+fn sample_git_sha() -> GitSha { GitSha::try_from("abc1234").expect("valid sha") }
 
 #[fixture]
 fn sample_toolchain() -> ToolchainChannel {

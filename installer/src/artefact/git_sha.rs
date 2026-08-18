@@ -4,9 +4,11 @@
 //! of 7–40 characters, matching the range of abbreviated to full git
 //! object names.
 
-use super::error::{ArtefactError, Result};
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
+
+use super::error::{ArtefactError, Result};
 
 /// Minimum length of an abbreviated git SHA (7 hex characters).
 const MIN_LEN: usize = 7;
@@ -40,9 +42,7 @@ impl GitSha {
     /// assert_eq!(sha.as_str(), "abc1234");
     /// ```
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 
     /// Consume the wrapper and return the inner string.
     ///
@@ -55,9 +55,7 @@ impl GitSha {
     /// assert_eq!(sha.into_inner(), "abc1234");
     /// ```
     #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
+    pub fn into_inner(self) -> String { self.0 }
 }
 
 impl TryFrom<&str> for GitSha {
@@ -80,15 +78,11 @@ impl TryFrom<String> for GitSha {
 }
 
 impl AsRef<str> for GitSha {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    fn as_ref(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for GitSha {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl<'de> serde::Deserialize<'de> for GitSha {
@@ -146,8 +140,9 @@ fn validate_git_sha(value: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn accepts_seven_char_abbreviated_sha() {

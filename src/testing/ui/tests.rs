@@ -1,11 +1,15 @@
 //! Tests that verify the UI harness runner validates inputs and propagates
 //! errors from custom runners.
-use super::{HarnessError, run_with_runner};
+use std::{
+    env,
+    sync::{Mutex, MutexGuard, OnceLock},
+};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
-use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 use whitaker_common::test_support::with_env_var;
+
+use super::{HarnessError, run_with_runner};
 
 #[rstest]
 #[case(

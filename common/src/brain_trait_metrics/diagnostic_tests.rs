@@ -1,11 +1,13 @@
 //! Unit tests for brain trait diagnostic formatting.
 
-use super::*;
-use crate::brain_trait_metrics::TraitMetricsBuilder;
-use crate::brain_trait_metrics::evaluation::BrainTraitDisposition;
-use crate::decomposition_advice::SubjectKind;
-use crate::test_support::decomposition::{decomposition_suggestions, transport_trait_fixture};
 use rstest::rstest;
+
+use super::*;
+use crate::{
+    brain_trait_metrics::{TraitMetricsBuilder, evaluation::BrainTraitDisposition},
+    decomposition_advice::SubjectKind,
+    test_support::decomposition::{decomposition_suggestions, transport_trait_fixture},
+};
 
 // ---------------------------------------------------------------------------
 // Helper: build diagnostics for formatting tests

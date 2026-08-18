@@ -7,8 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::descriptor::ReportingDescriptor;
-use super::result::SarifResult;
+use super::{descriptor::ReportingDescriptor, result::SarifResult};
 
 /// A single analysis tool execution.
 ///

@@ -6,15 +6,18 @@
 //! tests that exercise it — so `ui.rs` stays focused on the example and
 //! trybuild assertions.
 
+use std::{
+    fs::{File, OpenOptions},
+    io,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+
 use filetime::{FileTime, set_file_mtime};
 use fs2::FileExt;
 use log::debug;
 use rstest::rstest;
-use std::fs::{File, OpenOptions};
-use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // The example harness lock coordinates separate nextest processes. Windows CI
 // can legitimately hold it for several minutes, so only remove directories

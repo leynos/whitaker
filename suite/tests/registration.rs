@@ -2,11 +2,14 @@
 #![cfg(feature = "dylint-driver")]
 //! Behaviour-driven tests for the suite registration wiring.
 
+use std::{
+    cell::RefCell,
+    panic::{AssertUnwindSafe, catch_unwind},
+};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_lint::LintStore;
-use std::cell::RefCell;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use whitaker_suite::{register_suite_lints, suite_lint_decls, suite_lint_names};
 
 struct RegistrationWorld {
@@ -29,14 +32,10 @@ impl RegistrationWorld {
 }
 
 #[fixture]
-fn world() -> RegistrationWorld {
-    RegistrationWorld::new()
-}
+fn world() -> RegistrationWorld { RegistrationWorld::new() }
 
 #[given("an empty lint store")]
-fn given_empty_store(world: &RegistrationWorld) {
-    world.reset();
-}
+fn given_empty_store(world: &RegistrationWorld) { world.reset(); }
 
 #[given("the suite lints are already registered")]
 fn given_already_registered(world: &RegistrationWorld) {
@@ -109,11 +108,7 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 }
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
-fn scenario_registers_cleanly(world: RegistrationWorld) {
-    let _ = world;
-}
+fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
-fn scenario_double_registration(world: RegistrationWorld) {
-    let _ = world;
-}
+fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }

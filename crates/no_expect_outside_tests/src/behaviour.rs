@@ -1,12 +1,17 @@
 //! Behaviour-driven tests covering context summarization for the lint's context
 //! world and BDD steps.
 
-use crate::context::{ContextSummary, summarise_context};
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::{ContextEntry, ContextKind};
+use whitaker_common::{
+    ContextEntry,
+    ContextKind,
+    attributes::{Attribute, AttributeKind, AttributePath},
+};
+
+use crate::context::{ContextSummary, summarise_context};
 
 #[derive(Default)]
 struct ContextWorld {
@@ -41,17 +46,13 @@ impl ContextWorld {
             .push(ContextEntry::new(name, ContextKind::Module, Vec::new()));
     }
 
-    fn enable_cfg_test(&self) {
-        *self.cfg_test.borrow_mut() = true;
-    }
+    fn enable_cfg_test(&self) { *self.cfg_test.borrow_mut() = true; }
 
     fn register_additional_attribute(&self, path: &str) {
         self.additional.borrow_mut().push(AttributePath::from(path));
     }
 
-    fn mark_doctest(&self) {
-        *self.is_doctest.borrow_mut() = true;
-    }
+    fn mark_doctest(&self) { *self.is_doctest.borrow_mut() = true; }
 
     fn evaluate(&self) {
         let entries = self.entries.borrow();
@@ -64,29 +65,19 @@ impl ContextWorld {
         *self.summary.borrow_mut() = summary;
     }
 
-    fn summary_ref(&self) -> std::cell::Ref<'_, ContextSummary> {
-        self.summary.borrow()
-    }
+    fn summary_ref(&self) -> std::cell::Ref<'_, ContextSummary> { self.summary.borrow() }
 
-    fn should_skip_lint(&self) -> bool {
-        *self.skip_lint.borrow()
-    }
+    fn should_skip_lint(&self) -> bool { *self.skip_lint.borrow() }
 }
 
 #[fixture]
-fn world() -> ContextWorld {
-    ContextWorld::default()
-}
+fn world() -> ContextWorld { ContextWorld::default() }
 
 #[given("a non-test function named {name}")]
-fn given_plain_function(world: &ContextWorld, name: String) {
-    world.push_function(&name);
-}
+fn given_plain_function(world: &ContextWorld, name: String) { world.push_function(&name); }
 
 #[given("a test function named {name}")]
-fn given_test_function(world: &ContextWorld, name: String) {
-    world.push_test_function(&name);
-}
+fn given_test_function(world: &ContextWorld, name: String) { world.push_test_function(&name); }
 
 #[given("a module with cfg(test)")]
 fn given_cfg_test_module(world: &ContextWorld) {
@@ -111,14 +102,10 @@ fn given_function_with_additional_attribute(world: &ContextWorld, path: String) 
 }
 
 #[given("the lint is running within a doctest")]
-fn given_doctest(world: &ContextWorld) {
-    world.mark_doctest();
-}
+fn given_doctest(world: &ContextWorld) { world.mark_doctest(); }
 
 #[when("I summarise the context")]
-fn when_summarise(world: &ContextWorld) {
-    world.evaluate();
-}
+fn when_summarise(world: &ContextWorld) { world.evaluate(); }
 
 #[then("the context is marked as production")]
 fn then_production(world: &ContextWorld) {

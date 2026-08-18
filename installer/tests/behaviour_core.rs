@@ -3,17 +3,24 @@
 //! These scenarios validate crate resolution, crate name validation, toolchain
 //! parsing, and shell snippet generation using rstest-bdd.
 
+use std::cell::{Cell, RefCell};
+
 use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::output::ShellSnippet;
-use whitaker_installer::resolution::{
-    CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
-    validate_crate_names,
+use whitaker_installer::{
+    crate_name::CrateName,
+    output::ShellSnippet,
+    resolution::{
+        CrateResolutionOptions,
+        EXPERIMENTAL_LINT_CRATES,
+        LINT_CRATES,
+        SUITE_CRATE,
+        resolve_crates,
+        validate_crate_names,
+    },
+    toolchain::parse_toolchain_channel,
 };
-use whitaker_installer::toolchain::parse_toolchain_channel;
 
 // ---------------------------------------------------------------------------
 // Crate resolution world
@@ -28,9 +35,7 @@ struct CrateResolutionWorld {
 }
 
 #[fixture]
-fn crate_world() -> CrateResolutionWorld {
-    CrateResolutionWorld::default()
-}
+fn crate_world() -> CrateResolutionWorld { CrateResolutionWorld::default() }
 
 #[given("no specific lints are requested")]
 fn given_no_specific_lints(crate_world: &CrateResolutionWorld) {
@@ -135,9 +140,7 @@ struct ValidationWorld {
 }
 
 #[fixture]
-fn validation_world() -> ValidationWorld {
-    ValidationWorld::default()
-}
+fn validation_world() -> ValidationWorld { ValidationWorld::default() }
 
 #[given("a list of valid crate names")]
 fn given_valid_names(validation_world: &ValidationWorld) {
@@ -219,9 +222,7 @@ struct ToolchainWorld {
 }
 
 #[fixture]
-fn toolchain_world() -> ToolchainWorld {
-    ToolchainWorld::default()
-}
+fn toolchain_world() -> ToolchainWorld { ToolchainWorld::default() }
 
 #[given("a rust-toolchain.toml with standard format")]
 fn given_standard_toolchain(toolchain_world: &ToolchainWorld) {
@@ -287,9 +288,7 @@ struct SnippetWorld {
 }
 
 #[fixture]
-fn snippet_world() -> SnippetWorld {
-    SnippetWorld::default()
-}
+fn snippet_world() -> SnippetWorld { SnippetWorld::default() }
 
 #[given("a target library path")]
 fn given_library_path(snippet_world: &SnippetWorld) {
@@ -337,9 +336,7 @@ fn scenario_resolve_suite_only_by_default(crate_world: CrateResolutionWorld) {
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 1)]
-fn scenario_resolve_individual_lints(crate_world: CrateResolutionWorld) {
-    let _ = crate_world;
-}
+fn scenario_resolve_individual_lints(crate_world: CrateResolutionWorld) { let _ = crate_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 2)]
 fn scenario_resolve_individual_lints_with_experimental(crate_world: CrateResolutionWorld) {
@@ -347,39 +344,25 @@ fn scenario_resolve_individual_lints_with_experimental(crate_world: CrateResolut
 }
 
 #[scenario(path = "tests/features/installer.feature", index = 3)]
-fn scenario_resolve_specific_lints(crate_world: CrateResolutionWorld) {
-    let _ = crate_world;
-}
+fn scenario_resolve_specific_lints(crate_world: CrateResolutionWorld) { let _ = crate_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 4)]
-fn scenario_validate_known_names(validation_world: ValidationWorld) {
-    let _ = validation_world;
-}
+fn scenario_validate_known_names(validation_world: ValidationWorld) { let _ = validation_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 5)]
-fn scenario_reject_unknown_names(validation_world: ValidationWorld) {
-    let _ = validation_world;
-}
+fn scenario_reject_unknown_names(validation_world: ValidationWorld) { let _ = validation_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 6)]
-fn scenario_parse_standard_toolchain(toolchain_world: ToolchainWorld) {
-    let _ = toolchain_world;
-}
+fn scenario_parse_standard_toolchain(toolchain_world: ToolchainWorld) { let _ = toolchain_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 7)]
-fn scenario_parse_top_level_channel(toolchain_world: ToolchainWorld) {
-    let _ = toolchain_world;
-}
+fn scenario_parse_top_level_channel(toolchain_world: ToolchainWorld) { let _ = toolchain_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 8)]
-fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) {
-    let _ = toolchain_world;
-}
+fn scenario_reject_missing_channel(toolchain_world: ToolchainWorld) { let _ = toolchain_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 9)]
-fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) {
-    let _ = snippet_world;
-}
+fn scenario_generate_shell_snippets(snippet_world: SnippetWorld) { let _ = snippet_world; }
 
 #[scenario(path = "tests/features/installer.feature", index = 19)]
 fn scenario_validate_experimental_names_with_opt_in(validation_world: ValidationWorld) {

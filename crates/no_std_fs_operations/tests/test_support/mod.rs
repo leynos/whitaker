@@ -1,8 +1,10 @@
 //! Shared, test-only fixture helpers for `no_std_fs_operations` integration
 //! tests.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context as _;
 use tempfile::TempDir;
@@ -15,9 +17,7 @@ pub(super) struct FixtureProject {
 
 impl FixtureProject {
     /// Returns the fixture project root directory.
-    pub(super) fn root(&self) -> &Path {
-        &self.root
-    }
+    pub(super) fn root(&self) -> &Path { &self.root }
 }
 
 /// Selects which suppression mechanism a fixture exercises.

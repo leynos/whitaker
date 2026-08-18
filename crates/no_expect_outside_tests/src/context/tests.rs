@@ -4,8 +4,6 @@
 //! detection for both parsed and unparsed attribute variants.
 
 #[cfg(feature = "dylint-driver")]
-use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
-#[cfg(feature = "dylint-driver")]
 use rstest::rstest;
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::ast::{DelimArgs, MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
@@ -24,6 +22,9 @@ use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 #[cfg(feature = "dylint-driver")]
 use whitaker_common::{AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER};
 
+#[cfg(feature = "dylint-driver")]
+use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
+
 /// Type-safe wrapper for AST path segments.
 #[cfg(feature = "dylint-driver")]
 #[derive(Debug, Clone, Copy)]
@@ -31,16 +32,12 @@ struct PathSegments(&'static [&'static str]);
 
 #[cfg(feature = "dylint-driver")]
 impl PathSegments {
-    const fn new(segments: &'static [&'static str]) -> Self {
-        Self(segments)
-    }
+    const fn new(segments: &'static [&'static str]) -> Self { Self(segments) }
 }
 
 #[cfg(feature = "dylint-driver")]
 impl AsRef<[&'static str]> for PathSegments {
-    fn as_ref(&self) -> &[&'static str] {
-        self.0
-    }
+    fn as_ref(&self) -> &[&'static str] { self.0 }
 }
 
 #[cfg(feature = "dylint-driver")]
@@ -183,9 +180,7 @@ fn meta_list(segments: PathSegments, children: Vec<MetaItemInner>) -> MetaItem {
 }
 
 #[cfg(feature = "dylint-driver")]
-fn meta_inner(meta: MetaItem) -> MetaItemInner {
-    MetaItemInner::MetaItem(meta)
-}
+fn meta_inner(meta: MetaItem) -> MetaItemInner { MetaItemInner::MetaItem(meta) }
 
 // ---------------------------------------------------------------------------
 // cfg pattern helpers
@@ -257,9 +252,7 @@ fn build_cfg_all_test_unix() -> MetaItem {
 
 /// Builds `cfg(not(test))`.
 #[cfg(feature = "dylint-driver")]
-fn build_cfg_not_test() -> MetaItem {
-    cfg_not(meta_word(PATH_TEST))
-}
+fn build_cfg_not_test() -> MetaItem { cfg_not(meta_word(PATH_TEST)) }
 
 /// Builds `cfg_attr(test, cfg(test))`.
 #[cfg(feature = "dylint-driver")]

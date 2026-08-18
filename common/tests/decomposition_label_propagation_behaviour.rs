@@ -1,20 +1,21 @@
 //! Behaviour-driven coverage for decomposition label propagation.
 
+use std::{cell::RefCell, str::FromStr};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::str::FromStr;
 use whitaker_common::test_support::decomposition::{
-    AdjacencyError, EdgeInput, LabelPropagationReport, label_propagation_report,
+    AdjacencyError,
+    EdgeInput,
+    LabelPropagationReport,
+    label_propagation_report,
 };
 
 #[derive(Clone, Debug)]
 struct CsvList(Vec<String>);
 
 impl CsvList {
-    fn into_vec(self) -> Vec<String> {
-        self.0
-    }
+    fn into_vec(self) -> Vec<String> { self.0 }
 }
 
 impl FromStr for CsvList {
@@ -36,9 +37,7 @@ impl FromStr for CsvList {
 struct CsvLabels(Vec<usize>);
 
 impl CsvLabels {
-    fn as_slice(&self) -> &[usize] {
-        &self.0
-    }
+    fn as_slice(&self) -> &[usize] { &self.0 }
 }
 
 impl FromStr for CsvLabels {
@@ -68,9 +67,7 @@ struct LabelPropagationWorld {
 }
 
 #[fixture]
-fn world() -> LabelPropagationWorld {
-    LabelPropagationWorld::default()
-}
+fn world() -> LabelPropagationWorld { LabelPropagationWorld::default() }
 
 #[given("methods named {method_names} are tracked")]
 fn given_methods(world: &LabelPropagationWorld, method_names: CsvList) {
@@ -199,9 +196,7 @@ fn scenario_disconnected_pairs_settle_to_shared_labels(world: LabelPropagationWo
     path = "tests/features/decomposition_label_propagation.feature",
     index = 1
 )]
-fn scenario_isolated_nodes_keep_their_own_labels(world: LabelPropagationWorld) {
-    let _ = world;
-}
+fn scenario_isolated_nodes_keep_their_own_labels(world: LabelPropagationWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_label_propagation.feature",
@@ -215,14 +210,10 @@ fn scenario_zero_iteration_bound_keeps_initial_labels(world: LabelPropagationWor
     path = "tests/features/decomposition_label_propagation.feature",
     index = 3
 )]
-fn scenario_equal_scores_break_ties_lexically(world: LabelPropagationWorld) {
-    let _ = world;
-}
+fn scenario_equal_scores_break_ties_lexically(world: LabelPropagationWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_label_propagation.feature",
     index = 4
 )]
-fn scenario_invalid_edge_input_is_rejected(world: LabelPropagationWorld) {
-    let _ = world;
-}
+fn scenario_invalid_edge_input_is_rejected(world: LabelPropagationWorld) { let _ = world; }

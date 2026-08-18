@@ -4,11 +4,19 @@ use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 use whitaker_sarif::{
-    Level, LocationBuilder, RelatedLocation, ResultBuilder, Run, RunBuilder, WHITAKER_FRAGMENT_KEY,
-    WHK001_ID, WHK002_ID, WhitakerPropertiesBuilder, all_rules, deduplicate_results,
+    Level,
+    LocationBuilder,
+    RelatedLocation,
+    ResultBuilder,
+    Run,
+    RunBuilder,
+    WHITAKER_FRAGMENT_KEY,
+    WHK001_ID,
+    WHK002_ID,
+    WhitakerPropertiesBuilder,
+    all_rules,
+    deduplicate_results,
 };
-
-use crate::{CandidatePair, NormProfile};
 
 use super::{
     error::{Run0Error, Run0Result},
@@ -16,6 +24,7 @@ use super::{
     span::region_for_range,
     types::{AcceptedPair, TokenFragment, TokenPassConfig},
 };
+use crate::{CandidatePair, NormProfile};
 
 /// Accepts canonical candidate pairs for later Run 0 emission.
 ///

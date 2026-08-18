@@ -3,16 +3,24 @@
 //! These step implementations are used by the scenarios in
 //! `behaviour_toolchain.rs` via rstest-bdd macros.
 
+use std::{
+    cell::{Cell, RefCell},
+    process::{Command, Output},
+};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
-use std::cell::{Cell, RefCell};
-use std::process::{Command, Output};
 use tempfile::TempDir;
 
-use super::prebuilt_markers::PREBUILT_INSTALL_MARKER;
-use super::support::{
-    is_toolchain_installed, is_toolchain_installed_in_env, pinned_toolchain_channel,
-    setup_isolated_rustup, workspace_root,
+use super::{
+    prebuilt_markers::PREBUILT_INSTALL_MARKER,
+    support::{
+        is_toolchain_installed,
+        is_toolchain_installed_in_env,
+        pinned_toolchain_channel,
+        setup_isolated_rustup,
+        workspace_root,
+    },
 };
 
 /// Non-existent toolchain channel used to exercise auto-install failure paths.
@@ -151,9 +159,7 @@ fn assert_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
 // ---------------------------------------------------------------------------
 
 #[fixture]
-pub fn world() -> ToolchainWorld {
-    ToolchainWorld::default()
-}
+pub fn world() -> ToolchainWorld { ToolchainWorld::default() }
 
 // ---------------------------------------------------------------------------
 // Given steps
@@ -202,9 +208,7 @@ pub fn given_isolated_rustup_quiet(world: &ToolchainWorld) {
 }
 
 #[given("the installer is invoked with a non-existent toolchain")]
-pub fn given_nonexistent_toolchain(world: &ToolchainWorld) {
-    setup_failure_scenario(world, &[]);
-}
+pub fn given_nonexistent_toolchain(world: &ToolchainWorld) { setup_failure_scenario(world, &[]); }
 
 #[given("the installer is invoked with a non-existent toolchain in quiet mode")]
 pub fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) {
@@ -327,7 +331,8 @@ pub fn then_suite_library_is_staged(world: &ToolchainWorld) {
     let has_prebuilt_staging_marker = stderr.contains(PREBUILT_INSTALL_MARKER);
     assert!(
         has_local_staging_marker || has_prebuilt_staging_marker,
-        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_INSTALL_MARKER}' in staging output, stderr: {stderr}"
+        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_INSTALL_MARKER}' in staging output, \
+         stderr: {stderr}"
     );
 }
 

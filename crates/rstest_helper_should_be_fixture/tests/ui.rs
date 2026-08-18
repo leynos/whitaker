@@ -11,13 +11,15 @@
 #[cfg(feature = "dylint-driver")]
 extern crate rustc_driver;
 
-use dylint_testing::ui::Test;
-use rstest::rstest;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use whitaker_common::test_support::{run_test_runner, with_env_var};
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
+use dylint_testing::ui::Test;
 use harness_lock::ExampleHarnessLock;
+use rstest::rstest;
+use whitaker_common::test_support::{run_test_runner, with_env_var};
 
 // Internal test-only hook mirrored in the lint driver. It asks
 // `check_crate_post` to append redacted, shape-only passive collection
@@ -41,7 +43,8 @@ fn example_harness_collects_call_site_evidence() {
     for expected in [
         "callee_count=3",
         "record_count=9",
-        "callee=Builder::<'_>::build;records=2\nfingerprint=unsupported,fixture-local\nfingerprint=unsupported,fixture-local",
+        "callee=Builder::<'_>::build;records=2\nfingerprint=unsupported,fixture-local\\
+         nfingerprint=unsupported,fixture-local",
         "callee=helper;records=2",
         "callee=nested_helper;records=5",
         "fingerprint=unsupported,fixture-local",
@@ -94,7 +97,8 @@ impl ExampleHarness {
         })
         .unwrap_or_else(|error| {
             panic!(
-                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
+                 \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
             )
         });
     }

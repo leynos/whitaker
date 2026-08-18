@@ -1,12 +1,15 @@
 //! Staging-focused tests for pipeline orchestration.
 
-use crate::builder::BuildResult;
-use crate::crate_name::CrateName;
-use crate::pipeline::stage_libraries;
-use crate::toolchain::Toolchain;
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
+
+use crate::{
+    builder::BuildResult,
+    crate_name::CrateName,
+    pipeline::stage_libraries,
+    toolchain::Toolchain,
+};
 
 /// Fixture providing a temporary directory for staging tests.
 ///
@@ -45,9 +48,7 @@ impl StagingTestContext {
         }
     }
 
-    fn target_dir(&self) -> &Utf8Path {
-        &self.target_dir
-    }
+    fn target_dir(&self) -> &Utf8Path { &self.target_dir }
 
     fn with_quiet(mut self, quiet: bool) -> Self {
         self.quiet = quiet;
@@ -73,8 +74,9 @@ impl StagingTestContext {
 }
 
 fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> BuildResult {
-    use crate::builder::{library_extension, library_prefix};
     use std::fs;
+
+    use crate::builder::{library_extension, library_prefix};
 
     let source_dir = target_dir.join("source");
     fs::create_dir_all(&source_dir).expect("failed to create source directory");
@@ -89,9 +91,7 @@ fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> BuildResult {
 }
 
 #[fixture]
-fn staging_ctx() -> StagingTestContext {
-    StagingTestContext::new()
-}
+fn staging_ctx() -> StagingTestContext { StagingTestContext::new() }
 
 fn assert_bumpy_road_lint_in_staging_output(experimental: bool) {
     let staging_ctx = StagingTestContext::new().with_experimental(experimental);

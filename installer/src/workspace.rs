@@ -3,9 +3,12 @@
 //! This module provides utilities for detecting whether the current directory
 //! is a Whitaker workspace and for resolving platform-specific clone locations.
 
-use crate::dirs::BaseDirs;
-use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::{
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+};
 
 /// Repository URL for cloning Whitaker.
 pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
@@ -203,12 +206,13 @@ fn is_cargo_workspace_root(cargo_toml: &Utf8Path) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::PathBuf};
+
+    use rstest::{fixture, rstest};
+    use tempfile::TempDir;
+
     use super::*;
     use crate::dirs::{MockBaseDirs, SystemBaseDirs};
-    use rstest::{fixture, rstest};
-    use std::fs;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
 
     /// A temporary directory converted to a UTF-8 path for workspace tests.
     struct TempWorkspace {

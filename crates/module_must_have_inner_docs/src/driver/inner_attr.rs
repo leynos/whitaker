@@ -4,9 +4,8 @@
 //! tied to the main lint flow, such as detecting case-mismatched `doc`
 //! identifiers and filtering `cfg_attr` wrappers that never supply docs.
 
-use crate::{AttributeBody, ParseInput};
-
 use super::parser;
+use crate::{AttributeBody, ParseInput};
 
 fn segment_has_case_incorrect_doc(segment: &str) -> bool {
     let Some((ident, tail)) = parser::take_ident(ParseInput::from(segment)) else {

@@ -1,8 +1,9 @@
 //! Pure parameter classification helpers for `rstest`-driven functions.
 
+use std::collections::BTreeSet;
+
 use super::RstestDetectionOptions;
 use crate::attributes::Attribute;
-use std::collections::BTreeSet;
 
 /// Represents the supported parameter binding shapes for version-one `rstest`
 /// classification.
@@ -27,12 +28,17 @@ impl RstestParameter {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-    /// use whitaker_common::rstest::{ParameterBinding, RstestParameter};
+    /// use whitaker_common::{
+    ///     attributes::{Attribute, AttributeKind, AttributePath},
+    ///     rstest::{ParameterBinding, RstestParameter},
+    /// };
     ///
     /// let parameter = RstestParameter::new(
     ///     ParameterBinding::Ident("db".to_string()),
-    ///     vec![Attribute::new(AttributePath::from("case"), AttributeKind::Outer)],
+    ///     vec![Attribute::new(
+    ///         AttributePath::from("case"),
+    ///         AttributeKind::Outer,
+    ///     )],
     /// );
     /// assert_eq!(parameter.attributes().len(), 1);
     /// ```
@@ -70,21 +76,15 @@ impl RstestParameter {
     /// assert_eq!(parameter.binding_name(), None);
     /// ```
     #[must_use]
-    pub const fn unsupported() -> Self {
-        Self::new(ParameterBinding::Unsupported, Vec::new())
-    }
+    pub const fn unsupported() -> Self { Self::new(ParameterBinding::Unsupported, Vec::new()) }
 
     /// Returns the binding metadata.
     #[must_use]
-    pub const fn binding(&self) -> &ParameterBinding {
-        &self.binding
-    }
+    pub const fn binding(&self) -> &ParameterBinding { &self.binding }
 
     /// Returns the parameter attributes.
     #[must_use]
-    pub fn attributes(&self) -> &[Attribute] {
-        &self.attributes
-    }
+    pub fn attributes(&self) -> &[Attribute] { &self.attributes }
 
     /// Returns the identifier binding name when available.
     #[must_use]
@@ -115,14 +115,22 @@ pub enum RstestParameterKind {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-/// use whitaker_common::rstest::{
-///     RstestDetectionOptions, RstestParameter, RstestParameterKind, classify_rstest_parameter,
+/// use whitaker_common::{
+///     attributes::{Attribute, AttributeKind, AttributePath},
+///     rstest::{
+///         RstestDetectionOptions,
+///         RstestParameter,
+///         RstestParameterKind,
+///         classify_rstest_parameter,
+///     },
 /// };
 ///
 /// let parameter = RstestParameter::new(
 ///     whitaker_common::rstest::ParameterBinding::Ident("db".to_string()),
-///     vec![Attribute::new(AttributePath::from("case"), AttributeKind::Outer)],
+///     vec![Attribute::new(
+///         AttributePath::from("case"),
+///         AttributeKind::Outer,
+///     )],
 /// );
 /// let kind = classify_rstest_parameter(&parameter, &RstestDetectionOptions::default());
 /// assert_eq!(kind, RstestParameterKind::Provider);
@@ -151,7 +159,10 @@ pub fn classify_rstest_parameter(
 /// ```
 /// use whitaker_common::rstest::{RstestDetectionOptions, RstestParameter, fixture_local_names};
 ///
-/// let parameters = vec![RstestParameter::ident("db"), RstestParameter::ident("clock")];
+/// let parameters = vec![
+///     RstestParameter::ident("db"),
+///     RstestParameter::ident("clock"),
+/// ];
 /// let names = fixture_local_names(&parameters, &RstestDetectionOptions::default());
 /// assert!(names.contains("db"));
 /// assert!(names.contains("clock"));

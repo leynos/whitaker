@@ -4,7 +4,12 @@ use std::fmt;
 
 use super::{LeafClass, NormalizedNode, NormalizedTree};
 use crate::hashing::{
-    FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION, mix_byte, mix_bytes, mix_u16, mix_u64,
+    FNV_OFFSET_BASIS,
+    PARSER_SCHEMA_VERSION,
+    mix_byte,
+    mix_bytes,
+    mix_u16,
+    mix_u64,
 };
 
 /// Opaque canonical AST subtree hash.
@@ -12,8 +17,10 @@ use crate::hashing::{
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree};
-/// use whitaker_clones_core::canonical_hash;
+/// use whitaker_clones_core::{
+///     ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree},
+///     canonical_hash,
+/// };
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
 /// let tree = NormalizedTree::new(NormalizedNode::new(KindId::new(1), None, Vec::new()), span);
@@ -26,9 +33,7 @@ pub struct AstHash(u64);
 impl AstHash {
     /// Renders the hash as a fixed-width lowercase hexadecimal string.
     #[must_use]
-    pub fn to_hex(&self) -> String {
-        format!("{:016x}", self.0)
-    }
+    pub fn to_hex(&self) -> String { format!("{:016x}", self.0) }
 }
 
 impl fmt::Display for AstHash {
@@ -44,9 +49,7 @@ pub fn canonical_hash(tree: &NormalizedTree) -> AstHash {
     AstHash(hash_node(seed, tree.root()))
 }
 
-fn seed_hash() -> u64 {
-    mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes())
-}
+fn seed_hash() -> u64 { mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes()) }
 
 fn hash_node(seed: u64, node: &NormalizedNode) -> u64 {
     // Pop-based traversal keeps every stack access provably in bounds: each

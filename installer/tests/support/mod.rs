@@ -4,8 +4,11 @@
 //! including workspace path resolution, toolchain detection, and isolated rustup
 //! environment setup.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
+
 use tempfile::TempDir;
 use whitaker_installer::toolchain::parse_toolchain_channel;
 
@@ -112,7 +115,8 @@ fn parse_rustup_location_output(output: &std::process::Output) -> String {
         .lines()
         .next()
         .expect("rustup not found in PATH")
-        .trim().to_owned()
+        .trim()
+        .to_owned()
 }
 
 /// Locates the system rustup binary path.

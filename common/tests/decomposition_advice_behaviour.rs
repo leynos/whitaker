@@ -1,21 +1,23 @@
 //! Behaviour-driven coverage for decomposition advice analysis.
 
+use std::{cell::RefCell, collections::BTreeMap};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::collections::BTreeMap;
 use whitaker_common::decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, MethodProfileBuilder, SubjectKind,
-    SuggestedExtractionKind, suggest_decomposition,
+    DecompositionContext,
+    DecompositionSuggestion,
+    MethodProfileBuilder,
+    SubjectKind,
+    SuggestedExtractionKind,
+    suggest_decomposition,
 };
 
 #[derive(Debug, Clone)]
 struct CsvList(Vec<String>);
 
 impl CsvList {
-    fn into_vec(self) -> Vec<String> {
-        self.0
-    }
+    fn into_vec(self) -> Vec<String> { self.0 }
 }
 
 impl std::str::FromStr for CsvList {
@@ -42,9 +44,7 @@ struct DecompositionWorld {
 }
 
 #[fixture]
-fn world() -> DecompositionWorld {
-    DecompositionWorld::default()
-}
+fn world() -> DecompositionWorld { DecompositionWorld::default() }
 
 fn create_method_builder(world: &DecompositionWorld, method_name: &str) -> usize {
     let mut next_method_id = world.next_method_id.borrow_mut();
@@ -150,9 +150,7 @@ fn given_context(world: &DecompositionWorld, kind: SubjectKind, name: String) {
 }
 
 #[given("a method named {name}")]
-fn given_method(world: &DecompositionWorld, name: String) {
-    create_method_builder(world, &name);
-}
+fn given_method(world: &DecompositionWorld, name: String) { create_method_builder(world, &name); }
 
 #[given("method {name} accesses fields {fields}")]
 fn given_fields(world: &DecompositionWorld, name: String, fields: CsvList) {
@@ -262,7 +260,8 @@ fn then_matching_suggestion(
                 .map(|s| format!("{}:{}:{:?}", s.label(), s.extraction_kind(), s.methods()))
                 .collect::<Vec<_>>();
             Err(format!(
-                "missing {kind} suggestion labelled {label} containing methods {expected_methods:?}; actual suggestions: {actual:?}"
+                "missing {kind} suggestion labelled {label} containing methods \
+                 {expected_methods:?}; actual suggestions: {actual:?}"
             ))
         }
     })
@@ -298,26 +297,16 @@ fn then_suggestion_has_rationale(
 // `tests/features/decomposition_advice.feature` file.
 
 #[scenario(path = "tests/features/decomposition_advice.feature", index = 0)]
-fn scenario_type_method_groups(world: DecompositionWorld) {
-    let _ = world;
-}
+fn scenario_type_method_groups(world: DecompositionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_advice.feature", index = 1)]
-fn scenario_trait_sub_traits(world: DecompositionWorld) {
-    let _ = world;
-}
+fn scenario_trait_sub_traits(world: DecompositionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_advice.feature", index = 2)]
-fn scenario_no_suggestions(world: DecompositionWorld) {
-    let _ = world;
-}
+fn scenario_no_suggestions(world: DecompositionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_advice.feature", index = 3)]
-fn scenario_singleton_noise(world: DecompositionWorld) {
-    let _ = world;
-}
+fn scenario_singleton_noise(world: DecompositionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/decomposition_advice.feature", index = 4)]
-fn scenario_local_type_groups(world: DecompositionWorld) {
-    let _ = world;
-}
+fn scenario_local_type_groups(world: DecompositionWorld) { let _ = world; }

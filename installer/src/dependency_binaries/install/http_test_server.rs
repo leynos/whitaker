@@ -5,14 +5,19 @@
 //! Kept in its own module so the boundary-test file stays within its size
 //! budget.
 
-use std::collections::HashMap;
-use std::io;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    io,
+    io::{BufRead, BufReader, Write},
+    net::{TcpListener, TcpStream},
+    sync::{
+        Arc,
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 /// One canned HTTP/1.1 response body served for a matched path. `declared_len`
 /// is the advertised `Content-Length`, which normally matches `body`.
@@ -73,9 +78,7 @@ impl LocalServer {
         }
     }
 
-    pub(super) fn url(&self, path: &str) -> String {
-        format!("{}{path}", self.base_url)
-    }
+    pub(super) fn url(&self, path: &str) -> String { format!("{}{path}", self.base_url) }
 
     pub(super) fn requested_paths(&self) -> Vec<String> {
         self.requested.lock().expect("lock requested paths").clone()

@@ -1,9 +1,15 @@
 use std::borrow::Cow;
 
-use super::FluentValue;
 use rstest::rstest;
 
-use super::{Arguments, FALLBACK_LOCALE, Localizer, available_locales, supports_locale};
+use super::{
+    Arguments,
+    FALLBACK_LOCALE,
+    FluentValue,
+    Localizer,
+    available_locales,
+    supports_locale,
+};
 
 #[rstest]
 #[case(None, FALLBACK_LOCALE, true)]

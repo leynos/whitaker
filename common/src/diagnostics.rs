@@ -49,21 +49,15 @@ impl Suggestion {
 
     /// Returns the human-readable message.
     #[must_use]
-    pub fn message(&self) -> &str {
-        &self.message
-    }
+    pub fn message(&self) -> &str { &self.message }
 
     /// Returns the replacement snippet.
     #[must_use]
-    pub fn replacement(&self) -> &str {
-        &self.replacement
-    }
+    pub fn replacement(&self) -> &str { &self.replacement }
 
     /// Returns the applicability classification.
     #[must_use]
-    pub const fn applicability(&self) -> Applicability {
-        self.applicability
-    }
+    pub const fn applicability(&self) -> Applicability { self.applicability }
 }
 
 /// Represents a lint diagnostic with optional notes and suggestions.
@@ -80,39 +74,27 @@ pub struct Diagnostic {
 impl Diagnostic {
     /// Returns the lint code.
     #[must_use]
-    pub fn code(&self) -> &str {
-        &self.code
-    }
+    pub fn code(&self) -> &str { &self.code }
 
     /// Returns the primary message.
     #[must_use]
-    pub fn message(&self) -> &str {
-        &self.message
-    }
+    pub fn message(&self) -> &str { &self.message }
 
     /// Returns the primary span.
     #[must_use]
-    pub const fn span(&self) -> SourceSpan {
-        self.span
-    }
+    pub const fn span(&self) -> SourceSpan { self.span }
 
     /// Returns additional diagnostic notes.
     #[must_use]
-    pub fn notes(&self) -> &[String] {
-        &self.notes
-    }
+    pub fn notes(&self) -> &[String] { &self.notes }
 
     /// Returns help messages.
     #[must_use]
-    pub fn helps(&self) -> &[String] {
-        &self.helps
-    }
+    pub fn helps(&self) -> &[String] { &self.helps }
 
     /// Returns collected suggestions.
     #[must_use]
-    pub fn suggestions(&self) -> &[Suggestion] {
-        &self.suggestions
-    }
+    pub fn suggestions(&self) -> &[Suggestion] { &self.suggestions }
 }
 
 /// Builder for [`Diagnostic`] instances.
@@ -157,9 +139,7 @@ impl DiagnosticBuilder {
 
     /// Completes the builder and returns the diagnostic.
     #[must_use]
-    pub fn build(self) -> Diagnostic {
-        self.diagnostic
-    }
+    pub fn build(self) -> Diagnostic { self.diagnostic }
 }
 
 /// Starts building a lint diagnostic for a given span.
@@ -167,13 +147,20 @@ impl DiagnosticBuilder {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::diagnostics::{span_lint, Applicability, Suggestion};
-/// use whitaker_common::span::{SourceLocation, SourceSpan};
+/// use whitaker_common::{
+///     diagnostics::{Applicability, Suggestion, span_lint},
+///     span::{SourceLocation, SourceSpan},
+/// };
 ///
-/// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4)).expect("valid span for example");
+/// let span = SourceSpan::new(SourceLocation::new(1, 0), SourceLocation::new(1, 4))
+///     .expect("valid span for example");
 /// let diagnostic = span_lint("demo", "Example", span)
 ///     .help("Consider refactoring")
-///     .suggestion(Suggestion::new("Use helper", "helper()", Applicability::MaybeIncorrect))
+///     .suggestion(Suggestion::new(
+///         "Use helper",
+///         "helper()",
+///         Applicability::MaybeIncorrect,
+///     ))
 ///     .build();
 /// assert_eq!(diagnostic.code(), "demo");
 /// ```
@@ -188,9 +175,10 @@ pub fn span_lint(
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::span::{SourceLocation, SourceSpan};
-    use rstest::rstest;
 
     #[rstest]
     fn builds_diagnostic() {

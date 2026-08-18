@@ -2,20 +2,27 @@
 
 mod fast_path;
 
-use super::*;
+use std::{path::PathBuf, time::Duration};
+
 use rstest::{fixture, rstest};
-use std::path::PathBuf;
-use std::time::Duration;
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::dependency_binaries::DependencyBinaryInstaller;
-use whitaker_installer::deps::DependencyInstallOptions;
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::test_utils::dependency_binary_helpers::{
-    AlwaysNotFoundRepositoryInstaller, cargo_dylint_check, dylint_link_install_list_check,
-    with_fake_binary_on_path,
+use whitaker_installer::{
+    cli::InstallArgs,
+    dependency_binaries::DependencyBinaryInstaller,
+    deps::DependencyInstallOptions,
+    dirs::BaseDirs,
+    installer_packaging::TargetTriple,
+    test_utils::{
+        dependency_binary_helpers::{
+            AlwaysNotFoundRepositoryInstaller,
+            cargo_dylint_check,
+            dylint_link_install_list_check,
+            with_fake_binary_on_path,
+        },
+        *,
+    },
 };
-use whitaker_installer::test_utils::*;
+
+use super::*;
 
 fn dependency_install_options<'a>(
     dirs: &'a TestBaseDirs,
@@ -235,17 +242,11 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        self.home_dir.clone()
-    }
+    fn home_dir(&self) -> Option<PathBuf> { self.home_dir.clone() }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
+    fn bin_dir(&self) -> Option<PathBuf> { self.bin_dir.clone() }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        self.data_dir.clone()
-    }
+    fn whitaker_data_dir(&self) -> Option<PathBuf> { self.data_dir.clone() }
 }
 
 #[test]

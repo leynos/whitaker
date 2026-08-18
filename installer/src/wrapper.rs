@@ -4,11 +4,15 @@
 //! that set the `DYLINT_LIBRARY_PATH` environment variable and invoke
 //! `cargo dylint`.
 
-use crate::dirs::BaseDirs;
-use crate::error::{InstallerError, Result};
-use crate::resolution::SUITE_CRATE;
-use camino::Utf8Path;
 use std::path::Path;
+
+use camino::Utf8Path;
+
+use crate::{
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    resolution::SUITE_CRATE,
+};
 
 /// Result of wrapper script generation.
 #[derive(Debug)]
@@ -44,8 +48,10 @@ pub struct WrapperResult {
 ///
 /// ```no_run
 /// use camino::Utf8Path;
-/// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
-/// use whitaker_installer::wrapper::generate_wrapper_scripts;
+/// use whitaker_installer::{
+///     dirs::{BaseDirs, SystemBaseDirs},
+///     wrapper::generate_wrapper_scripts,
+/// };
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
 /// let library_path = Utf8Path::new("/home/user/.local/share/dylint/lib");
@@ -172,8 +178,7 @@ cargo dylint list --color never | Where-Object {{
 
 /// Checks if a directory is in the PATH environment variable.
 fn is_directory_in_path(dir: &Path) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|path| std::env::split_paths(&path).any(|p| p == dir))
+    std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|p| p == dir))
 }
 
 /// Returns instructions for adding a directory to PATH.
@@ -211,8 +216,9 @@ pub fn path_instructions(bin_dir: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn is_directory_in_path_returns_false_for_random_dir() {
@@ -223,8 +229,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn generate_unix_scripts_create_executables() {
-        use camino::Utf8PathBuf;
         use std::os::unix::fs::PermissionsExt;
+
+        use camino::Utf8PathBuf;
 
         let temp = TempDir::new().expect("failed to create temp dir");
         let library_path = Utf8PathBuf::from("/tmp/dylint/lib");

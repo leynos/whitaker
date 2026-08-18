@@ -1,10 +1,14 @@
 //! Unit tests for install-flow prebuilt staging and fallback behaviour.
 
-use super::*;
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+
+use super::*;
 
 struct StagingFixture {
     _temp_dir: tempfile::TempDir,
@@ -17,22 +21,14 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
-    fn bin_dir(&self) -> Option<PathBuf> {
-        None
-    }
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        self.data_dir.clone()
-    }
+    fn home_dir(&self) -> Option<PathBuf> { None }
+    fn bin_dir(&self) -> Option<PathBuf> { None }
+    fn whitaker_data_dir(&self) -> Option<PathBuf> { self.data_dir.clone() }
 }
 
 static PRUNE_HOOK_CALLED: AtomicBool = AtomicBool::new(false);
 
-fn stub_detect_host_target() -> Result<String> {
-    Ok("x86_64-unknown-linux-gnu".to_owned())
-}
+fn stub_detect_host_target() -> Result<String> { Ok("x86_64-unknown-linux-gnu".to_owned()) }
 
 fn stub_resolve_destination_dir(
     _dirs: &dyn BaseDirs,

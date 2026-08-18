@@ -1,10 +1,17 @@
 //! Unit tests for shared `rstest` fingerprint data models.
 
-use crate::rstest::{
-    ArgAtom, ArgFingerprint, CalleeShape, ExprShape, LocalSlot, ParagraphFingerprint,
-    ParagraphNormalizer, StmtShape,
-};
 use rstest::rstest;
+
+use crate::rstest::{
+    ArgAtom,
+    ArgFingerprint,
+    CalleeShape,
+    ExprShape,
+    LocalSlot,
+    ParagraphFingerprint,
+    ParagraphNormalizer,
+    StmtShape,
+};
 
 #[rstest]
 fn argument_fingerprints_compare_identical_atom_sequences() {

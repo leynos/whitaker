@@ -182,7 +182,9 @@ fn process_token(
 ///
 /// assert_eq!(
 ///     labels,
-///     vec!["fn", "<ID_0>", "(", "<ID_1>", ":", "<ID_2>", ")", "{", "<ID_1>", "+", "<NUM>", "}"]
+///     vec![
+///         "fn", "<ID_0>", "(", "<ID_1>", ":", "<ID_2>", ")", "{", "<ID_1>", "+", "<NUM>", "}"
+///     ]
 /// );
 /// # Ok::<(), whitaker_clones_core::TokenPassError>(())
 /// ```
@@ -322,9 +324,7 @@ fn normalize_symbolic_text(
     wrap(symbol)
 }
 
-fn raw_identifier_text(text: &str) -> &str {
-    text.strip_prefix("r#").unwrap_or(text)
-}
+fn raw_identifier_text(text: &str) -> &str { text.strip_prefix("r#").unwrap_or(text) }
 
 fn atom_label(kind: TokenKind) -> &'static str {
     match kind {

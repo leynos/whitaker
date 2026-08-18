@@ -7,10 +7,12 @@
 //! See `docs/brain-trust-lints-design.md` §Diagnostic output for the
 //! full format specification.
 
-use super::TraitMetrics;
-use super::evaluation::BrainTraitDisposition;
+use super::{TraitMetrics, evaluation::BrainTraitDisposition};
 use crate::decomposition_advice::{
-    DecompositionContext, DecompositionSuggestion, SubjectKind, format_diagnostic_note,
+    DecompositionContext,
+    DecompositionSuggestion,
+    SubjectKind,
+    format_diagnostic_note,
 };
 
 #[cfg(test)]
@@ -29,10 +31,10 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_trait_metrics::evaluation::{
-///     BrainTraitDiagnostic, BrainTraitDisposition,
+/// use whitaker_common::brain_trait_metrics::{
+///     TraitMetricsBuilder,
+///     evaluation::{BrainTraitDiagnostic, BrainTraitDisposition},
 /// };
-/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diag = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -66,27 +68,19 @@ impl BrainTraitDiagnostic {
 
     /// Returns the trait name.
     #[must_use]
-    pub fn trait_name(&self) -> &str {
-        &self.trait_name
-    }
+    pub fn trait_name(&self) -> &str { &self.trait_name }
 
     /// Returns the evaluation disposition.
     #[must_use]
-    pub const fn disposition(&self) -> BrainTraitDisposition {
-        self.disposition
-    }
+    pub const fn disposition(&self) -> BrainTraitDisposition { self.disposition }
 
     /// Returns the number of required methods.
     #[must_use]
-    pub const fn required_method_count(&self) -> usize {
-        self.required_method_count
-    }
+    pub const fn required_method_count(&self) -> usize { self.required_method_count }
 
     /// Returns the number of default methods.
     #[must_use]
-    pub const fn default_method_count(&self) -> usize {
-        self.default_method_count
-    }
+    pub const fn default_method_count(&self) -> usize { self.default_method_count }
 
     /// Returns the total method count (required + default).
     #[must_use]
@@ -96,22 +90,16 @@ impl BrainTraitDiagnostic {
 
     /// Returns the sum of default method cognitive complexity values.
     #[must_use]
-    pub const fn default_method_cc_sum(&self) -> usize {
-        self.default_method_cc_sum
-    }
+    pub const fn default_method_cc_sum(&self) -> usize { self.default_method_cc_sum }
 
     /// Returns the total number of trait items (methods + associated
     /// types + associated consts).
     #[must_use]
-    pub const fn total_item_count(&self) -> usize {
-        self.total_item_count
-    }
+    pub const fn total_item_count(&self) -> usize { self.total_item_count }
 
     /// Returns implementor burden (required method count).
     #[must_use]
-    pub const fn implementor_burden(&self) -> usize {
-        self.implementor_burden
-    }
+    pub const fn implementor_burden(&self) -> usize { self.implementor_burden }
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +114,10 @@ impl BrainTraitDiagnostic {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_trait_metrics::evaluation::{
-///     BrainTraitDiagnostic, BrainTraitDisposition, format_primary_message,
+/// use whitaker_common::brain_trait_metrics::{
+///     TraitMetricsBuilder,
+///     evaluation::{BrainTraitDiagnostic, BrainTraitDisposition, format_primary_message},
 /// };
-/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let mut builder = TraitMetricsBuilder::new("Parser");
 /// builder.add_required_method("parse");
@@ -149,8 +137,8 @@ pub fn format_primary_message(diagnostic: &BrainTraitDiagnostic) -> String {
 
     if cc > 0 {
         format!(
-            "`{name}` has {total} methods ({req} required, \
-             {def} default) with default method complexity CC={cc}."
+            "`{name}` has {total} methods ({req} required, {def} default) with default method \
+             complexity CC={cc}."
         )
     } else {
         format!("`{name}` has {total} methods ({req} required, {def} default).")
@@ -165,10 +153,10 @@ pub fn format_primary_message(diagnostic: &BrainTraitDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_trait_metrics::evaluation::{
-///     BrainTraitDiagnostic, BrainTraitDisposition, format_note,
+/// use whitaker_common::brain_trait_metrics::{
+///     TraitMetricsBuilder,
+///     evaluation::{BrainTraitDiagnostic, BrainTraitDisposition, format_note},
 /// };
-/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diag = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -181,14 +169,13 @@ pub fn format_note(diagnostic: &BrainTraitDiagnostic) -> String {
         String::from("Total method count measures interface size and implementation surface area.");
     if diagnostic.default_method_cc_sum() > 0 {
         note.push_str(
-            " Default method CC sum measures complexity hidden behind \
-             the trait's default implementations.",
+            " Default method CC sum measures complexity hidden behind the trait's default \
+             implementations.",
         );
     }
     if diagnostic.required_method_count() > 0 {
         note.push_str(
-            " Implementor burden indicates how many methods each \
-             implementor must provide.",
+            " Implementor burden indicates how many methods each implementor must provide.",
         );
     }
     note
@@ -201,10 +188,10 @@ pub fn format_note(diagnostic: &BrainTraitDiagnostic) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_trait_metrics::evaluation::{
-///     BrainTraitDiagnostic, BrainTraitDisposition, format_decomposition_note,
+/// use whitaker_common::brain_trait_metrics::{
+///     TraitMetricsBuilder,
+///     evaluation::{BrainTraitDiagnostic, BrainTraitDisposition, format_decomposition_note},
 /// };
-/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diagnostic = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -231,10 +218,10 @@ pub fn format_decomposition_note(
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::brain_trait_metrics::evaluation::{
-///     BrainTraitDiagnostic, BrainTraitDisposition, format_help,
+/// use whitaker_common::brain_trait_metrics::{
+///     TraitMetricsBuilder,
+///     evaluation::{BrainTraitDiagnostic, BrainTraitDisposition, format_help},
 /// };
-/// use whitaker_common::brain_trait_metrics::TraitMetricsBuilder;
 ///
 /// let metrics = TraitMetricsBuilder::new("Foo").build();
 /// let diag = BrainTraitDiagnostic::new(&metrics, BrainTraitDisposition::Pass);
@@ -249,10 +236,7 @@ pub fn format_help(diagnostic: &BrainTraitDiagnostic) -> String {
         parts.push("splitting the trait into focused sub-traits");
     }
     if diagnostic.default_method_cc_sum() > 0 {
-        parts.push(
-            "extracting complex default method bodies into free \
-             functions or helper traits",
-        );
+        parts.push("extracting complex default method bodies into free functions or helper traits");
     }
     if diagnostic.required_method_count() > 0 {
         parts.push("providing more default implementations to reduce implementor burden");
@@ -260,8 +244,7 @@ pub fn format_help(diagnostic: &BrainTraitDiagnostic) -> String {
 
     if parts.is_empty() {
         return String::from(
-            "Consider splitting the trait into smaller, focused \
-             sub-traits to reduce complexity.",
+            "Consider splitting the trait into smaller, focused sub-traits to reduce complexity.",
         );
     }
 

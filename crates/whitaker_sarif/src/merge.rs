@@ -7,11 +7,10 @@
 
 use std::collections::HashSet;
 
-use crate::error::{Result, SarifError};
-use crate::model::descriptor::ReportingDescriptor;
-use crate::model::location::Region;
-use crate::model::result::SarifResult;
-use crate::model::run::Run;
+use crate::{
+    error::{Result, SarifError},
+    model::{descriptor::ReportingDescriptor, location::Region, result::SarifResult, run::Run},
+};
 
 /// Fingerprint key used by the Whitaker clone detector for result deduplication.
 ///
@@ -84,20 +83,20 @@ fn extract_key(result: &SarifResult) -> Option<ResultKey> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{SarifResult, Level, Message, deduplicate_results};
+/// use whitaker_sarif::{Level, Message, SarifResult, deduplicate_results};
 ///
-/// let results = vec![
-///     SarifResult {
-///         rule_id: "WHK001".into(),
-///         level: Level::Warning,
-///         message: Message { text: "clone".into() },
-///         locations: Vec::new(),
-///         related_locations: Vec::new(),
-///         partial_fingerprints: Default::default(),
-///         properties: None,
-///         baseline_state: None,
+/// let results = vec![SarifResult {
+///     rule_id: "WHK001".into(),
+///     level: Level::Warning,
+///     message: Message {
+///         text: "clone".into(),
 ///     },
-/// ];
+///     locations: Vec::new(),
+///     related_locations: Vec::new(),
+///     partial_fingerprints: Default::default(),
+///     properties: None,
+///     baseline_state: None,
+/// }];
 /// let deduped = deduplicate_results(&results);
 /// assert_eq!(deduped.len(), 1);
 /// ```
@@ -191,8 +190,10 @@ fn union_rules(runs: &[Run]) -> Vec<ReportingDescriptor> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{ResultBuilder, RunBuilder};
-    use crate::test_support::make_keyed_result;
+    use crate::{
+        builders::{ResultBuilder, RunBuilder},
+        test_support::make_keyed_result,
+    };
 
     fn merged_result_count(r1: SarifResult, r2: SarifResult) -> usize {
         let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();

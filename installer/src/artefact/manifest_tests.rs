@@ -1,8 +1,9 @@
 //! Tests for manifest schema types.
 
-use super::*;
 use rstest::{fixture, rstest};
 use serde_json::Value;
+
+use super::*;
 
 #[fixture]
 fn sample_provenance() -> ManifestProvenance {

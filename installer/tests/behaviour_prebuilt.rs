@@ -1,17 +1,21 @@
 //! BDD tests for the prebuilt artefact download and verification workflow.
 
+use std::{path::Path, sync::Mutex};
+
 use camino::Utf8PathBuf;
 use clap::Parser;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::path::Path;
-use std::sync::Mutex;
-use whitaker_installer::artefact::download::{ArtefactDownloader, DownloadError};
-use whitaker_installer::artefact::extraction::{ArtefactExtractor, ExtractionError};
-use whitaker_installer::cli::{Cli, InstallArgs};
-use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt_with};
-use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
-use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
+use whitaker_installer::{
+    artefact::{
+        download::{ArtefactDownloader, DownloadError},
+        extraction::{ArtefactExtractor, ExtractionError},
+    },
+    cli::{Cli, InstallArgs},
+    prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt_with},
+    resolution::{CrateResolutionOptions, resolve_crates},
+    test_utils::{prebuilt_manifest_json, sha256_hex},
+};
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
@@ -336,54 +340,40 @@ fn then_destination_is_not_created(world: &mut PrebuiltWorld) {
     path = "tests/features/prebuilt_download.feature",
     name = "Successful prebuilt download and verification"
 )]
-fn scenario_successful_download(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_successful_download(world: PrebuiltWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
     name = "Checksum mismatch triggers fallback"
 )]
-fn scenario_checksum_mismatch(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_checksum_mismatch(world: PrebuiltWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
     name = "Network failure triggers fallback"
 )]
-fn scenario_network_failure(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_network_failure(world: PrebuiltWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
     name = "Missing artefact triggers fallback"
 )]
-fn scenario_not_found(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_not_found(world: PrebuiltWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
     name = "Destination path creation failure triggers fallback"
 )]
-fn scenario_destination_creation_failure(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_destination_creation_failure(world: PrebuiltWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
     name = "Toolchain mismatch triggers fallback"
 )]
-fn scenario_toolchain_mismatch(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_toolchain_mismatch(world: PrebuiltWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/prebuilt_download.feature",
     name = "Build-only flag skips prebuilt"
 )]
-fn scenario_build_only(world: PrebuiltWorld) {
-    let _ = world;
-}
+fn scenario_build_only(world: PrebuiltWorld) { let _ = world; }

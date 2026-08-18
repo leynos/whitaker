@@ -1,14 +1,23 @@
 //! Unit tests for dependency-binary packaging helpers.
 
-use crate::dependency_binaries::find_dependency_binary;
-use crate::dependency_packaging::{
-    ArchiveFormat, DependencyPackageParams, DependencyPackagingError, archive_format,
-    inner_dir_name, package_dependency_binary, render_provenance_markdown,
-    write_provenance_markdown,
-};
-use crate::installer_packaging::TargetTriple;
-use rstest::{fixture, rstest};
 use std::fs;
+
+use rstest::{fixture, rstest};
+
+use crate::{
+    dependency_binaries::find_dependency_binary,
+    dependency_packaging::{
+        ArchiveFormat,
+        DependencyPackageParams,
+        DependencyPackagingError,
+        archive_format,
+        inner_dir_name,
+        package_dependency_binary,
+        render_provenance_markdown,
+        write_provenance_markdown,
+    },
+    installer_packaging::TargetTriple,
+};
 
 struct PackagingCase<'a> {
     package: &'a str,
@@ -28,9 +37,7 @@ fn windows_target() -> TargetTriple {
 }
 
 #[fixture]
-fn temp_dir() -> tempfile::TempDir {
-    tempfile::tempdir().expect("temp dir")
-}
+fn temp_dir() -> tempfile::TempDir { tempfile::tempdir().expect("temp dir") }
 
 #[test]
 fn archive_format_matches_target_platform() {

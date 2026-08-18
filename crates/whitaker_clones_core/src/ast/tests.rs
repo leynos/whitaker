@@ -1,12 +1,25 @@
 //! Tests for parser-independent AST feature extraction.
 
-use super::{
-    AstResult, ByteSpan, Depth, KindId, KindWeight, LeafClass, NormalizedNode, NormalizedTree,
-    Production, canonical_hash, kind_counts, kind_histogram, production_multiset,
-    select_smallest_covering, weighted_histogram,
-};
 use proptest::prelude::*;
 use rstest::rstest;
+
+use super::{
+    AstResult,
+    ByteSpan,
+    Depth,
+    KindId,
+    KindWeight,
+    LeafClass,
+    NormalizedNode,
+    NormalizedTree,
+    Production,
+    canonical_hash,
+    kind_counts,
+    kind_histogram,
+    production_multiset,
+    select_smallest_covering,
+    weighted_histogram,
+};
 
 #[cfg(not(feature = "parser"))]
 #[rstest]
@@ -155,13 +168,19 @@ fn canonical_hash_is_stable_for_equivalent_trees() {
 #[rstest]
 fn canonical_hash_is_sensitive_to_child_order() {
     let reordered = reordered_tree().expect("static test span should be valid");
-    assert_ne!(canonical_hash(&expect_feature_tree()), canonical_hash(&reordered));
+    assert_ne!(
+        canonical_hash(&expect_feature_tree()),
+        canonical_hash(&reordered)
+    );
 }
 
 #[rstest]
 fn canonical_hash_is_sensitive_to_leaf_class() {
     let different = different_leaf_tree().expect("static test span should be valid");
-    assert_ne!(canonical_hash(&expect_feature_tree()), canonical_hash(&different));
+    assert_ne!(
+        canonical_hash(&expect_feature_tree()),
+        canonical_hash(&different)
+    );
 }
 
 fn expect_feature_tree() -> NormalizedTree {

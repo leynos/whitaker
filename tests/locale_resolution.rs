@@ -1,7 +1,6 @@
 //! Behaviour-driven tests covering locale resolution semantics.
 
-use std::cell::RefCell;
-use std::str::FromStr;
+use std::{cell::RefCell, str::FromStr};
 
 mod support;
 
@@ -19,9 +18,7 @@ struct LocaleWorld {
 }
 
 #[fixture]
-fn world() -> LocaleWorld {
-    LocaleWorld::default()
-}
+fn world() -> LocaleWorld { LocaleWorld::default() }
 
 #[derive(Debug)]
 struct StepSource(LocaleSource);
@@ -41,9 +38,7 @@ impl FromStr for StepSource {
 }
 
 impl StepSource {
-    const fn into_inner(self) -> LocaleSource {
-        self.0
-    }
+    const fn into_inner(self) -> LocaleSource { self.0 }
 }
 
 fn resolved(world: &LocaleWorld) -> LocaleSelection {
@@ -55,9 +50,7 @@ fn resolved(world: &LocaleWorld) -> LocaleSelection {
 }
 
 #[given("no explicit locale override is provided")]
-fn no_explicit(world: &LocaleWorld) {
-    world.explicit.borrow_mut().take();
-}
+fn no_explicit(world: &LocaleWorld) { world.explicit.borrow_mut().take(); }
 
 #[given("the explicit locale override is {value}")]
 fn set_explicit(world: &LocaleWorld, value: StepLocale) {
@@ -65,9 +58,7 @@ fn set_explicit(world: &LocaleWorld, value: StepLocale) {
 }
 
 #[given("DYLINT_LOCALE is not set")]
-fn clear_environment(world: &LocaleWorld) {
-    world.environment.borrow_mut().take();
-}
+fn clear_environment(world: &LocaleWorld) { world.environment.borrow_mut().take(); }
 
 #[given("DYLINT_LOCALE is {value}")]
 fn set_environment(world: &LocaleWorld, value: StepLocale) {
@@ -75,9 +66,7 @@ fn set_environment(world: &LocaleWorld, value: StepLocale) {
 }
 
 #[given("no configuration locale is provided")]
-fn clear_configuration(world: &LocaleWorld) {
-    world.configuration.borrow_mut().take();
-}
+fn clear_configuration(world: &LocaleWorld) { world.configuration.borrow_mut().take(); }
 
 #[given("the configuration locale is {value}")]
 fn set_configuration(world: &LocaleWorld, value: StepLocale) {
@@ -126,26 +115,16 @@ fn assert_fallback_not_used(world: &LocaleWorld) {
 }
 
 #[scenario("tests/features/locale_resolution.feature", index = 0)]
-fn scenario_fallback(world: LocaleWorld) {
-    let _ = world;
-}
+fn scenario_fallback(world: LocaleWorld) { let _ = world; }
 
 #[scenario("tests/features/locale_resolution.feature", index = 1)]
-fn scenario_environment(world: LocaleWorld) {
-    let _ = world;
-}
+fn scenario_environment(world: LocaleWorld) { let _ = world; }
 
 #[scenario("tests/features/locale_resolution.feature", index = 2)]
-fn scenario_configuration(world: LocaleWorld) {
-    let _ = world;
-}
+fn scenario_configuration(world: LocaleWorld) { let _ = world; }
 
 #[scenario("tests/features/locale_resolution.feature", index = 3)]
-fn scenario_explicit(world: LocaleWorld) {
-    let _ = world;
-}
+fn scenario_explicit(world: LocaleWorld) { let _ = world; }
 
 #[scenario("tests/features/locale_resolution.feature", index = 4)]
-fn scenario_whitespace(world: LocaleWorld) {
-    let _ = world;
-}
+fn scenario_whitespace(world: LocaleWorld) { let _ = world; }

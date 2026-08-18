@@ -1,8 +1,9 @@
 //! Unit tests for brain type threshold evaluation.
 
+use rstest::rstest;
+
 use super::*;
 use crate::brain_type_metrics::TypeMetricsBuilder;
-use rstest::rstest;
 
 // ---------------------------------------------------------------------------
 // Helper: build TypeMetrics with the desired shape

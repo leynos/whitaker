@@ -5,16 +5,24 @@
 //! handling, context label generation, and error paths using `rstest-bdd` and a
 //! `FailingLookup` test double.
 
-use super::{
-    I18nError, Localizer, MESSAGE_KEY, NoExpectMessages, ReceiverCategory, ReceiverLabel,
-    context_label, fallback_messages, localised_messages,
-};
-use crate::context::ContextSummary;
+use std::cell::{Cell, Ref, RefCell};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, Ref, RefCell};
-use whitaker_common::i18n::BundleLookup;
-use whitaker_common::i18n::testing::FailingLookup;
+use whitaker_common::i18n::{BundleLookup, testing::FailingLookup};
+
+use super::{
+    I18nError,
+    Localizer,
+    MESSAGE_KEY,
+    NoExpectMessages,
+    ReceiverCategory,
+    ReceiverLabel,
+    context_label,
+    fallback_messages,
+    localised_messages,
+};
+use crate::context::ContextSummary;
 
 fn unquote(value: &str) -> &str {
     value
@@ -92,9 +100,7 @@ impl LocalizationWorld {
 }
 
 #[fixture]
-fn world() -> LocalizationWorld {
-    LocalizationWorld::default()
-}
+fn world() -> LocalizationWorld { LocalizationWorld::default() }
 
 #[given("the locale {locale} is selected")]
 fn given_locale(world: &LocalizationWorld, locale: String) {
@@ -114,9 +120,7 @@ fn given_function(world: &LocalizationWorld, name: String) {
 }
 
 #[given("the receiver type is empty")]
-fn given_receiver_type_empty(world: &LocalizationWorld) {
-    world.set_receiver_type("");
-}
+fn given_receiver_type_empty(world: &LocalizationWorld) { world.set_receiver_type(""); }
 
 #[given("the receiver type is malformed")]
 fn given_receiver_type_malformed(world: &LocalizationWorld) {
@@ -129,14 +133,10 @@ fn given_receiver_type_unexpected(world: &LocalizationWorld) {
 }
 
 #[given("the call occurs outside any function")]
-fn given_no_function(world: &LocalizationWorld) {
-    world.set_function(None);
-}
+fn given_no_function(world: &LocalizationWorld) { world.set_function(None); }
 
 #[given("localization fails")]
-fn given_failure(world: &LocalizationWorld) {
-    world.failing.set(true);
-}
+fn given_failure(world: &LocalizationWorld) { world.failing.set(true); }
 
 #[when("I localise the expect diagnostic")]
 fn when_localize(world: &LocalizationWorld) {
@@ -202,39 +202,25 @@ fn then_failure(world: &LocalizationWorld, key: String) {
 }
 
 #[scenario(path = "tests/features/localization.feature", index = 0)]
-fn scenario_fallback(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_fallback(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 1)]
-fn scenario_cymraeg(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_cymraeg(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 2)]
-fn scenario_unknown_locale(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_unknown_locale(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 3)]
-fn scenario_receiver_empty(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_receiver_empty(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 4)]
-fn scenario_receiver_malformed(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_receiver_malformed(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 5)]
-fn scenario_receiver_unexpected(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_receiver_unexpected(world: LocalizationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/localization.feature", index = 6)]
-fn scenario_failure(world: LocalizationWorld) {
-    let _ = world;
-}
+fn scenario_failure(world: LocalizationWorld) { let _ = world; }
 
 #[then("the fallback help mentions {snippet}")]
 fn then_fallback(world: &LocalizationWorld, snippet: String) {
@@ -261,6 +247,4 @@ fn execute_localization(
     localised_messages(lookup, receiver, &context, category)
 }
 
-fn failing_lookup() -> FailingLookup {
-    FailingLookup::new(MESSAGE_KEY.as_ref())
-}
+fn failing_lookup() -> FailingLookup { FailingLookup::new(MESSAGE_KEY.as_ref()) }

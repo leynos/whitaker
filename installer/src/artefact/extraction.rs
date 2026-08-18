@@ -113,9 +113,11 @@ fn validate_entry_path(path: &Path) -> Result<(), ExtractionError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rstest::rstest;
     use std::path::PathBuf;
+
+    use rstest::rstest;
+
+    use super::*;
 
     #[test]
     fn extract_real_archive() {

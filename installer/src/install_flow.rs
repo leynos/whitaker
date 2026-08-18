@@ -3,28 +3,24 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
-use camino::Utf8Path;
-use camino::Utf8PathBuf;
-use std::collections::HashSet;
-use std::fs;
-use std::io;
-use std::io::Write;
-use std::time::Duration;
-use whitaker_installer::builder::{library_extension, library_prefix};
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    CommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
-};
+use std::{collections::HashSet, fs, io, io::Write, time::Duration};
+
+use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(test)]
 use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_install};
-use whitaker_installer::output::write_stderr_line;
-use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+use whitaker_installer::{
+    builder::{library_extension, library_prefix},
+    cli::InstallArgs,
+    crate_name::CrateName,
+    deps::{CommandExecutor, check_dylint_tools, install_dylint_tools_with_output},
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    install_metrics::{InstallMode, RecordOutcome, record_install},
+    output::write_stderr_line,
+    prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
+    prebuilt_path::prebuilt_library_dir,
+    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
+};
 
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,

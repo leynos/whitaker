@@ -9,25 +9,25 @@
 //! behavioural tests validating new functionality. End-to-end integration testing
 //! of the exclusion feature is not feasible with `dylint_testing` because:
 //!
-//! 1. **Technical constraint**: The `dylint_testing` harness uses `CARGO_PKG_NAME`
-//!    at compile time, preventing fixture crates from having controlled names.
+//! 1. **Technical constraint**: The `dylint_testing` harness uses `CARGO_PKG_NAME` at compile time,
+//!    preventing fixture crates from having controlled names.
 //!
-//! 2. **Unit test coverage is sufficient**: The exclusion implementation is
-//!    straightforward—when `self.excluded` is true, `emit_optional` returns early
-//!    (see `driver.rs`). All configuration parsing, deserialization, and matching
-//!    logic is fully validated by the tests below.
+//! 2. **Unit test coverage is sufficient**: The exclusion implementation is straightforward—when
+//!    `self.excluded` is true, `emit_optional` returns early (see `driver.rs`). All configuration
+//!    parsing, deserialization, and matching logic is fully validated by the tests below.
 //!
-//! 3. **Behaviour is deterministic**: The `check_crate` method sets `self.excluded`
-//!    based on `config.is_excluded(crate_name)`, which is exhaustively tested here.
+//! 3. **Behaviour is deterministic**: The `check_crate` method sets `self.excluded` based on
+//!    `config.is_excluded(crate_name)`, which is exhaustively tested here.
 //!
 //! The integration tests in `tests/integration_exclusion.rs` provide additional
 //! coverage by invoking `cargo dylint` on fixture projects with real exclusion
 //! configurations.
 
-use super::*;
+use std::{collections::HashSet, io};
+
 use rstest::rstest;
-use std::collections::HashSet;
-use std::io;
+
+use super::*;
 
 #[test]
 fn config_default_has_empty_excluded_crates() {

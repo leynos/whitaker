@@ -2,11 +2,11 @@
 
 use rstest::{fixture, rstest};
 
-use crate::decomposition_advice::community::{
-    SimilarityEdge, build_adjacency, detect_communities, propagate_labels_report,
+use crate::decomposition_advice::{
+    community::{SimilarityEdge, build_adjacency, detect_communities, propagate_labels_report},
+    minimal_feature_vector,
+    vector::{MethodFeatureVector, test_feature_vector},
 };
-use crate::decomposition_advice::minimal_feature_vector;
-use crate::decomposition_advice::vector::{MethodFeatureVector, test_feature_vector};
 
 fn vectors(method_names: &[&str]) -> Vec<MethodFeatureVector> {
     method_names
@@ -20,9 +20,7 @@ fn edge(left: usize, right: usize, weight: u64) -> SimilarityEdge {
 }
 
 #[fixture]
-fn connected_triplet_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn connected_triplet_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 #[fixture]
 fn connected_triplet_adjacency() -> Vec<Vec<(usize, u64)>> {
@@ -40,19 +38,13 @@ fn linear_quartet_adjacency() -> Vec<Vec<(usize, u64)>> {
 }
 
 #[fixture]
-fn isolated_tail_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn isolated_tail_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 #[fixture]
-fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> {
-    build_adjacency(3, &[edge(0, 1, 5)])
-}
+fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> { build_adjacency(3, &[edge(0, 1, 5)]) }
 
 #[fixture]
-fn lexical_tie_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["gamma", "alpha", "beta"])
-}
+fn lexical_tie_vectors() -> Vec<MethodFeatureVector> { vectors(&["gamma", "alpha", "beta"]) }
 
 #[fixture]
 fn lexical_tie_adjacency() -> Vec<Vec<(usize, u64)>> {

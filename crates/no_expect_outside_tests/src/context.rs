@@ -2,17 +2,23 @@
 //! guards (for example, `cfg(test)`), supporting the lint's context
 //! summarization.
 
-use rustc_ast::AttrStyle;
-use rustc_ast::ast::{MetaItem, MetaItemInner};
+use rustc_ast::{
+    AttrStyle,
+    ast::{MetaItem, MetaItemInner},
+};
 use rustc_hir as hir;
-use rustc_hir::Node;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
+use rustc_hir::{Node, attrs::AttributeKind as HirAttributeKind};
 use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker::hir::has_test_like_hir_attributes;
 use whitaker_common::{
-    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
-    PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
+    Attribute,
+    AttributeKind,
+    AttributePath,
+    ContextEntry,
+    ContextKind,
+    PARSED_ATTRIBUTE_PLACEHOLDER,
+    in_test_like_context_with,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -31,8 +37,8 @@ pub(crate) struct ContextSummary {
 ///
 /// - `cx`: Lint context used to walk the HIR and inspect ancestor attributes.
 /// - `hir_id`: The HIR node whose ancestor chain should be summarized.
-/// - `additional_test_attributes`: Extra user-configured attribute paths that
-///   should be treated as test markers alongside Whitaker's built-in list.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that should be treated as
+///   test markers alongside Whitaker's built-in list.
 ///
 /// # Returns
 ///
@@ -95,11 +101,10 @@ fn has_test_ancestry(
 /// # Parameters
 ///
 /// - `entries`: Simplified ancestor contexts produced by `collect_context`.
-/// - `has_test_context_ancestry`: Whether any ancestor already established
-///   test-only ancestry via propagation, `cfg(test)`, or a recognized
-///   test-marker attribute.
-/// - `additional_test_attributes`: Extra user-configured attribute paths that
-///   should be considered test markers during the final summary check.
+/// - `has_test_context_ancestry`: Whether any ancestor already established test-only ancestry via
+///   propagation, `cfg(test)`, or a recognized test-marker attribute.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that should be considered
+///   test markers during the final summary check.
 ///
 /// # Returns
 ///
@@ -267,8 +272,7 @@ pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
         return false;
     }
 
-    attr.meta_item_list()
-        .is_some_and(check_cfg_attr_for_test)
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
@@ -288,23 +292,20 @@ fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool 
     }
 
     if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .is_some_and(|items| {
-                items
-                    .iter()
-                    .cloned()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            });
-    }
-
-    meta.meta_item_list()
-        .is_some_and(|items| {
+        return meta.meta_item_list().is_some_and(|items| {
             items
                 .iter()
                 .cloned()
-                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
-        })
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
+    }
+
+    meta.meta_item_list().is_some_and(|items| {
+        items
+            .iter()
+            .cloned()
+            .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+    })
 }
 
 fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
