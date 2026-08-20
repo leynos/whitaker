@@ -94,24 +94,30 @@ fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> std::io::Resu
 #[fixture]
 fn staging_ctx() -> std::io::Result<StagingTestContext> { StagingTestContext::new() }
 
-fn assert_bumpy_road_lint_in_staging_output(experimental: bool) {
-    let staging_ctx = StagingTestContext::new()
-        .expect("staging context should be created")
-        .with_experimental(experimental);
-    let context = staging_ctx.pipeline_context();
-    let build_results = vec![
-        create_mock_library(staging_ctx.target_dir(), "whitaker_suite")
-            .expect("mock library should be staged"),
-    ];
-    let mut stderr = Vec::new();
+/// Asserts that staging output lists the stable `bumpy_road_function` lint.
+///
+/// Expressed as a macro so the fallible setup stays inside the calling test
+/// body and failures report the caller's line number.
+macro_rules! assert_bumpy_road_lint_in_staging_output {
+    ($experimental:expr) => {{
+        let staging_ctx = StagingTestContext::new()
+            .expect("staging context should be created")
+            .with_experimental($experimental);
+        let context = staging_ctx.pipeline_context();
+        let build_results = vec![
+            create_mock_library(staging_ctx.target_dir(), "whitaker_suite")
+                .expect("mock library should be staged"),
+        ];
+        let mut stderr = Vec::new();
 
-    stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
+        stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
 
-    let output = String::from_utf8_lossy(&stderr);
-    assert!(
-        output.contains("bumpy_road_function"),
-        "expected stable bumpy_road_function lint in output, got: {output}"
-    );
+        let output = String::from_utf8_lossy(&stderr);
+        assert!(
+            output.contains("bumpy_road_function"),
+            "expected stable bumpy_road_function lint in output, got: {output}"
+        );
+    }};
 }
 
 #[rstest]
@@ -222,5 +228,5 @@ fn stage_libraries_logs_installed_lints_when_not_quiet(
 #[case::without_experimental(false)]
 #[case::with_experimental(true)]
 fn stage_libraries_lists_bumpy_road_lint(#[case] experimental: bool) {
-    assert_bumpy_road_lint_in_staging_output(experimental);
+    assert_bumpy_road_lint_in_staging_output!(experimental);
 }

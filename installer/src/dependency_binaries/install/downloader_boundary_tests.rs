@@ -5,10 +5,7 @@
 //! runs without the network. The server helper lives here (not in `downloader.rs`)
 //! to keep that module within its size budget; it is test support for these cases.
 
-// `io` is only referenced by the `#[cfg(unix)]` non-UTF-8 tests (`io::ErrorKind`);
 // `Read` is used across platforms for `read_to_end`.
-#[cfg(unix)]
-use std::io;
 use std::{collections::HashMap, io::Read, path::PathBuf, time::Duration};
 
 use camino::Utf8Path;
@@ -17,11 +14,6 @@ use rstest::{fixture, rstest};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
-// Only the non-UTF-8 production-path test (gated `#[cfg(unix)]`) drives the
-// trait and concrete downloader; keep these imports on the same gate so other
-// platforms do not see them as unused.
-#[cfg(unix)]
-use super::downloader::{DependencyArchiveDownloader, RepositoryArchiveDownloader};
 use super::{
     downloader::download_from_urls,
     http_test_server::{CannedResponse, LocalServer},
@@ -340,68 +332,8 @@ fn download_from_urls_rejects_a_malformed_checksum_sidecar(
     );
 }
 
+// The non-UTF-8 destination cases are Unix-only and live in their own module so
+// this one stays within its size budget.
 #[cfg(unix)]
-#[test]
-fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
-    use std::os::unix::ffi::OsStringExt as _;
-
-    // No route is registered; the server exists only to prove it is never
-    // contacted for an invalid destination.
-    let server = LocalServer::start(HashMap::new()).expect("local server should start");
-
-    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8
-    // and must be rejected during validation, before any HTTP request.
-    let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
-        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
-    ]));
-
-    let error = download_from_urls(
-        &agent(),
-        &server.url("/archive.tgz"),
-        &server.url("/archive.tgz.sha256"),
-        &invalid,
-    )
-    .expect_err("non-UTF-8 destination must be rejected");
-
-    match error {
-        DependencyBinaryInstallError::Io(source) => {
-            assert_eq!(source.kind(), io::ErrorKind::InvalidInput);
-        }
-        other => panic!("expected an Io error, got {other:?}"),
-    }
-    assert!(
-        server.requested_paths().is_empty(),
-        "no HTTP request must be made for an invalid destination",
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn download_rejects_a_non_utf8_destination_before_any_network_access() {
-    use std::os::unix::ffi::OsStringExt as _;
-
-    // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8.
-    // The production `download` must reject it during path validation, which
-    // happens before any HTTP call, so the test needs no network.
-    let invalid = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
-        b'/', b't', b'm', b'p', b'/', 0x80, b'.', b't', b'g', b'z',
-    ]));
-
-    let downloader = RepositoryArchiveDownloader;
-    let error = downloader
-        .download("whitaker-dependency", &invalid)
-        .expect_err("non-UTF-8 destination must be rejected");
-
-    match error {
-        DependencyBinaryInstallError::Io(source) => {
-            assert_eq!(source.kind(), io::ErrorKind::InvalidInput);
-            assert!(
-                source
-                    .to_string()
-                    .contains("destination archive path is not valid UTF-8"),
-                "error should identify the non-UTF-8 destination, got: {source}",
-            );
-        }
-        other => panic!("expected an Io error, got {other:?}"),
-    }
-}
+#[path = "downloader_boundary_non_utf8_tests.rs"]
+mod non_utf8;

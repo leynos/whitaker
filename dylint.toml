@@ -43,6 +43,7 @@ excluded_crates = [
     "behaviour_artefact_packaging",
     "behaviour_cli",
     "behaviour_docs",
+    "behaviour_install_metrics",
     "behaviour_installer_release",
     "behaviour_prebuilt",
     "behaviour_staging",

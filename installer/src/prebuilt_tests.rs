@@ -29,32 +29,37 @@ fn destination_dir() -> std::io::Result<(tempfile::TempDir, Utf8PathBuf)> {
     Ok((temp, path))
 }
 
-/// Run a fallback scenario: set up mocks via `setup_mocks`, call the
+/// Run a fallback scenario: set up mocks via `$setup_mocks`, call the
 /// orchestrator, and assert `Fallback` whose reason contains
-/// `expected_reason_substring`.
-fn test_fallback_scenario(
-    setup_mocks: impl FnOnce(&mut MockArtefactDownloader, &mut MockArtefactExtractor),
-    expected_reason_substring: &str,
-) {
-    let (_temp, destination_dir) =
-        destination_dir().expect("destination directory should be created");
-    let config = base_config(&destination_dir);
+/// `$expected_reason_substring`.
+///
+/// Expressed as a macro so the fallible setup stays inside the calling test
+/// body and failures report the caller's line number.
+macro_rules! test_fallback_scenario {
+    ($setup_mocks:expr, $expected_reason_substring:expr $(,)?) => {{
+        let setup_mocks: &dyn Fn(&mut MockArtefactDownloader, &mut MockArtefactExtractor) =
+            &$setup_mocks;
+        let expected_reason_substring: &str = $expected_reason_substring;
+        let (_temp, destination_dir) =
+            destination_dir().expect("destination directory should be created");
+        let config = base_config(&destination_dir);
 
-    let mut downloader = MockArtefactDownloader::new();
-    let mut extractor = MockArtefactExtractor::new();
-    setup_mocks(&mut downloader, &mut extractor);
+        let mut downloader = MockArtefactDownloader::new();
+        let mut extractor = MockArtefactExtractor::new();
+        setup_mocks(&mut downloader, &mut extractor);
 
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(
-                reason.contains(expected_reason_substring),
-                "reason: {reason}"
-            );
+        let mut stderr = Vec::new();
+        let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
+        match result {
+            PrebuiltResult::Fallback { reason } => {
+                assert!(
+                    reason.contains(expected_reason_substring),
+                    "reason: {reason}"
+                );
+            }
+            other @ PrebuiltResult::Success { .. } => panic!("expected Fallback, got {other:?}"),
         }
-        other @ PrebuiltResult::Success { .. } => panic!("expected Fallback, got {other:?}"),
-    }
+    }};
 }
 
 #[test]
@@ -95,7 +100,7 @@ fn manifest_download_errors_return_fallback(
     #[case] make_error: fn() -> DownloadError,
     #[case] expected_substring: &str,
 ) {
-    test_fallback_scenario(
+    test_fallback_scenario!(
         |downloader, _extractor| {
             downloader
                 .expect_download_manifest()
@@ -126,7 +131,7 @@ fn manifest_validation_errors_return_fallback() {
     ];
 
     for (toolchain, target, expected_reason_substring) in test_cases {
-        test_fallback_scenario(
+        test_fallback_scenario!(
             |downloader, _extractor| {
                 let manifest_json = prebuilt_manifest_json(toolchain, target, "a".repeat(64));
                 downloader
@@ -140,7 +145,7 @@ fn manifest_validation_errors_return_fallback() {
 
 #[test]
 fn checksum_mismatch_returns_fallback() {
-    test_fallback_scenario(
+    test_fallback_scenario!(
         |downloader, _extractor| {
             // Manifest claims SHA = "aaa...a" but the file will hash differently.
             let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, "a".repeat(64));
@@ -159,7 +164,7 @@ fn checksum_mismatch_returns_fallback() {
 
 #[test]
 fn extraction_failure_returns_fallback() {
-    test_fallback_scenario(
+    test_fallback_scenario!(
         |downloader, extractor| {
             let fake_sha = sha256_hex(FAKE_ARCHIVE);
             let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);
