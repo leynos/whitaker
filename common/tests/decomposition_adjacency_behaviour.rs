@@ -59,6 +59,19 @@ fn with_report(
     }
 }
 
+fn with_neighbours_of_node(
+    world: &AdjacencyWorld,
+    node: usize,
+    assert_fn: impl FnOnce(&[(usize, u64)]) -> Result<(), String>,
+) -> Result<(), String> {
+    with_report(world, |report| {
+        let neighbours = report
+            .neighbours_of(node)
+            .ok_or_else(|| format!("node {node} is out of bounds"))?;
+        assert_fn(neighbours)
+    })
+}
+
 #[then("the adjacency is symmetric")]
 fn then_adjacency_is_symmetric(world: &AdjacencyWorld) -> Result<(), String> {
     with_report(world, |report| {
@@ -97,10 +110,7 @@ fn then_build_is_rejected(world: &AdjacencyWorld) -> Result<(), String> {
 
 #[then("node {node} has no neighbours")]
 fn then_node_has_no_neighbours(world: &AdjacencyWorld, node: usize) -> Result<(), String> {
-    with_report(world, |report| {
-        let neighbours = report
-            .neighbours_of(node)
-            .ok_or_else(|| format!("node {node} is out of bounds"))?;
+    with_neighbours_of_node(world, node, |neighbours| {
         if neighbours.is_empty() {
             Ok(())
         } else {
@@ -111,10 +121,7 @@ fn then_node_has_no_neighbours(world: &AdjacencyWorld, node: usize) -> Result<()
 
 #[then("the neighbours of node {node} are sorted")]
 fn then_neighbours_of_node_are_sorted(world: &AdjacencyWorld, node: usize) -> Result<(), String> {
-    with_report(world, |report| {
-        let neighbours = report
-            .neighbours_of(node)
-            .ok_or_else(|| format!("node {node} is out of bounds"))?;
+    with_neighbours_of_node(world, node, |neighbours| {
         let is_sorted = neighbours.is_sorted_by_key(|neighbour| neighbour.0);
         if is_sorted {
             Ok(())
