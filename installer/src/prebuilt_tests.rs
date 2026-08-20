@@ -51,7 +51,7 @@ fn test_fallback_scenario(
                 "reason: {reason}"
             );
         }
-        other => panic!("expected Fallback, got {other:?}"),
+        other @ PrebuiltResult::Success { .. } => panic!("expected Fallback, got {other:?}"),
     }
 }
 
@@ -81,7 +81,7 @@ fn happy_path_returns_success() {
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
     match result {
         PrebuiltResult::Success { staging_path } => assert_eq!(staging_path, destination_dir),
-        other => panic!("expected Success, got {other:?}"),
+        other @ PrebuiltResult::Fallback { .. } => panic!("expected Success, got {other:?}"),
     }
 }
 
@@ -118,21 +118,11 @@ fn make_not_found_error() -> DownloadError {
 #[test]
 fn manifest_validation_errors_return_fallback() {
     let test_cases = vec![
-        (
-            "toolchain mismatch",
-            "nightly-2025-01-01",
-            TARGET,
-            "toolchain mismatch",
-        ),
-        (
-            "target mismatch",
-            TOOLCHAIN,
-            "aarch64-apple-darwin",
-            "target mismatch",
-        ),
+        ("nightly-2025-01-01", TARGET, "toolchain mismatch"),
+        (TOOLCHAIN, "aarch64-apple-darwin", "target mismatch"),
     ];
 
-    for (case_name, toolchain, target, expected_reason_substring) in test_cases {
+    for (toolchain, target, expected_reason_substring) in test_cases {
         test_fallback_scenario(
             |downloader, _extractor| {
                 let manifest_json = prebuilt_manifest_json(toolchain, target, "a".repeat(64));
@@ -142,7 +132,6 @@ fn manifest_validation_errors_return_fallback() {
             },
             expected_reason_substring,
         );
-        eprintln!("manifest validation scenario passed: {case_name}");
     }
 }
 
@@ -215,6 +204,6 @@ fn destination_creation_failure_returns_fallback() {
             reason.contains("download failed"),
             "unexpected fallback reason: {reason}"
         ),
-        other => panic!("expected Fallback, got {other:?}"),
+        other @ PrebuiltResult::Success { .. } => panic!("expected Fallback, got {other:?}"),
     }
 }

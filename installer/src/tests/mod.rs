@@ -40,9 +40,9 @@ fn dependency_install_options<'a>(
 #[fixture]
 fn test_base_dirs() -> TestBaseDirs {
     TestBaseDirs {
-        home_dir: Some(PathBuf::from("/tmp")),
-        bin_dir: Some(PathBuf::from("/tmp/bin")),
-        data_dir: Some(PathBuf::from("/tmp")),
+        home: Some(PathBuf::from("/tmp")),
+        bin: Some(PathBuf::from("/tmp/bin")),
+        data: Some(PathBuf::from("/tmp")),
     }
 }
 
@@ -242,26 +242,26 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
 
 #[derive(Debug, Clone)]
 struct TestBaseDirs {
-    home_dir: Option<PathBuf>,
-    bin_dir: Option<PathBuf>,
-    data_dir: Option<PathBuf>,
+    home: Option<PathBuf>,
+    bin: Option<PathBuf>,
+    data: Option<PathBuf>,
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> { self.home_dir.clone() }
+    fn home_dir(&self) -> Option<PathBuf> { self.home.clone() }
 
-    fn bin_dir(&self) -> Option<PathBuf> { self.bin_dir.clone() }
+    fn bin_dir(&self) -> Option<PathBuf> { self.bin.clone() }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> { self.data_dir.clone() }
+    fn whitaker_data_dir(&self) -> Option<PathBuf> { self.data.clone() }
 }
 
 #[test]
 fn write_install_metrics_prints_summary_and_persists_metrics() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let dirs = TestBaseDirs {
-        home_dir: Some(temp_dir.path().to_path_buf()),
-        bin_dir: Some(temp_dir.path().join("bin")),
-        data_dir: Some(temp_dir.path().to_path_buf()),
+        home: Some(temp_dir.path().to_path_buf()),
+        bin: Some(temp_dir.path().join("bin")),
+        data: Some(temp_dir.path().to_path_buf()),
     };
 
     let mut stderr = Vec::new();
@@ -289,9 +289,9 @@ fn write_install_metrics_prints_summary_and_persists_metrics() {
 #[test]
 fn write_install_metrics_warns_when_recording_fails() {
     let dirs = TestBaseDirs {
-        home_dir: None,
-        bin_dir: None,
-        data_dir: None,
+        home: None,
+        bin: None,
+        data: None,
     };
 
     let mut stderr = Vec::new();
@@ -311,9 +311,9 @@ fn write_install_metrics_warns_when_recording_fails() {
 fn write_install_metrics_suppresses_output_in_quiet_mode() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let dirs = TestBaseDirs {
-        home_dir: Some(temp_dir.path().to_path_buf()),
-        bin_dir: Some(temp_dir.path().join("bin")),
-        data_dir: Some(temp_dir.path().to_path_buf()),
+        home: Some(temp_dir.path().to_path_buf()),
+        bin: Some(temp_dir.path().join("bin")),
+        data: Some(temp_dir.path().to_path_buf()),
     };
 
     let mut stderr = Vec::new();

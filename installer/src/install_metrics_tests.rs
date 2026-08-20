@@ -184,11 +184,15 @@ fn concurrent_records_do_not_lose_updates(metrics_path_fixture: MetricsPathFixtu
     let mut threads = Vec::new();
 
     for _ in 0..4 {
-        let path = path.clone();
+        let writer_path = path.clone();
         threads.push(std::thread::spawn(move || {
             for _ in 0..20 {
-                record_install_at_path(&path, InstallMode::Download, Duration::from_millis(1))
-                    .expect("record install from concurrent writer");
+                record_install_at_path(
+                    &writer_path,
+                    InstallMode::Download,
+                    Duration::from_millis(1),
+                )
+                .expect("record install from concurrent writer");
             }
         }));
     }

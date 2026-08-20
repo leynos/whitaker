@@ -391,7 +391,8 @@ mod tests {
             .get(toolchain)
             .expect("toolchain should exist");
         assert_eq!(libs.len(), 1);
-        assert_eq!(libs[0].crate_name.as_str(), "whitaker_suite");
-        assert_eq!(libs[0].toolchain, toolchain);
+        let library = libs.first().expect("library should be recorded");
+        assert_eq!(library.crate_name.as_str(), "whitaker_suite");
+        assert_eq!(library.toolchain, toolchain);
     }
 }

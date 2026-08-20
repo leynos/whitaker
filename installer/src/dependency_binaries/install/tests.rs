@@ -160,7 +160,7 @@ fn install_with_returns_error_when_binary_missing_after_extract(
         DependencyBinaryInstallError::MissingBinaryInArchive { binary } => {
             assert_eq!(binary, expected_path);
         }
-        other => panic!("expected MissingBinaryInArchive, got {:?}", other),
+        other => panic!("expected MissingBinaryInArchive, got {other:?}"),
     }
 }
 

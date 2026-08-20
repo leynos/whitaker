@@ -114,19 +114,17 @@ fn assert_bumpy_road_lint_in_staging_output(experimental: bool) {
 
 #[rstest]
 fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext) {
-    let staging_ctx = staging_ctx.with_quiet(true);
-    let context = staging_ctx.pipeline_context();
+    let quiet_ctx = staging_ctx.with_quiet(true);
+    let context = quiet_ctx.pipeline_context();
     let build_results = vec![];
     let mut stderr = Vec::new();
 
-    let result = stage_libraries(&context, &build_results, &mut stderr);
-
-    assert!(result.is_ok(), "expected success, got: {result:?}");
-    let staging_path = result.expect("already checked");
+    let staging_path =
+        stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
 
     // Keep this contract explicit so staged artefacts remain discoverable by
     // toolchain and profile when scanner logic depends on path layout.
-    let expected_path = staging_ctx
+    let expected_path = quiet_ctx
         .target_dir()
         .join("nightly-2026-05-28")
         .join("release");
@@ -140,8 +138,8 @@ fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext)
 #[case::quiet_mode(true)]
 #[case::verbose_mode(false)]
 fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] quiet: bool) {
-    let staging_ctx = staging_ctx.with_quiet(quiet);
-    let context = staging_ctx.pipeline_context();
+    let quiet_ctx = staging_ctx.with_quiet(quiet);
+    let context = quiet_ctx.pipeline_context();
     let build_results = vec![];
     let mut stderr = Vec::new();
 
@@ -153,8 +151,7 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
     } else {
         assert!(
             output.contains("Staging libraries to"),
-            "expected progress message, got: {}",
-            output
+            "expected progress message, got: {output}"
         );
     }
 }
@@ -163,10 +160,10 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
 fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
     use crate::builder::{library_extension, library_prefix};
 
-    let staging_ctx = staging_ctx.with_quiet(true);
-    let context = staging_ctx.pipeline_context();
+    let quiet_ctx = staging_ctx.with_quiet(true);
+    let context = quiet_ctx.pipeline_context();
     let build_results = vec![create_mock_library(
-        staging_ctx.target_dir(),
+        quiet_ctx.target_dir(),
         "whitaker_suite",
     )];
     let mut stderr = Vec::new();

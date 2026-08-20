@@ -37,9 +37,9 @@ fn fast_path_fixture() -> FastPathFixture {
     FastPathFixture {
         args: InstallArgs::default(),
         dirs: TestBaseDirs {
-            home_dir: Some("/tmp".into()),
-            bin_dir: Some("/tmp/bin".into()),
-            data_dir: Some("/tmp".into()),
+            home: Some("/tmp".into()),
+            bin: Some("/tmp/bin".into()),
+            data: Some("/tmp".into()),
         },
         toolchain: Toolchain::with_override(Utf8Path::new("."), "nightly-2026-05-28"),
         target_dir: Utf8PathBuf::from("/tmp/target"),

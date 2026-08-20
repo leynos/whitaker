@@ -26,10 +26,10 @@ use crate::{
     },
 };
 
-fn install_options<'a>(
-    repository_installer: &'a dyn DependencyBinaryInstaller,
+fn install_options(
+    repository_installer: &dyn DependencyBinaryInstaller,
     quiet: bool,
-) -> DependencyInstallOptions<'a> {
+) -> DependencyInstallOptions<'_> {
     let dirs = StubDirs {
         bin_dir: Some(PathBuf::from("/tmp/bin")),
     };
