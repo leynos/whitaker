@@ -13,28 +13,48 @@ fn cli_parses_defaults() {
     assert_default_skip_flags(&cli);
 }
 
+/// Assert each named condition holds, reporting the first field that differs
+/// from its documented default.
+fn assert_default_conditions(conditions: &[(&str, bool)]) {
+    for &(name, condition) in conditions {
+        assert!(condition, "{name} must have its default value");
+    }
+}
+
 /// Assert that no target directory or lint selection is present by default.
 fn assert_default_lint_selection(cli: &Cli) {
-    assert!(cli.install.target_dir.is_none());
-    assert!(cli.install.lint.is_empty());
-    assert!(!cli.install.lint_selection.individual_lints);
-    assert!(!cli.install.lint_selection.experimental);
+    assert_default_conditions(&[
+        ("target_dir", cli.install.target_dir.is_none()),
+        ("lint", cli.install.lint.is_empty()),
+        (
+            "lint_selection.individual_lints",
+            !cli.install.lint_selection.individual_lints,
+        ),
+        (
+            "lint_selection.experimental",
+            !cli.install.lint_selection.experimental,
+        ),
+    ]);
 }
 
 /// Assert that execution options default to a full, non-quiet build.
 fn assert_default_execution_options(cli: &Cli) {
-    assert!(!cli.install.execution.cranelift);
-    assert!(!cli.install.execution.dry_run);
-    assert_eq!(cli.install.verbosity, 0);
-    assert!(!cli.install.quiet);
+    assert_default_conditions(&[
+        ("execution.cranelift", !cli.install.execution.cranelift),
+        ("execution.dry_run", !cli.install.execution.dry_run),
+        ("verbosity", cli.install.verbosity == 0),
+        ("quiet", !cli.install.quiet),
+    ]);
 }
 
 /// Assert that no pipeline steps are skipped by default.
 fn assert_default_skip_flags(cli: &Cli) {
-    assert!(!cli.install.skip.skip_deps);
-    assert!(!cli.install.skip.skip_wrapper);
-    assert!(!cli.install.skip.no_update);
-    assert!(!cli.install.is_build_only);
+    assert_default_conditions(&[
+        ("skip.skip_deps", !cli.install.skip.skip_deps),
+        ("skip.skip_wrapper", !cli.install.skip.skip_wrapper),
+        ("skip.no_update", !cli.install.skip.no_update),
+        ("is_build_only", !cli.install.is_build_only),
+    ]);
 }
 
 #[test]
@@ -184,10 +204,18 @@ fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
 #[test]
 fn install_args_default_is_valid() {
     let args = InstallArgs::default();
-    assert!(!args.lint_selection.individual_lints);
-    assert!(!args.lint_selection.experimental);
-    assert!(!args.execution.cranelift);
-    assert!(!args.skip.skip_deps);
+    assert_default_conditions(&[
+        (
+            "lint_selection.individual_lints",
+            !args.lint_selection.individual_lints,
+        ),
+        (
+            "lint_selection.experimental",
+            !args.lint_selection.experimental,
+        ),
+        ("execution.cranelift", !args.execution.cranelift),
+        ("skip.skip_deps", !args.skip.skip_deps),
+    ]);
 }
 
 #[test]
