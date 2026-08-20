@@ -89,23 +89,28 @@ impl fmt::Display for ArtefactName {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for artefact release-asset naming.
+
     use rstest::{fixture, rstest};
 
     use super::*;
+    use crate::artefact::error::ArtefactError;
 
     #[fixture]
-    fn sample_name() -> ArtefactName {
-        ArtefactName::new(
-            GitSha::try_from("abc1234").expect("valid sha"),
-            ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel"),
-            TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
-        )
+    fn sample_name() -> Result<ArtefactName, ArtefactError> {
+        Ok(ArtefactName::new(
+            GitSha::try_from("abc1234")?,
+            ToolchainChannel::try_from("nightly-2026-05-28")?,
+            TargetTriple::try_from("x86_64-unknown-linux-gnu")?,
+        ))
     }
 
     #[rstest]
-    fn display_matches_adr_format(sample_name: ArtefactName) {
+    fn display_matches_adr_format(sample_name: Result<ArtefactName, ArtefactError>) {
+        let name = sample_name.expect("sample artefact name should build");
+
         assert_eq!(
-            sample_name.to_string(),
+            name.to_string(),
             concat!(
                 "whitaker-lints-abc1234-nightly-2026-05-28",
                 "-x86_64-unknown-linux-gnu.tar.zst"
@@ -114,15 +119,19 @@ mod tests {
     }
 
     #[rstest]
-    fn filename_matches_display(sample_name: ArtefactName) {
-        assert_eq!(sample_name.filename(), sample_name.to_string());
+    fn filename_matches_display(sample_name: Result<ArtefactName, ArtefactError>) {
+        let name = sample_name.expect("sample artefact name should build");
+
+        assert_eq!(name.filename(), name.to_string());
     }
 
     #[rstest]
-    fn accessors_return_components(sample_name: ArtefactName) {
-        assert_eq!(sample_name.git_sha().as_str(), "abc1234");
-        assert_eq!(sample_name.toolchain().as_str(), "nightly-2026-05-28");
-        assert_eq!(sample_name.target().as_str(), "x86_64-unknown-linux-gnu");
+    fn accessors_return_components(sample_name: Result<ArtefactName, ArtefactError>) {
+        let name = sample_name.expect("sample artefact name should build");
+
+        assert_eq!(name.git_sha().as_str(), "abc1234");
+        assert_eq!(name.toolchain().as_str(), "nightly-2026-05-28");
+        assert_eq!(name.target().as_str(), "x86_64-unknown-linux-gnu");
     }
 
     #[rstest]

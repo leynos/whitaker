@@ -140,6 +140,8 @@ fn validate_git_sha(value: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for git SHA parsing and validation.
+
     use rstest::rstest;
 
     use super::*;

@@ -21,11 +21,12 @@ fn base_config(destination_dir: &Utf8Path) -> PrebuiltConfig<'_> {
     }
 }
 
-fn destination_dir() -> (tempfile::TempDir, Utf8PathBuf) {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let root = Utf8PathBuf::try_from(temp.path().to_path_buf()).expect("UTF-8 path");
+fn destination_dir() -> std::io::Result<(tempfile::TempDir, Utf8PathBuf)> {
+    let temp = tempfile::tempdir()?;
+    let root = Utf8PathBuf::try_from(temp.path().to_path_buf())
+        .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
     let path = root.join("lints").join(TOOLCHAIN).join(TARGET).join("lib");
-    (temp, path)
+    Ok((temp, path))
 }
 
 /// Run a fallback scenario: set up mocks via `setup_mocks`, call the
@@ -35,7 +36,8 @@ fn test_fallback_scenario(
     setup_mocks: impl FnOnce(&mut MockArtefactDownloader, &mut MockArtefactExtractor),
     expected_reason_substring: &str,
 ) {
-    let (_temp, destination_dir) = destination_dir();
+    let (_temp, destination_dir) =
+        destination_dir().expect("destination directory should be created");
     let config = base_config(&destination_dir);
 
     let mut downloader = MockArtefactDownloader::new();
@@ -57,7 +59,8 @@ fn test_fallback_scenario(
 
 #[test]
 fn happy_path_returns_success() {
-    let (_temp, destination_dir) = destination_dir();
+    let (_temp, destination_dir) =
+        destination_dir().expect("destination directory should be created");
     let config = base_config(&destination_dir);
     let fake_sha = sha256_hex(FAKE_ARCHIVE);
     let manifest_json = prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha);

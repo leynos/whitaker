@@ -120,6 +120,8 @@ fn validate_sha256(value: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for SHA-256 digest parsing and formatting.
+
     use rstest::{fixture, rstest};
 
     use super::*;

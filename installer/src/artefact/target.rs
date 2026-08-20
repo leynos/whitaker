@@ -141,6 +141,8 @@ impl fmt::Display for TargetTriple {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for target-triple parsing and validation.
+
     use rstest::rstest;
 
     use super::*;

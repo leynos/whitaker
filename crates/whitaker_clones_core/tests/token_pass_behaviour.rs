@@ -248,11 +248,13 @@ fn then_first_fingerprint_spans(world: &TokenPassWorld, start: usize, end: usize
 
 #[then("the retained hashes are {hashes}")]
 fn then_retained_hashes_are(world: &TokenPassWorld, hashes: String) {
-    let expected = hashes
+    let Ok(expected) = hashes
         .split_whitespace()
         .map(str::parse::<u64>)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_else(|error| panic!("expected hash list must be valid: {error}"));
+        .collect::<Result<Vec<u64>, _>>()
+    else {
+        panic!("expected hash list `{hashes}` must be valid");
+    };
 
     with_retained(world, |retained| {
         assert_eq!(

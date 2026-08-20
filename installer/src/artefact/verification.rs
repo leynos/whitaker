@@ -79,6 +79,8 @@ impl fmt::Display for VerificationFailureAction {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for artefact checksum verification.
+
     use super::*;
 
     #[test]

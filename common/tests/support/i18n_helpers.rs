@@ -102,6 +102,8 @@ pub fn extract_identifier(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the i18n behaviour-test helpers that parse Fluent fixtures.
+
     use super::*;
 
     #[test]

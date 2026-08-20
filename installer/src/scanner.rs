@@ -236,6 +236,8 @@ pub fn lints_for_library_with_experimental(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for scanning installed lint libraries.
+
     use rstest::rstest;
     use tempfile::TempDir;
 

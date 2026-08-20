@@ -7,6 +7,7 @@ use super::{
     *,
 };
 use crate::{
+    artefact::error::ArtefactError,
     dependency_binaries::{DependencyBinaryInstallError, MockDependencyBinaryInstaller},
     installer_packaging::TargetTriple,
     test_utils::{
@@ -26,21 +27,23 @@ use crate::{
     },
 };
 
+const OPTIONS_MSG: &str = "dependency install options should build";
+
 fn install_options(
     repository_installer: &dyn DependencyBinaryInstaller,
     quiet: bool,
-) -> DependencyInstallOptions<'_> {
+) -> std::result::Result<DependencyInstallOptions<'_>, ArtefactError> {
     let dirs = StubDirs {
         bin_dir: Some(PathBuf::from("/tmp/bin")),
     };
-    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
-    DependencyInstallOptions {
+    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu")?;
+    Ok(DependencyInstallOptions {
         // Intentional leak in tests to extend lifetime for trait object; acceptable here.
         dirs: Box::leak(Box::new(dirs)),
         repository_installer,
         target: Some(target),
         quiet,
-    }
+    })
 }
 
 #[test]
@@ -73,7 +76,7 @@ fn install_dylint_tools_uses_repository_release_first() {
             dylint_link: true,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("repository install should succeed");
 
@@ -105,7 +108,7 @@ fn install_dylint_tools_falls_back_to_binstall_when_repository_unavailable() {
             dylint_link: true,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("cargo binstall fallback should succeed");
 
@@ -139,7 +142,7 @@ fn install_dylint_tools_falls_back_to_cargo_install_when_binstall_missing() {
             dylint_link: true,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("cargo install fallback should succeed");
 
@@ -169,7 +172,7 @@ fn install_dylint_tools_falls_back_when_repository_verification_fails() {
             dylint_link: true,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("fallback after verification failure should succeed");
 
@@ -202,7 +205,7 @@ fn install_dylint_tools_reports_total_failure_after_all_fallbacks() {
             dylint_link: true,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect_err("install should fail after all fallbacks");
 
@@ -242,7 +245,7 @@ fn install_dylint_tools_builds_from_source_when_repository_asset_is_missing() {
             dylint_link: true,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("source build should succeed");
 
@@ -286,7 +289,7 @@ fn install_dylint_tools_skips_dylint_link_when_cargo_dylint_source_build_install
                 dylint_link: false,
             },
             &mut stderr,
-            &install_options(&repository_installer, false),
+            &install_options(&repository_installer, false).expect(OPTIONS_MSG),
         )
         .expect("cargo-dylint source build should satisfy both tools");
     })
@@ -340,7 +343,7 @@ fn install_dylint_tools_accepts_repository_dylint_link_without_executing_it() {
             dylint_link: false,
         },
         &mut stderr,
-        &install_options(&repository_installer, false),
+        &install_options(&repository_installer, false).expect(OPTIONS_MSG),
     )
     .expect("repository install should satisfy dylint-link");
 
@@ -382,7 +385,7 @@ fn install_dylint_tools_falls_back_when_repository_dylint_link_install_fails() {
                 dylint_link: false,
             },
             &mut stderr,
-            &install_options(&repository_installer, false),
+            &install_options(&repository_installer, false).expect(OPTIONS_MSG),
         )
         .expect("binstall fallback should succeed");
     })

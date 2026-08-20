@@ -26,15 +26,19 @@ fn labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassEr
     })
 }
 
-fn literal_symbols(source: &str, profile: NormProfile) -> Vec<LiteralSymbol> {
-    normalize(source, profile)
-        .expect("literal normalization should succeed")
-        .into_iter()
-        .filter_map(|token| match token.kind {
-            NormalizedTokenKind::Literal(symbol) => Some(symbol),
-            _ => None,
-        })
-        .collect()
+fn literal_symbols(
+    source: &str,
+    profile: NormProfile,
+) -> Result<Vec<LiteralSymbol>, TokenPassError> {
+    normalize(source, profile).map(|tokens| {
+        tokens
+            .into_iter()
+            .filter_map(|token| match token.kind {
+                NormalizedTokenKind::Literal(symbol) => Some(symbol),
+                _ => None,
+            })
+            .collect()
+    })
 }
 
 fn token_labels(tokens: &[super::NormalizedToken]) -> Vec<String> {
@@ -309,7 +313,8 @@ fn literal_variants_are_terminated_and_canonicalized(
     #[case] source: &str,
     #[case] assertion_message: &str,
 ) {
-    let literal_syms = literal_symbols(source, NormProfile::T1);
+    let literal_syms =
+        literal_symbols(source, NormProfile::T1).expect("literal normalization should succeed");
 
     assert!(
         literal_syms.len() >= 2,

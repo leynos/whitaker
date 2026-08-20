@@ -277,6 +277,8 @@ pub fn find_dependency_binary(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the embedded dependency-binary manifest.
+
     use rstest::{fixture, rstest};
 
     use super::*;

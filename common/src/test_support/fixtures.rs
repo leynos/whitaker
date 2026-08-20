@@ -169,6 +169,8 @@ fn depth_limit_error(path: &Path) -> io::Error {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for fixture staging helpers used by lint test suites.
+
     use std::{
         fs,
         io,
@@ -226,28 +228,29 @@ mod tests {
     fn setup_copy_fixture_test(
         with_stderr: bool,
         with_support: bool,
-    ) -> (TempDir, PathBuf, TempDir) {
-        let root = tempdir().expect("fixture root");
+    ) -> io::Result<(TempDir, PathBuf, TempDir)> {
+        let root = tempdir()?;
         let fixture = root.path().join("case.rs");
-        fs::write(&fixture, "fn main() {}").expect("fixture file");
+        fs::write(&fixture, "fn main() {}")?;
 
         if with_stderr {
-            fs::write(root.path().join("case.stderr"), "stderr").expect("stderr file");
+            fs::write(root.path().join("case.stderr"), "stderr")?;
         }
 
         if with_support {
             let support_dir = root.path().join("case");
-            fs::create_dir_all(&support_dir).expect("support dir");
-            fs::write(support_dir.join("helper.rs"), "fn helper() {}").expect("support helper");
+            fs::create_dir_all(&support_dir)?;
+            fs::write(support_dir.join("helper.rs"), "fn helper() {}")?;
         }
 
-        let destination = tempdir().expect("destination root");
-        (root, fixture, destination)
+        let destination = tempdir()?;
+        Ok((root, fixture, destination))
     }
 
     #[test]
     fn copy_fixture_without_stderr_succeeds() {
-        let (root, fixture, destination) = setup_copy_fixture_test(false, false);
+        let (root, fixture, destination) =
+            setup_copy_fixture_test(false, false).expect("stage fixture without stderr");
 
         copy_fixture(root.path(), &fixture, destination.path())
             .expect("copy succeeds without stderr");
@@ -258,7 +261,8 @@ mod tests {
 
     #[test]
     fn copy_fixture_without_support_directory_succeeds() {
-        let (root, fixture, destination) = setup_copy_fixture_test(true, false);
+        let (root, fixture, destination) =
+            setup_copy_fixture_test(true, false).expect("stage fixture with stderr");
 
         copy_fixture(root.path(), &fixture, destination.path())
             .expect("copy succeeds without support dir");

@@ -277,6 +277,8 @@ pub type Result<T> = std::result::Result<T, InstallerError>;
 
 #[cfg(test)]
 mod tests {
+    //! Tests for installer error construction and display.
+
     use super::*;
 
     #[test]

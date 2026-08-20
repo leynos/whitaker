@@ -56,12 +56,13 @@ fn with_whitaker_properties(world: &Run0World, assert_fn: impl FnOnce(&WhitakerP
         let [result] = results else {
             panic!("exactly one result must exist before checking Whitaker properties");
         };
-        let properties = result
-            .properties
-            .as_ref()
-            .unwrap_or_else(|| panic!("Whitaker properties must be present"));
-        let extracted = WhitakerProperties::try_from(properties)
-            .unwrap_or_else(|error| panic!("unexpected property extraction error: {error}"));
+        let Some(properties) = result.properties.as_ref() else {
+            panic!("Whitaker properties must be present");
+        };
+        let extracted = match WhitakerProperties::try_from(properties) {
+            Ok(extracted) => extracted,
+            Err(error) => panic!("unexpected property extraction error: {error}"),
+        };
         assert_fn(&extracted);
     });
 }

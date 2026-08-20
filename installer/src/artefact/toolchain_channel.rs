@@ -113,6 +113,8 @@ impl fmt::Display for ToolchainChannel {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for toolchain channel parsing and validation.
+
     use rstest::rstest;
 
     use super::*;

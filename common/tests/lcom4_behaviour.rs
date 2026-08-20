@@ -106,6 +106,9 @@ fn scenario_self_call(world: LcomWorld) { let _ = world; }
 
 #[cfg(test)]
 mod parse_field_set_tests {
+    //! Unit tests for `parse_field_set`, the comma-separated field parser used
+    //! by the LCOM4 behaviour steps.
+
     use std::collections::BTreeSet;
 
     use super::parse_field_set;

@@ -75,6 +75,8 @@ impl fmt::Display for SchemaVersion {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for artefact manifest schema versioning.
+
     use super::*;
 
     #[test]

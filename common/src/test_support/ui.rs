@@ -167,14 +167,23 @@ pub fn read_directory_config(directory: &Utf8Path) -> io::Result<Option<String>>
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the UI test harness helpers.
+
     use std::fs;
 
     use camino::Utf8PathBuf;
 
     use super::*;
 
-    fn utf8_path(buf: &Path) -> Utf8PathBuf {
-        Utf8PathBuf::from_path_buf(buf.to_path_buf()).expect("utf8 path")
+    /// Converts a [`Path`] into a [`Utf8PathBuf`] for test data.
+    ///
+    /// This is a macro rather than a helper function so the fallible
+    /// conversion is inlined into the calling `#[test]` body, where a
+    /// non-UTF-8 temporary directory is the test verdict.
+    macro_rules! utf8_path {
+        ($path:expr) => {
+            Utf8PathBuf::from_path_buf(::std::path::Path::to_path_buf($path)).expect("utf8 path")
+        };
     }
 
     #[test]
@@ -182,7 +191,7 @@ mod tests {
         let dir = tempdir().expect("fixture directory");
         fs::write(dir.path().join("b.rs"), "fn main() {}").expect("write first fixture");
         fs::write(dir.path().join("a.rs"), "fn main() {}").expect("write second fixture");
-        let directory = utf8_path(dir.path());
+        let directory = utf8_path!(dir.path());
         let mut visited = Vec::new();
 
         run_fixtures_with("crate", &directory, |_, _, source| {
@@ -204,7 +213,7 @@ mod tests {
         let dir = tempdir().expect("fixture directory");
         fs::write(dir.path().join("first.rs"), "").expect("first fixture");
         fs::write(dir.path().join("second.txt"), "").expect("second fixture");
-        let directory = utf8_path(dir.path());
+        let directory = utf8_path!(dir.path());
 
         let mut fixtures = discover_fixtures(&directory).expect("discover fixtures");
         fixtures.sort();
@@ -217,7 +226,7 @@ mod tests {
     #[test]
     fn discover_fixtures_returns_empty_directory() {
         let dir = tempdir().expect("fixture directory");
-        let directory = utf8_path(dir.path());
+        let directory = utf8_path!(dir.path());
 
         let fixtures = discover_fixtures(&directory).expect("discover fixtures");
 
@@ -239,7 +248,7 @@ mod tests {
     #[test]
     fn read_directory_config_loads_global_file() {
         let dir = tempdir().expect("fixture directory");
-        let directory = utf8_path(dir.path());
+        let directory = utf8_path!(dir.path());
         fs::write(directory.as_std_path().join("dylint.toml"), "max_lines = 5")
             .expect("global config");
 
@@ -250,7 +259,7 @@ mod tests {
     #[test]
     fn resolve_fixture_config_prefers_fixture_specific_file() {
         let dir = tempdir().expect("fixture directory");
-        let directory = utf8_path(dir.path());
+        let directory = utf8_path!(dir.path());
         let fixture = directory.as_std_path().join("case.rs");
         fs::write(&fixture, "").expect("fixture");
         fs::write(

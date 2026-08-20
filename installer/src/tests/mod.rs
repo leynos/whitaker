@@ -28,13 +28,16 @@ fn dependency_install_options<'a>(
     dirs: &'a TestBaseDirs,
     repository_installer: &'a dyn DependencyBinaryInstaller,
     quiet: bool,
-) -> DependencyInstallOptions<'a> {
-    DependencyInstallOptions {
+) -> std::result::Result<
+    DependencyInstallOptions<'a>,
+    whitaker_installer::artefact::error::ArtefactError,
+> {
+    Ok(DependencyInstallOptions {
         dirs,
         repository_installer,
-        target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")),
+        target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu")?),
         quiet,
-    }
+    })
 }
 
 #[fixture]
@@ -130,7 +133,8 @@ fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
+            .expect("dependency install options should build");
         let result = ensure_dylint_tools_with_options(&executor, &mut stderr, &options);
 
         assert!(result.is_ok());
@@ -176,7 +180,8 @@ fn ensure_dylint_tools_installs_missing_tools(
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet);
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet)
+            .expect("dependency install options should build");
         let result = ensure_dylint_tools_with_options(&executor, &mut stderr, &options);
 
         assert!(result.is_ok());
@@ -225,7 +230,8 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
+            .expect("dependency install options should build");
         let err = ensure_dylint_tools_with_options(&executor, &mut stderr, &options)
             .expect_err("expected install failure");
 

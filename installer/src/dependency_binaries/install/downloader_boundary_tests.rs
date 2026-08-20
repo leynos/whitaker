@@ -55,14 +55,15 @@ impl DownloadHarness {
 
     /// Open the destination's parent directory as a capability, for asserting on
     /// the written archive.
-    fn destination_dir(&self) -> Dir {
-        let parent = Utf8Path::from_path(
-            self.destination
-                .parent()
-                .expect("destination has a parent directory"),
-        )
-        .expect("temp path is UTF-8");
-        Dir::open_ambient_dir(parent, ambient_authority()).expect("open temp dir capability")
+    fn destination_dir(&self) -> std::io::Result<Dir> {
+        let parent = self
+            .destination
+            .parent()
+            .and_then(Utf8Path::from_path)
+            .ok_or_else(|| {
+                std::io::Error::other("destination must have a UTF-8 parent directory")
+            })?;
+        Dir::open_ambient_dir(parent, ambient_authority())
     }
 }
 
@@ -73,15 +74,15 @@ impl DownloadHarness {
 #[fixture]
 fn download_harness(
     #[default(HashMap::new())] routes: HashMap<String, CannedResponse>,
-) -> DownloadHarness {
-    let server = LocalServer::start(routes);
-    let temp = TempDir::new().expect("create temp dir");
+) -> std::io::Result<DownloadHarness> {
+    let server = LocalServer::start(routes)?;
+    let temp = TempDir::new()?;
     let destination = temp.path().join("archive.tgz");
-    DownloadHarness {
+    Ok(DownloadHarness {
         server,
         _temp: temp,
         destination,
-    }
+    })
 }
 
 #[rstest]
@@ -97,7 +98,7 @@ fn download_from_urls_writes_the_archive_and_requests_both_endpoints(agent: ureq
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     download_from_urls(
         &agent,
@@ -112,6 +113,7 @@ fn download_from_urls_writes_the_archive_and_requests_both_endpoints(agent: ureq
     let mut written = Vec::new();
     harness
         .destination_dir()
+        .expect("destination directory should open")
         .open("archive.tgz")
         .expect("open written archive")
         .read_to_end(&mut written)
@@ -134,7 +136,7 @@ fn download_from_urls_reports_a_checksum_mismatch(agent: ureq::Agent) {
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{wrong_checksum}  archive.tgz\n").into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     let error = download_from_urls(
         &agent,
@@ -165,7 +167,10 @@ fn download_from_urls_reports_a_checksum_mismatch(agent: ureq::Agent) {
     // The unverified archive must not survive a checksum mismatch, so a retry
     // never reads stale data from the destination.
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "archive must be removed from the destination after a checksum mismatch",
     );
 }
@@ -181,7 +186,7 @@ fn download_from_urls_rejects_an_oversized_checksum_sidecar(agent: ureq::Agent) 
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(vec![b'a'; 128 * 1024]),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     let error = download_from_urls(
         &agent,
@@ -203,7 +208,10 @@ fn download_from_urls_rejects_an_oversized_checksum_sidecar(agent: ureq::Agent) 
     }
 
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "archive must be removed after an oversized checksum sidecar",
     );
 }
@@ -227,7 +235,7 @@ fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ur
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(sidecar.into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     let error = download_from_urls(
         &agent,
@@ -253,7 +261,10 @@ fn download_from_urls_removes_the_partial_archive_when_the_write_fails(agent: ur
     );
 
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "partial archive must be removed after a write failure",
     );
 }
@@ -271,7 +282,7 @@ fn download_from_urls_accepts_an_uppercase_checksum_sidecar(agent: ureq::Agent) 
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(format!("{checksum}  archive.tgz\n").into_bytes()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
 
     download_from_urls(
         &agent,
@@ -300,7 +311,7 @@ fn download_from_urls_rejects_a_malformed_checksum_sidecar(
         "/archive.tgz.sha256".to_owned(),
         CannedResponse::ok(sidecar.as_bytes().to_vec()),
     );
-    let harness = download_harness(routes);
+    let harness = download_harness(routes).expect("download harness should start");
     let checksum_url = harness.checksum_url();
 
     let error = download_from_urls(
@@ -321,7 +332,10 @@ fn download_from_urls_rejects_a_malformed_checksum_sidecar(
 
     // The archive was written before the checksum failed, so it must be removed.
     assert!(
-        !harness.destination_dir().exists("archive.tgz"),
+        !harness
+            .destination_dir()
+            .expect("destination directory should open")
+            .exists("archive.tgz"),
         "archive must be removed after a checksum retrieval failure",
     );
 }
@@ -333,7 +347,7 @@ fn download_from_urls_rejects_a_non_utf8_destination_before_any_request() {
 
     // No route is registered; the server exists only to prove it is never
     // contacted for an invalid destination.
-    let server = LocalServer::start(HashMap::new());
+    let server = LocalServer::start(HashMap::new()).expect("local server should start");
 
     // 0x80 is a lone UTF-8 continuation byte, so this path is never valid UTF-8
     // and must be rejected during validation, before any HTTP request.

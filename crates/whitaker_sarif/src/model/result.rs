@@ -118,6 +118,8 @@ pub struct SarifResult {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF result model.
+
     use super::*;
 
     #[test]

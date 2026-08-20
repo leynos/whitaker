@@ -5,7 +5,7 @@ use std::{fs, io::Read};
 use rstest::rstest;
 
 use super::*;
-use crate::binstall_metadata;
+use crate::{artefact::error::ArtefactError, binstall_metadata};
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -29,12 +29,12 @@ struct PackagingFixture {
 
 /// Create a [`PackagingFixture`] for the given target, writing a fake binary
 /// with the provided content into a fresh temporary directory.
-fn packaging_fixture(target: &str, content: &[u8]) -> PackagingFixture {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let bin_name = binary_filename(&TargetTriple::try_from(target).expect("valid target"));
-    let binary_path = temp.path().join(bin_name);
-    fs::write(&binary_path, content).expect("write fake binary");
-    PackagingFixture { temp, binary_path }
+fn packaging_fixture(target: &str, content: &[u8]) -> std::io::Result<PackagingFixture> {
+    let temp = tempfile::tempdir()?;
+    let triple = TargetTriple::try_from(target).map_err(std::io::Error::other)?;
+    let binary_path = temp.path().join(binary_filename(&triple));
+    fs::write(&binary_path, content)?;
+    Ok(PackagingFixture { temp, binary_path })
 }
 
 /// Build [`InstallerPackageParams`] from a fixture, version, and target.
@@ -42,44 +42,42 @@ fn params_from_fixture(
     fixture: &PackagingFixture,
     version: &str,
     target: &str,
-) -> InstallerPackageParams {
-    InstallerPackageParams {
+) -> std::result::Result<InstallerPackageParams, ArtefactError> {
+    Ok(InstallerPackageParams {
         version: Version::new(version),
-        target: TargetTriple::try_from(target).expect("valid target"),
+        target: TargetTriple::try_from(target)?,
         binary_path: fixture.binary_path.clone(),
         output_dir: fixture.temp.path().to_path_buf(),
-    }
+    })
 }
 
 /// Read entry paths from a `.tgz` archive, failing explicitly on errors.
-fn read_tgz_entry_paths(archive_path: &std::path::Path) -> Vec<String> {
-    let file = fs::File::open(archive_path).expect("open archive");
+fn read_tgz_entry_paths(archive_path: &std::path::Path) -> std::io::Result<Vec<String>> {
+    let file = fs::File::open(archive_path)?;
     let gz = flate2::read::GzDecoder::new(file);
     let mut tar_archive = tar::Archive::new(gz);
     tar_archive
-        .entries()
-        .expect("entries")
-        .map(|e| {
-            let entry = e.expect("valid tar entry");
-            entry
-                .path()
-                .expect("valid entry path")
-                .to_string_lossy()
-                .into_owned()
+        .entries()?
+        .map(|entry_result| {
+            let entry = entry_result?;
+            let path = entry.path()?;
+            Ok(path.to_string_lossy().into_owned())
         })
         .collect()
 }
 
 /// Read entry names from a `.zip` archive, failing explicitly on errors.
-fn read_zip_entry_names(archive_path: &std::path::Path) -> Vec<String> {
-    let file = fs::File::open(archive_path).expect("open archive");
-    let zip_archive = zip::ZipArchive::new(file).expect("open zip");
+fn read_zip_entry_names(
+    archive_path: &std::path::Path,
+) -> std::result::Result<Vec<String>, zip::result::ZipError> {
+    let file = fs::File::open(archive_path)?;
+    let zip_archive = zip::ZipArchive::new(file)?;
     (0..zip_archive.len())
-        .map(|i| {
+        .map(|index| {
             zip_archive
-                .name_for_index(i)
-                .expect("valid zip entry name")
-                .to_owned()
+                .name_for_index(index)
+                .map(str::to_owned)
+                .ok_or(zip::result::ZipError::FileNotFound)
         })
         .collect()
 }
@@ -200,16 +198,17 @@ fn package_installer_creates_archive(
     #[case] expected_name: &str,
     #[case] expected_entry: &str,
 ) {
-    let fixture = packaging_fixture(target, content);
-    let params = params_from_fixture(&fixture, "0.2.1", target);
+    let fixture = packaging_fixture(target, content).expect("packaging fixture should be staged");
+    let params =
+        params_from_fixture(&fixture, "0.2.1", target).expect("packaging params should build");
     let output = package_installer(&params).expect("packaging should succeed");
     assert!(output.archive_path.exists(), "archive should exist");
     assert_eq!(output.archive_name, expected_name);
 
     let entries = if has_extension(expected_name, "tgz") {
-        read_tgz_entry_paths(&output.archive_path)
+        read_tgz_entry_paths(&output.archive_path).expect("tgz archive should list entries")
     } else {
-        read_zip_entry_names(&output.archive_path)
+        read_zip_entry_names(&output.archive_path).expect("zip archive should list entries")
     };
     assert_eq!(entries.len(), 1, "expected 1 entry, got {entries:?}");
     let entry = entries.first().expect("archive should contain one entry");
@@ -286,8 +285,10 @@ fn archive_name_matches_binstall_template(#[case] target: &str, #[case] version:
 #[test]
 fn tgz_archive_preserves_binary_content() {
     let content = b"binary-payload-12345";
-    let fixture = packaging_fixture("aarch64-unknown-linux-gnu", content);
-    let params = params_from_fixture(&fixture, "0.2.1", "aarch64-unknown-linux-gnu");
+    let fixture = packaging_fixture("aarch64-unknown-linux-gnu", content)
+        .expect("packaging fixture should be staged");
+    let params = params_from_fixture(&fixture, "0.2.1", "aarch64-unknown-linux-gnu")
+        .expect("packaging params should build");
 
     let output = package_installer(&params).expect("packaging");
     let file = fs::File::open(&output.archive_path).expect("open");

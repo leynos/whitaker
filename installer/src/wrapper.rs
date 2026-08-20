@@ -216,6 +216,8 @@ pub fn path_instructions(bin_dir: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the generated cargo-whitaker wrapper script.
+
     use tempfile::TempDir;
 
     use super::*;
@@ -226,28 +228,38 @@ mod tests {
         assert!(!is_directory_in_path(temp.path()));
     }
 
-    /// Asserts that every user, group, and other execute bit is set on `path`.
+    /// Asserts that every user, group, and other execute bit is set on `$path`.
+    ///
+    /// Expressed as a macro so failures point at the calling test, and so the
+    /// fallible metadata read stays inside the test body.
     #[cfg(unix)]
-    fn assert_script_is_executable(path: &Path) {
-        use std::os::unix::fs::PermissionsExt;
+    macro_rules! assert_script_is_executable {
+        ($path:expr) => {{
+            use std::os::unix::fs::PermissionsExt as _;
 
-        let perms = std::fs::metadata(path)
-            .expect("failed to read metadata")
-            .permissions();
-        assert_eq!(perms.mode() & 0o111, 0o111, "script should be executable");
+            let metadata = std::fs::metadata($path).expect("script metadata should be readable");
+            assert_eq!(
+                metadata.permissions().mode() & 0o111,
+                0o111,
+                "script should be executable"
+            );
+        }};
     }
 
-    /// Asserts that the script at `path` contains every fragment in `fragments`.
+    /// Asserts that the script at `$path` contains every fragment in `$fragments`.
     #[cfg(unix)]
-    fn assert_script_contains(path: &Path, fragments: &[&str]) {
-        let content = std::fs::read_to_string(path).expect("failed to read script");
-        for fragment in fragments {
-            assert!(
-                content.contains(fragment),
-                "script {} should contain {fragment}",
-                path.display()
-            );
-        }
+    macro_rules! assert_script_contains {
+        ($path:expr, $fragments:expr) => {{
+            let path: &Path = $path;
+            let content = std::fs::read_to_string(path).expect("script should be readable");
+            for fragment in $fragments {
+                assert!(
+                    content.contains(fragment),
+                    "script {} should contain {fragment}",
+                    path.display()
+                );
+            }
+        }};
     }
 
     #[cfg(unix)]
@@ -263,14 +275,14 @@ mod tests {
 
         assert!(whitaker_path.exists());
         assert!(whitaker_ls_path.exists());
-        assert_script_is_executable(&whitaker_path);
-        assert_script_contains(
+        assert_script_is_executable!(&whitaker_path);
+        assert_script_contains!(
             &whitaker_path,
-            &["DYLINT_LIBRARY_PATH", "cargo dylint", "$@"],
+            &["DYLINT_LIBRARY_PATH", "cargo dylint", "$@"]
         );
-        assert_script_contains(
+        assert_script_contains!(
             &whitaker_ls_path,
-            &["DYLINT_LIBRARY_PATH", "cargo dylint list", "whitaker_suite"],
+            &["DYLINT_LIBRARY_PATH", "cargo dylint list", "whitaker_suite"]
         );
     }
 

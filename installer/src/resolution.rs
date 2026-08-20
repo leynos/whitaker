@@ -148,6 +148,8 @@ pub fn validate_crate_names(names: &[CrateName], options: &CrateResolutionOption
 
 #[cfg(test)]
 mod tests {
+    //! Tests for release resolution.
+
     use rstest::rstest;
 
     use super::*;

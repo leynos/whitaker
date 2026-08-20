@@ -136,10 +136,9 @@ fn when_candidate_span_is_lowered(world: &AstFeatureWorld) {
         return;
     };
     let end = start + needle.len();
-    let span_start =
-        u32::try_from(start).unwrap_or_else(|error| panic!("span start must fit in u32: {error}"));
-    let span_end =
-        u32::try_from(end).unwrap_or_else(|error| panic!("span end must fit in u32: {error}"));
+    let (Ok(span_start), Ok(span_end)) = (u32::try_from(start), u32::try_from(end)) else {
+        panic!("candidate span offsets {start}..{end} must fit in u32");
+    };
 
     match ByteSpan::new(&source, span_start, span_end).and_then(|span| lower_span(&source, span)) {
         Ok(tree) => {
@@ -169,9 +168,9 @@ fn then_lowered_root_kind_is(world: &AstFeatureWorld, kind: String) {
     );
     let expected = u16::from(ExpectedKind::parse(&kind).syntax_kind());
     let lowered = world.lowered.borrow();
-    let tree = lowered
-        .as_ref()
-        .unwrap_or_else(|| panic!("lowered tree must be available after lowering"));
+    let Some(tree) = lowered.as_ref() else {
+        panic!("lowered tree must be available after lowering");
+    };
 
     assert_eq!(
         tree.root().kind().get(),

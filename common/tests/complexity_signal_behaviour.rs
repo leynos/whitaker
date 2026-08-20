@@ -105,7 +105,11 @@ fn world() -> SignalWorld { SignalWorld::default() }
 ///
 /// The feature text uses values like `0.0, 1.0, 2.0`. Whitespace is ignored and
 /// empty segments are skipped.
-fn parse_f64_list(values: &str) -> Vec<f64> {
+///
+/// # Errors
+///
+/// Returns a description of the first segment that is not a valid `f64`.
+fn parse_f64_list(values: &str) -> Result<Vec<f64>, String> {
     values
         .split(',')
         .map(str::trim)
@@ -113,7 +117,7 @@ fn parse_f64_list(values: &str) -> Vec<f64> {
         .map(|chunk| {
             chunk
                 .parse::<f64>()
-                .unwrap_or_else(|error| panic!("failed to parse `{chunk}` as f64: {error}"))
+                .map_err(|error| format!("failed to parse `{chunk}` as f64: {error}"))
         })
         .collect()
 }
@@ -173,15 +177,17 @@ fn given_function_range(world: &SignalWorld, start: usize, end: usize) {
 }
 
 #[given("a segment from line {start} to {end} with value {value}")]
-fn given_segment(world: &SignalWorld, start: usize, end: usize, value: f64) {
+fn given_segment(world: &SignalWorld, start: usize, end: usize, value: f64) -> Result<(), String> {
     let segment = LineSegment::new(start, end, value)
-        .unwrap_or_else(|error| panic!("segment inputs should be valid: {error}"));
+        .map_err(|error| format!("segment inputs should be valid: {error}"))?;
     world.push_segment(segment);
+    Ok(())
 }
 
 #[given("the raw signal is {values}")]
-fn given_raw_signal(world: &SignalWorld, values: String) {
-    world.set_raw_signal(parse_f64_list(&values));
+fn given_raw_signal(world: &SignalWorld, values: String) -> Result<(), String> {
+    world.set_raw_signal(parse_f64_list(&values)?);
+    Ok(())
 }
 
 #[given("the smoothing window is {window}")]
@@ -194,12 +200,13 @@ fn when_build(world: &SignalWorld) { world.build_signal(); }
 fn when_smooth(world: &SignalWorld) { world.smooth(); }
 
 #[then("the built signal equals {expected}")]
-fn then_built_signal(world: &SignalWorld, expected: String) {
+fn then_built_signal(world: &SignalWorld, expected: String) -> Result<(), String> {
     let actual = world
         .built_signal()
-        .unwrap_or_else(|error| panic!("signal build should succeed: {error}"));
-    let expected_values = parse_f64_list(&expected);
+        .map_err(|error| format!("signal build should succeed: {error}"))?;
+    let expected_values = parse_f64_list(&expected)?;
     assert_vec_approx_eq(&actual, &expected_values);
+    Ok(())
 }
 
 #[then("signal building fails")]
@@ -211,12 +218,13 @@ fn then_build_fails(world: &SignalWorld) {
 }
 
 #[then("the smoothed signal equals {expected}")]
-fn then_smoothed_signal(world: &SignalWorld, expected: String) {
+fn then_smoothed_signal(world: &SignalWorld, expected: String) -> Result<(), String> {
     let actual = world
         .smoothed_signal()
-        .unwrap_or_else(|error| panic!("smoothing should succeed: {error}"));
-    let expected_values = parse_f64_list(&expected);
+        .map_err(|error| format!("smoothing should succeed: {error}"))?;
+    let expected_values = parse_f64_list(&expected)?;
     assert_vec_approx_eq(&actual, &expected_values);
+    Ok(())
 }
 
 #[then("smoothing fails")]

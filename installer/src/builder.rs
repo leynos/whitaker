@@ -233,6 +233,8 @@ pub const fn library_prefix() -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for lint-library build orchestration.
+
     use rstest::{fixture, rstest};
 
     use super::*;

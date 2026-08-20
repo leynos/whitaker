@@ -96,15 +96,16 @@ fn with_method_builder(
     world: &DiagnosticNoteWorld,
     method_name: &str,
     update: impl FnOnce(&mut MethodProfileBuilder),
-) {
+) -> Result<(), String> {
     let method_id = lookup_method_id(world, method_name)
         .unwrap_or_else(|| create_method_builder(world, method_name));
 
     let mut methods = world.methods.borrow_mut();
     let builder = methods
         .get_mut(&method_id)
-        .unwrap_or_else(|| panic!("method id {method_id} must exist while applying updates"));
+        .ok_or_else(|| format!("method id {method_id} must exist while applying updates"))?;
     update(builder);
+    Ok(())
 }
 
 fn with_rendered_note(
@@ -171,23 +172,27 @@ fn given_transport_fixture(world: &DiagnosticNoteWorld) {
 }
 
 #[given("method {name} accesses fields {fields}")]
-fn given_fields(world: &DiagnosticNoteWorld, name: String, fields: CsvList) {
+fn given_fields(world: &DiagnosticNoteWorld, name: String, fields: CsvList) -> Result<(), String> {
     let parsed_fields = fields.into_vec();
     with_method_builder(world, &name, |builder| {
         for field in &parsed_fields {
             builder.record_accessed_field(field.as_str());
         }
-    });
+    })
 }
 
 #[given("method {name} uses external domains {domains}")]
-fn given_external_domains(world: &DiagnosticNoteWorld, name: String, domains: CsvList) {
+fn given_external_domains(
+    world: &DiagnosticNoteWorld,
+    name: String,
+    domains: CsvList,
+) -> Result<(), String> {
     let parsed_domains = domains.into_vec();
     with_method_builder(world, &name, |builder| {
         for domain in &parsed_domains {
             builder.record_external_domain(domain.as_str());
         }
-    });
+    })
 }
 
 #[when("the decomposition diagnostic note is rendered")]
