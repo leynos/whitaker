@@ -84,7 +84,7 @@ struct DependencyRlib {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
         run_test_runner(spec.name, || {
             let _guard = env_test_guard();
             with_vars_unset(
@@ -288,10 +288,14 @@ fn dependency_rlib_candidate(
 /// Returns `true` when `path` names a file that starts with `prefix` and has
 /// the `.rlib` extension.
 fn is_dependency_rlib(path: &Path, prefix: &str) -> bool {
-    path.file_name().is_some_and(|name| {
-        name.to_str()
-            .is_some_and(|name| name.starts_with(prefix) && name.ends_with(".rlib"))
-    })
+    let has_rlib_extension = path
+        .extension()
+        .is_some_and(|extension| extension == "rlib");
+    has_rlib_extension
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(prefix))
 }
 
 #[rstest]

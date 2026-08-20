@@ -76,9 +76,11 @@ fn detect_bumps_reports_two_intervals() {
     let smoothed = vec![0.0, 3.0, 3.0, 0.0, 3.1, 3.0];
     let bumps = detect_bumps(&smoothed, 3.0, 2);
 
-    assert_eq!(bumps.len(), 2);
-    assert_eq!((bumps[0].start_index(), bumps[0].end_index()), (1, 2));
-    assert_eq!((bumps[1].start_index(), bumps[1].end_index()), (4, 5));
+    let ranges: Vec<(usize, usize)> = bumps
+        .iter()
+        .map(|bump| (bump.start_index(), bump.end_index()))
+        .collect();
+    assert_eq!(ranges, vec![(1, 2), (4, 5)]);
 }
 
 #[rstest]
@@ -95,9 +97,11 @@ fn top_two_bumps_prefers_area_then_length() {
     let bumps = detect_bumps(&smoothed, 3.0, 2);
     let top = top_two_bumps(bumps);
 
-    assert_eq!(top.len(), 2);
-    assert_eq!((top[0].start_index(), top[0].end_index()), (6, 8));
-    assert_eq!((top[1].start_index(), top[1].end_index()), (1, 2));
+    let ranges: Vec<(usize, usize)> = top
+        .iter()
+        .map(|bump| (bump.start_index(), bump.end_index()))
+        .collect();
+    assert_eq!(ranges, vec![(6, 8), (1, 2)]);
 }
 
 #[derive(Default)]
@@ -182,7 +186,14 @@ fn then_threshold(world: &World, threshold: f64) {
         .normalized
         .borrow()
         .expect("settings should be normalized");
-    assert_eq!(settings.threshold, threshold);
+    // Compare bit patterns: the assertion is that the configured value
+    // round-tripped through parsing unchanged, which is exact equality of
+    // representation rather than numeric proximity.
+    assert_eq!(
+        settings.threshold.to_bits(),
+        threshold.to_bits(),
+        "the normalized threshold should match the configured value exactly",
+    );
 }
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 0)]
@@ -237,8 +248,11 @@ fn ui_dylint_toml_threshold_matches_default() {
         .and_then(toml::Value::as_float)
         .expect("ui/dylint.toml should contain [bumpy_road_function].threshold");
 
+    // Bit-pattern comparison: this pins the fixture to the constant exactly,
+    // so any drift in either is caught rather than tolerated.
     assert_eq!(
-        threshold, DEFAULT_THRESHOLD,
+        threshold.to_bits(),
+        DEFAULT_THRESHOLD.to_bits(),
         concat!(
             "ui/dylint.toml threshold must equal DEFAULT_THRESHOLD; ",
             "update the config file or the constant to keep them in sync"

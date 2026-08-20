@@ -51,41 +51,54 @@ fn given_version_and_target(world: &mut InstallerReleaseWorld, version: String, 
     world.target = target;
 }
 
+/// Parse the world's target string, reporting a descriptive error on failure.
+fn world_target(world: &InstallerReleaseWorld) -> Result<TargetTriple, String> {
+    TargetTriple::try_from(world.target.as_str())
+        .map_err(|error| format!("invalid target '{}': {error}", world.target))
+}
+
 #[given("a fake installer binary exists")]
-fn given_fake_binary_exists(world: &mut InstallerReleaseWorld) {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let bin_name = installer_packaging::binary_filename(
-        &TargetTriple::try_from(world.target.as_str()).expect("valid target"),
-    );
+fn given_fake_binary_exists(world: &mut InstallerReleaseWorld) -> Result<(), String> {
+    let temp = tempfile::tempdir().map_err(|error| format!("create temp dir: {error}"))?;
+    let bin_name = installer_packaging::binary_filename(&world_target(world)?);
     let binary_path = temp.path().join(&bin_name);
-    std::fs::write(&binary_path, b"fake-binary").expect("write fake binary");
+    std::fs::write(&binary_path, b"fake-binary")
+        .map_err(|error| format!("write fake binary: {error}"))?;
     world.binary_path = Some(binary_path);
     world.temp_dir = Some(temp);
+    Ok(())
 }
 
 #[given("the binary path does not exist")]
-fn given_binary_missing(world: &mut InstallerReleaseWorld) {
-    let temp = tempfile::tempdir().expect("temp dir");
+fn given_binary_missing(world: &mut InstallerReleaseWorld) -> Result<(), String> {
+    let temp = tempfile::tempdir().map_err(|error| format!("create temp dir: {error}"))?;
     world.binary_path = Some(temp.path().join("does-not-exist"));
     world.temp_dir = Some(temp);
+    Ok(())
 }
 
 #[when("the archive filename is computed")]
-fn when_archive_filename_computed(world: &mut InstallerReleaseWorld) {
-    world.computed_filename = installer_packaging::archive_filename(
-        &Version::new(&world.version),
-        &TargetTriple::try_from(world.target.as_str()).expect("valid target"),
-    );
+fn when_archive_filename_computed(world: &mut InstallerReleaseWorld) -> Result<(), String> {
+    world.computed_filename =
+        installer_packaging::archive_filename(&Version::new(&world.version), &world_target(world)?);
+    Ok(())
 }
 
 /// Run the packaging pipeline and store the result in the world.
-fn attempt_packaging(world: &mut InstallerReleaseWorld) {
-    let temp_dir = world.temp_dir.as_ref().expect("temp dir set");
-    let binary_path = world.binary_path.as_ref().expect("binary path set");
+fn attempt_packaging(world: &mut InstallerReleaseWorld) -> Result<(), String> {
+    let target = world_target(world)?;
+    let temp_dir = world
+        .temp_dir
+        .as_ref()
+        .ok_or_else(|| String::from("temp dir set"))?;
+    let binary_path = world
+        .binary_path
+        .as_ref()
+        .ok_or_else(|| String::from("binary path set"))?;
 
     let params = InstallerPackageParams {
         version: Version::new(&world.version),
-        target: TargetTriple::try_from(world.target.as_str()).expect("valid target"),
+        target,
         binary_path: binary_path.clone(),
         output_dir: temp_dir.path().to_path_buf(),
     };
@@ -94,13 +107,18 @@ fn attempt_packaging(world: &mut InstallerReleaseWorld) {
         Ok(output) => world.package_output = Some(output),
         Err(e) => world.packaging_error = Some(e),
     }
+    Ok(())
 }
 
 #[when("the installer is packaged")]
-fn when_installer_packaged(world: &mut InstallerReleaseWorld) { attempt_packaging(world); }
+fn when_installer_packaged(world: &mut InstallerReleaseWorld) -> Result<(), String> {
+    attempt_packaging(world)
+}
 
 #[when("packaging is attempted")]
-fn when_packaging_attempted(world: &mut InstallerReleaseWorld) { attempt_packaging(world); }
+fn when_packaging_attempted(world: &mut InstallerReleaseWorld) -> Result<(), String> {
+    attempt_packaging(world)
+}
 
 #[then("the archive filename is \"{expected}\"")]
 fn then_archive_filename_is(world: &mut InstallerReleaseWorld, expected: String) {
@@ -111,21 +129,25 @@ fn then_archive_filename_is(world: &mut InstallerReleaseWorld, expected: String)
 }
 
 #[then("the archive contains \"{expected_path}\"")]
-fn then_archive_contains(world: &mut InstallerReleaseWorld, expected_path: String) {
+fn then_archive_contains(
+    world: &mut InstallerReleaseWorld,
+    expected_path: String,
+) -> Result<(), String> {
+    let format = installer_packaging::archive_format(&world_target(world)?);
     let output = world
         .package_output
         .as_ref()
-        .expect("package output should be set");
+        .ok_or_else(|| String::from("package output should be set"))?;
 
-    let format = installer_packaging::archive_format(
-        &TargetTriple::try_from(world.target.as_str()).expect("valid target"),
-    );
-    let entries = read_archive_entries(&output.archive_path, format);
+    let entries = read_archive_entries(&output.archive_path, format)?;
 
-    assert!(
-        entries.contains(&expected_path),
-        "expected archive to contain '{expected_path}', found: {entries:?}"
-    );
+    if entries.contains(&expected_path) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected archive to contain '{expected_path}', found: {entries:?}"
+        ))
+    }
 }
 
 #[then("the binstall pkg-url ends with the archive filename")]
@@ -139,15 +161,16 @@ fn then_binstall_url_ends_with_filename(world: &mut InstallerReleaseWorld) {
 }
 
 #[then("a packaging error is returned")]
-fn then_packaging_error_returned(world: &mut InstallerReleaseWorld) {
+fn then_packaging_error_returned(world: &mut InstallerReleaseWorld) -> Result<(), String> {
     let err = world
         .packaging_error
         .as_ref()
-        .expect("expected packaging to fail, but it succeeded");
-    assert!(
-        matches!(err, InstallerPackagingError::BinaryNotFound(_)),
-        "expected BinaryNotFound, got {err:?}"
-    );
+        .ok_or_else(|| String::from("expected packaging to fail, but it succeeded"))?;
+    if matches!(err, InstallerPackagingError::BinaryNotFound(_)) {
+        Ok(())
+    } else {
+        Err(format!("expected BinaryNotFound, got {err:?}"))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +178,14 @@ fn then_packaging_error_returned(world: &mut InstallerReleaseWorld) {
 // ---------------------------------------------------------------------------
 
 /// Read entry paths from an archive file.
-fn read_archive_entries(path: &std::path::Path, format: ArchiveFormat) -> Vec<String> {
+///
+/// # Errors
+///
+/// Returns an error when the archive cannot be opened or its entries read.
+fn read_archive_entries(
+    path: &std::path::Path,
+    format: ArchiveFormat,
+) -> Result<Vec<String>, String> {
     match format {
         ArchiveFormat::Tgz => read_tgz_entries(path),
         ArchiveFormat::Zip => read_zip_entries(path),
@@ -163,32 +193,34 @@ fn read_archive_entries(path: &std::path::Path, format: ArchiveFormat) -> Vec<St
 }
 
 /// Read entry paths from a `.tgz` archive.
-fn read_tgz_entries(path: &std::path::Path) -> Vec<String> {
-    let file = std::fs::File::open(path).expect("open tgz");
+fn read_tgz_entries(path: &std::path::Path) -> Result<Vec<String>, String> {
+    let file = std::fs::File::open(path).map_err(|error| format!("open tgz: {error}"))?;
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
     archive
         .entries()
-        .expect("entries")
-        .map(|e| {
-            let entry = e.expect("valid tar entry");
-            entry
+        .map_err(|error| format!("list tgz entries: {error}"))?
+        .map(|entry| {
+            let archive_entry = entry.map_err(|error| format!("read tar entry: {error}"))?;
+            let entry_path = archive_entry
                 .path()
-                .expect("valid entry path")
-                .to_string_lossy()
-                .into_owned()
+                .map_err(|error| format!("read tar entry path: {error}"))?;
+            Ok(entry_path.to_string_lossy().into_owned())
         })
         .collect()
 }
 
 /// Read entry paths from a `.zip` archive.
-fn read_zip_entries(path: &std::path::Path) -> Vec<String> {
-    let file = std::fs::File::open(path).expect("open zip");
-    let archive = zip::ZipArchive::new(file).expect("open zip archive");
+fn read_zip_entries(path: &std::path::Path) -> Result<Vec<String>, String> {
+    let file = std::fs::File::open(path).map_err(|error| format!("open zip: {error}"))?;
+    let archive =
+        zip::ZipArchive::new(file).map_err(|error| format!("open zip archive: {error}"))?;
     (0..archive.len())
-        .map(|i| {
-            let entry = archive.name_for_index(i).expect("entry name");
-            entry.to_owned()
+        .map(|index| {
+            archive
+                .name_for_index(index)
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| format!("zip entry {index} has no name"))
         })
         .collect()
 }

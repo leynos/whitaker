@@ -50,13 +50,15 @@ fn when_register_suite(world: &RegistrationWorld) {
         register_suite_lints(&mut world.store.borrow_mut());
     }))
     .map_err(|panic| {
-        if let Some(message) = panic.downcast_ref::<&str>() {
-            (*message).to_owned()
-        } else if let Some(message) = panic.downcast_ref::<String>() {
-            message.clone()
-        } else {
-            "registration panicked with a non-string payload".to_owned()
-        }
+        panic.downcast_ref::<&str>().map_or_else(
+            || {
+                panic.downcast_ref::<String>().map_or_else(
+                    || "registration panicked with a non-string payload".to_owned(),
+                    Clone::clone,
+                )
+            },
+            |message| (*message).to_owned(),
+        )
     });
 
     *world.result.borrow_mut() = registration;

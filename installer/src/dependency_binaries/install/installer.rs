@@ -144,7 +144,7 @@ pub(crate) fn install_with(
 ) -> Result<PathBuf, DependencyBinaryInstallError> {
     let bin_dir = support
         .dirs
-        .bin_dir()
+        .executables()
         .ok_or(DependencyBinaryInstallError::MissingBinDir)?;
     fs::create_dir_all(bin_dir.as_path())?;
 

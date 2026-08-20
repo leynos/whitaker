@@ -9,6 +9,7 @@ use rstest::{fixture, rstest};
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_hir::attrs::{AttributeKind as HirAttributeKind, InlineAttr, OptimizeAttr};
 use rustc_span::{BytePos, DUMMY_SP, Span};
+use thin_vec::ThinVec;
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 
 use super::{
@@ -231,7 +232,7 @@ fn parsed_attribute_span_recovers_whitelisted_kinds() {
         (
             "target_feature",
             HirAttributeKind::TargetFeature {
-                features: Default::default(),
+                features: ThinVec::default(),
                 attr_span: span,
                 was_forced: false,
             },

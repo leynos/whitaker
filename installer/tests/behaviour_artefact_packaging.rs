@@ -385,8 +385,8 @@ fn list_archive_entries(world: &PackagingWorld) -> Result<Vec<String>, String> {
         .entries()
         .map_err(|e| format!("list archive entries: {e}"))?
     {
-        let entry = entry.map_err(|e| format!("read archive entry: {e}"))?;
-        let path = entry
+        let archive_entry = entry.map_err(|e| format!("read archive entry: {e}"))?;
+        let path = archive_entry
             .path()
             .map_err(|e| format!("read entry path: {e}"))?
             .to_string_lossy()

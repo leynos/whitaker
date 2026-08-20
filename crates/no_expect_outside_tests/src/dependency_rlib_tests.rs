@@ -82,11 +82,10 @@ fn resolve_dependency_rlib_selection(
 }
 
 #[rstest]
-#[case("newest", &NEWEST_ARTEFACTS, "libtokio-newer.rlib")]
-#[case("ties", &TIED_ARTEFACTS, "libtokio-alpha.rlib")]
+#[case::newest(&NEWEST_ARTEFACTS, "libtokio-newer.rlib")]
+#[case::ties(&TIED_ARTEFACTS, "libtokio-alpha.rlib")]
 fn dependency_rlib_selects_expected_artefact(
     selection_directory: TemporaryDirectory,
-    #[case] _directory_name: &str,
     #[case] artefacts: &[ArtefactSpec<'_>],
     #[case] expected_file_name: &str,
 ) {
@@ -129,7 +128,11 @@ impl TemporaryDirectory {
 }
 
 impl Drop for TemporaryDirectory {
-    fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+    fn drop(&mut self) {
+        // Best-effort cleanup: the directory lives under the OS temporary root,
+        // so a removal failure only leaks a fixture rather than failing a test.
+        let _cleanup_result = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Creates an empty `.rlib` fixture file at `directory/file_name` and returns

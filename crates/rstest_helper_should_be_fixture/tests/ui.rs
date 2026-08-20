@@ -75,22 +75,25 @@ fn trybuild_fixtures_compile_without_diagnostics() {
 /// releasing the lock mid-assertion, which would let a concurrent run append to
 /// the same summary path.
 struct ExampleHarness {
-    _lock: ExampleHarnessLock,
+    lock: ExampleHarnessLock,
 }
 
 impl ExampleHarness {
     fn acquire() -> Self {
-        let lock = ExampleHarnessLock::acquire().expect("example harness lock should be acquired");
-        Self { _lock: lock }
+        match ExampleHarnessLock::acquire() {
+            Ok(lock) => Self { lock },
+            Err(error) => panic!("example harness lock should be acquired: {error}"),
+        }
     }
 
     /// Compiles and runs one example while the lock is held.
     fn run_example(&self, example: &str) {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "examples";
-        whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+        let lock_path = self.lock.path().display();
+        whitaker::testing::ui::run_with_runner(crate_name, directory, |runner_crate, _| {
             run_test_runner(example, || {
-                let mut test = Test::example(crate_name, example);
+                let mut test = Test::example(runner_crate, example);
                 test.rustc_flags(["--test"]);
                 test.run();
             })
@@ -98,7 +101,8 @@ impl ExampleHarness {
         .unwrap_or_else(|error| {
             panic!(
                 "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
-                 \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+                 \"{crate_name}\", directory: \"{directory}\", lock: \"{lock_path}\", message: \
+                 {error} }}"
             )
         });
     }
@@ -113,9 +117,11 @@ impl ExampleHarness {
         let summary_path = unique_summary_path();
         with_env_var(COLLECTION_SUMMARY_ENV, summary_path.as_os_str(), || {
             self.run_example(example);
-            let summary = std::fs::read_to_string(&summary_path)
-                .expect("collection summary should be written");
-            let _ = std::fs::remove_file(&summary_path);
+            let summary = match std::fs::read_to_string(&summary_path) {
+                Ok(summary) => summary,
+                Err(error) => panic!("collection summary should be written: {error}"),
+            };
+            let _cleanup_result = std::fs::remove_file(&summary_path);
             summary
         })
     }

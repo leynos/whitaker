@@ -115,6 +115,7 @@ fn assert_has_test_like_attributes(
         assert_eq!(
             has_test_like_hir_attributes(&attrs, additional_test_attributes),
             expected,
+            "attribute segments {attr_segments:?} should report test-like as {expected}",
         );
     });
 }
@@ -131,7 +132,10 @@ fn has_test_like_hir_attributes_detects_test_attributes(#[case] case_index: usiz
         &[&["tokio", "test"]],
         &[&["core", "prelude", "v1", "test"]],
     ];
-    assert_has_test_like_attributes(test_cases[case_index], &[], true);
+    let segments = test_cases
+        .get(case_index)
+        .expect("case index should address a declared test case");
+    assert_has_test_like_attributes(segments, &[], true);
 }
 
 #[test]

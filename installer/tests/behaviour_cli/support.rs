@@ -217,8 +217,8 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
 }
 
 pub(super) fn get_output(cli_world: &CliWorld) -> Ref<'_, Output> {
-    let output = cli_world.output.borrow();
-    Ref::map(output, |opt| {
+    let output_slot = cli_world.output.borrow();
+    Ref::map(output_slot, |opt| {
         let Some(output) = opt.as_ref() else {
             panic!("output not set");
         };

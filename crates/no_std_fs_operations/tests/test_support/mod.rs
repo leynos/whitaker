@@ -220,12 +220,13 @@ mod tests {
         let config = fixture_dylint_config(crate_name, FixtureKind::CrateExclusion, true);
         let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
 
-        assert_eq!(
-            parsed["no_std_fs_operations"]["excluded_crates"][0]
-                .as_str()
-                .expect("excluded crate should be a string"),
-            crate_name
-        );
+        let excluded_crate = parsed
+            .get("no_std_fs_operations")
+            .and_then(|section| section.get("excluded_crates"))
+            .and_then(|entries| entries.get(0))
+            .and_then(toml::Value::as_str)
+            .expect("excluded crate should be a string");
+        assert_eq!(excluded_crate, crate_name);
         assert!(parsed.get("other").is_none(), "config was:\n{config}");
         assert!(parsed.get("injected").is_none(), "config was:\n{config}");
     }
@@ -237,14 +238,17 @@ mod tests {
         let manifest = std::fs::read_to_string(fixture.root().join("Cargo.toml"))?;
         let parsed: toml::Value = toml::from_str(&manifest)?;
 
-        assert_eq!(
-            parsed["package"]["name"]
-                .as_str()
-                .expect("package name should be a string"),
-            crate_name
+        let package_name = parsed
+            .get("package")
+            .and_then(|package| package.get("name"))
+            .and_then(toml::Value::as_str)
+            .expect("package name should be a string");
+        anyhow::ensure!(
+            package_name == crate_name,
+            "manifest package name should round-trip, manifest was:\n{manifest}"
         );
-        assert!(parsed.get("other").is_none(), "manifest was:\n{manifest}");
-        assert!(
+        anyhow::ensure!(parsed.get("other").is_none(), "manifest was:\n{manifest}");
+        anyhow::ensure!(
             parsed.get("injected").is_none(),
             "manifest was:\n{manifest}"
         );
@@ -257,12 +261,13 @@ mod tests {
         let config = fixture_dylint_config("my_app", FixtureKind::PathExclusion, true);
         let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
 
-        assert_eq!(
-            parsed["no_std_fs_operations"]["excluded_paths"][0]
-                .as_str()
-                .expect("excluded path should be a string"),
-            "my_app::guarded"
-        );
+        let excluded_path = parsed
+            .get("no_std_fs_operations")
+            .and_then(|section| section.get("excluded_paths"))
+            .and_then(|entries| entries.get(0))
+            .and_then(toml::Value::as_str)
+            .expect("excluded path should be a string");
+        assert_eq!(excluded_path, "my_app::guarded");
     }
 
     #[test]
@@ -270,11 +275,14 @@ mod tests {
         let config = fixture_dylint_config("my_app", FixtureKind::PathExclusion, false);
         let parsed: toml::Value = toml::from_str(&config).expect("config should parse as TOML");
 
+        let excluded_paths = parsed
+            .get("no_std_fs_operations")
+            .and_then(|section| section.get("excluded_paths"))
+            .and_then(toml::Value::as_array)
+            .expect("excluded_paths should be an array");
         assert!(
-            parsed["no_std_fs_operations"]["excluded_paths"]
-                .as_array()
-                .expect("excluded_paths should be an array")
-                .is_empty()
+            excluded_paths.is_empty(),
+            "no paths should be excluded, config was:\n{config}"
         );
     }
 
@@ -285,22 +293,20 @@ mod tests {
         let source = std::fs::read_to_string(fixture.root().join("src/lib.rs"))?;
 
         // The fixture must declare the module the config excludes.
-        let guarded_start = source.find("pub mod guarded").unwrap_or_else(|| {
-            panic!("fixture should declare a guarded module, source was:\n{source}")
-        });
+        let Some(guarded_start) = source.find("pub mod guarded") else {
+            anyhow::bail!("fixture should declare a guarded module, source was:\n{source}");
+        };
 
         // The `std::fs` usage must be the *only* one, and must sit inside the
         // guarded module. Otherwise a passing exclusion test could reflect an
         // accidental global suppression (or a stray crate-root usage) rather
         // than genuine module-scoped suppression.
         let fs_usages: Vec<usize> = source.match_indices("std::fs").map(|(i, _)| i).collect();
-        assert_eq!(
-            fs_usages.len(),
-            1,
-            "expected exactly one std::fs usage, source was:\n{source}"
-        );
-        assert!(
-            fs_usages[0] > guarded_start,
+        let [fs_usage] = fs_usages.as_slice() else {
+            anyhow::bail!("expected exactly one std::fs usage, source was:\n{source}");
+        };
+        anyhow::ensure!(
+            *fs_usage > guarded_start,
             "the std::fs usage must sit inside the guarded module, source was:\n{source}"
         );
         Ok(())

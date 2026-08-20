@@ -18,7 +18,10 @@ use toolchain_steps::{ToolchainWorld, world};
 // Import step definitions so rstest-bdd's scenario macro can discover them.
 // These imports appear unused to clippy because they're consumed by macro
 // expansion, not direct source-level calls.
-#[expect(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "step definitions are consumed by rstest-bdd macro expansion, not by direct calls"
+)]
 use toolchain_steps::{
     given_auto_detect_toolchain,
     given_auto_detect_toolchain_install,

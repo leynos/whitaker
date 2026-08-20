@@ -21,9 +21,9 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> { None }
-    fn bin_dir(&self) -> Option<PathBuf> { None }
-    fn whitaker_data_dir(&self) -> Option<PathBuf> { self.data_dir.clone() }
+    fn home(&self) -> Option<PathBuf> { None }
+    fn executables(&self) -> Option<PathBuf> { None }
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data_dir.clone() }
 }
 
 static PRUNE_HOOK_CALLED: AtomicBool = AtomicBool::new(false);

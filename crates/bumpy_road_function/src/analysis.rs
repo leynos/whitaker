@@ -224,6 +224,11 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
     context.into_intervals()
 }
 
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bump areas accumulate smoothed complexity samples, which are inherently \
+              floating-point"
+)]
 fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionContext) {
     if value >= context.threshold {
         if context.current_start.is_none() {

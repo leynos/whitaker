@@ -49,7 +49,7 @@ impl PanicInfo {
     /// Returns `true` when the closure has at least one interpolated panic
     /// and no plain (non-interpolating) panic.
     #[must_use]
-    pub(crate) const fn is_interpolated_only(&self) -> bool {
+    pub(crate) const fn is_interpolated_only(self) -> bool {
         self.has_interpolated_panic && !self.has_plain_panic
     }
 }
@@ -84,12 +84,12 @@ pub(crate) fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: ty::Ty<'tcx>) -> bool {
-    let ty = cx
+    let normalized = cx
         .tcx
         .normalize_erasing_regions(cx.typing_env(), ty::Unnormalized::new_wip(ty))
         .peel_refs();
 
-    let Some(adt) = ty.ty_adt_def() else {
+    let Some(adt) = normalized.ty_adt_def() else {
         return false;
     };
 

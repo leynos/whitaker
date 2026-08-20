@@ -51,8 +51,8 @@ fn ensure_error_matches<F>(
 where
     F: FnOnce(&ArtefactError) -> bool,
 {
-    let error = error.ok_or_else(|| format!("expected {field_name} validation to fail"))?;
-    if predicate(error) {
+    let observed = error.ok_or_else(|| format!("expected {field_name} validation to fail"))?;
+    if predicate(observed) {
         Ok(())
     } else {
         Err(format!("error variant mismatch for {field_name}"))

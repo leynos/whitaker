@@ -36,13 +36,13 @@ impl LintPolicy {
 ///     has_plain_panic: true,
 ///     has_interpolated_panic: false,
 /// };
-/// assert!(should_flag(&policy, &summary, &info, false));
+/// assert!(should_flag(policy, summary, info, false));
 /// ```
 #[must_use]
 pub(crate) const fn should_flag(
-    policy: &LintPolicy,
-    summary: &ContextSummary,
-    panic_info: &PanicInfo,
+    policy: LintPolicy,
+    summary: ContextSummary,
+    panic_info: PanicInfo,
     is_doctest: bool,
 ) -> bool {
     if !panic_info.panics {
@@ -153,13 +153,9 @@ mod tests {
     })]
     fn policy_evaluation(#[case] case: PolicyCase) {
         assert_eq!(
-            should_flag(
-                &case.policy,
-                &case.context,
-                &case.panic_info,
-                case.is_doctest
-            ),
-            case.should_flag
+            should_flag(case.policy, case.context, case.panic_info, case.is_doctest),
+            case.should_flag,
+            "policy evaluation should match the expected decision"
         );
     }
 }

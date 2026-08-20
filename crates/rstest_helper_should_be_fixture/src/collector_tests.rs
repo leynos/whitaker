@@ -230,11 +230,11 @@ fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
     collector
         .iter()
         .map(|(callee, records)| {
-            let spans = records
+            let recorded_spans = records
                 .iter()
                 .map(|record| (record.span.lo().0, record.span.hi().0))
                 .collect();
-            (callee.to_owned(), spans)
+            (callee.to_owned(), recorded_spans)
         })
         .collect()
 }

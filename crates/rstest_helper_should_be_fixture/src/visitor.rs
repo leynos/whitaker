@@ -130,7 +130,7 @@ impl CallSiteVisitor<'_, '_> {
             self.closure_span_fallbacks
                 .iter()
                 .rev()
-                .find_map(|span| whitaker::hir::recover_user_editable_hir_span(*span))
+                .find_map(|fallback| whitaker::hir::recover_user_editable_hir_span(*fallback))
         })
     }
 }
@@ -205,11 +205,13 @@ fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
     }
 }
 
+/// Parsed attributes never reach this helper because `attribute_path` filters
+/// them out; treating them as outer keeps the mapping total.
 fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
-    let hir::Attribute::Unparsed(item) = attr else {
-        unreachable!("attribute_path filters parsed attributes");
-    };
-    item.style
+    match attr {
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+    }
 }
 
 pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String {

@@ -30,10 +30,23 @@ use whitaker_installer::{
     },
 };
 
+/// Outcome the stubbed repository installer should simulate.
 enum RepositoryInstallerBehaviour {
+    /// Installation succeeds and the staged binary verifies.
     Success,
+    /// Installation succeeds but verification of the staged binary fails.
+    SuccessWithFailedVerification,
+    /// The release asset is absent from the repository.
     NotFound,
+    /// Installation fails with the given message.
     Failure(String),
+}
+
+impl RepositoryInstallerBehaviour {
+    /// Whether the stub stages a runnable binary for this behaviour.
+    const fn installs_binary(&self) -> bool {
+        matches!(*self, Self::Success | Self::SuccessWithFailedVerification)
+    }
 }
 
 struct StubRepositoryInstaller {
@@ -48,20 +61,23 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
         dirs: &dyn BaseDirs,
     ) -> std::result::Result<PathBuf, DependencyBinaryInstallError> {
         match &self.behaviour {
-            RepositoryInstallerBehaviour::Success => dirs.bin_dir().map_or_else(
-                || Err(DependencyBinaryInstallError::MissingBinDir),
-                |bin_dir| {
-                    // Stage a runnable fake at the returned path: dylint-link
-                    // verification probes the extracted binary directly. The
-                    // platform suffix keeps the fake executable on Windows.
-                    let installed_path = path_binary_location(
-                        &bin_dir,
-                        &format!("{}-{}", dependency.package(), target),
-                    );
-                    write_fake_binary(&installed_path, true)?;
-                    Ok(installed_path)
-                },
-            ),
+            RepositoryInstallerBehaviour::Success
+            | RepositoryInstallerBehaviour::SuccessWithFailedVerification => {
+                dirs.executables().map_or_else(
+                    || Err(DependencyBinaryInstallError::MissingBinDir),
+                    |bin_dir| {
+                        // Stage a runnable fake at the returned path: dylint-link
+                        // verification probes the extracted binary directly. The
+                        // platform suffix keeps the fake executable on Windows.
+                        let installed_path = path_binary_location(
+                            &bin_dir,
+                            &format!("{}-{}", dependency.package(), target),
+                        );
+                        write_fake_binary(&installed_path, true)?;
+                        Ok(installed_path)
+                    },
+                )
+            }
             RepositoryInstallerBehaviour::NotFound => Err(DependencyBinaryInstallError::NotFound {
                 url: format!(
                     "{}/releases/download/v{}/{}",
@@ -84,7 +100,6 @@ impl DependencyBinaryInstaller for StubRepositoryInstaller {
 struct DependencyBinaryWorld {
     missing_tool: Option<String>,
     repository_behaviour: Option<RepositoryInstallerBehaviour>,
-    should_repository_verification_fail: bool,
     expect_missing_dylint_link: bool,
     is_binstall_available: bool,
     cargo_binstall_failure: Option<String>,
@@ -121,8 +136,7 @@ fn given_repository_failure(world: &mut DependencyBinaryWorld, message: String) 
 
 #[given("the repository installer succeeds but verification fails")]
 fn given_repository_verification_failure(world: &mut DependencyBinaryWorld) {
-    world.repository_behaviour = Some(RepositoryInstallerBehaviour::Success);
-    world.should_repository_verification_fail = true;
+    world.repository_behaviour = Some(RepositoryInstallerBehaviour::SuccessWithFailedVerification);
 }
 
 #[given("dylint-link is missing from PATH after installation")]
@@ -156,10 +170,11 @@ fn given_unsupported_target(world: &mut DependencyBinaryWorld) {
 }
 
 #[given("the dependency manifest is loaded")]
-fn given_manifest_loaded(world: &mut DependencyBinaryWorld) {
+fn given_manifest_loaded(world: &mut DependencyBinaryWorld) -> Result<(), String> {
     world.dependencies = required_dependency_binaries()
-        .expect("dependency manifest should load")
+        .map_err(|error| format!("dependency manifest should load: {error}"))?
         .to_vec();
+    Ok(())
 }
 
 fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecutor {
@@ -167,14 +182,16 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::NotFound)
     );
-    let expect_repository_verification = matches!(
+    let expect_repository_verification = world
+        .repository_behaviour
+        .as_ref()
+        .is_some_and(RepositoryInstallerBehaviour::installs_binary)
+        && !world.is_unsupported_target;
+    let should_verification_fail = matches!(
         world.repository_behaviour,
-        Some(RepositoryInstallerBehaviour::Success)
-    ) && !world.is_unsupported_target;
-    let repository_verification = match (
-        expect_repository_verification,
-        world.should_repository_verification_fail,
-    ) {
+        Some(RepositoryInstallerBehaviour::SuccessWithFailedVerification)
+    );
+    let repository_verification = match (expect_repository_verification, should_verification_fail) {
         (false, _) => RepositoryVerification::Skip,
         (true, true) => RepositoryVerification::Fails,
         (true, false) => RepositoryVerification::Succeeds,
@@ -192,33 +209,36 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
     ))
 }
 
+/// Stages a runnable `dylint-link` fake in the executables directory so PATH
+/// lookups succeed.
+fn stage_dylint_link_on_path(bin_dir: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    let dylint_link_path = bin_dir.join("dylint-link.cmd");
+    #[cfg(not(windows))]
+    let dylint_link_path = bin_dir.join("dylint-link");
+    write_fake_binary(&dylint_link_path, true)
+        .map_err(|error| format!("write fake dylint-link: {error}"))
+}
+
 fn run_install_with_dylint_link_on_path(
-    expect_missing_dylint_link: bool,
     bin_dir: &Path,
     run_install: impl FnOnce() -> std::result::Result<(), whitaker_installer::error::InstallerError>,
 ) -> std::result::Result<(), whitaker_installer::error::InstallerError> {
     let _guard = env_test_guard();
-    if !expect_missing_dylint_link {
-        #[cfg(windows)]
-        let dylint_link_path = bin_dir.join("dylint-link.cmd");
-        #[cfg(not(windows))]
-        let dylint_link_path = bin_dir.join("dylint-link");
-        write_fake_binary(&dylint_link_path, true).expect("write fake dylint-link");
-    }
     with_var("PATH", Some(bin_dir), run_install)
 }
 
 #[when("dependency installation runs")]
-fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
+fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) -> Result<(), String> {
     let tool = world
         .missing_tool
         .clone()
-        .expect("missing tool should be configured");
+        .ok_or_else(|| String::from("missing tool should be configured"))?;
     let executor = build_stub_executor(world, &tool);
     let repository_installer = StubRepositoryInstaller {
-        behaviour: world.repository_behaviour.take().unwrap_or(
-            RepositoryInstallerBehaviour::Failure("missing repository".to_owned()),
-        ),
+        behaviour: world.repository_behaviour.take().unwrap_or_else(|| {
+            RepositoryInstallerBehaviour::Failure("missing repository".to_owned())
+        }),
     };
     let status = DylintToolStatus {
         cargo_dylint: tool != "cargo-dylint",
@@ -228,13 +248,21 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
     let target = if world.is_unsupported_target {
         None
     } else {
-        Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"))
+        Some(
+            TargetTriple::try_from("x86_64-unknown-linux-gnu")
+                .map_err(|error| format!("valid target: {error}"))?,
+        )
     };
-    let bin_dir_temp = tempfile::tempdir().expect("bin dir tempdir should be created");
+    let bin_dir_temp = tempfile::tempdir()
+        .map_err(|error| format!("bin dir tempdir should be created: {error}"))?;
     let bin_dir = bin_dir_temp.path().to_path_buf();
     let dirs = StubDirs {
         bin_dir: Some(bin_dir.clone()),
     };
+    let is_dylint_link = tool == "dylint-link";
+    if is_dylint_link && !world.expect_missing_dylint_link {
+        stage_dylint_link_on_path(&bin_dir)?;
+    }
     let run_install = || {
         install_dylint_tools_with_options(
             &executor,
@@ -248,16 +276,13 @@ fn when_dependency_installation_runs(world: &mut DependencyBinaryWorld) {
             },
         )
     };
-    world.install_result = Some(if tool == "dylint-link" {
-        run_install_with_dylint_link_on_path(
-            world.expect_missing_dylint_link,
-            &bin_dir,
-            run_install,
-        )
+    world.install_result = Some(if is_dylint_link {
+        run_install_with_dylint_link_on_path(&bin_dir, run_install)
     } else {
         run_install()
     });
     executor.assert_finished();
+    Ok(())
 }
 
 #[when("provenance markdown is rendered")]
@@ -265,22 +290,36 @@ fn when_provenance_markdown_rendered(world: &mut DependencyBinaryWorld) {
     world.provenance = Some(render_provenance_markdown(&world.dependencies));
 }
 
-#[then("the install succeeds")]
-fn then_install_succeeds(world: &mut DependencyBinaryWorld) {
-    let result = world
+/// Borrows the recorded install outcome, failing when the When step has not run.
+fn install_result(
+    world: &DependencyBinaryWorld,
+) -> Result<&std::result::Result<(), whitaker_installer::error::InstallerError>, String> {
+    world
         .install_result
         .as_ref()
-        .expect("install result should exist");
-    assert!(result.is_ok(), "expected success, got {result:?}");
+        .ok_or_else(|| String::from("install result should exist"))
+}
+
+#[then("the install succeeds")]
+fn then_install_succeeds(world: &mut DependencyBinaryWorld) -> Result<(), String> {
+    let result = install_result(world)?;
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => Err(format!("expected success, got {error:?}")),
+    }
 }
 
 #[then("stderr contains \"{expected}\"")]
-fn then_stderr_contains(world: &mut DependencyBinaryWorld, expected: String) {
-    let stderr = String::from_utf8(world.stderr.clone()).expect("stderr should be UTF-8");
-    assert!(
-        stderr.contains(&expected),
-        "expected stderr to contain {expected:?}, got {stderr:?}"
-    );
+fn then_stderr_contains(world: &mut DependencyBinaryWorld, expected: String) -> Result<(), String> {
+    let stderr = String::from_utf8(world.stderr.clone())
+        .map_err(|error| format!("stderr should be UTF-8: {error}"))?;
+    if stderr.contains(&expected) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected stderr to contain {expected:?}, got {stderr:?}"
+        ))
+    }
 }
 
 #[then("the install fails for \"{tool}\" with message containing \"{expected}\"")]
@@ -288,36 +327,45 @@ fn then_install_fails_with_message(
     world: &mut DependencyBinaryWorld,
     tool: String,
     expected: String,
-) {
-    let result = world
-        .install_result
-        .as_ref()
-        .expect("install result should exist");
-    match result {
-        Err(whitaker_installer::error::InstallerError::DependencyInstall {
-            tool: actual_tool,
-            message,
-        }) => {
-            assert_eq!(actual_tool, &tool);
-            assert!(
-                message.contains(&expected),
-                "expected error message to contain {expected:?}, got {message:?}"
-            );
-        }
-        other => panic!("expected dependency install error, got {other:?}"),
+) -> Result<(), String> {
+    let result = install_result(world)?;
+    let Err(whitaker_installer::error::InstallerError::DependencyInstall {
+        tool: actual_tool,
+        message,
+    }) = result
+    else {
+        return Err(format!("expected dependency install error, got {result:?}"));
+    };
+    if actual_tool != &tool {
+        return Err(format!(
+            "expected failure for {tool:?}, got {actual_tool:?}"
+        ));
+    }
+    if message.contains(&expected) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected error message to contain {expected:?}, got {message:?}"
+        ))
     }
 }
 
 #[then("the provenance contains \"{expected}\"")]
-fn then_provenance_contains(world: &mut DependencyBinaryWorld, expected: String) {
+fn then_provenance_contains(
+    world: &mut DependencyBinaryWorld,
+    expected: String,
+) -> Result<(), String> {
     let provenance = world
         .provenance
         .as_ref()
-        .expect("provenance should have been rendered");
-    assert!(
-        provenance.contains(&expected),
-        "expected provenance to contain {expected:?}, got {provenance:?}"
-    );
+        .ok_or_else(|| String::from("provenance should have been rendered"))?;
+    if provenance.contains(&expected) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected provenance to contain {expected:?}, got {provenance:?}"
+        ))
+    }
 }
 
 #[scenario(path = "tests/features/dependency_binaries.feature", index = 0)]

@@ -78,9 +78,9 @@ fn normalizes_numeric_thresholds_to_two() {
 #[case::blank(vec![" ".to_owned()], vec!["case", "values", "files", "future", "context"])]
 fn normalizes_provider_attributes(#[case] input: Vec<String>, #[case] expected: Vec<&str>) {
     let normalized = normalize_provider_attributes(input);
-    let expected: Vec<String> = expected.into_iter().map(str::to_owned).collect();
+    let expected_owned: Vec<String> = expected.into_iter().map(str::to_owned).collect();
 
-    assert_eq!(normalized, expected);
+    assert_eq!(normalized, expected_owned);
 }
 
 #[rstest]
@@ -154,7 +154,7 @@ fn applying_crate_configuration_initializes_pass_state() {
         ..Config::default()
     };
 
-    pass.apply_crate_configuration(config.clone(), SharedConfig::default());
+    pass.apply_crate_configuration(config.clone(), &SharedConfig::default());
 
     assert_eq!(pass.config, config.normalized());
     assert!(pass.detection_options.use_expansion_trace_fallback());
@@ -174,7 +174,7 @@ fn check_crate_configuration_loads_and_normalizes_config() {
 
     pass.apply_loaded_crate_configuration(
         loaded_configuration::<String>(Ok(Some(config))),
-        SharedConfig::default(),
+        &SharedConfig::default(),
     );
 
     assert_eq!(pass.config.min_calls, 2);

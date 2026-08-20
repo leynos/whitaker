@@ -27,7 +27,7 @@ pub fn prebuilt_library_dir(
     target: &str,
 ) -> Result<Utf8PathBuf> {
     let data_dir = dirs
-        .whitaker_data_dir()
+        .whitaker_data()
         .ok_or_else(|| InstallerError::StagingFailed {
             reason: "could not determine Whitaker data directory".to_owned(),
         })?;
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn prebuilt_library_dir_builds_expected_path() {
         let mut dirs = MockBaseDirs::new();
-        dirs.expect_whitaker_data_dir()
+        dirs.expect_whitaker_data()
             .returning(|| Some(PathBuf::from("/home/test/.local/share/whitaker")));
 
         let result = prebuilt_library_dir(&dirs, "nightly-2026-05-28", "x86_64-unknown-linux-gnu")
@@ -78,7 +78,7 @@ mod tests {
         #[case] expected_reason: &str,
     ) {
         let mut dirs = MockBaseDirs::new();
-        dirs.expect_whitaker_data_dir()
+        dirs.expect_whitaker_data()
             .return_once(move || data_dir.clone());
 
         let err = prebuilt_library_dir(&dirs, "nightly-2026-05-28", "x86_64-unknown-linux-gnu")
@@ -95,7 +95,7 @@ mod tests {
         use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
         let mut dirs = MockBaseDirs::new();
-        dirs.expect_whitaker_data_dir().return_once(|| {
+        dirs.expect_whitaker_data().return_once(|| {
             Some(PathBuf::from(OsString::from_vec(vec![
                 b'/', b't', b'm', b'p', b'/', 0xff,
             ])))

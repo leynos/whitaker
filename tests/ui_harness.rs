@@ -128,7 +128,11 @@ fn assert_absolute_error(harness_world: &HarnessWorld, path: String) {
     let borrow = harness_world.harness_result.borrow();
     match borrow.as_ref() {
         Some(Err(HarnessError::AbsoluteDirectory { directory })) => {
-            assert_eq!(directory, &Utf8PathBuf::from(path));
+            assert_eq!(
+                directory,
+                &Utf8PathBuf::from(path),
+                "the rejected directory should be reported verbatim",
+            );
         }
         Some(Ok(())) => panic!("expected an error but harness succeeded"),
         Some(Err(error)) => panic!("expected an absolute directory error, found {error}"),
@@ -142,7 +146,10 @@ fn assert_runner_failure(harness_world: &HarnessWorld, snippet: StepString) {
     let snippet_value = snippet.into_inner();
     match borrow.as_ref() {
         Some(Err(HarnessError::RunnerFailure { message, .. })) => {
-            assert!(message.contains(snippet_value.as_str()));
+            assert!(
+                message.contains(snippet_value.as_str()),
+                "runner failure should mention {snippet_value}, got: {message}",
+            );
         }
         Some(Ok(())) => panic!("expected an error but harness succeeded"),
         Some(Err(error)) => panic!("expected a runner failure error, found {error}"),

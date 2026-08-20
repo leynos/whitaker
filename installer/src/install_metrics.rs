@@ -266,7 +266,7 @@ pub fn record_install_at_path(
 
 fn metrics_path(dirs: &dyn BaseDirs) -> Result<PathBuf, InstallMetricsError> {
     let data_dir = dirs
-        .whitaker_data_dir()
+        .whitaker_data()
         .ok_or(InstallMetricsError::MissingDataDirectory)?;
     Ok(data_dir.join(METRICS_DIRNAME).join(METRICS_FILENAME))
 }

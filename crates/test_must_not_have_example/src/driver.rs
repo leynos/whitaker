@@ -35,12 +35,30 @@ struct Config {
     additional_test_attributes: Vec<String>,
 }
 
-dylint_linting::impl_late_lint! {
-    pub TEST_MUST_NOT_HAVE_EXAMPLE,
-    Warn,
-    "test functions should not include examples or fenced code in documentation",
-    TestMustNotHaveExample::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::TestMustNotHaveExample;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when a test function's documentation contains an example.
+        pub TEST_MUST_NOT_HAVE_EXAMPLE,
+        Warn,
+        "test functions should not include examples or fenced code in documentation",
+        TestMustNotHaveExample::default()
+    }
 }
+
+pub use declaration::TEST_MUST_NOT_HAVE_EXAMPLE;
 
 /// Lint pass that checks test documentation for example sections.
 pub struct TestMustNotHaveExample {
@@ -95,7 +113,7 @@ macro_rules! impl_check_method {
                 let attrs = cx.tcx.hir_attrs(item.hir_id());
                 self.check_function_item(
                     cx,
-                    ItemKindInfo::$variant {
+                    &ItemKindInfo::$variant {
                         ident: &item.ident,
                         attrs,
                     },
@@ -145,7 +163,7 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
                 return;
             };
             let attrs = cx.tcx.hir_attrs(item.hir_id());
-            self.check_function_item(cx, ItemKindInfo::Item { ident, attrs }, Some(item));
+            self.check_function_item(cx, &ItemKindInfo::Item { ident, attrs }, Some(item));
         }
     }
 
@@ -164,11 +182,7 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
 }
 
 impl TestMustNotHaveExample {
-    fn detect_violation(
-        &self,
-        attrs: &[hir::Attribute],
-        is_test: bool,
-    ) -> Option<DocExampleViolation> {
+    fn detect_violation(attrs: &[hir::Attribute], is_test: bool) -> Option<DocExampleViolation> {
         if !is_test {
             return None;
         }
@@ -184,7 +198,7 @@ impl TestMustNotHaveExample {
     fn emit_violation(
         &self,
         cx: &LateContext<'_>,
-        function: FunctionSite<'_>,
+        function: &FunctionSite<'_>,
         violation: DocExampleViolation,
     ) {
         let messages = localized_messages(&self.localizer, function.name, violation);
@@ -206,20 +220,26 @@ impl TestMustNotHaveExample {
     fn check_function_item<'tcx>(
         &mut self,
         cx: &LateContext<'tcx>,
-        item_info: ItemKindInfo<'_>,
+        item_info: &ItemKindInfo<'_>,
         item: Option<&'tcx hir::Item<'tcx>>,
     ) {
         let attrs = item_info.attrs();
-        let is_test = if let Some(item) = item {
-            is_test_function_item(cx, item, attrs, self.additional_test_attributes.as_slice())
-        } else {
-            has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice())
-        };
+        let is_test = item.map_or_else(
+            || has_test_like_hir_attributes(attrs, self.additional_test_attributes.as_slice()),
+            |test_item| {
+                is_test_function_item(
+                    cx,
+                    test_item,
+                    attrs,
+                    self.additional_test_attributes.as_slice(),
+                )
+            },
+        );
 
-        if let Some(violation) = self.detect_violation(attrs, is_test) {
+        if let Some(violation) = Self::detect_violation(attrs, is_test) {
             self.emit_violation(
                 cx,
-                FunctionSite {
+                &FunctionSite {
                     name: item_info.ident().name.as_str(),
                     span: item_info.ident().span,
                 },
