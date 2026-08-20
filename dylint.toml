@@ -12,4 +12,40 @@
 # reports `whitaker_common`, not the hyphenated Cargo package name. The
 # whitaker crate contains the UI test harness which needs ambient access to
 # copy compiled lint libraries during test execution.
-excluded_crates = ["whitaker_installer", "whitaker_common", "whitaker"]
+#
+# Integration-test targets compile as their own crates named after the test
+# file, so they are not covered by the `whitaker_common` entry above.
+# `i18n_packaging` (`common/tests/i18n_packaging.rs`) drives `cargo package`
+# and inspects the resulting `target/package` directory; both are ambient by
+# construction and cannot be scoped to a `cap_std` root.
+#
+# The installer's packaging binaries (`whitaker-package-lints`,
+# `whitaker-package-installer`, `whitaker-package-dependency-binary`) are
+# separate crates from `whitaker_installer`. They write release archives,
+# checksums, and manifests to output directories supplied by Cargo or CI, so
+# their roots are ambient by construction and cannot be scoped to a `cap_std`
+# root.
+#
+# The installer's behavioural integration tests each compile as their own crate
+# named after the test file. They stage fixture trees, permission-denied
+# directories, and packaged archives at ambient temporary paths, and several
+# read repository documentation relative to `CARGO_MANIFEST_DIR`. Migrating
+# them to `cap_std` would mean re-rooting fixtures the code under test then
+# reopens by absolute path, so they are excluded rather than half-migrated.
+excluded_crates = [
+    "whitaker_installer",
+    "whitaker_common",
+    "whitaker",
+    "i18n_packaging",
+    "whitaker_package_lints",
+    "whitaker_package_installer",
+    "whitaker_package_dependency_binary",
+    "behaviour_artefact_packaging",
+    "behaviour_cli",
+    "behaviour_docs",
+    "behaviour_installer_release",
+    "behaviour_prebuilt",
+    "behaviour_staging",
+    "behaviour_toolchain",
+    "behaviour_workflows",
+]

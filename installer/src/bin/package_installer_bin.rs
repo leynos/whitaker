@@ -83,6 +83,8 @@ fn run(cli: Cli) -> Result<(), CliError> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the installer packaging command.
+
     use clap::Parser;
     use rstest::rstest;
 

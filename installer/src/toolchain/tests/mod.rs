@@ -71,7 +71,10 @@ fn rejects_invalid_toolchain_file(#[case] contents: &str, #[case] expected_reaso
     assert_parse_fails_with_reason(contents, expected_reason, parse_toolchain_channel);
 }
 
-fn run_missing_toolchain_install_test(extra: &[&str], expected_components: &[&str]) {
+fn run_missing_toolchain_install_test(
+    extra: &[&str],
+    expected_components: &[&str],
+) -> Result<ToolchainInstallStatus> {
     let channel = "nightly-2026-05-28";
     let toolchain = test_toolchain(channel);
     let mut runner = MockCommandRunner::new();
@@ -97,11 +100,7 @@ fn run_missing_toolchain_install_test(extra: &[&str], expected_components: &[&st
 
     expect_rustc_version(&mut runner, &mut seq, channel, 0);
 
-    let status = toolchain
-        .ensure_installed_with(&runner, extra)
-        .expect("toolchain should install");
-
-    assert!(status.installed_toolchain());
+    toolchain.ensure_installed_with(&runner, extra)
 }
 
 #[rstest]
@@ -117,10 +116,16 @@ fn ensure_installed_installs_missing_toolchain(
     #[case] extra: Vec<&'static str>,
     #[case] expected_components: Vec<&'static str>,
 ) {
-    run_missing_toolchain_install_test(&extra, &expected_components);
+    let status = run_missing_toolchain_install_test(&extra, &expected_components)
+        .expect("toolchain should install");
+
+    assert!(status.installed_toolchain());
 }
 
-fn run_component_installation_test(extra: &[&str], expected: &[&str]) {
+fn run_component_installation_test(
+    extra: &[&str],
+    expected: &[&str],
+) -> Result<ToolchainInstallStatus> {
     let channel = "nightly-2026-05-28";
     let toolchain = test_toolchain(channel);
     let mut runner = MockCommandRunner::new();
@@ -134,11 +139,7 @@ fn run_component_installation_test(extra: &[&str], expected: &[&str]) {
         .in_sequence(&mut seq)
         .returning(|_, _| Ok(output_with_status(0)));
 
-    let status = toolchain
-        .ensure_installed_with(&runner, extra)
-        .expect("toolchain should be ready");
-
-    assert!(!status.installed_toolchain());
+    toolchain.ensure_installed_with(&runner, extra)
 }
 
 #[rstest]
@@ -151,7 +152,10 @@ fn ensure_installed_adds_correct_components(
     #[case] extra: Vec<&'static str>,
     #[case] expected: Vec<&'static str>,
 ) {
-    run_component_installation_test(&extra, &expected);
+    let status =
+        run_component_installation_test(&extra, &expected).expect("toolchain should be ready");
+
+    assert!(!status.installed_toolchain());
 }
 
 #[test]
@@ -187,19 +191,18 @@ fn install_components_with_failure_reports_all_components() {
         .install_components_with(&runner, &[CRANELIFT_COMPONENT])
         .expect_err("component installation should fail");
 
-    assert!(
-        matches!(
-            err,
-            InstallerError::ToolchainComponentInstallFailed {
-                toolchain: ref failed_toolchain,
-                components: ref failed_components,
-                ref message,
-            } if failed_toolchain == "nightly-2026-05-28"
-                && failed_components == &expected_component_list
-                && message == COMPONENT_INSTALL_FAILURE_MESSAGE
-        ),
-        "expected ToolchainComponentInstallFailed with all components, got {err:?}"
-    );
+    let InstallerError::ToolchainComponentInstallFailed {
+        toolchain: ref failed_toolchain,
+        components: ref failed_components,
+        ref message,
+    } = err
+    else {
+        panic!("expected ToolchainComponentInstallFailed, got {err:?}");
+    };
+
+    assert_eq!(failed_toolchain, "nightly-2026-05-28");
+    assert_eq!(failed_components, &expected_component_list);
+    assert_eq!(message, COMPONENT_INSTALL_FAILURE_MESSAGE);
 }
 
 #[rstest]

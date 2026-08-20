@@ -31,9 +31,9 @@ pub(super) fn fragment(input: &FragmentInput<'_>) -> TokenFragment {
     )
 }
 
-pub(super) fn pair(left: &str, right: &str) -> CandidatePair {
+/// Builds a canonical candidate pair, yielding `None` for a degenerate self-pair.
+pub(super) fn pair(left: &str, right: &str) -> Option<CandidatePair> {
     CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-        .unwrap_or_else(|| panic!("pair `{left}` and `{right}` must be distinct"))
 }
 
 pub(super) fn config() -> TokenPassConfig {

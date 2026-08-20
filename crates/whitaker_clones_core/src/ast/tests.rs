@@ -80,7 +80,9 @@ fn deeply_nested_trees_extract_features_and_hash_without_recursion() {
 
 #[rstest]
 fn kind_counts_record_depth_resolved_counts() {
-    let counts = kind_counts(&expect_feature_tree());
+    let tree = feature_tree().expect("static test span should be valid");
+
+    let counts = kind_counts(&tree);
 
     let expected = [
         (KindId::new(1), Depth::root(), 1),
@@ -95,7 +97,9 @@ fn kind_counts_record_depth_resolved_counts() {
 
 #[rstest]
 fn weighted_histogram_applies_dyadic_depth_weights() {
-    let histogram = kind_histogram(&expect_feature_tree());
+    let tree = feature_tree().expect("static test span should be valid");
+
+    let histogram = kind_histogram(&tree);
 
     assert_eq!(
         histogram.get(KindId::new(1)).map(KindWeight::get),
@@ -129,7 +133,9 @@ fn weighted_histogram_accumulates_four_equal_depth_one_kinds() {
 
 #[rstest]
 fn production_multiset_records_bigrams_and_trigrams() {
-    let productions = production_multiset(&expect_feature_tree());
+    let tree = feature_tree().expect("static test span should be valid");
+
+    let productions = production_multiset(&tree);
 
     assert_eq!(
         productions.count(Production::Bigram(KindId::new(1), KindId::new(2))),
@@ -159,32 +165,26 @@ fn production_multiset_records_bigrams_and_trigrams() {
 
 #[rstest]
 fn canonical_hash_is_stable_for_equivalent_trees() {
-    assert_eq!(
-        canonical_hash(&expect_feature_tree()),
-        canonical_hash(&expect_feature_tree())
-    );
+    let first = feature_tree().expect("static test span should be valid");
+    let second = feature_tree().expect("static test span should be valid");
+
+    assert_eq!(canonical_hash(&first), canonical_hash(&second));
 }
 
 #[rstest]
 fn canonical_hash_is_sensitive_to_child_order() {
+    let tree = feature_tree().expect("static test span should be valid");
     let reordered = reordered_tree().expect("static test span should be valid");
-    assert_ne!(
-        canonical_hash(&expect_feature_tree()),
-        canonical_hash(&reordered)
-    );
+
+    assert_ne!(canonical_hash(&tree), canonical_hash(&reordered));
 }
 
 #[rstest]
 fn canonical_hash_is_sensitive_to_leaf_class() {
+    let tree = feature_tree().expect("static test span should be valid");
     let different = different_leaf_tree().expect("static test span should be valid");
-    assert_ne!(
-        canonical_hash(&expect_feature_tree()),
-        canonical_hash(&different)
-    );
-}
 
-fn expect_feature_tree() -> NormalizedTree {
-    feature_tree().expect("static test span should be valid")
+    assert_ne!(canonical_hash(&tree), canonical_hash(&different));
 }
 
 fn feature_tree() -> AstResult<NormalizedTree> {
@@ -240,7 +240,7 @@ fn literal(kind: KindId) -> NormalizedNode {
 
 #[rstest]
 fn feature_functions_reflect_tree_contents() {
-    let expected = expect_feature_tree();
+    let expected = feature_tree().expect("static test span should be valid");
     let distinct = tree_with_root(NormalizedNode::new(
         KindId::new(9),
         None,

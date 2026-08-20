@@ -6,7 +6,7 @@
 use std::{
     borrow::Cow,
     cell::RefCell,
-    sync::{Mutex, MutexGuard},
+    sync::{Mutex, MutexGuard, PoisonError},
 };
 
 use logtest::Logger;
@@ -52,9 +52,11 @@ struct HelperWorld {
 
 impl HelperWorld {
     fn new() -> Self {
+        // The guard protects only process-wide environment mutation; a
+        // poisoned lock carries no invalid state, so recovering is safe.
         let guard = ENVIRONMENT_LOCK
             .lock()
-            .unwrap_or_else(|error| panic!("environment lock poisoned: {error}"));
+            .unwrap_or_else(PoisonError::into_inner);
 
         Self {
             configuration: RefCell::new(None),
@@ -86,21 +88,24 @@ impl HelperWorld {
         self.localizer.borrow_mut().replace(localizer);
     }
 
-    fn ensure_localizer(&self) -> Localizer {
+    fn ensure_localizer(&self) -> Result<Localizer, String> {
         self.localizer
             .borrow()
             .as_ref()
             .cloned()
-            .unwrap_or_else(|| panic!("localizer should be initialized"))
+            .ok_or_else(|| String::from("localizer should be initialized"))
     }
 
-    fn assert_locale(&self, expected: &str) {
-        let localizer = self.ensure_localizer();
-        assert_eq!(
-            localizer.locale(),
-            expected,
-            "expected resolved locale `{expected}`"
-        );
+    fn assert_locale(&self, expected: &str) -> Result<(), String> {
+        let localizer = self.ensure_localizer()?;
+        let actual = localizer.locale();
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(format!(
+                "expected resolved locale `{expected}`, but found `{actual}`"
+            ))
+        }
     }
 
     fn set_message_key(&self, key: String) { self.message_key.borrow_mut().replace(key); }
@@ -141,13 +146,13 @@ impl HelperWorld {
         *self.arguments.borrow_mut() = args;
     }
 
-    fn resolve_messages(&self) {
-        let localizer = self.ensure_localizer();
+    fn resolve_messages(&self) -> Result<(), String> {
+        let localizer = self.ensure_localizer()?;
         let key = self
             .message_key
             .borrow()
             .clone()
-            .unwrap_or_else(|| panic!("a message key should be configured"));
+            .ok_or_else(|| String::from("a message key should be configured"))?;
         let args = self.arguments.borrow().clone();
         let fallback = self.ensure_fallback();
 
@@ -166,14 +171,15 @@ impl HelperWorld {
         );
 
         self.result.borrow_mut().replace(messages);
+        Ok(())
     }
 
-    fn resolved_messages(&self) -> DiagnosticMessageSet {
+    fn resolved_messages(&self) -> Result<DiagnosticMessageSet, String> {
         self.result
             .borrow()
             .as_ref()
             .cloned()
-            .unwrap_or_else(|| panic!("diagnostic messages should be resolved"))
+            .ok_or_else(|| String::from("diagnostic messages should be resolved"))
     }
 
     fn recorded_messages(&self) -> Vec<String> { self.emitter.recorded_messages() }
@@ -206,7 +212,9 @@ fn when_request_localizer(world: &HelperWorld, lint: String) {
 }
 
 #[then("the resolved locale is {locale}")]
-fn then_locale(world: &HelperWorld, locale: String) { world.assert_locale(unquote(&locale)); }
+fn then_locale(world: &HelperWorld, locale: String) -> Result<(), String> {
+    world.assert_locale(unquote(&locale))
+}
 
 #[given("fallback messages are defined")]
 fn given_fallback(world: &HelperWorld) { world.set_fallback_messages(); }
@@ -228,16 +236,19 @@ fn given_doc_arguments(world: &HelperWorld) { world.prepare_doc_arguments(); }
 fn given_no_doc_arguments(world: &HelperWorld) { world.clear_arguments(); }
 
 #[when("I resolve the diagnostic message set")]
-fn when_resolve_messages(world: &HelperWorld) { world.resolve_messages(); }
+fn when_resolve_messages(world: &HelperWorld) -> Result<(), String> { world.resolve_messages() }
 
 #[then("the fallback primary message contains {snippet}")]
-fn then_fallback_primary(world: &HelperWorld, snippet: String) {
-    let messages = world.resolved_messages();
+fn then_fallback_primary(world: &HelperWorld, snippet: String) -> Result<(), String> {
+    let messages = world.resolved_messages()?;
     let expected_snippet = unquote(&snippet);
-    assert!(
-        messages.primary().contains(expected_snippet),
-        "expected fallback primary message to contain `{expected_snippet}`"
-    );
+    if messages.primary().contains(expected_snippet) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected fallback primary message to contain `{expected_snippet}`"
+        ))
+    }
 }
 
 #[then("a delayed bug is recorded mentioning {snippet}")]
@@ -257,13 +268,16 @@ fn then_bug_recorded(world: &HelperWorld, snippet: String) {
 }
 
 #[then("the resolved primary message contains {snippet}")]
-fn then_primary_message(world: &HelperWorld, snippet: String) {
-    let messages = world.resolved_messages();
+fn then_primary_message(world: &HelperWorld, snippet: String) -> Result<(), String> {
+    let messages = world.resolved_messages()?;
     let expected_snippet = unquote(&snippet);
-    assert!(
-        messages.primary().contains(expected_snippet),
-        "expected resolved primary message to contain `{expected_snippet}`"
-    );
+    if messages.primary().contains(expected_snippet) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected resolved primary message to contain `{expected_snippet}`"
+        ))
+    }
 }
 
 #[then("no delayed bug is recorded")]
@@ -293,7 +307,7 @@ fn invalid_locale_warns_and_falls_back() {
     world.set_environment(Some(String::from("xx-XX")));
     world.set_configuration(None);
     world.request_localizer("function_attrs_follow_docs");
-    world.assert_locale("en-GB");
+    world.assert_locale("en-GB").expect("locale should resolve");
 
     let mut warned = false;
     while let Some(record) = logger.pop() {
@@ -319,8 +333,8 @@ fn repeated_failures_record_all_bugs() {
     world.set_fallback_messages();
     world.set_message_key(String::from("missing-key"));
 
-    world.resolve_messages();
-    world.resolve_messages();
+    world.resolve_messages().expect("messages should resolve");
+    world.resolve_messages().expect("messages should resolve");
 
     let recorded = world.recorded_messages();
     assert_eq!(recorded.len(), 2);
@@ -338,7 +352,9 @@ fn missing_key_with_noop_reporter_uses_fallback(world: HelperWorld) {
     world.request_localizer("no_expect_outside_tests");
     world.set_fallback_messages();
 
-    let localizer = world.ensure_localizer();
+    let localizer = world
+        .ensure_localizer()
+        .expect("localizer should initialize");
     let args = world.ensure_arguments();
     let fallback = world.ensure_fallback();
     let resolution = MessageResolution {

@@ -15,6 +15,7 @@ use super::{
 };
 use crate::{
     AstError,
+    AstResult,
     ByteSpan,
     Production,
     ast::{KindId, LeafClass, NormalizedNode, NormalizedTree, PARSER_SCHEMA_VERSION},
@@ -29,8 +30,12 @@ fn kind_name(kind: KindId) -> String {
     format!("{parser_kind:?}")
 }
 
-fn offset_u32(offset: usize) -> u32 {
-    u32::try_from(offset).expect("test source offsets should fit in u32")
+fn offset_u32(offset: usize) -> AstResult<u32> {
+    u32::try_from(offset).map_err(|_| AstError::OffsetTooLarge(offset))
+}
+
+fn whole_span(source: &str) -> AstResult<ByteSpan> {
+    ByteSpan::new(source, 0, offset_u32(source.len())?)
 }
 
 #[rstest]
@@ -63,7 +68,7 @@ fn two_sibling_span_selects_common_expression_ancestor() {
 #[rstest]
 fn whole_file_span_selects_source_file() {
     let source = "fn f() {}";
-    let span = ByteSpan::new(source, 0, offset_u32(source.len())).expect("span should validate");
+    let span = whole_span(source).expect("span should validate");
     let tree = lower_span(source, span).expect("source should lower");
     assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
 }
@@ -75,7 +80,7 @@ fn large_synthetic_source_still_lowers() {
         .collect::<Vec<_>>()
         .join(" ");
     let source = format!("fn generated() {{ {statements} }}");
-    let span = ByteSpan::new(&source, 0, offset_u32(source.len())).expect("span should validate");
+    let span = whole_span(&source).expect("span should validate");
     let tree = lower_span(&source, span).expect("source should lower");
     assert_eq!(kind_name(tree.root().kind()), "SOURCE_FILE");
 }
@@ -87,7 +92,7 @@ fn oversized_source_is_rejected_by_the_node_budget() {
         .collect::<Vec<_>>()
         .join(" ");
     let source = format!("fn generated() {{ {statements} }}");
-    let span = ByteSpan::new(&source, 0, offset_u32(source.len())).expect("span should validate");
+    let span = whole_span(&source).expect("span should validate");
 
     assert_eq!(
         lower_span(&source, span),
@@ -104,7 +109,7 @@ fn deeply_nested_syntax_obeys_the_lowering_depth_budget() {
         .tree()
         .syntax()
         .clone();
-    let span = ByteSpan::new(source, 0, offset_u32(source.len())).expect("span should validate");
+    let span = whole_span(source).expect("span should validate");
 
     assert_eq!(
         LoweringLimits::with_depth_limit(2, span).lower(&root, 0),
@@ -195,13 +200,11 @@ fn source_mismatch_out_of_bounds_is_reported_by_lowering() {
 #[rstest]
 fn error_subtree_is_rejected() {
     let source = "@error@";
-    let span = ByteSpan::new(source, 0, offset_u32(source.len())).expect("span should validate");
+    let end = offset_u32(source.len()).expect("source length should fit in u32");
+    let span = ByteSpan::new(source, 0, end).expect("span should validate");
     assert_eq!(
         lower_span(source, span),
-        Err(AstError::UnparsableSpan {
-            start: 0,
-            end: offset_u32(source.len())
-        })
+        Err(AstError::UnparsableSpan { start: 0, end })
     );
 }
 
@@ -212,7 +215,7 @@ fn lower_span_for(source: &str, needle: &str) -> Result<NormalizedTree, AstError
     let end = start + needle.len();
     lower_span(
         source,
-        ByteSpan::new(source, offset_u32(start), offset_u32(end))?,
+        ByteSpan::new(source, offset_u32(start)?, offset_u32(end)?)?,
     )
 }
 
@@ -242,7 +245,7 @@ fn kind_names_are_available_for_adapter_snapshots() {
 #[rstest]
 fn ast_feature_vector_snapshot() -> Result<(), AstError> {
     let source = "fn add(a: i32, b: i32) -> i32 { a + b }";
-    let span = ByteSpan::new(source, 0, offset_u32(source.len()))?;
+    let span = whole_span(source)?;
     let tree = lower_span(source, span)?;
     let counts = kind_counts(&tree)
         .iter()

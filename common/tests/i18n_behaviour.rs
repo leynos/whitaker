@@ -133,17 +133,20 @@ fn then_fallback_used(fixture: &I18nFixture) {
 }
 
 #[then("the message contains {snippet}")]
-fn then_contains(fixture: &I18nFixture, snippet: String) {
+fn then_contains(fixture: &I18nFixture, snippet: String) -> Result<(), String> {
     let message = fixture
         .result()
-        .unwrap_or_else(|| panic!("lookup should have been performed"))
-        .unwrap_or_else(|error| panic!("message should resolve: {error}"));
+        .ok_or_else(|| String::from("lookup should have been performed"))?
+        .map_err(|error| format!("message should resolve: {error}"))?;
     let cleaned_message = strip_isolation_marks(&message);
     let cleaned_snippet = strip_isolation_marks(&snippet);
-    assert!(
-        cleaned_message.contains(cleaned_snippet.as_ref()),
-        "expected `{cleaned_message}` to contain `{cleaned_snippet}`",
-    );
+    if cleaned_message.contains(cleaned_snippet.as_ref()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected `{cleaned_message}` to contain `{cleaned_snippet}`"
+        ))
+    }
 }
 
 #[then("localization fails with a missing message error")]

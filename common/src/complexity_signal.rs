@@ -335,6 +335,8 @@ pub fn smooth_moving_average(signal: &[f64], window: usize) -> Result<Vec<f64>, 
 
 #[cfg(test)]
 mod tests {
+    //! Tests for complexity-signal segmentation, construction, and smoothing.
+
     use rstest::rstest;
 
     use super::*;

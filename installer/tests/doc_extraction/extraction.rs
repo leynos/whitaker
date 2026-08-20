@@ -19,8 +19,9 @@ pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let mut all_blocks = Vec::new();
     for path in DOC_PATHS {
         let guide_path = workspace_root.join(path);
-        let content = std::fs::read_to_string(&guide_path)
-            .unwrap_or_else(|_| panic!("failed to read {path}"));
+        let Ok(content) = std::fs::read_to_string(&guide_path) else {
+            panic!("documentation file {path} should be readable");
+        };
         all_blocks.extend(extract_toml_blocks(&content));
     }
     all_blocks
@@ -86,15 +87,16 @@ pub fn extract_toml_blocks(markdown: &str) -> Vec<String> {
 
 /// Find a TOML block containing the specified marker text.
 pub fn find_block_containing(marker: &str) -> String {
-    DOC_TOML_BLOCKS
-        .iter()
-        .find(|block| block.contains(marker))
-        .unwrap_or_else(|| panic!("no TOML block containing '{marker}' found in documentation"))
-        .clone()
+    let Some(block) = DOC_TOML_BLOCKS.iter().find(|block| block.contains(marker)) else {
+        panic!("no TOML block containing '{marker}' found in documentation");
+    };
+    block.clone()
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for extracting TOML blocks from documentation.
+
     use super::*;
 
     #[test]

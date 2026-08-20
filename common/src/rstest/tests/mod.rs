@@ -215,12 +215,19 @@ fn collects_supported_fixture_local_names_in_order() {
     );
 }
 
-fn source_span(line: usize, start: usize, end: usize) -> SourceSpan {
-    SourceSpan::new(
-        SourceLocation::new(line, start),
-        SourceLocation::new(line, end),
-    )
-    .expect("test spans should always be valid")
+/// Builds a single-line [`SourceSpan`] for test data.
+///
+/// This is a macro rather than a helper function so the fallible construction
+/// is inlined into the calling `#[rstest]` body, where a failure is the test
+/// verdict, and so it can be used inside `#[case(...)]` attributes.
+macro_rules! source_span {
+    ($line:expr, $start:expr, $end:expr) => {
+        SourceSpan::new(
+            SourceLocation::new($line, $start),
+            SourceLocation::new($line, $end),
+        )
+        .expect("test spans should always be valid")
+    };
 }
 
 fn assert_span_recovery(
@@ -236,25 +243,25 @@ fn assert_span_recovery(
 
 #[rstest]
 #[case::keeps_direct_user_editable_span(
-    vec![(source_span(1, 1, 8), false)],
-    UserEditableSpan::Direct(source_span(1, 1, 8)),
+    vec![(source_span!(1, 1, 8), false)],
+    UserEditableSpan::Direct(source_span!(1, 1, 8)),
 )]
 #[case::recovers_macro_frame_to_first_user_span(
-    vec![(source_span(2, 1, 8), true), (source_span(10, 1, 12), false)],
-    UserEditableSpan::Recovered(source_span(10, 1, 12)),
+    vec![(source_span!(2, 1, 8), true), (source_span!(10, 1, 12), false)],
+    UserEditableSpan::Recovered(source_span!(10, 1, 12)),
 )]
 #[case::recovers_first_user_span_from_nested_macro_chain(
     vec![
-        (source_span(2, 1, 4), true),
-        (source_span(3, 1, 5), true),
-        (source_span(14, 1, 6), false),
-        (source_span(20, 1, 9), false),
+        (source_span!(2, 1, 4), true),
+        (source_span!(3, 1, 5), true),
+        (source_span!(14, 1, 6), false),
+        (source_span!(20, 1, 9), false),
     ],
-    UserEditableSpan::Recovered(source_span(14, 1, 6)),
+    UserEditableSpan::Recovered(source_span!(14, 1, 6)),
 )]
 #[case::treats_empty_frame_list_as_macro_only(vec![], UserEditableSpan::MacroOnly)]
 #[case::treats_all_expansion_frames_as_macro_only(
-    vec![(source_span(4, 1, 4), true), (source_span(5, 1, 6), true)],
+    vec![(source_span!(4, 1, 4), true), (source_span!(5, 1, 6), true)],
     UserEditableSpan::MacroOnly,
 )]
 fn recovers_user_editable_span_from_frame_sequences(

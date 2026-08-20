@@ -149,6 +149,8 @@ pub struct LibraryEntry {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for human-readable and JSON list formatting.
+
     use std::collections::BTreeMap;
 
     use camino::Utf8PathBuf;

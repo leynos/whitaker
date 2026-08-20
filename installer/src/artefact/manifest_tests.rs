@@ -4,49 +4,46 @@ use rstest::{fixture, rstest};
 use serde_json::Value;
 
 use super::*;
+use crate::artefact::error::ArtefactError;
 
 #[fixture]
-fn sample_provenance() -> ManifestProvenance {
-    ManifestProvenance {
-        git_sha: GitSha::try_from("abc1234").expect("valid sha"),
+fn sample_provenance() -> Result<ManifestProvenance, ArtefactError> {
+    Ok(ManifestProvenance {
+        git_sha: GitSha::try_from("abc1234")?,
         schema_version: SchemaVersion::current(),
-        toolchain: ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel"),
-        target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"),
-    }
+        toolchain: ToolchainChannel::try_from("nightly-2026-05-28")?,
+        target: TargetTriple::try_from("x86_64-unknown-linux-gnu")?,
+    })
 }
 
 #[fixture]
-fn sample_content() -> ManifestContent {
-    ManifestContent {
+fn sample_content() -> Result<ManifestContent, ArtefactError> {
+    Ok(ManifestContent {
         generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
         files: vec!["libwhitaker_lints@nightly-2026-05-28-x86_64-unknown-linux-gnu.so".to_owned()],
-        sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid digest"),
-    }
+        sha256: Sha256Digest::try_from("a".repeat(64).as_str())?,
+    })
 }
 
 #[fixture]
 fn sample_manifest(
-    sample_provenance: ManifestProvenance,
-    sample_content: ManifestContent,
-) -> Manifest {
-    Manifest::new(sample_provenance, sample_content)
+    sample_provenance: Result<ManifestProvenance, ArtefactError>,
+    sample_content: Result<ManifestContent, ArtefactError>,
+) -> Result<Manifest, ArtefactError> {
+    Ok(Manifest::new(sample_provenance?, sample_content?))
 }
 
 #[rstest]
-fn accessors_return_all_fields(sample_manifest: Manifest) {
-    assert_eq!(sample_manifest.git_sha().as_str(), "abc1234");
-    assert_eq!(sample_manifest.schema_version().as_u32(), 1);
-    assert_eq!(sample_manifest.toolchain().as_str(), "nightly-2026-05-28");
-    assert_eq!(
-        sample_manifest.target().as_str(),
-        "x86_64-unknown-linux-gnu"
-    );
-    assert_eq!(
-        sample_manifest.generated_at().as_str(),
-        "2026-05-28T00:00:00Z"
-    );
-    assert_eq!(sample_manifest.files().len(), 1);
-    assert_eq!(sample_manifest.sha256().as_str().len(), 64);
+fn accessors_return_all_fields(sample_manifest: Result<Manifest, ArtefactError>) {
+    let manifest = sample_manifest.expect("sample manifest should build");
+
+    assert_eq!(manifest.git_sha().as_str(), "abc1234");
+    assert_eq!(manifest.schema_version().as_u32(), 1);
+    assert_eq!(manifest.toolchain().as_str(), "nightly-2026-05-28");
+    assert_eq!(manifest.target().as_str(), "x86_64-unknown-linux-gnu");
+    assert_eq!(manifest.generated_at().as_str(), "2026-05-28T00:00:00Z");
+    assert_eq!(manifest.files().len(), 1);
+    assert_eq!(manifest.sha256().as_str().len(), 64);
 }
 
 #[rstest]
@@ -56,8 +53,9 @@ fn generated_at_display() {
 }
 
 #[rstest]
-fn serialized_json_contains_all_adr_001_keys(sample_manifest: Manifest) {
-    let json = serde_json::to_string(&sample_manifest).expect("serialization succeeds");
+fn serialized_json_contains_all_adr_001_keys(sample_manifest: Result<Manifest, ArtefactError>) {
+    let manifest = sample_manifest.expect("sample manifest should build");
+    let json = serde_json::to_string(&manifest).expect("serialization succeeds");
     let parsed: Value = serde_json::from_str(&json).expect("valid JSON");
     let obj = parsed.as_object().expect("top-level object");
 
@@ -111,10 +109,11 @@ fn manifest_with_multiple_files() {
 }
 
 #[rstest]
-fn serde_round_trip(sample_manifest: Manifest) {
-    let json = serde_json::to_string_pretty(&sample_manifest).expect("serialize");
+fn serde_round_trip(sample_manifest: Result<Manifest, ArtefactError>) {
+    let manifest = sample_manifest.expect("sample manifest should build");
+    let json = serde_json::to_string_pretty(&manifest).expect("serialize");
     let back: Manifest = serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(sample_manifest, back);
+    assert_eq!(manifest, back);
 }
 
 #[rstest]

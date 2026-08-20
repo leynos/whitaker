@@ -54,6 +54,8 @@ impl Default for SarifLog {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF log model.
+
     use super::*;
 
     #[test]

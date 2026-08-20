@@ -301,6 +301,8 @@ pub(crate) fn validate_edges(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for adjacency-report validation of decomposition edge inputs.
+
     use super::{AdjacencyError, EdgeInput, adjacency_report};
 
     #[test]

@@ -5,7 +5,9 @@
 //! configurable timeout to prevent hangs on network issues.
 
 use std::{
-    process::{Command, Output, Stdio},
+    io::Read,
+    process::{Child, Command, Output, Stdio},
+    thread::JoinHandle,
     time::Duration,
 };
 
@@ -85,6 +87,31 @@ fn run_git_with_timeout(
     working_dir: Option<&Utf8Path>,
     operation: &'static str,
 ) -> Result<Output> {
+    let mut child = spawn_git_child(args, working_dir)?;
+
+    // Take ownership of pipes before spawning threads to avoid blocking.
+    // If either pipe is missing, use empty readers.
+    let stdout_reader = spawn_pipe_reader(child.stdout.take());
+    let stderr_reader = spawn_pipe_reader(child.stderr.take());
+
+    let Some(status) = child.wait_timeout(GIT_TIMEOUT)? else {
+        return Err(abandon_timed_out_git(
+            child,
+            stdout_reader,
+            stderr_reader,
+            operation,
+        ));
+    };
+
+    Ok(Output {
+        status,
+        stdout: join_pipe_reader(stdout_reader, operation, "stdout")?.into_bytes(),
+        stderr: join_pipe_reader(stderr_reader, operation, "stderr")?.into_bytes(),
+    })
+}
+
+/// Spawns the git child process with both standard streams piped.
+fn spawn_git_child(args: &[&str], working_dir: Option<&Utf8Path>) -> Result<Child> {
     let mut cmd = Command::new("git");
     cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -92,69 +119,63 @@ fn run_git_with_timeout(
         cmd.current_dir(dir.as_std_path());
     }
 
-    let mut child = cmd.spawn()?;
+    Ok(cmd.spawn()?)
+}
 
-    // Take ownership of pipes before spawning threads to avoid blocking.
-    // If either pipe is missing, use empty readers.
-    let stdout_pipe = child.stdout.take();
-    let stderr_pipe = child.stderr.take();
+/// Handle for a thread draining one of the child's output pipes.
+type PipeReader = JoinHandle<std::io::Result<String>>;
 
-    // Spawn threads to read pipes concurrently whilst the process runs.
-    let stdout_thread = std::thread::spawn(move || -> std::io::Result<String> {
-        stdout_pipe
-            .map(std::io::read_to_string)
+/// Drains an optional child pipe on its own thread, yielding an empty string
+/// when the pipe is absent.
+fn spawn_pipe_reader<R>(pipe: Option<R>) -> PipeReader
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        pipe.map(std::io::read_to_string)
             .transpose()
             .map(Option::unwrap_or_default)
-    });
-    let stderr_thread = std::thread::spawn(move || -> std::io::Result<String> {
-        stderr_pipe
-            .map(std::io::read_to_string)
-            .transpose()
-            .map(Option::unwrap_or_default)
-    });
+    })
+}
 
-    if let Some(status) = child.wait_timeout(GIT_TIMEOUT)? {
-        // Command completed within timeout - collect output from threads
-        let stdout = stdout_thread
-            .join()
-            .map_err(|_| InstallerError::Git {
-                operation,
-                message: "failed to read stdout".to_owned(),
-            })?
-            .unwrap_or_default();
-        let stderr = stderr_thread
-            .join()
-            .map_err(|_| InstallerError::Git {
-                operation,
-                message: "failed to read stderr".to_owned(),
-            })?
-            .unwrap_or_default();
-
-        Ok(Output {
-            status,
-            stdout: stdout.into_bytes(),
-            stderr: stderr.into_bytes(),
-        })
-    } else {
-        // Timeout - kill the process and wait for the reader threads to
-        // finish. Each result is discarded deliberately: the operation has
-        // already failed, so cleanup is best effort.
-        drop(child.kill());
-        drop(child.wait());
-        drop(stdout_thread.join());
-        drop(stderr_thread.join());
-        Err(InstallerError::Git {
+/// Joins a pipe reader, reporting a git error when the reader thread panicked.
+fn join_pipe_reader(reader: PipeReader, operation: &'static str, stream: &str) -> Result<String> {
+    Ok(reader
+        .join()
+        .map_err(|_| InstallerError::Git {
             operation,
-            message: format!(
-                "operation timed out after {} seconds",
-                GIT_TIMEOUT.as_secs()
-            ),
-        })
+            message: format!("failed to read {stream}"),
+        })?
+        .unwrap_or_default())
+}
+
+/// Kills a timed-out git child and reaps its reader threads before reporting.
+///
+/// Each cleanup result is discarded deliberately: the operation has already
+/// failed, so cleanup is best effort.
+fn abandon_timed_out_git(
+    mut child: Child,
+    stdout_reader: PipeReader,
+    stderr_reader: PipeReader,
+    operation: &'static str,
+) -> InstallerError {
+    drop(child.kill());
+    drop(child.wait());
+    drop(stdout_reader.join());
+    drop(stderr_reader.join());
+    InstallerError::Git {
+        operation,
+        message: format!(
+            "operation timed out after {} seconds",
+            GIT_TIMEOUT.as_secs()
+        ),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for git clone and update helpers.
+
     use super::*;
 
     #[test]

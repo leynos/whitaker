@@ -88,6 +88,8 @@ impl Default for SarifLogBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF log builder.
+
     use super::*;
     use crate::model::run::{Tool, ToolComponent};
 

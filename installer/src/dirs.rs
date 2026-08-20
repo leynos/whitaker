@@ -117,6 +117,8 @@ impl BaseDirs for SystemBaseDirs {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for base-directory resolution.
+
     use super::*;
     use crate::test_support::env_test_guard;
 

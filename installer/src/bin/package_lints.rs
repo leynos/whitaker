@@ -258,6 +258,8 @@ const fn civil_from_epoch(epoch_secs: u64) -> (i64, u64, u64) {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the lint-library packaging command.
+
     use std::fs;
 
     use clap::Parser;
@@ -288,8 +290,8 @@ mod tests {
     }
 
     #[fixture]
-    fn linux_target() -> TargetTriple {
-        TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")
+    fn linux_target() -> Result<TargetTriple, ArtefactError> {
+        TargetTriple::try_from("x86_64-unknown-linux-gnu")
     }
 
     #[test]
@@ -345,7 +347,11 @@ mod tests {
     }
 
     #[rstest]
-    fn discover_library_files_finds_expected_files(linux_target: TargetTriple) {
+    fn discover_library_files_finds_expected_files(
+        #[from(linux_target)] linux_target_res: Result<TargetTriple, ArtefactError>,
+    ) {
+        let linux_target = linux_target_res.expect("linux target triple should validate");
+
         let dir = tempfile::tempdir().expect("temp dir");
         for name in LINT_CRATES.iter().chain(std::iter::once(&SUITE_CRATE)) {
             fs::write(dir.path().join(format!("lib{name}.so")), b"fake").expect("write");
@@ -370,7 +376,11 @@ mod tests {
     }
 
     #[rstest]
-    fn discover_library_files_rejects_missing(linux_target: TargetTriple) {
+    fn discover_library_files_rejects_missing(
+        #[from(linux_target)] linux_target_res: Result<TargetTriple, ArtefactError>,
+    ) {
+        let linux_target = linux_target_res.expect("linux target triple should validate");
+
         let dir = tempfile::tempdir().expect("temp dir");
         fs::write(dir.path().join("libconditional_max_n_branches.so"), b"fake").expect("write");
         let result = discover_library_files(dir.path(), &linux_target);

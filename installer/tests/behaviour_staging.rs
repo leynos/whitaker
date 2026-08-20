@@ -79,6 +79,8 @@ use staging_failure::staging_failure_world;
 
 #[cfg(unix)]
 mod staging_failure {
+    //! Unix-only world and steps for staging permission failures.
+
     use std::{fs, os::unix::fs::PermissionsExt};
 
     use tempfile::TempDir;

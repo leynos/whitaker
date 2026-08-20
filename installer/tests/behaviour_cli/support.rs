@@ -43,18 +43,19 @@ pub(super) fn workspace_root() -> PathBuf {
 
 pub(super) fn pinned_toolchain_channel() -> String {
     let toolchain_path = workspace_root().join("rust-toolchain.toml");
-    let contents = std::fs::read_to_string(&toolchain_path).unwrap_or_else(|err| {
+    let Ok(contents) = std::fs::read_to_string(&toolchain_path) else {
         panic!(
-            "failed to read rust-toolchain.toml at {}: {err}",
+            "rust-toolchain.toml at {} should be readable",
             toolchain_path.display()
-        )
-    });
-    parse_toolchain_channel(&contents).unwrap_or_else(|err| {
+        );
+    };
+    let Ok(channel) = parse_toolchain_channel(&contents) else {
         panic!(
-            "failed to parse rust-toolchain.toml at {}: {err}",
+            "rust-toolchain.toml at {} should declare a channel",
             toolchain_path.display()
-        )
-    })
+        );
+    };
+    channel
 }
 
 pub(super) fn is_toolchain_installed(channel: &str) -> bool {
@@ -90,8 +91,9 @@ pub(super) fn ensure_required_toolchain_available(cli_world: &CliWorld) -> Optio
 }
 
 pub(super) fn setup_temp_dir(cli_world: &CliWorld) -> String {
-    let temp_dir =
-        TempDir::new().unwrap_or_else(|error| panic!("failed to create temp dir: {error}"));
+    let Ok(temp_dir) = TempDir::new() else {
+        panic!("temporary directory should be created");
+    };
     let target_dir = temp_dir.path().to_string_lossy().to_string();
     cli_world.temp_dir.replace(Some(temp_dir));
     target_dir
@@ -210,9 +212,9 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
         command.env(TEST_STAGE_SUITE_ENV, "1");
     }
 
-    let output = command
-        .output()
-        .unwrap_or_else(|error| panic!("failed to run whitaker-installer: {error}"));
+    let Ok(output) = command.output() else {
+        panic!("whitaker-installer should run");
+    };
     cli_world.output.replace(Some(output));
 }
 

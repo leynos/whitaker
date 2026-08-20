@@ -152,8 +152,10 @@ fn then_only_candidate_pair_is(world: &MinHashLshWorld, left: String, right: Str
                 candidates.len()
             );
         };
-        let expected = CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-            .unwrap_or_else(|| panic!("distinct fragment IDs must form a canonical pair"));
+        let Some(expected) = CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
+        else {
+            panic!("distinct fragment IDs must form a canonical pair");
+        };
         assert_eq!(
             candidate, &expected,
             "candidate pair must match the scenario expectation"

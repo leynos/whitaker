@@ -62,6 +62,8 @@ pub struct MultiformatMessageString {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF reporting descriptor model.
+
     use super::*;
 
     #[test]

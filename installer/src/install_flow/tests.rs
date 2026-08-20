@@ -53,27 +53,26 @@ fn stub_prune_prebuilt_libraries(
 }
 
 #[fixture]
-fn staging_fixture() -> StagingFixture {
-    let temp_dir = tempfile::tempdir().expect("tempdir should be available");
+fn staging_fixture() -> std::io::Result<StagingFixture> {
+    let temp_dir = tempfile::tempdir()?;
     let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-        .expect("tempdir path should be utf-8");
-    fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
-    StagingFixture {
+        .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
+    fs::create_dir_all(staging_path.as_std_path())?;
+    Ok(StagingFixture {
         _temp_dir: temp_dir,
         staging_path,
         toolchain: "nightly-2026-05-28",
-    }
+    })
 }
 
 fn create_staged_library(
     staging_path: &Utf8Path,
     crate_name: &str,
     toolchain: &str,
-) -> Utf8PathBuf {
+) -> std::io::Result<Utf8PathBuf> {
     let library_path = staging_path.join(staged_library_filename(crate_name, toolchain));
-    fs::write(library_path.as_std_path(), b"fake prebuilt library")
-        .expect("test setup should write staged library");
-    library_path
+    fs::write(library_path.as_std_path(), b"fake prebuilt library")?;
+    Ok(library_path)
 }
 
 #[rstest]
@@ -93,11 +92,12 @@ fn create_staged_library(
     &[SUITE_CRATE, "no_expect_outside_tests"]
 )]
 fn prune_prebuilt_libraries_keeps_only_requested_crates(
-    staging_fixture: StagingFixture,
+    #[from(staging_fixture)] staging_res: std::io::Result<StagingFixture>,
     #[case] requested: &[&str],
     #[case] retained: &[&str],
     #[case] removed: &[&str],
 ) {
+    let staging_fixture = staging_res.expect("staging fixture should be created");
     let StagingFixture {
         staging_path,
         toolchain,
@@ -110,7 +110,8 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
 
     let mut staged = Vec::new();
     for crate_name in retained.iter().chain(removed.iter()) {
-        let path = create_staged_library(&staging_path, crate_name, toolchain);
+        let path = create_staged_library(&staging_path, crate_name, toolchain)
+            .expect("test setup should write staged library");
         staged.push(((*crate_name).to_owned(), path));
     }
 

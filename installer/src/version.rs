@@ -44,6 +44,8 @@ impl fmt::Display for Version {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for installer version reporting.
+
     use super::*;
 
     #[test]

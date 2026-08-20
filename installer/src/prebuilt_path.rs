@@ -47,6 +47,8 @@ pub fn prebuilt_library_dir(
 
 #[cfg(test)]
 mod tests {
+    //! Tests for prebuilt artefact path resolution.
+
     use std::path::PathBuf;
 
     use rstest::rstest;

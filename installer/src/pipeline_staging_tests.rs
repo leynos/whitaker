@@ -28,15 +28,15 @@ struct StagingTestContext {
 }
 
 impl StagingTestContext {
-    fn new() -> Self {
+    fn new() -> std::io::Result<Self> {
         use std::fs;
 
-        let temp_dir = TempDir::new().expect("failed to create temp dir");
-        let target_dir =
-            Utf8PathBuf::try_from(temp_dir.path().to_owned()).expect("non-UTF8 temp path");
+        let temp_dir = TempDir::new()?;
+        let target_dir = Utf8PathBuf::try_from(temp_dir.path().to_owned())
+            .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
         let workspace_root = target_dir.join("workspace");
-        fs::create_dir_all(&workspace_root).expect("failed to create workspace root");
-        Self {
+        fs::create_dir_all(&workspace_root)?;
+        Ok(Self {
             _temp_dir: temp_dir,
             target_dir,
             toolchain: Toolchain::with_override(&workspace_root, "nightly-2026-05-28"),
@@ -45,7 +45,7 @@ impl StagingTestContext {
             verbosity: 0,
             experimental: false,
             quiet: false,
-        }
+        })
     }
 
     fn target_dir(&self) -> &Utf8Path { &self.target_dir }
@@ -73,34 +73,36 @@ impl StagingTestContext {
     }
 }
 
-fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> BuildResult {
+fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> std::io::Result<BuildResult> {
     use std::fs;
 
     use crate::builder::{library_extension, library_prefix};
 
     let source_dir = target_dir.join("source");
-    fs::create_dir_all(&source_dir).expect("failed to create source directory");
+    fs::create_dir_all(&source_dir)?;
     let filename = format!("{}{}{}", library_prefix(), crate_name, library_extension());
     let library_path = source_dir.join(&filename);
-    fs::write(&library_path, b"mock library content").expect("failed to write mock library");
+    fs::write(&library_path, b"mock library content")?;
 
-    BuildResult {
+    Ok(BuildResult {
         crate_name: CrateName::from(crate_name),
         library_path,
-    }
+    })
 }
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn staging_ctx() -> StagingTestContext { StagingTestContext::new() }
+fn staging_ctx() -> std::io::Result<StagingTestContext> { StagingTestContext::new() }
 
 fn assert_bumpy_road_lint_in_staging_output(experimental: bool) {
-    let staging_ctx = StagingTestContext::new().with_experimental(experimental);
+    let staging_ctx = StagingTestContext::new()
+        .expect("staging context should be created")
+        .with_experimental(experimental);
     let context = staging_ctx.pipeline_context();
-    let build_results = vec![create_mock_library(
-        staging_ctx.target_dir(),
-        "whitaker_suite",
-    )];
+    let build_results = vec![
+        create_mock_library(staging_ctx.target_dir(), "whitaker_suite")
+            .expect("mock library should be staged"),
+    ];
     let mut stderr = Vec::new();
 
     stage_libraries(&context, &build_results, &mut stderr).expect("staging should succeed");
@@ -113,7 +115,11 @@ fn assert_bumpy_road_lint_in_staging_output(experimental: bool) {
 }
 
 #[rstest]
-fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext) {
+fn stage_libraries_returns_correct_staging_path(
+    #[from(staging_ctx)] staging_ctx_res: std::io::Result<StagingTestContext>,
+) {
+    let staging_ctx = staging_ctx_res.expect("staging context should be created");
+
     let quiet_ctx = staging_ctx.with_quiet(true);
     let context = quiet_ctx.pipeline_context();
     let build_results = vec![];
@@ -137,7 +143,11 @@ fn stage_libraries_returns_correct_staging_path(staging_ctx: StagingTestContext)
 #[rstest]
 #[case::quiet_mode(true)]
 #[case::verbose_mode(false)]
-fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] quiet: bool) {
+fn stage_libraries_respects_quiet_flag(
+    #[from(staging_ctx)] staging_ctx_res: std::io::Result<StagingTestContext>,
+    #[case] quiet: bool,
+) {
+    let staging_ctx = staging_ctx_res.expect("staging context should be created");
     let quiet_ctx = staging_ctx.with_quiet(quiet);
     let context = quiet_ctx.pipeline_context();
     let build_results = vec![];
@@ -157,15 +167,19 @@ fn stage_libraries_respects_quiet_flag(staging_ctx: StagingTestContext, #[case] 
 }
 
 #[rstest]
-fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
+fn stage_libraries_stages_build_results(
+    #[from(staging_ctx)] staging_ctx_res: std::io::Result<StagingTestContext>,
+) {
     use crate::builder::{library_extension, library_prefix};
+
+    let staging_ctx = staging_ctx_res.expect("staging context should be created");
 
     let quiet_ctx = staging_ctx.with_quiet(true);
     let context = quiet_ctx.pipeline_context();
-    let build_results = vec![create_mock_library(
-        quiet_ctx.target_dir(),
-        "whitaker_suite",
-    )];
+    let build_results = vec![
+        create_mock_library(quiet_ctx.target_dir(), "whitaker_suite")
+            .expect("mock library should be staged"),
+    ];
     let mut stderr = Vec::new();
 
     let staging_path =
@@ -186,7 +200,11 @@ fn stage_libraries_stages_build_results(staging_ctx: StagingTestContext) {
 }
 
 #[rstest]
-fn stage_libraries_logs_installed_lints_when_not_quiet(staging_ctx: StagingTestContext) {
+fn stage_libraries_logs_installed_lints_when_not_quiet(
+    #[from(staging_ctx)] staging_ctx_res: std::io::Result<StagingTestContext>,
+) {
+    let staging_ctx = staging_ctx_res.expect("staging context should be created");
+
     let context = staging_ctx.pipeline_context();
     let build_results = vec![];
     let mut stderr = Vec::new();

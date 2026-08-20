@@ -82,18 +82,15 @@ mod tests {
             Stager::new(self.target_dir.clone(), self.toolchain.channel())
         }
 
-        fn create_blocked_suite_output(&self) -> Utf8PathBuf {
+        fn create_blocked_suite_output(&self) -> Result<Utf8PathBuf> {
             let stager = self.stager();
-            stager
-                .prepare()
-                .expect("expected staging directory to be writable for test setup");
+            stager.prepare()?;
 
             let blocked_path = stager
                 .staging_path()
                 .join(stager.staged_filename(&CrateName::from(SUITE_CRATE)));
-            std::fs::create_dir_all(blocked_path.as_std_path())
-                .expect("expected to pre-create staged filename as a directory");
-            blocked_path
+            std::fs::create_dir_all(blocked_path.as_std_path())?;
+            Ok(blocked_path)
         }
     }
 
@@ -101,24 +98,24 @@ mod tests {
         Toolchain::with_override(Utf8Path::new("."), "nightly-2026-05-28")
     }
 
-    fn utf8_temp_dir(temp_dir: &TempDir) -> Utf8PathBuf {
+    fn utf8_temp_dir(temp_dir: &TempDir) -> std::io::Result<Utf8PathBuf> {
         Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-            .expect("expected UTF-8 temp path for staged suite tests")
+            .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))
     }
 
     #[fixture]
-    fn staged_suite_setup() -> StagedSuiteSetup {
+    fn staged_suite_setup() -> std::io::Result<StagedSuiteSetup> {
         let guard = env_test_guard();
-        let temp_dir = tempfile::tempdir().expect("expected temp dir for staged suite tests");
-        let target_dir = utf8_temp_dir(&temp_dir);
+        let temp_dir = tempfile::tempdir()?;
+        let target_dir = utf8_temp_dir(&temp_dir)?;
         let toolchain = test_toolchain();
 
-        StagedSuiteSetup {
+        Ok(StagedSuiteSetup {
             _guard: guard,
             _temp_dir: temp_dir,
             toolchain,
             target_dir,
-        }
+        })
     }
 
     #[rstest]
@@ -141,9 +138,11 @@ mod tests {
     #[case::env_disabled((vec![CrateName::from(SUITE_CRATE)], Some("0")))]
     #[case::non_suite((vec![CrateName::from("module_max_lines")], Some("1")))]
     fn staged_suite_installation_skips_non_staging_requests(
-        staged_suite_setup: StagedSuiteSetup,
+        #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
         #[case] case: (Vec<CrateName>, Option<&str>),
     ) {
+        let staged_suite_setup = setup_res.expect("staged suite setup should be created");
+
         let (requested_crates, env_val) = case;
         let run = || {
             let result = try_test_staged_suite_installation(
@@ -172,8 +171,10 @@ mod tests {
     #[cfg(debug_assertions)]
     #[rstest]
     fn staged_suite_installation_writes_placeholder_library_for_suite_requests(
-        staged_suite_setup: StagedSuiteSetup,
+        #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
+        let staged_suite_setup = setup_res.expect("staged suite setup should be created");
+
         let requested_crates = StagedSuiteSetup::requested_suite_crates();
         let stager = staged_suite_setup.stager();
 
@@ -197,9 +198,15 @@ mod tests {
 
     #[cfg(debug_assertions)]
     #[rstest]
-    fn staged_suite_installation_surfaces_write_failures(staged_suite_setup: StagedSuiteSetup) {
+    fn staged_suite_installation_surfaces_write_failures(
+        #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
+    ) {
+        let staged_suite_setup = setup_res.expect("staged suite setup should be created");
+
         let requested_crates = StagedSuiteSetup::requested_suite_crates();
-        let blocked_path = staged_suite_setup.create_blocked_suite_output();
+        let blocked_path = staged_suite_setup
+            .create_blocked_suite_output()
+            .expect("blocked staged output should be pre-created");
 
         with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
             let err = try_test_staged_suite_installation(
@@ -220,8 +227,10 @@ mod tests {
     #[cfg(not(debug_assertions))]
     #[rstest]
     fn staged_suite_installation_is_disabled_in_release_builds(
-        staged_suite_setup: StagedSuiteSetup,
+        #[from(staged_suite_setup)] setup_res: std::io::Result<StagedSuiteSetup>,
     ) {
+        let staged_suite_setup = setup_res.expect("staged suite setup should be created");
+
         let requested_crates = StagedSuiteSetup::requested_suite_crates();
         let staging_dir = staged_suite_setup
             .target_dir

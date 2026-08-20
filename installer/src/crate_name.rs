@@ -46,6 +46,8 @@ impl fmt::Display for CrateName {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for crate-name normalization.
+
     use std::collections::HashSet;
 
     use super::*;

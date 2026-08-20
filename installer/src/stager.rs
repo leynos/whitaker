@@ -139,6 +139,8 @@ pub fn default_target_dir() -> Option<Utf8PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for staging lint libraries into the target directory.
+
     use super::*;
 
     #[test]

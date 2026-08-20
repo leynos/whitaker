@@ -6,8 +6,16 @@
 
 #[cfg(unix)]
 mod unix {
+    //! Unix-only packaging checks that shell out to `cargo package` and `tar`.
+    //!
+    //! These helpers stage a temporary target directory, build the package
+    //! tarball, and list its contents so the test can assert that the
+    //! fallback Fluent bundle ships with the crate.
+
     use std::{
+        error::Error,
         fs,
+        io,
         path::{Path, PathBuf},
         process::Command,
     };
@@ -15,36 +23,39 @@ mod unix {
     use tempfile::{Builder, TempDir};
     use whitaker_common::i18n::packaged_fallback_locale_path;
 
+    type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+
     #[test]
-    fn fluent_bundles_are_included_in_the_package_tarball() {
-        let target_dir = package_target_dir();
-        let crate_path = package_crate_path(target_dir.path());
-        let tar_listing = package_tar_listing(&crate_path);
+    fn fluent_bundles_are_included_in_the_package_tarball() -> TestResult {
+        let target_dir = package_target_dir()?;
+        let crate_path = package_crate_path(target_dir.path())?;
+        let tar_listing = package_tar_listing(&crate_path)?;
         let expected_entry = packaged_fallback_locale_path()
             .to_string_lossy()
             .replace('\\', "/");
 
-        assert!(
-            tar_listing.lines().any(|line| line == expected_entry),
-            "expected packaged tarball to include the fallback Fluent bundle, but it did not"
-        );
+        if tar_listing.lines().any(|line| line == expected_entry) {
+            Ok(())
+        } else {
+            Err(format!(
+                "expected packaged tarball to include the fallback Fluent bundle \
+                 `{expected_entry}`, but it did not"
+            )
+            .into())
+        }
     }
 
-    fn package_target_dir() -> TempDir {
+    fn package_target_dir() -> io::Result<TempDir> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let target_root = manifest_dir.join("target");
-        fs::create_dir_all(&target_root)
-            .unwrap_or_else(|error| panic!("target directory should be creatable: {error}"));
+        fs::create_dir_all(&target_root)?;
 
         Builder::new()
             .prefix("whitaker-common-package-")
             .tempdir_in(&target_root)
-            .unwrap_or_else(|error| {
-                panic!("temporary package directory should be creatable: {error}")
-            })
     }
 
-    fn package_crate_path(target_dir: &Path) -> PathBuf {
+    fn package_crate_path(target_dir: &Path) -> TestResult<PathBuf> {
         let status = Command::new("cargo")
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .env("CARGO_TARGET_DIR", target_dir)
@@ -55,10 +66,11 @@ mod unix {
                 "--allow-dirty",
                 "--no-verify",
             ])
-            .status()
-            .unwrap_or_else(|error| panic!("cargo package should run: {error}"));
+            .status()?;
 
-        assert!(status.success(), "cargo package should succeed");
+        if !status.success() {
+            return Err(format!("cargo package should succeed, but exited with {status}").into());
+        }
 
         let expected_name = format!(
             "{}-{}.crate",
@@ -66,36 +78,30 @@ mod unix {
             env!("CARGO_PKG_VERSION")
         );
         let package_dir = target_dir.join("package");
-        fs::read_dir(&package_dir)
-            .unwrap_or_else(|error| panic!("package directory should be readable: {error}"))
-            .map(|entry| {
-                entry
-                    .unwrap_or_else(|error| {
-                        panic!("package directory entry should be readable: {error}")
-                    })
-                    .path()
-            })
-            .find(|path| {
-                path.file_name()
-                    .is_some_and(|name| name == expected_name.as_str())
-            })
-            .unwrap_or_else(|| panic!("cargo package should produce {expected_name}"))
+        for entry_result in fs::read_dir(&package_dir)? {
+            let path = entry_result?.path();
+            if path
+                .file_name()
+                .is_some_and(|name| name == expected_name.as_str())
+            {
+                return Ok(path);
+            }
+        }
+
+        Err(format!("cargo package should produce {expected_name}").into())
     }
 
-    fn package_tar_listing(crate_path: &Path) -> String {
-        let output = Command::new("tar")
-            .arg("-tf")
-            .arg(crate_path)
-            .output()
-            .unwrap_or_else(|error| panic!("tar should list package contents: {error}"));
+    fn package_tar_listing(crate_path: &Path) -> TestResult<String> {
+        let output = Command::new("tar").arg("-tf").arg(crate_path).output()?;
 
-        assert!(
-            output.status.success(),
-            "tar should succeed when listing the packaged crate: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        if !output.status.success() {
+            return Err(format!(
+                "tar should succeed when listing the packaged crate: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into());
+        }
 
-        String::from_utf8(output.stdout)
-            .unwrap_or_else(|error| panic!("tar listing should be valid UTF-8: {error}"))
+        String::from_utf8(output.stdout).map_err(Into::into)
     }
 }

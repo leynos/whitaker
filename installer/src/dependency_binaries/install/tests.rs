@@ -23,21 +23,26 @@ use crate::{dirs::MockBaseDirs, installer_packaging::TargetTriple};
 fn run_install_scenario(
     dependency_name: &str,
     writes_binary: bool,
-) -> (
+) -> std::io::Result<(
     tempfile::TempDir,
     PathBuf,
     Result<PathBuf, DependencyBinaryInstallError>,
-) {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
+)> {
+    let temp_dir = tempfile::tempdir()?;
     let bin_dir = temp_dir.path().join("bin");
     let mut dirs = MockBaseDirs::new();
     dirs.expect_executables()
         .once()
         .return_const(Some(bin_dir.clone()));
     let dependency = crate::dependency_binaries::find_dependency_binary(dependency_name)
-        .expect("dependency manifest should load")
-        .expect("dependency should exist");
-    let target = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
+        .map_err(std::io::Error::other)?
+        .ok_or_else(|| {
+            std::io::Error::other(format!(
+                "dependency `{dependency_name}` is not in the manifest"
+            ))
+        })?;
+    let target =
+        TargetTriple::try_from("x86_64-unknown-linux-gnu").map_err(std::io::Error::other)?;
     let mut downloader = MockDependencyArchiveDownloader::new();
     let expected_archive = archive_filename(dependency, &target);
     downloader
@@ -60,9 +65,11 @@ fn run_install_scenario(
                     binary: expected_member_path.to_owned(),
                 });
             }
-            let binary_name = Path::new(expected_member_path)
-                .file_name()
-                .expect("member path should include a filename");
+            let Some(binary_name) = Path::new(expected_member_path).file_name() else {
+                return Err(DependencyBinaryInstallError::MissingBinaryInArchive {
+                    binary: expected_member_path.to_owned(),
+                });
+            };
             let path = destination_dir.join(binary_name);
             fs::write(&path, b"fake binary")?;
             Ok(path)
@@ -77,24 +84,24 @@ fn run_install_scenario(
         },
     );
 
-    (temp_dir, bin_dir, result)
+    Ok((temp_dir, bin_dir, result))
 }
 
 #[fixture]
-fn cargo_dylint_install_result() -> (
+fn cargo_dylint_install_result() -> std::io::Result<(
     tempfile::TempDir,
     PathBuf,
     Result<PathBuf, DependencyBinaryInstallError>,
-) {
+)> {
     run_install_scenario("cargo-dylint", true)
 }
 
 #[fixture]
-fn missing_binary_install_result() -> (
+fn missing_binary_install_result() -> std::io::Result<(
     tempfile::TempDir,
     PathBuf,
     Result<PathBuf, DependencyBinaryInstallError>,
-) {
+)> {
     run_install_scenario("dylint-link", false)
 }
 
@@ -121,12 +128,13 @@ fn binary_filename_adds_windows_suffix() {
 
 #[rstest]
 fn install_with_creates_missing_bin_directory(
-    cargo_dylint_install_result: (
+    #[from(cargo_dylint_install_result)] scenario: std::io::Result<(
         tempfile::TempDir,
         PathBuf,
         Result<PathBuf, DependencyBinaryInstallError>,
-    ),
+    )>,
 ) {
+    let cargo_dylint_install_result = scenario.expect("install scenario should be staged");
     let (_temp_dir, bin_dir, result) = cargo_dylint_install_result;
     let installed_path = result.expect("install");
     assert!(bin_dir.is_dir());
@@ -143,12 +151,13 @@ fn install_with_creates_missing_bin_directory(
 
 #[rstest]
 fn install_with_returns_error_when_binary_missing_after_extract(
-    missing_binary_install_result: (
+    #[from(missing_binary_install_result)] scenario: std::io::Result<(
         tempfile::TempDir,
         PathBuf,
         Result<PathBuf, DependencyBinaryInstallError>,
-    ),
+    )>,
 ) {
+    let missing_binary_install_result = scenario.expect("install scenario should be staged");
     let (_temp_dir, _bin_dir, result) = missing_binary_install_result;
     let dependency = crate::dependency_binaries::find_dependency_binary("dylint-link")
         .expect("dependency manifest should load")

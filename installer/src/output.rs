@@ -175,6 +175,8 @@ impl DryRunInfo<'_> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for installer output rendering.
+
     use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
 
