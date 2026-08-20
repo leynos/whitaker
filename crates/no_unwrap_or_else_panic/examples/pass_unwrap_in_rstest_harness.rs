@@ -39,7 +39,9 @@ fn pass_unwrap_in_rstest_harness(value: i32) {
 #[cfg(all(test, windows))]
 mod pass_unwrap_in_rstest_harness {
     #[test]
-    fn case_1() { super::pass_unwrap_in_rstest_harness(1); }
+    fn case_1() {
+        super::pass_unwrap_in_rstest_harness(1);
+    }
 }
 
 fn main() {}

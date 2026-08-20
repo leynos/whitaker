@@ -23,7 +23,7 @@ pub mod ui;
 
 use std::{
     ffi::OsStr,
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::{Mutex, MutexGuard, OnceLock, PoisonError},
 };
 
 pub use fixtures::{copy_directory, copy_fixture};
@@ -44,16 +44,15 @@ pub use ui::{
 /// `temp_env::with_vars_unset` when the test would otherwise race with other
 /// cases changing the same global process state.
 ///
-/// # Panics
-///
-/// Panics when the lock is poisoned, which means an earlier test panicked
-/// while mutating the environment; the process state can no longer be
-/// trusted, so failing fast is the only safe response.
+/// The mutex guards `()`, so a poisoned lock carries no corrupted state: it
+/// only records that some earlier test panicked while holding the
+/// serialization token. Recovering the guard is therefore sound, and keeps one
+/// failing test from cascading into every later one.
 pub fn env_test_guard() -> MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(|error| panic!("expected environment test lock: {error}"))
+        .unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Runs `callback` with one environment variable temporarily set.

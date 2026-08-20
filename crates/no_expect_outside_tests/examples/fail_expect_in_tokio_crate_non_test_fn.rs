@@ -15,4 +15,6 @@ async fn unrelated_tokio_test() {
     value.expect("actual Tokio tests should still be allowed");
 }
 
-fn main() { parse_config(); }
+fn main() {
+    parse_config();
+}
