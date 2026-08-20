@@ -76,7 +76,7 @@ mod tests {
     }
 
     impl StagedSuiteSetup {
-        fn requested_suite_crates(&self) -> Vec<CrateName> { vec![CrateName::from(SUITE_CRATE)] }
+        fn requested_suite_crates() -> Vec<CrateName> { vec![CrateName::from(SUITE_CRATE)] }
 
         fn stager(&self) -> Stager {
             Stager::new(self.target_dir.clone(), self.toolchain.channel())
@@ -174,7 +174,7 @@ mod tests {
     fn staged_suite_installation_writes_placeholder_library_for_suite_requests(
         staged_suite_setup: StagedSuiteSetup,
     ) {
-        let requested_crates = staged_suite_setup.requested_suite_crates();
+        let requested_crates = StagedSuiteSetup::requested_suite_crates();
         let stager = staged_suite_setup.stager();
 
         with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
@@ -198,7 +198,7 @@ mod tests {
     #[cfg(debug_assertions)]
     #[rstest]
     fn staged_suite_installation_surfaces_write_failures(staged_suite_setup: StagedSuiteSetup) {
-        let requested_crates = staged_suite_setup.requested_suite_crates();
+        let requested_crates = StagedSuiteSetup::requested_suite_crates();
         let blocked_path = staged_suite_setup.create_blocked_suite_output();
 
         with_var(TEST_STAGE_SUITE_ENV, Some("1"), || {
@@ -222,7 +222,7 @@ mod tests {
     fn staged_suite_installation_is_disabled_in_release_builds(
         staged_suite_setup: StagedSuiteSetup,
     ) {
-        let requested_crates = staged_suite_setup.requested_suite_crates();
+        let requested_crates = StagedSuiteSetup::requested_suite_crates();
         let staging_dir = staged_suite_setup
             .target_dir
             .join(staged_suite_setup.toolchain.channel())

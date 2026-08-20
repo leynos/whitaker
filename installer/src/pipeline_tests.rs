@@ -89,7 +89,8 @@ impl PipelineContextProvider for TestContext {
     }
 }
 
-/// Returns a default TestContext with owned paths and default settings for pipeline unit tests.
+/// Returns a default `TestContext` with owned paths and default settings for
+/// pipeline unit tests.
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn test_ctx() -> TestContext { TestContext::new() }
@@ -163,7 +164,10 @@ fn perform_build_with_calls_build_all_with_provided_crates(test_ctx: TestContext
     let mut mock = MockCrateBuilder::new();
     mock.expect_build_all()
         .withf(|c| {
-            c.len() == 2 && c[0].as_str() == "whitaker_suite" && c[1].as_str() == "module_max_lines"
+            let [suite, lint] = c else {
+                return false;
+            };
+            suite.as_str() == "whitaker_suite" && lint.as_str() == "module_max_lines"
         })
         .times(1)
         .returning(|_| Ok(vec![]));
@@ -189,7 +193,8 @@ fn perform_build_with_returns_builder_results(test_ctx: TestContext) {
     let results = perform_build_with(&ctx.pipeline_context(), &crates, &mock, &mut stderr)
         .expect("build should succeed");
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].crate_name.as_str(), "whitaker_suite");
+    let built = results.first().expect("build result should be recorded");
+    assert_eq!(built.crate_name.as_str(), "whitaker_suite");
 }
 
 #[rstest]

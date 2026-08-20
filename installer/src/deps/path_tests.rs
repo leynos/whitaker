@@ -98,10 +98,13 @@ fn check_dylint_tools_rejects_unpinned_dylint_link(#[case] install_list_check: E
 fn check_dylint_tools_rejects_non_invocable_dylint_link_on_path() {
     with_fake_path(
         |directories| {
+            let first_dir = directories.first().ok_or_else(|| {
+                std::io::Error::other("fake PATH should contain at least one directory")
+            })?;
             #[cfg(windows)]
-            let binary_path = directories[0].join("dylint-link.cmd");
+            let binary_path = first_dir.join("dylint-link.cmd");
             #[cfg(not(windows))]
-            let binary_path = directories[0].join("dylint-link");
+            let binary_path = first_dir.join("dylint-link");
 
             write_fake_binary_with_status(&binary_path, true, 1)
         },
@@ -154,10 +157,13 @@ fn is_binary_on_path_returns_false_when_binary_is_missing_from_all_directories()
 fn is_binary_on_path_checks_multiple_directories() {
     with_fake_path(
         |directories| {
+            let second_dir = directories.get(1).ok_or_else(|| {
+                std::io::Error::other("fake PATH should contain at least two directories")
+            })?;
             #[cfg(windows)]
-            let binary_path = directories[1].join("dylint-link.exe");
+            let binary_path = second_dir.join("dylint-link.exe");
             #[cfg(not(windows))]
-            let binary_path = directories[1].join("dylint-link");
+            let binary_path = second_dir.join("dylint-link");
 
             write_fake_binary(&binary_path, true)
         },

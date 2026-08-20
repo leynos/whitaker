@@ -10,11 +10,8 @@ use crate::test_utils::dependency_binary_helpers::{
 
 #[test]
 fn repository_verification_call_returns_probe_for_cargo_dylint() {
-    let call = repository_verification_call("cargo-dylint", false);
-    let call = match call {
-        Some(call) => call,
-        None => panic!("cargo-dylint should use a verification probe"),
-    };
+    let call = repository_verification_call("cargo-dylint", false)
+        .expect("cargo-dylint should use a verification probe");
 
     assert_eq!(call.cmd, "cargo");
     assert_eq!(call.args, vec!["dylint", "--version"]);
@@ -50,8 +47,9 @@ fn expected_calls_include_repository_probe_for_cargo_dylint() {
     );
 
     assert_eq!(calls.len(), 2);
-    assert_eq!(calls[1].cmd, "cargo");
-    assert_eq!(calls[1].args, vec!["dylint", "--version"]);
+    let verification = calls.get(1).expect("verification probe should be recorded");
+    assert_eq!(verification.cmd, "cargo");
+    assert_eq!(verification.args, vec!["dylint", "--version"]);
 }
 
 #[test]
@@ -69,6 +67,7 @@ fn expected_calls_omit_executor_verification_for_dylint_link() {
     );
 
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].cmd, "cargo");
-    assert_eq!(calls[0].args, vec!["binstall", "--version"]);
+    let probe = calls.first().expect("binstall probe should be recorded");
+    assert_eq!(probe.cmd, "cargo");
+    assert_eq!(probe.args, vec!["binstall", "--version"]);
 }
