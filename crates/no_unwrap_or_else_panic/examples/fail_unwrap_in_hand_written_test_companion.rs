@@ -18,8 +18,7 @@
 #[cfg(test)]
 #[expect(
     dead_code,
-    reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. \
-              Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
+    reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
 )]
 fn hand_written_test_companion_subject(value: i32) {
     let _ = Some(value).unwrap_or_else(|| panic!("handwritten companion {value}"));

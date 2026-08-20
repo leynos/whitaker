@@ -11,8 +11,7 @@
 #[cfg(test)]
 #[expect(
     dead_code,
-    reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. \
-              Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
+    reason = "compiled by the Dylint UI harness solely to assert the emitted lint; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
 )]
 fn aliased_test_crate_non_companion_subject(value: i32) {
     let _ = Some(value).unwrap_or_else(|| panic!("aliased non-companion {value}"));
@@ -25,11 +24,11 @@ mod aliased_test_crate_non_companion_subject {
 
     #[expect(
         dead_code,
-        reason = "proves an aliased `test` import alone is not an rstest companion; never \
-                  invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap \
-                  item 2.2.9."
+        reason = "proves an aliased `test` import alone is not an rstest companion; never invoked. Migration to #[whitaker_support::dylint_expect] is tracked by roadmap item 2.2.9."
     )]
-    fn unrelated_item() { let _ = test_harness::black_box(1); }
+    fn unrelated_item() {
+        let _ = test_harness::black_box(1);
+    }
 }
 
 fn main() {}
