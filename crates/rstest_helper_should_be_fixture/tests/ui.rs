@@ -43,8 +43,11 @@ fn example_harness_collects_call_site_evidence() {
     for expected in [
         "callee_count=3",
         "record_count=9",
-        "callee=Builder::<'_>::build;records=2\nfingerprint=unsupported,fixture-local\\
-         nfingerprint=unsupported,fixture-local",
+        concat!(
+            "callee=Builder::<'_>::build;records=2\n",
+            "fingerprint=unsupported,fixture-local\n",
+            "fingerprint=unsupported,fixture-local",
+        ),
         "callee=helper;records=2",
         "callee=nested_helper;records=5",
         "fingerprint=unsupported,fixture-local",
