@@ -55,6 +55,29 @@ fn table_str<'a>(table: &'a Table, key: &str) -> Result<&'a str, String> {
         .ok_or_else(|| format!("{key} not found"))
 }
 
+/// Assert that a string-valued binstall key equals `expected`.
+///
+/// The mismatch is returned as an `Err` rather than asserted: these steps
+/// return `Result`, so a panic here would trip `clippy::panic_in_result_fn`,
+/// and returning the message keeps the failure reporting identical to the
+/// other steps in this file.
+fn assert_binstall_value_equals(
+    world: &BinstallWorld,
+    key: &str,
+    expected: &str,
+    value_name: &str,
+) -> Result<(), String> {
+    let binstall = binstall_table(world)?;
+    let actual = table_str(binstall, key)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "{value_name} mismatch: expected {expected}, got {actual}"
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
@@ -105,38 +128,17 @@ fn when_bin_dir_expanded(world: &mut BinstallWorld) {
 
 #[then("the pkg-url template is present")]
 fn then_pkg_url_present(world: &mut BinstallWorld) -> Result<(), String> {
-    let binstall = binstall_table(world)?;
-    let pkg_url = table_str(binstall, "pkg-url")?;
-    if pkg_url != PKG_URL_TEMPLATE {
-        return Err(format!(
-            "pkg-url mismatch: expected {PKG_URL_TEMPLATE}, got {pkg_url}"
-        ));
-    }
-    Ok(())
+    assert_binstall_value_equals(world, "pkg-url", PKG_URL_TEMPLATE, "pkg-url")
 }
 
 #[then("the bin-dir template is present")]
 fn then_bin_dir_present(world: &mut BinstallWorld) -> Result<(), String> {
-    let binstall = binstall_table(world)?;
-    let bin_dir = table_str(binstall, "bin-dir")?;
-    if bin_dir != BIN_DIR_TEMPLATE {
-        return Err(format!(
-            "bin-dir mismatch: expected {BIN_DIR_TEMPLATE}, got {bin_dir}"
-        ));
-    }
-    Ok(())
+    assert_binstall_value_equals(world, "bin-dir", BIN_DIR_TEMPLATE, "bin-dir")
 }
 
 #[then("the default pkg-fmt is \"{expected}\"")]
 fn then_default_pkg_fmt(world: &mut BinstallWorld, expected: String) -> Result<(), String> {
-    let binstall = binstall_table(world)?;
-    let pkg_fmt = table_str(binstall, "pkg-fmt")?;
-    if pkg_fmt != expected {
-        return Err(format!(
-            "pkg-fmt mismatch: expected {expected}, got {pkg_fmt}"
-        ));
-    }
-    Ok(())
+    assert_binstall_value_equals(world, "pkg-fmt", &expected, "pkg-fmt")
 }
 
 #[then("the x86_64-pc-windows-msvc override has pkg-fmt \"{expected}\"")]
