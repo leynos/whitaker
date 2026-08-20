@@ -33,7 +33,7 @@ fn xdg_bin_home() -> Option<PathBuf> {
 /// use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
-/// if let Some(bin_dir) = dirs.bin_dir() {
+/// if let Some(bin_dir) = dirs.executables() {
 ///     println!("Executables go in: {}", bin_dir.display());
 /// }
 /// ```
@@ -74,7 +74,7 @@ pub trait BaseDirs {
 ///
 /// let dirs = SystemBaseDirs::new().expect("failed to initialize directories");
 /// let data_dir = dirs
-///     .whitaker_data_dir()
+///     .whitaker_data()
 ///     .expect("could not determine data directory");
 /// println!("Whitaker data at: {}", data_dir.display());
 /// ```

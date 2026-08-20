@@ -56,6 +56,16 @@ SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(SPELLING_PY_ENV) \
 	--with pytest-cov==7.0.0 python -m pytest
 WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
+# Doctests compile as their own crate and do not inherit the lib's
+# `#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]`, so the
+# Dylint driver crates cannot link `rustc_driver` from a doctest and fail with
+# "use of unstable library feature `rustc_private`". Their examples are covered
+# by the unit and UI suites instead, so exclude them from the doctest run.
+DOCTEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
+	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude rstest_helper_should_be_fixture \
+	$(foreach crate,$(LINT_CRATES),--exclude $(crate))
 CARGO_DYLINT_VERSION ?= 6.0.1
 DYLINT_LINK_VERSION ?= 6.0.1
 # Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
@@ -123,7 +133,7 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --workspace --doc --all-features $(DOCTEST_EXCLUDES) $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
