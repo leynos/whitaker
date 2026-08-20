@@ -2,13 +2,13 @@
 
 ## Status
 
-Accepted (2026-07-23): Keep Whitaker's mutation-testing adoption pin-only and
+Accepted (2026-07-22): Keep Whitaker's mutation-testing adoption pin-only and
 contract-test its declared configuration rather than claiming parity with the
 continuous integration (CI) test baseline.
 
 ## Date
 
-2026-07-23.
+2026-07-22.
 
 ## Context and problem statement
 
@@ -37,23 +37,13 @@ only that declared configuration.
 
 ## Options considered
 
-### Option A: require full CI-baseline parity
+| Option                                                  | Shared-workflow feasibility                                                                         | Mutation coverage                                                               | Operational risk                                                                   | CI-baseline claim / verification                                                                 | Rationale                                                                               |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| A: require full CI-baseline parity                      | Unsafe and unimplementable: the current shared workflow cannot inject the required flags per crate. | Aims for full workspace coverage equivalent to `make test`.                     | Applying the flags workspace-wide breaks `cargo install` for `whitaker-installer`. | Would claim parity, but cannot verify it through the shared workflow.                            | Missing per-crate flags make this option unsafe and unimplementable.                    |
+| B: exclude every crate that needs dynamic-linking flags | Runs reliably with the shared workflow by removing the affected crates.                             | Omits important production code, making the reported scope less useful.         | Lower run risk, but accepts the risk of untested affected crates.                  | Makes no full-baseline claim; verification covers only the reduced scope.                        | Reliable execution deliberately omits important affected crates.                        |
+| C: adopt a pin-only declared-configuration contract     | Closest safe approximation supported by the shared workflow.                                        | Retains useful informational coverage without claiming full workspace coverage. | Keeps mutation testing informational and independent of pull-request gates.        | Verifies the caller's declared security and configuration shape, not a full workspace assertion. | A declared-shape contract is the closest safe approximation, not full workspace parity. |
 
-Pass a workspace-testing argument and treat the mutation run as equivalent to
-`make test`. This is not implementable through the current shared workflow
-because it cannot inject the required flags per crate.
-
-### Option B: exclude every crate that needs dynamic-linking flags
-
-Remove the affected crates from mutation scope. This would make the workflow
-run reliably, but would deliberately omit important production code and make
-the reported scope less useful.
-
-### Option C: adopt a pin-only declared-configuration contract
-
-Run the closest safe approximation supported by the shared workflow and test
-the caller's security and configuration shape without asserting that a full
-workspace mutation baseline passes.
+_Table 1: Comparison of mutation-testing options._
 
 ## Decision outcome / proposed direction
 
