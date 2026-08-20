@@ -1,6 +1,7 @@
 //! Unit tests for `MinHash` and LSH candidate generation.
 
 use rstest::{fixture, rstest};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 use super::{
     CandidatePair,
@@ -39,12 +40,15 @@ fn multi_band_config() -> LshConfig {
     LshConfig::new(32, 4).expect("multi-band config should validate")
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn shared_signature() -> MinHashSignature { sketch(&[1, 2, 3, 4]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn distinct_signature() -> MinHashSignature { sketch(&[8, 9, 10, 11]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn identical_signature() -> MinHashSignature { sketch(&[5, 7, 11, 13]) }
 

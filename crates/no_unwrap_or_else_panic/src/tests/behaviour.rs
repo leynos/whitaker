@@ -32,6 +32,7 @@ impl DecisionWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DecisionWorld { DecisionWorld::default() }
 

@@ -558,7 +558,7 @@ All phases produce additive changes. If a phase fails partway through, fix the
 issue and re-run the quality gates. The `tempfile` crate ensures downloaded
 archives are cleaned up on failure.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Key files created:
 

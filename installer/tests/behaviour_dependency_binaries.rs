@@ -22,6 +22,7 @@ use whitaker_installer::{
         StubExecutor,
         dependency_binary_helpers::{
             ExpectedCallConfig,
+            RepositoryVerification,
             expected_calls,
             path_binary_location,
             write_fake_binary,
@@ -95,6 +96,7 @@ struct DependencyBinaryWorld {
     dependencies: Vec<DependencyBinary>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DependencyBinaryWorld { DependencyBinaryWorld::default() }
 
@@ -169,14 +171,21 @@ fn build_stub_executor(world: &DependencyBinaryWorld, tool: &str) -> StubExecuto
         world.repository_behaviour,
         Some(RepositoryInstallerBehaviour::Success)
     ) && !world.is_unsupported_target;
+    let repository_verification = match (
+        expect_repository_verification,
+        world.should_repository_verification_fail,
+    ) {
+        (false, _) => RepositoryVerification::Skip,
+        (true, true) => RepositoryVerification::Fails,
+        (true, false) => RepositoryVerification::Succeeds,
+    };
     StubExecutor::new(expected_calls(
         tool,
         &ExpectedCallConfig {
             is_binstall_available: world.is_binstall_available,
             has_repository_context: !world.is_unsupported_target,
             is_repository_asset_missing,
-            should_verify_repository_install: expect_repository_verification,
-            is_repository_verification_failing: world.should_repository_verification_fail,
+            repository_verification,
             cargo_binstall_failure: world.cargo_binstall_failure.as_deref(),
             cargo_install_failure: world.cargo_install_failure.as_deref(),
         },

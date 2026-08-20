@@ -256,8 +256,8 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
 fn when_install_config_checked(world: &mut PrebuiltWorld) {
     let install_args = world.install_args.clone().unwrap_or_default();
     let options = CrateResolutionOptions {
-        individual_lints: install_args.individual_lints,
-        experimental: install_args.experimental,
+        individual_lints: install_args.lint_selection.individual_lints,
+        experimental: install_args.lint_selection.experimental,
     };
     let requested_crates = resolve_crates(&[], &options);
     world.should_attempt_prebuilt = Some(install_args.should_attempt_prebuilt(&requested_crates));

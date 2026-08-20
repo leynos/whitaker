@@ -17,6 +17,7 @@ use whitaker_clones_core::{
     normalize,
     winnow,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct TokenPassWorld {
@@ -34,6 +35,7 @@ struct TokenPassWorld {
     window_error: RefCell<Option<TokenPassError>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> TokenPassWorld { TokenPassWorld::default() }
 
@@ -69,12 +71,12 @@ fn snippet_for_name(name: &str) -> &'static str {
 
 #[given("the source snippet {name}")]
 fn given_source(world: &TokenPassWorld, name: String) {
-    *world.source.borrow_mut() = snippet_for_name(&name).to_owned();
+    snippet_for_name(&name).clone_into(&mut world.source.borrow_mut());
 }
 
 #[given("the comparison source snippet {name}")]
 fn given_comparison_source(world: &TokenPassWorld, name: String) {
-    *world.comparison_source.borrow_mut() = snippet_for_name(&name).to_owned();
+    snippet_for_name(&name).clone_into(&mut world.comparison_source.borrow_mut());
 }
 
 #[given("the profile is {profile}")]
@@ -89,8 +91,8 @@ fn given_profile(world: &TokenPassWorld, profile: String) {
 #[given("shingle size {size}")]
 fn given_shingle_size(world: &TokenPassWorld, size: usize) {
     match ShingleSize::try_from(size) {
-        Ok(size) => {
-            *world.k.borrow_mut() = Some(size);
+        Ok(shingle_size) => {
+            *world.k.borrow_mut() = Some(shingle_size);
             *world.k_error.borrow_mut() = None;
         }
         Err(error) => {
@@ -103,8 +105,8 @@ fn given_shingle_size(world: &TokenPassWorld, size: usize) {
 #[given("winnow window {window}")]
 fn given_window(world: &TokenPassWorld, window: usize) {
     match WinnowWindow::try_from(window) {
-        Ok(window) => {
-            *world.window.borrow_mut() = Some(window);
+        Ok(winnow_window) => {
+            *world.window.borrow_mut() = Some(winnow_window);
             *world.window_error.borrow_mut() = None;
         }
         Err(error) => {
@@ -203,7 +205,11 @@ fn then_normalized_labels_are(world: &TokenPassWorld, labels: String) {
         .split_whitespace()
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
-    assert_eq!(*world.normalized_labels.borrow(), expected);
+    assert_eq!(
+        *world.normalized_labels.borrow(),
+        expected,
+        "normalized labels must match the scenario expectation"
+    );
 }
 
 #[then("the normalized labels match exactly")]
@@ -218,7 +224,11 @@ fn then_normalized_labels_match_exactly(world: &TokenPassWorld) {
 #[then("the fingerprint count is {count}")]
 fn then_fingerprint_count_is(world: &TokenPassWorld, count: usize) {
     with_fingerprints(world, |fingerprints| {
-        assert_eq!(fingerprints.len(), count);
+        assert_eq!(
+            fingerprints.len(),
+            count,
+            "fingerprint count must match the scenario expectation"
+        );
     });
 }
 
@@ -228,7 +238,11 @@ fn then_first_fingerprint_spans(world: &TokenPassWorld, start: usize, end: usize
         let Some(first) = fingerprints.first() else {
             panic!("fingerprints must exist before checking the first span");
         };
-        assert_eq!(first.range, start..end);
+        assert_eq!(
+            first.range,
+            start..end,
+            "first fingerprint span must match the scenario expectation"
+        );
     });
 }
 
@@ -238,7 +252,7 @@ fn then_retained_hashes_are(world: &TokenPassWorld, hashes: String) {
         .split_whitespace()
         .map(str::parse::<u64>)
         .collect::<Result<Vec<_>, _>>()
-        .expect("expected hash list should be valid");
+        .unwrap_or_else(|error| panic!("expected hash list must be valid: {error}"));
 
     with_retained(world, |retained| {
         assert_eq!(
@@ -246,7 +260,8 @@ fn then_retained_hashes_are(world: &TokenPassWorld, hashes: String) {
                 .iter()
                 .map(|fingerprint| fingerprint.hash)
                 .collect::<Vec<_>>(),
-            expected
+            expected,
+            "retained fingerprint hashes must match the scenario expectation"
         );
     });
 }
@@ -262,7 +277,11 @@ fn then_error_is(world: &TokenPassWorld, message: String) {
         .collect::<Vec<_>>();
 
     if let [error] = errors.as_slice() {
-        assert_eq!(error.to_string(), message);
+        assert_eq!(
+            error.to_string(),
+            message,
+            "reported error must match the scenario expectation"
+        );
         return;
     }
 

@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::lcom4::{MethodInfo, MethodInfoBuilder};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct ExtractionWorld {
@@ -53,6 +54,7 @@ impl ExtractionWorld {
     fn calls_empty(&self) -> bool { self.with_result(|info| info.called_methods().is_empty()) }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> ExtractionWorld { ExtractionWorld::default() }
 

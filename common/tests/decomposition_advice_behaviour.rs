@@ -12,6 +12,7 @@ use whitaker_common::decomposition_advice::{
     SuggestedExtractionKind,
     suggest_decomposition,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Clone)]
 struct CsvList(Vec<String>);
@@ -43,6 +44,7 @@ struct DecompositionWorld {
     suggestions: RefCell<Option<Vec<DecompositionSuggestion>>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DecompositionWorld { DecompositionWorld::default() }
 

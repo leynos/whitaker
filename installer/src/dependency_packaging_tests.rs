@@ -36,6 +36,7 @@ fn windows_target() -> TargetTriple {
     TargetTriple::try_from("x86_64-pc-windows-msvc").expect("valid target")
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn temp_dir() -> tempfile::TempDir { tempfile::tempdir().expect("temp dir") }
 

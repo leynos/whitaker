@@ -22,6 +22,7 @@ struct InstallMetricsWorld {
     summary_line: Option<String>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> InstallMetricsWorld { InstallMetricsWorld::default() }
 

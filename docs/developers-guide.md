@@ -1541,7 +1541,7 @@ context by combining a HIR ancestry walk with attribute-shape matching.
 `ContextEntry` items for modules, functions, impls, and blocks, and carries a
 boolean `has_test_context_ancestry` alongside that list. On each step,
 `has_test_ancestry` updates that boolean so the test-only decision can
-propagate from outer ancestors into nested helper code. `summarise_context`
+propagate from outer ancestors into nested helper code. `summarize_context`
 then combines the accumulated entries, the propagated boolean, and
 `in_test_like_context_with(additional_test_attributes)` to produce the final
 `ContextSummary.is_test` result. This pattern matters because user-configured
@@ -1555,7 +1555,7 @@ not just the immediately enclosing function.
     `is_cfg_test_attribute`
   - the current ancestor is a function item whose attributes match Whitaker's
     built-in test list or `additional_test_attributes`
-- `summarise_context` merges that ancestry flag with the collected
+- `summarize_context` merges that ancestry flag with the collected
   `ContextEntry` values to derive the final `ContextSummary.is_test` decision.
 
 Real `rstest` case expansion adds a second `--test` harness shape that the

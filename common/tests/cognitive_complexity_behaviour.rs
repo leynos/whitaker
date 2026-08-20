@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::brain_type_metrics::cognitive_complexity::CognitiveComplexityBuilder;
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct CcWorld {
@@ -21,6 +22,7 @@ impl Default for CcWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> CcWorld { CcWorld::default() }
 
@@ -85,8 +87,8 @@ fn given_pop_nesting(world: &CcWorld) {
 
 // --- When steps ---
 
-#[when("the complexity is finalised")]
-fn when_finalised(world: &CcWorld) {
+#[when("the complexity is finalized")]
+fn when_finalized(world: &CcWorld) {
     let builder = world
         .builder
         .borrow_mut()

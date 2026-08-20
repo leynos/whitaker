@@ -57,10 +57,15 @@ fn format_toolchain_section(
 
 /// Render the listing lines for one installed library and its lints.
 fn format_library_lines(library: &InstalledLibrary) -> String {
-    let lint_lines: String = lints_for_library(&library.crate_name)
-        .iter()
-        .map(|lint| format!("      - {lint}\n"))
-        .collect();
+    let lint_lines: String =
+        lints_for_library(&library.crate_name)
+            .iter()
+            .fold(String::new(), |mut output, lint| {
+                output.push_str("      - ");
+                output.push_str(lint);
+                output.push('\n');
+                output
+            });
     format!("    {}\n{lint_lines}", library.crate_name)
 }
 

@@ -31,7 +31,7 @@ use rustc_span::sym;
 
 /// Summarize the context for a given HIR node.
 #[cfg(feature = "dylint-driver")]
-pub(crate) fn summarise_context(cx: &LateContext<'_>, hir_id: hir::HirId) -> ContextSummary {
+pub(crate) fn summarize_context(cx: &LateContext<'_>, hir_id: hir::HirId) -> ContextSummary {
     let mut entries = Vec::new();
     let mut has_cfg_test = false;
 

@@ -90,6 +90,7 @@ fn create_mock_library(target_dir: &Utf8Path, crate_name: &str) -> BuildResult {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn staging_ctx() -> StagingTestContext { StagingTestContext::new() }
 

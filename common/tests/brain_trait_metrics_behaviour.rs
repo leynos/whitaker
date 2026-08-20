@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::brain_trait_metrics::{TraitMetrics, TraitMetricsBuilder};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug)]
 enum PendingTraitItem {
@@ -25,6 +26,7 @@ struct TraitMetricsWorld {
     metrics: RefCell<Option<TraitMetrics>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> TraitMetricsWorld { TraitMetricsWorld::default() }
 

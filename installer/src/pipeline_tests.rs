@@ -90,6 +90,7 @@ impl PipelineContextProvider for TestContext {
 }
 
 /// Returns a default TestContext with owned paths and default settings for pipeline unit tests.
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn test_ctx() -> TestContext { TestContext::new() }
 

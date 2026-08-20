@@ -20,7 +20,7 @@ use super::{
     ReceiverLabel,
     context_label,
     fallback_messages,
-    localised_messages,
+    localized_messages,
 };
 use crate::context::ContextSummary;
 
@@ -99,6 +99,7 @@ impl LocalizationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LocalizationWorld { LocalizationWorld::default() }
 
@@ -138,7 +139,7 @@ fn given_no_function(world: &LocalizationWorld) { world.set_function(None); }
 #[given("localization fails")]
 fn given_failure(world: &LocalizationWorld) { world.failing.set(true); }
 
-#[when("I localise the expect diagnostic")]
+#[when("I localize the expect diagnostic")]
 fn when_localize(world: &LocalizationWorld) {
     let receiver = world.receiver.borrow().clone();
     let summary = world.summary.borrow().clone();
@@ -244,7 +245,7 @@ fn execute_localization(
 ) -> Result<NoExpectMessages, I18nError> {
     let context = context_label(summary);
     let category = ReceiverCategory::for_label(receiver);
-    localised_messages(lookup, receiver, &context, category)
+    localized_messages(lookup, receiver, &context, category)
 }
 
 fn failing_lookup() -> FailingLookup { FailingLookup::new(MESSAGE_KEY.as_ref()) }

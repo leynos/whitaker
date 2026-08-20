@@ -98,7 +98,7 @@ pub use i18n::{
     branch_phrase,
     get_localizer_for_lint,
     noop_reporter,
-    normalise_locale,
+    normalize_locale,
     resolve_localizer,
     safe_resolve_message_set,
     supports_locale,

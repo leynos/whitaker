@@ -1,9 +1,9 @@
-Feature: Localised diagnostics for expect usage
+Feature: Localized diagnostics for expect usage
   Scenario: English fallback locale
     Given the locale "en-GB" is selected
     And the receiver type is "Result<T, E>"
     And the function context is "handler"
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then the diagnostic mentions "calling expect on `Result<T, E>`"
     And the note references "function `handler`"
     And the help references "`Result<T, E>`"
@@ -13,7 +13,7 @@ Feature: Localised diagnostics for expect usage
     Given the locale "cy" is selected
     And the receiver type is "Option<String>"
     And the function context is ""
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then the diagnostic mentions "Peidiwch"
     And the note references "Daw’r galwad"
 
@@ -21,7 +21,7 @@ Feature: Localised diagnostics for expect usage
     Given the locale "zz" is selected
     And the receiver type is "Result<i32, i32>"
     And the call occurs outside any function
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then the diagnostic mentions "calling expect on `Result<i32, i32>`"
     And the fallback help mentions "`Result<i32, i32>`"
     And the fallback help mentions "`Err` variant"
@@ -30,26 +30,26 @@ Feature: Localised diagnostics for expect usage
     Given the locale "en-GB" is selected
     And the receiver type is empty
     And the function context is ""
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then the fallback and localization logic should handle the receiver type robustly
 
   Scenario: Receiver type is malformed
     Given the locale "en-GB" is selected
     And the receiver type is malformed
     And the function context is "worker"
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then the fallback and localization logic should handle the receiver type robustly
 
   Scenario: Receiver type is unexpected
     Given the locale "en-GB" is selected
     And the receiver type is unexpected
     And the function context is "handler"
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then the fallback and localization logic should handle the receiver type robustly
 
   Scenario: Localization failure surfaces missing message
     Given localization fails
     And the receiver type is "Result<(), ()>"
     And the function context is "worker"
-    When I localise the expect diagnostic
+    When I localize the expect diagnostic
     Then localization fails for "no_expect_outside_tests"

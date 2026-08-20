@@ -65,7 +65,7 @@ fn extract_key(result: &SarifResult) -> Option<ResultKey> {
         .clone();
 
     let location = result.locations.first()?;
-    let file = location.physical_location.artifact_location.uri.clone();
+    let file = location.physical_location.artefact_location.uri.clone();
     let region = location.physical_location.region.as_ref()?;
 
     Some(ResultKey {
@@ -126,7 +126,7 @@ pub fn deduplicate_results(results: &[SarifResult]) -> Vec<SarifResult> {
 ///
 /// The tool metadata is taken from the first run. Rules are unioned across all
 /// runs by `id` (first occurrence wins). Results are collected from all runs
-/// and deduplicated. Artifacts and invocations are concatenated.
+/// and deduplicated. Artefacts and invocations are concatenated.
 ///
 /// # Errors
 ///
@@ -151,12 +151,12 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
     tool.driver.rules = union_rules(runs);
 
     let mut all_results = Vec::new();
-    let mut all_artifacts = Vec::new();
+    let mut all_artefacts = Vec::new();
     let mut all_invocations = Vec::new();
 
     for run in runs {
         all_results.extend(run.results.clone());
-        all_artifacts.extend(run.artifacts.clone());
+        all_artefacts.extend(run.artefacts.clone());
         all_invocations.extend(run.invocations.clone());
     }
 
@@ -166,7 +166,7 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
         tool,
         invocations: all_invocations,
         results,
-        artifacts: all_artifacts,
+        artefacts: all_artefacts,
     })
 }
 

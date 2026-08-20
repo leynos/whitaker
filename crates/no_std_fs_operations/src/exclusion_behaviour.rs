@@ -33,6 +33,7 @@ impl ExclusionWorld {
 
 type WorldCell = RefCell<ExclusionWorld>;
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> WorldCell { RefCell::new(ExclusionWorld::default()) }
 

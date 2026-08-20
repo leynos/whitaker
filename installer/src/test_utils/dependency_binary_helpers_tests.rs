@@ -2,6 +2,7 @@
 
 use crate::test_utils::dependency_binary_helpers::{
     ExpectedCallConfig,
+    RepositoryVerification,
     dependency_version,
     expected_calls,
     repository_verification_call,
@@ -42,8 +43,7 @@ fn expected_calls_include_repository_probe_for_cargo_dylint() {
             is_binstall_available: false,
             has_repository_context: true,
             is_repository_asset_missing: false,
-            should_verify_repository_install: true,
-            is_repository_verification_failing: false,
+            repository_verification: RepositoryVerification::Succeeds,
             cargo_binstall_failure: None,
             cargo_install_failure: None,
         },
@@ -62,8 +62,7 @@ fn expected_calls_omit_executor_verification_for_dylint_link() {
             is_binstall_available: false,
             has_repository_context: true,
             is_repository_asset_missing: false,
-            should_verify_repository_install: true,
-            is_repository_verification_failing: false,
+            repository_verification: RepositoryVerification::Succeeds,
             cargo_binstall_failure: None,
             cargo_install_failure: None,
         },

@@ -27,6 +27,7 @@ use whitaker_common::{
     },
     test_support::with_locale,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -90,7 +91,7 @@ impl HelperWorld {
             .borrow()
             .as_ref()
             .cloned()
-            .unwrap_or_else(|| panic!("localizer should be initialised"))
+            .unwrap_or_else(|| panic!("localizer should be initialized"))
     }
 
     fn assert_locale(&self, expected: &str) {
@@ -178,6 +179,7 @@ impl HelperWorld {
     fn recorded_messages(&self) -> Vec<String> { self.emitter.recorded_messages() }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> HelperWorld { HelperWorld::new() }
 

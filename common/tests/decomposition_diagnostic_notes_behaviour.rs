@@ -14,6 +14,7 @@ use whitaker_common::{
     },
     test_support::decomposition::{parser_serde_fs_fixture, transport_trait_fixture},
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Clone)]
 struct CsvList(Vec<String>);
@@ -59,6 +60,7 @@ struct DiagnosticNoteWorld {
     rendered_note: RefCell<Option<String>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DiagnosticNoteWorld { DiagnosticNoteWorld::default() }
 

@@ -329,17 +329,17 @@ fn fallback_messages(module: ModuleName<'_>) -> ModuleDocMessages {
 }
 
 #[cfg(test)]
-#[path = "tests/behaviour.rs"]
+#[path = "../tests/behaviour.rs"]
 mod behaviour;
 
 #[cfg(test)]
-#[path = "tests/ui.rs"]
+#[path = "../tests/ui.rs"]
 mod ui;
 
 #[cfg(test)]
-#[path = "tests/classifier.rs"]
+#[path = "../tests/classifier.rs"]
 mod classifier;
 
 #[cfg(test)]
-#[path = "tests/span_to_snippet.rs"]
+#[path = "../tests/span_to_snippet.rs"]
 mod span_to_snippet;

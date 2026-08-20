@@ -14,7 +14,7 @@ use bumpy_road_function::analysis::{
     Settings,
     Weights,
     detect_bumps,
-    normalise_settings,
+    normalize_settings,
     top_two_bumps,
 };
 use rstest::{fixture, rstest};
@@ -63,12 +63,12 @@ use rstest_bdd_macros::{given, scenario, then, when};
     },
     Settings::default(),
 )]
-fn normalise_settings_falls_back_to_defaults(
+fn normalize_settings_falls_back_to_defaults(
     #[case] settings: Settings,
     #[case] expected: Settings,
 ) {
-    let normalised = normalise_settings(settings);
-    assert_eq!(normalised, expected);
+    let normalized = normalize_settings(settings);
+    assert_eq!(normalized, expected);
 }
 
 #[rstest]
@@ -107,9 +107,10 @@ struct World {
     min_bump_lines: RefCell<usize>,
     bumps: RefCell<Vec<bumpy_road_function::analysis::BumpInterval>>,
     settings: RefCell<Settings>,
-    normalised: RefCell<Option<Settings>>,
+    normalized: RefCell<Option<Settings>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> World { World::default() }
 
@@ -159,28 +160,28 @@ fn when_set_threshold(world: &World, threshold: f64) {
     world.settings.borrow_mut().threshold = threshold;
 }
 
-#[when("I normalise the settings")]
-fn when_normalise(world: &World) {
+#[when("I normalize the settings")]
+fn when_normalize(world: &World) {
     let settings = *world.settings.borrow();
-    let normalised = normalise_settings(settings);
-    world.normalised.replace(Some(normalised));
+    let normalized = normalize_settings(settings);
+    world.normalized.replace(Some(normalized));
 }
 
 #[then("the window becomes {window}")]
 fn then_window(world: &World, window: usize) {
     let settings = world
-        .normalised
+        .normalized
         .borrow()
-        .expect("settings should be normalised");
+        .expect("settings should be normalized");
     assert_eq!(settings.window, window);
 }
 
 #[then("the threshold becomes {threshold:f64}")]
 fn then_threshold(world: &World, threshold: f64) {
     let settings = world
-        .normalised
+        .normalized
         .borrow()
-        .expect("settings should be normalised");
+        .expect("settings should be normalized");
     assert_eq!(settings.threshold, threshold);
 }
 

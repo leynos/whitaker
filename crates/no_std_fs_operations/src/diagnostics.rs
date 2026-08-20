@@ -83,7 +83,7 @@ fn sanitize_message(text: String) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn localised_messages(
+pub(crate) fn localized_messages(
     lookup: &impl BundleLookup,
     operation: &str,
 ) -> Result<StdFsMessages, I18nError> {

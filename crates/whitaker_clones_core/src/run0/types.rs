@@ -66,7 +66,7 @@ impl TokenFragment {
     #[must_use]
     pub const fn profile(&self) -> NormProfile { self.profile }
 
-    /// Returns the source artifact URI used in SARIF output.
+    /// Returns the source artefact URI used in SARIF output.
     #[must_use]
     pub const fn file_uri(&self) -> &str { self.file_uri.as_str() }
 

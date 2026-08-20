@@ -31,6 +31,7 @@ impl PredicateWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> PredicateWorld { PredicateWorld::default() }
 

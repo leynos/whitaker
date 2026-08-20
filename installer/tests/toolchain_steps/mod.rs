@@ -158,6 +158,7 @@ fn assert_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
 // Fixture
 // ---------------------------------------------------------------------------
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 pub fn world() -> ToolchainWorld { ToolchainWorld::default() }
 

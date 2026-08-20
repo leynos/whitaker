@@ -48,6 +48,7 @@ rustc_lexer = "0.1.0"
 ra_ap_syntax = "=0.0.334"
 whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.7" }
 whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.7" }
+whitaker_test_macros = { path = "crates/whitaker_test_macros", version = "0.2.7" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
@@ -94,6 +95,7 @@ rustc_span = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 whitaker-common = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }

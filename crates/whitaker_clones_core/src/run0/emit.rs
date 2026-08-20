@@ -169,7 +169,7 @@ fn build_result(
                 text: format!("Peer clone fragment: {}", peer.id().as_str()),
             }),
             physical_location: whitaker_sarif::PhysicalLocation {
-                artifact_location: whitaker_sarif::ArtifactLocation {
+                artefact_location: whitaker_sarif::ArtefactLocation {
                     uri: peer.file_uri().to_owned(),
                     uri_base_id: None,
                 },

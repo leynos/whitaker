@@ -35,17 +35,36 @@ struct BinstallWorld {
     expanded_bin_dir: String,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> BinstallWorld { BinstallWorld::default() }
+
+/// Fetch the binstall table, failing if it has not been loaded.
+fn binstall_table(world: &BinstallWorld) -> Result<&Table, String> {
+    world
+        .binstall_table
+        .as_ref()
+        .ok_or_else(|| String::from("binstall table must be loaded"))
+}
+
+/// Read a string-valued key from a TOML table, failing if absent.
+fn table_str<'a>(table: &'a Table, key: &str) -> Result<&'a str, String> {
+    table
+        .get(key)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("{key} not found"))
+}
 
 // ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
 
 #[given("the installer Cargo.toml is loaded")]
-fn given_cargo_toml_loaded(world: &mut BinstallWorld) {
-    let table = load_cargo_toml().expect("load installer Cargo.toml");
-    world.binstall_table = Some(extract_binstall_table(&table).expect("extract binstall table"));
+fn given_cargo_toml_loaded(world: &mut BinstallWorld) -> Result<(), String> {
+    let table = load_cargo_toml().map_err(|e| format!("load installer Cargo.toml: {e}"))?;
+    world.binstall_table =
+        Some(extract_binstall_table(&table).map_err(|e| format!("extract binstall table: {e}"))?);
+    Ok(())
 }
 
 #[given("target \"{target}\" and version \"{version}\"")]
@@ -65,13 +84,13 @@ fn when_binstall_inspected(world: &mut BinstallWorld) {
 }
 
 #[when("the binstall overrides are inspected")]
-fn when_overrides_inspected(world: &mut BinstallWorld) {
+fn when_overrides_inspected(world: &mut BinstallWorld) -> Result<(), String> {
     // Verify overrides are accessible; the Then step extracts them directly.
-    let binstall = world.binstall_table.as_ref().expect("binstall table set");
-    assert!(
-        binstall.get("overrides").is_some(),
-        "overrides table not found"
-    );
+    let binstall = binstall_table(world)?;
+    if binstall.get("overrides").is_none() {
+        return Err(String::from("overrides table not found"));
+    }
+    Ok(())
 }
 
 #[when("the pkg-url template is expanded")]
@@ -85,48 +104,62 @@ fn when_bin_dir_expanded(world: &mut BinstallWorld) {
 }
 
 #[then("the pkg-url template is present")]
-fn then_pkg_url_present(world: &mut BinstallWorld) {
-    let binstall = world.binstall_table.as_ref().expect("binstall table set");
-    let pkg_url = binstall
-        .get("pkg-url")
-        .and_then(|v| v.as_str())
-        .expect("pkg-url not found");
-    assert_eq!(pkg_url, PKG_URL_TEMPLATE);
+fn then_pkg_url_present(world: &mut BinstallWorld) -> Result<(), String> {
+    let binstall = binstall_table(world)?;
+    let pkg_url = table_str(binstall, "pkg-url")?;
+    if pkg_url != PKG_URL_TEMPLATE {
+        return Err(format!(
+            "pkg-url mismatch: expected {PKG_URL_TEMPLATE}, got {pkg_url}"
+        ));
+    }
+    Ok(())
 }
 
 #[then("the bin-dir template is present")]
-fn then_bin_dir_present(world: &mut BinstallWorld) {
-    let binstall = world.binstall_table.as_ref().expect("binstall table set");
-    let bin_dir = binstall
-        .get("bin-dir")
-        .and_then(|v| v.as_str())
-        .expect("bin-dir not found");
-    assert_eq!(bin_dir, BIN_DIR_TEMPLATE);
+fn then_bin_dir_present(world: &mut BinstallWorld) -> Result<(), String> {
+    let binstall = binstall_table(world)?;
+    let bin_dir = table_str(binstall, "bin-dir")?;
+    if bin_dir != BIN_DIR_TEMPLATE {
+        return Err(format!(
+            "bin-dir mismatch: expected {BIN_DIR_TEMPLATE}, got {bin_dir}"
+        ));
+    }
+    Ok(())
 }
 
 #[then("the default pkg-fmt is \"{expected}\"")]
-fn then_default_pkg_fmt(world: &mut BinstallWorld, expected: String) {
-    let binstall = world.binstall_table.as_ref().expect("binstall table set");
-    let pkg_fmt = binstall
-        .get("pkg-fmt")
-        .and_then(|v| v.as_str())
-        .expect("pkg-fmt not found");
-    assert_eq!(pkg_fmt, expected);
+fn then_default_pkg_fmt(world: &mut BinstallWorld, expected: String) -> Result<(), String> {
+    let binstall = binstall_table(world)?;
+    let pkg_fmt = table_str(binstall, "pkg-fmt")?;
+    if pkg_fmt != expected {
+        return Err(format!(
+            "pkg-fmt mismatch: expected {expected}, got {pkg_fmt}"
+        ));
+    }
+    Ok(())
 }
 
 #[then("the x86_64-pc-windows-msvc override has pkg-fmt \"{expected}\"")]
-fn then_windows_override_pkg_fmt(world: &mut BinstallWorld, expected: String) {
-    let binstall = world.binstall_table.as_ref().expect("binstall table set");
+fn then_windows_override_pkg_fmt(
+    world: &mut BinstallWorld,
+    expected: String,
+) -> Result<(), String> {
+    let binstall = binstall_table(world)?;
     let windows = binstall
         .get("overrides")
         .and_then(|o| o.get(WINDOWS_OVERRIDE_TARGET))
         .and_then(|w| w.as_table())
-        .expect("Windows override not found");
+        .ok_or_else(|| String::from("Windows override not found"))?;
     let pkg_fmt = windows
         .get("pkg-fmt")
         .and_then(|v| v.as_str())
-        .expect("pkg-fmt not found in Windows override");
-    assert_eq!(pkg_fmt, expected);
+        .ok_or_else(|| String::from("pkg-fmt not found in Windows override"))?;
+    if pkg_fmt != expected {
+        return Err(format!(
+            "Windows override pkg-fmt mismatch: expected {expected}, got {pkg_fmt}"
+        ));
+    }
+    Ok(())
 }
 
 #[then("the URL ends with \"{suffix}\"")]
@@ -158,24 +191,24 @@ fn then_path_ends_with(world: &mut BinstallWorld, suffix: String) {
 }
 
 #[then("no templates contain the placeholder \"{placeholder}\"")]
-fn then_no_invalid_placeholder(world: &mut BinstallWorld, placeholder: String) {
-    let binstall = world.binstall_table.as_ref().expect("binstall table set");
-    let pkg_url = binstall
-        .get("pkg-url")
-        .and_then(|v| v.as_str())
-        .expect("pkg-url not found");
-    let bin_dir = binstall
-        .get("bin-dir")
-        .and_then(|v| v.as_str())
-        .expect("bin-dir not found");
-    assert!(
-        !pkg_url.contains(&placeholder),
-        "pkg-url contains invalid placeholder '{placeholder}'"
-    );
-    assert!(
-        !bin_dir.contains(&placeholder),
-        "bin-dir contains invalid placeholder '{placeholder}'"
-    );
+fn then_no_invalid_placeholder(
+    world: &mut BinstallWorld,
+    placeholder: String,
+) -> Result<(), String> {
+    let binstall = binstall_table(world)?;
+    let pkg_url = table_str(binstall, "pkg-url")?;
+    let bin_dir = table_str(binstall, "bin-dir")?;
+    if pkg_url.contains(&placeholder) {
+        return Err(format!(
+            "pkg-url contains invalid placeholder '{placeholder}'"
+        ));
+    }
+    if bin_dir.contains(&placeholder) {
+        return Err(format!(
+            "bin-dir contains invalid placeholder '{placeholder}'"
+        ));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

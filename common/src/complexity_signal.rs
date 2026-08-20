@@ -256,22 +256,6 @@ pub fn rasterize_signal(
     Ok(accumulate_signal_from_diff(diff.as_slice(), len))
 }
 
-/// Deprecated alias for [`rasterize_signal`].
-///
-/// # Errors
-///
-/// Propagates the same [`SignalBuildError`] conditions as [`rasterize_signal`]:
-/// a zero (non-one-based) line in the range, an inverted range, or a segment
-/// outside the function range.
-#[deprecated(note = "Use rasterize_signal instead.")]
-#[must_use = "Inspect the signal build result to handle invalid ranges"]
-pub fn rasterise_signal(
-    function_lines: RangeInclusive<usize>,
-    segments: &[LineSegment],
-) -> Result<Vec<f64>, SignalBuildError> {
-    rasterize_signal(function_lines, segments)
-}
-
 /// Errors emitted when smoothing a signal.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum SmoothingError {

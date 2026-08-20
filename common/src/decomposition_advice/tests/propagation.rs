@@ -1,6 +1,7 @@
 //! Unit tests for deterministic label propagation.
 
 use rstest::{fixture, rstest};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 use crate::decomposition_advice::{
     community::{SimilarityEdge, build_adjacency, detect_communities, propagate_labels_report},
@@ -19,6 +20,7 @@ fn edge(left: usize, right: usize, weight: u64) -> SimilarityEdge {
     SimilarityEdge::new(left, right, weight)
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn connected_triplet_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
@@ -37,12 +39,15 @@ fn linear_quartet_adjacency() -> Vec<Vec<(usize, u64)>> {
     build_adjacency(4, &[edge(0, 1, 5), edge(1, 2, 5), edge(2, 3, 5)])
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn isolated_tail_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> { build_adjacency(3, &[edge(0, 1, 5)]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn lexical_tie_vectors() -> Vec<MethodFeatureVector> { vectors(&["gamma", "alpha", "beta"]) }
 

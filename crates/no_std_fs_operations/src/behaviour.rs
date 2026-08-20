@@ -6,7 +6,7 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::i18n::{I18nError, Localizer, testing::FailingLookup};
 
-use crate::diagnostics::{StdFsMessages, localised_messages};
+use crate::diagnostics::{StdFsMessages, localized_messages};
 
 #[derive(Default)]
 struct LocalizationWorld {
@@ -28,10 +28,10 @@ impl LocalizationWorld {
     fn resolve(&mut self) {
         let op = self.operation.clone();
         let result = if self.failing {
-            localised_messages(&FailingLookup::new("no_std_fs_operations"), &op)
+            localized_messages(&FailingLookup::new("no_std_fs_operations"), &op)
         } else {
             let localizer = self.localizer.as_ref().expect("a locale must be selected");
-            localised_messages(localizer, &op)
+            localized_messages(localizer, &op)
         };
         self.result = Some(result);
     }
@@ -78,8 +78,8 @@ fn given_operation(world: &WorldCell, operation: String) {
 #[given("localization fails")]
 fn given_failure(world: &WorldCell) { world.borrow_mut().mark_failure(); }
 
-#[when("I localise the std::fs diagnostic")]
-fn when_localise(world: &WorldCell) { world.borrow_mut().resolve(); }
+#[when("I localize the std::fs diagnostic")]
+fn when_localize(world: &WorldCell) { world.borrow_mut().resolve(); }
 
 #[then("the primary mentions {snippet}")]
 fn then_primary(world: &WorldCell, snippet: String) {

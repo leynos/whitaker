@@ -22,7 +22,7 @@ use super::{StdFsUsage, UsageCategory, label_is_std_fs};
 #[case("fs::std", false)]
 #[case("std::", false)]
 #[case("std::filesystem", false)]
-fn recognises_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
+fn recognizes_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
     assert_eq!(label_is_std_fs(path), expected);
 }
 

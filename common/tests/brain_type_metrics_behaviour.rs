@@ -12,6 +12,7 @@ use whitaker_common::brain_type_metrics::{
     foreign_reach_count,
     weighted_methods_count,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct MetricsWorld {
@@ -52,6 +53,7 @@ impl Default for MetricsWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> MetricsWorld { MetricsWorld::default() }
 
