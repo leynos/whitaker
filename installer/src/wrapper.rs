@@ -226,11 +226,33 @@ mod tests {
         assert!(!is_directory_in_path(temp.path()));
     }
 
+    /// Asserts that every user, group, and other execute bit is set on `path`.
+    #[cfg(unix)]
+    fn assert_script_is_executable(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let perms = std::fs::metadata(path)
+            .expect("failed to read metadata")
+            .permissions();
+        assert_eq!(perms.mode() & 0o111, 0o111, "script should be executable");
+    }
+
+    /// Asserts that the script at `path` contains every fragment in `fragments`.
+    #[cfg(unix)]
+    fn assert_script_contains(path: &Path, fragments: &[&str]) {
+        let content = std::fs::read_to_string(path).expect("failed to read script");
+        for fragment in fragments {
+            assert!(
+                content.contains(fragment),
+                "script {} should contain {fragment}",
+                path.display()
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn generate_unix_scripts_create_executables() {
-        use std::os::unix::fs::PermissionsExt;
-
         use camino::Utf8PathBuf;
 
         let temp = TempDir::new().expect("failed to create temp dir");
@@ -241,23 +263,15 @@ mod tests {
 
         assert!(whitaker_path.exists());
         assert!(whitaker_ls_path.exists());
-
-        let perms = std::fs::metadata(&whitaker_path)
-            .expect("failed to read metadata")
-            .permissions();
-        assert_eq!(perms.mode() & 0o111, 0o111, "script should be executable");
-
-        let whitaker_content =
-            std::fs::read_to_string(&whitaker_path).expect("failed to read script");
-        assert!(whitaker_content.contains("DYLINT_LIBRARY_PATH"));
-        assert!(whitaker_content.contains("cargo dylint"));
-        assert!(whitaker_content.contains("$@"));
-
-        let whitaker_ls_content =
-            std::fs::read_to_string(&whitaker_ls_path).expect("failed to read script");
-        assert!(whitaker_ls_content.contains("DYLINT_LIBRARY_PATH"));
-        assert!(whitaker_ls_content.contains("cargo dylint list"));
-        assert!(whitaker_ls_content.contains("whitaker_suite"));
+        assert_script_is_executable(&whitaker_path);
+        assert_script_contains(
+            &whitaker_path,
+            &["DYLINT_LIBRARY_PATH", "cargo dylint", "$@"],
+        );
+        assert_script_contains(
+            &whitaker_ls_path,
+            &["DYLINT_LIBRARY_PATH", "cargo dylint list", "whitaker_suite"],
+        );
     }
 
     #[test]

@@ -81,7 +81,7 @@ fn run_missing_toolchain_install_test(extra: &[&str], expected_components: &[&st
     expect_toolchain_install(
         &mut runner,
         &mut seq,
-        ToolchainInstallExpectation {
+        &ToolchainInstallExpectation {
             channel,
             exit_code: 0,
             stderr: None,
@@ -191,11 +191,11 @@ fn install_components_with_failure_reports_all_components() {
         matches!(
             err,
             InstallerError::ToolchainComponentInstallFailed {
-                ref toolchain,
-                ref components,
+                toolchain: ref failed_toolchain,
+                components: ref failed_components,
                 ref message,
-            } if toolchain == "nightly-2026-05-28"
-                && components == &expected_component_list
+            } if failed_toolchain == "nightly-2026-05-28"
+                && failed_components == &expected_component_list
                 && message == COMPONENT_INSTALL_FAILURE_MESSAGE
         ),
         "expected ToolchainComponentInstallFailed with all components, got {err:?}"
@@ -226,10 +226,10 @@ fn ensure_installed_reports_failure(
     };
 
     test_helpers::assert_install_fails_with(
-        toolchain,
+        &toolchain,
         |runner, seq| setup_failure_mocks(runner, seq, channel, setup),
-        |toolchain, runner| toolchain.ensure_installed_with(runner, additional_components),
-        |err| assert_failure_error(err, channel, setup),
+        |candidate, runner| candidate.ensure_installed_with(runner, additional_components),
+        |err| assert_failure_error(&err, channel, setup),
     );
 }
 
@@ -239,10 +239,7 @@ fn ensure_installed_reports_failure(
 #[case::trailing_whitespace(Some("some error message   \n\n"), "some error message")]
 #[case::multiline_utf8(Some("line one\nline two\n"), "line one\nline two")]
 fn stderr_message_extracts_error(#[case] stderr: Option<&str>, #[case] expected: &str) {
-    let output = match stderr {
-        Some(s) => output_with_stderr(1, s),
-        None => output_with_status(1),
-    };
+    let output = stderr.map_or_else(|| output_with_status(1), |s| output_with_stderr(1, s));
     assert_eq!(stderr_message(&output), expected);
 }
 

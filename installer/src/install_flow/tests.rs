@@ -28,15 +28,12 @@ impl BaseDirs for TestBaseDirs {
 
 static PRUNE_HOOK_CALLED: AtomicBool = AtomicBool::new(false);
 
-fn stub_detect_host_target() -> Result<String> { Ok("x86_64-unknown-linux-gnu".to_owned()) }
+/// Host-target detection stub that always resolves to a fixed Linux target.
+const STUB_DETECT_HOST_TARGET: DetectHostTargetFn = || Ok("x86_64-unknown-linux-gnu".to_owned());
 
-fn stub_resolve_destination_dir(
-    _dirs: &dyn BaseDirs,
-    _toolchain_channel: &str,
-    _host_target: &str,
-) -> Result<Utf8PathBuf> {
-    Ok(Utf8PathBuf::from("/tmp/whitaker-test-data/lints"))
-}
+/// Destination resolution stub that always yields a fixed library directory.
+const STUB_RESOLVE_DESTINATION_DIR: ResolveDestinationDirFn =
+    |_dirs, _channel, _host_target| Ok(Utf8PathBuf::from("/tmp/whitaker-test-data/lints"));
 
 fn stub_attempt_prebuilt(_config: &PrebuiltConfig<'_>, _stderr: &mut dyn Write) -> PrebuiltResult {
     PrebuiltResult::Success {
@@ -102,9 +99,9 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
     #[case] removed: &[&str],
 ) {
     let StagingFixture {
-        _temp_dir: _,
         staging_path,
         toolchain,
+        ..
     } = staging_fixture;
 
     let foreign_path = staging_path.join("libforeign_lint@nightly-2026-05-28.so");
@@ -176,29 +173,29 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
     let result = try_prebuilt_installation_with(
         &context,
         &mut stderr,
-        PrebuiltInstallationHooks {
-            detect_host_target: stub_detect_host_target,
-            resolve_destination_dir: stub_resolve_destination_dir,
+        &PrebuiltInstallationHooks {
+            detect_host_target: STUB_DETECT_HOST_TARGET,
+            resolve_destination_dir: STUB_RESOLVE_DESTINATION_DIR,
             attempt_prebuilt: stub_attempt_prebuilt,
             prune_prebuilt_libraries: stub_prune_prebuilt_libraries,
         },
     );
 
     assert!(
-        matches!(result, Ok(None)),
+        result.is_none(),
         "prune failure should trigger fallback to local compilation"
     );
     assert!(
         PRUNE_HOOK_CALLED.load(Ordering::SeqCst),
         "prune hook should be invoked"
     );
-    let stderr = String::from_utf8(stderr).expect("stderr should be utf-8");
+    let stderr_text = String::from_utf8(stderr).expect("stderr should be utf-8");
     assert!(
-        stderr.contains("Prebuilt download unavailable: staging failed: forced prune failure"),
-        "fallback reason should include prune error, stderr: {stderr}"
+        stderr_text.contains("Prebuilt download unavailable: staging failed: forced prune failure"),
+        "fallback reason should include prune error, stderr: {stderr_text}"
     );
     assert!(
-        stderr.contains("Falling back to local compilation."),
-        "fallback message should be emitted, stderr: {stderr}"
+        stderr_text.contains("Falling back to local compilation."),
+        "fallback message should be emitted, stderr: {stderr_text}"
     );
 }

@@ -326,8 +326,7 @@ mod tests {
 
         let result = resolve_workspace_path(&mock);
 
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), expected_dir);
+        assert_eq!(result.expect("workspace path should resolve"), expected_dir);
     }
 
     #[rstest]
@@ -337,8 +336,7 @@ mod tests {
 
         let result = resolve_workspace_path(&mock);
 
-        assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("resolution should fail without a data directory");
         assert!(
             matches!(err, InstallerError::WorkspaceNotFound { .. }),
             "expected WorkspaceNotFound error, got: {err:?}"
@@ -372,7 +370,7 @@ mod tests {
     fn find_workspace_root_finds_workspace_in_current_dir(temp_workspace: TempWorkspace) {
         write_workspace_cargo_toml(&temp_workspace.path);
         assert_eq!(
-            find_workspace_root(&temp_workspace.path).unwrap(),
+            find_workspace_root(&temp_workspace.path).expect("workspace root should be found"),
             temp_workspace.path
         );
     }
@@ -382,7 +380,10 @@ mod tests {
         write_workspace_cargo_toml(&temp_workspace.path);
         let subdir = temp_workspace.path.join("crates").join("my_crate");
         fs::create_dir_all(&subdir).expect("failed to create subdirs");
-        assert_eq!(find_workspace_root(&subdir).unwrap(), temp_workspace.path);
+        assert_eq!(
+            find_workspace_root(&subdir).expect("workspace root should be found"),
+            temp_workspace.path
+        );
     }
 
     #[rstest]
@@ -390,7 +391,7 @@ mod tests {
         write_cargo_toml(&temp_workspace.path, "not_a_workspace");
         let result = find_workspace_root(&temp_workspace.path);
         assert!(matches!(
-            result.unwrap_err(),
+            result.expect_err("workspace lookup should fail"),
             InstallerError::WorkspaceNotFound { .. }
         ));
     }
