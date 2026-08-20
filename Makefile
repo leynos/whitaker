@@ -11,6 +11,15 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so the workspace lint policy cannot meaningfully apply to them
+# -- a fixture proving `expect_used` fires cannot itself forbid `expect_used`.
+# Lint every other target rather than `--all-targets`; `typecheck` still builds
+# the fixtures, and the suite still lints them through the UI harness.
+CLIPPY_FLAGS ?= --workspace --lib --bins --tests --benches --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
 NEXTEST_PROFILE ?=
@@ -159,7 +168,7 @@ lint: lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint 
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
-	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+	$(CARGO) clippy $(CARGO_LOCKED) $(CLIPPY_FLAGS) -- $(RUST_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \

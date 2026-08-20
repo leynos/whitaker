@@ -67,7 +67,7 @@ fn fast_path_context_holds_supplied_values(fast_path_fixture: FastPathFixture) {
     let ctx = fast_path_fixture.context();
 
     assert!(std::ptr::eq(ctx.args, &raw const fast_path_fixture.args));
-    assert_eq!(ctx.dirs.home_dir(), Some(PathBuf::from("/tmp")));
+    assert_eq!(ctx.dirs.home(), Some(PathBuf::from("/tmp")));
     assert_eq!(ctx.toolchain.channel(), "nightly-2026-05-28");
     assert_eq!(ctx.target_dir, &Utf8PathBuf::from("/tmp/target"));
     assert!(ctx.requested_crates.is_empty());

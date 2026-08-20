@@ -61,7 +61,7 @@ pub fn is_whitaker_workspace(dir: &Utf8Path) -> bool {
 ///
 /// Returns `None` if the platform's data directory cannot be determined.
 pub fn clone_directory(dirs: &dyn BaseDirs) -> Option<Utf8PathBuf> {
-    dirs.whitaker_data_dir()
+    dirs.whitaker_data()
         .and_then(|p| Utf8PathBuf::try_from(p).ok())
 }
 
@@ -312,7 +312,7 @@ mod tests {
 
     fn mock_dirs_returning(data_dir: Option<PathBuf>) -> MockBaseDirs {
         let mut mock = MockBaseDirs::new();
-        mock.expect_whitaker_data_dir().return_const(data_dir);
+        mock.expect_whitaker_data().return_const(data_dir);
         mock
     }
 

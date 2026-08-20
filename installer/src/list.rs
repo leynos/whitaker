@@ -77,7 +77,7 @@ fn sort_installed_libraries(installed: &mut InstalledLints) {
 
 fn default_prebuilt_target_dir() -> Option<Utf8PathBuf> {
     SystemBaseDirs::new()
-        .and_then(|dirs| dirs.whitaker_data_dir())
+        .and_then(|dirs| dirs.whitaker_data())
         .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
         .map(|path| path.join("lints"))
 }

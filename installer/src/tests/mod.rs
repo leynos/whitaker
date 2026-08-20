@@ -248,11 +248,11 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> { self.home.clone() }
+    fn home(&self) -> Option<PathBuf> { self.home.clone() }
 
-    fn bin_dir(&self) -> Option<PathBuf> { self.bin.clone() }
+    fn executables(&self) -> Option<PathBuf> { self.bin.clone() }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> { self.data.clone() }
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data.clone() }
 }
 
 #[test]

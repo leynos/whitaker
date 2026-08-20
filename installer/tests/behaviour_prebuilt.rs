@@ -1,6 +1,9 @@
 //! BDD tests for the prebuilt artefact download and verification workflow.
 
-use std::{path::Path, sync::Mutex};
+use std::{
+    path::Path,
+    sync::{Mutex, PoisonError},
+};
 
 use camino::Utf8PathBuf;
 use clap::Parser;
@@ -61,9 +64,13 @@ impl ArtefactDownloader for StubDownloader {
         let behaviour = self
             .manifest
             .lock()
-            .expect("lock")
+            .unwrap_or_else(PoisonError::into_inner)
             .take()
-            .expect("manifest behaviour not set");
+            .ok_or_else(|| {
+                DownloadError::Io(std::io::Error::other(
+                    "stub manifest behaviour was not configured",
+                ))
+            })?;
         match behaviour {
             ManifestBehaviour::Ok(json) => Ok(json),
             ManifestBehaviour::HttpError { url, reason } => {
@@ -77,9 +84,9 @@ impl ArtefactDownloader for StubDownloader {
         let behaviour = self
             .archive
             .lock()
-            .expect("lock")
+            .unwrap_or_else(PoisonError::into_inner)
             .take()
-            .unwrap_or(ArchiveBehaviour::CorrectChecksum);
+            .unwrap_or_default();
         match behaviour {
             ArchiveBehaviour::CorrectChecksum => {
                 std::fs::write(dest, FAKE_ARCHIVE).map_err(DownloadError::Io)
@@ -121,10 +128,16 @@ struct PrebuiltWorld {
     attempted_destination: Option<Utf8PathBuf>,
 }
 
+// A fixture cannot report failure to the scenario binding, so setup problems
+// abort the scenario with a descriptive panic.
 #[fixture]
 fn world() -> PrebuiltWorld {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let staging_root = Utf8PathBuf::try_from(temp_dir.path().to_path_buf()).expect("UTF-8 path");
+    let Ok(temp_dir) = tempfile::tempdir() else {
+        panic!("failed to create staging temp dir");
+    };
+    let Ok(staging_root) = Utf8PathBuf::try_from(temp_dir.path().to_path_buf()) else {
+        panic!("staging temp dir path is not valid UTF-8");
+    };
     PrebuiltWorld {
         _temp_dir: Some(temp_dir),
         staging_root: Some(staging_root),
@@ -209,16 +222,20 @@ fn given_destination_path_conflict(world: &mut PrebuiltWorld) {
 }
 
 #[when("prebuilt download is attempted")]
-fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
+fn when_prebuilt_attempted(world: &mut PrebuiltWorld) -> Result<(), String> {
     let toolchain = world
         .expected_toolchain
         .as_deref()
         .unwrap_or(DEFAULT_TOOLCHAIN);
     let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
-    let staging_root = world.staging_root.as_ref().expect("staging_root set");
+    let staging_root = world
+        .staging_root
+        .as_ref()
+        .ok_or_else(|| String::from("staging_root set"))?;
     let destination_dir = if world.force_destination_conflict {
         let occupied = staging_root.join("occupied");
-        std::fs::write(occupied.as_std_path(), b"occupied file").expect("write occupied file");
+        std::fs::write(occupied.as_std_path(), b"occupied file")
+            .map_err(|error| format!("write occupied file: {error}"))?;
         occupied.join("child").join("lib")
     } else {
         staging_root
@@ -238,7 +255,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
     let manifest_behaviour = world
         .manifest_behaviour
         .take()
-        .expect("manifest_behaviour set");
+        .ok_or_else(|| String::from("manifest_behaviour set"))?;
     let archive_behaviour = world
         .archive_behaviour
         .take()
@@ -250,6 +267,7 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
     world.result = Some(result);
+    Ok(())
 }
 
 #[when("the install configuration is checked")]
@@ -263,77 +281,96 @@ fn when_install_config_checked(world: &mut PrebuiltWorld) {
     world.should_attempt_prebuilt = Some(install_args.should_attempt_prebuilt(&requested_crates));
 }
 
+/// Borrow the recorded prebuilt outcome, failing when the When step has not run.
+fn prebuilt_result(world: &PrebuiltWorld) -> Result<&PrebuiltResult, String> {
+    world
+        .result
+        .as_ref()
+        .ok_or_else(|| String::from("result set"))
+}
+
 #[then("the prebuilt result is success")]
-fn then_result_is_success(world: &mut PrebuiltWorld) {
-    let result = world.result.as_ref().expect("result set");
-    assert!(
-        matches!(result, PrebuiltResult::Success { .. }),
-        "expected Success, got {result:?}"
-    );
+fn then_result_is_success(world: &mut PrebuiltWorld) -> Result<(), String> {
+    let result = prebuilt_result(world)?;
+    if matches!(result, PrebuiltResult::Success { .. }) {
+        Ok(())
+    } else {
+        Err(format!("expected Success, got {result:?}"))
+    }
 }
 
 #[then("the staging path uses toolchain, target, and lib directories")]
-fn then_staging_path_uses_expected_layout(world: &mut PrebuiltWorld) {
-    let result = world.result.as_ref().expect("result set");
-    if let PrebuiltResult::Success { staging_path } = result {
-        let toolchain = world
-            .expected_toolchain
-            .as_deref()
-            .unwrap_or(DEFAULT_TOOLCHAIN);
-        let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
-        let expected_suffix = format!("{toolchain}/{target}/lib");
-        assert!(
-            staging_path.ends_with(&expected_suffix),
-            "staging path {staging_path} does not end with {expected_suffix}"
-        );
+fn then_staging_path_uses_expected_layout(world: &mut PrebuiltWorld) -> Result<(), String> {
+    let result = prebuilt_result(world)?;
+    let PrebuiltResult::Success { staging_path } = result else {
+        return Err(format!("expected Success, got {result:?}"));
+    };
+    let toolchain = world
+        .expected_toolchain
+        .as_deref()
+        .unwrap_or(DEFAULT_TOOLCHAIN);
+    let target = world.requested_target.as_deref().unwrap_or(DEFAULT_TARGET);
+    let expected_suffix = format!("{toolchain}/{target}/lib");
+    if staging_path.ends_with(&expected_suffix) {
+        Ok(())
     } else {
-        panic!("expected Success, got {result:?}");
+        Err(format!(
+            "staging path {staging_path} does not end with {expected_suffix}"
+        ))
     }
 }
 
 #[then("the prebuilt result is fallback")]
-fn then_result_is_fallback(world: &mut PrebuiltWorld) {
-    let result = world.result.as_ref().expect("result set");
-    assert!(
-        matches!(result, PrebuiltResult::Fallback { .. }),
-        "expected Fallback, got {result:?}"
-    );
+fn then_result_is_fallback(world: &mut PrebuiltWorld) -> Result<(), String> {
+    let result = prebuilt_result(world)?;
+    if matches!(result, PrebuiltResult::Fallback { .. }) {
+        Ok(())
+    } else {
+        Err(format!("expected Fallback, got {result:?}"))
+    }
 }
 
 #[then("the fallback reason mentions \"{keyword}\"")]
-fn then_fallback_reason_mentions(world: &mut PrebuiltWorld, keyword: String) {
-    let result = world.result.as_ref().expect("result set");
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            let lower_reason = reason.to_lowercase();
-            let lower_keyword = keyword.to_lowercase();
-            assert!(
-                lower_reason.contains(&lower_keyword),
-                "expected reason to contain '{keyword}', got: {reason}"
-            );
-        }
-        other => panic!("expected Fallback, got {other:?}"),
+fn then_fallback_reason_mentions(world: &mut PrebuiltWorld, keyword: String) -> Result<(), String> {
+    let result = prebuilt_result(world)?;
+    let PrebuiltResult::Fallback { reason } = result else {
+        return Err(format!("expected Fallback, got {result:?}"));
+    };
+    let lower_reason = reason.to_lowercase();
+    let lower_keyword = keyword.to_lowercase();
+    if lower_reason.contains(&lower_keyword) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected reason to contain '{keyword}', got: {reason}"
+        ))
     }
 }
 
 #[then("no prebuilt download is attempted")]
-fn then_no_prebuilt_attempted(world: &mut PrebuiltWorld) {
-    assert!(
-        world.should_attempt_prebuilt == Some(false),
-        "expected no prebuilt download attempt when --build-only is set"
-    );
+fn then_no_prebuilt_attempted(world: &mut PrebuiltWorld) -> Result<(), String> {
+    if world.should_attempt_prebuilt == Some(false) {
+        Ok(())
+    } else {
+        Err(String::from(
+            "expected no prebuilt download attempt when --build-only is set",
+        ))
+    }
 }
 
 #[then("the destination directory is not created")]
-fn then_destination_is_not_created(world: &mut PrebuiltWorld) {
+fn then_destination_is_not_created(world: &mut PrebuiltWorld) -> Result<(), String> {
     let destination = world
         .attempted_destination
         .as_ref()
-        .expect("attempted destination should be set");
-    assert!(
-        !destination.exists(),
-        "destination directory should not exist: {destination}"
-    );
+        .ok_or_else(|| String::from("attempted destination should be set"))?;
+    if destination.exists() {
+        Err(format!(
+            "destination directory should not exist: {destination}"
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 #[scenario(

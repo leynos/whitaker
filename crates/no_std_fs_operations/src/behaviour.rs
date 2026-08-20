@@ -21,7 +21,7 @@ impl LocalizationWorld {
         self.localizer = Some(Localizer::new(Some(locale)));
     }
 
-    fn set_operation(&mut self, operation: &str) { self.operation = operation.to_owned(); }
+    fn set_operation(&mut self, operation: &str) { operation.clone_into(&mut self.operation); }
 
     const fn mark_failure(&mut self) { self.failing = true; }
 
@@ -30,26 +30,26 @@ impl LocalizationWorld {
         let result = if self.failing {
             localized_messages(&FailingLookup::new("no_std_fs_operations"), &op)
         } else {
-            let localizer = self.localizer.as_ref().expect("a locale must be selected");
+            let Some(localizer) = self.localizer.as_ref() else {
+                panic!("a locale must be selected before resolving messages")
+            };
             localized_messages(localizer, &op)
         };
         self.result = Some(result);
     }
 
     fn messages(&self) -> &StdFsMessages {
-        self.result
-            .as_ref()
-            .expect("localization result should be recorded")
-            .as_ref()
-            .expect("localization should succeed")
+        let Some(Ok(messages)) = self.result.as_ref().map(Result::as_ref) else {
+            panic!("localization should have been resolved successfully")
+        };
+        messages
     }
 
     fn error(&self) -> &I18nError {
-        self.result
-            .as_ref()
-            .expect("localization result should be recorded")
-            .as_ref()
-            .expect_err("localization should fail")
+        let Some(Err(error)) = self.result.as_ref().map(Result::as_ref) else {
+            panic!("localization should have been resolved to a failure")
+        };
+        error
     }
 }
 
@@ -85,21 +85,30 @@ fn when_localize(world: &WorldCell) { world.borrow_mut().resolve(); }
 fn then_primary(world: &WorldCell, snippet: String) {
     let needle = snippet.trim_matches('"');
     let borrow = world.borrow();
-    assert!(borrow.messages().primary().contains(needle));
+    assert!(
+        borrow.messages().primary().contains(needle),
+        "primary message should mention `{needle}`"
+    );
 }
 
 #[then("the note references {snippet}")]
 fn then_note(world: &WorldCell, snippet: String) {
     let needle = snippet.trim_matches('"');
     let borrow = world.borrow();
-    assert!(borrow.messages().note().contains(needle));
+    assert!(
+        borrow.messages().note().contains(needle),
+        "note message should mention `{needle}`"
+    );
 }
 
 #[then("the help references {snippet}")]
 fn then_help(world: &WorldCell, snippet: String) {
     let needle = snippet.trim_matches('"');
     let borrow = world.borrow();
-    assert!(borrow.messages().help().contains(needle));
+    assert!(
+        borrow.messages().help().contains(needle),
+        "help message should mention `{needle}`"
+    );
 }
 
 #[then("localization fails for {key}")]
@@ -107,7 +116,11 @@ fn then_failure(world: &WorldCell, key: String) {
     let borrow = world.borrow();
     match borrow.error() {
         I18nError::MissingMessage { key: missing, .. } => {
-            assert_eq!(missing, &key.trim_matches('"'));
+            assert_eq!(
+                missing,
+                &key.trim_matches('"'),
+                "localization should fail for the requested key"
+            );
         }
     }
 }

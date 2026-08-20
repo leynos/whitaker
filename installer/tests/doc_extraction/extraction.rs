@@ -12,9 +12,9 @@ const DOC_PATHS: &[&str] = &["docs/users-guide.md", "docs/developers-guide.md"];
 /// Extracted TOML code blocks from documentation, loaded once at test startup.
 pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let workspace_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .expect("installer crate should be in workspace");
+    let Some(workspace_root) = std::path::Path::new(manifest_dir).parent() else {
+        panic!("installer crate should be in workspace");
+    };
 
     let mut all_blocks = Vec::new();
     for path in DOC_PATHS {
@@ -116,8 +116,10 @@ other = true
 
         let blocks = extract_toml_blocks(markdown);
         assert_eq!(blocks.len(), 2);
-        assert!(blocks[0].contains("key = \"value\""));
-        assert!(blocks[1].contains("other = true"));
+        let first = blocks.first().expect("first TOML block should be present");
+        let second = blocks.get(1).expect("second TOML block should be present");
+        assert!(first.contains("key = \"value\""));
+        assert!(second.contains("other = true"));
     }
 
     #[test]
@@ -132,11 +134,12 @@ key = "value"
 
         let blocks = extract_toml_blocks(markdown);
         assert_eq!(blocks.len(), 1);
+        let block = blocks.first().expect("TOML block should be present");
         assert!(
-            !blocks[0].contains("# This is a comment"),
+            !block.contains("# This is a comment"),
             "expected comment to be skipped"
         );
-        assert!(blocks[0].contains("key = \"value\""));
+        assert!(block.contains("key = \"value\""));
     }
 
     #[test]

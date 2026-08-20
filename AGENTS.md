@@ -147,13 +147,17 @@ project:
 
     ```sh
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    cargo clippy --workspace --lib --bins --tests --benches --all-features \
+        -- -D warnings
     whitaker --all -- -p whitaker-common -p whitaker-installer \
         -p whitaker_clones_core -p whitaker_sarif --all-targets --all-features
     ```
 
-    building rustdoc with warnings denied, linting every target with all
-    features enabled and denying all Clippy warnings, and running the
+    building rustdoc with warnings denied, linting every target except the
+    Dylint UI fixtures under `examples/` (which deliberately contain the
+    anti-patterns the suite detects, so the workspace policy cannot apply to
+    them) with all features enabled and denying all Clippy warnings, and
+    running the
     Whitaker Dylint suite over the support crates (install via
     `cargo install whitaker-installer && whitaker-installer`). `make
     lint-clippy` runs the rustdoc and Clippy subset; `make lint-whitaker`

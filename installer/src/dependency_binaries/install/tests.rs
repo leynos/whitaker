@@ -31,7 +31,7 @@ fn run_install_scenario(
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let bin_dir = temp_dir.path().join("bin");
     let mut dirs = MockBaseDirs::new();
-    dirs.expect_bin_dir()
+    dirs.expect_executables()
         .once()
         .return_const(Some(bin_dir.clone()));
     let dependency = crate::dependency_binaries::find_dependency_binary(dependency_name)

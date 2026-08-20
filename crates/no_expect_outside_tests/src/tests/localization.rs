@@ -115,8 +115,12 @@ fn given_receiver(world: &LocalizationWorld, receiver: String) {
 
 #[given("the function context is {name}")]
 fn given_function(world: &LocalizationWorld, name: String) {
-    let name = unquote(&name);
-    let value = if name.is_empty() { None } else { Some(name) };
+    let function_name = unquote(&name);
+    let value = if function_name.is_empty() {
+        None
+    } else {
+        Some(function_name)
+    };
     world.set_function(value);
 }
 
@@ -156,31 +160,31 @@ fn when_localize(world: &LocalizationWorld) {
 
 #[then("the diagnostic mentions {snippet}")]
 fn then_primary(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let primary = normalize_for_assertion(world.messages().primary());
     assert!(
-        primary.contains(&snippet),
-        "primary message `{primary}` did not contain `{snippet}`"
+        primary.contains(&expected),
+        "primary message `{primary}` did not contain `{expected}`"
     );
 }
 
 #[then("the note references {snippet}")]
 fn then_note(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let note = normalize_for_assertion(world.messages().note());
     assert!(
-        note.contains(&snippet),
-        "note `{note}` did not contain `{snippet}`"
+        note.contains(&expected),
+        "note `{note}` did not contain `{expected}`"
     );
 }
 
 #[then("the help references {snippet}")]
 fn then_help(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let help = normalize_for_assertion(world.messages().help());
     assert!(
-        help.contains(&snippet),
-        "help `{help}` did not contain `{snippet}`"
+        help.contains(&expected),
+        "help `{help}` did not contain `{expected}`"
     );
 }
 
@@ -195,10 +199,13 @@ fn then_receiver_type_edge_cases_are_handled(world: &LocalizationWorld) {
 
 #[then("localization fails for {key}")]
 fn then_failure(world: &LocalizationWorld, key: String) {
-    let key = unquote(&key);
+    let expected_key = unquote(&key);
     let error = world.error();
     match &*error {
-        I18nError::MissingMessage { key: missing, .. } => assert_eq!(missing, key),
+        I18nError::MissingMessage { key: missing, .. } => assert_eq!(
+            missing, &expected_key,
+            "localization should fail for the requested key"
+        ),
     }
 }
 
@@ -225,7 +232,7 @@ fn scenario_failure(world: LocalizationWorld) { let _ = world; }
 
 #[then("the fallback help mentions {snippet}")]
 fn then_fallback(world: &LocalizationWorld, snippet: String) {
-    let snippet = normalize_for_assertion(unquote(&snippet));
+    let expected = normalize_for_assertion(unquote(&snippet));
     let summary = world.summary.borrow().clone();
     let context = context_label(&summary);
     let receiver = world.receiver.borrow().clone();
@@ -233,8 +240,8 @@ fn then_fallback(world: &LocalizationWorld, snippet: String) {
     let fallback = fallback_messages(&receiver, &context, category);
     let help = normalize_for_assertion(fallback.help());
     assert!(
-        help.contains(&snippet),
-        "fallback help `{help}` did not contain `{snippet}`"
+        help.contains(&expected),
+        "fallback help `{help}` did not contain `{expected}`"
     );
 }
 

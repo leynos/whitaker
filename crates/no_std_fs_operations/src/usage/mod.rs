@@ -142,8 +142,7 @@ pub fn classify_def_id(
 }
 
 fn is_std_fs_path(path: &SimplePath) -> bool {
-    let segments = path.segments();
-    segments.len() >= 2 && segments[0] == "std" && segments[1] == "fs"
+    matches!(path.segments(), [first, second, ..] if first == "std" && second == "fs")
 }
 
 /// Returns true if the character should be rejected in a valid `std::fs` label.
@@ -158,11 +157,9 @@ pub(crate) fn label_is_std_fs(label: &str) -> bool {
         return false;
     }
 
-    if !label.starts_with("std::fs") {
+    let Some(remainder) = label.strip_prefix("std::fs") else {
         return false;
-    }
-
-    let remainder = &label["std::fs".len()..];
+    };
     if remainder.is_empty() {
         return true;
     }

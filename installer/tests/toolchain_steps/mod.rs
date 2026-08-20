@@ -3,28 +3,24 @@
 //! These step implementations are used by the scenarios in
 //! `behaviour_toolchain.rs` via rstest-bdd macros.
 
-use std::{
-    cell::{Cell, RefCell},
-    process::{Command, Output},
-};
+mod scenario_setup;
+
+use std::process::Command;
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
-use tempfile::TempDir;
-
-use super::{
-    prebuilt_markers::PREBUILT_INSTALL_MARKER,
-    support::{
-        is_toolchain_installed,
-        is_toolchain_installed_in_env,
-        pinned_toolchain_channel,
-        setup_isolated_rustup,
-        workspace_root,
-    },
+pub use scenario_setup::{FAKE_TOOLCHAIN, ToolchainWorld, setup_install_scenario};
+use scenario_setup::{
+    ensure_toolchain_installed_in_isolated_env,
+    get_combined_output_string,
+    get_output,
+    get_stderr_string,
+    setup_auto_install_scenario,
+    setup_dry_run_scenario,
+    setup_failure_scenario,
 };
 
-/// Non-existent toolchain channel used to exercise auto-install failure paths.
-pub const FAKE_TOOLCHAIN: &str = "nonexistent-nightly-2024-01-01";
+use super::{prebuilt_markers::PREBUILT_INSTALL_MARKER, support::workspace_root};
 
 /// Output marker indicating successful library staging (build-from-source path).
 const STAGING_OUTPUT_MARKER: &str = "Staging libraries to";
@@ -38,120 +34,12 @@ const TOOLCHAIN_ERROR_MARKER: &str = "installation failed";
 /// Maximum output lines expected in quiet mode error scenarios.
 const QUIET_MODE_MAX_LINES: usize = 5;
 
-#[derive(Default)]
-pub struct ToolchainWorld {
-    pub args: RefCell<Vec<String>>,
-    pub output: RefCell<Option<Output>>,
-    pub should_skip_assertions: Cell<bool>,
-    pub temp_dir: RefCell<Option<TempDir>>,
-    pub rustup_home: RefCell<Option<TempDir>>,
-    pub cargo_home: RefCell<Option<TempDir>>,
-    pub pinned_channel: RefCell<String>,
-}
-
-fn get_output(world: &ToolchainWorld) -> std::cell::Ref<'_, Output> {
-    let output = world.output.borrow();
-    std::cell::Ref::map(output, |opt| opt.as_ref().expect("output not set"))
-}
-
-fn get_combined_output_string(world: &ToolchainWorld) -> String {
-    let output = get_output(world);
-    format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    )
-}
-
-fn get_stderr_string(world: &ToolchainWorld) -> String {
-    let output = get_output(world);
-    String::from_utf8_lossy(&output.stderr).to_string()
-}
-
 macro_rules! skip_if_needed {
     ($world:expr) => {
         if $world.should_skip_assertions.get() {
-            return;
+            return Ok(());
         }
     };
-}
-
-fn skip_scenario_when_toolchain_missing(world: &ToolchainWorld, channel: &str) {
-    if !is_toolchain_installed(channel) {
-        eprintln!("Skipping scenario: toolchain '{channel}' not installed.");
-        world.should_skip_assertions.set(true);
-        rstest_bdd::skip!("toolchain '{channel}' is not installed.", channel = channel);
-    }
-}
-
-fn setup_temp_dir(world: &ToolchainWorld) -> String {
-    let temp_dir = TempDir::new().expect("failed to create temp dir");
-    let target_dir = temp_dir.path().to_string_lossy().to_string();
-    world.temp_dir.replace(Some(temp_dir));
-    target_dir
-}
-
-fn setup_dry_run_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
-    let channel = pinned_toolchain_channel();
-    skip_scenario_when_toolchain_missing(world, &channel);
-    world.pinned_channel.replace(channel.clone());
-
-    let target_dir = setup_temp_dir(world);
-    let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
-    args.extend(["--target-dir".to_owned(), target_dir]);
-    world.args.replace(args);
-}
-
-pub fn setup_install_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
-    let env = setup_isolated_rustup();
-    world.rustup_home.replace(Some(env.rustup_home));
-    world.cargo_home.replace(Some(env.cargo_home));
-    world.pinned_channel.replace(pinned_toolchain_channel());
-
-    let target_dir = setup_temp_dir(world);
-    let mut args: Vec<String> = extra_args.iter().map(|s| (*s).to_owned()).collect();
-    args.extend(["--target-dir".to_owned(), target_dir]);
-    world.args.replace(args);
-}
-
-fn setup_failure_scenario(world: &ToolchainWorld, extra_args: &[&str]) {
-    // Use isolated rustup environment so the install failure path is exercised
-    // without affecting the host system.
-    let env = setup_isolated_rustup();
-    world.rustup_home.replace(Some(env.rustup_home));
-    world.cargo_home.replace(Some(env.cargo_home));
-
-    let target_dir = setup_temp_dir(world);
-    // Filter out --dry-run to exercise the real install path
-    let mut args: Vec<String> = extra_args
-        .iter()
-        .filter(|s| **s != "--dry-run")
-        .map(|s| (*s).to_owned())
-        .collect();
-    args.extend([
-        "--toolchain".to_owned(),
-        FAKE_TOOLCHAIN.to_owned(),
-        "--target-dir".to_owned(),
-        target_dir,
-        "--skip-deps".to_owned(),
-    ]);
-    world.args.replace(args);
-}
-
-fn assert_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
-    let rustup_home = world.rustup_home.borrow();
-    let cargo_home = world.cargo_home.borrow();
-    assert!(
-        rustup_home.is_some() && cargo_home.is_some(),
-        "isolated rustup environment must be configured for install scenario"
-    );
-    let rustup = rustup_home.as_ref().expect("rustup_home");
-    let cargo = cargo_home.as_ref().expect("cargo_home");
-    let channel = pinned_toolchain_channel();
-    assert!(
-        is_toolchain_installed_in_env(&channel, rustup, cargo),
-        "toolchain '{channel}' was not installed in isolated environment"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -167,53 +55,42 @@ pub fn world() -> ToolchainWorld { ToolchainWorld::default() }
 // ---------------------------------------------------------------------------
 
 #[given("the installer is invoked with auto-detect toolchain")]
-pub fn given_auto_detect_toolchain(world: &ToolchainWorld) {
-    setup_dry_run_scenario(world, &["--dry-run"]);
+pub fn given_auto_detect_toolchain(world: &ToolchainWorld) -> Result<(), String> {
+    setup_dry_run_scenario(world, &["--dry-run"])
 }
 
 #[given("the installer is invoked with auto-detect toolchain in quiet mode")]
-pub fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) {
-    setup_dry_run_scenario(world, &["--dry-run", "--quiet"]);
-}
-
-fn setup_auto_install_scenario(world: &ToolchainWorld) {
-    // Skip auto-install tests on Windows - toolchain downloads are extremely slow
-    // due to Windows Defender scanning and larger binaries. The code path is
-    // identical to Linux; we're testing rustup behaviour rather than installer logic.
-    if cfg!(windows) {
-        eprintln!("Skipping auto-install scenario on Windows (toolchain downloads too slow).");
-        world.should_skip_assertions.set(true);
-        rstest_bdd::skip!("auto-install tests skipped on Windows");
-    }
-    // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
-    setup_install_scenario(world, &["--jobs", "1", "--skip-deps", "--skip-wrapper"]);
+pub fn given_auto_detect_toolchain_quiet(world: &ToolchainWorld) -> Result<(), String> {
+    setup_dry_run_scenario(world, &["--dry-run", "--quiet"])
 }
 
 #[given("the installer is invoked with auto-detect toolchain to a temporary directory")]
-pub fn given_auto_detect_toolchain_install(world: &ToolchainWorld) {
-    setup_auto_install_scenario(world);
+pub fn given_auto_detect_toolchain_install(world: &ToolchainWorld) -> Result<(), String> {
+    setup_auto_install_scenario(world)
 }
 
 #[given("the installer is invoked with isolated rustup to force auto-install")]
-pub fn given_isolated_rustup_auto_install(world: &ToolchainWorld) {
-    setup_auto_install_scenario(world);
+pub fn given_isolated_rustup_auto_install(world: &ToolchainWorld) -> Result<(), String> {
+    setup_auto_install_scenario(world)
 }
 
 #[given("the installer is invoked with isolated rustup in quiet mode")]
-pub fn given_isolated_rustup_quiet(world: &ToolchainWorld) {
+pub fn given_isolated_rustup_quiet(world: &ToolchainWorld) -> Result<(), String> {
     // Use --skip-wrapper to prevent writing to the user's real ~/.local/bin.
     setup_install_scenario(
         world,
         &["--jobs", "1", "--quiet", "--skip-deps", "--skip-wrapper"],
-    );
+    )
 }
 
 #[given("the installer is invoked with a non-existent toolchain")]
-pub fn given_nonexistent_toolchain(world: &ToolchainWorld) { setup_failure_scenario(world, &[]); }
+pub fn given_nonexistent_toolchain(world: &ToolchainWorld) -> Result<(), String> {
+    setup_failure_scenario(world, &[])
+}
 
 #[given("the installer is invoked with a non-existent toolchain in quiet mode")]
-pub fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) {
-    setup_failure_scenario(world, &["--quiet"]);
+pub fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) -> Result<(), String> {
+    setup_failure_scenario(world, &["--quiet"])
 }
 
 // ---------------------------------------------------------------------------
@@ -221,13 +98,13 @@ pub fn given_nonexistent_toolchain_quiet(world: &ToolchainWorld) {
 // ---------------------------------------------------------------------------
 
 #[when("the installer CLI is run")]
-pub fn when_installer_cli_run(world: &ToolchainWorld) {
+pub fn when_installer_cli_run(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
 
     let args = world.args.borrow();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_whitaker-installer"));
     cmd.args(args.iter());
-    cmd.current_dir(workspace_root());
+    cmd.current_dir(workspace_root()?);
 
     // Sanitize rustup environment to prevent host settings from leaking
     // into tests: always disable auto-install and remove toolchain overrides
@@ -241,8 +118,11 @@ pub fn when_installer_cli_run(world: &ToolchainWorld) {
         cmd.env("CARGO_HOME", cargo_home.path());
     }
 
-    let output = cmd.output().expect("failed to run whitaker-installer");
+    let output = cmd
+        .output()
+        .map_err(|error| format!("failed to run whitaker-installer: {error}"))?;
     world.output.replace(Some(output));
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -250,132 +130,160 @@ pub fn when_installer_cli_run(world: &ToolchainWorld) {
 // ---------------------------------------------------------------------------
 
 #[then("the CLI exits successfully")]
-pub fn then_cli_exits_successfully(world: &ToolchainWorld) {
+pub fn then_cli_exits_successfully(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let output = get_output(world);
-    assert!(
-        output.status.success(),
-        "expected success, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let output = get_output(world)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected success, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    }
 }
 
 #[then("dry-run output shows the detected toolchain")]
-pub fn then_dry_run_shows_toolchain(world: &ToolchainWorld) {
+pub fn then_dry_run_shows_toolchain(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let output = get_output(world);
+    let output = get_output(world)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     let expected_channel = world.pinned_channel.borrow().clone();
-    assert!(
-        stderr.contains(&expected_channel),
-        "expected toolchain '{expected_channel}' in output, stderr: {stderr}"
-    );
+    if stderr.contains(&expected_channel) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected toolchain '{expected_channel}' in output, stderr: {stderr}"
+        ))
+    }
 }
 
 #[then("no toolchain installation message is shown")]
-pub fn then_no_install_message(world: &ToolchainWorld) {
+pub fn then_no_install_message(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let out = get_combined_output_string(world);
+    let out = get_combined_output_string(world)?;
     let channel = world.pinned_channel.borrow().clone();
     let out_lc = out.to_lowercase();
     let needle = format!("toolchain {channel} installed successfully").to_lowercase();
-    assert!(
-        !(out_lc.contains(&needle)
-            || out_lc.contains(&channel.to_lowercase())
-                && out_lc.contains(TOOLCHAIN_INSTALLED_MARKER)),
-        "expected no installation message for channel '{channel}' in output, got:\n{out}"
-    );
+    let has_install_message = out_lc.contains(&needle)
+        || out_lc.contains(&channel.to_lowercase()) && out_lc.contains(TOOLCHAIN_INSTALLED_MARKER);
+    if has_install_message {
+        return Err(format!(
+            "expected no installation message for channel '{channel}' in output, got:\n{out}"
+        ));
+    }
+    Ok(())
 }
 
 #[then("the toolchain installation message is shown")]
-pub fn then_install_message_shown(world: &ToolchainWorld) {
+pub fn then_install_message_shown(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let out = get_combined_output_string(world);
+    let out = get_combined_output_string(world)?;
     let channel = world.pinned_channel.borrow().clone();
     let out_lc = out.to_lowercase();
     let needle = format!("toolchain {channel} installed successfully").to_lowercase();
-    let ok = out_lc.contains(&needle)
+    let has_success_marker = out_lc.contains(&needle)
         || (out_lc.contains("installed successfully") && out_lc.contains(&channel.to_lowercase()));
-    assert!(
-        ok,
-        "expected success marker for channel '{channel}' in output, got:\n{out}"
-    );
+    if has_success_marker {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected success marker for channel '{channel}' in output, got:\n{out}"
+        ))
+    }
 }
 
 #[then("installation succeeds or is skipped")]
-pub fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) {
+pub fn then_installation_succeeds_or_is_skipped(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let output = get_output(world);
-    assert!(
-        output.status.success(),
-        "installation failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_toolchain_installed_in_isolated_env(world);
+    {
+        let output = get_output(world)?;
+        if !output.status.success() {
+            return Err(format!(
+                "installation failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+    ensure_toolchain_installed_in_isolated_env(world)
 }
 
 #[then("the toolchain is installed in the isolated environment")]
-pub fn then_toolchain_installed_in_isolated_env(world: &ToolchainWorld) {
+pub fn then_toolchain_installed_in_isolated_env(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    assert_toolchain_installed_in_isolated_env(world);
+    ensure_toolchain_installed_in_isolated_env(world)
 }
 
 #[then("the suite library is staged")]
-pub fn then_suite_library_is_staged(world: &ToolchainWorld) {
+pub fn then_suite_library_is_staged(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let output = get_output(world);
+    let output = get_output(world)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     // Accept either the build-from-source staging marker or the prebuilt
     // success marker — when prebuilt artefacts are available the installer
     // downloads them instead of building locally.
     let has_local_staging_marker = stderr.contains(STAGING_OUTPUT_MARKER);
     let has_prebuilt_staging_marker = stderr.contains(PREBUILT_INSTALL_MARKER);
-    assert!(
-        has_local_staging_marker || has_prebuilt_staging_marker,
-        "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_INSTALL_MARKER}' in staging output, \
-         stderr: {stderr}"
-    );
+    if has_local_staging_marker || has_prebuilt_staging_marker {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected '{STAGING_OUTPUT_MARKER}' or '{PREBUILT_INSTALL_MARKER}' in staging output, \
+             stderr: {stderr}"
+        ))
+    }
 }
 
 #[then("the CLI exits with an error")]
-pub fn then_cli_exits_with_error(world: &ToolchainWorld) {
+pub fn then_cli_exits_with_error(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let output = get_output(world);
-    assert!(
-        !output.status.success(),
-        "expected failure exit code, but command succeeded"
-    );
+    let output = get_output(world)?;
+    if output.status.success() {
+        return Err(String::from(
+            "expected failure exit code, but command succeeded",
+        ));
+    }
+    Ok(())
 }
 
 #[then("the error mentions toolchain installation failure")]
-pub fn then_error_mentions_install_failure(world: &ToolchainWorld) {
+pub fn then_error_mentions_install_failure(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let stderr = get_stderr_string(world);
-    assert!(
-        stderr.contains(TOOLCHAIN_ERROR_MARKER),
-        "expected '{}' in stderr: {stderr}",
-        TOOLCHAIN_ERROR_MARKER
-    );
+    let stderr = get_stderr_string(world)?;
+    if stderr.contains(TOOLCHAIN_ERROR_MARKER) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected '{TOOLCHAIN_ERROR_MARKER}' in stderr: {stderr}"
+        ))
+    }
 }
 
 #[then("the error includes the toolchain name")]
-pub fn then_error_includes_toolchain_name(world: &ToolchainWorld) {
+pub fn then_error_includes_toolchain_name(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let stderr = get_stderr_string(world);
-    assert!(
-        stderr.contains(FAKE_TOOLCHAIN),
-        "expected toolchain name '{FAKE_TOOLCHAIN}' in error output, stderr: {stderr}"
-    );
+    let stderr = get_stderr_string(world)?;
+    if stderr.contains(FAKE_TOOLCHAIN) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected toolchain name '{FAKE_TOOLCHAIN}' in error output, stderr: {stderr}"
+        ))
+    }
 }
 
 #[then("the error output is minimal")]
-pub fn then_error_output_is_minimal(world: &ToolchainWorld) {
+pub fn then_error_output_is_minimal(world: &ToolchainWorld) -> Result<(), String> {
     skip_if_needed!(world);
-    let output = get_output(world);
+    let output = get_output(world)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     let line_count = stderr.lines().count();
-    assert!(
-        line_count <= QUIET_MODE_MAX_LINES,
-        "expected at most {QUIET_MODE_MAX_LINES} lines in quiet mode, got {line_count}: {stderr}"
-    );
+    if line_count <= QUIET_MODE_MAX_LINES {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected at most {QUIET_MODE_MAX_LINES} lines in quiet mode, got {line_count}: \
+             {stderr}"
+        ))
+    }
 }
