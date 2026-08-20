@@ -81,7 +81,7 @@ fn try_fast_path_installation(
         requested_crates: context.requested_crates,
         toolchain_channel: context.toolchain.channel(),
     };
-    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr)? {
+    if let Some(staging_path) = try_prebuilt_installation(&prebuilt_context, stderr) {
         return Ok(Some((staging_path, InstallMode::Download)));
     }
     if let Some(staging_path) = staged_suite::try_test_staged_suite_installation(
@@ -235,11 +235,11 @@ fn ensure_whitaker_workspace(
     if !args.quiet
         && let Some(clone_dir) = clone_directory(dirs)
     {
-        let cwd = std::env::current_dir()
+        let utf8_cwd = std::env::current_dir()
             .ok()
             .and_then(|p| Utf8PathBuf::try_from(p).ok());
 
-        let Some(cwd) = cwd else {
+        let Some(cwd) = utf8_cwd else {
             return ensure_workspace(dirs, !args.skip.no_update);
         };
 
@@ -262,10 +262,10 @@ fn resolve_toolchain(
     workspace_root: &Utf8Path,
     override_channel: Option<&str>,
 ) -> Result<Toolchain> {
-    match override_channel {
-        Some(channel) => Ok(Toolchain::with_override(workspace_root, channel)),
-        None => Toolchain::detect(workspace_root),
-    }
+    override_channel.map_or_else(
+        || Toolchain::detect(workspace_root),
+        |channel| Ok(Toolchain::with_override(workspace_root, channel)),
+    )
 }
 
 fn ensure_toolchain_installed(
