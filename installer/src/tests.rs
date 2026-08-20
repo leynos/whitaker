@@ -6,7 +6,7 @@ use std::{path::PathBuf, time::Duration};
 
 use rstest::{fixture, rstest};
 use whitaker_installer::{
-    cli::InstallArgs,
+    cli::{InstallArgs, LintSelectionFlags},
     dependency_binaries::DependencyBinaryInstaller,
     deps::DependencyInstallOptions,
     dirs::BaseDirs,
@@ -71,7 +71,13 @@ fn exit_code_for_run_result_prints_error_and_returns_one() {
 #[rstest]
 #[case::default_suite_only(InstallArgs::default(), false, true)]
 #[case::individual_lints(
-    InstallArgs { individual_lints: true, ..InstallArgs::default() },
+    InstallArgs {
+        lint_selection: LintSelectionFlags {
+            individual_lints: true,
+            ..LintSelectionFlags::default()
+        },
+        ..InstallArgs::default()
+    },
     true,
     false
 )]

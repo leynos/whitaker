@@ -69,7 +69,7 @@ impl Default for Settings {
 /// # Examples
 ///
 /// ```
-/// use bumpy_road_function::analysis::{Settings, Weights, normalise_settings};
+/// use bumpy_road_function::analysis::{Settings, Weights, normalize_settings};
 ///
 /// let settings = Settings {
 ///     threshold: -1.0,
@@ -82,14 +82,14 @@ impl Default for Settings {
 ///     ..Settings::default()
 /// };
 ///
-/// let normalised = normalise_settings(settings);
-/// assert_eq!(normalised.threshold, Settings::default().threshold);
-/// assert_eq!(normalised.window, Settings::default().window);
-/// assert_eq!(normalised.weights, Settings::default().weights);
+/// let normalized = normalize_settings(settings);
+/// assert_eq!(normalized.threshold, Settings::default().threshold);
+/// assert_eq!(normalized.window, Settings::default().window);
+/// assert_eq!(normalized.weights, Settings::default().weights);
 /// ```
 #[must_use]
-pub fn normalise_settings(settings: Settings) -> Settings {
-    fn normalise_weight(candidate: f64, fallback: f64) -> f64 {
+pub fn normalize_settings(settings: Settings) -> Settings {
+    fn normalize_weight(candidate: f64, fallback: f64) -> f64 {
         if candidate.is_finite() && candidate >= 0.0 {
             candidate
         } else {
@@ -114,9 +114,9 @@ pub fn normalise_settings(settings: Settings) -> Settings {
 
     let min_bump_lines = settings.min_bump_lines.max(1);
     let weights = Weights {
-        depth: normalise_weight(settings.weights.depth, defaults.weights.depth),
-        predicate: normalise_weight(settings.weights.predicate, defaults.weights.predicate),
-        flow: normalise_weight(settings.weights.flow, defaults.weights.flow),
+        depth: normalize_weight(settings.weights.depth, defaults.weights.depth),
+        predicate: normalize_weight(settings.weights.predicate, defaults.weights.predicate),
+        flow: normalize_weight(settings.weights.flow, defaults.weights.flow),
     };
 
     Settings {

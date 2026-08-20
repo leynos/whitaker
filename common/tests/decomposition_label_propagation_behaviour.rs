@@ -10,6 +10,7 @@ use whitaker_common::test_support::decomposition::{
     LabelPropagationReport,
     label_propagation_report,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug)]
 struct CsvList(Vec<String>);
@@ -66,6 +67,7 @@ struct LabelPropagationWorld {
     result: RefCell<Option<Result<LabelPropagationReport, AdjacencyError>>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LabelPropagationWorld { LabelPropagationWorld::default() }
 

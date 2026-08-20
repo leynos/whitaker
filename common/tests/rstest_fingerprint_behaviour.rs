@@ -14,6 +14,7 @@ use whitaker_common::rstest::{
     ParagraphNormalizer,
     StmtShape,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Default)]
 struct FingerprintWorld {
@@ -55,6 +56,7 @@ impl FingerprintWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> FingerprintWorld { FingerprintWorld::default() }
 

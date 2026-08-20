@@ -100,8 +100,9 @@ fn essential_binstall_fields_present() {
 #[case::macos_arm("aarch64-apple-darwin")]
 fn non_windows_targets_expand_to_tgz(#[case] target: &str) {
     let url = expand_pkg_url("0.2.0", target);
+    let extension = std::path::Path::new(&url).extension();
     assert!(
-        url.ends_with(".tgz"),
+        extension.is_some_and(|ext| ext.eq_ignore_ascii_case("tgz")),
         "expected URL for {target} to end with .tgz, got {url}"
     );
     assert!(url.contains(target));
@@ -111,8 +112,9 @@ fn non_windows_targets_expand_to_tgz(#[case] target: &str) {
 #[rstest]
 fn windows_target_expands_to_zip() {
     let url = expand_pkg_url("0.2.0", WINDOWS_OVERRIDE_TARGET);
+    let extension = std::path::Path::new(&url).extension();
     assert!(
-        url.ends_with(".zip"),
+        extension.is_some_and(|ext| ext.eq_ignore_ascii_case("zip")),
         "expected URL for Windows to end with .zip, got {url}"
     );
 }

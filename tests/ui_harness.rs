@@ -49,6 +49,7 @@ impl Default for HarnessWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn harness_world() -> HarnessWorld { HarnessWorld::default() }
 

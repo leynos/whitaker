@@ -157,6 +157,20 @@ pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     }
 }
 
+/// Expected outcome of repository-install verification in a test scenario.
+///
+/// Collapses the "should verification run" and "does verification fail"
+/// questions into a single three-state value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RepositoryVerification {
+    /// Repository verification is not expected to run.
+    Skip,
+    /// Repository verification runs and succeeds.
+    Succeeds,
+    /// Repository verification runs and fails.
+    Fails,
+}
+
 /// Configuration for generating expected calls in dependency binary tests.
 pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
@@ -165,10 +179,8 @@ pub struct ExpectedCallConfig<'a> {
     pub has_repository_context: bool,
     /// Whether the repository failure is a missing asset.
     pub is_repository_asset_missing: bool,
-    /// Whether to verify repository installation.
-    pub should_verify_repository_install: bool,
-    /// Whether repository verification should fail.
-    pub is_repository_verification_failing: bool,
+    /// Expected repository-install verification outcome.
+    pub repository_verification: RepositoryVerification,
     /// Error message for cargo binstall failure (None if succeeds).
     pub cargo_binstall_failure: Option<&'a str>,
     /// Error message for cargo install failure (None if succeeds).
@@ -450,13 +462,14 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
 pub fn expected_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
     let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
-    if config.should_verify_repository_install {
-        calls.extend(repository_verification_call(
-            tool,
-            config.is_repository_verification_failing,
-        ));
-        if !config.is_repository_verification_failing {
+    match config.repository_verification {
+        RepositoryVerification::Skip => {}
+        RepositoryVerification::Succeeds => {
+            calls.extend(repository_verification_call(tool, false));
             return calls;
+        }
+        RepositoryVerification::Fails => {
+            calls.extend(repository_verification_call(tool, true));
         }
     }
 

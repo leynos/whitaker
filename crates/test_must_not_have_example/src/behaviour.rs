@@ -24,6 +24,7 @@ impl DocumentationWorld {
     fn outcome(&self) -> Option<DocExampleViolation> { *self.outcome.borrow() }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DocumentationWorld { DocumentationWorld::default() }
 

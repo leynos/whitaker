@@ -60,7 +60,7 @@ fn run(cli: &Cli, stdout: &mut dyn Write, stderr: &mut dyn Write) -> Result<()> 
 
 /// Returns the set of additional rustup components requested by the CLI flags.
 const fn resolve_additional_components(args: &InstallArgs) -> &'static [&'static str] {
-    if args.cranelift {
+    if args.execution.cranelift {
         &["rustc-codegen-cranelift"]
     } else {
         &[]
@@ -107,12 +107,12 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     let dirs = SystemBaseDirs::new().ok_or_else(|| InstallerError::WorkspaceNotFound {
         reason: "could not determine platform directories".to_owned(),
     })?;
-    if args.dry_run {
+    if args.execution.dry_run {
         return run_dry(args, &dirs, stderr);
     }
     let install_started = Instant::now();
     // Step 1: Check and install Dylint dependencies if needed
-    if !args.skip_deps {
+    if !args.skip.skip_deps {
         ensure_dylint_tools(args.quiet, stderr)?;
     }
     // Step 2: Ensure workspace is available (clone if needed)
@@ -153,7 +153,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         target_dir: &target_dir,
         jobs: args.jobs,
         verbosity: args.verbosity,
-        experimental: args.experimental,
+        experimental: args.lint_selection.experimental,
         quiet: args.quiet,
     };
     // Step 4: Build and stage
@@ -186,9 +186,9 @@ fn run_dry(args: &InstallArgs, dirs: &dyn BaseDirs, stderr: &mut dyn Write) -> R
         verbosity: args.verbosity,
         quiet: args.quiet,
         skips: DryRunSkips {
-            deps: args.skip_deps,
-            wrapper: args.skip_wrapper,
-            update: args.no_update,
+            deps: args.skip.skip_deps,
+            wrapper: args.skip.skip_wrapper,
+            update: args.skip.no_update,
         },
         jobs: args.jobs,
         crates: &requested_crates,
@@ -240,10 +240,10 @@ fn ensure_whitaker_workspace(
             .and_then(|p| Utf8PathBuf::try_from(p).ok());
 
         let Some(cwd) = cwd else {
-            return ensure_workspace(dirs, !args.no_update);
+            return ensure_workspace(dirs, !args.skip.no_update);
         };
 
-        match decide_workspace_action(&cwd, &clone_dir, !args.no_update) {
+        match decide_workspace_action(&cwd, &clone_dir, !args.skip.no_update) {
             WorkspaceAction::CloneTo(dir) => {
                 write_stderr_line(stderr, format!("Cloning Whitaker repository to {dir}..."));
             }
@@ -254,7 +254,7 @@ fn ensure_whitaker_workspace(
         }
     }
 
-    ensure_workspace(dirs, !args.no_update)
+    ensure_workspace(dirs, !args.skip.no_update)
 }
 
 /// Detects or overrides the toolchain, then verifies it is installed.
@@ -292,7 +292,7 @@ fn finish_install(
     staging_path: &Utf8Path,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    if args.skip_wrapper {
+    if args.skip.skip_wrapper {
         write_stderr_line(stderr, "");
         write_stderr_line(stderr, ShellSnippet::new(staging_path).display_text());
     } else {
@@ -344,8 +344,8 @@ fn resolve_requested_crates(args: &InstallArgs) -> Result<Vec<CrateName>> {
         .collect();
 
     let options = CrateResolutionOptions {
-        individual_lints: args.individual_lints,
-        experimental: args.experimental,
+        individual_lints: args.lint_selection.individual_lints,
+        experimental: args.lint_selection.experimental,
     };
     if !lint_crates.is_empty() {
         validate_crate_names(&lint_crates, &options)?;

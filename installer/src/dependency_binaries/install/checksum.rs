@@ -263,8 +263,11 @@ mod tests {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"));
             }
             let take = self.data.len().min(self.chunk).min(buf.len());
-            buf[..take].copy_from_slice(&self.data[..take]);
-            self.data = &self.data[take..];
+            let (to_copy, rest) = self.data.split_at(take);
+            buf.get_mut(..take)
+                .expect("take is bounded by buf.len()")
+                .copy_from_slice(to_copy);
+            self.data = rest;
             Ok(take)
         }
     }

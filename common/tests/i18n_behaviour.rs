@@ -9,6 +9,7 @@ use std::{borrow::Cow, cell::RefCell, collections::HashMap};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::i18n::{Arguments, FluentValue, I18nError, Localizer, branch_phrase};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[path = "support/i18n_helpers.rs"]
 mod i18n_helpers;
@@ -58,6 +59,7 @@ fn branch_count_from_key(key: &str) -> Option<(String, u32)> {
     Some((base.to_owned(), value))
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn fixture() -> I18nFixture { I18nFixture::default() }
 

@@ -142,7 +142,7 @@ fn summarize_context_with_harness(
     is_test_harness: bool,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> ContextSummary {
-    let mut summary = crate::context::summarise_context(cx, hir_id);
+    let mut summary = crate::context::summarize_context(cx, hir_id);
     if !summary.is_test && is_test_harness {
         summary.is_test = is_inside_harness_test_function(cx, hir_id, harness_test_functions);
     }

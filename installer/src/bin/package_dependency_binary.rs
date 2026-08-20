@@ -1,6 +1,6 @@
 //! Package dependency binaries and shared provenance assets for release uploads.
 
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 use thiserror::Error;
@@ -13,6 +13,7 @@ use whitaker_installer::{
         write_provenance_markdown,
     },
     installer_packaging::TargetTriple,
+    output::write_stderr_line,
 };
 
 /// Package repository-hosted dependency binaries for release publication.
@@ -68,6 +69,9 @@ enum CliError {
 
     #[error("{0}")]
     Target(#[from] whitaker_installer::artefact::error::ArtefactError),
+
+    #[error("failed to write to stdout: {0}")]
+    Stdout(#[from] std::io::Error),
 }
 
 /// Parse command-line arguments, execute the requested subcommand, and report
@@ -75,7 +79,7 @@ enum CliError {
 fn main() {
     let cli = Cli::parse();
     if let Err(error) = run(cli) {
-        eprintln!("error: {error}");
+        write_stderr_line(&mut std::io::stderr(), format!("error: {error}"));
         std::process::exit(1);
     }
 }
@@ -93,20 +97,24 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 .map_err(|error| CliError::Manifest(error.to_string()))?
                 .cloned()
                 .ok_or(CliError::UnknownPackage(package))?;
-            let target = TargetTriple::try_from(target.as_str())?;
+            let target_triple = TargetTriple::try_from(target.as_str())?;
             let output = package_dependency_binary(&DependencyPackageParams {
                 dependency,
-                target,
+                target: target_triple,
                 binary_path,
                 output_dir,
             })?;
-            println!("Created {}", output.archive_path.display());
+            writeln!(
+                std::io::stdout(),
+                "Created {}",
+                output.archive_path.display()
+            )?;
         }
         Command::Provenance { output_dir } => {
             let dependencies = required_dependency_binaries()
                 .map_err(|error| CliError::Manifest(error.to_string()))?;
             let output = write_provenance_markdown(&output_dir, dependencies)?;
-            println!("Created {}", output.display());
+            writeln!(std::io::stdout(), "Created {}", output.display())?;
         }
     }
     Ok(())

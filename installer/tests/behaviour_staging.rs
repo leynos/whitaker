@@ -24,6 +24,7 @@ struct StagingWorld {
     staged_name: RefCell<String>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn staging_world() -> StagingWorld { StagingWorld::default() }
 
@@ -101,6 +102,7 @@ mod staging_failure {
         }
     }
 
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
     pub fn staging_failure_world() -> StagingFailureWorld { StagingFailureWorld::default() }
 

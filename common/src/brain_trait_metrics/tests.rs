@@ -97,7 +97,7 @@ fn default_method_cc_sum_aggregates_only_default_methods() {
     let items = vec![
         TraitItemMetrics::required_method("parse"),
         TraitItemMetrics::default_method("render", 12),
-        TraitItemMetrics::default_method("serialise", 8),
+        TraitItemMetrics::default_method("serialize", 8),
         TraitItemMetrics::associated_type("Output"),
     ];
 
@@ -192,7 +192,7 @@ fn implementor_burden_equals_required_method_count() {
     let mut builder = TraitMetricsBuilder::new("Transformer");
     builder.add_required_method("parse");
     builder.add_required_method("validate");
-    builder.add_default_method("normalise", 7, false);
+    builder.add_default_method("normalize", 7, false);
     builder.add_associated_type("Output");
 
     let metrics = builder.build();

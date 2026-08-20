@@ -24,6 +24,7 @@ struct WorkflowWorld {
     _temp_dir: RefCell<Option<TempDir>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> WorkflowWorld { WorkflowWorld::default() }
 

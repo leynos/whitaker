@@ -14,11 +14,13 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
 use whitaker::SharedConfig;
-use whitaker_common::i18n::normalise_locale;
+use whitaker_common::i18n::normalize_locale;
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn config_source() -> RefCell<Option<String>> { RefCell::new(None) }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> { RefCell::new(None) }
 
@@ -146,7 +148,7 @@ fn assert_locale(
     expected: StepLocale,
 ) {
     let raw = expected.into_inner();
-    let expected_value = normalise_locale(Some(raw.as_str()))
+    let expected_value = normalize_locale(Some(raw.as_str()))
         .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
     let borrow = load_result.borrow();
     let config = match borrow.as_ref() {

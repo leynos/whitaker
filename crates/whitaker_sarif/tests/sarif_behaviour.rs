@@ -23,6 +23,7 @@ use whitaker_sarif::{
     model::{descriptor::ReportingDescriptor, run::Run},
     token_pass_path,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct SarifWorld {
@@ -41,6 +42,7 @@ struct SarifWorld {
     computed_path: RefCell<Option<Utf8PathBuf>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> SarifWorld { SarifWorld::default() }
 

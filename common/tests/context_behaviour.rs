@@ -11,6 +11,7 @@ use whitaker_common::{
     attributes::{Attribute, AttributeKind, AttributePath},
     context::{ContextEntry, in_test_like_context_with, is_test_fn_with},
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug, Default)]
 struct FunctionFixture {
@@ -54,6 +55,7 @@ impl FunctionFixture {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn function() -> FunctionFixture { FunctionFixture::new() }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -62,6 +64,7 @@ struct Evaluation {
     in_context: bool,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn evaluation() -> Evaluation { Evaluation::default() }
 
@@ -80,7 +83,7 @@ fn given_tokio(function: &FunctionFixture) {
 #[given("a function without test attributes")]
 fn given_plain(function: &FunctionFixture) { function.clear(); }
 
-#[given("the lint recognises {path} as a test attribute")]
+#[given("the lint recognizes {path} as a test attribute")]
 fn given_custom_attribute(function: &FunctionFixture, path: String) {
     function.configure_additional(&path);
 }
@@ -102,7 +105,7 @@ fn when_check(function: &FunctionFixture) -> Evaluation {
     }
 }
 
-#[then("the function is recognised as test-like")]
+#[then("the function is recognized as test-like")]
 fn then_positive(evaluation: &Evaluation) {
     assert!(evaluation.is_test);
 }
@@ -112,7 +115,7 @@ fn then_context_positive(evaluation: &Evaluation) {
     assert!(evaluation.in_context);
 }
 
-#[then("the function is recognised as not test-like")]
+#[then("the function is recognized as not test-like")]
 fn then_negative(evaluation: &Evaluation) {
     assert!(!evaluation.is_test);
 }
@@ -138,6 +141,6 @@ fn scenario_ignores_plain(function: FunctionFixture, evaluation: Evaluation) {
 }
 
 #[scenario(path = "tests/features/context_detection.feature", index = 3)]
-fn scenario_recognises_custom(function: FunctionFixture, evaluation: Evaluation) {
+fn scenario_recognizes_custom(function: FunctionFixture, evaluation: Evaluation) {
     let _ = (function, evaluation);
 }

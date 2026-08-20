@@ -7,7 +7,7 @@ mod support;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
-use whitaker_common::i18n::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
+use whitaker_common::i18n::{LocaleSelection, LocaleSource, normalize_locale, resolve_localizer};
 
 #[derive(Default)]
 struct LocaleWorld {
@@ -17,6 +17,7 @@ struct LocaleWorld {
     resolution: RefCell<Option<LocaleSelection>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LocaleWorld { LocaleWorld::default() }
 
@@ -94,7 +95,7 @@ fn assert_source(world: &LocaleWorld, source: StepSource) {
 fn assert_locale(world: &LocaleWorld, value: StepLocale) {
     let resolution = resolved(world);
     let raw = value.into_inner();
-    let expected = normalise_locale(Some(raw.as_str()))
+    let expected = normalize_locale(Some(raw.as_str()))
         .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
 
     assert_eq!(resolution.locale(), expected);

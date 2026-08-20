@@ -17,7 +17,7 @@ use whitaker_common::{
     i18n::MessageKey,
 };
 
-use crate::analysis::{Settings, detect_bumps, normalise_settings};
+use crate::analysis::{Settings, detect_bumps, normalize_settings};
 
 const LINT_NAME: &str = "bumpy_road_function";
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
@@ -32,12 +32,25 @@ use self::{
     segment_builder::{SegmentBuilder, span_line_range},
 };
 
-dylint_linting::impl_late_lint! {
-    pub BUMPY_ROAD_FUNCTION,
-    Warn,
-    "functions should avoid multiple separated clusters of complex conditional logic",
-    BumpyRoadFunction::default()
+/// Registration glue expanded from `dylint_linting::impl_late_lint!`.
+///
+/// The macro generates undocumented public registration items, so the
+/// expansion is scoped to this private module and only the documented lint
+/// static is re-exported.
+mod registration {
+    use super::BumpyRoadFunction;
+
+    dylint_linting::impl_late_lint! {
+        /// Lint flagging functions with multiple separated clusters of complex
+        /// conditional logic ("bumpy road" complexity profiles).
+        pub BUMPY_ROAD_FUNCTION,
+        Warn,
+        "functions should avoid multiple separated clusters of complex conditional logic",
+        BumpyRoadFunction::default()
+    }
 }
+
+pub use registration::BUMPY_ROAD_FUNCTION;
 
 /// Lint pass that caches configuration and localization for a crate.
 pub struct BumpyRoadFunction {
@@ -56,7 +69,7 @@ impl Default for BumpyRoadFunction {
 
 impl<'tcx> LateLintPass<'tcx> for BumpyRoadFunction {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
-        self.settings = normalise_settings(load_configuration().into_settings());
+        self.settings = normalize_settings(load_configuration().into_settings());
         let shared_config = SharedConfig::load();
         self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
     }
@@ -104,7 +117,7 @@ impl BumpyRoadFunction {
             return;
         }
 
-        analyse_body(cx, target, &self.settings, &self.localizer);
+        analyse_body(cx, &target, &self.settings, &self.localizer);
     }
 }
 
@@ -180,7 +193,7 @@ struct AnalysisTarget {
 
 fn analyse_body(
     cx: &LateContext<'_>,
-    target: AnalysisTarget,
+    target: &AnalysisTarget,
     settings: &Settings,
     localizer: &Localizer,
 ) {
@@ -204,14 +217,14 @@ fn analyse_body(
         Err(error) => {
             cx.tcx.sess.dcx().span_delayed_bug(
                 body_span,
-                format!("bumpy-road signal rasterisation failed: {error}"),
+                format!("bumpy-road signal rasterization failed: {error}"),
             );
             return;
         }
     };
 
     let smoothed = match smooth_moving_average(&signal, settings.window) {
-        Ok(signal) => signal,
+        Ok(smoothed) => smoothed,
         Err(error) => {
             cx.tcx.sess.dcx().span_delayed_bug(
                 body_span,

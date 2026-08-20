@@ -21,7 +21,7 @@ use whitaker::{SharedConfig, hir::has_test_like_hir_attributes};
 use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 
 use crate::{
-    context::{collect_context, is_cfg_test_attribute, summarise_context},
+    context::{collect_context, is_cfg_test_attribute, summarize_context},
     diagnostics::{DiagnosticContext, emit_diagnostic},
 };
 
@@ -121,7 +121,7 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
 
         let additional = self.additional_test_attributes.as_slice();
         let (entries, has_test_context_ancestry) = collect_context(cx, expr.hir_id, additional);
-        let summary = summarise_context(entries.as_slice(), has_test_context_ancestry, additional);
+        let summary = summarize_context(entries.as_slice(), has_test_context_ancestry, additional);
 
         if summary.is_test {
             return;

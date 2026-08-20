@@ -1,6 +1,6 @@
+//! Behaviour-driven tests for the suite registration wiring.
 #![feature(rustc_private)]
 #![cfg(feature = "dylint-driver")]
-//! Behaviour-driven tests for the suite registration wiring.
 
 use std::{
     cell::RefCell,
@@ -31,6 +31,7 @@ impl RegistrationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> RegistrationWorld { RegistrationWorld::new() }
 

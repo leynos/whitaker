@@ -8,6 +8,7 @@ use whitaker_common::{
     MethodProfileBuilder,
     test_support::decomposition::{MethodVectorAlgebraReport, method_vector_algebra},
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Copy, Debug)]
 enum MethodSide {
@@ -63,6 +64,7 @@ struct VectorAlgebraWorld {
     report: RefCell<Option<MethodVectorAlgebraReport>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> VectorAlgebraWorld { VectorAlgebraWorld::default() }
 

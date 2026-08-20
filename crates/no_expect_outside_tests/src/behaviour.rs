@@ -11,7 +11,7 @@ use whitaker_common::{
     attributes::{Attribute, AttributeKind, AttributePath},
 };
 
-use crate::context::{ContextSummary, summarise_context};
+use crate::context::{ContextSummary, summarize_context};
 
 #[derive(Default)]
 struct ContextWorld {
@@ -56,7 +56,7 @@ impl ContextWorld {
 
     fn evaluate(&self) {
         let entries = self.entries.borrow();
-        let summary = summarise_context(
+        let summary = summarize_context(
             entries.as_slice(),
             *self.cfg_test.borrow(),
             self.additional.borrow().as_slice(),
@@ -70,6 +70,7 @@ impl ContextWorld {
     fn should_skip_lint(&self) -> bool { *self.skip_lint.borrow() }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> ContextWorld { ContextWorld::default() }
 
@@ -104,8 +105,8 @@ fn given_function_with_additional_attribute(world: &ContextWorld, path: String) 
 #[given("the lint is running within a doctest")]
 fn given_doctest(world: &ContextWorld) { world.mark_doctest(); }
 
-#[when("I summarise the context")]
-fn when_summarise(world: &ContextWorld) { world.evaluate(); }
+#[when("I summarize the context")]
+fn when_summarize(world: &ContextWorld) { world.evaluate(); }
 
 #[then("the context is marked as production")]
 fn then_production(world: &ContextWorld) {

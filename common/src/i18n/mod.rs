@@ -89,7 +89,7 @@ pub use helpers::{
 };
 pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};
-pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
+pub use selection::{LocaleSelection, LocaleSource, normalize_locale, resolve_localizer};
 
 #[cfg(test)]
 mod tests;

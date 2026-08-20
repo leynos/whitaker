@@ -8,6 +8,7 @@ use whitaker_common::{
     MethodProfileBuilder,
     test_support::decomposition::methods_meet_cosine_threshold,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Copy, Debug)]
 enum MethodSide {
@@ -63,6 +64,7 @@ struct CosineThresholdWorld {
     threshold_met: RefCell<Option<bool>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> CosineThresholdWorld { CosineThresholdWorld::default() }
 

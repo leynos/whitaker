@@ -18,6 +18,7 @@ use whitaker_common::{
         is_rstest_test_with,
     },
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug, Default)]
 struct DetectionWorld {
@@ -109,6 +110,7 @@ impl DetectionWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DetectionWorld { DetectionWorld::default() }
 
@@ -186,17 +188,17 @@ fn when_classify_parameter(world: &DetectionWorld) -> Result<(), String> {
 #[when("I evaluate fixture-local names")]
 fn when_fixture_names_evaluated(world: &DetectionWorld) { world.evaluate_fixture_names(); }
 
-#[then("the function is recognised as an rstest test")]
+#[then("the function is recognized as an rstest test")]
 fn then_test_positive(world: &DetectionWorld) {
     assert_eq!(*world.test_result.borrow(), Some(true));
 }
 
-#[then("the function is recognised as not being an rstest test")]
+#[then("the function is recognized as not being an rstest test")]
 fn then_test_negative(world: &DetectionWorld) {
     assert_eq!(*world.test_result.borrow(), Some(false));
 }
 
-#[then("the function is recognised as an rstest fixture")]
+#[then("the function is recognized as an rstest fixture")]
 fn then_fixture_positive(world: &DetectionWorld) {
     assert_eq!(*world.fixture_result.borrow(), Some(true));
 }

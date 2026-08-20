@@ -25,6 +25,7 @@ struct TomlWorld {
     error: RefCell<Option<String>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn toml_world() -> TomlWorld { TomlWorld::default() }
 

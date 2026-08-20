@@ -10,6 +10,7 @@ use whitaker_common::test_support::decomposition::{
     EdgeInput,
     adjacency_report,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct AdjacencyWorld {
@@ -18,6 +19,7 @@ struct AdjacencyWorld {
     result: RefCell<Option<Result<AdjacencyReport, AdjacencyError>>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> AdjacencyWorld { AdjacencyWorld::default() }
 

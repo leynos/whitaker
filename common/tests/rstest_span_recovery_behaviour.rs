@@ -8,6 +8,7 @@ use whitaker_common::{
     rstest::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span},
     span::{SourceLocation, SourceSpan},
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Default)]
 struct SpanRecoveryWorld {
@@ -30,6 +31,7 @@ impl SpanRecoveryWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> SpanRecoveryWorld { SpanRecoveryWorld::default() }
 

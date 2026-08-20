@@ -53,6 +53,7 @@ const TIED_ARTEFACTS: [ArtefactSpec<'static>; 2] = [
 
 /// rstest fixture that creates a uniquely named temporary directory for a
 /// selection test.
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn selection_directory() -> TemporaryDirectory { TemporaryDirectory::new("selection") }
 

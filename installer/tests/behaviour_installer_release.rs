@@ -37,6 +37,7 @@ struct InstallerReleaseWorld {
     packaging_error: Option<InstallerPackagingError>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> InstallerReleaseWorld { InstallerReleaseWorld::default() }
 

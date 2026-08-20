@@ -12,10 +12,9 @@ const ADAPTER_OR_TEST_FILES: &[&str] = &["kani.rs", "lowering.rs", "lowering_tes
 #[test]
 fn ast_domain_files_do_not_import_parser_crates() -> Result<(), Box<dyn std::error::Error>> {
     let domain_files = domain_files()?;
-    assert!(
-        !domain_files.is_empty(),
-        "AST domain-file discovery must not be empty"
-    );
+    if domain_files.is_empty() {
+        return Err("AST domain-file discovery must not be empty".into());
+    }
 
     for file in domain_files {
         assert_domain_boundary(&file.path, &file.contents);
@@ -35,8 +34,8 @@ fn domain_files() -> Result<Vec<DomainFile>, std::io::Error> {
     let mut files = Vec::new();
 
     for entry in ast_directory.entries()? {
-        let entry = entry?;
-        let filename = entry.file_name()?;
+        let dir_entry = entry?;
+        let filename = dir_entry.file_name()?;
         let path = ast_path.join(&filename);
         let should_include =
             path.extension() == Some("rs") && !ADAPTER_OR_TEST_FILES.contains(&filename.as_str());
@@ -108,17 +107,19 @@ fn use_trees(contents: &str) -> Vec<Vec<&str>> {
     let mut imports = Vec::new();
     let mut index = 0;
 
-    while index < tokens.len() {
-        if tokens[index] != "use" {
+    while let Some(&token) = tokens.get(index) {
+        if token != "use" {
             index += 1;
             continue;
         }
 
-        let end = tokens[index + 1..]
+        let end = tokens
+            .get(index + 1..)
+            .unwrap_or_default()
             .iter()
-            .position(|token| *token == ";")
+            .position(|candidate| *candidate == ";")
             .map_or(tokens.len(), |offset| index + 1 + offset);
-        imports.push(tokens[index + 1..end].to_vec());
+        imports.push(tokens.get(index + 1..end).unwrap_or_default().to_vec());
         index = end + 1;
     }
 
@@ -135,7 +136,7 @@ fn non_comment_lexemes(contents: &str) -> Vec<&str> {
     tokenize(contents)
         .filter_map(|token| {
             let end = offset + token.len;
-            let lexeme = &contents[offset..end];
+            let lexeme = contents.get(offset..end).unwrap_or("");
             offset = end;
             is_non_comment_lexeme(token.kind).then(|| normalize_raw_identifier(token.kind, lexeme))
         })
@@ -170,12 +171,12 @@ fn coalesce_path_separators<'a>(tokens: &[&'a str]) -> Vec<&'a str> {
     let mut coalesced = Vec::new();
     let mut index = 0;
 
-    while index < tokens.len() {
-        if tokens[index] == ":" && tokens.get(index + 1) == Some(&":") {
+    while let Some(&token) = tokens.get(index) {
+        if token == ":" && tokens.get(index + 1) == Some(&":") {
             coalesced.push("::");
             index += 2;
         } else {
-            coalesced.push(tokens[index]);
+            coalesced.push(token);
             index += 1;
         }
     }
@@ -215,10 +216,11 @@ fn parse_use_tree<'a>(tokens: &[&'a str], prefix: &[&'a str]) -> (Vec<Vec<&'a st
     let mut path = prefix.to_vec();
     let mut index = 0;
 
-    while index < tokens.len() {
-        match tokens[index] {
+    while let Some(&token) = tokens.get(index) {
+        match token {
             "{" => {
-                let (leaves, consumed) = parse_group(&tokens[index + 1..], &path);
+                let group_tokens = tokens.get(index + 1..).unwrap_or_default();
+                let (leaves, consumed) = parse_group(group_tokens, &path);
                 return (leaves, index + 1 + consumed);
             }
             "," | "}" => break,
@@ -241,7 +243,8 @@ fn parse_group<'a>(tokens: &[&'a str], prefix: &[&'a str]) -> (Vec<Vec<&'a str>>
     let mut position = 0;
 
     loop {
-        let (sibling_leaves, consumed) = parse_use_tree(&tokens[position..], prefix);
+        let (sibling_leaves, consumed) =
+            parse_use_tree(tokens.get(position..).unwrap_or_default(), prefix);
         leaves.extend(sibling_leaves);
         position += consumed;
 

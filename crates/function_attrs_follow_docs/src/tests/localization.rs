@@ -15,7 +15,7 @@ use super::{
     Localizer,
     MESSAGE_KEY,
     attribute_fallback,
-    localised_messages,
+    localized_messages,
 };
 
 #[derive(Default)]
@@ -58,6 +58,7 @@ impl LocalizationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LocalizationWorld { LocalizationWorld::default() }
 
@@ -85,7 +86,7 @@ fn given_attribute_fallback(world: &LocalizationWorld) { world.use_attribute_fal
 #[given("localization fails")]
 fn given_failure(world: &LocalizationWorld) { world.failing.set(true); }
 
-#[when("I localise the diagnostic")]
+#[when("I localize the diagnostic")]
 fn when_localize(world: &LocalizationWorld) {
     let kind = *world.subject.borrow();
     let failing = world.failing.get();
@@ -114,9 +115,9 @@ fn resolve_localization(
 ) -> Result<FunctionAttrsMessages, I18nError> {
     if failing {
         let lookup = failing_lookup();
-        localised_messages(&lookup, kind, attribute)
+        localized_messages(&lookup, kind, attribute)
     } else {
-        world.with_localizer(|localizer| localised_messages(localizer, kind, attribute))
+        world.with_localizer(|localizer| localized_messages(localizer, kind, attribute))
     }
 }
 

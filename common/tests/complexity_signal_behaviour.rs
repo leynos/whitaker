@@ -11,6 +11,7 @@ use whitaker_common::complexity_signal::{
     rasterize_signal,
     smooth_moving_average,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct SignalWorld {
@@ -96,6 +97,7 @@ impl SignalWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> SignalWorld { SignalWorld::default() }
 

@@ -84,11 +84,11 @@ fn init_isolated_rustup(rustup_home: &Path, cargo_home: &Path) {
         .env("RUSTUP_AUTO_INSTALL", "0")
         .env_remove("RUSTUP_TOOLCHAIN")
         .output()
-        .expect("failed to initialise isolated rustup environment");
+        .expect("failed to initialize isolated rustup environment");
 
     assert!(
         init_output.status.success(),
-        "failed to initialise isolated rustup: {}",
+        "failed to initialize isolated rustup: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
 

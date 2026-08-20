@@ -16,6 +16,7 @@ use whitaker_clones_core::{
     canonical_hash,
     lower_span,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Clone, Copy)]
 enum SnippetName {
@@ -86,32 +87,44 @@ struct AstFeatureWorld {
     right_hash: RefCell<Option<AstHash>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> AstFeatureWorld { AstFeatureWorld::default() }
 
-fn whole_source_hash(source: &str) -> Result<AstHash, AstError> {
-    let span = ByteSpan::new(source, 0, source.len() as u32)?;
-    Ok(canonical_hash(&lower_span(source, span)?))
+fn whole_source_hash(source: &str) -> Result<AstHash, String> {
+    let length = u32::try_from(source.len())
+        .map_err(|error| format!("source length must fit in u32: {error}"))?;
+    let span = ByteSpan::new(source, 0, length).map_err(|error| error.to_string())?;
+    let tree = lower_span(source, span).map_err(|error| error.to_string())?;
+    Ok(canonical_hash(&tree))
 }
 
 #[given("the source snippet {name}")]
 fn given_source(world: &AstFeatureWorld, name: String) {
-    *world.source.borrow_mut() = SnippetName::parse(&name).source().to_owned();
+    SnippetName::parse(&name)
+        .source()
+        .clone_into(&mut world.source.borrow_mut());
 }
 
 #[given("the candidate span snippet {name}")]
 fn given_candidate_span(world: &AstFeatureWorld, name: String) {
-    *world.span_needle.borrow_mut() = SnippetName::parse(&name).source().to_owned();
+    SnippetName::parse(&name)
+        .source()
+        .clone_into(&mut world.span_needle.borrow_mut());
 }
 
 #[given("the left source snippet {name}")]
 fn given_left_source(world: &AstFeatureWorld, name: String) {
-    *world.left_source.borrow_mut() = SnippetName::parse(&name).source().to_owned();
+    SnippetName::parse(&name)
+        .source()
+        .clone_into(&mut world.left_source.borrow_mut());
 }
 
 #[given("the right source snippet {name}")]
 fn given_right_source(world: &AstFeatureWorld, name: String) {
-    *world.right_source.borrow_mut() = SnippetName::parse(&name).source().to_owned();
+    SnippetName::parse(&name)
+        .source()
+        .clone_into(&mut world.right_source.borrow_mut());
 }
 
 #[when("the candidate span is lowered")]
@@ -123,10 +136,12 @@ fn when_candidate_span_is_lowered(world: &AstFeatureWorld) {
         return;
     };
     let end = start + needle.len();
+    let span_start =
+        u32::try_from(start).unwrap_or_else(|error| panic!("span start must fit in u32: {error}"));
+    let span_end =
+        u32::try_from(end).unwrap_or_else(|error| panic!("span end must fit in u32: {error}"));
 
-    match ByteSpan::new(&source, start as u32, end as u32)
-        .and_then(|span| lower_span(&source, span))
-    {
+    match ByteSpan::new(&source, span_start, span_end).and_then(|span| lower_span(&source, span)) {
         Ok(tree) => {
             *world.lowered.borrow_mut() = Some(tree);
             *world.lowering_error.borrow_mut() = None;
@@ -139,7 +154,7 @@ fn when_candidate_span_is_lowered(world: &AstFeatureWorld) {
 }
 
 #[when("both whole sources are lowered and hashed")]
-fn when_both_whole_sources_are_lowered_and_hashed(world: &AstFeatureWorld) -> Result<(), AstError> {
+fn when_both_whole_sources_are_lowered_and_hashed(world: &AstFeatureWorld) -> Result<(), String> {
     *world.left_hash.borrow_mut() = Some(whole_source_hash(&world.left_source.borrow())?);
     *world.right_hash.borrow_mut() = Some(whole_source_hash(&world.right_source.borrow())?);
     Ok(())
@@ -156,20 +171,24 @@ fn then_lowered_root_kind_is(world: &AstFeatureWorld, kind: String) {
     let lowered = world.lowered.borrow();
     let tree = lowered
         .as_ref()
-        .expect("lowered tree should be available after lowering");
+        .unwrap_or_else(|| panic!("lowered tree must be available after lowering"));
 
-    assert_eq!(tree.root().kind().get(), expected);
+    assert_eq!(
+        tree.root().kind().get(),
+        expected,
+        "lowered root kind must match the scenario expectation"
+    );
 }
 
 fn ast_hash_pair(world: &AstFeatureWorld) -> (AstHash, AstHash) {
     let left_hash = world
         .left_hash
         .borrow()
-        .expect("left AST hash should be available after lowering");
+        .unwrap_or_else(|| panic!("left AST hash must be available after lowering"));
     let right_hash = world
         .right_hash
         .borrow()
-        .expect("right AST hash should be available after lowering");
+        .unwrap_or_else(|| panic!("right AST hash must be available after lowering"));
 
     (left_hash, right_hash)
 }
@@ -178,14 +197,20 @@ fn ast_hash_pair(world: &AstFeatureWorld) -> (AstHash, AstHash) {
 fn then_ast_hashes_match(world: &AstFeatureWorld) {
     let (left_hash, right_hash) = ast_hash_pair(world);
 
-    assert_eq!(left_hash, right_hash);
+    assert_eq!(
+        left_hash, right_hash,
+        "AST hashes must match for these snippets"
+    );
 }
 
 #[then("the AST hashes differ")]
 fn then_ast_hashes_differ(world: &AstFeatureWorld) {
     let (left_hash, right_hash) = ast_hash_pair(world);
 
-    assert_ne!(left_hash, right_hash);
+    assert_ne!(
+        left_hash, right_hash,
+        "AST hashes must differ for these snippets"
+    );
 }
 
 /// The `#[scenario]` macro runs every Gherkin step for this scenario before

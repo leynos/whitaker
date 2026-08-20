@@ -421,7 +421,7 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
             {
                 Some(
                     serde_json::to_value(message.message)
-                        .context("failed to serialise diagnostic for snapshot"),
+                        .context("failed to serialize diagnostic for snapshot"),
                 )
             }
             _ => None,

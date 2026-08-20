@@ -5,6 +5,7 @@
 //! rolling-release CI workflow.
 
 use std::{
+    io::Write,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -21,6 +22,7 @@ use whitaker_installer::{
         target::TargetTriple,
         toolchain_channel::ToolchainChannel,
     },
+    output::write_stderr_line,
     resolution::{LINT_CRATES, SUITE_CRATE},
 };
 
@@ -87,12 +89,16 @@ enum PackageCliError {
     /// Failed to read the system clock.
     #[error("system time error: {0}")]
     SystemTime(#[from] std::time::SystemTimeError),
+
+    /// Failed to write the success report to standard output.
+    #[error("failed to write to stdout: {0}")]
+    Stdout(#[from] std::io::Error),
 }
 
 fn main() {
     let cli = PackageCli::parse();
     if let Err(err) = run(cli) {
-        eprintln!("error: {err}");
+        write_stderr_line(&mut std::io::stderr(), format!("error: {err}"));
         std::process::exit(1);
     }
 }
@@ -124,6 +130,7 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
 
     std::fs::create_dir_all(&cli.output_dir).map_err(PackagingError::from)?;
 
+    let out_dir = cli.output_dir.clone();
     let params = PackageParams {
         git_sha,
         toolchain,
@@ -135,12 +142,12 @@ fn run(cli: PackageCli) -> Result<(), PackageCliError> {
 
     let output = package_artefact(&params)?;
     let manifest_json = generate_manifest_json(&output.manifest)?;
-    let out_dir = output.archive_path.parent().expect("archive has parent");
     let manifest_filename = format!("manifest-{}.json", output.manifest.target());
     let manifest_path = out_dir.join(manifest_filename);
     std::fs::write(&manifest_path, &manifest_json).map_err(PackagingError::from)?;
-    println!("Created {}", output.archive_path.display());
-    println!("Manifest {}", manifest_path.display());
+    let mut stdout = std::io::stdout();
+    writeln!(stdout, "Created {}", output.archive_path.display())?;
+    writeln!(stdout, "Manifest {}", manifest_path.display())?;
     Ok(())
 }
 
@@ -179,32 +186,37 @@ fn validate_library_files(paths: &[PathBuf]) -> Result<(), PackageCliError> {
 
 /// Verify that `ts` matches the expected `YYYY-MM-DDThh:mm:ssZ` shape.
 fn validate_iso8601(ts: &str) -> Result<(), PackageCliError> {
-    let b = ts.as_bytes();
-    if !has_valid_length(b) {
+    let &[
+        y0,
+        y1,
+        y2,
+        y3,
+        b'-',
+        mo0,
+        mo1,
+        b'-',
+        d0,
+        d1,
+        b'T',
+        h0,
+        h1,
+        b':',
+        mi0,
+        mi1,
+        b':',
+        s0,
+        s1,
+        b'Z',
+    ] = ts.as_bytes()
+    else {
         return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
+    };
+    let digits = [y0, y1, y2, y3, mo0, mo1, d0, d1, h0, h1, mi0, mi1, s0, s1];
+    if digits.iter().all(u8::is_ascii_digit) {
+        Ok(())
+    } else {
+        Err(PackageCliError::InvalidTimestamp(ts.to_owned()))
     }
-    if !has_valid_separators(b) {
-        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
-    }
-    if !has_valid_digits(b) {
-        return Err(PackageCliError::InvalidTimestamp(ts.to_owned()));
-    }
-    Ok(())
-}
-
-const fn has_valid_length(b: &[u8]) -> bool { b.len() == 20 }
-
-fn has_valid_separators(b: &[u8]) -> bool {
-    b[4] == b'-' && b[7] == b'-' && b[10] == b'T' && b[13] == b':' && b[16] == b':' && b[19] == b'Z'
-}
-
-/// Digit positions in `YYYY-MM-DDThh:mm:ssZ` (start, end pairs).
-const DIGIT_RANGES: [(usize, usize); 6] = [(0, 4), (5, 7), (8, 10), (11, 13), (14, 16), (17, 19)];
-
-fn has_valid_digits(b: &[u8]) -> bool {
-    DIGIT_RANGES
-        .iter()
-        .all(|&(s, e)| b[s..e].iter().all(u8::is_ascii_digit))
 }
 
 /// Return the current UTC time as an ISO 8601 string (`YYYY-MM-DDThh:mm:ssZ`).
@@ -218,10 +230,10 @@ fn now_utc_iso8601() -> Result<String, std::time::SystemTimeError> {
 /// Format a Unix epoch timestamp as `YYYY-MM-DDThh:mm:ssZ`.
 fn format_epoch_secs(epoch_secs: u64) -> String {
     let (year, month, day) = civil_from_epoch(epoch_secs);
-    let day_secs = (epoch_secs % 86_400) as u32;
-    let hour = day_secs / 3_600;
-    let minute = (day_secs % 3_600) / 60;
-    let second = day_secs % 60;
+    let day_secs = epoch_secs.rem_euclid(86_400);
+    let hour = day_secs.div_euclid(3_600);
+    let minute = day_secs.rem_euclid(3_600).div_euclid(60);
+    let second = day_secs.rem_euclid(60);
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
 }
 
@@ -229,22 +241,19 @@ fn format_epoch_secs(epoch_secs: u64) -> String {
 ///
 /// Adapted from Howard Hinnant's `civil_from_days` algorithm, which is
 /// public domain and widely used in C++ `<chrono>` implementations.
-const fn civil_from_epoch(epoch_secs: u64) -> (u32, u32, u32) {
-    let z = (epoch_secs / 86_400) as i64 + 719_468;
+const fn civil_from_epoch(epoch_secs: u64) -> (i64, u64, u64) {
+    let z = epoch_secs.div_euclid(86_400).cast_signed() + 719_468;
     let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097) as u64; // day of era [0, 146_096]
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // day of year
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
+    let doe = z.rem_euclid(146_097).cast_unsigned(); // day of era [0, 146_096]
+    let yoe = (doe - doe.div_euclid(1_460) + doe.div_euclid(36_524) - doe.div_euclid(146_096))
+        .div_euclid(365);
+    let y = yoe.cast_signed() + era * 400;
+    let doy = doe - (365 * yoe + yoe.div_euclid(4) - yoe.div_euclid(100)); // day of year
+    let mp = (5 * doy + 2).div_euclid(153);
+    let d = doy - (153 * mp + 2).div_euclid(5) + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "year is always positive for post-epoch dates"
-    )]
-    (y as u32, m as u32, d as u32)
+    let year = if m <= 2 { y + 1 } else { y };
+    (year, m, d)
 }
 
 #[cfg(test)]

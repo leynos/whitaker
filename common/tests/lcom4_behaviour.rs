@@ -8,6 +8,7 @@ use std::{
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_common::lcom4::{MethodInfo, cohesion_components};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct LcomWorld {
@@ -26,6 +27,7 @@ impl LcomWorld {
     const fn result(&self) -> Option<usize> { self.result.get() }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LcomWorld { LcomWorld::default() }
 

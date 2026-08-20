@@ -4,13 +4,14 @@
 //! [`whitaker_installer::installer_packaging::package_installer`] invoked
 //! by the release CI workflow to create binstall-compatible archives.
 
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 
 use clap::Parser;
 use thiserror::Error;
 use whitaker_installer::{
     artefact::error::ArtefactError,
     installer_packaging::{InstallerPackagingError, TargetTriple, Version, package_installer},
+    output::write_stderr_line,
 };
 
 /// Package the `whitaker-installer` binary into a release archive.
@@ -48,12 +49,16 @@ enum CliError {
     /// An invalid target triple was provided.
     #[error("{0}")]
     Artefact(#[from] ArtefactError),
+
+    /// Failed to write the success report to standard output.
+    #[error("failed to write to stdout: {0}")]
+    Stdout(#[from] std::io::Error),
 }
 
 fn main() {
     let cli = Cli::parse();
     if let Err(err) = run(cli) {
-        eprintln!("error: {err}");
+        write_stderr_line(&mut std::io::stderr(), format!("error: {err}"));
         std::process::exit(1);
     }
 }
@@ -68,7 +73,11 @@ fn run(cli: Cli) -> Result<(), CliError> {
     };
 
     let output = package_installer(&params)?;
-    println!("Created {}", output.archive_path.display());
+    writeln!(
+        std::io::stdout(),
+        "Created {}",
+        output.archive_path.display()
+    )?;
     Ok(())
 }
 

@@ -44,9 +44,11 @@ impl AttributeWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> AttributeWorld { AttributeWorld::default() }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn result() -> Option<(usize, usize)> { None }
 

@@ -30,8 +30,8 @@ pub use error::{Result, SarifError};
 pub use merge::{WHITAKER_FRAGMENT_KEY, deduplicate_results, merge_runs};
 // Model types
 pub use model::{
-    Artifact,
-    ArtifactLocation,
+    Artefact,
+    ArtefactLocation,
     Invocation,
     Level,
     Location,

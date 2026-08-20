@@ -17,6 +17,7 @@ use whitaker_common::brain_type_metrics::{
         format_primary_message,
     },
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct EvaluationWorld {
@@ -94,6 +95,7 @@ impl EvaluationWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> EvaluationWorld { EvaluationWorld::default() }
 

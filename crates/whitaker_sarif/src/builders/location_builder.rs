@@ -2,7 +2,7 @@
 
 use crate::{
     error::SarifError,
-    model::location::{ArtifactLocation, Location, PhysicalLocation, Region},
+    model::location::{ArtefactLocation, Location, PhysicalLocation, Region},
 };
 
 /// Fluent builder for constructing a [`Region`].
@@ -66,7 +66,7 @@ impl RegionBuilder {
         self
     }
 
-    /// Sets the byte offset from the start of the artifact.
+    /// Sets the byte offset from the start of the artefact.
     #[must_use]
     pub const fn with_byte_offset(mut self, offset: usize) -> Self {
         self.byte_offset = Some(offset);
@@ -170,7 +170,7 @@ impl RegionBuilder {
 ///             .expect("valid region"),
 ///     )
 ///     .build();
-/// assert_eq!(loc.physical_location.artifact_location.uri, "src/main.rs");
+/// assert_eq!(loc.physical_location.artefact_location.uri, "src/main.rs");
 /// ```
 #[derive(Debug, Clone)]
 pub struct LocationBuilder {
@@ -197,7 +197,7 @@ impl LocationBuilder {
         self
     }
 
-    /// Sets the region within the artifact.
+    /// Sets the region within the artefact.
     #[must_use]
     pub const fn with_region(mut self, region: Region) -> Self {
         self.region = Some(region);
@@ -209,7 +209,7 @@ impl LocationBuilder {
     pub fn build(self) -> Location {
         Location {
             physical_location: PhysicalLocation {
-                artifact_location: ArtifactLocation {
+                artefact_location: ArtefactLocation {
                     uri: self.uri,
                     uri_base_id: self.uri_base_id,
                 },
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn location_builder_minimal() {
         let loc = LocationBuilder::new("src/main.rs").build();
-        assert_eq!(loc.physical_location.artifact_location.uri, "src/main.rs");
+        assert_eq!(loc.physical_location.artefact_location.uri, "src/main.rs");
         assert!(loc.physical_location.region.is_none());
     }
 
@@ -289,7 +289,7 @@ mod tests {
             .build();
         assert_eq!(
             loc.physical_location
-                .artifact_location
+                .artefact_location
                 .uri_base_id
                 .as_deref(),
             Some("%SRCROOT%")

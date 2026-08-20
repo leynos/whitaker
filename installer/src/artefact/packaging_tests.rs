@@ -5,9 +5,11 @@ use tempfile::TempDir;
 
 use super::*;
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn temp_dir() -> TempDir { TempDir::new().expect("temp dir creation succeeds") }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn sample_git_sha() -> GitSha { GitSha::try_from("abc1234").expect("valid sha") }
 
@@ -278,8 +280,11 @@ fn packaging_produces_deterministic_digest(temp_dir: TempDir) {
         let output = package_artefact(&params).expect("packaging");
         digests.push(output.manifest.sha256().as_str().to_owned());
     }
+    let [first, second] = digests.as_slice() else {
+        panic!("expected exactly two digests, got {}", digests.len());
+    };
     assert_eq!(
-        digests[0], digests[1],
+        first, second,
         "identical inputs must produce identical manifest digests"
     );
 }

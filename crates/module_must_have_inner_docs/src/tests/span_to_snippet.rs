@@ -29,6 +29,7 @@ fn span_to_snippet_failure_skips_diagnostic(unresolvable_span_fixture: (SourceMa
     );
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn unresolvable_span_fixture() -> (SourceMap, Span) { unresolvable_span() }
 
