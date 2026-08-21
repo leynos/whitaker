@@ -7,6 +7,11 @@ This ExecPlan (execution plan) is a living document. The sections
 
 Status: DRAFT
 
+Prerequisite: roadmap item **6.1.3** must be complete and its architectural
+decision record (ADR) accepted before implementation begins. That ADR
+formalizes the brain trust lint driver interfaces this plan consumes. See
+`Constraints` and `Stage A`.
+
 ## Purpose / big picture
 
 Whitaker's brain trust analysis measures how overgrown a Rust type or trait has
@@ -52,13 +57,24 @@ brain trust configuration and explicitly requires 3.6.3, which adopts
 opt-in as a value the caller supplies, so 6.6.1 can wire whatever surface
 3.6.3 lands on without rework.
 
-It does not create the `brain_type` and `brain_trait` Dylint lint crates. They
-do not exist, and no roadmap item creates them — see `Risks`.
+It does not create the `brain_type` and `brain_trait` Dylint lint crates. Those
+are roadmap items 6.2.4 and 6.3.3, and the interfaces between them, the
+evaluation layer, and this emitter are formalized by roadmap item 6.1.3's ADR,
+which this item requires.
 
 ## Constraints
 
 Hard invariants. Violating one requires escalation, not a workaround.
 
+- Roadmap item 6.1.3's ADR must be accepted before any code in this plan is
+  written. Its subject is the seam this plan sits on — how a lint pass turns a
+  `rustc_span::Span` and a `TyCtxt` into a repository-root-relative file
+  identifier and a `SourceSpan`, how metric builders are populated from HIR,
+  how `DecompositionSuggestion` values reach rendering, and the lint-pass
+  lifecycle for collecting and finalizing findings. This plan **consumes** that
+  ADR; it must not invent those interfaces. If the accepted ADR contradicts any
+  signature in `Interfaces and dependencies`, the ADR wins and this plan is
+  revised.
 - Reuse before invention. Any capability the clone detector already has —
   builders, rules, merge, dedup, property bags, region conversion, fingerprint
   hashing — must be reused, and refactored into `whitaker_sarif` for shared use
@@ -127,19 +143,19 @@ trust emitter have different blast radii.
   Mitigation: `EP-M1` changes it to `BTreeMap`. Verified by review that every
   consumer uses only `get`, `insert`, `new`, `contains_key`, and moves — all
   available on `BTreeMap`.
-- Risk: the `brain_type` and `brain_trait` Dylint crates do not exist, **and no
-  roadmap item creates them**. Roadmap 6.2.2 and 6.3.2 are ticked but delivered
-  only the evaluation layer in `whitaker-common`; 6.6.3 presupposes
-  `crates/brain_type/ui/` that nothing produces. The emitter is therefore
-  designed without its production caller in the room.
+- Risk: the `brain_type` and `brain_trait` Dylint crates do not exist, so the
+  emitter would otherwise be designed without its production caller in the
+  room. Roadmap 6.2.2 and 6.3.2 are ticked but delivered only the evaluation
+  layer in `whitaker-common`.
   Severity: medium. Likelihood: certain.
-  Mitigation: keeping this item pure and I/O-free means the caller only has to
-  supply data it already holds. The open question this leaves — how a
-  `LateLintPass` turns a `rustc_span::Span` into a normalized file URI and a
-  `SourceSpan` — is answered concretely in `Interfaces and dependencies` and
-  recorded in the ADR so the lint crates inherit a decision rather than a gap.
-  The missing roadmap item is raised in `Outcomes & retrospective` as follow-up
-  work; fixing the roadmap is not in this item's scope.
+  Mitigation: resolved at the roadmap level rather than worked around here.
+  Roadmap items 6.2.4 and 6.3.3 now create the two crates, and 6.1.3 requires
+  an ADR formalizing the interfaces between them, the evaluation layer, and
+  this emitter. This item requires 6.1.3, so the seam is a decision this plan
+  inherits rather than a gap it guesses at. Residual risk: if 6.1.3's ADR
+  lands after this plan is approved but before implementation, the signatures
+  in `Interfaces and dependencies` may need revising — the `Constraints`
+  section makes the ADR authoritative in that case.
 - Risk: promoting fingerprint hashing changes the clone detector's emitted
   fingerprint values.
   Severity: low. Likelihood: certain.
@@ -184,8 +200,9 @@ trust emitter have different blast radii.
 - [~] (2026-08-21) EP-M0 Understand and propose. Completed: reconnaissance of
   `whitaker_sarif`, `whitaker_clones_core::run0`, and the brain trust modules
   in `whitaker-common`; SARIF 2.1.0 and GitHub code-scanning research; a
-  six-lens design review whose findings are folded into this revision.
-  Remaining: plan approval.
+  six-lens design review whose findings are folded into this revision; roadmap
+  items 6.1.3, 6.2.4, and 6.3.3 added to close the missing-lint-crate gap.
+  Remaining: plan approval, and acceptance of 6.1.3's ADR.
 - [ ] EP-M1 Deterministic SARIF results and workspace test dependencies.
 - [ ] EP-M2 Shared fingerprint encoding, with the Verus injectivity proof.
 - [ ] EP-M3 Shared file-URI and region conversion, with the Kani harness.
@@ -395,17 +412,46 @@ Add a timestamp to each entry as it completes.
   literal versions in one manifest, so the repository gets one pinned decision
   rather than a local exception.
   Date/Author: 2026-08-21, planning agent, over Dinolump's objection.
-- Follow-up recorded, not actioned here: no roadmap item creates
-  `crates/brain_type/` or `crates/brain_trait/`, yet 6.6.3 presupposes their
-  `ui/` directories. Raise a roadmap addendum.
+- Decision: fix the roadmap gap rather than record it as follow-up. Roadmap
+  6.1.3 (ADR formalizing the lint driver interfaces), 6.2.4 (`brain_type` lint
+  crate), and 6.3.3 (`brain_trait` lint crate) were added, and 6.5.1 now
+  requires 6.1.3. The dependent items 6.6.1, 6.6.2, and 6.6.3 were repointed
+  from 6.2.2/6.3.2 to 6.2.4/6.3.3, because configuration, localization, and UI
+  tests genuinely cannot be done until the crates exist.
+  Rationale: the review found that 6.6.3 presupposed `crates/brain_type/ui/`
+  that nothing produced. Designing the emitter's interfaces inside this item
+  would have frozen guesses into committed snapshots; formalizing them in an
+  ADR that the crate items and this item both consume makes the seam a shared
+  decision. The maintainer directed this fix.
+  Date/Author: 2026-08-21, maintainer direction, following Pandalump and
+  Wafflecat (review panel).
+- Decision: gate the whole of Stage C on 6.1.3, not just `EP-M5`.
+  Rationale: the roadmap now records 6.5.1 as requiring 6.1.3, so the item as a
+  whole is gated. `EP-M1`–`EP-M4` are shared `whitaker_sarif` refactors whose
+  content does not depend on the ADR, so a maintainer may resequence them ahead
+  of it — but that is an explicit decision to record here, not a default.
+  Date/Author: 2026-08-21, planning agent.
+- Decision: do not hard-code an ADR number for this item.
+  Rationale: `adr-001` through `adr-004` exist, and 6.1.3's ADR takes the next
+  free number. This item's ADR takes whichever number is free when it is
+  written, and references 6.1.3's rather than restating it.
+  Date/Author: 2026-08-21, planning agent.
+- Note on tooling: the `mapsplice` roadmap editor was tried first and rejected
+  for this edit. It reindents every continuation line in `docs/roadmap.md` from
+  two spaces to four, which is the broad spacing-only churn its own guidance
+  says to stop on. The edits here are append-only within existing steps, so no
+  renumbering was required and they were made directly.
 
 ## Outcomes & retrospective
 
 To be completed at `EP-M6`. Before setting the plan to `COMPLETE`, reconcile
 every discovery against `docs/brain-trust-lints-design.md` §SARIF output,
-`docs/whitaker-clone-detector-design.md` §SARIF schema and mapping, the new
-ADR, `docs/users-guide.md`, `docs/developers-guide.md`, and `docs/roadmap.md`
-item 6.5.1.
+`docs/whitaker-clone-detector-design.md` §SARIF schema and mapping, roadmap
+item 6.1.3's ADR, the new ADR for this item, `docs/users-guide.md`,
+`docs/developers-guide.md`, and `docs/roadmap.md` item 6.5.1. In particular,
+if implementation revealed that 6.1.3's interface decisions do not survive
+contact with the emitter, that ADR must be amended before this plan closes —
+items 6.2.4 and 6.3.3 depend on it too.
 
 ## Context and orientation
 
@@ -508,7 +554,13 @@ in the clone detector; this item promotes them.
 There is no Terms of Reference document. The upstream artefacts are:
 
 - `docs/roadmap.md` §6.5, item 6.5.1, at the tree of branch
-  `harden-lint-config` (`origin/main` at `02e6c1c`).
+  `harden-lint-config` (`origin/main` at `02e6c1c`), as amended by this branch
+  to require 6.1.3.
+- `docs/roadmap.md` item 6.1.3 and the ADR it produces — the authoritative
+  statement of the lint driver interfaces this plan consumes. This item cannot
+  start until that ADR is accepted.
+- `docs/roadmap.md` items 6.2.4 and 6.3.3 — the `brain_type` and `brain_trait`
+  lint crates that become this emitter's callers.
 - `docs/brain-trust-lints-design.md` §SARIF output and §Configuration,
   localization, and testing.
 - `docs/whitaker-clone-detector-design.md` §SARIF schema and mapping, §Runs,
@@ -739,7 +791,12 @@ surface; `crates/whitaker_sarif/src/` in full;
 `common/src/brain_type_metrics/diagnostic.rs` and `evaluation.rs`;
 `common/src/brain_trait_metrics/diagnostic.rs`;
 `common/src/decomposition_advice/note.rs` and `profile.rs`;
-`common/src/span.rs`. Then obtain approval.
+`common/src/span.rs`. Then read the accepted ADR from roadmap item 6.1.3 and
+reconcile every signature in `Interfaces and dependencies` against it, revising
+this plan where they differ.
+
+Stage A ends when two gates have cleared: this plan is approved, **and** 6.1.3's
+ADR is accepted. Do not begin Stage B before both.
 
 ### Stage B — red tests and open proof obligations
 
@@ -958,16 +1015,18 @@ Feature: Opt-in SARIF emission for brain trust findings
 
 - Outcome: the change is documented everywhere the repository requires.
 - Changes:
-  - `docs/adr-005-brain-trust-sarif-emission.md`, using the required ADR
-    sections. It records: mirroring the clone detector's pure-emitter
-    architecture and why file writing is deferred; promoting four helpers into
-    `whitaker_sarif` and the defects each promotion fixed; the `BTreeMap`
-    determinism fix and why `implicit_hasher` does not apply; length-prefixed
-    encoding versus delimiter separation; the discriminated property bag; the
-    `WHK1xx` SARIF rule block and its distinction from the roadmap-3.6.1
-    selector codes; deferring configuration to 6.6.1; omitting
-    `defaultConfiguration.level`, `ruleIndex`, and `automationDetails`; and the
-    span-to-URI contract the future lint crates must satisfy.
+  - `docs/adr-NNN-brain-trust-sarif-emission.md`, taking the next free ADR
+    number at the time of writing (6.1.3's ADR will already have claimed one),
+    and using the required ADR sections. It records: mirroring the clone
+    detector's pure-emitter architecture and why file writing is deferred;
+    promoting four helpers into `whitaker_sarif` and the defects each promotion
+    fixed; the `BTreeMap` determinism fix and why `implicit_hasher` does not
+    apply; length-prefixed encoding versus delimiter separation; the
+    discriminated property bag; the `WHK1xx` SARIF rule block and its
+    distinction from the roadmap-3.6.1 selector codes; deferring configuration
+    to 6.6.1; and omitting `defaultConfiguration.level`, `ruleIndex`, and
+    `automationDetails`. It **references** 6.1.3's ADR for the span-to-URI and
+    lint-pass-lifecycle contract rather than restating it.
   - `docs/brain-trust-lints-design.md` §SARIF output: replace the planned
     approach with the delivered design, note that 6.6.2 must not localize the
     `format_*` functions the emitter depends on without forking them, and
@@ -1318,12 +1377,17 @@ Note the `Option` here carries exactly one meaning — disabled. An enabled run
 with no findings returns `Ok(Some(run))` with an empty `results` array, so a
 future consumer can tell "clean" from "not asked".
 
-### The contract the future lint crates must satisfy
+### The contract with the lint crates
 
 A `LateLintPass` holds a `rustc_span::Span` and a `TyCtxt`. To build a
 `BrainTrustSubject` it must produce a repository-root-relative, forward-slashed
 path for `FileUri::try_from`, and a `SourceSpan` from the span's start and end
-line and column. Record this in the ADR; it is the seam roadmap 6.6.x inherits.
+line and column.
+
+**This plan does not decide that contract.** Roadmap item 6.1.3's ADR does, and
+items 6.2.4 and 6.3.3 implement it. The shapes above record what this emitter
+needs from it; if the accepted ADR specifies something different, the ADR wins
+and `finding.rs` is written to match. Reconcile at Stage A.
 
 ### Signposted documentation and skills
 
