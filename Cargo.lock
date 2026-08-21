@@ -3664,6 +3664,7 @@ dependencies = [
  "directories-next",
  "flate2",
  "fs2",
+ "insta",
  "libc",
  "log",
  "mockall",

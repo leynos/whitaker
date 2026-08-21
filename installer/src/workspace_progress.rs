@@ -93,21 +93,24 @@ mod tests {
     #[rstest]
     #[case::clone(
         WorkspaceAction::CloneTo(Utf8PathBuf::from("/managed/whitaker")),
-        "Cloning Whitaker repository to /managed/whitaker...\n"
+        "workspace_progress_reports_clone_message"
     )]
     #[case::update(
         WorkspaceAction::UpdateAt(Utf8PathBuf::from("/managed/whitaker")),
-        "Updating Whitaker repository at /managed/whitaker...\n"
+        "workspace_progress_reports_update_message"
     )]
     fn workspace_progress_reports_exact_action_message(
         #[case] action: WorkspaceAction,
-        #[case] expected: &str,
+        #[case] snapshot_name: &str,
     ) {
         let mut output = Vec::new();
 
         report_workspace_progress(&InstallArgs::default(), &checkout(action), &mut output);
 
-        assert_eq!(String::from_utf8(output).expect("UTF-8 output"), expected);
+        insta::assert_snapshot!(
+            snapshot_name,
+            String::from_utf8(output).expect("UTF-8 output")
+        );
     }
 
     #[test]
@@ -126,9 +129,9 @@ mod tests {
             &mut output,
         );
 
-        assert_eq!(
-            String::from_utf8(output).expect("UTF-8 output"),
-            "Pinning Whitaker suite to v0.2.5...\n"
+        insta::assert_snapshot!(
+            "workspace_progress_reports_requested_pin_message",
+            String::from_utf8(output).expect("UTF-8 output")
         );
     }
 
@@ -148,24 +151,29 @@ mod tests {
             &mut output,
         );
 
-        assert!(output.is_empty());
+        let output = String::from_utf8(output).expect("UTF-8 output");
+
+        insta::assert_snapshot!(
+            "workspace_progress_is_silent_in_quiet_mode",
+            format!("{output:?}")
+        );
     }
 
     #[rstest]
-    #[case::requested_ref(Some("v0.2.5"), "Pinned Whitaker suite to v0.2.5 (abc123456789).\n")]
-    #[case::commit_fallback(
-        None,
-        "Pinned Whitaker suite to abc1234567890000000000000000000000000000 (abc123456789).\n"
-    )]
+    #[case::requested_ref(Some("v0.2.5"), "pinned_checkout_reports_requested_ref")]
+    #[case::commit_fallback(None, "pinned_checkout_reports_commit_fallback")]
     fn pinned_checkout_reports_exact_message(
         #[case] git_ref: Option<&str>,
-        #[case] expected: &str,
+        #[case] snapshot_name: &str,
     ) {
         let mut output = Vec::new();
 
         report_pinned_checkout(false, git_ref, &pinned_checkout(), &mut output);
 
-        assert_eq!(String::from_utf8(output).expect("UTF-8 output"), expected);
+        insta::assert_snapshot!(
+            snapshot_name,
+            String::from_utf8(output).expect("UTF-8 output")
+        );
     }
 
     #[test]
@@ -174,6 +182,11 @@ mod tests {
 
         report_pinned_checkout(true, Some("v0.2.5"), &pinned_checkout(), &mut output);
 
-        assert!(output.is_empty());
+        let output = String::from_utf8(output).expect("UTF-8 output");
+
+        insta::assert_snapshot!(
+            "pinned_checkout_is_silent_in_quiet_mode",
+            format!("{output:?}")
+        );
     }
 }

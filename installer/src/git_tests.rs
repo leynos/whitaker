@@ -222,6 +222,10 @@ fn fetch_ref_retrieves_a_new_tag(git_fixture: GitFixture) {
         resolve_commit(&git_fixture.clone, "v2").expect("resolve v2"),
         third
     );
+    assert!(
+        resolve_commit(&git_fixture.clone, "unrelated").is_err(),
+        "fetching v2 must not transfer unrelated tags"
+    );
 }
 
 #[rstest]

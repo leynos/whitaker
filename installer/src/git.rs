@@ -83,11 +83,11 @@ pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Fetches a specific ref (and all tags) from `origin` into the repository.
+/// Fetches a specific ref from `origin` into the private pinned ref.
 ///
 /// Used to recover when a pinned ref cannot be resolved from the existing
 /// clone. The requested ref is force-updated into a private local ref so the
-/// returned commit cannot be confused with another entry fetched by `--tags`.
+/// returned commit is unambiguous.
 ///
 /// # Errors
 ///
@@ -100,11 +100,7 @@ pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
         "fetching requested Git ref"
     );
     let pinned_refspec = format!("+{refspec}:{PINNED_REF}");
-    run_git_checked(
-        &["fetch", "origin", &pinned_refspec, "--tags"],
-        Some(repo),
-        "fetch",
-    )?;
+    run_git_checked(&["fetch", "origin", &pinned_refspec], Some(repo), "fetch")?;
     resolve_commit(repo, PINNED_REF)
 }
 
