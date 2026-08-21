@@ -839,7 +839,7 @@ closes.
 | C-18 | Ratify or supersede `span_to_region` | 6.5.1 deferral | not answered |
 | C-19 | Ratify or supersede `BrainTrustSubject` | 6.5.1 deferral | not answered |
 
-_Table 1: The completeness checklist for ADR 005, written before drafting._
+*Table 1: The completeness checklist for ADR 005, written before drafting.*
 
 ### Behaviour a reviewer can verify
 
@@ -925,7 +925,7 @@ flowchart TD
     D --> E
 ```
 
-_Figure 1: Dependency direction across the brain trust lint driver seam._
+*Figure 1: Dependency direction across the brain trust lint driver seam.*
 
 The rule is one sentence: **everything that knows about the compiler lives
 above the line, and nothing below the line may depend on anything above it.**
@@ -1082,7 +1082,7 @@ Contract, per callback:
 | `check_item`, `check_impl_item`, `check_trait_item` | Capture only. Never evaluate, never emit, never allocate a finding. |
 | `check_crate_post` | Finalize once, then evaluate, build findings, emit diagnostics in a deterministic order, and hand the findings to the SARIF sink. |
 
-_Table 2: Responsibilities of each lint-pass callback._
+*Table 2: Responsibilities of each lint-pass callback.*
 
 Normative rules:
 
