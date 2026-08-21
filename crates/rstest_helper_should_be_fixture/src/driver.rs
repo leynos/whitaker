@@ -4,26 +4,30 @@
 //! configuration normalization stays in small helper methods so it can be
 //! tested without constructing rustc contexts.
 
-use crate::collector::CallSiteCollector;
-use crate::visitor::{
-    CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape,
-};
+use std::{collections::HashSet, io::Write};
+
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, OpenOptions};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, OpenOptions},
+};
 use log::debug;
 use rustc_hir as hir;
-use rustc_hir::def_id::LocalDefId;
-use rustc_hir::intravisit::Visitor;
+use rustc_hir::{def_id::LocalDefId, intravisit::Visitor};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Span;
 use serde::Deserialize;
-use std::collections::HashSet;
-use std::io::Write;
 use whitaker::SharedConfig;
-use whitaker_common::attributes::AttributePath;
-use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
-use whitaker_common::rstest::{RstestDetectionOptions, is_rstest_test_with};
+use whitaker_common::{
+    attributes::AttributePath,
+    i18n::{Localizer, get_localizer_for_lint},
+    rstest::{RstestDetectionOptions, is_rstest_test_with},
+};
+
+use crate::{
+    collector::CallSiteCollector,
+    visitor::{CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape},
+};
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 /// Internal test-only hook used by the UI harness to assert passive collection.
@@ -40,12 +44,30 @@ const DEFAULT_PROVIDER_PARAM_ATTRIBUTES: &[&str] =
 
 type ConfigLoadResult = Result<Config, String>;
 
-dylint_linting::impl_late_lint! {
-    pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
-    Warn,
-    "repeated rstest helper calls should be extracted into fixtures",
-    RstestHelperShouldBeFixture::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::RstestHelperShouldBeFixture;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when repeated rstest helper calls should become fixtures.
+        pub RSTEST_HELPER_SHOULD_BE_FIXTURE,
+        Warn,
+        "repeated rstest helper calls should be extracted into fixtures",
+        RstestHelperShouldBeFixture::default()
+    }
 }
+
+pub use declaration::RSTEST_HELPER_SHOULD_BE_FIXTURE;
 
 /// Configuration for the `rstest_helper_should_be_fixture` lint.
 ///
@@ -131,10 +153,10 @@ impl RstestHelperShouldBeFixture {
     fn apply_loaded_crate_configuration(
         &mut self,
         config: ConfigLoadResult,
-        shared_config: SharedConfig,
+        shared_config: &SharedConfig,
     ) {
-        let config = match config {
-            Ok(config) => config,
+        let resolved = match config {
+            Ok(loaded) => loaded,
             Err(error) => {
                 debug!(
                     target: LINT_NAME,
@@ -144,10 +166,10 @@ impl RstestHelperShouldBeFixture {
             }
         };
 
-        self.apply_crate_configuration(config, shared_config);
+        self.apply_crate_configuration(resolved, shared_config);
     }
 
-    fn apply_crate_configuration(&mut self, config: Config, shared_config: SharedConfig) {
+    fn apply_crate_configuration(&mut self, config: Config, shared_config: &SharedConfig) {
         debug!(
             target: LINT_NAME,
             "applying `{LINT_NAME}` configuration: min_calls={}, min_distinct_tests={}, \
@@ -185,8 +207,7 @@ impl RstestHelperShouldBeFixture {
         {
             debug!(
                 target: LINT_NAME,
-                "skipping helper call-site collection for non-rstest function: def_id={:?}",
-                def_id,
+                "skipping helper call-site collection for non-rstest function: def_id={def_id:?}",
             );
             return;
         }
@@ -204,7 +225,7 @@ impl RstestHelperShouldBeFixture {
 
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
-        self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
+        self.apply_loaded_crate_configuration(load_configuration(), &load_shared_config());
         self.rstest_collection_roots = whitaker::hir::collect_rstest_companion_test_functions(cx);
     }
 
@@ -241,8 +262,7 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
         if let Err(error) = self.write_collection_summary() {
             debug!(
                 target: LINT_NAME,
-                "failed to write rstest helper call-site collection summary: {}",
-                error,
+                "failed to write rstest helper call-site collection summary: {error}",
             );
         }
         debug!(
@@ -262,12 +282,15 @@ impl RstestHelperShouldBeFixture {
             self.collector.record_count(),
         );
         for (callee, records) in self.collector.iter() {
-            summary.push_str(&format!("callee={callee};records={}\n", records.len()));
+            summary.push_str("callee=");
+            summary.push_str(callee);
+            summary.push_str(";records=");
+            summary.push_str(&records.len().to_string());
+            summary.push('\n');
             for record in records {
-                summary.push_str(&format!(
-                    "fingerprint={}\n",
-                    redacted_fingerprint_shape(&record.fingerprint)
-                ));
+                summary.push_str("fingerprint=");
+                summary.push_str(&redacted_fingerprint_shape(&record.fingerprint));
+                summary.push('\n');
             }
         }
         summary

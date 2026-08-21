@@ -20,15 +20,11 @@ pub struct KindId(u16);
 impl KindId {
     /// Creates an opaque syntax-kind identifier.
     #[must_use]
-    pub const fn new(value: u16) -> Self {
-        Self(value)
-    }
+    pub const fn new(value: u16) -> Self { Self(value) }
 
     /// Returns the opaque numeric value.
     #[must_use]
-    pub const fn get(self) -> u16 {
-        self.0
-    }
+    pub const fn get(self) -> u16 { self.0 }
 }
 
 /// Tree depth relative to the lowered subtree root.
@@ -46,21 +42,15 @@ pub struct Depth(u16);
 impl Depth {
     /// Returns the root depth.
     #[must_use]
-    pub const fn root() -> Self {
-        Self(0)
-    }
+    pub const fn root() -> Self { Self(0) }
 
     /// Creates a depth value.
     #[must_use]
-    pub const fn new(value: u16) -> Self {
-        Self(value)
-    }
+    pub const fn new(value: u16) -> Self { Self(value) }
 
     /// Returns the underlying depth.
     #[must_use]
-    pub const fn get(self) -> u16 {
-        self.0
-    }
+    pub const fn get(self) -> u16 { self.0 }
 }
 
 /// Normalized leaf token class for Type-2-style leaf erasure.
@@ -97,7 +87,7 @@ pub enum LeafClass {
 pub struct NormalizedNode {
     kind: KindId,
     leaf: Option<LeafClass>,
-    children: Vec<NormalizedNode>,
+    children: Vec<Self>,
 }
 
 impl NormalizedNode {
@@ -111,7 +101,7 @@ impl NormalizedNode {
     /// leaf-erasure feature extraction rely on that invariant to stay
     /// unambiguous.
     #[must_use]
-    pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<NormalizedNode>) -> Self {
+    pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<Self>) -> Self {
         debug_assert!(
             leaf.is_none() || children.is_empty(),
             "a leaf-tagged NormalizedNode must have no children"
@@ -125,21 +115,15 @@ impl NormalizedNode {
 
     /// Returns the node kind.
     #[must_use]
-    pub const fn kind(&self) -> KindId {
-        self.kind
-    }
+    pub const fn kind(&self) -> KindId { self.kind }
 
     /// Returns the optional leaf class.
     #[must_use]
-    pub const fn leaf(&self) -> Option<LeafClass> {
-        self.leaf
-    }
+    pub const fn leaf(&self) -> Option<LeafClass> { self.leaf }
 
     /// Returns the ordered child nodes.
     #[must_use]
-    pub fn children(&self) -> &[NormalizedNode] {
-        &self.children
-    }
+    pub fn children(&self) -> &[Self] { &self.children }
 }
 
 /// Lowered candidate subtree plus its source span.
@@ -163,21 +147,15 @@ pub struct NormalizedTree {
 impl NormalizedTree {
     /// Creates a lowered tree.
     #[must_use]
-    pub const fn new(root: NormalizedNode, span: ByteSpan) -> Self {
-        Self { root, span }
-    }
+    pub const fn new(root: NormalizedNode, span: ByteSpan) -> Self { Self { root, span } }
 
     /// Returns the lowered root node.
     #[must_use]
-    pub const fn root(&self) -> &NormalizedNode {
-        &self.root
-    }
+    pub const fn root(&self) -> &NormalizedNode { &self.root }
 
     /// Returns the source span represented by this tree.
     #[must_use]
-    pub const fn span(&self) -> ByteSpan {
-        self.span
-    }
+    pub const fn span(&self) -> ByteSpan { self.span }
 }
 
 /// Half-open byte span over source text.
@@ -199,7 +177,15 @@ pub struct ByteSpan {
 
 impl ByteSpan {
     /// Validates and creates a half-open byte span.
-    pub fn new(source_text: &str, start: u32, end: u32) -> AstResult<Self> {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AstError::InvalidSpan`] when `end` precedes `start`,
+    /// [`AstError::EmptySpan`] when the span is zero width,
+    /// [`AstError::SpanOutOfBounds`] when the span exceeds `source_text`, and
+    /// [`AstError::NonCharBoundary`] when either offset splits a UTF-8
+    /// character.
+    pub const fn new(source_text: &str, start: u32, end: u32) -> AstResult<Self> {
         if end < start {
             return Err(AstError::InvalidSpan { start, end });
         }
@@ -225,13 +211,9 @@ impl ByteSpan {
 
     /// Returns the start offset.
     #[must_use]
-    pub const fn start(self) -> u32 {
-        self.start
-    }
+    pub const fn start(self) -> u32 { self.start }
 
     /// Returns the exclusive end offset.
     #[must_use]
-    pub const fn end(self) -> u32 {
-        self.end
-    }
+    pub const fn end(self) -> u32 { self.end }
 }

@@ -1,11 +1,15 @@
 //! Tests that verify the UI harness runner validates inputs and propagates
 //! errors from custom runners.
-use super::{HarnessError, run_with_runner};
+use std::{
+    env,
+    sync::{Mutex, MutexGuard, OnceLock},
+};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
-use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
-use whitaker_common::test_support::EnvVarGuard;
+use whitaker_common::test_support::with_env_var;
+
+use super::{HarnessError, run_with_runner};
 
 #[rstest]
 #[case(
@@ -97,31 +101,34 @@ fn propagates_runner_failures() {
 #[test]
 fn runner_env_guard_clears_and_restores_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
+    with_env_var("RUSTC_WRAPPER", "sccache", || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+            Ok(())
+        })
+        .expect("runner should execute with RUSTC_WRAPPER cleared");
 
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        Ok(())
-    })
-    .expect("runner should execute with RUSTC_WRAPPER cleared");
-
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+        assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+    });
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
+    use whitaker_common::test_support::with_env_var_removed;
+
     let _serial_guard = runner_env_guard_test_lock();
-    let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
-    let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
+    with_env_var("VCPKG_ROOT", r"C:\vcpkg", || {
+        with_env_var_removed("RUSTC_WRAPPER", || {
+            run_with_runner("lint", "ui", |_, _| {
+                assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+                Ok(())
+            })
+            .expect("runner should execute without installing RUSTC_WRAPPER");
 
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        Ok(())
-    })
-    .expect("runner should execute without installing RUSTC_WRAPPER");
-
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        });
+    });
 }
 
 #[test]

@@ -1,13 +1,23 @@
 //! Behaviour-driven coverage for brain type threshold evaluation.
 
+use std::cell::{Cell, RefCell};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use whitaker_common::brain_type_metrics::evaluation::{
-    BrainTypeDiagnostic, BrainTypeDisposition, BrainTypeThresholds, BrainTypeThresholdsBuilder,
-    evaluate_brain_type, format_primary_message,
+use whitaker_common::brain_type_metrics::{
+    MethodMetrics,
+    TypeMetrics,
+    TypeMetricsBuilder,
+    evaluation::{
+        BrainTypeDiagnostic,
+        BrainTypeDisposition,
+        BrainTypeThresholds,
+        BrainTypeThresholdsBuilder,
+        evaluate_brain_type,
+        format_primary_message,
+    },
 };
-use whitaker_common::brain_type_metrics::{MethodMetrics, TypeMetrics, TypeMetricsBuilder};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct EvaluationWorld {
@@ -85,10 +95,9 @@ impl EvaluationWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> EvaluationWorld {
-    EvaluationWorld::default()
-}
+fn world() -> EvaluationWorld { EvaluationWorld::default() }
 
 // --- Given steps ---
 
@@ -100,9 +109,7 @@ fn given_type_metrics(world: &EvaluationWorld, name: String, wmc: usize, brain_c
 }
 
 #[given("the type has LCOM4 {lcom4}")]
-fn given_lcom4(world: &EvaluationWorld, lcom4: usize) {
-    world.lcom4.set(lcom4);
-}
+fn given_lcom4(world: &EvaluationWorld, lcom4: usize) { world.lcom4.set(lcom4); }
 
 #[given("the default brain type thresholds")]
 fn given_default_thresholds(world: &EvaluationWorld) {
@@ -184,13 +191,13 @@ fn then_disposition_deny(world: &EvaluationWorld) {
     reason = "primary message is required for this behaviour test"
 )]
 fn then_primary_message_contains(world: &EvaluationWorld, text: String) {
-    let msg = world.primary_message.borrow();
-    let msg = msg
+    let message_ref = world.primary_message.borrow();
+    let message = message_ref
         .as_deref()
         .expect("primary message must be formatted first");
     assert!(
-        msg.contains(&text),
-        "expected primary message to contain '{text}', got: {msg}"
+        message.contains(&text),
+        "expected primary message to contain '{text}', got: {message}"
     );
 }
 
@@ -200,46 +207,28 @@ fn then_primary_message_contains(world: &EvaluationWorld, text: String) {
 // here.
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 0)]
-fn scenario_within_limits_passes(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_within_limits_passes(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 1)]
-fn scenario_all_warn_conditions(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_all_warn_conditions(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 2)]
-fn scenario_high_wmc_alone(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_high_wmc_alone(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 3)]
-fn scenario_brain_method_without_wmc(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_brain_method_without_wmc(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 4)]
-fn scenario_wmc_deny_threshold(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_wmc_deny_threshold(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 5)]
-fn scenario_multiple_brain_methods_deny(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_multiple_brain_methods_deny(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 6)]
-fn scenario_high_lcom4_deny(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_high_lcom4_deny(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 7)]
-fn scenario_deny_supersedes_warn(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_deny_supersedes_warn(world: EvaluationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/brain_type_evaluation.feature", index = 8)]
-fn scenario_diagnostic_surfaces_values(world: EvaluationWorld) {
-    let _ = world;
-}
+fn scenario_diagnostic_surfaces_values(world: EvaluationWorld) { let _ = world; }

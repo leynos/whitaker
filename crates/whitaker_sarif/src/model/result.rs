@@ -47,7 +47,9 @@ pub enum Level {
 /// ```
 /// use whitaker_sarif::Message;
 ///
-/// let msg = Message { text: "clone detected".into() };
+/// let msg = Message {
+///     text: "clone detected".into(),
+/// };
 /// assert_eq!(msg.text, "clone detected");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,12 +66,14 @@ pub struct Message {
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{SarifResult, Level, Message};
+/// use whitaker_sarif::{Level, Message, SarifResult};
 ///
 /// let result = SarifResult {
 ///     rule_id: "WHK001".into(),
 ///     level: Level::Warning,
-///     message: Message { text: "clone detected".into() },
+///     message: Message {
+///         text: "clone detected".into(),
+///     },
 ///     locations: Vec::new(),
 ///     related_locations: Vec::new(),
 ///     partial_fingerprints: Default::default(),
@@ -114,6 +118,8 @@ pub struct SarifResult {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF result model.
+
     use super::*;
 
     #[test]

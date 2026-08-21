@@ -1,9 +1,11 @@
 //! Behaviour-driven coverage for method metadata extraction.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
 use whitaker_common::lcom4::{MethodInfo, MethodInfoBuilder};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct ExtractionWorld {
@@ -47,19 +49,14 @@ impl ExtractionWorld {
         self.with_result(|info| info.called_methods().contains(method))
     }
 
-    fn fields_empty(&self) -> bool {
-        self.with_result(|info| info.accessed_fields().is_empty())
-    }
+    fn fields_empty(&self) -> bool { self.with_result(|info| info.accessed_fields().is_empty()) }
 
-    fn calls_empty(&self) -> bool {
-        self.with_result(|info| info.called_methods().is_empty())
-    }
+    fn calls_empty(&self) -> bool { self.with_result(|info| info.called_methods().is_empty()) }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> ExtractionWorld {
-    ExtractionWorld::default()
-}
+fn world() -> ExtractionWorld { ExtractionWorld::default() }
 
 // --- Given steps ---
 
@@ -91,9 +88,7 @@ fn given_call_expanded(world: &ExtractionWorld, method: String) {
 // --- When steps ---
 
 #[when("the method info is built")]
-fn when_build(world: &ExtractionWorld) {
-    world.build();
-}
+fn when_build(world: &ExtractionWorld) { world.build(); }
 
 // --- Then steps ---
 
@@ -145,36 +140,22 @@ fn then_calls_empty(world: &ExtractionWorld) {
 // here.
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 0)]
-fn scenario_field_access_recorded(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_field_access_recorded(world: ExtractionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 1)]
-fn scenario_method_call_recorded(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_method_call_recorded(world: ExtractionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 2)]
-fn scenario_macro_field_filtered(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_macro_field_filtered(world: ExtractionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 3)]
-fn scenario_macro_call_filtered(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_macro_call_filtered(world: ExtractionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 4)]
-fn scenario_all_expansion_empty(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_all_expansion_empty(world: ExtractionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 5)]
-fn scenario_empty_builder(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_empty_builder(world: ExtractionWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/method_extraction.feature", index = 6)]
-fn scenario_multiple_accumulate(world: ExtractionWorld) {
-    let _ = world;
-}
+fn scenario_multiple_accumulate(world: ExtractionWorld) { let _ = world; }

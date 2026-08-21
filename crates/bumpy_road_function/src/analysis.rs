@@ -69,7 +69,7 @@ impl Default for Settings {
 /// # Examples
 ///
 /// ```
-/// use bumpy_road_function::analysis::{normalise_settings, Settings, Weights};
+/// use bumpy_road_function::analysis::{Settings, Weights, normalize_settings};
 ///
 /// let settings = Settings {
 ///     threshold: -1.0,
@@ -82,14 +82,14 @@ impl Default for Settings {
 ///     ..Settings::default()
 /// };
 ///
-/// let normalised = normalise_settings(settings);
-/// assert_eq!(normalised.threshold, Settings::default().threshold);
-/// assert_eq!(normalised.window, Settings::default().window);
-/// assert_eq!(normalised.weights, Settings::default().weights);
+/// let normalized = normalize_settings(settings);
+/// assert_eq!(normalized.threshold, Settings::default().threshold);
+/// assert_eq!(normalized.window, Settings::default().window);
+/// assert_eq!(normalized.weights, Settings::default().weights);
 /// ```
 #[must_use]
-pub fn normalise_settings(settings: Settings) -> Settings {
-    fn normalise_weight(candidate: f64, fallback: f64) -> f64 {
+pub fn normalize_settings(settings: Settings) -> Settings {
+    fn normalize_weight(candidate: f64, fallback: f64) -> f64 {
         if candidate.is_finite() && candidate >= 0.0 {
             candidate
         } else {
@@ -97,9 +97,7 @@ pub fn normalise_settings(settings: Settings) -> Settings {
         }
     }
 
-    fn is_valid_window(window: usize) -> bool {
-        window != 0 && (window & 1) == 1
-    }
+    const fn is_valid_window(window: usize) -> bool { window != 0 && (window & 1) == 1 }
 
     let defaults = Settings::default();
     let threshold = if settings.threshold.is_finite() && settings.threshold >= 0.0 {
@@ -116,9 +114,9 @@ pub fn normalise_settings(settings: Settings) -> Settings {
 
     let min_bump_lines = settings.min_bump_lines.max(1);
     let weights = Weights {
-        depth: normalise_weight(settings.weights.depth, defaults.weights.depth),
-        predicate: normalise_weight(settings.weights.predicate, defaults.weights.predicate),
-        flow: normalise_weight(settings.weights.flow, defaults.weights.flow),
+        depth: normalize_weight(settings.weights.depth, defaults.weights.depth),
+        predicate: normalize_weight(settings.weights.predicate, defaults.weights.predicate),
+        flow: normalize_weight(settings.weights.flow, defaults.weights.flow),
     };
 
     Settings {
@@ -141,21 +139,15 @@ pub struct BumpInterval {
 impl BumpInterval {
     /// First index covered by the bump (inclusive).
     #[must_use]
-    pub const fn start_index(self) -> usize {
-        self.start_index
-    }
+    pub const fn start_index(self) -> usize { self.start_index }
 
     /// Last index covered by the bump (inclusive).
     #[must_use]
-    pub const fn end_index(self) -> usize {
-        self.end_index
-    }
+    pub const fn end_index(self) -> usize { self.end_index }
 
     /// Number of samples spanned by the bump.
     #[must_use]
-    pub const fn len(self) -> usize {
-        self.end_index - self.start_index + 1
-    }
+    pub const fn len(self) -> usize { self.end_index - self.start_index + 1 }
 
     /// Returns `true` when the interval contains no samples.
     ///
@@ -163,15 +155,11 @@ impl BumpInterval {
     /// retained defensively so callers can validate values originating from
     /// other sources.
     #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.start_index > self.end_index
-    }
+    pub const fn is_empty(self) -> bool { self.start_index > self.end_index }
 
     /// Area above the threshold used for ranking bumps.
     #[must_use]
-    pub const fn area_above_threshold(self) -> f64 {
-        self.area_above_threshold
-    }
+    pub const fn area_above_threshold(self) -> f64 { self.area_above_threshold }
 }
 
 /// Mutable state maintained during bump detection.
@@ -194,9 +182,7 @@ impl BumpDetectionContext {
         }
     }
 
-    fn into_intervals(self) -> Vec<BumpInterval> {
-        self.intervals
-    }
+    fn into_intervals(self) -> Vec<BumpInterval> { self.intervals }
 }
 
 /// Detects bump intervals in the smoothed signal.
@@ -238,6 +224,11 @@ pub fn detect_bumps(smoothed: &[f64], threshold: f64, min_bump_lines: usize) -> 
     context.into_intervals()
 }
 
+#[expect(
+    clippy::float_arithmetic,
+    reason = "bump areas accumulate smoothed complexity samples, which are inherently \
+              floating-point"
+)]
 fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionContext) {
     if value >= context.threshold {
         if context.current_start.is_none() {
@@ -259,7 +250,7 @@ fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionCon
     context.area = 0.0;
 }
 
-fn finalize_bump(
+const fn finalize_bump(
     start: usize,
     end: usize,
     area: f64,

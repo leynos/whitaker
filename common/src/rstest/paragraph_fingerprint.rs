@@ -18,15 +18,11 @@ impl LocalSlot {
     /// assert_eq!(slot.index(), 0);
     /// ```
     #[must_use]
-    pub const fn new(index: u32) -> Self {
-        Self(index)
-    }
+    pub const fn new(index: u32) -> Self { Self(index) }
 
     /// Returns the stable slot ordinal.
     #[must_use]
-    pub const fn index(self) -> u32 {
-        self.0
-    }
+    pub const fn index(self) -> u32 { self.0 }
 }
 
 /// Assigns deterministic local slots by first appearance order.
@@ -64,14 +60,14 @@ impl ParagraphNormalizer {
     /// reuse the original slot.
     #[must_use]
     pub fn local_slot(&mut self, local_name: impl Into<String>) -> LocalSlot {
-        let local_name = local_name.into();
-        if let Some(slot) = self.slots.get(&local_name) {
+        let owned_name = local_name.into();
+        if let Some(slot) = self.slots.get(&owned_name) {
             return *slot;
         }
 
         let slot = LocalSlot::new(self.next_slot);
         self.next_slot += 1;
-        self.slots.insert(local_name, slot);
+        self.slots.insert(owned_name, slot);
         slot
     }
 }
@@ -97,9 +93,7 @@ impl CalleeShape {
     /// assert_eq!(callee, CalleeShape::DefPath("crate::make_user".to_string()));
     /// ```
     #[must_use]
-    pub fn def_path(def_path: impl Into<String>) -> Self {
-        Self::DefPath(def_path.into())
-    }
+    pub fn def_path(def_path: impl Into<String>) -> Self { Self::DefPath(def_path.into()) }
 
     /// Builds an unknown callee shape.
     ///
@@ -111,18 +105,26 @@ impl CalleeShape {
     /// assert_eq!(CalleeShape::unknown(), CalleeShape::Unknown);
     /// ```
     #[must_use]
-    pub const fn unknown() -> Self {
-        Self::Unknown
-    }
+    pub const fn unknown() -> Self { Self::Unknown }
 }
 
 /// A normalized expression shape used by paragraph statements.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ExprShape {
     /// A function call with known or unknown callee identity and arity.
-    Call { callee: CalleeShape, argc: usize },
+    Call {
+        /// The normalized callee identity.
+        callee: CalleeShape,
+        /// The number of call arguments.
+        argc: usize,
+    },
     /// A method call with method name and arity.
-    MethodCall { method: String, argc: usize },
+    MethodCall {
+        /// The method name as written at the call site.
+        method: String,
+        /// The number of call arguments, excluding the receiver.
+        argc: usize,
+    },
     /// A stable path expression.
     Path,
     /// A stable literal expression.
@@ -149,9 +151,7 @@ impl ExprShape {
     /// );
     /// ```
     #[must_use]
-    pub const fn call(callee: CalleeShape, argc: usize) -> Self {
-        Self::Call { callee, argc }
-    }
+    pub const fn call(callee: CalleeShape, argc: usize) -> Self { Self::Call { callee, argc } }
 
     /// Builds a method-call expression shape.
     #[must_use]
@@ -164,31 +164,31 @@ impl ExprShape {
 
     /// Builds a path expression shape.
     #[must_use]
-    pub const fn path() -> Self {
-        Self::Path
-    }
+    pub const fn path() -> Self { Self::Path }
 
     /// Builds a literal expression shape.
     #[must_use]
-    pub const fn lit() -> Self {
-        Self::Lit
-    }
+    pub const fn lit() -> Self { Self::Lit }
 
     /// Builds an explicit unsupported expression shape.
     #[must_use]
-    pub const fn other() -> Self {
-        Self::Other
-    }
+    pub const fn other() -> Self { Self::Other }
 }
 
 /// A normalized statement shape used for paragraph grouping.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StmtShape {
     /// A `let` statement represented by its initializer shape.
-    Let { init: ExprShape },
+    Let {
+        /// The normalized shape of the initializer expression.
+        init: ExprShape,
+    },
     /// A mutating call, optionally tied to a normalized local receiver slot.
     MutCall {
+        /// The normalized slot of the local receiver, when the receiver is a
+        /// known local binding.
         receiver: Option<LocalSlot>,
+        /// The normalized callee identity.
         callee: CalleeShape,
     },
 }
@@ -203,13 +203,13 @@ impl StmtShape {
     ///
     /// assert_eq!(
     ///     StmtShape::let_binding(ExprShape::lit()),
-    ///     StmtShape::Let { init: ExprShape::Lit },
+    ///     StmtShape::Let {
+    ///         init: ExprShape::Lit
+    ///     },
     /// );
     /// ```
     #[must_use]
-    pub const fn let_binding(init: ExprShape) -> Self {
-        Self::Let { init }
-    }
+    pub const fn let_binding(init: ExprShape) -> Self { Self::Let { init } }
 
     /// Builds a mutating-call statement shape.
     #[must_use]
@@ -231,7 +231,10 @@ impl ParagraphFingerprint {
     ///
     /// ```
     /// use whitaker_common::rstest::{
-    ///     CalleeShape, ExprShape, ParagraphFingerprint, ParagraphNormalizer,
+    ///     CalleeShape,
+    ///     ExprShape,
+    ///     ParagraphFingerprint,
+    ///     ParagraphNormalizer,
     ///     StmtShape,
     /// };
     ///
@@ -261,13 +264,9 @@ impl ParagraphFingerprint {
 
     /// Returns the stored statement shapes in paragraph order.
     #[must_use]
-    pub fn shapes(&self) -> &[StmtShape] {
-        &self.shapes
-    }
+    pub fn shapes(&self) -> &[StmtShape] { &self.shapes }
 
     /// Consumes the fingerprint and returns the stored statement shapes.
     #[must_use]
-    pub fn into_shapes(self) -> Vec<StmtShape> {
-        self.shapes
-    }
+    pub fn into_shapes(self) -> Vec<StmtShape> { self.shapes }
 }

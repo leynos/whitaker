@@ -11,29 +11,21 @@ use whitaker::testing::ui::{HarnessError, run_with_runner};
 struct StepString(String);
 
 impl StepString {
-    fn into_inner(self) -> String {
-        self.0
-    }
+    fn into_inner(self) -> String { self.0 }
 }
 
 impl From<std::string::String> for StepString {
-    fn from(value: std::string::String) -> Self {
-        Self(value)
-    }
+    fn from(value: std::string::String) -> Self { Self(value) }
 }
 
 impl From<StepString> for String {
-    fn from(value: StepString) -> Self {
-        value.0
-    }
+    fn from(value: StepString) -> Self { value.0 }
 }
 
 impl std::str::FromStr for StepString {
     type Err = Infallible;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(input.to_owned()))
-    }
+    fn from_str(input: &str) -> Result<Self, Self::Err> { Ok(Self(input.to_owned())) }
 }
 
 #[derive(Debug)]
@@ -57,15 +49,12 @@ impl Default for HarnessWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn harness_world() -> HarnessWorld {
-    HarnessWorld::default()
-}
+fn harness_world() -> HarnessWorld { HarnessWorld::default() }
 
 #[given("the harness has no crate name")]
-fn clear_crate(harness_world: &HarnessWorld) {
-    harness_world.crate_name.borrow_mut().clear();
-}
+fn clear_crate(harness_world: &HarnessWorld) { harness_world.crate_name.borrow_mut().clear(); }
 
 #[given("the harness is prepared for crate {name}")]
 fn prepare_crate(harness_world: &HarnessWorld, name: String) {
@@ -139,7 +128,11 @@ fn assert_absolute_error(harness_world: &HarnessWorld, path: String) {
     let borrow = harness_world.harness_result.borrow();
     match borrow.as_ref() {
         Some(Err(HarnessError::AbsoluteDirectory { directory })) => {
-            assert_eq!(directory, &Utf8PathBuf::from(path));
+            assert_eq!(
+                directory,
+                &Utf8PathBuf::from(path),
+                "the rejected directory should be reported verbatim",
+            );
         }
         Some(Ok(())) => panic!("expected an error but harness succeeded"),
         Some(Err(error)) => panic!("expected an absolute directory error, found {error}"),
@@ -153,7 +146,10 @@ fn assert_runner_failure(harness_world: &HarnessWorld, snippet: StepString) {
     let snippet_value = snippet.into_inner();
     match borrow.as_ref() {
         Some(Err(HarnessError::RunnerFailure { message, .. })) => {
-            assert!(message.contains(snippet_value.as_str()));
+            assert!(
+                message.contains(snippet_value.as_str()),
+                "runner failure should mention {snippet_value}, got: {message}",
+            );
         }
         Some(Ok(())) => panic!("expected an error but harness succeeded"),
         Some(Err(error)) => panic!("expected a runner failure error, found {error}"),
@@ -162,33 +158,21 @@ fn assert_runner_failure(harness_world: &HarnessWorld, snippet: StepString) {
 }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 0)]
-fn scenario_runs_successfully(harness_world: HarnessWorld) {
-    let _ = harness_world;
-}
+fn scenario_runs_successfully(harness_world: HarnessWorld) { let _ = harness_world; }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 1)]
-fn scenario_rejects_empty_crate(harness_world: HarnessWorld) {
-    let _ = harness_world;
-}
+fn scenario_rejects_empty_crate(harness_world: HarnessWorld) { let _ = harness_world; }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 2)]
-fn scenario_rejects_absolute_directory(harness_world: HarnessWorld) {
-    let _ = harness_world;
-}
+fn scenario_rejects_absolute_directory(harness_world: HarnessWorld) { let _ = harness_world; }
 
 #[scenario(path = "tests/features/ui_harness.feature", index = 3)]
-fn scenario_propagates_runner_failure(harness_world: HarnessWorld) {
-    let _ = harness_world;
-}
+fn scenario_propagates_runner_failure(harness_world: HarnessWorld) { let _ = harness_world; }
 
 #[cfg(windows)]
 #[scenario(path = "tests/features/ui_harness.feature", index = 4)]
-fn scenario_rejects_unc_directory(harness_world: HarnessWorld) {
-    let _ = harness_world;
-}
+fn scenario_rejects_unc_directory(harness_world: HarnessWorld) { let _ = harness_world; }
 
 #[cfg(windows)]
 #[scenario(path = "tests/features/ui_harness.feature", index = 5)]
-fn scenario_rejects_drive_relative_directory(harness_world: HarnessWorld) {
-    let _ = harness_world;
-}
+fn scenario_rejects_drive_relative_directory(harness_world: HarnessWorld) { let _ = harness_world; }

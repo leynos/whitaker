@@ -1,10 +1,14 @@
 //! Coverage for dependency artefact selection and related test fixtures.
 
-use super::dependency_rlib;
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime},
+};
+
 use rstest::{fixture, rstest};
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+
+use super::dependency_rlib;
 
 /// A temporary directory that is removed automatically when dropped.
 #[derive(Debug)]
@@ -49,10 +53,9 @@ const TIED_ARTEFACTS: [ArtefactSpec<'static>; 2] = [
 
 /// rstest fixture that creates a uniquely named temporary directory for a
 /// selection test.
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn selection_directory() -> TemporaryDirectory {
-    TemporaryDirectory::new("selection")
-}
+fn selection_directory() -> TemporaryDirectory { TemporaryDirectory::new("selection") }
 
 /// Creates `artefacts` inside `directory`, sets their modification times, then
 /// invokes `dependency_rlib` and returns both the expected and selected paths
@@ -79,11 +82,10 @@ fn resolve_dependency_rlib_selection(
 }
 
 #[rstest]
-#[case("newest", &NEWEST_ARTEFACTS, "libtokio-newer.rlib")]
-#[case("ties", &TIED_ARTEFACTS, "libtokio-alpha.rlib")]
+#[case::newest(&NEWEST_ARTEFACTS, "libtokio-newer.rlib")]
+#[case::ties(&TIED_ARTEFACTS, "libtokio-alpha.rlib")]
 fn dependency_rlib_selects_expected_artefact(
     selection_directory: TemporaryDirectory,
-    #[case] _directory_name: &str,
     #[case] artefacts: &[ArtefactSpec<'_>],
     #[case] expected_file_name: &str,
 ) {
@@ -122,14 +124,14 @@ impl TemporaryDirectory {
     }
 
     /// Returns the path to the temporary directory.
-    fn path(&self) -> &Path {
-        &self.0
-    }
+    fn path(&self) -> &Path { &self.0 }
 }
 
 impl Drop for TemporaryDirectory {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        // Best-effort cleanup: the directory lives under the OS temporary root,
+        // so a removal failure only leaks a fixture rather than failing a test.
+        let _cleanup_result = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -154,8 +156,10 @@ fn set_modified_time(path: &Path, seconds_since_epoch: u64) {
         .expect("rlib fixture metadata should be readable")
         .accessed();
     let times = existing_accessed
-        .map(|accessed| std::fs::FileTimes::new().set_accessed(accessed))
-        .unwrap_or_else(|_| std::fs::FileTimes::new())
+        .map_or_else(
+            |_| std::fs::FileTimes::new(),
+            |accessed| std::fs::FileTimes::new().set_accessed(accessed),
+        )
         .set_modified(modified);
     file.set_times(times)
         .expect("rlib fixture modified time should be set");

@@ -1,25 +1,47 @@
 //! Lint wiring that flags panicking `unwrap_or_else` fallbacks.
 
-use crate::LINT_NAME;
-use crate::context::ContextSummary;
-use crate::diagnostics::emit_diagnostic;
-use crate::panic_detector::{closure_panics, receiver_is_option_or_result};
-use crate::policy::{LintPolicy, should_flag};
+use std::collections::HashSet;
+
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
-use std::collections::HashSet;
 use whitaker::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 
-dylint_linting::impl_late_lint! {
-    pub NO_UNWRAP_OR_ELSE_PANIC,
-    Deny,
-    "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)",
-    NoUnwrapOrElsePanic::default()
+use crate::{
+    LINT_NAME,
+    context::ContextSummary,
+    diagnostics::emit_diagnostic,
+    panic_detector::{closure_panics, receiver_is_option_or_result},
+    policy::{LintPolicy, should_flag},
+};
+
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoUnwrapOrElsePanic;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies `unwrap_or_else` fallbacks whose closure panics.
+        pub NO_UNWRAP_OR_ELSE_PANIC,
+        Deny,
+        "forbid `unwrap_or_else` whose closure panics (directly or via unwrap/expect)",
+        NoUnwrapOrElsePanic::default()
+    }
 }
+
+pub use declaration::NO_UNWRAP_OR_ELSE_PANIC;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -28,9 +50,7 @@ struct Config {
 }
 
 impl Config {
-    fn resolved_allow_in_main(&self) -> bool {
-        self.allow_in_main.unwrap_or(false)
-    }
+    fn resolved_allow_in_main(&self) -> bool { self.allow_in_main.unwrap_or(false) }
 }
 
 /// Lint pass that inspects `unwrap_or_else` fallbacks for panics.
@@ -98,7 +118,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
             return;
         };
 
-        let summary = summarise_context_with_harness(
+        let summary = summarize_context_with_harness(
             cx,
             expr.hir_id,
             self.is_test_harness,
@@ -106,7 +126,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
         );
 
         let panic_info = closure_panics(cx, body_id);
-        if !should_flag(&self.policy, &summary, &panic_info, self.is_doctest) {
+        if !should_flag(self.policy, summary, panic_info, self.is_doctest) {
             return;
         }
 
@@ -114,8 +134,8 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
     }
 }
 
-fn is_inside_harness_test_function<'tcx>(
-    cx: &LateContext<'tcx>,
+fn is_inside_harness_test_function(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> bool {
@@ -134,20 +154,20 @@ fn is_inside_harness_test_function<'tcx>(
 
 /// Summarizes the lint context for an expression, merging attribute-based and
 /// harness-based test detection into a single immutable result.
-fn summarise_context_with_harness<'tcx>(
-    cx: &LateContext<'tcx>,
+fn summarize_context_with_harness(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     is_test_harness: bool,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> ContextSummary {
-    let mut summary = crate::context::summarise_context(cx, hir_id);
+    let mut summary = crate::context::summarize_context(cx, hir_id);
     if !summary.is_test && is_test_harness {
         summary.is_test = is_inside_harness_test_function(cx, hir_id, harness_test_functions);
     }
     summary
 }
 
-fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
+const fn closure_body(expr: &hir::Expr<'_>) -> Option<hir::BodyId> {
     match expr.kind {
         ExprKind::Closure(hir::Closure { body, .. }) => Some(*body),
         _ => None,

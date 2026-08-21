@@ -32,6 +32,7 @@ experimental-rstest-helper-should-be-fixture = [
 ]
 
 [dependencies]
+whitaker-common = { workspace = true }
 dylint_linting = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
 rustc_session = { workspace = true, optional = true }
@@ -49,6 +50,10 @@ bumpy_road_function = { path = "../crates/bumpy_road_function", optional = true,
 rstest_helper_should_be_fixture = { path = "../crates/rstest_helper_should_be_fixture", optional = true, features = ["dylint-driver", "constituent"] }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
+
+[lints]
+workspace = true

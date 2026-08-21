@@ -1,6 +1,7 @@
-//! Tests for classifying std::fs usage and its reporting metadata.
-use super::{StdFsUsage, UsageCategory, label_is_std_fs};
+//! Tests for classifying `std::fs` usage and its reporting metadata.
 use rstest::rstest;
+
+use super::{StdFsUsage, UsageCategory, label_is_std_fs};
 
 #[rstest]
 #[case("std::fs", true)]
@@ -21,7 +22,7 @@ use rstest::rstest;
 #[case("fs::std", false)]
 #[case("std::", false)]
 #[case("std::filesystem", false)]
-fn recognises_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
+fn recognizes_std_fs_paths(#[case] path: &str, #[case] expected: bool) {
     assert_eq!(label_is_std_fs(path), expected);
 }
 

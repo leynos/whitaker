@@ -3,30 +3,29 @@
 //! These scenarios exercise `detect_misordered_doc` to ensure doc comments
 //! continue to precede other outer attributes across common layouts.
 
-use super::{
-    AttrInfo, OrderedAttribute, attribute_within_item, detect_misordered_doc, parsed_attribute_span,
-};
-use rstest::fixture;
-use rstest::rstest;
-use rstest_bdd_macros::{given, scenario, then, when};
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
-use rustc_hir::attrs::{InlineAttr, OptimizeAttr};
-use rustc_span::{BytePos, DUMMY_SP, Span};
 use std::cell::RefCell;
+
+use rstest::{fixture, rstest};
+use rstest_bdd_macros::{given, scenario, then, when};
+use rustc_hir::attrs::{AttributeKind as HirAttributeKind, InlineAttr, OptimizeAttr};
+use rustc_span::{BytePos, DUMMY_SP, Span};
+use thin_vec::ThinVec;
 use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 
+use super::{
+    AttrInfo,
+    OrderedAttribute,
+    attribute_within_item,
+    detect_misordered_doc,
+    parsed_attribute_span,
+};
+
 impl OrderedAttribute for Attribute {
-    fn is_outer(&self) -> bool {
-        self.is_outer()
-    }
+    fn is_outer(&self) -> bool { self.is_outer() }
 
-    fn is_doc(&self) -> bool {
-        self.is_doc()
-    }
+    fn is_doc(&self) -> bool { self.is_doc() }
 
-    fn span(&self) -> Span {
-        DUMMY_SP
-    }
+    fn span(&self) -> Span { DUMMY_SP }
 }
 
 #[derive(Default)]
@@ -46,15 +45,13 @@ impl AttributeWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> AttributeWorld {
-    AttributeWorld::default()
-}
+fn world() -> AttributeWorld { AttributeWorld::default() }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn result() -> Option<(usize, usize)> {
-    None
-}
+fn result() -> Option<(usize, usize)> { None }
 
 #[given("a doc comment before other attributes")]
 fn doc_precedes(world: &AttributeWorld) {
@@ -82,9 +79,7 @@ fn doc_after_inner(world: &AttributeWorld) {
 }
 
 #[when("I evaluate the attribute order")]
-fn evaluate(world: &AttributeWorld) -> Option<(usize, usize)> {
-    world.result()
-}
+fn evaluate(world: &AttributeWorld) -> Option<(usize, usize)> { world.result() }
 
 #[then("the order is accepted")]
 fn order_ok(result: &Option<(usize, usize)>) {
@@ -96,9 +91,7 @@ fn order_rejected(result: &Option<(usize, usize)>) {
     assert!(result.is_some());
 }
 
-fn test_span(lo: u32, hi: u32) -> Span {
-    Span::with_root_ctxt(BytePos(lo), BytePos(hi))
-}
+fn test_span(lo: u32, hi: u32) -> Span { Span::with_root_ctxt(BytePos(lo), BytePos(hi)) }
 
 #[rstest]
 fn recovered_user_span_drives_source_ordering() {
@@ -239,7 +232,7 @@ fn parsed_attribute_span_recovers_whitelisted_kinds() {
         (
             "target_feature",
             HirAttributeKind::TargetFeature {
-                features: Default::default(),
+                features: ThinVec::default(),
                 attr_span: span,
                 was_forced: false,
             },

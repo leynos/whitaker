@@ -7,11 +7,10 @@
 
 use std::collections::HashSet;
 
-use crate::error::{Result, SarifError};
-use crate::model::descriptor::ReportingDescriptor;
-use crate::model::location::Region;
-use crate::model::result::SarifResult;
-use crate::model::run::Run;
+use crate::{
+    error::{Result, SarifError},
+    model::{descriptor::ReportingDescriptor, location::Region, result::SarifResult, run::Run},
+};
 
 /// Fingerprint key used by the Whitaker clone detector for result deduplication.
 ///
@@ -43,7 +42,7 @@ struct RegionKey {
 }
 
 impl RegionKey {
-    fn from_region(region: &Region) -> Self {
+    const fn from_region(region: &Region) -> Self {
         Self {
             start_line: region.start_line,
             start_column: region.start_column,
@@ -66,7 +65,7 @@ fn extract_key(result: &SarifResult) -> Option<ResultKey> {
         .clone();
 
     let location = result.locations.first()?;
-    let file = location.physical_location.artifact_location.uri.clone();
+    let file = location.physical_location.artefact_location.uri.clone();
     let region = location.physical_location.region.as_ref()?;
 
     Some(ResultKey {
@@ -84,20 +83,20 @@ fn extract_key(result: &SarifResult) -> Option<ResultKey> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{SarifResult, Level, Message, deduplicate_results};
+/// use whitaker_sarif::{Level, Message, SarifResult, deduplicate_results};
 ///
-/// let results = vec![
-///     SarifResult {
-///         rule_id: "WHK001".into(),
-///         level: Level::Warning,
-///         message: Message { text: "clone".into() },
-///         locations: Vec::new(),
-///         related_locations: Vec::new(),
-///         partial_fingerprints: Default::default(),
-///         properties: None,
-///         baseline_state: None,
+/// let results = vec![SarifResult {
+///     rule_id: "WHK001".into(),
+///     level: Level::Warning,
+///     message: Message {
+///         text: "clone".into(),
 ///     },
-/// ];
+///     locations: Vec::new(),
+///     related_locations: Vec::new(),
+///     partial_fingerprints: Default::default(),
+///     properties: None,
+///     baseline_state: None,
+/// }];
 /// let deduped = deduplicate_results(&results);
 /// assert_eq!(deduped.len(), 1);
 /// ```
@@ -127,7 +126,7 @@ pub fn deduplicate_results(results: &[SarifResult]) -> Vec<SarifResult> {
 ///
 /// The tool metadata is taken from the first run. Rules are unioned across all
 /// runs by `id` (first occurrence wins). Results are collected from all runs
-/// and deduplicated. Artifacts and invocations are concatenated.
+/// and deduplicated. Artefacts and invocations are concatenated.
 ///
 /// # Errors
 ///
@@ -152,12 +151,12 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
     tool.driver.rules = union_rules(runs);
 
     let mut all_results = Vec::new();
-    let mut all_artifacts = Vec::new();
+    let mut all_artefacts = Vec::new();
     let mut all_invocations = Vec::new();
 
     for run in runs {
         all_results.extend(run.results.clone());
-        all_artifacts.extend(run.artifacts.clone());
+        all_artefacts.extend(run.artefacts.clone());
         all_invocations.extend(run.invocations.clone());
     }
 
@@ -167,7 +166,7 @@ pub fn merge_runs(runs: &[Run]) -> Result<Run> {
         tool,
         invocations: all_invocations,
         results,
-        artifacts: all_artifacts,
+        artefacts: all_artefacts,
     })
 }
 
@@ -190,9 +189,13 @@ fn union_rules(runs: &[Run]) -> Vec<ReportingDescriptor> {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for merging SARIF logs and fragments.
+
     use super::*;
-    use crate::builders::{ResultBuilder, RunBuilder};
-    use crate::test_support::make_keyed_result;
+    use crate::{
+        builders::{ResultBuilder, RunBuilder},
+        test_support::make_keyed_result,
+    };
 
     fn merged_result_count(r1: SarifResult, r2: SarifResult) -> usize {
         let run_a = RunBuilder::new("tool", "1.0").with_result(r1).build();

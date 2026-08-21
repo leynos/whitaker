@@ -1,10 +1,10 @@
-//! Shared MinHash and LSH index types.
+//! Shared `MinHash` and LSH index types.
 
 use std::{num::NonZeroUsize, slice::ChunksExact};
 
 use super::{FragmentId, IndexError, IndexResult};
 
-/// The fixed MinHash sketch width for roadmap item 7.2.2.
+/// The fixed `MinHash` sketch width for roadmap item 7.2.2.
 pub const MINHASH_SIZE: usize = 128;
 
 /// A canonical fragment pair emitted by the LSH candidate filter.
@@ -27,7 +27,10 @@ impl CandidatePair {
     ///
     /// let pair = CandidatePair::new(FragmentId::from("beta"), FragmentId::from("alpha"));
     /// assert_eq!(
-    ///     pair.map(|pair| (pair.left().as_str().to_owned(), pair.right().as_str().to_owned())),
+    ///     pair.map(|pair| (
+    ///         pair.left().as_str().to_owned(),
+    ///         pair.right().as_str().to_owned()
+    ///     )),
     ///     Some(("alpha".to_owned(), "beta".to_owned()))
     /// );
     /// ```
@@ -47,18 +50,14 @@ impl CandidatePair {
 
     /// Returns the left fragment identifier.
     #[must_use]
-    pub const fn left(&self) -> &FragmentId {
-        &self.left
-    }
+    pub const fn left(&self) -> &FragmentId { &self.left }
 
     /// Returns the right fragment identifier.
     #[must_use]
-    pub const fn right(&self) -> &FragmentId {
-        &self.right
-    }
+    pub const fn right(&self) -> &FragmentId { &self.right }
 }
 
-/// Validated LSH settings for the fixed-width MinHash sketch.
+/// Validated LSH settings for the fixed-width `MinHash` sketch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LshConfig {
     bands: NonZeroUsize,
@@ -88,30 +87,29 @@ impl LshConfig {
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     pub fn new(bands: usize, rows: usize) -> IndexResult<Self> {
-        let Some(bands) = NonZeroUsize::new(bands) else {
+        let Some(band_count) = NonZeroUsize::new(bands) else {
             return Err(IndexError::ZeroBands);
         };
-        let Some(rows) = NonZeroUsize::new(rows) else {
+        let Some(row_count) = NonZeroUsize::new(rows) else {
             return Err(IndexError::ZeroRows);
         };
-        validate_product(bands, rows)?;
-        Ok(Self { bands, rows })
+        validate_product(band_count, row_count)?;
+        Ok(Self {
+            bands: band_count,
+            rows: row_count,
+        })
     }
 
     /// Returns the number of LSH bands.
     #[must_use]
-    pub const fn bands(self) -> usize {
-        self.bands.get()
-    }
+    pub const fn bands(self) -> usize { self.bands.get() }
 
     /// Returns the number of rows in each band.
     #[must_use]
-    pub const fn rows(self) -> usize {
-        self.rows.get()
-    }
+    pub const fn rows(self) -> usize { self.rows.get() }
 }
 
-fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> {
+const fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> {
     match bands.get().checked_mul(rows.get()) {
         Some(MINHASH_SIZE) => Ok(()),
         Some(_) | None => Err(IndexError::invalid_band_row_product(
@@ -121,15 +119,13 @@ fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> 
     }
 }
 
-/// A fixed-width MinHash sketch over retained fingerprint hashes.
+/// A fixed-width `MinHash` sketch over retained fingerprint hashes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinHashSignature([u64; MINHASH_SIZE]);
 
 impl MinHashSignature {
     #[must_use]
-    pub(crate) const fn new(values: [u64; MINHASH_SIZE]) -> Self {
-        Self(values)
-    }
+    pub(crate) const fn new(values: &[u64; MINHASH_SIZE]) -> Self { Self(*values) }
 
     /// Returns the sketch values in order.
     ///
@@ -139,23 +135,18 @@ impl MinHashSignature {
     /// use whitaker_clones_core::{Fingerprint, MinHasher};
     ///
     /// let hasher = MinHasher::new();
-    /// let signature = hasher.sketch(&[
-    ///     Fingerprint::new(11, 0..1),
-    ///     Fingerprint::new(22, 1..2),
-    /// ])?;
+    /// let signature = hasher.sketch(&[Fingerprint::new(11, 0..1), Fingerprint::new(22, 1..2)])?;
     /// assert_eq!(signature.values().len(), 128);
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     #[must_use]
-    pub const fn values(&self) -> &[u64; MINHASH_SIZE] {
-        &self.0
-    }
+    pub const fn values(&self) -> &[u64; MINHASH_SIZE] { &self.0 }
 
     pub(crate) fn bands(&self, rows: usize) -> ChunksExact<'_, u64> {
         debug_assert!(
             self.0.len().is_multiple_of(rows),
-            "MinHashSignature length ({}) must divide evenly by rows ({}); \
-             LshConfig ensures bands * rows == MINHASH_SIZE",
+            "MinHashSignature length ({}) must divide evenly by rows ({}); LshConfig ensures \
+             bands * rows == MINHASH_SIZE",
             self.0.len(),
             rows
         );

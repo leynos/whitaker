@@ -4,9 +4,10 @@
 //! to users when installation fails. Each error includes recovery hints where
 //! applicable.
 
-use crate::crate_name::CrateName;
 use camino::Utf8PathBuf;
 use thiserror::Error;
+
+use crate::crate_name::CrateName;
 
 /// Errors that can occur during the installation process.
 #[derive(Debug, Error)]
@@ -251,14 +252,18 @@ impl Clone for InstallerError {
             Self::WriteFailed { source } => Self::WriteFailed {
                 source: clone_io_error(source),
             },
+            // These variants are cloned by `clone_toolchain_variant` before
+            // this match runs. Should that helper ever regress, degrade to a
+            // detection error carrying the formatted message rather than
+            // panicking inside `clone`.
             Self::ToolchainDetection { .. }
             | Self::ToolchainFileNotFound { .. }
             | Self::InvalidToolchainFile { .. }
             | Self::ToolchainNotInstalled { .. }
             | Self::ToolchainInstallFailed { .. }
-            | Self::ToolchainComponentInstallFailed { .. } => {
-                unreachable!("handled by clone_toolchain_variant")
-            }
+            | Self::ToolchainComponentInstallFailed { .. } => Self::ToolchainDetection {
+                reason: self.to_string(),
+            },
             #[cfg(any(test, feature = "test-support"))]
             Self::StubMismatch { message } => Self::StubMismatch {
                 message: message.clone(),
@@ -272,6 +277,8 @@ pub type Result<T> = std::result::Result<T, InstallerError>;
 
 #[cfg(test)]
 mod tests {
+    //! Tests for installer error construction and display.
+
     use super::*;
 
     #[test]

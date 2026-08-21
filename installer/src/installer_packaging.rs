@@ -16,14 +16,16 @@
 //!
 //! Windows archives use `.zip` format and the `.exe` suffix.
 
-pub use crate::artefact::target::TargetTriple;
-pub use crate::version::Version;
+use std::{
+    fs,
+    io,
+    path::{Path, PathBuf},
+};
+
+use thiserror::Error;
 
 use crate::binstall_metadata::{DEFAULT_PKG_FMT, WINDOWS_PKG_FMT};
-use std::fs;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
+pub use crate::{artefact::target::TargetTriple, version::Version};
 
 /// The crate name used in archive and directory names.
 const CRATE_NAME: &str = "whitaker-installer";
@@ -82,12 +84,15 @@ pub enum InstallerPackagingError {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::{archive_filename, Version, TargetTriple};
+/// use whitaker_installer::installer_packaging::{TargetTriple, Version, archive_filename};
 ///
 /// let v = Version::new("0.2.1");
 /// let t = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
 /// let name = archive_filename(&v, &t);
-/// assert_eq!(name, "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz");
+/// assert_eq!(
+///     name,
+///     "whitaker-installer-x86_64-unknown-linux-gnu-v0.2.1.tgz"
+/// );
 /// ```
 #[must_use]
 pub fn archive_filename(version: &Version, target: &TargetTriple) -> String {
@@ -111,7 +116,7 @@ pub fn archive_filename(version: &Version, target: &TargetTriple) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::{inner_dir_name, Version, TargetTriple};
+/// use whitaker_installer::installer_packaging::{TargetTriple, Version, inner_dir_name};
 ///
 /// let v = Version::new("0.2.1");
 /// let t = TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target");
@@ -131,7 +136,7 @@ pub fn inner_dir_name(version: &Version, target: &TargetTriple) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::{binary_filename, TargetTriple};
+/// use whitaker_installer::installer_packaging::{TargetTriple, binary_filename};
 ///
 /// assert_eq!(
 ///     binary_filename(&TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")),
@@ -159,7 +164,7 @@ pub fn binary_filename(target: &TargetTriple) -> String {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::installer_packaging::{archive_format, ArchiveFormat, TargetTriple};
+/// use whitaker_installer::installer_packaging::{ArchiveFormat, TargetTriple, archive_format};
 ///
 /// assert_eq!(
 ///     archive_format(&TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid")),
@@ -191,7 +196,7 @@ pub fn archive_format(target: &TargetTriple) -> ArchiveFormat {
 /// not exist, or [`InstallerPackagingError::Io`] /
 /// [`InstallerPackagingError::Zip`] on archive creation failures.
 pub fn package_installer(
-    params: InstallerPackageParams,
+    params: &InstallerPackageParams,
 ) -> Result<InstallerPackageOutput, InstallerPackagingError> {
     if !params.binary_path.is_file() {
         return Err(InstallerPackagingError::BinaryNotFound(
@@ -234,8 +239,8 @@ fn create_tgz_archive(
 
     let archive_entry_path = format!("{inner_dir}/{bin_name}");
     archive.append_path_with_name(binary_path, &archive_entry_path)?;
-    let gz_encoder = archive.into_inner()?;
-    gz_encoder.finish()?;
+    let finished_encoder = archive.into_inner()?;
+    finished_encoder.finish()?;
 
     Ok(())
 }
@@ -256,14 +261,7 @@ fn create_zip_archive(
     zip_writer.start_file(&archive_entry_path, options)?;
 
     let mut binary_file = fs::File::open(binary_path)?;
-    let mut buffer = [0u8; 8192];
-    loop {
-        let bytes_read = binary_file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        zip_writer.write_all(&buffer[..bytes_read])?;
-    }
+    io::copy(&mut binary_file, &mut zip_writer)?;
 
     zip_writer.finish()?;
     Ok(())

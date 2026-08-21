@@ -7,7 +7,12 @@ use super::{Attribute, AttributePath};
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{split_doc_attributes, Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::attributes::{
+///     Attribute,
+///     AttributeKind,
+///     AttributePath,
+///     split_doc_attributes,
+/// };
 ///
 /// let doc = Attribute::new(AttributePath::from("doc"), AttributeKind::Outer);
 /// let allow = Attribute::new(AttributePath::from("allow"), AttributeKind::Outer);
@@ -26,7 +31,7 @@ pub fn split_doc_attributes(attrs: &[Attribute]) -> (Vec<&Attribute>, Vec<&Attri
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{outer_attributes, Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath, outer_attributes};
 ///
 /// let inner = Attribute::new(AttributePath::from("doc"), AttributeKind::Inner);
 /// let outer = Attribute::new(AttributePath::from("test"), AttributeKind::Outer);
@@ -44,7 +49,12 @@ pub fn outer_attributes(attrs: &[Attribute]) -> Vec<&Attribute> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{has_test_like_attribute, Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::attributes::{
+///     Attribute,
+///     AttributeKind,
+///     AttributePath,
+///     has_test_like_attribute,
+/// };
 ///
 /// let attr = Attribute::new(AttributePath::from("tokio::test"), AttributeKind::Outer);
 /// assert!(has_test_like_attribute(&[attr]));
@@ -60,7 +70,12 @@ pub fn has_test_like_attribute(attrs: &[Attribute]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::attributes::{has_test_like_attribute_with, Attribute, AttributeKind, AttributePath};
+/// use whitaker_common::attributes::{
+///     Attribute,
+///     AttributeKind,
+///     AttributePath,
+///     has_test_like_attribute_with,
+/// };
 ///
 /// let attr = Attribute::new(AttributePath::from("custom::test"), AttributeKind::Outer);
 /// let additional = vec![AttributePath::from("custom::test")];

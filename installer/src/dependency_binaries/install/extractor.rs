@@ -1,10 +1,14 @@
 //! Archive extraction helpers for repository-hosted dependency binaries.
 
-use super::installer::DependencyBinaryInstallError;
-use std::fs::File;
-use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::{self, Read, Write},
+    path::{Path, PathBuf},
+};
+
 use tempfile::NamedTempFile;
+
+use super::installer::DependencyBinaryInstallError;
 
 /// Extracts a single executable from dependency archives.
 #[cfg_attr(test, mockall::automock)]
@@ -57,8 +61,8 @@ pub(crate) fn extract_from_tgz(
         archive: archive_path.to_path_buf(),
         reason: error.to_string(),
     };
-    for entry in archive.entries().map_err(map_archive_err)? {
-        let mut entry = entry.map_err(map_archive_err)?;
+    for entry_result in archive.entries().map_err(map_archive_err)? {
+        let mut entry = entry_result.map_err(map_archive_err)?;
         let path = entry.path().map_err(map_archive_err)?.into_owned();
         if path == Path::new(expected_member_path) {
             return extract_entry_to_destination(&mut entry, expected_member_path, destination_dir);
@@ -84,17 +88,17 @@ pub(crate) fn extract_from_zip(
         })?;
 
     for index in 0..archive.len() {
-        let mut file =
+        let mut member =
             archive
                 .by_index(index)
                 .map_err(|error| DependencyBinaryInstallError::Extraction {
                     archive: archive_path.to_path_buf(),
                     reason: error.to_string(),
                 })?;
-        if file.name() != expected_member_path {
+        if member.name() != expected_member_path {
             continue;
         }
-        return extract_entry_to_destination(&mut file, expected_member_path, destination_dir);
+        return extract_entry_to_destination(&mut member, expected_member_path, destination_dir);
     }
 
     Err(DependencyBinaryInstallError::MissingBinaryInArchive {

@@ -1,4 +1,4 @@
-.PHONY: help all clean test coverage build release lint fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
+.PHONY: help all clean test coverage build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint nixie publish-check typecheck install-smoke release-installer-dry-run package-lints workflow-test workflow-test-deps test-workflow-contracts verus kani verus-clone-detector kani-clone-detector spelling spelling-config spelling-config-write spelling-phrase-check spelling-helper-test
 
 # Appended only on targets that invoke binaries commonly installed under these
 # prefixes (cargo/bun/user-local), so the default recipe environment stays
@@ -11,6 +11,15 @@ CARGO ?= $(or $(shell command -v cargo 2>/dev/null),$(shell [ -x "$(HOME)/.cargo
 CARGO_LOCKED ?=
 BUILD_JOBS ?=
 CARGO_FLAGS ?= --workspace --all-targets --all-features
+# Dylint UI fixtures live under `examples/` because `dylint_testing::Test::example`
+# builds them with each lint crate's dev-dependencies (tokio, rstest); `ui/`
+# fixtures are standalone and cannot carry those. Every file there is a
+# `fail_*`/`pass_*` fixture that deliberately contains the anti-patterns the
+# suite detects, so the workspace lint policy cannot meaningfully apply to them
+# -- a fixture proving `expect_used` fires cannot itself forbid `expect_used`.
+# Lint every other target rather than `--all-targets`; `typecheck` still builds
+# the fixtures, and the suite still lints them through the UI harness.
+CLIPPY_FLAGS ?= --workspace --lib --bins --tests --benches --all-features
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
 NEXTEST_PROFILE ?=
@@ -47,12 +56,29 @@ SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(SPELLING_PY_ENV) \
 	--with pytest-cov==7.0.0 python -m pytest
 WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
+# Doctests compile as their own crate and do not inherit the lib's
+# `#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]`, so the
+# Dylint driver crates cannot link `rustc_driver` from a doctest and fail with
+# "use of unstable library feature `rustc_private`". Their examples are covered
+# by the unit and UI suites instead, so exclude them from the doctest run.
+DOCTEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
+	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude rstest_helper_should_be_fixture \
+	$(foreach crate,$(LINT_CRATES),--exclude $(crate))
 CARGO_DYLINT_VERSION ?= 6.0.1
 DYLINT_LINK_VERSION ?= 6.0.1
 # Host-tool installs run under this toolchain: the dylint 6.0.1 lockfile
 # needs a newer rustc than the repository's pinned nightly provides.
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
+WHITAKER ?= whitaker
+# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
+# crates, the aggregated suite, and the whitaker root crate all require
+# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
+# that `cargo dylint`'s plain check build cannot provide, so the suite runs
+# over the support crates that build as ordinary libraries.
+WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -107,6 +133,7 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --workspace --doc --all-features $(DOCTEST_EXCLUDES) $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -147,9 +174,15 @@ target/%/$(APP): ## Build binary in debug or release mode
 	manifest=$$(grep -l whitaker-installer */Cargo.toml crates/*/Cargo.toml); \
 	$(CARGO) build $(CARGO_LOCKED) $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP) --manifest-path "$$manifest"
 
-lint: ## Run Clippy with warnings denied
+lint: lint-clippy lint-whitaker ## Run rustdoc, Clippy, and the Whitaker Dylint suite
+
+lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc $(CARGO_LOCKED) --workspace --no-deps
-	$(CARGO) clippy $(CARGO_LOCKED) $(CARGO_FLAGS) -- $(RUST_FLAGS)
+	$(CARGO) clippy $(CARGO_LOCKED) $(CLIPPY_FLAGS) -- $(RUST_FLAGS)
+
+lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
+	@export PATH="$$PATH:$(TOOL_PATH_SUFFIX)"; \
+	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(WHITAKER_PACKAGES) --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

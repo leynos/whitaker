@@ -33,9 +33,7 @@ impl VerificationPolicy {
     /// digest of the downloaded archive and compare it against the digest
     /// recorded in the manifest before extracting any files.
     #[must_use]
-    pub fn require_checksum(&self) -> bool {
-        self.require_checksum
-    }
+    pub const fn require_checksum(&self) -> bool { self.require_checksum }
 }
 
 impl Default for VerificationPolicy {
@@ -81,6 +79,8 @@ impl fmt::Display for VerificationFailureAction {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for artefact checksum verification.
+
     use super::*;
 
     #[test]

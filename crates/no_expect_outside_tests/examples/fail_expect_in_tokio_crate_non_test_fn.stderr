@@ -4,7 +4,7 @@ error: Avoid calling expect on `std::option::Option<&str>` outside test-only cod
 LL |     let _ = parsed.expect("ordinary code in a Tokio crate must still lint");
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: The call originates within function `parse_config` which is not recognised as a test.
+   = note: The call originates within function `parse_config` which is not recognized as a test.
    = help: Handle the `None` variant of `std::option::Option<&str>` or move the code into a test.
    = note: requested on the command line with `-D no-expect-outside-tests`
 

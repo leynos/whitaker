@@ -34,8 +34,12 @@ log = { workspace = true, optional = true }
 whitaker = { version = "0.2.7", path = "../../", features = ["dylint-driver"], optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 camino = { workspace = true }
+
+[lints]
+workspace = true

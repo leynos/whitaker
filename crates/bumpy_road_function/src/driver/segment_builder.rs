@@ -5,13 +5,13 @@
 
 use std::ops::RangeInclusive;
 
-use crate::analysis::Settings;
 use rustc_hir as hir;
 use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::LateContext;
-use rustc_span::source_map::SourceMap;
-use rustc_span::{DesugaringKind, Span};
+use rustc_span::{DesugaringKind, Span, source_map::SourceMap};
 use whitaker_common::complexity_signal::LineSegment;
+
+use crate::analysis::Settings;
 
 pub(super) struct SegmentBuilder<'a, 'tcx> {
     cx: &'a LateContext<'tcx>,
@@ -21,7 +21,7 @@ pub(super) struct SegmentBuilder<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
-    pub(super) fn new(
+    pub(super) const fn new(
         cx: &'a LateContext<'tcx>,
         settings: &'a Settings,
         function_lines: RangeInclusive<usize>,
@@ -134,12 +134,16 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
         self.push_segment(span, self.settings.weights.flow);
     }
 
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "predicate weights are floating-point tuning parameters scaled by branch counts"
+    )]
     fn push_predicate_segment(&mut self, expr: &'tcx hir::Expr<'tcx>) {
         if matches!(expr.kind, ExprKind::Let(..)) {
             return;
         }
 
-        let branches = count_branches(expr) as f64;
+        let branches = f64::from(u32::try_from(count_branches(expr)).unwrap_or(u32::MAX));
         let value = branches * self.settings.weights.predicate;
         self.push_segment(expr.span, value);
     }
@@ -160,7 +164,9 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             self.cx.tcx.sess.dcx().span_delayed_bug(
                 span,
                 format!(
-                    "bumpy-road segment lines lie outside function range (segment={segment_start}..={segment_end}, function={function_start}..={function_end})",
+                    "bumpy-road segment lines lie outside function range \
+                     (segment={segment_start}..={segment_end}, \
+                     function={function_start}..={function_end})",
                     segment_start = lines.start(),
                     segment_end = lines.end(),
                     function_start = self.function_lines.start(),
@@ -185,14 +191,10 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for SegmentBuilder<'a, 'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
-        Self::visit_expr(self, expr);
-    }
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for SegmentBuilder<'_, 'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) { Self::visit_expr(self, expr); }
 
-    fn visit_block(&mut self, block: &'tcx hir::Block<'tcx>) {
-        Self::visit_block(self, block);
-    }
+    fn visit_block(&mut self, block: &'tcx hir::Block<'tcx>) { Self::visit_block(self, block); }
 }
 
 fn extract_while_components<'hir>(
@@ -211,12 +213,8 @@ fn count_branches(expr: &hir::Expr<'_>) -> usize {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
             count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
-        ExprKind::DropTemps(inner) => count_branches(inner),
-        ExprKind::Block(block, _) => match block.expr {
-            Some(inner) => count_branches(inner),
-            None => 1,
-        },
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
         ExprKind::If(cond, ..) => count_branches(cond),
         _ => 1,
     }
@@ -229,8 +227,9 @@ pub(super) fn span_line_range(source_map: &SourceMap, span: Span) -> Option<Rang
 
     let contiguous = info
         .lines
-        .windows(2)
-        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+        .iter()
+        .zip(info.lines.iter().skip(1))
+        .all(|(previous, next)| next.line_index == previous.line_index + 1);
     if !contiguous {
         return None;
     }

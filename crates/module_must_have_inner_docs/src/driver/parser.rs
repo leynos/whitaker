@@ -6,8 +6,8 @@
 //! `#![doc = \"...\"]` style attributes) while ignoring commas inside nested
 //! parentheses when dissecting meta lists. Key helpers:
 //! - `skip_leading_whitespace`: advances a text cursor past Unicode whitespace.
-//! - `is_doc_comment`: recognizes leading doc comments or doc attributes,
-//!   including those wrapped in `cfg_attr`.
+//! - `is_doc_comment`: recognizes leading doc comments or doc attributes, including those wrapped
+//!   in `cfg_attr`.
 //!
 //! These utilities underpin the lint that determines whether a module has the
 //! required leading inner docs.
@@ -44,7 +44,7 @@ use crate::{AttributeBody, MetaList, ParseInput};
 /// assert_eq!(offset, 5); // 2 bytes + 3 bytes.
 /// assert_eq!(rest.as_str(), "hello");
 /// ```
-pub(super) fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, ParseInput<'a>) {
+pub(super) fn skip_leading_whitespace(snippet: ParseInput<'_>) -> (usize, ParseInput<'_>) {
     let snippet_str = snippet.as_str();
     let trimmed = snippet_str.trim_start_matches(char::is_whitespace);
     let byte_offset = snippet_str.len().saturating_sub(trimmed.len());
@@ -78,8 +78,9 @@ pub(super) fn is_doc_comment(rest: ParseInput<'_>) -> bool {
         let (_, tail) = skip_leading_whitespace(ParseInput::from(after_bang));
         if let Some(body) = tail.strip_prefix('[') {
             let attr_end = body.find(']').unwrap_or(body.len());
-            let attr_body = AttributeBody::from(&body[..attr_end]);
-            return is_doc_attr(attr_body);
+            return body
+                .get(..attr_end)
+                .is_some_and(|attr_body| is_doc_attr(AttributeBody::from(attr_body)));
         }
     }
     false
@@ -87,9 +88,7 @@ pub(super) fn is_doc_comment(rest: ParseInput<'_>) -> bool {
 
 // Returns true for direct `doc` attributes and for `cfg_attr` wrappers that
 // contain a `doc` entry.
-fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
-    is_doc_ident(ParseInput::from(*attr_body))
-}
+fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool { is_doc_ident(ParseInput::from(*attr_body)) }
 
 /// Extracts the leading identifier from the input, skipping any leading
 /// whitespace.
@@ -104,22 +103,24 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
 /// # use module_must_have_inner_docs::ParseInput;
 /// # use module_must_have_inner_docs::parser::take_ident;
 /// let input = ParseInput::from("  foo_bar(baz)");
-/// let Some((ident, rest)) = take_ident(input) else { panic!() };
+/// let Some((ident, rest)) = take_ident(input) else {
+///     panic!()
+/// };
 /// assert_eq!(*ident, "foo_bar");
 /// assert_eq!(rest.as_str(), "(baz)");
 ///
 /// assert!(take_ident(ParseInput::from("  123")).is_none());
 /// ```
-pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, ParseInput<'a>)> {
+pub(super) fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, ParseInput<'_>)> {
     let (_, trimmed) = skip_leading_whitespace(input);
     let trimmed_str = trimmed.as_str();
     let mut iter = trimmed_str.char_indices();
-    let (start, ch) = iter.next()?;
-    if !is_ident_start(ch) {
+    let (start, first_ch) = iter.next()?;
+    if !is_ident_start(first_ch) {
         return None;
     }
 
-    let mut end = start + ch.len_utf8();
+    let mut end = start + first_ch.len_utf8();
     for (idx, ch) in iter {
         if is_ident_continue(ch) {
             end = idx + ch.len_utf8();
@@ -128,8 +129,8 @@ pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, P
         }
     }
 
-    let ident = ParseInput::from(&trimmed_str[..end]);
-    Some((ident, ParseInput::from(&trimmed_str[end..])))
+    let (ident, remainder) = trimmed_str.split_at_checked(end)?;
+    Some((ParseInput::from(ident), ParseInput::from(remainder)))
 }
 
 // Detects documentation by matching a `doc` ident directly or inside `cfg_attr`.
@@ -149,25 +150,25 @@ fn is_doc_ident(input: ParseInput<'_>) -> bool {
     false
 }
 
-fn is_ident_start(ch: char) -> bool {
+const fn is_ident_start(ch: char) -> bool {
     // Ident parsing is intentionally ASCII-only; we only need to recognize
     // built-in attribute names such as `doc` and `cfg_attr`.
     ch == '_' || ch.is_ascii_alphabetic()
 }
 
-fn is_ident_continue(ch: char) -> bool {
-    ch == '_' || ch.is_ascii_alphanumeric()
-}
+const fn is_ident_continue(ch: char) -> bool { ch == '_' || ch.is_ascii_alphanumeric() }
 
 pub(super) fn cfg_attr_has_doc(tail: ParseInput<'_>) -> bool {
-    let (_, tail) = skip_leading_whitespace(tail);
-    let Some(args) = tail.strip_prefix('(') else {
+    let (_, trimmed) = skip_leading_whitespace(tail);
+    let Some(args) = trimmed.strip_prefix('(') else {
         return false;
     };
     let Some(close_idx) = args.rfind(')') else {
         return false;
     };
-    let meta_list = &args[..close_idx];
+    let Some(meta_list) = args.get(..close_idx) else {
+        return false;
+    };
 
     has_doc_in_meta_list_after_first(MetaList::from(meta_list))
 }
@@ -179,7 +180,7 @@ struct ParserStateAfterFirst {
 }
 
 impl ParserStateAfterFirst {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             depth: 0,
             start: 0,
@@ -198,7 +199,7 @@ fn has_doc_in_meta_list_after_first(list: MetaList<'_>) -> bool {
         }
     }
 
-    state.seen_comma && segment_is_doc(&list_str[state.start..])
+    state.seen_comma && list_str.get(state.start..).is_some_and(segment_is_doc)
 }
 
 fn process_char_for_doc_after_first(
@@ -217,7 +218,7 @@ fn process_char_for_doc_after_first(
             false
         }
         ',' if state.depth == 0 => {
-            if state.seen_comma && segment_is_doc(&list_str[state.start..idx]) {
+            if state.seen_comma && list_str.get(state.start..idx).is_some_and(segment_is_doc) {
                 return true;
             }
             state.seen_comma = true;
@@ -228,17 +229,16 @@ fn process_char_for_doc_after_first(
     }
 }
 
-fn segment_is_doc(segment: &str) -> bool {
-    is_doc_ident(ParseInput::from(segment))
-}
+fn segment_is_doc(segment: &str) -> bool { is_doc_ident(ParseInput::from(segment)) }
 
 #[cfg(test)]
 mod tests {
     //! Unit tests for parsing helpers.
 
+    use rstest::rstest;
+
     use super::skip_leading_whitespace;
     use crate::ParseInput;
-    use rstest::rstest;
 
     #[rstest]
     #[case("", 0, "")]

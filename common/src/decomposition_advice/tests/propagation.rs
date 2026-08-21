@@ -1,12 +1,13 @@
 //! Unit tests for deterministic label propagation.
 
 use rstest::{fixture, rstest};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
-use crate::decomposition_advice::community::{
-    SimilarityEdge, build_adjacency, detect_communities, propagate_labels_report,
+use crate::decomposition_advice::{
+    community::{SimilarityEdge, build_adjacency, detect_communities, propagate_labels_report},
+    minimal_feature_vector,
+    vector::{MethodFeatureVector, test_feature_vector},
 };
-use crate::decomposition_advice::minimal_feature_vector;
-use crate::decomposition_advice::vector::{MethodFeatureVector, test_feature_vector};
 
 fn vectors(method_names: &[&str]) -> Vec<MethodFeatureVector> {
     method_names
@@ -19,10 +20,9 @@ fn edge(left: usize, right: usize, weight: u64) -> SimilarityEdge {
     SimilarityEdge::new(left, right, weight)
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn connected_triplet_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn connected_triplet_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
 #[fixture]
 fn connected_triplet_adjacency() -> Vec<Vec<(usize, u64)>> {
@@ -39,20 +39,17 @@ fn linear_quartet_adjacency() -> Vec<Vec<(usize, u64)>> {
     build_adjacency(4, &[edge(0, 1, 5), edge(1, 2, 5), edge(2, 3, 5)])
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn isolated_tail_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["alpha", "beta", "gamma"])
-}
+fn isolated_tail_vectors() -> Vec<MethodFeatureVector> { vectors(&["alpha", "beta", "gamma"]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> {
-    build_adjacency(3, &[edge(0, 1, 5)])
-}
+fn isolated_tail_adjacency() -> Vec<Vec<(usize, u64)>> { build_adjacency(3, &[edge(0, 1, 5)]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn lexical_tie_vectors() -> Vec<MethodFeatureVector> {
-    vectors(&["gamma", "alpha", "beta"])
-}
+fn lexical_tie_vectors() -> Vec<MethodFeatureVector> { vectors(&["gamma", "alpha", "beta"]) }
 
 #[fixture]
 fn lexical_tie_adjacency() -> Vec<Vec<(usize, u64)>> {
@@ -122,7 +119,7 @@ fn propagate_labels_leaves_isolated_nodes_with_original_labels(
 ) {
     let report = propagate_labels_report(&isolated_tail_vectors, &isolated_tail_adjacency, 3);
 
-    assert_eq!(report.labels[2], 2);
+    assert_eq!(report.labels.get(2), Some(&2));
 }
 
 #[rstest]
@@ -158,7 +155,7 @@ fn propagate_labels_uses_lexical_tie_break_for_equal_scores(
 ) {
     let report = propagate_labels_report(&lexical_tie_vectors, &lexical_tie_adjacency, 1);
 
-    assert_eq!(report.labels[0], 1);
+    assert_eq!(report.labels.first(), Some(&1));
 }
 
 #[rstest]
@@ -168,8 +165,8 @@ fn propagate_labels_prefers_heavier_star_neighbour_when_counts_match() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 1);
 
-    assert_eq!(report.labels[0], 1);
-    assert_eq!(report.labels[0], report.labels[1]);
+    assert_eq!(report.labels.first(), Some(&1));
+    assert_eq!(report.labels.first(), report.labels.get(1));
 }
 
 #[rstest]
@@ -179,7 +176,7 @@ fn propagate_labels_prefers_triangle_weight_over_count_tie() {
 
     let report = propagate_labels_report(&vectors, &adjacency, 1);
 
-    assert_eq!(report.labels[0], 1);
+    assert_eq!(report.labels.first(), Some(&1));
 }
 
 #[rstest]

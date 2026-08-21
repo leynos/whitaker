@@ -1,14 +1,24 @@
 //! Behaviour-driven tests for strict `rstest` detection helpers.
 
+use std::{cell::RefCell, collections::BTreeSet};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::collections::BTreeSet;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::rstest::{
-    ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
-    classify_rstest_parameter, fixture_local_names, is_rstest_fixture_with, is_rstest_test_with,
+use whitaker_common::{
+    attributes::{Attribute, AttributeKind, AttributePath},
+    rstest::{
+        ExpansionTrace,
+        ParameterBinding,
+        RstestDetectionOptions,
+        RstestParameter,
+        RstestParameterKind,
+        classify_rstest_parameter,
+        fixture_local_names,
+        is_rstest_fixture_with,
+        is_rstest_test_with,
+    },
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Debug, Default)]
 struct DetectionWorld {
@@ -100,20 +110,15 @@ impl DetectionWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> DetectionWorld {
-    DetectionWorld::default()
-}
+fn world() -> DetectionWorld { DetectionWorld::default() }
 
 #[given("a function annotated with rstest")]
-fn given_rstest_function(world: &DetectionWorld) {
-    world.push_attribute("rstest");
-}
+fn given_rstest_function(world: &DetectionWorld) { world.push_attribute("rstest"); }
 
 #[given("a function annotated with rstest::fixture")]
-fn given_rstest_fixture(world: &DetectionWorld) {
-    world.push_attribute("rstest::fixture");
-}
+fn given_rstest_fixture(world: &DetectionWorld) { world.push_attribute("rstest::fixture"); }
 
 #[given("a parameter named db")]
 fn given_fixture_local_parameter(world: &DetectionWorld) {
@@ -123,7 +128,7 @@ fn given_fixture_local_parameter(world: &DetectionWorld) {
 #[given("a parameter named case_input annotated with case")]
 fn given_provider_parameter(world: &DetectionWorld) {
     world.set_parameter(RstestParameter::new(
-        ParameterBinding::Ident("case_input".to_string()),
+        ParameterBinding::Ident("case_input".to_owned()),
         vec![Attribute::new(
             AttributePath::from("case"),
             AttributeKind::Outer,
@@ -137,14 +142,10 @@ fn given_unsupported_parameter(world: &DetectionWorld) {
 }
 
 #[given("the expansion trace contains rstest")]
-fn given_trace(world: &DetectionWorld) {
-    world.set_trace("rstest");
-}
+fn given_trace(world: &DetectionWorld) { world.set_trace("rstest"); }
 
 #[given("expansion fallback is enabled")]
-fn given_fallback_enabled(world: &DetectionWorld) {
-    world.enable_trace_fallback();
-}
+fn given_fallback_enabled(world: &DetectionWorld) { world.enable_trace_fallback(); }
 
 #[given("a function annotated with rstest and allow")]
 fn given_rstest_and_allow(world: &DetectionWorld) {
@@ -155,7 +156,7 @@ fn given_rstest_and_allow(world: &DetectionWorld) {
 #[given("a parameter annotated with a custom provider attribute")]
 fn given_custom_provider_parameter(world: &DetectionWorld) {
     world.set_parameter(RstestParameter::new(
-        ParameterBinding::Ident("custom_value".to_string()),
+        ParameterBinding::Ident("custom_value".to_owned()),
         vec![Attribute::new(
             AttributePath::from("custom::provider"),
             AttributeKind::Outer,
@@ -174,14 +175,10 @@ fn given_multi_frame_trace(world: &DetectionWorld) {
 }
 
 #[when("I check whether the function is an rstest test")]
-fn when_check_test(world: &DetectionWorld) {
-    world.evaluate_test();
-}
+fn when_check_test(world: &DetectionWorld) { world.evaluate_test(); }
 
 #[when("I check whether the function is an rstest fixture")]
-fn when_check_fixture(world: &DetectionWorld) {
-    world.evaluate_fixture();
-}
+fn when_check_fixture(world: &DetectionWorld) { world.evaluate_fixture(); }
 
 #[when("I classify the parameter")]
 fn when_classify_parameter(world: &DetectionWorld) -> Result<(), String> {
@@ -189,21 +186,19 @@ fn when_classify_parameter(world: &DetectionWorld) -> Result<(), String> {
 }
 
 #[when("I evaluate fixture-local names")]
-fn when_fixture_names_evaluated(world: &DetectionWorld) {
-    world.evaluate_fixture_names();
-}
+fn when_fixture_names_evaluated(world: &DetectionWorld) { world.evaluate_fixture_names(); }
 
-#[then("the function is recognised as an rstest test")]
+#[then("the function is recognized as an rstest test")]
 fn then_test_positive(world: &DetectionWorld) {
     assert_eq!(*world.test_result.borrow(), Some(true));
 }
 
-#[then("the function is recognised as not being an rstest test")]
+#[then("the function is recognized as not being an rstest test")]
 fn then_test_negative(world: &DetectionWorld) {
     assert_eq!(*world.test_result.borrow(), Some(false));
 }
 
-#[then("the function is recognised as an rstest fixture")]
+#[then("the function is recognized as an rstest fixture")]
 fn then_fixture_positive(world: &DetectionWorld) {
     assert_eq!(*world.fixture_result.borrow(), Some(true));
 }
@@ -213,7 +208,7 @@ fn then_fixture_local(world: &DetectionWorld) {
     assert_eq!(
         *world.parameter_kind.borrow(),
         Some(RstestParameterKind::FixtureLocal {
-            name: "db".to_string()
+            name: "db".to_owned()
         })
     );
 }
@@ -238,7 +233,7 @@ fn then_unsupported(world: &DetectionWorld) {
 fn then_fixture_names(world: &DetectionWorld) {
     assert_eq!(
         *world.fixture_names.borrow(),
-        Some(BTreeSet::from(["db".to_string()]))
+        Some(BTreeSet::from(["db".to_owned()]))
     );
 }
 

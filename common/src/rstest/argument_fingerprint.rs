@@ -4,11 +4,20 @@
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ArgAtom {
     /// An argument supplied by an `rstest` fixture-local parameter.
-    FixtureLocal { name: String },
+    FixtureLocal {
+        /// The fixture-local parameter name as written in the test signature.
+        name: String,
+    },
     /// A stable literal argument, stored as canonical source text.
-    ConstLit { text: String },
+    ConstLit {
+        /// Canonical source text of the literal.
+        text: String,
+    },
     /// A stable constant path, stored as a canonical definition path.
-    ConstPath { def_path: String },
+    ConstPath {
+        /// Canonical definition path of the referenced constant.
+        def_path: String,
+    },
     /// A present argument shape that later lowering does not support.
     Unsupported,
 }
@@ -22,7 +31,12 @@ impl ArgAtom {
     /// use whitaker_common::rstest::ArgAtom;
     ///
     /// let atom = ArgAtom::fixture_local("db");
-    /// assert_eq!(atom, ArgAtom::FixtureLocal { name: "db".to_string() });
+    /// assert_eq!(
+    ///     atom,
+    ///     ArgAtom::FixtureLocal {
+    ///         name: "db".to_string()
+    ///     }
+    /// );
     /// ```
     #[must_use]
     pub fn fixture_local(name: impl Into<String>) -> Self {
@@ -37,12 +51,15 @@ impl ArgAtom {
     /// use whitaker_common::rstest::ArgAtom;
     ///
     /// let atom = ArgAtom::const_lit("42");
-    /// assert_eq!(atom, ArgAtom::ConstLit { text: "42".to_string() });
+    /// assert_eq!(
+    ///     atom,
+    ///     ArgAtom::ConstLit {
+    ///         text: "42".to_string()
+    ///     }
+    /// );
     /// ```
     #[must_use]
-    pub fn const_lit(text: impl Into<String>) -> Self {
-        Self::ConstLit { text: text.into() }
-    }
+    pub fn const_lit(text: impl Into<String>) -> Self { Self::ConstLit { text: text.into() } }
 
     /// Builds a stable constant-path argument atom.
     ///
@@ -76,9 +93,7 @@ impl ArgAtom {
     /// assert_eq!(ArgAtom::unsupported(), ArgAtom::Unsupported);
     /// ```
     #[must_use]
-    pub const fn unsupported() -> Self {
-        Self::Unsupported
-    }
+    pub const fn unsupported() -> Self { Self::Unsupported }
 }
 
 /// A positional fingerprint for one helper-call argument list.
@@ -95,10 +110,7 @@ impl ArgFingerprint {
     /// ```
     /// use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
     ///
-    /// let fingerprint = ArgFingerprint::new([
-    ///     ArgAtom::fixture_local("db"),
-    ///     ArgAtom::const_lit("42"),
-    /// ]);
+    /// let fingerprint = ArgFingerprint::new([ArgAtom::fixture_local("db"), ArgAtom::const_lit("42")]);
     ///
     /// assert_eq!(fingerprint.atoms().len(), 2);
     /// ```
@@ -114,13 +126,9 @@ impl ArgFingerprint {
 
     /// Returns the stored atoms in positional order.
     #[must_use]
-    pub fn atoms(&self) -> &[ArgAtom] {
-        &self.atoms
-    }
+    pub fn atoms(&self) -> &[ArgAtom] { &self.atoms }
 
     /// Consumes the fingerprint and returns the stored atoms.
     #[must_use]
-    pub fn into_atoms(self) -> Vec<ArgAtom> {
-        self.atoms
-    }
+    pub fn into_atoms(self) -> Vec<ArgAtom> { self.atoms }
 }

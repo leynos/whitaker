@@ -1,8 +1,7 @@
 //! Classifies `std::fs` usages encountered by the lint into diagnostic inputs.
 
 use rustc_hir as hir;
-use rustc_hir::def::Res;
-use rustc_hir::def_id::DefId;
+use rustc_hir::{def::Res, def_id::DefId};
 use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker_common::SimplePath;
@@ -49,7 +48,7 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::read"), UsageCategory::Call);
     /// assert_eq!(usage.operation(), "std::fs::read");
     /// ```
-    pub fn new(operation: String, category: UsageCategory) -> Self {
+    pub const fn new(operation: String, category: UsageCategory) -> Self {
         Self {
             operation,
             category,
@@ -66,16 +65,12 @@ impl StdFsUsage {
     /// let usage = StdFsUsage::new(String::from("std::fs::remove_file"), UsageCategory::Call);
     /// assert_eq!(usage.operation(), "std::fs::remove_file");
     /// ```
-    pub fn operation(&self) -> &str {
-        &self.operation
-    }
+    pub fn operation(&self) -> &str { &self.operation }
 
     /// Returns the usage category.
     #[cfg(test)]
     #[must_use]
-    pub const fn category(&self) -> UsageCategory {
-        self.category
-    }
+    pub const fn category(&self) -> UsageCategory { self.category }
 }
 
 /// Classify a resolved path (expression, type, import) into a usage record.
@@ -147,14 +142,11 @@ pub fn classify_def_id(
 }
 
 fn is_std_fs_path(path: &SimplePath) -> bool {
-    let segments = path.segments();
-    segments.len() >= 2 && segments[0] == "std" && segments[1] == "fs"
+    matches!(path.segments(), [first, second, ..] if first == "std" && second == "fs")
 }
 
-/// Returns true if the character should be rejected in a valid std::fs label.
-fn is_invalid_label_char(ch: char) -> bool {
-    ch.is_whitespace() || matches!(ch, '(' | ')')
-}
+/// Returns true if the character should be rejected in a valid `std::fs` label.
+const fn is_invalid_label_char(ch: char) -> bool { ch.is_whitespace() || matches!(ch, '(' | ')') }
 
 pub(crate) fn label_is_std_fs(label: &str) -> bool {
     if label != label.trim() {
@@ -165,11 +157,9 @@ pub(crate) fn label_is_std_fs(label: &str) -> bool {
         return false;
     }
 
-    if !label.starts_with("std::fs") {
+    let Some(remainder) = label.strip_prefix("std::fs") else {
         return false;
-    }
-
-    let remainder = &label["std::fs".len()..];
+    };
     if remainder.is_empty() {
         return true;
     }

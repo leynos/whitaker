@@ -1,10 +1,12 @@
 //! Behaviour-driven tests for shared configuration loading.
 
-use std::any::Any;
-use std::cell::RefCell;
-use std::convert::Infallible;
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::str::FromStr;
+use std::{
+    any::Any,
+    cell::RefCell,
+    convert::Infallible,
+    panic::{AssertUnwindSafe, catch_unwind},
+    str::FromStr,
+};
 
 mod support;
 
@@ -12,17 +14,15 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
 use whitaker::SharedConfig;
-use whitaker_common::i18n::normalise_locale;
+use whitaker_common::i18n::normalize_locale;
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn config_source() -> RefCell<Option<String>> {
-    RefCell::new(None)
-}
+fn config_source() -> RefCell<Option<String>> { RefCell::new(None) }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> {
-    RefCell::new(None)
-}
+fn load_result() -> RefCell<Option<Result<SharedConfig, String>>> { RefCell::new(None) }
 
 fn panic_message(payload: Box<dyn Any + Send>) -> String {
     match payload.downcast::<String>() {
@@ -50,15 +50,11 @@ impl FromStr for ErrorSnippet {
 }
 
 impl AsRef<str> for ErrorSnippet {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
+    fn as_ref(&self) -> &str { self.0.as_str() }
 }
 
 impl ErrorSnippet {
-    fn into_inner(self) -> String {
-        self.0
-    }
+    fn into_inner(self) -> String { self.0 }
 }
 
 #[given("no configuration state has been prepared")]
@@ -71,9 +67,7 @@ fn reset_state(
 }
 
 #[given("no workspace configuration overrides are provided")]
-fn no_overrides(config_source: &RefCell<Option<String>>) {
-    config_source.borrow_mut().take();
-}
+fn no_overrides(config_source: &RefCell<Option<String>>) { config_source.borrow_mut().take(); }
 
 #[given("the workspace config sets the module max line limit to {value}")]
 fn override_max_lines(config_source: &RefCell<Option<String>>, value: usize) {
@@ -121,7 +115,10 @@ fn load_config(
     let maybe_source = config_source.borrow().clone();
     let outcome = catch_unwind(AssertUnwindSafe(|| {
         SharedConfig::load_with("module_max_lines", |crate_name| {
-            assert_eq!(crate_name, "module_max_lines");
+            assert_eq!(
+                crate_name, "module_max_lines",
+                "the loader should request configuration for the requested lint",
+            );
             maybe_source
                 .as_ref()
                 .map_or_else(SharedConfig::default, |input| {
@@ -154,7 +151,7 @@ fn assert_locale(
     expected: StepLocale,
 ) {
     let raw = expected.into_inner();
-    let expected_value = normalise_locale(Some(raw.as_str()))
+    let expected_value = normalize_locale(Some(raw.as_str()))
         .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
     let borrow = load_result.borrow();
     let config = match borrow.as_ref() {

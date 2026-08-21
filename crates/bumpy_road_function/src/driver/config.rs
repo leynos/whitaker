@@ -1,13 +1,13 @@
 //! Configuration parsing and loading for the bumpy road lint.
 //!
 //! The lint reads optional configuration from `dylint.toml`, applies defaults,
-//! and relies on `analysis::normalise_settings` to clamp invalid values.
+//! and relies on `analysis::normalize_settings` to clamp invalid values.
 
-use crate::analysis::{Settings, Weights};
 use log::debug;
 use serde::Deserialize;
 
 use super::LINT_NAME;
+use crate::analysis::{Settings, Weights};
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -52,7 +52,7 @@ impl Default for Config {
 }
 
 impl Config {
-    pub(super) fn into_settings(self) -> Settings {
+    pub(super) const fn into_settings(self) -> Settings {
         Settings {
             threshold: self.threshold,
             window: self.window,

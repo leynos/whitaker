@@ -1,7 +1,8 @@
 //! Unit tests for brain trait metric collection.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 fn mixed_items() -> Vec<TraitItemMetrics> {
     vec![
@@ -28,7 +29,7 @@ struct ExpectedTraitMetrics {
     burden: usize,
 }
 
-fn assert_trait_metrics(metrics: &TraitMetrics, expected: ExpectedTraitMetrics) {
+fn assert_trait_metrics(metrics: &TraitMetrics, expected: &ExpectedTraitMetrics) {
     assert_eq!(metrics.trait_name(), expected.name);
     assert_eq!(metrics.total_item_count(), expected.total);
     assert_eq!(metrics.required_method_count(), expected.required);
@@ -96,7 +97,7 @@ fn default_method_cc_sum_aggregates_only_default_methods() {
     let items = vec![
         TraitItemMetrics::required_method("parse"),
         TraitItemMetrics::default_method("render", 12),
-        TraitItemMetrics::default_method("serialise", 8),
+        TraitItemMetrics::default_method("serialize", 8),
         TraitItemMetrics::associated_type("Output"),
     ];
 
@@ -132,7 +133,7 @@ fn builder_builds_mixed_trait_metrics() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 4,
             required: 1,
@@ -153,7 +154,7 @@ fn builder_add_item_supports_prebuilt_entries() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Renderer",
             total: 2,
             required: 1,
@@ -175,7 +176,7 @@ fn builder_filters_macro_expanded_default_methods() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "Parser",
             total: 2,
             required: 1,
@@ -191,7 +192,7 @@ fn implementor_burden_equals_required_method_count() {
     let mut builder = TraitMetricsBuilder::new("Transformer");
     builder.add_required_method("parse");
     builder.add_required_method("validate");
-    builder.add_default_method("normalise", 7, false);
+    builder.add_default_method("normalize", 7, false);
     builder.add_associated_type("Output");
 
     let metrics = builder.build();
@@ -206,7 +207,7 @@ fn empty_trait_has_zeroed_metrics() {
 
     assert_trait_metrics(
         &metrics,
-        ExpectedTraitMetrics {
+        &ExpectedTraitMetrics {
             name: "EmptyTrait",
             total: 0,
             required: 0,

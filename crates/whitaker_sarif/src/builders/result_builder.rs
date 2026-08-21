@@ -4,9 +4,13 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use crate::error::{Result, SarifError};
-use crate::model::location::{Location, RelatedLocation};
-use crate::model::result::{Level, Message, SarifResult};
+use crate::{
+    error::{Result, SarifError},
+    model::{
+        location::{Location, RelatedLocation},
+        result::{Level, Message, SarifResult},
+    },
+};
 
 /// Fluent builder for constructing a [`SarifResult`].
 ///
@@ -16,7 +20,7 @@ use crate::model::result::{Level, Message, SarifResult};
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{ResultBuilder, Level};
+/// use whitaker_sarif::{Level, ResultBuilder};
 ///
 /// let result = ResultBuilder::new("WHK001")
 ///     .with_message("Type-1 clone detected")
@@ -50,7 +54,7 @@ impl ResultBuilder {
 
     /// Sets the severity level.
     #[must_use]
-    pub fn with_level(mut self, level: Level) -> Self {
+    pub const fn with_level(mut self, level: Level) -> Self {
         self.level = level;
         self
     }
@@ -133,9 +137,12 @@ impl ResultBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF result builder.
+
+    use rstest::rstest;
+
     use super::*;
     use crate::merge::WHITAKER_FRAGMENT_KEY;
-    use rstest::rstest;
 
     #[rstest]
     #[case("WHK001", "msg", Level::Warning)]

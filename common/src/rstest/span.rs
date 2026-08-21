@@ -13,8 +13,10 @@ impl<T> SpanRecoveryFrame<T> {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_common::rstest::SpanRecoveryFrame;
-    /// use whitaker_common::span::{SourceLocation, SourceSpan};
+    /// use whitaker_common::{
+    ///     rstest::SpanRecoveryFrame,
+    ///     span::{SourceLocation, SourceSpan},
+    /// };
     ///
     /// let span = SourceSpan::new(SourceLocation::new(3, 1), SourceLocation::new(3, 8))
     ///     .expect("example span should be valid");
@@ -32,21 +34,15 @@ impl<T> SpanRecoveryFrame<T> {
 
     /// Returns the stored frame value.
     #[must_use]
-    pub const fn value(&self) -> &T {
-        &self.value
-    }
+    pub const fn value(&self) -> &T { &self.value }
 
     /// Consumes the frame and returns the stored value.
     #[must_use]
-    pub fn into_value(self) -> T {
-        self.value
-    }
+    pub fn into_value(self) -> T { self.value }
 
     /// Returns whether the frame still originates from macro expansion.
     #[must_use]
-    pub const fn from_expansion(&self) -> bool {
-        self.from_expansion
-    }
+    pub const fn from_expansion(&self) -> bool { self.from_expansion }
 }
 
 /// The result of recovering a user-editable span from an ordered frame chain.
@@ -66,14 +62,19 @@ impl<T> UserEditableSpan<T> {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_common::rstest::UserEditableSpan;
-    /// use whitaker_common::span::{SourceLocation, SourceSpan};
+    /// use whitaker_common::{
+    ///     rstest::UserEditableSpan,
+    ///     span::{SourceLocation, SourceSpan},
+    /// };
     ///
     /// let span = SourceSpan::new(SourceLocation::new(5, 1), SourceLocation::new(5, 7))
     ///     .expect("example span should be valid");
     ///
     /// assert_eq!(UserEditableSpan::Recovered(span).into_option(), Some(span));
-    /// assert_eq!(UserEditableSpan::<SourceSpan>::MacroOnly.into_option(), None);
+    /// assert_eq!(
+    ///     UserEditableSpan::<SourceSpan>::MacroOnly.into_option(),
+    ///     None
+    /// );
     /// ```
     #[must_use]
     pub fn into_option(self) -> Option<T> {
@@ -92,8 +93,10 @@ impl<T> UserEditableSpan<T> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::rstest::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span};
-/// use whitaker_common::span::{SourceLocation, SourceSpan};
+/// use whitaker_common::{
+///     rstest::{SpanRecoveryFrame, UserEditableSpan, recover_user_editable_span},
+///     span::{SourceLocation, SourceSpan},
+/// };
 ///
 /// let macro_span = SourceSpan::new(SourceLocation::new(2, 1), SourceLocation::new(2, 5))
 ///     .expect("example span should be valid");

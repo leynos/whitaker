@@ -40,9 +40,7 @@ impl TraitMetrics {
     /// assert_eq!(metrics.trait_name(), "Parser");
     /// ```
     #[must_use]
-    pub fn trait_name(&self) -> &str {
-        &self.trait_name
-    }
+    pub fn trait_name(&self) -> &str { &self.trait_name }
 
     /// Returns the total number of trait items.
     ///
@@ -56,9 +54,7 @@ impl TraitMetrics {
     /// assert_eq!(builder.build().total_item_count(), 1);
     /// ```
     #[must_use]
-    pub fn total_item_count(&self) -> usize {
-        self.total_item_count
-    }
+    pub const fn total_item_count(&self) -> usize { self.total_item_count }
 
     /// Returns the number of required methods.
     ///
@@ -72,9 +68,7 @@ impl TraitMetrics {
     /// assert_eq!(builder.build().required_method_count(), 1);
     /// ```
     #[must_use]
-    pub fn required_method_count(&self) -> usize {
-        self.required_method_count
-    }
+    pub const fn required_method_count(&self) -> usize { self.required_method_count }
 
     /// Returns the number of default methods.
     ///
@@ -88,9 +82,7 @@ impl TraitMetrics {
     /// assert_eq!(builder.build().default_method_count(), 1);
     /// ```
     #[must_use]
-    pub fn default_method_count(&self) -> usize {
-        self.default_method_count
-    }
+    pub const fn default_method_count(&self) -> usize { self.default_method_count }
 
     /// Returns the sum of default method cognitive complexity values.
     ///
@@ -105,9 +97,7 @@ impl TraitMetrics {
     /// assert_eq!(builder.build().default_method_cc_sum(), 12);
     /// ```
     #[must_use]
-    pub fn default_method_cc_sum(&self) -> usize {
-        self.default_method_cc_sum
-    }
+    pub const fn default_method_cc_sum(&self) -> usize { self.default_method_cc_sum }
 
     /// Returns implementor burden as the required method count.
     ///
@@ -122,9 +112,7 @@ impl TraitMetrics {
     /// assert_eq!(builder.build().implementor_burden(), 2);
     /// ```
     #[must_use]
-    pub fn implementor_burden(&self) -> usize {
-        self.required_method_count
-    }
+    pub const fn implementor_burden(&self) -> usize { self.required_method_count }
 }
 
 /// Incremental builder for [`TraitMetrics`].
@@ -164,9 +152,7 @@ impl TraitMetricsBuilder {
     /// builder.add_item(TraitItemMetrics::required_method("parse"));
     /// assert_eq!(builder.build().required_method_count(), 1);
     /// ```
-    pub fn add_item(&mut self, item: TraitItemMetrics) {
-        self.items.push(item);
-    }
+    pub fn add_item(&mut self, item: TraitItemMetrics) { self.items.push(item); }
 
     /// Adds a required method.
     ///
@@ -255,9 +241,7 @@ impl TraitMetricsBuilder {
     /// assert!(TraitMetricsBuilder::new("Parser").is_empty());
     /// ```
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
+    pub const fn is_empty(&self) -> bool { self.items.is_empty() }
 
     /// Consumes the builder and returns aggregated trait metrics.
     ///
@@ -277,44 +261,21 @@ impl TraitMetricsBuilder {
     /// ```
     #[must_use]
     pub fn build(self) -> TraitMetrics {
-        let (total_item_count, required_method_count, default_method_count, default_method_cc_sum) =
-            self.items.iter().fold(
-                (0, 0, 0, 0),
-                |(
-                    total_item_count,
-                    required_method_count,
-                    default_method_count,
-                    default_method_cc_sum,
-                ),
-                 item| {
-                    let total_item_count = total_item_count + 1;
-                    let (required_method_count, default_method_count, default_method_cc_sum) =
-                        match item.kind() {
-                            TraitItemKind::RequiredMethod => (
-                                required_method_count + 1,
-                                default_method_count,
-                                default_method_cc_sum,
-                            ),
-                            TraitItemKind::DefaultMethod => (
-                                required_method_count,
-                                default_method_count + 1,
-                                default_method_cc_sum + item.default_method_cc().unwrap_or(0),
-                            ),
-                            TraitItemKind::AssociatedType | TraitItemKind::AssociatedConst => (
-                                required_method_count,
-                                default_method_count,
-                                default_method_cc_sum,
-                            ),
-                        };
+        let total_item_count = self.items.len();
+        let mut required_method_count = 0;
+        let mut default_method_count = 0;
+        let mut default_method_cc_sum = 0;
 
-                    (
-                        total_item_count,
-                        required_method_count,
-                        default_method_count,
-                        default_method_cc_sum,
-                    )
-                },
-            );
+        for item in &self.items {
+            match item.kind() {
+                TraitItemKind::RequiredMethod => required_method_count += 1,
+                TraitItemKind::DefaultMethod => {
+                    default_method_count += 1;
+                    default_method_cc_sum += item.default_method_cc().unwrap_or(0);
+                }
+                TraitItemKind::AssociatedType | TraitItemKind::AssociatedConst => {}
+            }
+        }
 
         TraitMetrics {
             trait_name: self.trait_name,

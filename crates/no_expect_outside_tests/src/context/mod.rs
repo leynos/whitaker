@@ -2,17 +2,23 @@
 //! guards (for example, `cfg(test)`), supporting the lint's context
 //! summarization.
 
-use rustc_ast::AttrStyle;
-use rustc_ast::ast::{MetaItem, MetaItemInner};
+use rustc_ast::{
+    AttrStyle,
+    ast::{MetaItem, MetaItemInner},
+};
 use rustc_hir as hir;
-use rustc_hir::Node;
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
+use rustc_hir::{Node, attrs::AttributeKind as HirAttributeKind};
 use rustc_lint::LateContext;
 use rustc_span::sym;
 use whitaker::hir::has_test_like_hir_attributes;
 use whitaker_common::{
-    Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
-    PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
+    Attribute,
+    AttributeKind,
+    AttributePath,
+    ContextEntry,
+    ContextKind,
+    PARSED_ATTRIBUTE_PLACEHOLDER,
+    in_test_like_context_with,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -31,8 +37,8 @@ pub(crate) struct ContextSummary {
 ///
 /// - `cx`: Lint context used to walk the HIR and inspect ancestor attributes.
 /// - `hir_id`: The HIR node whose ancestor chain should be summarized.
-/// - `additional_test_attributes`: Extra user-configured attribute paths that
-///   should be treated as test markers alongside Whitaker's built-in list.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that should be treated as
+///   test markers alongside Whitaker's built-in list.
 ///
 /// # Returns
 ///
@@ -47,8 +53,8 @@ pub(crate) struct ContextSummary {
 ///     collect_context(cx, expr.hir_id, additional_test_attributes);
 /// assert!(!entries.is_empty() || !has_test_context_ancestry);
 /// ```
-pub(crate) fn collect_context<'tcx>(
-    cx: &LateContext<'tcx>,
+pub(crate) fn collect_context(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     additional_test_attributes: &[AttributePath],
 ) -> (Vec<ContextEntry>, bool) {
@@ -95,11 +101,10 @@ fn has_test_ancestry(
 /// # Parameters
 ///
 /// - `entries`: Simplified ancestor contexts produced by `collect_context`.
-/// - `has_test_context_ancestry`: Whether any ancestor already established
-///   test-only ancestry via propagation, `cfg(test)`, or a recognized
-///   test-marker attribute.
-/// - `additional_test_attributes`: Extra user-configured attribute paths that
-///   should be considered test markers during the final summary check.
+/// - `has_test_context_ancestry`: Whether any ancestor already established test-only ancestry via
+///   propagation, `cfg(test)`, or a recognized test-marker attribute.
+/// - `additional_test_attributes`: Extra user-configured attribute paths that should be considered
+///   test markers during the final summary check.
 ///
 /// # Returns
 ///
@@ -109,7 +114,7 @@ fn has_test_ancestry(
 /// # Examples
 ///
 /// ```ignore
-/// let summary = summarise_context(
+/// let summary = summarize_context(
 ///     &entries,
 ///     has_test_context_ancestry,
 ///     additional_test_attributes,
@@ -118,7 +123,7 @@ fn has_test_ancestry(
 ///     // `.expect()` is allowed in this context.
 /// }
 /// ```
-pub(crate) fn summarise_context(
+pub(crate) fn summarize_context(
     entries: &[ContextEntry],
     has_test_context_ancestry: bool,
     additional_test_attributes: &[AttributePath],
@@ -129,7 +134,7 @@ pub(crate) fn summarise_context(
         entry
             .kind()
             .matches_function()
-            .then(|| entry.name().to_string())
+            .then(|| entry.name().to_owned())
     });
 
     ContextSummary {
@@ -148,7 +153,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
                 ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
             }),
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
-                "impl".to_string(),
+                "impl".to_owned(),
                 ContextKind::Impl,
                 convert_attributes(attrs),
             )),
@@ -169,7 +174,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
             _ => None,
         },
         Node::Block(_) => Some(ContextEntry::new(
-            "block".to_string(),
+            "block".to_owned(),
             ContextKind::Block,
             convert_attributes(attrs),
         )),
@@ -195,16 +200,16 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
             return Attribute::new(AttributePath::from(PARSED_ATTRIBUTE_PLACEHOLDER), kind);
         };
         let mut names = attr.path().into_iter().map(|symbol| symbol.to_string());
-        match names.next() {
-            Some(first) => AttributePath::new(std::iter::once(first).chain(names)),
-            None => AttributePath::from("unknown"),
-        }
+        names.next().map_or_else(
+            || AttributePath::from("unknown"),
+            |first| AttributePath::new(std::iter::once(first).chain(names)),
+        )
     };
 
     Attribute::new(path, kind)
 }
 
-/// Check if a cfg_attr has a test condition and contains nested cfg(test).
+/// Check if a `cfg_attr` has a test condition and contains nested cfg(test).
 fn check_cfg_attr_for_test<I>(items: I) -> bool
 where
     I: IntoIterator<Item = MetaItemInner>,
@@ -253,24 +258,21 @@ pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     };
 
     let path = attr.path();
-    if path.len() != 1 {
+    let [name] = path.as_slice() else {
         return false;
-    }
+    };
 
-    if path[0] == sym::cfg {
+    if *name == sym::cfg {
         return attr
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
-    if path[0] != sym::cfg_attr {
+    if *name != sym::cfg_attr {
         return false;
     }
 
-    attr.meta_item_list()
-        .map(check_cfg_attr_for_test)
-        .unwrap_or(false)
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
@@ -290,33 +292,27 @@ fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool 
     }
 
     if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .map(|items| {
-                items
-                    .iter()
-                    .cloned()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            })
-            .unwrap_or(false);
-    }
-
-    meta.meta_item_list()
-        .map(|items| {
+        return meta.meta_item_list().is_some_and(|items| {
             items
                 .iter()
                 .cloned()
-                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
-        })
-        .unwrap_or(false)
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
+    }
+
+    meta.meta_item_list().is_some_and(|items| {
+        items
+            .iter()
+            .cloned()
+            .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+    })
 }
 
 fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     if path_is_ident(&meta.path, sym::cfg) {
         return meta
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
     if !path_is_ident(&meta.path, sym::cfg_attr) {
@@ -324,8 +320,7 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     }
 
     meta.meta_item_list()
-        .map(|items| check_cfg_attr_for_test(items.iter().cloned()))
-        .unwrap_or(false)
+        .is_some_and(|items| check_cfg_attr_for_test(items.iter().cloned()))
 }
 
 fn item_name(item: &hir::Item<'_>) -> Option<String> {
@@ -336,12 +331,12 @@ fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
     match attr {
         hir::Attribute::Unparsed(item) => item.style,
         hir::Attribute::Parsed(HirAttributeKind::DocComment { style, .. }) => *style,
-        _ => AttrStyle::Outer,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
     }
 }
 
 fn path_is_ident(path: &rustc_ast::Path, symbol: rustc_span::Symbol) -> bool {
-    path.segments.len() == 1 && path.segments[0].ident.name == symbol
+    matches!(&*path.segments, [segment] if segment.ident.name == symbol)
 }
 
 #[cfg(test)]

@@ -4,12 +4,16 @@
 //! `cargo-dylint` and `dylint-link` with deterministic names and inner
 //! directories for each supported target.
 
+use std::{
+    fs,
+    io,
+    path::{Path, PathBuf},
+};
+
+use thiserror::Error;
+
 use crate::dependency_binaries::{DependencyBinary, binary_filename, provenance_filename};
 pub use crate::installer_packaging::{ArchiveFormat, TargetTriple};
-use std::fs;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
 
 /// Parameters for packaging a dependency binary archive.
 #[derive(Debug)]
@@ -71,8 +75,14 @@ pub fn archive_format(target: &TargetTriple) -> ArchiveFormat {
 }
 
 /// Package a dependency executable into the deterministic repository archive.
+///
+/// # Errors
+///
+/// Returns [`DependencyPackagingError::BinaryNotFound`] when
+/// `params.binary_path` is not a file, and propagates I/O or archive
+/// failures encountered while writing the archive.
 pub fn package_dependency_binary(
-    params: DependencyPackageParams,
+    params: &DependencyPackageParams,
 ) -> Result<DependencyPackageOutput, DependencyPackagingError> {
     if !params.binary_path.is_file() {
         return Err(DependencyPackagingError::BinaryNotFound(
@@ -96,10 +106,10 @@ pub fn package_dependency_binary(
         }
     }
 
-    let archive_path = archive_path.canonicalize()?;
+    let canonical_archive_path = archive_path.canonicalize()?;
 
     Ok(DependencyPackageOutput {
-        archive_path,
+        archive_path: canonical_archive_path,
         archive_name,
     })
 }
@@ -107,21 +117,31 @@ pub fn package_dependency_binary(
 /// Render the shared dependency-binary provenance and licence document.
 #[must_use]
 pub fn render_provenance_markdown(dependencies: &[DependencyBinary]) -> String {
-    let mut output = String::from("# Dependency binary licences and provenance\n\n");
-    output.push_str(
-        "Whitaker publishes the following third-party dependency binaries from repository releases.\n\n",
-    );
-    for dependency in dependencies {
-        output.push_str(&format!("## {}\n\n", dependency.package()));
-        output.push_str(&format!("- Binary: `{}`\n", dependency.binary()));
-        output.push_str(&format!("- Version: `{}`\n", dependency.version()));
-        output.push_str(&format!("- Licence: `{}`\n", dependency.license()));
-        output.push_str(&format!("- Repository: {}\n\n", dependency.repository()));
-    }
-    output
+    let sections: String = dependencies.iter().map(render_dependency_section).collect();
+    format!(
+        "# Dependency binary licences and provenance\n\nWhitaker publishes the following \
+         third-party dependency binaries from repository releases.\n\n{sections}"
+    )
+}
+
+/// Render the provenance section for a single dependency binary.
+fn render_dependency_section(dependency: &DependencyBinary) -> String {
+    format!(
+        "## {}\n\n- Binary: `{}`\n- Version: `{}`\n- Licence: `{}`\n- Repository: {}\n\n",
+        dependency.package(),
+        dependency.binary(),
+        dependency.version(),
+        dependency.license(),
+        dependency.repository()
+    )
 }
 
 /// Write the shared provenance document to `output_dir`.
+///
+/// # Errors
+///
+/// Returns [`DependencyPackagingError::Io`] when the output directory
+/// cannot be created or the document cannot be written.
 pub fn write_provenance_markdown(
     output_dir: &Path,
     dependencies: &[DependencyBinary],
@@ -144,8 +164,8 @@ fn create_tgz_archive(
     let mut archive = tar::Builder::new(gz_encoder);
     archive.mode(tar::HeaderMode::Deterministic);
     archive.append_path_with_name(binary_path, format!("{inner_dir}/{binary_name}"))?;
-    let gz_encoder = archive.into_inner()?;
-    gz_encoder.finish()?;
+    let finished_encoder = archive.into_inner()?;
+    finished_encoder.finish()?;
     Ok(())
 }
 
@@ -163,14 +183,7 @@ fn create_zip_archive(
         .compression_method(zip::CompressionMethod::Deflated);
     zip_writer.start_file(format!("{inner_dir}/{binary_name}"), options)?;
     let mut binary_file = fs::File::open(binary_path)?;
-    let mut buffer = [0u8; 8_192];
-    loop {
-        let bytes_read = binary_file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        zip_writer.write_all(&buffer[..bytes_read])?;
-    }
+    io::copy(&mut binary_file, &mut zip_writer)?;
     zip_writer.finish()?;
     Ok(())
 }

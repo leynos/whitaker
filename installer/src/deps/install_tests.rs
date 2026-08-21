@@ -1,10 +1,12 @@
 //! Tests for dependency-install status refresh behaviour.
 
+use rstest::rstest;
+
 use super::*;
 use crate::test_utils::dependency_binary_helpers::{
-    dylint_link_install_list_check, with_fake_binary_on_path,
+    dylint_link_install_list_check,
+    with_fake_binary_on_path,
 };
-use rstest::rstest;
 
 #[rstest]
 #[case(InstallOutcome::CargoBinstall)]
@@ -26,7 +28,8 @@ fn update_status_after_install_refreshes_link_for_local_cargo_dylint_installs(
         assert!(status.cargo_dylint);
         assert!(status.dylint_link);
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[test]
@@ -65,7 +68,7 @@ fn should_install_tool_returns_expected(
         dylint_link,
     };
 
-    assert_eq!(should_install_tool(&status, tool), expected);
+    assert_eq!(should_install_tool(status, tool), expected);
 }
 
 #[rstest]
@@ -89,5 +92,5 @@ fn should_refresh_companions_returns_expected(
     #[case] status: DylintToolStatus,
     #[case] expected: bool,
 ) {
-    assert_eq!(should_refresh_companions(outcome, &status), expected);
+    assert_eq!(should_refresh_companions(outcome, status), expected);
 }

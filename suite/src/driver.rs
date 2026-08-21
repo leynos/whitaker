@@ -1,13 +1,9 @@
 //! Combined lint wiring for the suite cdylib.
 
-use crate::lints::SUITE_LINT_DECLS;
-use dylint_linting::dylint_library;
-use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
-use rustc_session::Session;
-
 // Import constituent lint pass types required by `late_lint_methods!`.
 use bumpy_road_function::BumpyRoadFunction;
 use conditional_max_n_branches::ConditionalMaxNBranches;
+use dylint_linting::dylint_library;
 use function_attrs_follow_docs::FunctionAttrsFollowDocs;
 use module_max_lines::ModuleMaxLines;
 use module_must_have_inner_docs::ModuleMustHaveInnerDocs;
@@ -16,7 +12,11 @@ use no_std_fs_operations::NoStdFsOperations;
 use no_unwrap_or_else_panic::NoUnwrapOrElsePanic;
 #[cfg(feature = "experimental-rstest-helper-should-be-fixture")]
 use rstest_helper_should_be_fixture::RstestHelperShouldBeFixture;
+use rustc_lint::{Lint, LintStore, LintVec, declare_combined_late_lint_pass};
+use rustc_session::Session;
 use test_must_not_have_example::TestMustNotHaveExample;
+
+use crate::lints::SUITE_LINT_DECLS;
 
 dylint_library!();
 
@@ -80,19 +80,12 @@ pub fn register_suite_lints(store: &mut LintStore) {
 /// assert!(names.contains(&"no_unwrap_or_else_panic".to_string()));
 /// ```
 #[must_use]
-pub fn suite_lint_decls() -> &'static [&'static Lint] {
-    SUITE_LINT_DECLS
-}
+pub const fn suite_lint_decls() -> &'static [&'static Lint] { SUITE_LINT_DECLS }
 
-/// Dylint entrypoint that initializes configuration and registers lints.
-///
-/// # Safety
-///
-/// Callers must pass non-null, correctly initialized `Session` and
-/// `LintStore` references from the host compiler context that remain valid on
-/// this thread for the duration of the call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
+/// Initializes Dylint configuration then registers the suite lints.
+fn register_suite_entry(sess: &Session, store: &mut LintStore) {
     dylint_linting::init_config(sess);
     register_suite_lints(store);
 }
+
+whitaker_common::declare_dylint_register_entry!(register_suite_entry);

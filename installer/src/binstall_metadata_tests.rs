@@ -4,13 +4,14 @@
 //! the `[package.metadata.binstall]` section matches the specification in
 //! the design document (§ Installer release artefacts).
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[rstest]
 fn pkg_url_matches_design_document() {
-    let table = load_cargo_toml();
-    let binstall = extract_binstall_table(&table);
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    let binstall = extract_binstall_table(&table).expect("extract binstall table");
     let pkg_url = binstall
         .get("pkg-url")
         .and_then(|v| v.as_str())
@@ -20,8 +21,8 @@ fn pkg_url_matches_design_document() {
 
 #[rstest]
 fn bin_dir_matches_design_document() {
-    let table = load_cargo_toml();
-    let binstall = extract_binstall_table(&table);
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    let binstall = extract_binstall_table(&table).expect("extract binstall table");
     let bin_dir = binstall
         .get("bin-dir")
         .and_then(|v| v.as_str())
@@ -31,8 +32,8 @@ fn bin_dir_matches_design_document() {
 
 #[rstest]
 fn default_pkg_fmt_is_tgz() {
-    let table = load_cargo_toml();
-    let binstall = extract_binstall_table(&table);
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    let binstall = extract_binstall_table(&table).expect("extract binstall table");
     let pkg_fmt = binstall
         .get("pkg-fmt")
         .and_then(|v| v.as_str())
@@ -42,8 +43,8 @@ fn default_pkg_fmt_is_tgz() {
 
 #[rstest]
 fn windows_override_uses_zip() {
-    let table = load_cargo_toml();
-    let binstall = extract_binstall_table(&table);
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    let binstall = extract_binstall_table(&table).expect("extract binstall table");
     let overrides = binstall
         .get("overrides")
         .and_then(|o| o.as_table())
@@ -61,8 +62,8 @@ fn windows_override_uses_zip() {
 
 #[rstest]
 fn no_unexpected_overrides() {
-    let table = load_cargo_toml();
-    let binstall = extract_binstall_table(&table);
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    let binstall = extract_binstall_table(&table).expect("extract binstall table");
     let overrides = binstall
         .get("overrides")
         .and_then(|o| o.as_table())
@@ -81,8 +82,8 @@ fn no_unexpected_overrides() {
 
 #[rstest]
 fn essential_binstall_fields_present() {
-    let table = load_cargo_toml();
-    let binstall = extract_binstall_table(&table);
+    let table = load_cargo_toml().expect("load installer Cargo.toml");
+    let binstall = extract_binstall_table(&table).expect("extract binstall table");
     let required = ["pkg-url", "bin-dir", "pkg-fmt"];
     for key in &required {
         assert!(
@@ -99,8 +100,9 @@ fn essential_binstall_fields_present() {
 #[case::macos_arm("aarch64-apple-darwin")]
 fn non_windows_targets_expand_to_tgz(#[case] target: &str) {
     let url = expand_pkg_url("0.2.0", target);
+    let extension = std::path::Path::new(&url).extension();
     assert!(
-        url.ends_with(".tgz"),
+        extension.is_some_and(|ext| ext.eq_ignore_ascii_case("tgz")),
         "expected URL for {target} to end with .tgz, got {url}"
     );
     assert!(url.contains(target));
@@ -110,8 +112,9 @@ fn non_windows_targets_expand_to_tgz(#[case] target: &str) {
 #[rstest]
 fn windows_target_expands_to_zip() {
     let url = expand_pkg_url("0.2.0", WINDOWS_OVERRIDE_TARGET);
+    let extension = std::path::Path::new(&url).extension();
     assert!(
-        url.ends_with(".zip"),
+        extension.is_some_and(|ext| ext.eq_ignore_ascii_case("zip")),
         "expected URL for Windows to end with .zip, got {url}"
     );
 }

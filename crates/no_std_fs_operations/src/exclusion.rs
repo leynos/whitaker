@@ -6,10 +6,12 @@
 //! ordinary unit and behavioural tests; the driver supplies the enclosing item
 //! path resolved from the HIR.
 
-use crate::config::LINT_NAME;
-use log::warn;
 use std::collections::HashSet;
+
+use log::warn;
 use whitaker_common::SimplePath;
+
+use crate::config::LINT_NAME;
 
 /// Maximum length of a malformed entry echoed into a warning, so a pathological
 /// configuration value cannot produce an unbounded log line.
@@ -67,9 +69,7 @@ impl PathExclusions {
     ///
     /// The driver consults this before resolving an item's path so the common
     /// case pays no lookup cost.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.prefixes.is_empty()
-    }
+    pub(crate) const fn is_empty(&self) -> bool { self.prefixes.is_empty() }
 
     /// Returns `true` when `item_path` falls within a configured exclusion.
     ///
@@ -77,10 +77,9 @@ impl PathExclusions {
     /// `std::fs` usage.
     pub(crate) fn excludes(&self, item_path: &SimplePath) -> bool {
         let item = item_path.segments();
-        self.prefixes.iter().any(|prefix| {
-            let prefix = prefix.segments();
-            prefix.len() <= item.len() && item[..prefix.len()] == *prefix
-        })
+        self.prefixes
+            .iter()
+            .any(|prefix| item.starts_with(prefix.segments()))
     }
 }
 
@@ -105,7 +104,8 @@ fn bounded_entry(entry: &str) -> String {
     while !entry.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{:?}… ({} bytes total)", &entry[..end], entry.len())
+    let truncated = entry.get(..end).unwrap_or(entry);
+    format!("{truncated:?}… ({} bytes total)", entry.len())
 }
 
 #[cfg(test)]
@@ -114,11 +114,13 @@ mod tests {
     //! prefix matching (example-based and property-based), and the bounded
     //! rendering used when warning about rejected entries.
 
-    use super::PathExclusions;
+    use std::collections::HashSet;
+
     use proptest::prelude::*;
     use rstest::rstest;
-    use std::collections::HashSet;
     use whitaker_common::SimplePath;
+
+    use super::PathExclusions;
 
     fn exclusions(paths: &[&str]) -> PathExclusions {
         PathExclusions::new(
@@ -222,9 +224,7 @@ mod tests {
     // item paths that share segment *text* with a prefix but differ at a segment
     // boundary — exactly the `a::b` vs `a::bc` hazard segment-wise matching must
     // reject.
-    fn segment() -> impl Strategy<Value = String> {
-        "[a-c]{1,3}"
-    }
+    fn segment() -> impl Strategy<Value = String> { "[a-c]{1,3}" }
 
     proptest! {
         #[test]
@@ -247,9 +247,9 @@ mod tests {
 
             // Oracle: excluded iff some configured prefix is a genuine
             // segment-wise prefix of the item path.
-            let expected = configured.iter().any(|prefix| {
-                prefix.len() <= item.len() && item[..prefix.len()] == prefix[..]
-            });
+            let expected = configured
+                .iter()
+                .any(|prefix| item.starts_with(prefix.as_slice()));
 
             prop_assert_eq!(exclusions.excludes(&item_path), expected);
         }

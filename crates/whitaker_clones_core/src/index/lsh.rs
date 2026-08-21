@@ -1,4 +1,4 @@
-//! Locality-sensitive hashing over fixed-width MinHash signatures.
+//! Locality-sensitive hashing over fixed-width `MinHash` signatures.
 //!
 //! This module contains [`LshIndex`], the token-pass index that groups
 //! [`MinHashSignature`] band slices into locality-sensitive hashing (LSH)
@@ -49,7 +49,12 @@ impl LshIndex {
     ///
     /// ```rust
     /// use whitaker_clones_core::{
-    ///     Fingerprint, FragmentId, LshConfig, LshIndex, MinHasher, MINHASH_SIZE,
+    ///     Fingerprint,
+    ///     FragmentId,
+    ///     LshConfig,
+    ///     LshIndex,
+    ///     MINHASH_SIZE,
+    ///     MinHasher,
     /// };
     ///
     /// let hasher = MinHasher::new();
@@ -66,7 +71,7 @@ impl LshIndex {
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     #[must_use]
-    pub fn new(config: LshConfig) -> Self {
+    pub const fn new(config: LshConfig) -> Self {
         Self {
             config,
             #[cfg(not(kani))]
@@ -247,9 +252,7 @@ impl InsertedFragmentsForKani {
         }
     }
 
-    const fn len(&self) -> usize {
-        self.len
-    }
+    const fn len(&self) -> usize { self.len }
 
     fn get(&self, index: usize) -> Option<&InsertedFragmentForKani> {
         self.items.get(index).and_then(Option::as_ref)

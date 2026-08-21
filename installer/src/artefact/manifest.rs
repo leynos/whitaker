@@ -4,13 +4,17 @@
 //! archive ships a `manifest.json` capturing provenance, content listing,
 //! and the archive checksum.
 
-use super::git_sha::GitSha;
-use super::schema_version::SchemaVersion;
-use super::sha256_digest::Sha256Digest;
-use super::target::TargetTriple;
-use super::toolchain_channel::ToolchainChannel;
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
+
+use super::{
+    git_sha::GitSha,
+    schema_version::SchemaVersion,
+    sha256_digest::Sha256Digest,
+    target::TargetTriple,
+    toolchain_channel::ToolchainChannel,
+};
 
 /// Provenance fields that identify an artefact build.
 ///
@@ -62,28 +66,26 @@ pub struct ManifestContent {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::artefact::manifest::{
-///     GeneratedAt, Manifest, ManifestContent, ManifestProvenance,
+/// use whitaker_installer::artefact::{
+///     git_sha::GitSha,
+///     manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance},
+///     schema_version::SchemaVersion,
+///     sha256_digest::Sha256Digest,
+///     target::TargetTriple,
+///     toolchain_channel::ToolchainChannel,
 /// };
-/// use whitaker_installer::artefact::git_sha::GitSha;
-/// use whitaker_installer::artefact::schema_version::SchemaVersion;
-/// use whitaker_installer::artefact::sha256_digest::Sha256Digest;
-/// use whitaker_installer::artefact::target::TargetTriple;
-/// use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 ///
 /// let provenance = ManifestProvenance {
 ///     git_sha: GitSha::try_from("abc1234").expect("valid git SHA"),
 ///     schema_version: SchemaVersion::current(),
 ///     toolchain: ToolchainChannel::try_from("nightly-2026-05-28")
 ///         .expect("valid toolchain channel"),
-///     target: TargetTriple::try_from("x86_64-unknown-linux-gnu")
-///         .expect("valid target triple"),
+///     target: TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target triple"),
 /// };
 /// let content = ManifestContent {
 ///     generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
 ///     files: vec!["libwhitaker_lints.so".to_owned()],
-///     sha256: Sha256Digest::try_from("a".repeat(64).as_str())
-///         .expect("valid SHA-256 digest"),
+///     sha256: Sha256Digest::try_from("a".repeat(64).as_str()).expect("valid SHA-256 digest"),
 /// };
 /// let manifest = Manifest::new(provenance, content);
 /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
@@ -117,9 +119,7 @@ impl GeneratedAt {
     /// assert_eq!(ts.as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
+    pub fn new(value: impl Into<String>) -> Self { Self(value.into()) }
 
     /// Return the timestamp as a string slice.
     ///
@@ -132,15 +132,11 @@ impl GeneratedAt {
     /// assert_eq!(ts.as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for GeneratedAt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 /// Helper macro for manifest doc examples — constructs a sample
@@ -151,14 +147,14 @@ impl fmt::Display for GeneratedAt {
 #[macro_export]
 macro_rules! _manifest_doc_setup {
     ($manifest:ident) => {
-        use whitaker_installer::artefact::git_sha::GitSha;
-        use whitaker_installer::artefact::manifest::{
-            GeneratedAt, Manifest, ManifestContent, ManifestProvenance,
+        use whitaker_installer::artefact::{
+            git_sha::GitSha,
+            manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance},
+            schema_version::SchemaVersion,
+            sha256_digest::Sha256Digest,
+            target::TargetTriple,
+            toolchain_channel::ToolchainChannel,
         };
-        use whitaker_installer::artefact::schema_version::SchemaVersion;
-        use whitaker_installer::artefact::sha256_digest::Sha256Digest;
-        use whitaker_installer::artefact::target::TargetTriple;
-        use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 
         let provenance = ManifestProvenance {
             git_sha: GitSha::try_from("abc1234").expect("valid git SHA"),
@@ -187,7 +183,7 @@ impl Manifest {
     /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
     /// ```
     #[must_use]
-    pub fn new(provenance: ManifestProvenance, content: ManifestContent) -> Self {
+    pub const fn new(provenance: ManifestProvenance, content: ManifestContent) -> Self {
         Self {
             provenance,
             content,
@@ -203,9 +199,7 @@ impl Manifest {
     /// assert_eq!(manifest.git_sha().as_str(), "abc1234");
     /// ```
     #[must_use]
-    pub fn git_sha(&self) -> &GitSha {
-        &self.provenance.git_sha
-    }
+    pub const fn git_sha(&self) -> &GitSha { &self.provenance.git_sha }
 
     /// Return the schema version.
     ///
@@ -216,9 +210,7 @@ impl Manifest {
     /// assert_eq!(u32::from(manifest.schema_version()), 1);
     /// ```
     #[must_use]
-    pub fn schema_version(&self) -> SchemaVersion {
-        self.provenance.schema_version
-    }
+    pub const fn schema_version(&self) -> SchemaVersion { self.provenance.schema_version }
 
     /// Return the toolchain channel.
     ///
@@ -229,9 +221,7 @@ impl Manifest {
     /// assert_eq!(manifest.toolchain().as_str(), "nightly-2026-05-28");
     /// ```
     #[must_use]
-    pub fn toolchain(&self) -> &ToolchainChannel {
-        &self.provenance.toolchain
-    }
+    pub const fn toolchain(&self) -> &ToolchainChannel { &self.provenance.toolchain }
 
     /// Return the target triple.
     ///
@@ -242,9 +232,7 @@ impl Manifest {
     /// assert_eq!(manifest.target().as_str(), "x86_64-unknown-linux-gnu");
     /// ```
     #[must_use]
-    pub fn target(&self) -> &TargetTriple {
-        &self.provenance.target
-    }
+    pub const fn target(&self) -> &TargetTriple { &self.provenance.target }
 
     /// Return the build timestamp.
     ///
@@ -255,9 +243,7 @@ impl Manifest {
     /// assert_eq!(manifest.generated_at().as_str(), "2026-05-28T00:00:00Z");
     /// ```
     #[must_use]
-    pub fn generated_at(&self) -> &GeneratedAt {
-        &self.content.generated_at
-    }
+    pub const fn generated_at(&self) -> &GeneratedAt { &self.content.generated_at }
 
     /// Return the list of files in the archive.
     ///
@@ -268,9 +254,7 @@ impl Manifest {
     /// assert_eq!(manifest.files(), &["libwhitaker_lints.so"]);
     /// ```
     #[must_use]
-    pub fn files(&self) -> &[String] {
-        &self.content.files
-    }
+    pub fn files(&self) -> &[String] { &self.content.files }
 
     /// Return the SHA-256 digest of the archive.
     ///
@@ -281,9 +265,7 @@ impl Manifest {
     /// assert_eq!(manifest.sha256().as_str().len(), 64);
     /// ```
     #[must_use]
-    pub fn sha256(&self) -> &Sha256Digest {
-        &self.content.sha256
-    }
+    pub const fn sha256(&self) -> &Sha256Digest { &self.content.sha256 }
 }
 
 #[cfg(test)]

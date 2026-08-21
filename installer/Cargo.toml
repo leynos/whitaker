@@ -78,7 +78,8 @@ zip = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]
-libc = { workspace = true }
+whitaker_test_macros = { workspace = true }
+rustix = { version = "1.1.4", features = ["process"] }
 mockall = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }

@@ -4,9 +4,7 @@
 //! supporting assets into a temporary workspace so UI harnesses only need to
 //! focus on executing the lint runner.
 
-use std::fs;
-use std::io;
-use std::path::Path;
+use std::{fs, io, path::Path};
 
 const MAX_DIRECTORY_DEPTH: usize = 64;
 
@@ -19,10 +17,10 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::test_support::fixtures::copy_fixture;
-/// use std::fs;
-/// use std::path::PathBuf;
+/// use std::{fs, path::PathBuf};
+///
 /// use tempfile::tempdir;
+/// use whitaker_common::test_support::fixtures::copy_fixture;
 ///
 /// # fn demo() -> std::io::Result<()> {
 /// let fixtures = tempdir()?;
@@ -34,6 +32,12 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the fixture or stderr path lacks a usable
+/// file name, or when copying the fixture, its `.stderr` expectation, or a
+/// support directory fails.
 pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path) -> io::Result<()> {
     let file_name = source
         .file_name()
@@ -71,9 +75,10 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::test_support::fixtures::copy_directory;
 /// use std::fs;
+///
 /// use tempfile::tempdir;
+/// use whitaker_common::test_support::fixtures::copy_directory;
 ///
 /// # fn demo() -> std::io::Result<()> {
 /// let source = tempdir()?;
@@ -84,6 +89,12 @@ pub fn copy_fixture(fixture_root: &Path, source: &Path, destination_root: &Path)
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when `source` is not a directory, when a symlink
+/// is encountered, when nesting exceeds `MAX_DIRECTORY_DEPTH`, or when any
+/// underlying filesystem operation fails.
 pub fn copy_directory(source: &Path, destination: &Path) -> io::Result<()> {
     copy_directory_with_depth(source, destination, MAX_DIRECTORY_DEPTH)
 }
@@ -102,8 +113,8 @@ fn copy_directory_with_depth(
     ensure_not_symlink(source, metadata.file_type())?;
 
     fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
+    for entry_result in fs::read_dir(source)? {
+        let entry = entry_result?;
         let entry_path = entry.path();
         let file_type = entry_path.symlink_metadata()?.file_type();
 
@@ -158,11 +169,17 @@ fn depth_limit_error(path: &Path) -> io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::fs;
-    use std::io;
-    use std::path::{Path, PathBuf};
+    //! Tests for fixture staging helpers used by lint test suites.
+
+    use std::{
+        fs,
+        io,
+        path::{Path, PathBuf},
+    };
+
     use tempfile::{TempDir, tempdir};
+
+    use super::*;
 
     #[test]
     fn copy_fixture_clones_support_assets() {
@@ -211,28 +228,29 @@ mod tests {
     fn setup_copy_fixture_test(
         with_stderr: bool,
         with_support: bool,
-    ) -> (TempDir, PathBuf, TempDir) {
-        let root = tempdir().expect("fixture root");
+    ) -> io::Result<(TempDir, PathBuf, TempDir)> {
+        let root = tempdir()?;
         let fixture = root.path().join("case.rs");
-        fs::write(&fixture, "fn main() {}").expect("fixture file");
+        fs::write(&fixture, "fn main() {}")?;
 
         if with_stderr {
-            fs::write(root.path().join("case.stderr"), "stderr").expect("stderr file");
+            fs::write(root.path().join("case.stderr"), "stderr")?;
         }
 
         if with_support {
             let support_dir = root.path().join("case");
-            fs::create_dir_all(&support_dir).expect("support dir");
-            fs::write(support_dir.join("helper.rs"), "fn helper() {}").expect("support helper");
+            fs::create_dir_all(&support_dir)?;
+            fs::write(support_dir.join("helper.rs"), "fn helper() {}")?;
         }
 
-        let destination = tempdir().expect("destination root");
-        (root, fixture, destination)
+        let destination = tempdir()?;
+        Ok((root, fixture, destination))
     }
 
     #[test]
     fn copy_fixture_without_stderr_succeeds() {
-        let (root, fixture, destination) = setup_copy_fixture_test(false, false);
+        let (root, fixture, destination) =
+            setup_copy_fixture_test(false, false).expect("stage fixture without stderr");
 
         copy_fixture(root.path(), &fixture, destination.path())
             .expect("copy succeeds without stderr");
@@ -243,7 +261,8 @@ mod tests {
 
     #[test]
     fn copy_fixture_without_support_directory_succeeds() {
-        let (root, fixture, destination) = setup_copy_fixture_test(true, false);
+        let (root, fixture, destination) =
+            setup_copy_fixture_test(true, false).expect("stage fixture with stderr");
 
         copy_fixture(root.path(), &fixture, destination.path())
             .expect("copy succeeds without support dir");

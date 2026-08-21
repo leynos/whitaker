@@ -2,12 +2,20 @@
 
 use rstest::rstest;
 
-use crate::hashing::{FNV_OFFSET_BASIS, FNV_PRIME, RABIN_KARP_BASE};
-
 use super::{
-    Fingerprint, IdentifierSymbol, LiteralSymbol, NormProfile, NormalizedTokenKind, ShingleSize,
-    TokenPassError, WinnowWindow, hash_shingles, normalize, winnow,
+    Fingerprint,
+    IdentifierSymbol,
+    LiteralSymbol,
+    NormProfile,
+    NormalizedTokenKind,
+    ShingleSize,
+    TokenPassError,
+    WinnowWindow,
+    hash_shingles,
+    normalize,
+    winnow,
 };
+use crate::hashing::{FNV_OFFSET_BASIS, FNV_PRIME, RABIN_KARP_BASE};
 
 fn labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassError> {
     normalize(source, profile).map(|tokens| {
@@ -18,15 +26,19 @@ fn labels(source: &str, profile: NormProfile) -> Result<Vec<String>, TokenPassEr
     })
 }
 
-fn literal_symbols(source: &str, profile: NormProfile) -> Vec<LiteralSymbol> {
-    normalize(source, profile)
-        .expect("literal normalization should succeed")
-        .into_iter()
-        .filter_map(|token| match token.kind {
-            NormalizedTokenKind::Literal(symbol) => Some(symbol),
-            _ => None,
-        })
-        .collect()
+fn literal_symbols(
+    source: &str,
+    profile: NormProfile,
+) -> Result<Vec<LiteralSymbol>, TokenPassError> {
+    normalize(source, profile).map(|tokens| {
+        tokens
+            .into_iter()
+            .filter_map(|token| match token.kind {
+                NormalizedTokenKind::Literal(symbol) => Some(symbol),
+                _ => None,
+            })
+            .collect()
+    })
 }
 
 fn token_labels(tokens: &[super::NormalizedToken]) -> Vec<String> {
@@ -67,7 +79,9 @@ fn t2_canonicalizes_identifiers_literals_and_lifetimes() {
 fn byte_ranges_point_to_original_source() {
     let source = "fn demo() { value + 1 }";
     let tokens = normalize(source, NormProfile::T1).expect("normalization should succeed");
-    let value = &tokens[5];
+    let value = tokens
+        .get(5)
+        .expect("token stream should contain the `value` identifier");
 
     assert_eq!(value.range, 12..17);
     assert_eq!(source.get(value.range.clone()), Some("value"));
@@ -102,7 +116,8 @@ fn exact_k_tokens_yields_one_hash() {
     );
 
     assert_eq!(hashes.len(), 1);
-    assert_eq!(hashes[0].range, 0..12);
+    let only = hashes.first().expect("exactly one hash should be present");
+    assert_eq!(only.range, 0..12);
 }
 
 #[test]
@@ -232,7 +247,11 @@ fn shebang_is_stripped_equivalently_to_shebang_free_source() {
         "shebang should not affect the normalized token kinds"
     );
     assert_eq!(
-        with_shebang[0].range.start,
+        with_shebang
+            .first()
+            .expect("normalized stream should not be empty")
+            .range
+            .start,
         source_with_shebang.find("fn").expect("fn present")
     );
 }
@@ -294,13 +313,20 @@ fn literal_variants_are_terminated_and_canonicalized(
     #[case] source: &str,
     #[case] assertion_message: &str,
 ) {
-    let literal_syms = literal_symbols(source, NormProfile::T1);
+    let literal_syms =
+        literal_symbols(source, NormProfile::T1).expect("literal normalization should succeed");
 
     assert!(
         literal_syms.len() >= 2,
         "expected at least two literal tokens for the repeated literal pair"
     );
-    assert_eq!(literal_syms[0], literal_syms[1], "{assertion_message}");
+    let first = literal_syms
+        .first()
+        .expect("first literal symbol should be present");
+    let second = literal_syms
+        .get(1)
+        .expect("second literal symbol should be present");
+    assert_eq!(first, second, "{assertion_message}");
 }
 
 #[test]

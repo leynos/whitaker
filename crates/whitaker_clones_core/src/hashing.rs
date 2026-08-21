@@ -80,7 +80,12 @@ pub(crate) fn mix_bytes(mut current: u64, bytes: &[u8]) -> u64 {
 /// assert_eq!(mix_u16(FNV_OFFSET_BASIS, 0x1234), 0x0832_9407_b4eb_8443);
 /// ```
 pub(crate) fn mix_u16(current: u64, value: u16) -> u64 {
-    mix_bytes(current, &value.to_le_bytes())
+    // Decompose into little-endian bytes with explicit masks and shifts so the
+    // serialization order is spelled out rather than delegated to an
+    // endianness-specific method.
+    let low = (value & 0x00ff) as u8;
+    let high = (value >> 8) as u8;
+    mix_bytes(current, &[low, high])
 }
 
 /// Mixes a `u64` using little-endian bytes.
@@ -97,8 +102,16 @@ pub(crate) fn mix_u16(current: u64, value: u16) -> u64 {
 ///     0x999a_7071_7b39_65dd
 /// );
 /// ```
-pub(crate) fn mix_u64(current: u64, value: u64) -> u64 {
-    mix_bytes(current, &value.to_le_bytes())
+pub(crate) fn mix_u64(mut current: u64, value: u64) -> u64 {
+    // Mix the eight little-endian bytes lowest first, using explicit masks and
+    // shifts so the serialization order is spelled out rather than delegated to
+    // an endianness-specific method.
+    let mut remaining = value;
+    for _ in 0..8 {
+        current = mix_byte(current, (remaining & 0xff) as u8);
+        remaining >>= 8;
+    }
+    current
 }
 
 #[cfg(test)]

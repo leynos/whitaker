@@ -1,17 +1,27 @@
 //! Download support for repository-hosted dependency-binary archives.
 
-use crate::artefact::download::HttpDownloader;
-
-use super::checksum::{
-    CATEGORY_CHECKSUM, fetch_expected_checksum, map_ureq_error, verify_archive_checksum,
+use std::{
+    io::{self, Read, Write},
+    path::Path,
 };
-use super::installer::DependencyBinaryInstallError;
+
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, File};
-use std::io::{self, Read, Write};
-use std::path::Path;
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, File},
+};
 use tracing::{debug, instrument, warn};
+
+use super::{
+    checksum::{
+        CATEGORY_CHECKSUM,
+        fetch_expected_checksum,
+        map_ureq_error,
+        verify_archive_checksum,
+    },
+    installer::DependencyBinaryInstallError,
+};
+use crate::artefact::download::HttpDownloader;
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
@@ -100,25 +110,30 @@ pub(super) fn download_from_urls(
     // Acquire the parent-directory capability up front so every archive read and
     // write flows through it (never ambient `std::fs`); validation happens here,
     // before any HTTP request.
-    let destination = open_download_destination(destination)?;
-    destination.download_archive(agent, archive_url)?;
+    let destination_handle = open_download_destination(destination)?;
+    destination_handle.download_archive(agent, archive_url)?;
     // Any failure after the archive is written removes it, so a retry never sees
     // a partial or unverified file.
     let expected_checksum = fetch_expected_checksum(agent, checksum_url)
-        .inspect_err(|_| destination.remove_partial_archive())?;
+        .inspect_err(|_| destination_handle.remove_partial_archive())?;
 
     // Re-open the written archive and verify it; `verify_archive_checksum`
     // consumes the reader, closing the handle before any cleanup below.
-    let archive = destination.open_archive().inspect_err(|error| {
+    let archive = destination_handle.open_archive().inspect_err(|error| {
         warn!(
             category = CATEGORY_CAPABILITY,
-            archive_name = %destination.archive_name,
+            archive_name = %destination_handle.archive_name,
             error = %error,
             "failed to reopen archive for verification",
         );
-        destination.remove_partial_archive();
+        destination_handle.remove_partial_archive();
     })?;
-    match verify_archive_checksum(archive, destination.path.as_std_path(), &expected_checksum) {
+    let verification = verify_archive_checksum(
+        archive,
+        destination_handle.path.as_std_path(),
+        &expected_checksum,
+    );
+    match verification {
         Ok(()) => {
             debug!(
                 category = CATEGORY_CHECKSUM,
@@ -136,7 +151,7 @@ pub(super) fn download_from_urls(
                 "archive checksum verification failed",
             );
             // Remove the unverified archive so a retry never observes stale data.
-            destination.remove_partial_archive();
+            destination_handle.remove_partial_archive();
             Err(error)
         }
     }
@@ -189,9 +204,7 @@ impl DownloadDestination {
     }
 
     /// Reopen the written archive through the capability for verification.
-    fn open_archive(&self) -> io::Result<File> {
-        self.dir.open(&self.archive_name)
-    }
+    fn open_archive(&self) -> io::Result<File> { self.dir.open(&self.archive_name) }
 
     /// Remove a partial or unverified archive; a cleanup failure is only logged.
     fn remove_partial_archive(&self) {
@@ -287,114 +300,5 @@ fn open_destination_dir(destination: &Utf8Path) -> io::Result<(Dir, &str)> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Tests for downloader error mapping and archive checksum verification.
-
-    use super::*;
-    use crate::hex::to_lower_hex;
-    use sha2::{Digest, Sha256};
-    use std::io::Write;
-    use tempfile::TempDir;
-
-    // The under-cap success path is covered end to end by the local-server
-    // boundary tests; this exercises the over-cap rejection they cannot.
-    #[test]
-    fn copy_capped_rejects_a_body_exceeding_the_limit() {
-        let url = "https://example.test/a.tgz";
-        let error = copy_capped(&[0u8; 100][..], &mut Vec::new(), 8, url)
-            .expect_err("an over-cap body must be rejected");
-        assert!(
-            matches!(&error, DependencyBinaryInstallError::Download { url: u, reason }
-                if u == url && reason.contains("exceeds the maximum")),
-            "unexpected error: {error:?}",
-        );
-    }
-
-    #[test]
-    fn open_destination_dir_rejects_a_path_without_a_file_name() {
-        // The filesystem root has no file name, so the capability boundary
-        // cannot derive an archive name and must reject it up front.
-        let root = Utf8Path::new("/");
-        let error = open_destination_dir(root).expect_err("root path has no file name");
-
-        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-        assert!(
-            error.to_string().contains("has no file name"),
-            "error should identify the missing file name, got: {error}",
-        );
-    }
-
-    /// Removes a probe file from a capability-scoped directory when dropped, so
-    /// a leaked artefact is cleaned up even if an assertion panics first.
-    struct ProbeCleanup {
-        dir: Dir,
-        name: String,
-    }
-
-    impl Drop for ProbeCleanup {
-        fn drop(&mut self) {
-            // A correct run never writes the probe into this directory, so a
-            // missing file is the expected case.
-            let _ = self.dir.remove_file(&self.name);
-        }
-    }
-
-    #[test]
-    fn open_destination_dir_writes_into_the_destination_parent_not_the_cwd() {
-        let temp = TempDir::new().expect("create temp dir");
-        let temp_dir = Utf8Path::from_path(temp.path()).expect("temp path is UTF-8");
-        // A unique, test-owned probe name derived from the temp directory, so
-        // it can never collide with — or delete — a pre-existing file in the
-        // working directory.
-        let archive_file = format!(
-            "{}.tgz",
-            temp_dir.file_name().expect("temp dir has a file name"),
-        );
-        let destination = temp_dir.join(&archive_file);
-
-        // Open the process working directory as a capability, paired with RAII
-        // cleanup: if a regression leaks the probe here, it is removed on drop
-        // even when an assertion below panics first.
-        let cwd_probe = ProbeCleanup {
-            dir: Dir::open_ambient_dir(".", ambient_authority()).expect("open cwd capability"),
-            name: archive_file.clone(),
-        };
-        // An independent capability for the destination's directory, used to
-        // confirm the archive actually lands there rather than trusting the
-        // directory handle returned by the code under test.
-        let destination_dir = Dir::open_ambient_dir(temp_dir, ambient_authority())
-            .expect("open destination capability");
-
-        let (dir, archive_name) = open_destination_dir(&destination).expect("open destination dir");
-        assert_eq!(archive_name, archive_file.as_str());
-
-        let mut file = dir
-            .create(archive_name)
-            .expect("create archive via capability");
-        file.write_all(b"hello world").expect("write archive");
-        drop(file);
-
-        // The capability must write into the destination's parent directory...
-        assert!(
-            destination_dir.exists(&archive_file),
-            "archive must exist at the destination path",
-        );
-        // ...and never into the process working directory. This assertion fails
-        // if `open_destination_dir` opens `.` for a destination with a real
-        // parent.
-        assert!(
-            !cwd_probe.dir.exists(&archive_file),
-            "capability must not create the archive in the current working directory",
-        );
-
-        // Re-open through the same capability and keep the end-to-end checksum
-        // assertion.
-        let expected = to_lower_hex(&Sha256::digest(b"hello world"));
-        let archive = dir.open(archive_name).expect("open archive via capability");
-        assert!(verify_archive_checksum(archive, destination.as_std_path(), &expected).is_ok());
-
-        // `cwd_probe` drops here (or on any earlier panic), removing a leaked
-        // probe through its capability.
-        drop(cwd_probe);
-    }
-}
+#[path = "downloader_tests.rs"]
+mod tests;

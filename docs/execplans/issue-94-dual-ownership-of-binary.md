@@ -186,7 +186,7 @@ Edits are safe to re-run. If a step fails, revert the file changes with Git and
 re-apply. The `install-smoke` target uses a temporary directory and is safe to
 repeat. If validation fails twice, stop and escalate with the captured logs.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Capture key outputs in the log files listed in Concrete Steps. These logs are
 sufficient evidence for validation and troubleshooting.

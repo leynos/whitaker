@@ -75,21 +75,15 @@ impl MethodMetrics {
 
     /// Returns the method name.
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Returns the cognitive complexity (CC) value.
     #[must_use]
-    pub fn cognitive_complexity(&self) -> usize {
-        self.cognitive_complexity
-    }
+    pub const fn cognitive_complexity(&self) -> usize { self.cognitive_complexity }
 
     /// Returns the lines of code (LOC) count.
     #[must_use]
-    pub fn lines_of_code(&self) -> usize {
-        self.lines_of_code
-    }
+    pub const fn lines_of_code(&self) -> usize { self.lines_of_code }
 
     /// Returns `true` when this method qualifies as a "brain method".
     ///
@@ -106,7 +100,7 @@ impl MethodMetrics {
     /// assert!(!m.is_brain_method(25, 200));
     /// ```
     #[must_use]
-    pub fn is_brain_method(&self, cc_threshold: usize, loc_threshold: usize) -> bool {
+    pub const fn is_brain_method(&self, cc_threshold: usize, loc_threshold: usize) -> bool {
         self.cognitive_complexity >= cc_threshold && self.lines_of_code >= loc_threshold
     }
 }
@@ -209,52 +203,38 @@ pub struct TypeMetrics {
 impl TypeMetrics {
     /// Returns the type name.
     #[must_use]
-    pub fn type_name(&self) -> &str {
-        &self.type_name
-    }
+    pub fn type_name(&self) -> &str { &self.type_name }
 
     /// Weighted Methods Count (sum of CC across all methods).
     #[must_use]
-    pub fn wmc(&self) -> usize {
-        self.wmc
-    }
+    pub const fn wmc(&self) -> usize { self.wmc }
 
     /// Brain methods with their full metric details.
     #[must_use]
-    pub fn brain_methods(&self) -> &[MethodMetrics] {
-        &self.brain_methods
-    }
+    pub fn brain_methods(&self) -> &[MethodMetrics] { &self.brain_methods }
 
     /// Returns an iterator over the names of brain methods.
     ///
     /// Callers that need a collected `Vec` should use `.collect()`.
     pub fn brain_method_names(&self) -> impl Iterator<Item = &str> {
-        self.brain_methods.iter().map(|m| m.name())
+        self.brain_methods.iter().map(MethodMetrics::name)
     }
 
     /// Number of brain methods detected.
     #[must_use]
-    pub fn brain_method_count(&self) -> usize {
-        self.brain_methods.len()
-    }
+    pub const fn brain_method_count(&self) -> usize { self.brain_methods.len() }
 
     /// LCOM4 connected component count (1 = cohesive, >= 2 = low cohesion).
     #[must_use]
-    pub fn lcom4(&self) -> usize {
-        self.lcom4
-    }
+    pub const fn lcom4(&self) -> usize { self.lcom4 }
 
     /// Count of distinct external modules or types referenced.
     #[must_use]
-    pub fn foreign_reach(&self) -> usize {
-        self.foreign_reach
-    }
+    pub const fn foreign_reach(&self) -> usize { self.foreign_reach }
 
     /// Total number of methods in the type.
     #[must_use]
-    pub fn method_count(&self) -> usize {
-        self.method_count
-    }
+    pub const fn method_count(&self) -> usize { self.method_count }
 }
 
 // ---------------------------------------------------------------------------
@@ -326,14 +306,10 @@ impl TypeMetricsBuilder {
     }
 
     /// Records the LCOM4 value (connected component count).
-    pub fn set_lcom4(&mut self, lcom4: usize) {
-        self.lcom4 = Some(lcom4);
-    }
+    pub const fn set_lcom4(&mut self, lcom4: usize) { self.lcom4 = Some(lcom4); }
 
     /// Records the foreign reach count.
-    pub fn set_foreign_reach(&mut self, count: usize) {
-        self.foreign_reach = Some(count);
-    }
+    pub const fn set_foreign_reach(&mut self, count: usize) { self.foreign_reach = Some(count); }
 
     /// Consumes the builder and returns the completed [`TypeMetrics`].
     ///

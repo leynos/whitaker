@@ -1,14 +1,14 @@
 //! Behaviour-driven coverage for decomposition vector algebra helpers.
 
+use std::{cell::RefCell, collections::BTreeMap, str::FromStr};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::str::FromStr;
-use whitaker_common::MethodProfileBuilder;
-use whitaker_common::test_support::decomposition::{
-    MethodVectorAlgebraReport, method_vector_algebra,
+use whitaker_common::{
+    MethodProfileBuilder,
+    test_support::decomposition::{MethodVectorAlgebraReport, method_vector_algebra},
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Clone, Copy, Debug)]
 enum MethodSide {
@@ -17,7 +17,7 @@ enum MethodSide {
 }
 
 impl MethodSide {
-    fn key(self) -> &'static str {
+    const fn key(self) -> &'static str {
         match self {
             Self::Left => "left",
             Self::Right => "right",
@@ -41,9 +41,7 @@ impl FromStr for MethodSide {
 struct CsvList(Vec<String>);
 
 impl CsvList {
-    fn into_vec(self) -> Vec<String> {
-        self.0
-    }
+    fn into_vec(self) -> Vec<String> { self.0 }
 }
 
 impl FromStr for CsvList {
@@ -66,10 +64,9 @@ struct VectorAlgebraWorld {
     report: RefCell<Option<MethodVectorAlgebraReport>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> VectorAlgebraWorld {
-    VectorAlgebraWorld::default()
-}
+fn world() -> VectorAlgebraWorld { VectorAlgebraWorld::default() }
 
 fn ensure_method_builder(world: &VectorAlgebraWorld, side: MethodSide, method_name: &str) {
     world.methods.borrow_mut().insert(
@@ -222,17 +219,13 @@ fn then_dot_product_is_zero(world: &VectorAlgebraWorld) -> Result<(), String> {
     path = "tests/features/decomposition_vector_algebra.feature",
     index = 0
 )]
-fn scenario_shared_field_preserves_commutativity(world: VectorAlgebraWorld) {
-    let _ = world;
-}
+fn scenario_shared_field_preserves_commutativity(world: VectorAlgebraWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_vector_algebra.feature",
     index = 1
 )]
-fn scenario_empty_method_has_non_negative_norm(world: VectorAlgebraWorld) {
-    let _ = world;
-}
+fn scenario_empty_method_has_non_negative_norm(world: VectorAlgebraWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/decomposition_vector_algebra.feature",

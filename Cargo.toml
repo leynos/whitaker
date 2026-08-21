@@ -20,7 +20,6 @@ clap = "4.5.38"
 directories-next = "2.0.0"
 dylint_linting = "6"
 dylint_testing = "6"
-libc = "0.2"
 fluent-templates = "^0.15.0"
 insta = { version = "1", features = ["json"] }
 once_cell = "^1.21.3"
@@ -49,6 +48,10 @@ rustc_lexer = "0.1.0"
 ra_ap_syntax = "=0.0.334"
 whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.7" }
 whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.7" }
+# Path-only (no `version`): the crate is `publish = false`, and Cargo strips
+# versionless dev-dependencies when packaging, so the published crates do not
+# gain an unresolvable requirement.
+whitaker_test_macros = { path = "crates/whitaker_test_macros" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"
@@ -95,13 +98,17 @@ rustc_span = { workspace = true, optional = true }
 dylint_linting = { workspace = true, optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 whitaker-common = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
 
-[lints.clippy]
+[lints]
+workspace = true
+
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
 # 1. hygiene
@@ -109,8 +116,10 @@ allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 blanket_clippy_restriction_lints = "deny"
 cognitive_complexity = "deny"
+disallowed_methods = "deny"
 needless_pass_by_value = "deny"
 implicit_hasher = "deny"
+missing_assert_message = "deny"
 
 # 2. debugging leftovers
 dbg_macro = "deny"
@@ -166,6 +175,7 @@ result_large_err = "deny"
 [workspace.lints.rust]
 unknown_lints = "deny"
 renamed_and_removed_lints = "deny"
+unsafe_code = "forbid"
 missing_docs = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 

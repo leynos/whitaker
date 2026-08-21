@@ -1,14 +1,13 @@
-//! SARIF run, tool, invocation, and artifact types.
+//! SARIF run, tool, invocation, and artefact types.
 //!
 //! A [`Run`] represents a single execution of an analysis tool. It contains
 //! the [`Tool`] that produced the results, optional [`Invocation`] metadata,
 //! the [`SarifResult`] findings, and any referenced
-//! [`Artifact`]s.
+//! [`Artefact`]s.
 
 use serde::{Deserialize, Serialize};
 
-use super::descriptor::ReportingDescriptor;
-use super::result::SarifResult;
+use super::{descriptor::ReportingDescriptor, result::SarifResult};
 
 /// A single analysis tool execution.
 ///
@@ -28,7 +27,7 @@ use super::result::SarifResult;
 ///     },
 ///     invocations: Vec::new(),
 ///     results: Vec::new(),
-///     artifacts: Vec::new(),
+///     artefacts: Vec::new(),
 /// };
 /// assert_eq!(run.tool.driver.name, "whitaker_clones_cli");
 /// ```
@@ -46,9 +45,12 @@ pub struct Run {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub results: Vec<SarifResult>,
 
-    /// Referenced source artifacts.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub artifacts: Vec<Artifact>,
+    /// Referenced source artefacts.
+    ///
+    /// The SARIF 2.1.0 schema spells this property `artifacts`, so the wire
+    /// name is pinned here rather than derived from the field name.
+    #[serde(default, rename = "artifacts", skip_serializing_if = "Vec::is_empty")]
+    pub artefacts: Vec<Artefact>,
 }
 
 /// The analysis tool that produced a run.
@@ -117,27 +119,27 @@ pub struct Invocation {
     pub command_line: Option<String>,
 }
 
-/// A source artifact referenced by results.
+/// A source artefact referenced by results.
 ///
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{Artifact, ArtifactLocation};
+/// use whitaker_sarif::{Artefact, ArtefactLocation};
 ///
-/// let artifact = Artifact {
-///     location: ArtifactLocation {
+/// let artefact = Artefact {
+///     location: ArtefactLocation {
 ///         uri: "src/main.rs".into(),
 ///         uri_base_id: None,
 ///     },
 ///     mime_type: Some("text/x-rust".into()),
 /// };
-/// assert_eq!(artifact.location.uri, "src/main.rs");
+/// assert_eq!(artefact.location.uri, "src/main.rs");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Artifact {
-    /// Location of the artifact.
-    pub location: super::location::ArtifactLocation,
+pub struct Artefact {
+    /// Location of the artefact.
+    pub location: super::location::ArtefactLocation,
 
     /// Optional MIME type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -146,8 +148,10 @@ pub struct Artifact {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF run model.
+
     use super::*;
-    use crate::model::location::ArtifactLocation;
+    use crate::model::location::ArtefactLocation;
 
     #[test]
     fn run_round_trip() {
@@ -165,7 +169,7 @@ mod tests {
                 command_line: None,
             }],
             results: Vec::new(),
-            artifacts: Vec::new(),
+            artefacts: Vec::new(),
         };
         match serde_json::to_string(&run) {
             Ok(json) => match serde_json::from_str::<Run>(&json) {
@@ -189,13 +193,13 @@ mod tests {
             },
             invocations: Vec::new(),
             results: Vec::new(),
-            artifacts: Vec::new(),
+            artefacts: Vec::new(),
         };
         match serde_json::to_string(&run) {
             Ok(json) => {
                 assert!(!json.contains("\"invocations\""));
                 assert!(!json.contains("\"results\""));
-                assert!(!json.contains("\"artifacts\""));
+                assert!(!json.contains("\"artefacts\""));
                 assert!(!json.contains("\"rules\""));
             }
             Err(e) => panic!("failed to serialize: {e}"),
@@ -203,17 +207,17 @@ mod tests {
     }
 
     #[test]
-    fn artifact_round_trip() {
-        let artifact = Artifact {
-            location: ArtifactLocation {
+    fn artefact_round_trip() {
+        let artefact = Artefact {
+            location: ArtefactLocation {
                 uri: "src/lib.rs".into(),
                 uri_base_id: Some("%SRCROOT%".into()),
             },
             mime_type: Some("text/x-rust".into()),
         };
-        match serde_json::to_string(&artifact) {
-            Ok(json) => match serde_json::from_str::<Artifact>(&json) {
-                Ok(parsed) => assert_eq!(artifact, parsed),
+        match serde_json::to_string(&artefact) {
+            Ok(json) => match serde_json::from_str::<Artefact>(&json) {
+                Ok(parsed) => assert_eq!(artefact, parsed),
                 Err(e) => panic!("failed to deserialize: {e}"),
             },
             Err(e) => panic!("failed to serialize: {e}"),

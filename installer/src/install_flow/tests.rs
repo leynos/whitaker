@@ -1,10 +1,14 @@
 //! Unit tests for install-flow prebuilt staging and fallback behaviour.
 
-use super::*;
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+
+use super::*;
 
 struct StagingFixture {
     _temp_dir: tempfile::TempDir,
@@ -17,30 +21,19 @@ struct TestBaseDirs {
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
-    fn bin_dir(&self) -> Option<PathBuf> {
-        None
-    }
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        self.data_dir.clone()
-    }
+    fn home(&self) -> Option<PathBuf> { None }
+    fn executables(&self) -> Option<PathBuf> { None }
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data_dir.clone() }
 }
 
 static PRUNE_HOOK_CALLED: AtomicBool = AtomicBool::new(false);
 
-fn stub_detect_host_target() -> Result<String> {
-    Ok("x86_64-unknown-linux-gnu".to_owned())
-}
+/// Host-target detection stub that always resolves to a fixed Linux target.
+const STUB_DETECT_HOST_TARGET: DetectHostTargetFn = || Ok("x86_64-unknown-linux-gnu".to_owned());
 
-fn stub_resolve_destination_dir(
-    _dirs: &dyn BaseDirs,
-    _toolchain_channel: &str,
-    _host_target: &str,
-) -> Result<Utf8PathBuf> {
-    Ok(Utf8PathBuf::from("/tmp/whitaker-test-data/lints"))
-}
+/// Destination resolution stub that always yields a fixed library directory.
+const STUB_RESOLVE_DESTINATION_DIR: ResolveDestinationDirFn =
+    |_dirs, _channel, _host_target| Ok(Utf8PathBuf::from("/tmp/whitaker-test-data/lints"));
 
 fn stub_attempt_prebuilt(_config: &PrebuiltConfig<'_>, _stderr: &mut dyn Write) -> PrebuiltResult {
     PrebuiltResult::Success {
@@ -60,27 +53,26 @@ fn stub_prune_prebuilt_libraries(
 }
 
 #[fixture]
-fn staging_fixture() -> StagingFixture {
-    let temp_dir = tempfile::tempdir().expect("tempdir should be available");
+fn staging_fixture() -> std::io::Result<StagingFixture> {
+    let temp_dir = tempfile::tempdir()?;
     let staging_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-        .expect("tempdir path should be utf-8");
-    fs::create_dir_all(staging_path.as_std_path()).expect("staging path should be creatable");
-    StagingFixture {
+        .map_err(|_| std::io::Error::other("temporary directory path must be UTF-8"))?;
+    fs::create_dir_all(staging_path.as_std_path())?;
+    Ok(StagingFixture {
         _temp_dir: temp_dir,
         staging_path,
         toolchain: "nightly-2026-05-28",
-    }
+    })
 }
 
 fn create_staged_library(
     staging_path: &Utf8Path,
     crate_name: &str,
     toolchain: &str,
-) -> Utf8PathBuf {
+) -> std::io::Result<Utf8PathBuf> {
     let library_path = staging_path.join(staged_library_filename(crate_name, toolchain));
-    fs::write(library_path.as_std_path(), b"fake prebuilt library")
-        .expect("test setup should write staged library");
-    library_path
+    fs::write(library_path.as_std_path(), b"fake prebuilt library")?;
+    Ok(library_path)
 }
 
 #[rstest]
@@ -100,15 +92,16 @@ fn create_staged_library(
     &[SUITE_CRATE, "no_expect_outside_tests"]
 )]
 fn prune_prebuilt_libraries_keeps_only_requested_crates(
-    staging_fixture: StagingFixture,
+    #[from(staging_fixture)] staging_res: std::io::Result<StagingFixture>,
     #[case] requested: &[&str],
     #[case] retained: &[&str],
     #[case] removed: &[&str],
 ) {
+    let staging_fixture = staging_res.expect("staging fixture should be created");
     let StagingFixture {
-        _temp_dir: _,
         staging_path,
         toolchain,
+        ..
     } = staging_fixture;
 
     let foreign_path = staging_path.join("libforeign_lint@nightly-2026-05-28.so");
@@ -117,7 +110,8 @@ fn prune_prebuilt_libraries_keeps_only_requested_crates(
 
     let mut staged = Vec::new();
     for crate_name in retained.iter().chain(removed.iter()) {
-        let path = create_staged_library(&staging_path, crate_name, toolchain);
+        let path = create_staged_library(&staging_path, crate_name, toolchain)
+            .expect("test setup should write staged library");
         staged.push(((*crate_name).to_owned(), path));
     }
 
@@ -180,29 +174,29 @@ fn try_prebuilt_installation_prune_error_falls_back_to_local_build() {
     let result = try_prebuilt_installation_with(
         &context,
         &mut stderr,
-        PrebuiltInstallationHooks {
-            detect_host_target: stub_detect_host_target,
-            resolve_destination_dir: stub_resolve_destination_dir,
+        &PrebuiltInstallationHooks {
+            detect_host_target: STUB_DETECT_HOST_TARGET,
+            resolve_destination_dir: STUB_RESOLVE_DESTINATION_DIR,
             attempt_prebuilt: stub_attempt_prebuilt,
             prune_prebuilt_libraries: stub_prune_prebuilt_libraries,
         },
     );
 
     assert!(
-        matches!(result, Ok(None)),
+        result.is_none(),
         "prune failure should trigger fallback to local compilation"
     );
     assert!(
         PRUNE_HOOK_CALLED.load(Ordering::SeqCst),
         "prune hook should be invoked"
     );
-    let stderr = String::from_utf8(stderr).expect("stderr should be utf-8");
+    let stderr_text = String::from_utf8(stderr).expect("stderr should be utf-8");
     assert!(
-        stderr.contains("Prebuilt download unavailable: staging failed: forced prune failure"),
-        "fallback reason should include prune error, stderr: {stderr}"
+        stderr_text.contains("Prebuilt download unavailable: staging failed: forced prune failure"),
+        "fallback reason should include prune error, stderr: {stderr_text}"
     );
     assert!(
-        stderr.contains("Falling back to local compilation."),
-        "fallback message should be emitted, stderr: {stderr}"
+        stderr_text.contains("Falling back to local compilation."),
+        "fallback message should be emitted, stderr: {stderr_text}"
     );
 }

@@ -12,15 +12,15 @@
 //!
 //! See [`resolve_message_set`] for fetching a lint’s primary/note/help trio.
 
-use fluent_templates::static_loader;
 use std::path::PathBuf;
-use unic_langid::langid;
 
 /// Re-export the Fluent value type for constructing diagnostic arguments.
 /// See [`resolve_message_set`] for loading messages that consume these
 /// arguments.
 pub use fluent_templates::fluent_bundle::FluentValue;
 pub(crate) use fluent_templates::loader::LanguageIdentifier;
+use fluent_templates::static_loader;
+use unic_langid::langid;
 
 const FALLBACK_LITERAL: &str = "en-GB";
 /// Directory name used for Fluent locale resources.
@@ -35,15 +35,18 @@ static_loader! {
     };
 }
 
+/// Locale tag used when no supported locale is requested (`en-GB`).
 pub const FALLBACK_LOCALE: &str = FALLBACK_LITERAL;
 pub(crate) const FALLBACK_LANGUAGE: LanguageIdentifier = langid!("en-GB");
 
 /// Return the crate-local Fluent resource root used by packaging and tests.
+#[must_use]
 pub fn locales_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(LOCALES_DIR_NAME)
 }
 
 /// Return the relative path inside the package tarball for a locale bundle.
+#[must_use]
 pub fn packaged_locale_path(locale: &str, file: &str) -> PathBuf {
     PathBuf::from(format!(
         "{}-{}",
@@ -56,6 +59,7 @@ pub fn packaged_locale_path(locale: &str, file: &str) -> PathBuf {
 }
 
 /// Return the default packaged locale path for Whitaker diagnostics.
+#[must_use]
 pub fn packaged_fallback_locale_path() -> PathBuf {
     packaged_locale_path(FALLBACK_LOCALE, LOCALES_FTL_FILE)
 }
@@ -70,15 +74,22 @@ pub mod testing;
 /// Diagnostic localization helpers.
 /// See [`resolve_message_set`] for fetching primary, note, and help strings.
 pub use diagnostics::{
-    AttrKey, BundleLookup, DiagnosticMessageSet, MessageKey, resolve_message_set,
+    AttrKey,
+    BundleLookup,
+    DiagnosticMessageSet,
+    MessageKey,
+    resolve_message_set,
 };
 pub use helpers::{
-    MessageResolution, branch_phrase, get_localizer_for_lint, noop_reporter,
+    MessageResolution,
+    branch_phrase,
+    get_localizer_for_lint,
+    noop_reporter,
     safe_resolve_message_set,
 };
 pub use loader::{Arguments, I18nError, Localizer};
 pub use locales::{available_locales, supports_locale};
-pub use selection::{LocaleSelection, LocaleSource, normalise_locale, resolve_localizer};
+pub use selection::{LocaleSelection, LocaleSource, normalize_locale, resolve_localizer};
 
 #[cfg(test)]
 mod tests;

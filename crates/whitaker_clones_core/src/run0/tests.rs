@@ -2,23 +2,27 @@
 
 use whitaker_sarif::{Region, WHK001_ID, WHK002_ID};
 
-use crate::NormProfile;
-
 use super::{
-    AcceptedPair, Run0Error, SimilarityThreshold, TokenPassConfig, accept_candidate_pairs,
+    AcceptedPair,
+    Run0Error,
+    SimilarityThreshold,
+    TokenPassConfig,
+    accept_candidate_pairs,
     emit_run0,
     score::SimilarityRatio,
     span::region_for_range,
     test_helpers::{FragmentInput, config, fragment, pair},
 };
+use crate::{CandidatePair, NormProfile};
 
 fn build_pair_and_accept(
-    left: FragmentInput<'_>,
-    right: FragmentInput<'_>,
+    left: &FragmentInput<'_>,
+    right: &FragmentInput<'_>,
     cfg: &TokenPassConfig,
 ) -> Result<Vec<AcceptedPair>, Run0Error> {
     let fragments = vec![fragment(left), fragment(right)];
-    accept_candidate_pairs(&fragments, &[pair("alpha", "beta")], cfg)
+    let candidates: Vec<CandidatePair> = pair("alpha", "beta").into_iter().collect();
+    accept_candidate_pairs(&fragments, &candidates, cfg)
 }
 
 fn assert_single_accepted(
@@ -26,28 +30,31 @@ fn assert_single_accepted(
     expected_profile: NormProfile,
     expected_score: SimilarityRatio,
 ) {
-    assert_eq!(accepted.len(), 1);
-    assert_eq!(accepted[0].profile(), expected_profile);
-    assert_eq!(accepted[0].score(), expected_score);
+    let [only] = accepted else {
+        panic!("exactly one accepted pair should be present");
+    };
+    assert_eq!(only.profile(), expected_profile);
+    assert_eq!(only.score(), expected_score);
 }
 
-fn assert_region(id: &str, source: &str, range: std::ops::Range<usize>, expected: Region) {
-    let region = region_for_range(id, source, range)
-        .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
-    assert_eq!(region, expected);
+fn assert_region(id: &str, source: &str, range: std::ops::Range<usize>, expected: &Region) {
+    match region_for_range(id, source, range) {
+        Ok(region) => assert_eq!(&region, expected),
+        Err(error) => panic!("unexpected region error: {error}"),
+    }
 }
 
 #[test]
 fn boundary_threshold_accepts_type1_pair() {
     let accepted = build_pair_and_accept(
-        FragmentInput {
+        &FragmentInput {
             id: "alpha",
             profile: NormProfile::T1,
             file_uri: "src/a.rs",
             source_text: "fn a() {}\n",
             hashes: &[(1, 0..8), (2, 0..8)],
         },
-        FragmentInput {
+        &FragmentInput {
             id: "beta",
             profile: NormProfile::T1,
             file_uri: "src/b.rs",
@@ -56,7 +63,7 @@ fn boundary_threshold_accepts_type1_pair() {
         },
         &config(),
     )
-    .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
+    .expect("candidate acceptance should succeed");
 
     assert_single_accepted(&accepted, NormProfile::T1, SimilarityRatio::new(2, 2));
 }
@@ -64,18 +71,17 @@ fn boundary_threshold_accepts_type1_pair() {
 #[test]
 fn boundary_threshold_accepts_type2_pair() {
     let config = config().with_type2_threshold(
-        SimilarityThreshold::new("type2", 1, 3)
-            .unwrap_or_else(|error| panic!("unexpected threshold error: {error}")),
+        SimilarityThreshold::new("type2", 1, 3).expect("type2 threshold should validate"),
     );
     let accepted = build_pair_and_accept(
-        FragmentInput {
+        &FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
         },
-        FragmentInput {
+        &FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
@@ -84,7 +90,7 @@ fn boundary_threshold_accepts_type2_pair() {
         },
         &config,
     )
-    .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
+    .expect("candidate acceptance should succeed");
 
     assert_single_accepted(&accepted, NormProfile::T2, SimilarityRatio::new(1, 3));
 }
@@ -92,14 +98,14 @@ fn boundary_threshold_accepts_type2_pair() {
 #[test]
 fn just_below_threshold_is_rejected() {
     let accepted = build_pair_and_accept(
-        FragmentInput {
+        &FragmentInput {
             id: "alpha",
             profile: NormProfile::T2,
             file_uri: "src/a.rs",
             source_text: "fn a(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
         },
-        FragmentInput {
+        &FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
@@ -108,7 +114,7 @@ fn just_below_threshold_is_rejected() {
         },
         &config(),
     )
-    .unwrap_or_else(|error| panic!("unexpected acceptance error: {error}"));
+    .expect("candidate acceptance should succeed");
 
     assert!(accepted.is_empty());
 }
@@ -119,7 +125,7 @@ fn single_line_region_uses_one_based_columns() {
         "alpha",
         "fn a() {}\n",
         0..8,
-        Region {
+        &Region {
             start_line: 1,
             start_column: Some(1),
             end_line: Some(1),
@@ -136,7 +142,7 @@ fn multi_line_region_tracks_trailing_newline() {
         "alpha",
         "fn alpha() {\n    value();\n}\n",
         13..27,
-        Region {
+        &Region {
             start_line: 2,
             start_column: Some(1),
             end_line: Some(3),
@@ -150,14 +156,14 @@ fn multi_line_region_tracks_trailing_newline() {
 #[test]
 fn emit_run0_uses_primary_and_related_locations() {
     let fragments = vec![
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "alpha",
             profile: NormProfile::T1,
             file_uri: "src/a.rs",
             source_text: "fn a() {}\n",
             hashes: &[(11, 0..8)],
         }),
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "beta",
             profile: NormProfile::T1,
             file_uri: "src/b.rs",
@@ -166,13 +172,12 @@ fn emit_run0_uses_primary_and_related_locations() {
         }),
     ];
     let accepted = vec![AcceptedPair::new(
-        pair("alpha", "beta"),
+        pair("alpha", "beta").expect("alpha and beta are distinct"),
         NormProfile::T1,
         SimilarityRatio::new(1, 1),
     )];
 
-    let run = emit_run0(&fragments, &accepted, &config())
-        .unwrap_or_else(|error| panic!("unexpected emit error: {error}"));
+    let run = emit_run0(&fragments, &accepted, &config()).expect("Run 0 emission should succeed");
 
     let [result] = run.results.as_slice() else {
         panic!("expected exactly one result");
@@ -180,44 +185,43 @@ fn emit_run0_uses_primary_and_related_locations() {
     assert_eq!(result.rule_id, WHK001_ID);
     assert_eq!(result.locations.len(), 1);
     assert_eq!(result.related_locations.len(), 1);
-    assert_eq!(
-        result.locations[0].physical_location.artifact_location.uri,
-        "src/a.rs"
-    );
-    assert_eq!(
-        result.related_locations[0]
-            .physical_location
-            .artifact_location
-            .uri,
-        "src/b.rs"
-    );
+    let location = result
+        .locations
+        .first()
+        .expect("primary location should be present");
+    assert_eq!(location.physical_location.artefact_location.uri, "src/a.rs");
+    let related = result
+        .related_locations
+        .first()
+        .expect("related location should be present");
+    assert_eq!(related.physical_location.artefact_location.uri, "src/b.rs");
 }
 
 #[test]
 fn emit_run0_sorts_and_deduplicates_results() {
     let fragments = vec![
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "alpha",
             profile: NormProfile::T1,
             file_uri: "src/a.rs",
             source_text: "fn a() {}\n",
             hashes: &[(11, 0..8)],
         }),
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "beta",
             profile: NormProfile::T1,
             file_uri: "src/b.rs",
             source_text: "fn b() {}\n",
             hashes: &[(11, 0..8)],
         }),
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "gamma",
             profile: NormProfile::T2,
             file_uri: "src/c.rs",
             source_text: "fn c(x: i32) {}\n",
             hashes: &[(1, 0..15), (2, 0..15)],
         }),
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "delta",
             profile: NormProfile::T2,
             file_uri: "src/d.rs",
@@ -227,35 +231,36 @@ fn emit_run0_sorts_and_deduplicates_results() {
     ];
     let accepted = vec![
         AcceptedPair::new(
-            pair("gamma", "delta"),
+            pair("gamma", "delta").expect("gamma and delta are distinct"),
             NormProfile::T2,
             SimilarityRatio::new(2, 2),
         ),
         AcceptedPair::new(
-            pair("beta", "alpha"),
+            pair("beta", "alpha").expect("beta and alpha are distinct"),
             NormProfile::T1,
             SimilarityRatio::new(1, 1),
         ),
         AcceptedPair::new(
-            pair("alpha", "beta"),
+            pair("alpha", "beta").expect("alpha and beta are distinct"),
             NormProfile::T1,
             SimilarityRatio::new(1, 1),
         ),
     ];
 
-    let run = emit_run0(&fragments, &accepted, &config())
-        .unwrap_or_else(|error| panic!("unexpected emit error: {error}"));
+    let run = emit_run0(&fragments, &accepted, &config()).expect("Run 0 emission should succeed");
 
     assert_eq!(run.results.len(), 2);
-    assert_eq!(run.results[0].rule_id, WHK001_ID);
-    assert_eq!(run.results[1].rule_id, WHK002_ID);
+    let [first, second] = run.results.as_slice() else {
+        panic!("expected exactly two results");
+    };
+    assert_eq!(first.rule_id, WHK001_ID);
+    assert_eq!(second.rule_id, WHK002_ID);
 }
 
 #[test]
 fn invalid_range_produces_typed_error() {
-    let error = region_for_range("alpha", "fn a() {}\n", 9..12)
-        .err()
-        .unwrap_or_else(|| panic!("invalid range must error"));
+    let error =
+        region_for_range("alpha", "fn a() {}\n", 9..12).expect_err("invalid range must error");
 
     match error {
         Run0Error::InvalidFingerprintRange {
@@ -278,9 +283,8 @@ fn invalid_utf8_boundary_produces_typed_error() {
     // "á" = 2 bytes in UTF-8; index 2 is in the middle of that code point
     let source = "aáb";
     let mid = 2; // inside "á" byte sequence
-    let error = region_for_range("alpha", source, 0..mid)
-        .err()
-        .unwrap_or_else(|| panic!("invalid utf-8 boundary must error"));
+    let error =
+        region_for_range("alpha", source, 0..mid).expect_err("invalid utf-8 boundary must error");
 
     match error {
         Run0Error::InvalidUtf8Boundary { fragment_id } => {
@@ -292,18 +296,17 @@ fn invalid_utf8_boundary_produces_typed_error() {
 
 #[test]
 fn missing_fragment_produces_typed_error() {
-    let fragments = vec![fragment(FragmentInput {
+    let fragments = vec![fragment(&FragmentInput {
         id: "alpha",
         profile: NormProfile::T1,
         file_uri: "src/a.rs",
         source_text: "fn a() {}\n",
         hashes: &[(1, 0..8), (2, 0..8)],
     })];
-    let candidates = vec![pair("alpha", "beta")];
+    let candidates = vec![pair("alpha", "beta").expect("alpha and beta are distinct")];
 
     let error = accept_candidate_pairs(&fragments, &candidates, &config())
-        .err()
-        .unwrap_or_else(|| panic!("missing fragment must error"));
+        .expect_err("missing fragment must error");
 
     match error {
         Run0Error::MissingFragment { fragment_id } => {
@@ -316,14 +319,14 @@ fn missing_fragment_produces_typed_error() {
 #[test]
 fn mixed_profiles_produces_typed_error() {
     let fragments = vec![
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "alpha",
             profile: NormProfile::T1,
             file_uri: "src/a.rs",
             source_text: "fn a() {}\n",
             hashes: &[(1, 0..8), (2, 0..8)],
         }),
-        fragment(FragmentInput {
+        fragment(&FragmentInput {
             id: "beta",
             profile: NormProfile::T2,
             file_uri: "src/b.rs",
@@ -331,11 +334,10 @@ fn mixed_profiles_produces_typed_error() {
             hashes: &[(1, 0..8), (2, 0..8)],
         }),
     ];
-    let candidates = vec![pair("alpha", "beta")];
+    let candidates = vec![pair("alpha", "beta").expect("alpha and beta are distinct")];
 
     let error = accept_candidate_pairs(&fragments, &candidates, &config())
-        .err()
-        .unwrap_or_else(|| panic!("mixed profiles must error"));
+        .expect_err("mixed profiles must error");
 
     match error {
         Run0Error::MixedProfiles {

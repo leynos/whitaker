@@ -3,28 +3,24 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
-use camino::Utf8Path;
-use camino::Utf8PathBuf;
-use std::collections::HashSet;
-use std::fs;
-use std::io;
-use std::io::Write;
-use std::time::Duration;
-use whitaker_installer::builder::{library_extension, library_prefix};
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{
-    CommandExecutor, check_dylint_tools, install_dylint_tools_with_output,
-};
+use std::{collections::HashSet, fs, io, io::Write, time::Duration};
+
+use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(test)]
 use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_install};
-use whitaker_installer::output::write_stderr_line;
-use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
+use whitaker_installer::{
+    builder::{library_extension, library_prefix},
+    cli::InstallArgs,
+    crate_name::CrateName,
+    deps::{CommandExecutor, check_dylint_tools, install_dylint_tools_with_output},
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    install_metrics::{InstallMode, RecordOutcome, record_install},
+    output::write_stderr_line,
+    prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
+    prebuilt_path::prebuilt_library_dir,
+    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
+};
 
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,
@@ -56,8 +52,8 @@ pub(crate) fn ensure_dylint_tools_with_executor(
     stderr: &mut dyn Write,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_output(executor, &status, quiet, stderr)
+    ensure_dylint_tools_core(quiet, stderr, status.all_installed(), |sink| {
+        install_dylint_tools_with_output(executor, &status, quiet, sink)
     })
 }
 
@@ -65,11 +61,11 @@ pub(crate) fn ensure_dylint_tools_with_executor(
 pub(crate) fn ensure_dylint_tools_with_options(
     executor: &dyn CommandExecutor,
     stderr: &mut dyn Write,
-    options: DependencyInstallOptions<'_>,
+    options: &DependencyInstallOptions<'_>,
 ) -> Result<()> {
     let status = check_dylint_tools(executor);
-    ensure_dylint_tools_core(options.quiet, stderr, status.all_installed(), |stderr| {
-        install_dylint_tools_with_options(executor, &status, stderr, options)
+    ensure_dylint_tools_core(options.quiet, stderr, status.all_installed(), |sink| {
+        install_dylint_tools_with_options(executor, &status, sink, options)
     })
 }
 
@@ -112,14 +108,17 @@ pub(crate) fn write_prebuilt_fallback_message(
 }
 
 /// Attempt prebuilt installation and return staged path when successful.
+///
+/// Returns `None` when prebuilt installation is skipped or fails; every failure
+/// mode is reported on `stderr` and falls back to local compilation.
 pub(crate) fn try_prebuilt_installation(
     context: &PrebuiltInstallationContext<'_>,
     stderr: &mut dyn Write,
-) -> Result<Option<Utf8PathBuf>> {
+) -> Option<Utf8PathBuf> {
     try_prebuilt_installation_with(
         context,
         stderr,
-        PrebuiltInstallationHooks {
+        &PrebuiltInstallationHooks {
             detect_host_target,
             resolve_destination_dir: prebuilt_library_dir,
             attempt_prebuilt,
@@ -133,6 +132,7 @@ type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathB
 type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
 type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName]) -> Result<()>;
 
+#[derive(Clone, Copy)]
 struct PrebuiltInstallationHooks {
     detect_host_target: DetectHostTargetFn,
     resolve_destination_dir: ResolveDestinationDirFn,
@@ -143,27 +143,27 @@ struct PrebuiltInstallationHooks {
 fn try_prebuilt_installation_with(
     context: &PrebuiltInstallationContext<'_>,
     stderr: &mut dyn Write,
-    hooks: PrebuiltInstallationHooks,
-) -> Result<Option<Utf8PathBuf>> {
+    hooks: &PrebuiltInstallationHooks,
+) -> Option<Utf8PathBuf> {
     let PrebuiltInstallationHooks {
         detect_host_target,
         resolve_destination_dir,
         attempt_prebuilt,
         prune_prebuilt_libraries,
-    } = hooks;
+    } = *hooks;
 
     if !context
         .args
         .should_attempt_prebuilt(context.requested_crates)
     {
-        return Ok(None);
+        return None;
     }
 
     let host_target = match detect_host_target() {
         Ok(target) => target,
         Err(error) => {
             write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
-            return Ok(None);
+            return None;
         }
     };
 
@@ -172,7 +172,7 @@ fn try_prebuilt_installation_with(
             Ok(destination) => destination,
             Err(error) => {
                 write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
-                return Ok(None);
+                return None;
             }
         };
 
@@ -185,7 +185,7 @@ fn try_prebuilt_installation_with(
 
     let PrebuiltResult::Success { staging_path } = attempt_prebuilt(&prebuilt_config, stderr)
     else {
-        return Ok(None);
+        return None;
     };
     if let Err(error) = prune_prebuilt_libraries(
         &staging_path,
@@ -193,9 +193,9 @@ fn try_prebuilt_installation_with(
         context.requested_crates,
     ) {
         write_prebuilt_fallback_message(context.args.quiet, &error, stderr);
-        return Ok(None);
+        return None;
     }
-    Ok(Some(staging_path))
+    Some(staging_path)
 }
 
 fn requested_crate_names(requested_crates: &[CrateName]) -> HashSet<&str> {

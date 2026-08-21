@@ -121,10 +121,12 @@ fn process_token(
             start: range.start,
             end: range.end,
         }),
-        TokenKind::Literal { kind, .. } => {
-            ensure_literal_is_terminated(kind, &range)?;
+        TokenKind::Literal {
+            kind: literal_kind, ..
+        } => {
+            ensure_literal_is_terminated(literal_kind, &range)?;
             Ok(Some(NormalizedToken::new(
-                normalize_literal(text, kind, profile),
+                normalize_literal(text, literal_kind, profile),
                 range,
             )))
         }
@@ -180,7 +182,9 @@ fn process_token(
 ///
 /// assert_eq!(
 ///     labels,
-///     vec!["fn", "<ID_0>", "(", "<ID_1>", ":", "<ID_2>", ")", "{", "<ID_1>", "+", "<NUM>", "}"]
+///     vec![
+///         "fn", "<ID_0>", "(", "<ID_1>", ":", "<ID_2>", ")", "{", "<ID_1>", "+", "<NUM>", "}"
+///     ]
 /// );
 /// # Ok::<(), whitaker_clones_core::TokenPassError>(())
 /// ```
@@ -217,7 +221,7 @@ pub fn normalize(source: &str, profile: NormProfile) -> Result<Vec<NormalizedTok
     Ok(normalized)
 }
 
-fn ensure_literal_is_terminated(kind: LiteralKind, range: &Range<usize>) -> Result<()> {
+const fn ensure_literal_is_terminated(kind: LiteralKind, range: &Range<usize>) -> Result<()> {
     let terminated = match kind {
         LiteralKind::Int { .. } | LiteralKind::Float { .. } => true,
         LiteralKind::Char { terminated }
@@ -245,15 +249,17 @@ fn normalize_ident(
     profile: NormProfile,
     state: &mut CanonicalState,
 ) -> NormalizedTokenKind {
-    match keyword_label(text) {
-        Some(keyword) => NormalizedTokenKind::Atom(keyword),
-        None => normalize_symbolic_text(
-            text,
-            profile,
-            || state.identifier_index(text),
-            NormalizedTokenKind::Identifier,
-        ),
-    }
+    keyword_label(text).map_or_else(
+        || {
+            normalize_symbolic_text(
+                text,
+                profile,
+                || state.identifier_index(text),
+                NormalizedTokenKind::Identifier,
+            )
+        },
+        NormalizedTokenKind::Atom,
+    )
 }
 
 fn normalize_literal(text: &str, kind: LiteralKind, profile: NormProfile) -> NormalizedTokenKind {
@@ -276,7 +282,7 @@ struct LiteralLabels {
     kind: &'static str,
 }
 
-fn literal_labels(kind: LiteralKind) -> LiteralLabels {
+const fn literal_labels(kind: LiteralKind) -> LiteralLabels {
     match kind {
         LiteralKind::Int { .. } => LiteralLabels {
             canonical: "<NUM>",
@@ -318,9 +324,7 @@ fn normalize_symbolic_text(
     wrap(symbol)
 }
 
-fn raw_identifier_text(text: &str) -> &str {
-    text.strip_prefix("r#").unwrap_or(text)
-}
+fn raw_identifier_text(text: &str) -> &str { text.strip_prefix("r#").unwrap_or(text) }
 
 fn atom_label(kind: TokenKind) -> &'static str {
     match kind {
@@ -361,8 +365,7 @@ fn atom_label(kind: TokenKind) -> &'static str {
         | TokenKind::Unknown => {
             debug_assert!(
                 false,
-                "Token kind {:?} should be handled before atom_label",
-                kind
+                "Token kind {kind:?} should be handled before atom_label"
             );
             "<UNREACHABLE>"
         }

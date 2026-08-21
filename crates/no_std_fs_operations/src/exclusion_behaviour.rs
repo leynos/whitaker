@@ -3,12 +3,13 @@
 //! These scenarios exercise the pure `PathExclusions` decision the driver makes
 //! for each detected `std::fs` usage, without needing a live `rustc` session.
 
-use crate::exclusion::PathExclusions;
+use std::{cell::RefCell, collections::HashSet};
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
-use std::collections::HashSet;
 use whitaker_common::SimplePath;
+
+use crate::exclusion::PathExclusions;
 
 #[derive(Default)]
 struct ExclusionWorld {
@@ -17,9 +18,7 @@ struct ExclusionWorld {
 }
 
 impl ExclusionWorld {
-    fn exclude_path(&mut self, path: &str) {
-        self.excluded_paths.insert(path.to_owned());
-    }
+    fn exclude_path(&mut self, path: &str) { self.excluded_paths.insert(path.to_owned()); }
 
     fn evaluate(&mut self, item_path: &str) {
         let exclusions = PathExclusions::new(&self.excluded_paths);
@@ -27,17 +26,18 @@ impl ExclusionWorld {
     }
 
     fn suppressed(&self) -> bool {
-        self.suppressed
-            .expect("a usage should have been evaluated before asserting")
+        let Some(suppressed) = self.suppressed else {
+            panic!("a usage should have been evaluated before asserting")
+        };
+        suppressed
     }
 }
 
 type WorldCell = RefCell<ExclusionWorld>;
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> WorldCell {
-    RefCell::new(ExclusionWorld::default())
-}
+fn world() -> WorldCell { RefCell::new(ExclusionWorld::default()) }
 
 #[given("the module path {path} is excluded")]
 fn given_excluded_path(world: &WorldCell, path: String) {
@@ -45,9 +45,7 @@ fn given_excluded_path(world: &WorldCell, path: String) {
 }
 
 #[given("no module paths are excluded")]
-fn given_no_excluded_paths(world: &WorldCell) {
-    world.borrow_mut().excluded_paths.clear();
-}
+fn given_no_excluded_paths(world: &WorldCell) { world.borrow_mut().excluded_paths.clear(); }
 
 #[when("a std::fs usage is found in item {item}")]
 fn when_usage_found(world: &WorldCell, item: String) {

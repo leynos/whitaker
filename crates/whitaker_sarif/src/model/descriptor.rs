@@ -48,7 +48,9 @@ pub struct ReportingDescriptor {
 /// ```
 /// use whitaker_sarif::MultiformatMessageString;
 ///
-/// let msg = MultiformatMessageString { text: "hello".into() };
+/// let msg = MultiformatMessageString {
+///     text: "hello".into(),
+/// };
 /// assert_eq!(msg.text, "hello");
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +62,8 @@ pub struct MultiformatMessageString {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for the SARIF reporting descriptor model.
+
     use super::*;
 
     #[test]

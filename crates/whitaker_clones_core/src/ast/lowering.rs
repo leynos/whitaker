@@ -1,16 +1,21 @@
 //! Adapter from parser syntax trees into the parser-agnostic AST domain.
 
-use std::cell::Cell;
-use std::ops::Range;
+use std::{cell::Cell, ops::Range};
 
 use ra_ap_syntax::{
-    AstNode, Edition, NodeOrToken, SourceFile, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
+    AstNode,
+    Edition,
+    NodeOrToken,
+    SourceFile,
+    SyntaxKind,
+    SyntaxNode,
+    SyntaxToken,
+    TextRange,
     TextSize,
 };
 use tracing::{debug, error, warn};
 
 use super::{AstError, AstResult, ByteSpan, KindId, LeafClass, NormalizedNode, NormalizedTree};
-
 pub use crate::hashing::PARSER_SCHEMA_VERSION;
 
 const MAX_AST_NODES: usize = 10_000;
@@ -47,6 +52,13 @@ fn trace_ast_error(
 /// Latency metrics and feature-vector emission metrics are deferred to 7.3.2,
 /// where scoring and SARIF emission consume those observations.
 ///
+/// # Errors
+///
+/// Returns an [`AstError`] when the span fails re-validation against
+/// `file_text`, when no syntax node covers the requested span, when the
+/// selected subtree contains parser error elements, or when lowering exceeds
+/// the depth or node budgets.
+///
 /// # Examples
 ///
 /// ```
@@ -60,7 +72,9 @@ fn trace_ast_error(
 /// ```
 #[tracing::instrument(skip(file_text), fields(start = span.start(), end = span.end()))]
 pub fn lower_span(file_text: &str, span: ByteSpan) -> AstResult<NormalizedTree> {
-    let span = ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
+    // Re-validation returns a span with identical offsets, so the original
+    // binding can keep serving later uses without a shadowing rebind.
+    ByteSpan::new(file_text, span.start(), span.end()).map_err(|error| {
         trace_ast_error(
             error,
             "AST span lies outside the supplied source text",
@@ -234,11 +248,9 @@ struct LoweringLimits {
 }
 
 impl LoweringLimits {
-    fn new(span: ByteSpan) -> Self {
-        Self::with_depth_limit(MAX_AST_DEPTH, span)
-    }
+    const fn new(span: ByteSpan) -> Self { Self::with_depth_limit(MAX_AST_DEPTH, span) }
 
-    fn with_depth_limit(maximum_depth: usize, span: ByteSpan) -> Self {
+    const fn with_depth_limit(maximum_depth: usize, span: ByteSpan) -> Self {
         Self {
             maximum_depth,
             maximum_nodes: MAX_AST_NODES,
@@ -301,7 +313,7 @@ impl LoweringLimits {
         Ok(NormalizedNode::new(kind_id(node.kind()), None, children))
     }
 
-    fn unparsable_span(&self) -> AstError {
+    const fn unparsable_span(&self) -> AstError {
         AstError::UnparsableSpan {
             start: self.span.start(),
             end: self.span.end(),
@@ -331,17 +343,13 @@ fn is_identifier_like(kind: SyntaxKind) -> bool {
     kind == SyntaxKind::LIFETIME_IDENT || kind.is_any_identifier()
 }
 
-fn kind_id(kind: SyntaxKind) -> KindId {
-    KindId::new(u16::from(kind))
-}
+fn kind_id(kind: SyntaxKind) -> KindId { KindId::new(u16::from(kind)) }
 
 fn text_range(span: ByteSpan) -> TextRange {
     TextRange::new(TextSize::from(span.start()), TextSize::from(span.end()))
 }
 
-fn range_to_u32(range: TextRange) -> Range<u32> {
-    u32::from(range.start())..u32::from(range.end())
-}
+fn range_to_u32(range: TextRange) -> Range<u32> { u32::from(range.start())..u32::from(range.end()) }
 
 #[cfg(test)]
 #[path = "lowering_tests.rs"]

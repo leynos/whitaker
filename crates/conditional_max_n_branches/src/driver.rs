@@ -15,10 +15,16 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{DesugaringKind, Span};
 use serde::Deserialize;
 use whitaker::SharedConfig;
-use whitaker_common::i18n::{DiagnosticMessageSet, MessageKey};
 use whitaker_common::{
-    Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    FALLBACK_LOCALE,
+    Localizer,
+    MessageResolution,
+    branch_phrase,
+    get_localizer_for_lint,
+    i18n::{DiagnosticMessageSet, MessageKey},
+    noop_reporter,
+    safe_resolve_message_set,
 };
 
 const LINT_NAME: &str = "conditional_max_n_branches";
@@ -32,9 +38,7 @@ struct Config {
 }
 
 impl Config {
-    const fn default_max_branches() -> usize {
-        2
-    }
+    const fn default_max_branches() -> usize { 2 }
 }
 
 impl Default for Config {
@@ -60,12 +64,31 @@ impl Default for ConditionalMaxNBranches {
     }
 }
 
-dylint_linting::impl_late_lint! {
-    pub CONDITIONAL_MAX_N_BRANCHES,
-    Warn,
-    "complex conditionals should be decomposed when they exceed the configured branch limit",
-    ConditionalMaxNBranches::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::ConditionalMaxNBranches;
+
+    dylint_linting::impl_late_lint! {
+        /// Lint flagging conditionals whose predicate exceeds the configured
+        /// number of short-circuit branches.
+        pub CONDITIONAL_MAX_N_BRANCHES,
+        Warn,
+        "complex conditionals should be decomposed when they exceed the configured branch limit",
+        ConditionalMaxNBranches::default()
+    }
 }
+
+pub use declaration::CONDITIONAL_MAX_N_BRANCHES;
 
 impl<'tcx> LateLintPass<'tcx> for ConditionalMaxNBranches {
     fn check_crate(&mut self, _cx: &LateContext<'tcx>) {
@@ -187,12 +210,8 @@ fn count_branches(expr: &hir::Expr<'_>) -> usize {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
             count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
-        ExprKind::DropTemps(inner) => count_branches(inner),
-        ExprKind::Block(block, _) => match block.expr {
-            Some(inner) => count_branches(inner),
-            None => 1,
-        },
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
         ExprKind::If(cond, ..) => count_branches(cond),
         _ => 1,
     }
@@ -211,9 +230,12 @@ fn emit_diagnostic(
     );
     args.insert(
         Cow::Borrowed("branches"),
-        FluentValue::from(metadata.branches as i64),
+        FluentValue::from(i64::try_from(metadata.branches).unwrap_or(i64::MAX)),
     );
-    args.insert(Cow::Borrowed("limit"), FluentValue::from(limit as i64));
+    args.insert(
+        Cow::Borrowed("limit"),
+        FluentValue::from(i64::try_from(limit).unwrap_or(i64::MAX)),
+    );
     let branch_phrase_text = branch_phrase(localizer.locale(), metadata.branches);
     args.insert(
         Cow::Borrowed("branch_phrase"),
@@ -234,9 +256,9 @@ fn emit_diagnostic(
         fallback_messages(metadata.kind, metadata.branches, limit)
     });
 
-    let primary = normalise_isolation_marks(messages.primary());
-    let note = normalise_isolation_marks(messages.note());
-    let help = normalise_isolation_marks(messages.help());
+    let primary = normalize_isolation_marks(messages.primary());
+    let note = normalize_isolation_marks(messages.note());
+    let help = normalize_isolation_marks(messages.help());
 
     cx.emit_span_lint(
         CONDITIONAL_MAX_N_BRANCHES,
@@ -249,7 +271,7 @@ fn emit_diagnostic(
     );
 }
 
-fn normalise_isolation_marks(text: &str) -> String {
+fn normalize_isolation_marks(text: &str) -> String {
     if text
         .chars()
         .any(|character| matches!(character, '\u{2068}' | '\u{2069}' | '\u{FFFD}'))
@@ -261,7 +283,7 @@ fn normalise_isolation_marks(text: &str) -> String {
             })
             .collect()
     } else {
-        text.to_string()
+        text.to_owned()
     }
 }
 
@@ -287,8 +309,9 @@ fn fallback_messages(kind: ConditionKind, branches: usize, limit: usize) -> Diag
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(1, 2, ConditionDisposition::WithinLimit)]

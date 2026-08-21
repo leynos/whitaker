@@ -132,9 +132,7 @@ impl TraitItemMetrics {
     /// assert_eq!(item.name(), "parse");
     /// ```
     #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Returns the trait item kind.
     ///
@@ -147,9 +145,7 @@ impl TraitItemMetrics {
     /// assert_eq!(item.kind(), TraitItemKind::RequiredMethod);
     /// ```
     #[must_use]
-    pub fn kind(&self) -> TraitItemKind {
-        self.kind
-    }
+    pub const fn kind(&self) -> TraitItemKind { self.kind }
 
     /// Returns default method cognitive complexity when present.
     ///
@@ -162,9 +158,7 @@ impl TraitItemMetrics {
     /// assert_eq!(item.default_method_cc(), Some(9));
     /// ```
     #[must_use]
-    pub fn default_method_cc(&self) -> Option<usize> {
-        self.default_method_cc
-    }
+    pub const fn default_method_cc(&self) -> Option<usize> { self.default_method_cc }
 
     /// Returns `true` when this item is a required method.
     ///
@@ -177,9 +171,7 @@ impl TraitItemMetrics {
     /// assert!(item.is_required_method());
     /// ```
     #[must_use]
-    pub fn is_required_method(&self) -> bool {
-        self.kind == TraitItemKind::RequiredMethod
-    }
+    pub fn is_required_method(&self) -> bool { self.kind == TraitItemKind::RequiredMethod }
 
     /// Returns `true` when this item is a default method.
     ///
@@ -192,9 +184,7 @@ impl TraitItemMetrics {
     /// assert!(item.is_default_method());
     /// ```
     #[must_use]
-    pub fn is_default_method(&self) -> bool {
-        self.kind == TraitItemKind::DefaultMethod
-    }
+    pub fn is_default_method(&self) -> bool { self.kind == TraitItemKind::DefaultMethod }
 }
 
 /// Returns the total number of trait items.
@@ -211,9 +201,7 @@ impl TraitItemMetrics {
 /// assert_eq!(trait_item_count(&items), 2);
 /// ```
 #[must_use]
-pub fn trait_item_count(items: &[TraitItemMetrics]) -> usize {
-    items.len()
-}
+pub const fn trait_item_count(items: &[TraitItemMetrics]) -> usize { items.len() }
 
 /// Returns the number of required methods.
 ///

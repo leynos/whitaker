@@ -3,21 +3,21 @@
 //!
 //! These scenarios validate the domain types defined in the `artefact` module
 //! against the rules specified in ADR-001. Tests use the rstest-bdd v0.5.0
-//! mutable world pattern.
+//! mutable world pattern with fallible steps.
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use whitaker_installer::artefact::error::ArtefactError;
-use whitaker_installer::artefact::git_sha::GitSha;
-use whitaker_installer::artefact::manifest::{
-    GeneratedAt, Manifest, ManifestContent, ManifestProvenance,
+use whitaker_installer::artefact::{
+    error::ArtefactError,
+    git_sha::GitSha,
+    manifest::{GeneratedAt, Manifest, ManifestContent, ManifestProvenance},
+    naming::ArtefactName,
+    schema_version::SchemaVersion,
+    sha256_digest::Sha256Digest,
+    target::TargetTriple,
+    toolchain_channel::ToolchainChannel,
+    verification::{VerificationFailureAction, VerificationPolicy},
 };
-use whitaker_installer::artefact::naming::ArtefactName;
-use whitaker_installer::artefact::schema_version::SchemaVersion;
-use whitaker_installer::artefact::sha256_digest::Sha256Digest;
-use whitaker_installer::artefact::target::TargetTriple;
-use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
-use whitaker_installer::artefact::verification::{VerificationFailureAction, VerificationPolicy};
 
 // ---------------------------------------------------------------------------
 // World types
@@ -38,26 +38,38 @@ struct ArtefactWorld {
     all_triples_ok: Option<bool>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> ArtefactWorld {
-    ArtefactWorld::default()
-}
+fn world() -> ArtefactWorld { ArtefactWorld::default() }
 
-/// Helper to assert that an error option contains a specific ArtefactError variant.
-fn assert_error_matches<F>(error: &Option<ArtefactError>, field_name: &str, predicate: F)
+/// Check that an error option contains a specific `ArtefactError` variant.
+fn ensure_error_matches<F>(
+    error: Option<&ArtefactError>,
+    field_name: &str,
+    predicate: F,
+) -> Result<(), String>
 where
     F: FnOnce(&ArtefactError) -> bool,
 {
-    assert!(
-        error.is_some(),
-        "expected {} validation to fail",
-        field_name
-    );
-    assert!(
-        predicate(error.as_ref().expect("checked above")),
-        "error variant mismatch for {}",
-        field_name
-    );
+    let observed = error.ok_or_else(|| format!("expected {field_name} validation to fail"))?;
+    if predicate(observed) {
+        Ok(())
+    } else {
+        Err(format!("error variant mismatch for {field_name}"))
+    }
+}
+
+/// Compare two values for equality, reporting a mismatch as an error.
+fn ensure_eq<T, U>(actual: &T, expected: &U, context: &str) -> Result<(), String>
+where
+    T: PartialEq<U> + std::fmt::Debug + ?Sized,
+    U: std::fmt::Debug + ?Sized,
+{
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("{context}: expected {expected:?}, got {actual:?}"))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -65,32 +77,49 @@ where
 // ---------------------------------------------------------------------------
 
 #[given("a git SHA \"{sha}\"")]
-fn given_git_sha(world: &mut ArtefactWorld, sha: String) {
-    world.git_sha = Some(GitSha::try_from(sha).expect("test SHA"));
+fn given_git_sha(world: &mut ArtefactWorld, sha: String) -> Result<(), String> {
+    world.git_sha = Some(GitSha::try_from(sha).map_err(|e| format!("test SHA: {e}"))?);
+    Ok(())
 }
 
 #[given("a toolchain channel \"{channel}\"")]
-fn given_toolchain_channel(world: &mut ArtefactWorld, channel: String) {
-    world.toolchain = Some(ToolchainChannel::try_from(channel).expect("test channel"));
+fn given_toolchain_channel(world: &mut ArtefactWorld, channel: String) -> Result<(), String> {
+    world.toolchain =
+        Some(ToolchainChannel::try_from(channel).map_err(|e| format!("test channel: {e}"))?);
+    Ok(())
 }
 
 #[given("a target triple \"{triple}\"")]
-fn given_target_triple(world: &mut ArtefactWorld, triple: String) {
-    world.target = Some(TargetTriple::try_from(triple).expect("test triple"));
+fn given_target_triple(world: &mut ArtefactWorld, triple: String) -> Result<(), String> {
+    world.target = Some(TargetTriple::try_from(triple).map_err(|e| format!("test triple: {e}"))?);
+    Ok(())
 }
 
 #[when("an artefact name is constructed")]
-fn when_artefact_name_constructed(world: &mut ArtefactWorld) {
-    let sha = world.git_sha.clone().expect("git_sha set");
-    let ch = world.toolchain.clone().expect("toolchain set");
-    let tgt = world.target.clone().expect("target set");
+fn when_artefact_name_constructed(world: &mut ArtefactWorld) -> Result<(), String> {
+    let sha = world
+        .git_sha
+        .clone()
+        .ok_or_else(|| String::from("git_sha set"))?;
+    let ch = world
+        .toolchain
+        .clone()
+        .ok_or_else(|| String::from("toolchain set"))?;
+    let tgt = world
+        .target
+        .clone()
+        .ok_or_else(|| String::from("target set"))?;
     world.artefact_name = Some(ArtefactName::new(sha, ch, tgt));
+    Ok(())
 }
 
 #[then("the filename is \"{expected}\"")]
-fn then_filename_matches(world: &mut ArtefactWorld, expected: String) {
-    let name = world.artefact_name.as_ref().expect("artefact_name set");
-    assert_eq!(name.filename(), expected);
+fn then_filename_matches(world: &mut ArtefactWorld, expected: String) -> Result<(), String> {
+    let name = world
+        .artefact_name
+        .as_ref()
+        .ok_or_else(|| String::from("artefact_name set"))?;
+    ensure_eq(&name.filename(), &expected, "artefact filename")
 }
 
 #[given("an invalid target triple \"{triple}\"")]
@@ -99,10 +128,10 @@ fn given_invalid_target(world: &mut ArtefactWorld, triple: String) {
 }
 
 #[then("the target triple is rejected")]
-fn then_target_rejected(world: &mut ArtefactWorld) {
-    assert_error_matches(&world.target_error, "target", |e| {
+fn then_target_rejected(world: &mut ArtefactWorld) -> Result<(), String> {
+    ensure_error_matches(world.target_error.as_ref(), "target", |e| {
         matches!(e, ArtefactError::UnsupportedTarget { .. })
-    });
+    })
 }
 
 #[given("all supported target triples")]
@@ -114,8 +143,8 @@ fn given_all_supported(world: &mut ArtefactWorld) {
 }
 
 #[then("every triple is accepted")]
-fn then_all_accepted(world: &mut ArtefactWorld) {
-    assert_eq!(world.all_triples_ok, Some(true));
+fn then_all_accepted(world: &mut ArtefactWorld) -> Result<(), String> {
+    ensure_eq(&world.all_triples_ok, &Some(true), "all triples accepted")
 }
 
 #[given("an invalid git SHA \"{sha}\"")]
@@ -124,10 +153,10 @@ fn given_invalid_sha(world: &mut ArtefactWorld, sha: String) {
 }
 
 #[then("the git SHA is rejected")]
-fn then_sha_rejected(world: &mut ArtefactWorld) {
-    assert_error_matches(&world.sha_error, "SHA", |e| {
+fn then_sha_rejected(world: &mut ArtefactWorld) -> Result<(), String> {
+    ensure_error_matches(world.sha_error.as_ref(), "SHA", |e| {
         matches!(e, ArtefactError::InvalidGitSha { .. })
-    });
+    })
 }
 
 #[given("an empty toolchain channel")]
@@ -136,47 +165,71 @@ fn given_empty_channel(world: &mut ArtefactWorld) {
 }
 
 #[then("the toolchain channel is rejected")]
-fn then_channel_rejected(world: &mut ArtefactWorld) {
-    assert_error_matches(&world.channel_error, "channel", |e| {
+fn then_channel_rejected(world: &mut ArtefactWorld) -> Result<(), String> {
+    ensure_error_matches(world.channel_error.as_ref(), "channel", |e| {
         matches!(e, ArtefactError::InvalidToolchainChannel { .. })
-    });
+    })
 }
 
 #[given("a complete set of manifest fields")]
-fn given_manifest_fields(world: &mut ArtefactWorld) {
-    world.git_sha = Some(GitSha::try_from("abc1234").expect("valid sha"));
-    world.toolchain =
-        Some(ToolchainChannel::try_from("nightly-2026-05-28").expect("valid channel"));
-    world.target = Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target"));
+fn given_manifest_fields(world: &mut ArtefactWorld) -> Result<(), String> {
+    world.git_sha = Some(GitSha::try_from("abc1234").map_err(|e| format!("valid sha: {e}"))?);
+    world.toolchain = Some(
+        ToolchainChannel::try_from("nightly-2026-05-28")
+            .map_err(|e| format!("valid channel: {e}"))?,
+    );
+    world.target = Some(
+        TargetTriple::try_from("x86_64-unknown-linux-gnu")
+            .map_err(|e| format!("valid target: {e}"))?,
+    );
+    Ok(())
 }
 
 #[when("a manifest is constructed")]
-fn when_manifest_constructed(world: &mut ArtefactWorld) {
+fn when_manifest_constructed(world: &mut ArtefactWorld) -> Result<(), String> {
     let provenance = ManifestProvenance {
-        git_sha: world.git_sha.clone().expect("git_sha set"),
+        git_sha: world
+            .git_sha
+            .clone()
+            .ok_or_else(|| String::from("git_sha set"))?,
         schema_version: SchemaVersion::current(),
-        toolchain: world.toolchain.clone().expect("toolchain set"),
-        target: world.target.clone().expect("target set"),
+        toolchain: world
+            .toolchain
+            .clone()
+            .ok_or_else(|| String::from("toolchain set"))?,
+        target: world
+            .target
+            .clone()
+            .ok_or_else(|| String::from("target set"))?,
     };
     let digest_hex = "a".repeat(64);
     let content = ManifestContent {
         generated_at: GeneratedAt::new("2026-05-28T00:00:00Z"),
         files: vec!["libwhitaker_lints.so".to_owned()],
-        sha256: Sha256Digest::try_from(digest_hex.as_str()).expect("valid digest"),
+        sha256: Sha256Digest::try_from(digest_hex.as_str())
+            .map_err(|e| format!("valid digest: {e}"))?,
     };
     world.manifest = Some(Manifest::new(provenance, content));
+    Ok(())
 }
 
 #[then("all manifest fields are accessible")]
-fn then_manifest_accessible(world: &mut ArtefactWorld) {
-    let m = world.manifest.as_ref().expect("manifest set");
-    assert_eq!(m.git_sha().as_str(), "abc1234");
-    assert_eq!(m.schema_version().as_u32(), 1);
-    assert_eq!(m.toolchain().as_str(), "nightly-2026-05-28");
-    assert_eq!(m.target().as_str(), "x86_64-unknown-linux-gnu");
-    assert_eq!(m.generated_at().as_str(), "2026-05-28T00:00:00Z");
-    assert_eq!(m.files().len(), 1);
-    assert_eq!(m.sha256().as_str().len(), 64);
+fn then_manifest_accessible(world: &mut ArtefactWorld) -> Result<(), String> {
+    let m = world
+        .manifest
+        .as_ref()
+        .ok_or_else(|| String::from("manifest set"))?;
+    ensure_eq(m.git_sha().as_str(), "abc1234", "git sha")?;
+    ensure_eq(&m.schema_version().as_u32(), &1, "schema version")?;
+    ensure_eq(m.toolchain().as_str(), "nightly-2026-05-28", "toolchain")?;
+    ensure_eq(m.target().as_str(), "x86_64-unknown-linux-gnu", "target")?;
+    ensure_eq(
+        m.generated_at().as_str(),
+        "2026-05-28T00:00:00Z",
+        "generated at",
+    )?;
+    ensure_eq(&m.files().len(), &1, "file count")?;
+    ensure_eq(&m.sha256().as_str().len(), &64, "sha256 length")
 }
 
 #[given("the default verification policy")]
@@ -185,9 +238,16 @@ fn given_default_policy(world: &mut ArtefactWorld) {
 }
 
 #[then("checksum verification is required")]
-fn then_checksum_required(world: &mut ArtefactWorld) {
-    let policy = world.policy.as_ref().expect("policy set");
-    assert!(policy.require_checksum());
+fn then_checksum_required(world: &mut ArtefactWorld) -> Result<(), String> {
+    let policy = world
+        .policy
+        .as_ref()
+        .ok_or_else(|| String::from("policy set"))?;
+    if policy.require_checksum() {
+        Ok(())
+    } else {
+        Err(String::from("checksum verification must be required"))
+    }
 }
 
 #[given("the default failure action")]
@@ -196,11 +256,12 @@ fn given_default_failure_action(world: &mut ArtefactWorld) {
 }
 
 #[then("the action is fallback with warning")]
-fn then_action_is_fallback(world: &mut ArtefactWorld) {
-    assert_eq!(
-        world.failure_action,
-        Some(VerificationFailureAction::FallbackWithWarning)
-    );
+fn then_action_is_fallback(world: &mut ArtefactWorld) -> Result<(), String> {
+    ensure_eq(
+        &world.failure_action,
+        &Some(VerificationFailureAction::FallbackWithWarning),
+        "failure action",
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -211,62 +272,46 @@ fn then_action_is_fallback(world: &mut ArtefactWorld) {
     path = "tests/features/artefact_policy.feature",
     name = "Construct artefact name from valid components"
 )]
-fn scenario_construct_artefact_name(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_construct_artefact_name(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject unsupported target triple"
 )]
-fn scenario_reject_unsupported_target(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_unsupported_target(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Accept all five supported target triples"
 )]
-fn scenario_accept_all_supported_targets(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_accept_all_supported_targets(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject invalid git SHA"
 )]
-fn scenario_reject_invalid_git_sha(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_invalid_git_sha(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Reject empty toolchain channel"
 )]
-fn scenario_reject_empty_channel(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_reject_empty_channel(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Construct manifest with all fields"
 )]
-fn scenario_construct_manifest(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_construct_manifest(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Default verification policy requires checksum"
 )]
-fn scenario_default_verification_policy(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_default_verification_policy(world: ArtefactWorld) { let _ = world; }
 
 #[scenario(
     path = "tests/features/artefact_policy.feature",
     name = "Verification failure triggers fallback"
 )]
-fn scenario_verification_failure_fallback(world: ArtefactWorld) {
-    let _ = world;
-}
+fn scenario_verification_failure_fallback(world: ArtefactWorld) { let _ = world; }

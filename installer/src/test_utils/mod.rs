@@ -1,15 +1,17 @@
 //! Shared test utilities for the installer crate.
 
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    path::PathBuf,
+    process::{ExitStatus, Output},
+};
+
 #[cfg(any(test, feature = "test-support"))]
 use crate::deps::CommandExecutor;
-use crate::dirs::BaseDirs;
 #[cfg(any(test, feature = "test-support"))]
 use crate::error::InstallerError;
-use crate::error::Result;
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::process::{ExitStatus, Output};
+use crate::{dirs::BaseDirs, error::Result};
 
 /// Creates an `ExitStatus` from an exit code (Unix implementation).
 ///
@@ -25,6 +27,7 @@ use std::process::{ExitStatus, Output};
 /// assert!(!failure.success());
 /// ```
 #[cfg(unix)]
+#[must_use]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
 
@@ -45,6 +48,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
 /// assert!(!failure.success());
 /// ```
 #[cfg(windows)]
+#[must_use]
 pub fn exit_status(code: i32) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
 
@@ -63,6 +67,7 @@ pub fn exit_status(code: i32) -> ExitStatus {
 /// assert!(output.stdout.is_empty());
 /// assert!(output.stderr.is_empty());
 /// ```
+#[must_use]
 pub fn success_output() -> Output {
     Output {
         status: exit_status(0),
@@ -104,37 +109,32 @@ pub fn stdout_output(stdout: impl AsRef<str>) -> Output {
 /// assert_eq!(output.stderr, b"command failed");
 /// ```
 pub fn failure_output(stderr: impl AsRef<str>) -> Output {
-    let stderr = stderr.as_ref();
+    let stderr_text = stderr.as_ref();
     Output {
         status: exit_status(1),
         stdout: Vec::new(),
-        stderr: stderr.as_bytes().to_vec(),
+        stderr: stderr_text.as_bytes().to_vec(),
     }
 }
 
 /// Minimal directory stub for tests that only care about the binary path.
 #[derive(Debug, Clone, Default)]
 pub struct StubDirs {
-    /// Directory returned by [`BaseDirs::bin_dir`].
+    /// Directory returned by [`BaseDirs::executables`].
     pub bin_dir: Option<PathBuf>,
 }
 
 impl BaseDirs for StubDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        None
-    }
+    fn home(&self) -> Option<PathBuf> { None }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
+    fn executables(&self) -> Option<PathBuf> { self.bin_dir.clone() }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        None
-    }
+    fn whitaker_data(&self) -> Option<PathBuf> { None }
 }
 
 /// Compute the SHA-256 hex digest of a byte slice for test fixtures.
 #[cfg(any(test, feature = "test-support"))]
+#[must_use]
 pub fn sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     crate::hex::to_lower_hex(&Sha256::digest(data))
@@ -147,9 +147,9 @@ pub fn prebuilt_manifest_json(
     target: impl AsRef<str>,
     sha256: impl AsRef<str>,
 ) -> String {
-    let toolchain = toolchain.as_ref();
-    let target = target.as_ref();
-    let sha256 = sha256.as_ref();
+    let toolchain_value = toolchain.as_ref();
+    let target_value = target.as_ref();
+    let sha256_value = sha256.as_ref();
     format!(
         concat!(
             r#"{{"git_sha":"abc1234","schema_version":1,"#,
@@ -159,9 +159,9 @@ pub fn prebuilt_manifest_json(
             r#""files":["libwhitaker_suite.so"],"#,
             r#""sha256":"{sha256}"}}"#,
         ),
-        toolchain = toolchain,
-        target = target,
-        sha256 = sha256,
+        toolchain = toolchain_value,
+        target = target_value,
+        sha256 = sha256_value,
     )
 }
 
@@ -200,18 +200,20 @@ pub struct ExpectedCall {
 /// # Examples
 ///
 /// ```
-/// use whitaker_installer::deps::CommandExecutor;
-/// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+/// use whitaker_installer::{
+///     deps::CommandExecutor,
+///     test_utils::{ExpectedCall, StubExecutor, success_output},
+/// };
 ///
-/// let executor = StubExecutor::new(vec![
-///     ExpectedCall {
-///         cmd: "cargo",
-///         args: vec!["--version"],
-///         result: Ok(success_output()),
-///     },
-/// ]);
+/// let executor = StubExecutor::new(vec![ExpectedCall {
+///     cmd: "cargo",
+///     args: vec!["--version"],
+///     result: Ok(success_output()),
+/// }]);
 ///
-/// let output = executor.run("cargo", &["--version"]).expect("command failed");
+/// let output = executor
+///     .run("cargo", &["--version"])
+///     .expect("command failed");
 /// assert!(output.status.success());
 ///
 /// executor.assert_finished();
@@ -229,14 +231,13 @@ impl StubExecutor {
     /// ```
     /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
     ///
-    /// let executor = StubExecutor::new(vec![
-    ///     ExpectedCall {
-    ///         cmd: "cargo",
-    ///         args: vec!["build"],
-    ///         result: Ok(success_output()),
-    ///     },
-    /// ]);
+    /// let executor = StubExecutor::new(vec![ExpectedCall {
+    ///     cmd: "cargo",
+    ///     args: vec!["build"],
+    ///     result: Ok(success_output()),
+    /// }]);
     /// ```
+    #[must_use]
     pub fn new(expected: Vec<ExpectedCall>) -> Self {
         Self {
             expected: RefCell::new(expected.into()),
@@ -252,16 +253,16 @@ impl StubExecutor {
     /// # Examples
     ///
     /// ```
-    /// use whitaker_installer::deps::CommandExecutor;
-    /// use whitaker_installer::test_utils::{ExpectedCall, StubExecutor, success_output};
+    /// use whitaker_installer::{
+    ///     deps::CommandExecutor,
+    ///     test_utils::{ExpectedCall, StubExecutor, success_output},
+    /// };
     ///
-    /// let executor = StubExecutor::new(vec![
-    ///     ExpectedCall {
-    ///         cmd: "cargo",
-    ///         args: vec!["test"],
-    ///         result: Ok(success_output()),
-    ///     },
-    /// ]);
+    /// let executor = StubExecutor::new(vec![ExpectedCall {
+    ///     cmd: "cargo",
+    ///     args: vec!["test"],
+    ///     result: Ok(success_output()),
+    /// }]);
     ///
     /// // Execute the expected command
     /// let _ = executor.run("cargo", &["test"]);

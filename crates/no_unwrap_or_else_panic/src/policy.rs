@@ -1,7 +1,6 @@
 //! Pure lint policy evaluation logic shared by driver and behaviour tests.
 
-use crate::context::ContextSummary;
-use crate::panic_detector::PanicInfo;
+use crate::{context::ContextSummary, panic_detector::PanicInfo};
 
 /// Configuration flags controlling when the lint should emit diagnostics.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -12,9 +11,7 @@ pub(crate) struct LintPolicy {
 impl LintPolicy {
     /// Create a policy with the given `allow_in_main` flag.
     #[must_use]
-    pub(crate) const fn new(allow_in_main: bool) -> Self {
-        Self { allow_in_main }
-    }
+    pub(crate) const fn new(allow_in_main: bool) -> Self { Self { allow_in_main } }
 }
 
 /// Decide whether the lint should emit based on context and closure behaviour.
@@ -39,13 +36,13 @@ impl LintPolicy {
 ///     has_plain_panic: true,
 ///     has_interpolated_panic: false,
 /// };
-/// assert!(should_flag(&policy, &summary, &info, false));
+/// assert!(should_flag(policy, summary, info, false));
 /// ```
 #[must_use]
-pub(crate) fn should_flag(
-    policy: &LintPolicy,
-    summary: &ContextSummary,
-    panic_info: &PanicInfo,
+pub(crate) const fn should_flag(
+    policy: LintPolicy,
+    summary: ContextSummary,
+    panic_info: PanicInfo,
     is_doctest: bool,
 ) -> bool {
     if !panic_info.panics {
@@ -69,8 +66,9 @@ pub(crate) fn should_flag(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug)]
     struct PolicyCase {
@@ -155,13 +153,9 @@ mod tests {
     })]
     fn policy_evaluation(#[case] case: PolicyCase) {
         assert_eq!(
-            should_flag(
-                &case.policy,
-                &case.context,
-                &case.panic_info,
-                case.is_doctest
-            ),
-            case.should_flag
+            should_flag(case.policy, case.context, case.panic_info, case.is_doctest),
+            case.should_flag,
+            "policy evaluation should match the expected decision"
         );
     }
 }

@@ -2,9 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use super::community::detect_communities;
-use super::profile::{DecompositionContext, MethodProfile, SubjectKind};
-use super::vector::{FeatureCategory, MethodFeatureVector, build_feature_vector};
+use super::{
+    community::detect_communities,
+    profile::{DecompositionContext, MethodProfile, SubjectKind},
+    vector::{FeatureCategory, MethodFeatureVector, build_feature_vector},
+};
 
 /// The extraction shape suggested for a method community.
 ///
@@ -57,7 +59,10 @@ impl std::fmt::Display for SuggestedExtractionKind {
 ///
 /// ```
 /// use whitaker_common::decomposition_advice::{
-///     DecompositionContext, MethodProfileBuilder, SubjectKind, SuggestedExtractionKind,
+///     DecompositionContext,
+///     MethodProfileBuilder,
+///     SubjectKind,
+///     SuggestedExtractionKind,
 ///     suggest_decomposition,
 /// };
 ///
@@ -81,7 +86,10 @@ impl std::fmt::Display for SuggestedExtractionKind {
 /// );
 ///
 /// assert_eq!(suggestions.len(), 2);
-/// assert_eq!(suggestions[0].extraction_kind(), SuggestedExtractionKind::Module);
+/// assert_eq!(
+///     suggestions[0].extraction_kind(),
+///     SuggestedExtractionKind::Module
+/// );
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DecompositionSuggestion {
@@ -94,27 +102,19 @@ pub struct DecompositionSuggestion {
 impl DecompositionSuggestion {
     /// Returns the community label.
     #[must_use]
-    pub fn label(&self) -> &str {
-        &self.label
-    }
+    pub fn label(&self) -> &str { &self.label }
 
     /// Returns the suggested extraction kind.
     #[must_use]
-    pub fn extraction_kind(&self) -> SuggestedExtractionKind {
-        self.extraction_kind
-    }
+    pub const fn extraction_kind(&self) -> SuggestedExtractionKind { self.extraction_kind }
 
     /// Returns method names in the community.
     #[must_use]
-    pub fn methods(&self) -> &[String] {
-        &self.methods
-    }
+    pub fn methods(&self) -> &[String] { &self.methods }
 
     /// Returns the dominant features that motivated the suggestion.
     #[must_use]
-    pub fn rationale(&self) -> &[String] {
-        &self.rationale
-    }
+    pub fn rationale(&self) -> &[String] { &self.rationale }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,7 +133,10 @@ struct AggregatedFeature {
 ///
 /// ```
 /// use whitaker_common::decomposition_advice::{
-///     DecompositionContext, MethodProfileBuilder, SubjectKind, suggest_decomposition,
+///     DecompositionContext,
+///     MethodProfileBuilder,
+///     SubjectKind,
+///     suggest_decomposition,
 /// };
 ///
 /// let context = DecompositionContext::new("Parser", SubjectKind::Type);
@@ -197,9 +200,12 @@ fn build_suggestion(
     Some(DecompositionSuggestion {
         label: label_feature.display.clone(),
         extraction_kind: infer_extraction_kind(context.subject_kind(), label_feature.category),
+        // Community indices always come from `0..vectors.len()`, so the
+        // filter never drops a method; it only keeps the lookup panic free.
         methods: community
             .iter()
-            .map(|index| vectors[*index].method_name().to_owned())
+            .filter_map(|&index| vectors.get(index))
+            .map(|vector| vector.method_name().to_owned())
             .collect(),
         rationale,
     })
@@ -211,9 +217,16 @@ fn aggregate_features(
 ) -> Vec<AggregatedFeature> {
     let mut aggregated: BTreeMap<String, AggregatedFeature> = BTreeMap::new();
 
-    for method_index in community {
-        for (feature_key, weight) in vectors[*method_index].weights() {
-            let metadata = &vectors[*method_index].metadata()[feature_key];
+    for &method_index in community {
+        let Some(vector) = vectors.get(method_index) else {
+            continue;
+        };
+        for (feature_key, weight) in vector.weights() {
+            // Weights and metadata are built together, so the metadata entry
+            // always exists for a weighted feature key.
+            let Some(metadata) = vector.metadata().get(feature_key) else {
+                continue;
+            };
             let entry =
                 aggregated
                     .entry(feature_key.clone())
@@ -238,26 +251,17 @@ fn choose_label_feature(features: &[AggregatedFeature]) -> Option<&AggregatedFea
         FeatureCategory::LocalType,
     ];
 
-    for category in LABEL_PRIORITIES {
-        let mut matches: Vec<_> = features
+    LABEL_PRIORITIES.iter().find_map(|category| {
+        features
             .iter()
             .filter(|feature| feature.category == *category)
-            .collect();
-
-        if matches.is_empty() {
-            continue;
-        }
-
-        matches.sort_by(|left, right| {
-            right
-                .score
-                .cmp(&left.score)
-                .then_with(|| left.display.cmp(&right.display))
-        });
-        return Some(matches[0]);
-    }
-
-    None
+            .min_by(|left, right| {
+                right
+                    .score
+                    .cmp(&left.score)
+                    .then_with(|| left.display.cmp(&right.display))
+            })
+    })
 }
 
 fn choose_rationale(features: &[AggregatedFeature]) -> Vec<String> {

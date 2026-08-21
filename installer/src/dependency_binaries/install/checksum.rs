@@ -7,13 +7,13 @@
 //! owned here and imported by `downloader`, keeping the module dependency
 //! one-way.
 
+use std::{io, io::Read, path::Path};
+
+use sha2::{Digest, Sha256};
+use tracing::{debug, warn};
+
 use super::installer::DependencyBinaryInstallError;
 use crate::hex::to_lower_hex;
-use sha2::{Digest, Sha256};
-use std::io;
-use std::io::Read;
-use std::path::Path;
-use tracing::{debug, warn};
 
 /// Bounded `category` field for every checksum boundary event. Owned here so the
 /// module dependency stays one-way (`downloader` imports this; not vice versa).
@@ -95,7 +95,7 @@ pub(super) fn fetch_expected_checksum(
         );
         DependencyBinaryInstallError::Download {
             url: checksum_url.to_owned(),
-            reason: "empty or invalid checksum file".to_string(),
+            reason: "empty or invalid checksum file".to_owned(),
         }
     })?;
     let expected = token.to_ascii_lowercase();
@@ -133,7 +133,10 @@ fn compute_sha256(mut reader: impl Read) -> io::Result<String> {
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error),
         };
-        hasher.update(&buffer[..bytes_read]);
+        let chunk = buffer
+            .get(..bytes_read)
+            .ok_or_else(|| io::Error::other("reader returned an out-of-range byte count"))?;
+        hasher.update(chunk);
     }
     Ok(to_lower_hex(&hasher.finalize()))
 }
@@ -159,7 +162,7 @@ pub(super) fn verify_archive_checksum(
     if actual_checksum != expected {
         return Err(DependencyBinaryInstallError::Checksum {
             archive: archive.to_path_buf(),
-            expected: expected.to_string(),
+            expected: expected.to_owned(),
             actual: actual_checksum,
         });
     }
@@ -170,23 +173,23 @@ pub(super) fn verify_archive_checksum(
 mod tests {
     //! Tests for checksum parsing, streaming SHA-256, and verification.
 
-    use super::*;
-    use rstest::rstest;
     use std::io::Write;
+
+    use rstest::rstest;
     use tempfile::NamedTempFile;
 
+    use super::*;
+
     /// Write `contents` to a fresh temp file and return the handle.
-    fn temp_file_with(contents: &[u8]) -> NamedTempFile {
-        let mut file = NamedTempFile::new().expect("create temp file");
-        file.write_all(contents).expect("write temp file");
-        file.flush().expect("flush temp file");
-        file
+    fn temp_file_with(contents: &[u8]) -> io::Result<NamedTempFile> {
+        let mut file = NamedTempFile::new()?;
+        file.write_all(contents)?;
+        file.flush()?;
+        Ok(file)
     }
 
     /// Reopen `file` as a fresh read handle for streaming into the hasher.
-    fn read_handle(file: &NamedTempFile) -> impl Read {
-        file.reopen().expect("reopen temp file")
-    }
+    fn read_handle(file: &NamedTempFile) -> io::Result<impl Read> { file.reopen() }
 
     #[rstest]
     #[case(404, true)]
@@ -232,9 +235,10 @@ mod tests {
 
     #[test]
     fn compute_sha256_matches_known_vector() {
-        let file = temp_file_with(b"abc");
+        let file = temp_file_with(b"abc").expect("temp file should be written");
         assert_eq!(
-            compute_sha256(read_handle(&file)).expect("hash archive stream"),
+            compute_sha256(read_handle(&file).expect("temp file should reopen"))
+                .expect("hash archive stream"),
             concat!(
                 "ba7816bf8f01cfea414140de5dae2223",
                 "b00361a396177a9cb410ff61f20015ad",
@@ -260,8 +264,14 @@ mod tests {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"));
             }
             let take = self.data.len().min(self.chunk).min(buf.len());
-            buf[..take].copy_from_slice(&self.data[..take]);
-            self.data = &self.data[take..];
+            let (to_copy, rest) = self.data.split_at(take);
+            let Some(target) = buf.get_mut(..take) else {
+                return Err(io::Error::other(
+                    "read length must be bounded by the buffer",
+                ));
+            };
+            target.copy_from_slice(to_copy);
+            self.data = rest;
             Ok(take)
         }
     }
@@ -308,17 +318,29 @@ mod tests {
 
     #[test]
     fn verify_archive_checksum_accepts_a_matching_digest() {
-        let file = temp_file_with(b"hello world");
-        let expected = compute_sha256(read_handle(&file)).expect("hash archive stream");
-        assert!(verify_archive_checksum(read_handle(&file), file.path(), &expected).is_ok());
+        let file = temp_file_with(b"hello world").expect("temp file should be written");
+        let expected = compute_sha256(read_handle(&file).expect("temp file should reopen"))
+            .expect("hash archive stream");
+        assert!(
+            verify_archive_checksum(
+                read_handle(&file).expect("temp file should reopen"),
+                file.path(),
+                &expected
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn verify_archive_checksum_rejects_a_mismatched_digest() {
-        let file = temp_file_with(b"hello world");
+        let file = temp_file_with(b"hello world").expect("temp file should be written");
         let wrong = "0".repeat(64);
-        let error = verify_archive_checksum(read_handle(&file), file.path(), &wrong)
-            .expect_err("mismatched checksum must fail");
+        let error = verify_archive_checksum(
+            read_handle(&file).expect("temp file should reopen"),
+            file.path(),
+            &wrong,
+        )
+        .expect_err("mismatched checksum must fail");
         match error {
             DependencyBinaryInstallError::Checksum {
                 archive,

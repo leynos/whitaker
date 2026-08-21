@@ -97,23 +97,23 @@ pub(crate) fn lint_constant(crate_name: &str) -> String {
         .collect()
 }
 
-fn capitalise_segment(segment: &str) -> Option<String> {
+fn capitalize_segment(segment: &str) -> Option<String> {
     let mut characters = segment.chars();
     let first = characters.next()?;
 
-    let mut capitalised = String::with_capacity(segment.len());
-    capitalised.push(first.to_ascii_uppercase());
+    let mut capitalized = String::with_capacity(segment.len());
+    capitalized.push(first.to_ascii_uppercase());
     for character in characters {
-        capitalised.push(character.to_ascii_lowercase());
+        capitalized.push(character.to_ascii_lowercase());
     }
 
-    Some(capitalised)
+    Some(capitalized)
 }
 
 pub(crate) fn pass_struct_name(crate_name: &str) -> String {
     crate_name
         .split(['-', '_'])
-        .filter_map(capitalise_segment)
+        .filter_map(capitalize_segment)
         .collect()
 }
 
@@ -142,9 +142,9 @@ pub(crate) fn normalize_ui_directory(input: &str) -> Result<String, TemplateErro
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case("module_max_lines", "MODULE_MAX_LINES")]

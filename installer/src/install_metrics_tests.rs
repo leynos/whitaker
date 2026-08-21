@@ -1,12 +1,15 @@
 //! Unit tests for installer metrics persistence and aggregation.
 
-use crate::install_metrics::{
-    InstallMetrics, InstallMetricsError, InstallMode, record_install_at_path,
-};
+use std::{io::ErrorKind, path::PathBuf, time::Duration};
+
 use rstest::{fixture, rstest};
-use std::io::ErrorKind;
-use std::path::PathBuf;
-use std::time::Duration;
+
+use crate::install_metrics::{
+    InstallMetrics,
+    InstallMetricsError,
+    InstallMode,
+    record_install_at_path,
+};
 
 struct MetricsPathFixture {
     _temp_dir: tempfile::TempDir,
@@ -14,20 +17,24 @@ struct MetricsPathFixture {
 }
 
 #[fixture]
-fn metrics_path_fixture() -> MetricsPathFixture {
-    let temp_dir = tempfile::tempdir().expect("create tempdir");
+fn metrics_path_fixture() -> std::io::Result<MetricsPathFixture> {
+    let temp_dir = tempfile::tempdir()?;
     let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
-    MetricsPathFixture {
+    Ok(MetricsPathFixture {
         _temp_dir: temp_dir,
         metrics_path,
-    }
+    })
 }
 
 #[test]
 fn zero_state_rates_are_zero() {
     let metrics = InstallMetrics::default();
-    assert_eq!(metrics.download_rate(), 0.0);
-    assert_eq!(metrics.build_rate(), 0.0);
+    assert_eq!(
+        metrics.download_rate_permille(),
+        0,
+        "zero-state download rate"
+    );
+    assert_eq!(metrics.build_rate_permille(), 0, "zero-state build rate");
 }
 
 #[test]
@@ -40,12 +47,20 @@ fn record_install_updates_counts_and_duration() {
     assert_eq!(metrics.download_installs(), 1);
     assert_eq!(metrics.build_installs(), 1);
     assert_eq!(metrics.total_install_duration(), Duration::from_secs(2));
-    assert!((metrics.download_rate() - 0.5).abs() < f64::EPSILON);
-    assert!((metrics.build_rate() - 0.5).abs() < f64::EPSILON);
+    assert_eq!(
+        metrics.download_rate_permille(),
+        500,
+        "download rate permille"
+    );
+    assert_eq!(metrics.build_rate_permille(), 500, "build rate permille");
 }
 
 #[rstest]
-fn record_install_at_path_creates_metrics_file(metrics_path_fixture: MetricsPathFixture) {
+fn record_install_at_path_creates_metrics_file(
+    #[from(metrics_path_fixture)] metrics_path_res: std::io::Result<MetricsPathFixture>,
+) {
+    let metrics_path_fixture = metrics_path_res.expect("metrics fixture should be created");
+
     let result = record_install_at_path(
         &metrics_path_fixture.metrics_path,
         InstallMode::Download,
@@ -58,7 +73,11 @@ fn record_install_at_path_creates_metrics_file(metrics_path_fixture: MetricsPath
 }
 
 #[rstest]
-fn malformed_metrics_file_is_reset_and_recovered(metrics_path_fixture: MetricsPathFixture) {
+fn malformed_metrics_file_is_reset_and_recovered(
+    #[from(metrics_path_fixture)] metrics_path_res: std::io::Result<MetricsPathFixture>,
+) {
+    let metrics_path_fixture = metrics_path_res.expect("metrics fixture should be created");
+
     std::fs::create_dir_all(
         metrics_path_fixture
             .metrics_path
@@ -82,7 +101,11 @@ fn malformed_metrics_file_is_reset_and_recovered(metrics_path_fixture: MetricsPa
 }
 
 #[rstest]
-fn persistence_failure_is_reported(metrics_path_fixture: MetricsPathFixture) {
+fn persistence_failure_is_reported(
+    #[from(metrics_path_fixture)] metrics_path_res: std::io::Result<MetricsPathFixture>,
+) {
+    let metrics_path_fixture = metrics_path_res.expect("metrics fixture should be created");
+
     std::fs::create_dir_all(&metrics_path_fixture.metrics_path).expect("create blocking directory");
 
     let error = record_install_at_path(
@@ -110,7 +133,11 @@ fn persistence_failure_is_reported(metrics_path_fixture: MetricsPathFixture) {
 }
 
 #[rstest]
-fn summary_line_includes_rates_and_total_time(metrics_path_fixture: MetricsPathFixture) {
+fn summary_line_includes_rates_and_total_time(
+    #[from(metrics_path_fixture)] metrics_path_res: std::io::Result<MetricsPathFixture>,
+) {
+    let metrics_path_fixture = metrics_path_res.expect("metrics fixture should be created");
+
     record_install_at_path(
         &metrics_path_fixture.metrics_path,
         InstallMode::Download,
@@ -131,7 +158,11 @@ fn summary_line_includes_rates_and_total_time(metrics_path_fixture: MetricsPathF
 }
 
 #[rstest]
-fn long_durations_saturate_total_install_time(metrics_path_fixture: MetricsPathFixture) {
+fn long_durations_saturate_total_install_time(
+    #[from(metrics_path_fixture)] metrics_path_res: std::io::Result<MetricsPathFixture>,
+) {
+    let metrics_path_fixture = metrics_path_res.expect("metrics fixture should be created");
+
     std::fs::create_dir_all(
         metrics_path_fixture
             .metrics_path
@@ -168,16 +199,24 @@ fn long_durations_saturate_total_install_time(metrics_path_fixture: MetricsPathF
 }
 
 #[rstest]
-fn concurrent_records_do_not_lose_updates(metrics_path_fixture: MetricsPathFixture) {
+fn concurrent_records_do_not_lose_updates(
+    #[from(metrics_path_fixture)] metrics_path_res: std::io::Result<MetricsPathFixture>,
+) {
+    let metrics_path_fixture = metrics_path_res.expect("metrics fixture should be created");
+
     let path = metrics_path_fixture.metrics_path;
     let mut threads = Vec::new();
 
     for _ in 0..4 {
-        let path = path.clone();
+        let writer_path = path.clone();
         threads.push(std::thread::spawn(move || {
             for _ in 0..20 {
-                record_install_at_path(&path, InstallMode::Download, Duration::from_millis(1))
-                    .expect("record install from concurrent writer");
+                record_install_at_path(
+                    &writer_path,
+                    InstallMode::Download,
+                    Duration::from_millis(1),
+                )
+                .expect("record install from concurrent writer");
             }
         }));
     }

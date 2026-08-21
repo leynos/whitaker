@@ -1,16 +1,23 @@
 //! Package dependency binaries and shared provenance assets for release uploads.
 
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
+
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use thiserror::Error;
-use whitaker_installer::dependency_binaries::{
-    find_dependency_binary, required_dependency_binaries,
+use whitaker_installer::{
+    dependency_binaries::{find_dependency_binary, required_dependency_binaries},
+    dependency_packaging::{
+        DependencyPackageParams,
+        DependencyPackagingError,
+        package_dependency_binary,
+        write_provenance_markdown,
+    },
+    installer_packaging::TargetTriple,
+    output::write_stderr_line,
 };
-use whitaker_installer::dependency_packaging::{
-    DependencyPackageParams, DependencyPackagingError, package_dependency_binary,
-    write_provenance_markdown,
-};
-use whitaker_installer::installer_packaging::TargetTriple;
 
 /// Package repository-hosted dependency binaries for release publication.
 #[derive(Parser, Debug)]
@@ -65,6 +72,9 @@ enum CliError {
 
     #[error("{0}")]
     Target(#[from] whitaker_installer::artefact::error::ArtefactError),
+
+    #[error("failed to write to stdout: {0}")]
+    Stdout(#[from] std::io::Error),
 }
 
 /// Parse command-line arguments, execute the requested subcommand, and report
@@ -72,7 +82,7 @@ enum CliError {
 fn main() {
     let cli = Cli::parse();
     if let Err(error) = run(cli) {
-        eprintln!("error: {error}");
+        write_stderr_line(&mut std::io::stderr(), format!("error: {error}"));
         std::process::exit(1);
     }
 }
@@ -85,35 +95,54 @@ fn run(cli: Cli) -> Result<(), CliError> {
             target,
             binary_path,
             output_dir,
-        } => {
-            let dependency = find_dependency_binary(&package)
-                .map_err(|error| CliError::Manifest(error.to_string()))?
-                .cloned()
-                .ok_or(CliError::UnknownPackage(package))?;
-            let target = TargetTriple::try_from(target.as_str())?;
-            let output = package_dependency_binary(DependencyPackageParams {
-                dependency,
-                target,
-                binary_path,
-                output_dir,
-            })?;
-            println!("Created {}", output.archive_path.display());
-        }
-        Command::Provenance { output_dir } => {
-            let dependencies = required_dependency_binaries()
-                .map_err(|error| CliError::Manifest(error.to_string()))?;
-            let output = write_provenance_markdown(&output_dir, dependencies)?;
-            println!("Created {}", output.display());
-        }
+        } => run_package(package, &target, binary_path, output_dir),
+        Command::Provenance { output_dir } => run_provenance(&output_dir),
     }
+}
+
+/// Package a single dependency binary into a release archive.
+fn run_package(
+    package: String,
+    target: &str,
+    binary_path: PathBuf,
+    output_dir: PathBuf,
+) -> Result<(), CliError> {
+    let dependency = find_dependency_binary(&package)
+        .map_err(|error| CliError::Manifest(error.to_string()))?
+        .cloned()
+        .ok_or(CliError::UnknownPackage(package))?;
+    let target_triple = TargetTriple::try_from(target)?;
+    let output = package_dependency_binary(&DependencyPackageParams {
+        dependency,
+        target: target_triple,
+        binary_path,
+        output_dir,
+    })?;
+    writeln!(
+        std::io::stdout(),
+        "Created {}",
+        output.archive_path.display()
+    )?;
+    Ok(())
+}
+
+/// Write the dependency provenance summary into `output_dir`.
+fn run_provenance(output_dir: &Path) -> Result<(), CliError> {
+    let dependencies =
+        required_dependency_binaries().map_err(|error| CliError::Manifest(error.to_string()))?;
+    let output = write_provenance_markdown(output_dir, dependencies)?;
+    writeln!(std::io::stdout(), "Created {}", output.display())?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //! Tests for the dependency-binary packaging command.
+
     use tempfile::tempdir;
     use whitaker_installer::dependency_binaries::provenance_filename;
+
+    use super::*;
 
     #[test]
     fn run_package_command_rejects_invalid_target() {

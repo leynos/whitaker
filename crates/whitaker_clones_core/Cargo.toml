@@ -31,6 +31,7 @@ rstest-bdd-macros = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 toml = { workspace = true }
+whitaker_test_macros = { workspace = true }
 
 [build-dependencies]
 camino = { workspace = true }

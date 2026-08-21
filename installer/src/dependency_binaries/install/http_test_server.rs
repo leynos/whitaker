@@ -5,14 +5,20 @@
 //! Kept in its own module so the boundary-test file stays within its size
 //! budget.
 
-use std::collections::HashMap;
-use std::io;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    io,
+    io::{BufRead, BufReader, Write},
+    net::{TcpListener, TcpStream},
+    sync::{
+        Arc,
+        Mutex,
+        PoisonError,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 /// One canned HTTP/1.1 response body served for a matched path. `declared_len`
 /// is the advertised `Content-Length`, which normally matches `body`.
@@ -52,41 +58,47 @@ pub(super) struct LocalServer {
 }
 
 impl LocalServer {
-    pub(super) fn start(routes: HashMap<String, CannedResponse>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
-        let port = listener.local_addr().expect("resolve local addr").port();
-        listener
-            .set_nonblocking(true)
-            .expect("set listener non-blocking");
+    pub(super) fn start(routes: HashMap<String, CannedResponse>) -> io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        listener.set_nonblocking(true)?;
         let requested = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let handle = {
-            let requested = Arc::clone(&requested);
-            let stop = Arc::clone(&stop);
-            thread::spawn(move || run_server(&listener, &routes, &requested, &stop))
+            let requested_for_thread = Arc::clone(&requested);
+            let stop_for_thread = Arc::clone(&stop);
+            thread::spawn(move || {
+                run_server(&listener, &routes, &requested_for_thread, &stop_for_thread);
+            })
         };
-        Self {
+        Ok(Self {
             base_url: format!("http://127.0.0.1:{port}"),
             requested,
             stop,
             handle: Some(handle),
-        }
+        })
     }
 
-    pub(super) fn url(&self, path: &str) -> String {
-        format!("{}{path}", self.base_url)
-    }
+    pub(super) fn url(&self, path: &str) -> String { format!("{}{path}", self.base_url) }
 
     pub(super) fn requested_paths(&self) -> Vec<String> {
-        self.requested.lock().expect("lock requested paths").clone()
+        // A poisoned lock only means a test thread panicked while logging a
+        // request; the recorded paths remain a valid `Vec`.
+        self.requested
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
 impl Drop for LocalServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+        if let Some(handle) = self.handle.take()
+            && handle.join().is_err()
+        {
+            // The server thread panicked; tests observe failures through the
+            // requests they make, so nothing further can be reported here.
         }
     }
 }
@@ -112,6 +124,14 @@ fn run_server(
 
 /// Read one request, record its path, and write the matching canned response
 /// (or a 404). `Connection: close` lets the client frame the response end.
+/// Restores blocking mode and bounds reads and writes on an accepted socket.
+fn configure_connection(stream: &TcpStream) -> io::Result<()> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    Ok(())
+}
+
 fn serve_connection(
     mut stream: TcpStream,
     routes: &HashMap<String, CannedResponse>,
@@ -120,9 +140,10 @@ fn serve_connection(
     // Restore blocking mode and bound reads/writes on the accepted connection
     // (the listener is non-blocking only so the accept loop can poll for
     // shutdown). `try_clone` shares the socket, so `peer` inherits these.
-    let _ = stream.set_nonblocking(false);
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+    // Drop the connection if the socket cannot be configured.
+    if configure_connection(&stream).is_err() {
+        return;
+    }
     let Ok(peer) = stream.try_clone() else {
         return;
     };
@@ -139,20 +160,30 @@ fn serve_connection(
     // Drain the remaining request headers up to the blank line.
     loop {
         let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
-            Ok(_) if line == "\r\n" || line == "\n" => break,
-            Ok(_) => {}
-            Err(_) => break,
+        let bytes_read = reader.read_line(&mut line).unwrap_or(0);
+        let is_blank_line = matches!(line.as_str(), "\r\n" | "\n");
+        if bytes_read == 0 || is_blank_line {
+            break;
         }
     }
     // Resolve the route first — the returned references borrow `routes`, not
     // `path` — so the owned `path` can then move into the request log.
-    let (status_line, body, declared_len): (&str, &[u8], usize) = match routes.get(&path) {
-        Some(response) => (response.status_line, &response.body, response.declared_len),
-        None => ("404 Not Found", b"not found", b"not found".len()),
-    };
-    requested.lock().expect("lock requested paths").push(path);
+    let not_found: &[u8] = b"not found";
+    let (status_line, body, declared_len) = routes.get(&path).map_or_else(
+        || ("404 Not Found", not_found, not_found.len()),
+        |response| {
+            (
+                response.status_line,
+                response.body.as_slice(),
+                response.declared_len,
+            )
+        },
+    );
+    // See `LocalServer::requested_paths` for why poisoning is recovered here.
+    requested
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(path);
     let header = format!(
         concat!(
             "HTTP/1.1 {}\r\n",
@@ -162,7 +193,11 @@ fn serve_connection(
         ),
         status_line, declared_len,
     );
-    let _ = stream.write_all(header.as_bytes());
-    let _ = stream.write_all(body);
-    let _ = stream.flush();
+    let write_result = stream
+        .write_all(header.as_bytes())
+        .and_then(|()| stream.write_all(body))
+        .and_then(|()| stream.flush());
+    if write_result.is_err() {
+        // The client disconnected early; there is nothing further to serve.
+    }
 }

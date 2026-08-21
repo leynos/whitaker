@@ -4,8 +4,6 @@
 //! detection for both parsed and unparsed attribute variants.
 
 #[cfg(feature = "dylint-driver")]
-use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
-#[cfg(feature = "dylint-driver")]
 use rstest::rstest;
 #[cfg(feature = "dylint-driver")]
 use rustc_ast::ast::{DelimArgs, MetaItem, MetaItemInner, MetaItemKind, Path, PathSegment, Safety};
@@ -24,6 +22,9 @@ use rustc_span::{AttrId, DUMMY_SP, create_default_session_globals_then};
 #[cfg(feature = "dylint-driver")]
 use whitaker_common::{AttributeKind, AttributePath, PARSED_ATTRIBUTE_PLACEHOLDER};
 
+#[cfg(feature = "dylint-driver")]
+use super::{convert_attribute, has_test_ancestry, is_cfg_test_attribute, meta_contains_test_cfg};
+
 /// Type-safe wrapper for AST path segments.
 #[cfg(feature = "dylint-driver")]
 #[derive(Debug, Clone, Copy)]
@@ -31,16 +32,12 @@ struct PathSegments(&'static [&'static str]);
 
 #[cfg(feature = "dylint-driver")]
 impl PathSegments {
-    const fn new(segments: &'static [&'static str]) -> Self {
-        Self(segments)
-    }
+    const fn new(segments: &'static [&'static str]) -> Self { Self(segments) }
 }
 
 #[cfg(feature = "dylint-driver")]
 impl AsRef<[&'static str]> for PathSegments {
-    fn as_ref(&self) -> &[&'static str] {
-        self.0
-    }
+    fn as_ref(&self) -> &[&'static str] { self.0 }
 }
 
 #[cfg(feature = "dylint-driver")]
@@ -54,6 +51,25 @@ enum AttributeFixture {
     CfgAndBuiltInTest,
 }
 
+/// Outcome expected from `has_test_ancestry` for a table-driven case.
+#[cfg(feature = "dylint-driver")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AncestryOutcome {
+    TestContext,
+    NotTestContext,
+}
+
+#[cfg(feature = "dylint-driver")]
+impl AncestryOutcome {
+    const fn from_detection(is_test_context: bool) -> Self {
+        if is_test_context {
+            Self::TestContext
+        } else {
+            Self::NotTestContext
+        }
+    }
+}
+
 #[cfg(feature = "dylint-driver")]
 #[derive(Clone, Copy, Debug)]
 struct HasTestAncestryCase {
@@ -61,7 +77,7 @@ struct HasTestAncestryCase {
     attr_fixture: AttributeFixture,
     is_function_item: bool,
     include_custom_attribute: bool,
-    expected: bool,
+    expected: AncestryOutcome,
 }
 
 // Common path constants
@@ -183,9 +199,7 @@ fn meta_list(segments: PathSegments, children: Vec<MetaItemInner>) -> MetaItem {
 }
 
 #[cfg(feature = "dylint-driver")]
-fn meta_inner(meta: MetaItem) -> MetaItemInner {
-    MetaItemInner::MetaItem(meta)
-}
+fn meta_inner(meta: MetaItem) -> MetaItemInner { MetaItemInner::MetaItem(meta) }
 
 // ---------------------------------------------------------------------------
 // cfg pattern helpers
@@ -257,9 +271,7 @@ fn build_cfg_all_test_unix() -> MetaItem {
 
 /// Builds `cfg(not(test))`.
 #[cfg(feature = "dylint-driver")]
-fn build_cfg_not_test() -> MetaItem {
-    cfg_not(meta_word(PATH_TEST))
-}
+fn build_cfg_not_test() -> MetaItem { cfg_not(meta_word(PATH_TEST)) }
 
 /// Builds `cfg_attr(test, cfg(test))`.
 #[cfg(feature = "dylint-driver")]
@@ -279,8 +291,12 @@ fn build_cfg_attr_test_allow() -> MetaItem {
 /// Helper function to test `meta_contains_test_cfg` behaviour.
 /// Must be called within `create_default_session_globals_then`.
 #[cfg(feature = "dylint-driver")]
-fn assert_meta_test_cfg(meta: MetaItem, expected: bool) {
-    assert_eq!(meta_contains_test_cfg(&meta), expected);
+fn assert_meta_test_cfg(meta: &MetaItem, expected: bool) {
+    assert_eq!(
+        meta_contains_test_cfg(meta),
+        expected,
+        "meta item should report test-cfg detection as {expected}"
+    );
 }
 
 /// Asserts that `convert_attribute` preserves path segments for the given
@@ -340,42 +356,42 @@ fn build_additional_test_attributes(include_custom: bool) -> Vec<AttributePath> 
     attr_fixture: AttributeFixture::None,
     is_function_item: false,
     include_custom_attribute: false,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::cfg_test_attribute_detected(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::CfgTest,
     is_function_item: false,
     include_custom_attribute: false,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::built_in_test_attribute_on_function_item(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::BuiltInTest,
     is_function_item: true,
     include_custom_attribute: false,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::configured_test_attribute_on_function_item(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::CustomTest,
     is_function_item: true,
     include_custom_attribute: true,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::all_detection_paths_together(HasTestAncestryCase {
     has_test_context_ancestry: true,
     attr_fixture: AttributeFixture::CfgAndBuiltInTest,
     is_function_item: true,
     include_custom_attribute: true,
-    expected: true,
+    expected: AncestryOutcome::TestContext,
 })]
 #[case::negative_case(HasTestAncestryCase {
     has_test_context_ancestry: false,
     attr_fixture: AttributeFixture::Allow,
     is_function_item: false,
     include_custom_attribute: false,
-    expected: false,
+    expected: AncestryOutcome::NotTestContext,
 })]
 fn has_test_ancestry_detects_test_context(#[case] case: HasTestAncestryCase) {
     create_default_session_globals_then(|| {
@@ -383,14 +399,16 @@ fn has_test_ancestry_detects_test_context(#[case] case: HasTestAncestryCase) {
         let additional_test_attributes =
             build_additional_test_attributes(case.include_custom_attribute);
 
+        let outcome = AncestryOutcome::from_detection(has_test_ancestry(
+            case.has_test_context_ancestry,
+            &attrs,
+            case.is_function_item,
+            &additional_test_attributes,
+        ));
+
         assert_eq!(
-            has_test_ancestry(
-                case.has_test_context_ancestry,
-                &attrs,
-                case.is_function_item,
-                &additional_test_attributes,
-            ),
-            case.expected,
+            outcome, case.expected,
+            "test-ancestry detection should match the expected outcome for {case:?}"
         );
     });
 }
@@ -400,7 +418,7 @@ fn has_test_ancestry_detects_test_context(#[case] case: HasTestAncestryCase) {
 #[test]
 fn meta_contains_test_cfg_any_test_doctest() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_any_test_doctest(), true);
+        assert_meta_test_cfg(&build_cfg_any_test_doctest(), true);
     });
 }
 
@@ -409,7 +427,7 @@ fn meta_contains_test_cfg_any_test_doctest() {
 #[test]
 fn meta_contains_test_cfg_all_test_unix() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_all_test_unix(), true);
+        assert_meta_test_cfg(&build_cfg_all_test_unix(), true);
     });
 }
 
@@ -418,7 +436,7 @@ fn meta_contains_test_cfg_all_test_unix() {
 #[test]
 fn meta_contains_test_cfg_not_test() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_not_test(), false);
+        assert_meta_test_cfg(&build_cfg_not_test(), false);
     });
 }
 
@@ -427,7 +445,7 @@ fn meta_contains_test_cfg_not_test() {
 #[test]
 fn meta_contains_test_cfg_attr_test_cfg_test() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_attr_test_cfg_test(), true);
+        assert_meta_test_cfg(&build_cfg_attr_test_cfg_test(), true);
     });
 }
 
@@ -436,7 +454,7 @@ fn meta_contains_test_cfg_attr_test_cfg_test() {
 #[test]
 fn meta_contains_test_cfg_attr_test_allow() {
     create_default_session_globals_then(|| {
-        assert_meta_test_cfg(build_cfg_attr_test_allow(), false);
+        assert_meta_test_cfg(&build_cfg_attr_test_allow(), false);
     });
 }
 
@@ -457,7 +475,7 @@ fn convert_attribute_handles_parsed_must_use() {
     // Should return a placeholder "parsed" path instead of panicking.
     assert_eq!(
         attribute.path().segments(),
-        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_string()]
+        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_owned()]
     );
     assert_eq!(attribute.kind(), AttributeKind::Outer);
 }

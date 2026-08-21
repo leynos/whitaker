@@ -4,9 +4,11 @@
 //! that users can add to their shell profile to enable Dylint library discovery,
 //! as well as dry-run information formatting.
 
-use crate::crate_name::CrateName;
-use camino::Utf8Path;
 use std::io::Write;
+
+use camino::Utf8Path;
+
+use crate::crate_name::CrateName;
 
 /// Write a line to stderr, ignoring write failures.
 ///
@@ -39,9 +41,7 @@ impl ShellSnippet {
     /// use camino::Utf8PathBuf;
     /// use whitaker_installer::output::ShellSnippet;
     ///
-    /// let path = Utf8PathBuf::from(
-    ///     "/home/user/.local/share/dylint/lib/nightly-2025-01-15/release"
-    /// );
+    /// let path = Utf8PathBuf::from("/home/user/.local/share/dylint/lib/nightly-2025-01-15/release");
     /// let snippet = ShellSnippet::new(&path);
     ///
     /// assert!(snippet.bash.contains("DYLINT_LIBRARY_PATH"));
@@ -86,8 +86,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///
 /// ```
 /// use camino::Utf8PathBuf;
-/// use whitaker_installer::crate_name::CrateName;
-/// use whitaker_installer::output::DryRunInfo;
+/// use whitaker_installer::{crate_name::CrateName, output::DryRunInfo};
 ///
 /// let workspace = Utf8PathBuf::from("/home/user/whitaker");
 /// let target = Utf8PathBuf::from("/home/user/.local/share/dylint/lib");
@@ -99,9 +98,11 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     target_dir: &target,
 ///     verbosity: 0,
 ///     quiet: false,
-///     skip_deps: false,
-///     skip_wrapper: false,
-///     no_update: false,
+///     skips: whitaker_installer::output::DryRunSkips {
+///         deps: false,
+///         wrapper: false,
+///         update: false,
+///     },
 ///     jobs: None,
 ///     crates: &crates,
 /// };
@@ -122,16 +123,23 @@ pub struct DryRunInfo<'a> {
     pub verbosity: u8,
     /// Whether quiet mode is enabled.
     pub quiet: bool,
-    /// Whether dependency installation is skipped.
-    pub skip_deps: bool,
-    /// Whether wrapper script generation is skipped.
-    pub skip_wrapper: bool,
-    /// Whether repository updates are disabled.
-    pub no_update: bool,
+    /// Which installation steps are skipped.
+    pub skips: DryRunSkips,
     /// Optional parallel job count.
     pub jobs: Option<usize>,
     /// Crates to be built.
     pub crates: &'a [CrateName],
+}
+
+/// Step-skipping flags reported in dry-run output.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DryRunSkips {
+    /// Whether dependency installation is skipped.
+    pub deps: bool,
+    /// Whether wrapper script generation is skipped.
+    pub wrapper: bool,
+    /// Whether repository updates are disabled.
+    pub update: bool,
 }
 
 impl DryRunInfo<'_> {
@@ -146,9 +154,9 @@ impl DryRunInfo<'_> {
             format!("Target directory: {}", self.target_dir),
             format!("Verbosity level: {}", self.verbosity),
             format!("Quiet: {}", self.quiet),
-            format!("Skip deps: {}", self.skip_deps),
-            format!("Skip wrapper: {}", self.skip_wrapper),
-            format!("No update: {}", self.no_update),
+            format!("Skip deps: {}", self.skips.deps),
+            format!("Skip wrapper: {}", self.skips.wrapper),
+            format!("No update: {}", self.skips.update),
         ];
 
         if let Some(jobs) = self.jobs {
@@ -167,9 +175,12 @@ impl DryRunInfo<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //! Tests for installer output rendering.
+
     use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
+
+    use super::*;
 
     /// Shared fixture providing a test library path.
     #[fixture]
@@ -178,10 +189,9 @@ mod tests {
     }
 
     /// Shared fixture providing a shell snippet for the test path.
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
-    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet {
-        ShellSnippet::new(&test_path)
-    }
+    fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet { ShellSnippet::new(&test_path) }
 
     #[rstest]
     fn snippet_contains_path(test_snippet: ShellSnippet, test_path: Utf8PathBuf) {
@@ -214,7 +224,7 @@ mod tests {
     #[rstest]
     #[case::singular(1, "1 lint library")]
     #[case::plural(5, "5 lint libraries")]
-    fn success_message_pluralises_correctly(#[case] count: usize, #[case] expected: &str) {
+    fn success_message_pluralizes_correctly(#[case] count: usize, #[case] expected: &str) {
         let path = Utf8PathBuf::from("/tmp");
         let msg = success_message(count, &path);
         assert!(msg.contains(expected));

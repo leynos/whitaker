@@ -70,9 +70,11 @@ impl SimplePath {
         let mut candidate_iter = candidate.into_iter();
 
         for expected in &self.segments {
-            match candidate_iter.next() {
-                Some(candidate_segment) if expected == candidate_segment.as_ref() => continue,
-                _ => return false,
+            let Some(candidate_segment) = candidate_iter.next() else {
+                return false;
+            };
+            if expected != candidate_segment.as_ref() {
+                return false;
             }
         }
 
@@ -86,15 +88,11 @@ impl SimplePath {
 }
 
 impl From<&str> for SimplePath {
-    fn from(path: &str) -> Self {
-        Self::parse(path)
-    }
+    fn from(path: &str) -> Self { Self::parse(path) }
 }
 
 impl From<String> for SimplePath {
-    fn from(path: String) -> Self {
-        Self::parse(&path)
-    }
+    fn from(path: String) -> Self { Self::parse(&path) }
 }
 
 impl fmt::Display for SimplePath {
@@ -105,9 +103,13 @@ impl fmt::Display for SimplePath {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rstest::rstest;
+    //! Tests for path normalization and module-path utilities.
+
     use std::collections::VecDeque;
+
+    use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     fn filters_empty_segments() {

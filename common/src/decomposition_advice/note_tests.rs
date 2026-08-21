@@ -1,10 +1,15 @@
 //! Unit tests for decomposition diagnostic-note rendering.
 
 use super::format_diagnostic_note;
-use crate::decomposition_advice::{DecompositionContext, MethodProfile, SubjectKind};
-use crate::test_support::decomposition::{
-    MethodInput, decomposition_suggestions, parser_serde_fs_fixture, profile,
-    transport_trait_fixture,
+use crate::{
+    decomposition_advice::{DecompositionContext, MethodProfile, SubjectKind},
+    test_support::decomposition::{
+        MethodInput,
+        decomposition_suggestions,
+        parser_serde_fs_fixture,
+        profile,
+        transport_trait_fixture,
+    },
 };
 
 fn parser_serde_fs_suggestions() -> (
@@ -14,8 +19,8 @@ fn parser_serde_fs_suggestions() -> (
     decomposition_suggestions("Foo", SubjectKind::Type, &parser_serde_fs_fixture())
 }
 
-fn render_note(subject: &str, kind: SubjectKind, methods: Vec<MethodProfile>) -> String {
-    let (context, suggestions) = decomposition_suggestions(subject, kind, &methods);
+fn render_note(subject: &str, kind: SubjectKind, methods: &[MethodProfile]) -> String {
+    let (context, suggestions) = decomposition_suggestions(subject, kind, methods);
     format_diagnostic_note(&context, &suggestions).unwrap_or_default()
 }
 
@@ -43,7 +48,7 @@ fn format_diagnostic_note_renders_type_suggestions() {
 
 #[test]
 fn format_diagnostic_note_renders_trait_sub_traits() {
-    let rendered = render_note("Transport", SubjectKind::Trait, transport_trait_fixture());
+    let rendered = render_note("Transport", SubjectKind::Trait, &transport_trait_fixture());
 
     assert!(rendered.contains("- [serde::json] sub-trait for `decode_request`, `encode_request`"));
     assert!(rendered.contains("- [std::io] sub-trait for `read_frame`, `write_frame`"));
@@ -110,7 +115,7 @@ fn format_diagnostic_note_caps_rendered_suggestions() {
         }),
     ];
 
-    let rendered = render_note("Coordinator", SubjectKind::Type, methods);
+    let rendered = render_note("Coordinator", SubjectKind::Type, &methods);
 
     assert!(rendered.contains("- [grammar] helper struct"));
     assert!(rendered.contains("- [serde::json] module"));
@@ -173,9 +178,10 @@ fn format_diagnostic_note_caps_methods_per_suggestion() {
         }),
     ];
 
-    let rendered = render_note("Reporter", SubjectKind::Type, methods);
+    let rendered = render_note("Reporter", SubjectKind::Type, &methods);
 
     assert!(rendered.contains(
-        "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more methods"
+        "- [report] helper struct for `report_alpha`, `report_beta`, `report_delta`, +2 more \
+         methods"
     ));
 }

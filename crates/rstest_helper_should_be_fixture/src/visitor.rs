@@ -3,21 +3,36 @@
 //! This module keeps rustc HIR mechanics separate from the lint-pass bootstrap
 //! so the driver remains focused on configuration and crate-level lifecycle.
 
-use crate::collector::{
-    CallSiteCollector, CallSiteLocation, CallSiteRecord, lower_arg_atom, resolve_local_callee,
-};
+use std::collections::HashSet;
+
 use log::debug;
 use rustc_ast::AttrStyle;
 use rustc_hir as hir;
-use rustc_hir::def_id::DefId;
-use rustc_hir::intravisit::{self, Visitor};
+use rustc_hir::{
+    def_id::DefId,
+    intravisit::{self, Visitor},
+};
 use rustc_lint::LateContext;
 use rustc_span::Span;
-use std::collections::HashSet;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::rstest::{
-    ArgAtom, ArgFingerprint, ParameterBinding, RstestDetectionOptions, RstestParameter,
-    RstestParameterKind, classify_rstest_parameter,
+use whitaker_common::{
+    attributes::{Attribute, AttributeKind, AttributePath},
+    rstest::{
+        ArgAtom,
+        ArgFingerprint,
+        ParameterBinding,
+        RstestDetectionOptions,
+        RstestParameter,
+        RstestParameterKind,
+        classify_rstest_parameter,
+    },
+};
+
+use crate::collector::{
+    CallSiteCollector,
+    CallSiteLocation,
+    CallSiteRecord,
+    lower_arg_atom,
+    resolve_local_callee,
 };
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
@@ -31,7 +46,7 @@ pub(crate) struct CallSiteVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         cx: &'a LateContext<'tcx>,
         collector: &'a mut CallSiteCollector,
         test_source_def_id: DefId,
@@ -94,7 +109,7 @@ impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
         match expr.kind {
             hir::ExprKind::Call(_, args) => self.collect_call(expr, args),
             hir::ExprKind::MethodCall(_, receiver, args, _) => {
-                self.collect_call(expr, std::iter::once(receiver).chain(args))
+                self.collect_call(expr, std::iter::once(receiver).chain(args));
             }
             hir::ExprKind::Closure(hir::Closure { .. }) => {
                 self.closure_span_fallbacks.push(expr.span);
@@ -115,7 +130,7 @@ impl CallSiteVisitor<'_, '_> {
             self.closure_span_fallbacks
                 .iter()
                 .rev()
-                .find_map(|span| whitaker::hir::recover_user_editable_hir_span(*span))
+                .find_map(|fallback| whitaker::hir::recover_user_editable_hir_span(*fallback))
         })
     }
 }
@@ -190,11 +205,13 @@ fn attribute_kind(attr: &hir::Attribute) -> AttributeKind {
     }
 }
 
+/// Parsed attributes never reach this helper because `attribute_path` filters
+/// them out; treating them as outer keeps the mapping total.
 fn attribute_style(attr: &hir::Attribute) -> AttrStyle {
-    let hir::Attribute::Unparsed(item) = attr else {
-        unreachable!("attribute_path filters parsed attributes");
-    };
-    item.style
+    match attr {
+        hir::Attribute::Unparsed(item) => item.style,
+        hir::Attribute::Parsed(_) => AttrStyle::Outer,
+    }
 }
 
 pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String {
@@ -208,7 +225,7 @@ pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String
         .join(",")
 }
 
-fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
+const fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
     match atom {
         ArgAtom::FixtureLocal { .. } => "fixture-local",
         ArgAtom::ConstLit { .. } => "const-lit",

@@ -50,9 +50,7 @@ impl ForeignReferenceSet {
     /// assert!(refs.is_empty());
     /// ```
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Records a reference to an external module or type path.
     ///
@@ -67,7 +65,7 @@ impl ForeignReferenceSet {
     /// use whitaker_common::brain_type_metrics::ForeignReferenceSet;
     ///
     /// let mut refs = ForeignReferenceSet::new();
-    /// refs.record_reference("std::fmt", true);  // macro — filtered
+    /// refs.record_reference("std::fmt", true); // macro — filtered
     /// refs.record_reference("serde::Serialize", false);
     ///
     /// assert_eq!(refs.count(), 1);
@@ -90,9 +88,7 @@ impl ForeignReferenceSet {
     /// assert_eq!(refs.count(), 1);
     /// ```
     #[must_use]
-    pub fn count(&self) -> usize {
-        self.references.len()
-    }
+    pub fn count(&self) -> usize { self.references.len() }
 
     /// Returns `true` when no references have been recorded.
     ///
@@ -105,9 +101,7 @@ impl ForeignReferenceSet {
     /// assert!(refs.is_empty());
     /// ```
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.references.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.references.is_empty() }
 
     /// Returns the set of recorded references, for diagnostic display.
     ///
@@ -121,9 +115,7 @@ impl ForeignReferenceSet {
     /// assert!(refs.references().contains("std::io"));
     /// ```
     #[must_use]
-    pub fn references(&self) -> &BTreeSet<String> {
-        &self.references
-    }
+    pub const fn references(&self) -> &BTreeSet<String> { &self.references }
 }
 
 /// Counts distinct foreign references from an iterator of
@@ -140,9 +132,9 @@ impl ForeignReferenceSet {
 ///
 /// let refs = vec![
 ///     ("std::io".into(), false),
-///     ("std::io".into(), false),       // duplicate
+///     ("std::io".into(), false), // duplicate
 ///     ("serde::de".into(), false),
-///     ("macro_gen".into(), true),       // macro — filtered
+///     ("macro_gen".into(), true), // macro — filtered
 /// ];
 /// assert_eq!(foreign_reach_count(refs), 2);
 /// ```

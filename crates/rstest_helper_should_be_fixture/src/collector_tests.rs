@@ -6,18 +6,22 @@
 //! collector module, while these tests keep the record store cheap to exercise
 //! without constructing a rustc lint context.
 
+use proptest::prelude::*;
 use rstest::rstest;
-use rustc_hir::ItemLocalId;
-use rustc_hir::def_id::{DefId, DefIndex};
+use rustc_hir::{
+    ItemLocalId,
+    def_id::{DefId, DefIndex},
+};
 use rustc_span::{BytePos, DUMMY_SP, FileName, Span};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
 
 use super::{
-    CallSiteCollector, CallSiteLocation, CallSiteRecord, literal_text_atom,
+    CallSiteCollector,
+    CallSiteLocation,
+    CallSiteRecord,
+    literal_text_atom,
     should_skip_arg_for_unrecoverable_span,
 };
-
-use proptest::prelude::*;
 
 #[test]
 fn collector_iterates_callees_in_definition_path_order() {
@@ -34,7 +38,7 @@ fn collector_iterates_callees_in_definition_path_order() {
 
     let keys = collector
         .iter()
-        .map(|(callee, _)| callee.to_string())
+        .map(|(callee, _)| callee.to_owned())
         .collect::<Vec<_>>();
 
     assert_eq!(keys, ["crate::a_helper", "crate::z_helper"]);
@@ -111,7 +115,7 @@ fn collector_orders_large_single_callee_bucket_by_span() {
 #[test]
 fn literal_lowering_records_const_lit_atom() {
     assert_eq!(
-        literal_text_atom("\"literal\"".to_string()),
+        literal_text_atom("\"literal\"".to_owned()),
         ArgAtom::const_lit("\"literal\""),
     );
 }
@@ -139,17 +143,13 @@ fn collect_two_calls(lo2: u32, hi2: u32) -> (CallSiteCollector, [bool; 2]) {
     (collector, inserted)
 }
 
-fn record(callee_def_id: DefId) -> CallSiteRecord {
-    record_at(callee_def_id, DUMMY_SP)
-}
+fn record(callee_def_id: DefId) -> CallSiteRecord { record_at(callee_def_id, DUMMY_SP) }
 
 fn record_at(callee_def_id: DefId, span: Span) -> CallSiteRecord {
     CallSiteRecord::new(callee_def_id, ArgFingerprint::default(), def_id(99), span)
 }
 
-fn def_id(index: u32) -> DefId {
-    DefId::local(DefIndex::from_u32(index))
-}
+fn def_id(index: u32) -> DefId { DefId::local(DefIndex::from_u32(index)) }
 
 fn location(callee: &str, lo: BytePos, hi: BytePos) -> CallSiteLocation {
     location_with_hir_id(callee, lo, hi, 0)
@@ -162,16 +162,14 @@ fn location_with_hir_id(
     hir_local_id: u32,
 ) -> CallSiteLocation {
     CallSiteLocation::new(
-        callee.to_string(),
+        callee.to_owned(),
         source_file(),
         Span::with_root_ctxt(lo, hi),
         ItemLocalId::from_u32(hir_local_id),
     )
 }
 
-fn source_file() -> FileName {
-    FileName::Custom("src/lib.rs".to_string())
-}
+fn source_file() -> FileName { FileName::Custom("src/lib.rs".to_owned()) }
 
 proptest! {
     #[test]
@@ -232,11 +230,11 @@ fn collect_spans(spans: &[(u32, u32, u32)]) -> Vec<(String, Vec<(u32, u32)>)> {
     collector
         .iter()
         .map(|(callee, records)| {
-            let spans = records
+            let recorded_spans = records
                 .iter()
                 .map(|record| (record.span.lo().0, record.span.hi().0))
                 .collect();
-            (callee.to_string(), spans)
+            (callee.to_owned(), recorded_spans)
         })
         .collect()
 }

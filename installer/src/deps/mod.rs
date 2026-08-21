@@ -4,19 +4,33 @@
 //! available, then installs any missing tools by preferring repository-hosted
 //! release archives before falling back to `cargo binstall` or `cargo install`.
 
-use crate::dependency_binaries::{
-    DependencyBinaryInstaller, RepositoryDependencyBinaryInstaller, find_dependency_binary,
-    host_target,
+use std::{
+    io,
+    io::Write,
+    path::Path,
+    process::{Command, Output},
 };
-use crate::dirs::{BaseDirs, SystemBaseDirs};
-use crate::error::{InstallerError, Result};
-use std::io;
-use std::io::Write;
-use std::path::Path;
-use std::process::{Command, Output};
+
+use crate::{
+    dependency_binaries::{
+        DependencyBinary,
+        DependencyBinaryInstaller,
+        RepositoryDependencyBinaryInstaller,
+        find_dependency_binary,
+        host_target,
+    },
+    dirs::{BaseDirs, SystemBaseDirs},
+    error::{InstallerError, Result},
+};
 
 mod install;
-use install::*;
+use install::{
+    InstallContext,
+    cargo_fallback_mode,
+    command_succeeds,
+    install_missing_tools,
+    repository_install_context,
+};
 
 /// Abstraction for running external commands.
 pub trait CommandExecutor {
@@ -74,9 +88,7 @@ pub struct DylintToolStatus {
 impl DylintToolStatus {
     /// Returns `true` when both tools are installed.
     #[must_use]
-    pub fn all_installed(&self) -> bool {
-        self.cargo_dylint && self.dylint_link
-    }
+    pub const fn all_installed(&self) -> bool { self.cargo_dylint && self.dylint_link }
 }
 
 /// Additional install options used by test-support hooks.
@@ -102,6 +114,11 @@ pub fn check_dylint_tools(executor: &dyn CommandExecutor) -> DylintToolStatus {
 }
 
 /// Install missing tools without emitting progress output.
+///
+/// # Errors
+///
+/// Returns an error when any missing tool cannot be installed by the
+/// repository, `cargo binstall`, or `cargo install` strategies.
 pub fn install_dylint_tools(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
@@ -111,6 +128,11 @@ pub fn install_dylint_tools(
 }
 
 /// Install missing tools while writing progress output to `stderr`.
+///
+/// # Errors
+///
+/// Returns an error when any missing tool cannot be installed by the
+/// repository, `cargo binstall`, or `cargo install` strategies.
 pub fn install_dylint_tools_with_output(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
@@ -124,7 +146,7 @@ pub fn install_dylint_tools_with_output(
     let cargo_fallback_mode = cargo_fallback_mode(executor);
     install_missing_tools(
         executor,
-        status,
+        *status,
         stderr,
         &InstallContext {
             repo: repository_install_context(
@@ -145,12 +167,12 @@ pub fn install_dylint_tools_with_options(
     executor: &dyn CommandExecutor,
     status: &DylintToolStatus,
     stderr: &mut dyn Write,
-    options: DependencyInstallOptions<'_>,
+    options: &DependencyInstallOptions<'_>,
 ) -> Result<()> {
     let cargo_fallback_mode = cargo_fallback_mode(executor);
     install_missing_tools(
         executor,
-        status,
+        *status,
         stderr,
         &InstallContext {
             repo: repository_install_context(
@@ -174,7 +196,7 @@ fn is_tool_installed(executor: &dyn CommandExecutor, tool: &DependencyTool) -> b
     let expected_version = find_dependency_binary(tool.package)
         .ok()
         .flatten()
-        .map(|dependency| dependency.version());
+        .map(DependencyBinary::version);
 
     if tool == &DYLINT_LINK_TOOL {
         return is_dylint_link_installed(executor, expected_version);
@@ -192,7 +214,7 @@ fn is_dylint_link_installed(
     if find_binary_on_path(DYLINT_LINK_TOOL.command).is_none() {
         return false;
     }
-    let Some(expected_version) = expected_version else {
+    let Some(version_to_match) = expected_version else {
         return true;
     };
     // `dylint-link` is a pure linker wrapper: it forwards its entire argument
@@ -201,7 +223,7 @@ fn is_dylint_link_installed(
     // registry of installed binaries instead, which records the version each
     // binary was installed at.
     cargo_installed_version(executor, DYLINT_LINK_TOOL.package)
-        .is_some_and(|version| version == expected_version)
+        .is_some_and(|version| version == version_to_match)
 }
 
 fn is_versioned_tool_installed(
@@ -209,13 +231,13 @@ fn is_versioned_tool_installed(
     tool: &DependencyTool,
     expected_version: Option<&str>,
 ) -> bool {
-    let Some(expected_version) = expected_version else {
+    let Some(version_to_match) = expected_version else {
         return command_succeeds(executor, tool.command, tool.args);
     };
     executor.run(tool.command, tool.args).is_ok_and(|output| {
         output.status.success()
             && first_semver_token(&String::from_utf8_lossy(&output.stdout))
-                .is_some_and(|version| version == expected_version)
+                .is_some_and(|version| version == version_to_match)
     })
 }
 
@@ -261,9 +283,7 @@ fn is_binstall_available(executor: &dyn CommandExecutor) -> bool {
 }
 
 #[cfg(test)]
-fn is_binary_on_path(binary_name: &str) -> bool {
-    find_binary_on_path(binary_name).is_some()
-}
+fn is_binary_on_path(binary_name: &str) -> bool { find_binary_on_path(binary_name).is_some() }
 
 fn find_binary_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
     let path_var = std::env::var_os("PATH")?;
@@ -327,14 +347,11 @@ fn is_executable_file(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
 
     std::fs::metadata(path)
-        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 #[cfg(not(unix))]
-fn is_executable_file(path: &Path) -> bool {
-    path.is_file()
-}
+fn is_executable_file(path: &Path) -> bool { path.is_file() }
 
 #[cfg(test)]
 mod path_tests;

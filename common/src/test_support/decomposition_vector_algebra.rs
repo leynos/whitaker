@@ -1,7 +1,9 @@
 //! Observable vector-algebra seams for decomposition advice tests.
 
-use crate::MethodProfile;
-use crate::decomposition_advice::{build_feature_vector, dot_product};
+use crate::{
+    MethodProfile,
+    decomposition_advice::{build_feature_vector, dot_product},
+};
 
 /// Observable runtime vector-algebra results for two methods.
 ///
@@ -43,7 +45,11 @@ impl MethodVectorAlgebraReport {
     /// This is the dot product of the left and right method vectors.
     ///
     /// ```rust
-    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{
+    ///     MethodInput,
+    ///     method_vector_algebra,
+    ///     profile,
+    /// };
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -64,16 +70,18 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.left_dot_right(), 40);
     /// ```
     #[must_use]
-    pub fn left_dot_right(self) -> u64 {
-        self.left_dot_right
-    }
+    pub const fn left_dot_right(self) -> u64 { self.left_dot_right }
 
     /// Returns the result of [`MethodVectorAlgebraReport::right_dot_left`].
     ///
     /// This is the dot product of the right and left method vectors.
     ///
     /// ```rust
-    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{
+    ///     MethodInput,
+    ///     method_vector_algebra,
+    ///     profile,
+    /// };
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -94,16 +102,18 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.right_dot_left(), 40);
     /// ```
     #[must_use]
-    pub fn right_dot_left(self) -> u64 {
-        self.right_dot_left
-    }
+    pub const fn right_dot_left(self) -> u64 { self.right_dot_left }
 
     /// Returns the result of [`MethodVectorAlgebraReport::left_norm_squared`].
     ///
     /// This is the squared L2 norm of the left method vector.
     ///
     /// ```rust
-    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{
+    ///     MethodInput,
+    ///     method_vector_algebra,
+    ///     profile,
+    /// };
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -124,16 +134,18 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.left_norm_squared(), 44);
     /// ```
     #[must_use]
-    pub fn left_norm_squared(self) -> u64 {
-        self.left_norm_squared
-    }
+    pub const fn left_norm_squared(self) -> u64 { self.left_norm_squared }
 
     /// Returns the result of [`MethodVectorAlgebraReport::right_norm_squared`].
     ///
     /// This is the squared L2 norm of the right method vector.
     ///
     /// ```rust
-    /// use whitaker_common::test_support::decomposition::{MethodInput, method_vector_algebra, profile};
+    /// use whitaker_common::test_support::decomposition::{
+    ///     MethodInput,
+    ///     method_vector_algebra,
+    ///     profile,
+    /// };
     ///
     /// let left = profile(MethodInput {
     ///     name: "parse_tokens",
@@ -154,9 +166,7 @@ impl MethodVectorAlgebraReport {
     /// assert_eq!(report.right_norm_squared(), 44);
     /// ```
     #[must_use]
-    pub fn right_norm_squared(self) -> u64 {
-        self.right_norm_squared
-    }
+    pub const fn right_norm_squared(self) -> u64 { self.right_norm_squared }
 }
 
 /// Computes the shipped vector-algebra helper values for two methods.

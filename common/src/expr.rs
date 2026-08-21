@@ -1,5 +1,4 @@
 //! Lightweight expression helpers for lint analysis.
-#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use crate::path::SimplePath;
 
@@ -7,7 +6,10 @@ use crate::path::SimplePath;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
     /// A call expression with a resolved callee path.
-    Call { callee: SimplePath },
+    Call {
+        /// The resolved path of the function being called.
+        callee: SimplePath,
+    },
     /// A path expression.
     Path(SimplePath),
     /// Any other literal expression (placeholder for expansion).
@@ -19,17 +21,23 @@ pub enum Expr {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::expr::{Expr, def_id_of_expr_callee};
-/// use whitaker_common::path::SimplePath;
+/// use whitaker_common::{
+///     expr::{Expr, def_id_of_expr_callee},
+///     path::SimplePath,
+/// };
 ///
-/// let expr = Expr::Call { callee: SimplePath::from("std::mem::drop") };
+/// let expr = Expr::Call {
+///     callee: SimplePath::from("std::mem::drop"),
+/// };
 /// assert_eq!(
-///     def_id_of_expr_callee(&expr).expect("call expression has callee path").segments(),
+///     def_id_of_expr_callee(&expr)
+///         .expect("call expression has callee path")
+///         .segments(),
 ///     &["std", "mem", "drop"]
 /// );
 /// ```
 #[must_use]
-pub fn def_id_of_expr_callee(expr: &Expr) -> Option<&SimplePath> {
+pub const fn def_id_of_expr_callee(expr: &Expr) -> Option<&SimplePath> {
     match expr {
         Expr::Call { callee } => Some(callee),
         _ => None,
@@ -41,8 +49,7 @@ pub fn def_id_of_expr_callee(expr: &Expr) -> Option<&SimplePath> {
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::expr::is_path_to;
-/// use whitaker_common::path::SimplePath;
+/// use whitaker_common::{expr::is_path_to, path::SimplePath};
 ///
 /// let path = SimplePath::from("core::option::Option");
 /// assert!(is_path_to(&path, ["core", "option", "Option"]));
@@ -61,10 +68,11 @@ where
 /// # Examples
 ///
 /// ```
-/// use whitaker_common::expr::recv_is_option_or_result;
-/// use whitaker_common::path::SimplePath;
+/// use whitaker_common::{expr::recv_is_option_or_result, path::SimplePath};
 ///
-/// assert!(recv_is_option_or_result(&SimplePath::from("std::option::Option")));
+/// assert!(recv_is_option_or_result(&SimplePath::from(
+///     "std::option::Option"
+/// )));
 /// assert!(recv_is_option_or_result(&SimplePath::from("Result")));
 /// assert!(!recv_is_option_or_result(&SimplePath::from("crate::Thing")));
 /// ```
@@ -75,8 +83,11 @@ pub fn recv_is_option_or_result(path: &SimplePath) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //! Tests for expression-inspection helpers used by the lint drivers.
+
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     fn callee_extraction() {

@@ -24,11 +24,21 @@ mod metrics;
 mod tests;
 
 pub use evaluation::{
-    BrainTraitDiagnostic, BrainTraitDisposition, BrainTraitThresholds, BrainTraitThresholdsBuilder,
-    evaluate_brain_trait, format_help, format_note, format_primary_message,
+    BrainTraitDiagnostic,
+    BrainTraitDisposition,
+    BrainTraitThresholds,
+    BrainTraitThresholdsBuilder,
+    evaluate_brain_trait,
+    format_help,
+    format_note,
+    format_primary_message,
 };
 pub use item::{
-    TraitItemKind, TraitItemMetrics, default_method_cc_sum, default_method_count,
-    required_method_count, trait_item_count,
+    TraitItemKind,
+    TraitItemMetrics,
+    default_method_cc_sum,
+    default_method_count,
+    required_method_count,
+    trait_item_count,
 };
 pub use metrics::{TraitMetrics, TraitMetricsBuilder};

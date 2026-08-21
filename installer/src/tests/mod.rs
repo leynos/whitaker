@@ -2,40 +2,50 @@
 
 mod fast_path;
 
-use super::*;
+use std::{path::PathBuf, time::Duration};
+
 use rstest::{fixture, rstest};
-use std::path::PathBuf;
-use std::time::Duration;
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::dependency_binaries::DependencyBinaryInstaller;
-use whitaker_installer::deps::DependencyInstallOptions;
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::installer_packaging::TargetTriple;
-use whitaker_installer::test_utils::dependency_binary_helpers::{
-    AlwaysNotFoundRepositoryInstaller, cargo_dylint_check, dylint_link_install_list_check,
-    with_fake_binary_on_path,
+use whitaker_installer::{
+    cli::{InstallArgs, LintSelectionFlags},
+    dependency_binaries::DependencyBinaryInstaller,
+    deps::DependencyInstallOptions,
+    dirs::BaseDirs,
+    installer_packaging::TargetTriple,
+    test_utils::{
+        dependency_binary_helpers::{
+            AlwaysNotFoundRepositoryInstaller,
+            cargo_dylint_check,
+            dylint_link_install_list_check,
+            with_fake_binary_on_path,
+        },
+        *,
+    },
 };
-use whitaker_installer::test_utils::*;
+
+use super::*;
 
 fn dependency_install_options<'a>(
     dirs: &'a TestBaseDirs,
     repository_installer: &'a dyn DependencyBinaryInstaller,
     quiet: bool,
-) -> DependencyInstallOptions<'a> {
-    DependencyInstallOptions {
+) -> std::result::Result<
+    DependencyInstallOptions<'a>,
+    whitaker_installer::artefact::error::ArtefactError,
+> {
+    Ok(DependencyInstallOptions {
         dirs,
         repository_installer,
-        target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid target")),
+        target: Some(TargetTriple::try_from("x86_64-unknown-linux-gnu")?),
         quiet,
-    }
+    })
 }
 
 #[fixture]
 fn test_base_dirs() -> TestBaseDirs {
     TestBaseDirs {
-        home_dir: Some(PathBuf::from("/tmp")),
-        bin_dir: Some(PathBuf::from("/tmp/bin")),
-        data_dir: Some(PathBuf::from("/tmp")),
+        home: Some(PathBuf::from("/tmp")),
+        bin: Some(PathBuf::from("/tmp/bin")),
+        data: Some(PathBuf::from("/tmp")),
     }
 }
 
@@ -64,7 +74,13 @@ fn exit_code_for_run_result_prints_error_and_returns_one() {
 #[rstest]
 #[case::default_suite_only(InstallArgs::default(), false, true)]
 #[case::individual_lints(
-    InstallArgs { individual_lints: true, ..InstallArgs::default() },
+    InstallArgs {
+        lint_selection: LintSelectionFlags {
+            individual_lints: true,
+            ..LintSelectionFlags::default()
+        },
+        ..InstallArgs::default()
+    },
     true,
     false
 )]
@@ -117,13 +133,15 @@ fn ensure_dylint_tools_skips_install_when_installed(test_base_dirs: TestBaseDirs
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
-        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
+            .expect("dependency install options should build");
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, &options);
 
         assert!(result.is_ok());
         assert!(stderr.is_empty());
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[rstest]
@@ -162,8 +180,9 @@ fn ensure_dylint_tools_installs_missing_tools(
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet);
-        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, options);
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, quiet)
+            .expect("dependency install options should build");
+        let result = ensure_dylint_tools_with_options(&executor, &mut stderr, &options);
 
         assert!(result.is_ok());
         let stderr_text = String::from_utf8(stderr).expect("stderr was not UTF-8");
@@ -183,7 +202,8 @@ fn ensure_dylint_tools_installs_missing_tools(
             );
         }
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[rstest]
@@ -210,8 +230,9 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
         let repository_installer = AlwaysNotFoundRepositoryInstaller;
 
         let mut stderr = Vec::new();
-        let options = dependency_install_options(&test_base_dirs, &repository_installer, false);
-        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, options)
+        let options = dependency_install_options(&test_base_dirs, &repository_installer, false)
+            .expect("dependency install options should build");
+        let err = ensure_dylint_tools_with_options(&executor, &mut stderr, &options)
             .expect_err("expected install failure");
 
         assert!(matches!(
@@ -221,37 +242,32 @@ fn ensure_dylint_tools_propagates_install_failures(test_base_dirs: TestBaseDirs)
                     && message == "cargo install failed"
         ));
         executor.assert_finished();
-    });
+    })
+    .expect("prepare fake PATH");
 }
 
 #[derive(Debug, Clone)]
 struct TestBaseDirs {
-    home_dir: Option<PathBuf>,
-    bin_dir: Option<PathBuf>,
-    data_dir: Option<PathBuf>,
+    home: Option<PathBuf>,
+    bin: Option<PathBuf>,
+    data: Option<PathBuf>,
 }
 
 impl BaseDirs for TestBaseDirs {
-    fn home_dir(&self) -> Option<PathBuf> {
-        self.home_dir.clone()
-    }
+    fn home(&self) -> Option<PathBuf> { self.home.clone() }
 
-    fn bin_dir(&self) -> Option<PathBuf> {
-        self.bin_dir.clone()
-    }
+    fn executables(&self) -> Option<PathBuf> { self.bin.clone() }
 
-    fn whitaker_data_dir(&self) -> Option<PathBuf> {
-        self.data_dir.clone()
-    }
+    fn whitaker_data(&self) -> Option<PathBuf> { self.data.clone() }
 }
 
 #[test]
 fn write_install_metrics_prints_summary_and_persists_metrics() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let dirs = TestBaseDirs {
-        home_dir: Some(temp_dir.path().to_path_buf()),
-        bin_dir: Some(temp_dir.path().join("bin")),
-        data_dir: Some(temp_dir.path().to_path_buf()),
+        home: Some(temp_dir.path().to_path_buf()),
+        bin: Some(temp_dir.path().join("bin")),
+        data: Some(temp_dir.path().to_path_buf()),
     };
 
     let mut stderr = Vec::new();
@@ -272,17 +288,16 @@ fn write_install_metrics_prints_summary_and_persists_metrics() {
     let metrics_path = temp_dir.path().join("metrics").join("install_metrics.json");
     assert!(
         metrics_path.exists(),
-        "expected metrics file at {:?}",
-        metrics_path
+        "expected metrics file at {metrics_path:?}"
     );
 }
 
 #[test]
 fn write_install_metrics_warns_when_recording_fails() {
     let dirs = TestBaseDirs {
-        home_dir: None,
-        bin_dir: None,
-        data_dir: None,
+        home: None,
+        bin: None,
+        data: None,
     };
 
     let mut stderr = Vec::new();
@@ -302,9 +317,9 @@ fn write_install_metrics_warns_when_recording_fails() {
 fn write_install_metrics_suppresses_output_in_quiet_mode() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let dirs = TestBaseDirs {
-        home_dir: Some(temp_dir.path().to_path_buf()),
-        bin_dir: Some(temp_dir.path().join("bin")),
-        data_dir: Some(temp_dir.path().to_path_buf()),
+        home: Some(temp_dir.path().to_path_buf()),
+        bin: Some(temp_dir.path().join("bin")),
+        data: Some(temp_dir.path().to_path_buf()),
     };
 
     let mut stderr = Vec::new();

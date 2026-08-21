@@ -8,8 +8,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use log::debug;
 use rustc_hir as hir;
-use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LOCAL_CRATE};
+use rustc_hir::{
+    def::{DefKind, Res},
+    def_id::{DefId, LOCAL_CRATE},
+};
 use rustc_lint::LateContext;
 use rustc_span::{BytePos, FileName, Span};
 use whitaker_common::rstest::{ArgAtom, ArgFingerprint};
@@ -38,7 +40,7 @@ impl CallSiteRecord {
     /// assert_eq!(record.callee_def_id, callee);
     /// # }
     /// ```
-    pub(crate) fn new(
+    pub(crate) const fn new(
         callee_def_id: DefId,
         fingerprint: ArgFingerprint,
         test_source_def_id: DefId,
@@ -137,10 +139,7 @@ impl CallSiteCollector {
         if !self.seen.insert(location) {
             debug!(
                 target: "rstest_helper_should_be_fixture",
-                "dropping duplicate rstest helper call-site evidence: callee={}, lo={:?}, hi={:?}",
-                callee_key,
-                lo,
-                hi,
+                "dropping duplicate rstest helper call-site evidence: callee={callee_key}, lo={lo:?}, hi={hi:?}",
             );
             return false;
         }
@@ -193,14 +192,10 @@ impl CallSiteCollector {
     }
 
     /// Returns the number of distinct callees with collected evidence.
-    pub(crate) fn callee_count(&self) -> usize {
-        self.by_callee.len()
-    }
+    pub(crate) fn callee_count(&self) -> usize { self.by_callee.len() }
 
     /// Returns the number of deduplicated call-site records.
-    pub(crate) fn record_count(&self) -> usize {
-        self.by_callee.values().map(Vec::len).sum()
-    }
+    pub(crate) fn record_count(&self) -> usize { self.by_callee.values().map(Vec::len).sum() }
 
     /// Removes all stored evidence from the collector.
     pub(crate) fn clear(&mut self) {
@@ -291,8 +286,7 @@ fn local_fixture_atom(
     } else {
         debug!(
             target: "rstest_helper_should_be_fixture",
-            "lowering unsupported local argument: `{}` is not an rstest fixture local",
-            name,
+            "lowering unsupported local argument: `{name}` is not an rstest fixture local",
         );
         ArgAtom::unsupported()
     }
@@ -308,9 +302,7 @@ fn literal_atom(cx: &LateContext<'_>, span: Span, lit: &hir::Lit) -> ArgAtom {
     literal_text_atom(text)
 }
 
-fn literal_text_atom(text: String) -> ArgAtom {
-    ArgAtom::const_lit(text)
-}
+fn literal_text_atom(text: String) -> ArgAtom { ArgAtom::const_lit(text) }
 
 /// Resolves a helper call expression to a local function definition.
 #[must_use]
@@ -336,8 +328,7 @@ pub(crate) fn resolve_local_callee<'tcx>(
     } else {
         debug!(
             target: "rstest_helper_should_be_fixture",
-            "callee resolution skipped non-local or non-function callee: {:?}",
-            def_id,
+            "callee resolution skipped non-local or non-function callee: {def_id:?}",
         );
         None
     }

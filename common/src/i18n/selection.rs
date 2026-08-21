@@ -1,7 +1,7 @@
 //! Locale resolver wiring explicit overrides, environment variables, and
 //! configuration before falling back to the bundled localizer.
 
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use log::{debug, warn};
 
@@ -50,39 +50,27 @@ impl LocaleSelection {
 
     /// Returns the effective locale source.
     #[must_use]
-    pub const fn source(&self) -> LocaleSource {
-        self.source
-    }
+    pub const fn source(&self) -> LocaleSource { self.source }
 
     /// Returns the locale requested by the resolved source, if any.
     #[must_use]
-    pub fn requested(&self) -> Option<&str> {
-        self.requested.as_deref()
-    }
+    pub fn requested(&self) -> Option<&str> { self.requested.as_deref() }
 
     /// Returns the resolved locale tag.
     #[must_use]
-    pub fn locale(&self) -> &str {
-        self.localizer.locale()
-    }
+    pub fn locale(&self) -> &str { self.localizer.locale() }
 
     /// Whether the fallback locale was used.
     #[must_use]
-    pub fn used_fallback(&self) -> bool {
-        self.localizer.used_fallback()
-    }
+    pub const fn used_fallback(&self) -> bool { self.localizer.used_fallback() }
 
     /// Returns the resolved [`Localizer`].
     #[must_use]
-    pub fn localizer(&self) -> &Localizer {
-        &self.localizer
-    }
+    pub const fn localizer(&self) -> &Localizer { &self.localizer }
 
     /// Consumes the selection, yielding the [`Localizer`].
     #[must_use]
-    pub fn into_localizer(self) -> Localizer {
-        self.localizer
-    }
+    pub fn into_localizer(self) -> Localizer { self.localizer }
 
     /// Emit a debug log summarizing the resolved locale.
     pub fn log_outcome(&self, target: &str) {
@@ -97,7 +85,7 @@ impl LocaleSelection {
 
 /// Attempt to resolve a locale candidate from the given source.
 fn try_resolve_candidate(source: LocaleSource, raw: Option<&str>) -> Option<LocaleSelection> {
-    let candidate = normalise_locale(raw)?;
+    let candidate = normalize_locale(raw)?;
 
     if supports_locale(candidate) {
         return Some(LocaleSelection::new(
@@ -130,27 +118,36 @@ pub fn resolve_localizer(
     configuration: Option<&str>,
 ) -> LocaleSelection {
     let candidates = [
-        (LocaleSource::ExplicitArgument, explicit),
-        (LocaleSource::EnvironmentVariable, environment.as_deref()),
-        (LocaleSource::Configuration, configuration),
+        (LocaleSource::ExplicitArgument, explicit.map(Cow::Borrowed)),
+        (
+            LocaleSource::EnvironmentVariable,
+            environment.map(Cow::Owned),
+        ),
+        (
+            LocaleSource::Configuration,
+            configuration.map(Cow::Borrowed),
+        ),
     ];
 
     candidates
         .into_iter()
-        .find_map(|(source, raw)| try_resolve_candidate(source, raw))
+        .find_map(|(source, raw)| try_resolve_candidate(source, raw.as_deref()))
         .unwrap_or_else(|| LocaleSelection::new(Localizer::new(None), LocaleSource::Fallback, None))
 }
 
 /// Trim whitespace and discard empty locale candidates.
 #[must_use]
-pub fn normalise_locale(input: Option<&str>) -> Option<&str> {
+pub fn normalize_locale(input: Option<&str>) -> Option<&str> {
     input.map(str::trim).filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //! Tests for locale negotiation and fallback selection.
+
     use rstest::rstest;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug)]
     struct ResolutionCase {
@@ -163,9 +160,7 @@ mod tests {
     }
 
     impl ResolutionCase {
-        fn environment(&self) -> Option<String> {
-            self.environment.map(String::from)
-        }
+        fn environment(&self) -> Option<String> { self.environment.map(String::from) }
     }
 
     #[rstest]
@@ -223,7 +218,7 @@ mod tests {
     #[case(Some("  "), None)]
     #[case(Some("cy"), Some("cy"))]
     #[case(Some(" cy "), Some("cy"))]
-    fn normalises_candidates(#[case] input: Option<&str>, #[case] expected: Option<&str>) {
-        assert_eq!(normalise_locale(input), expected);
+    fn normalizes_candidates(#[case] input: Option<&str>, #[case] expected: Option<&str>) {
+        assert_eq!(normalize_locale(input), expected);
     }
 }

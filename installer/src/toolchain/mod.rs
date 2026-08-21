@@ -3,9 +3,11 @@
 //! This module provides utilities to detect the pinned Rust toolchain from
 //! `rust-toolchain.toml` and verify that it is installed via rustup.
 
-use crate::error::{InstallerError, Result};
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::{Command, Output};
+
+use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::error::{InstallerError, Result};
 
 /// Components required for building dylint lints.
 ///
@@ -30,9 +32,7 @@ pub struct ToolchainInstallStatus {
 impl ToolchainInstallStatus {
     /// Returns true if the toolchain was installed during this run.
     #[must_use]
-    pub fn installed_toolchain(&self) -> bool {
-        self.installed_toolchain
-    }
+    pub const fn installed_toolchain(&self) -> bool { self.installed_toolchain }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,15 +161,11 @@ impl Toolchain {
 
     /// Return the channel string for `cargo +<toolchain>` invocations.
     #[must_use]
-    pub fn channel(&self) -> &str {
-        &self.channel
-    }
+    pub fn channel(&self) -> &str { &self.channel }
 
     /// Return the workspace root path.
     #[must_use]
-    pub fn workspace_root(&self) -> &Utf8Path {
-        &self.workspace_root
-    }
+    pub fn workspace_root(&self) -> &Utf8Path { &self.workspace_root }
 
     fn is_installed_with(&self, runner: &dyn CommandRunner) -> Result<bool> {
         let output = run_rustup(runner, &["run", &self.channel, "rustc", "--version"])?;

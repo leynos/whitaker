@@ -2,7 +2,7 @@
 //! `rstest` detection option construction.
 //!
 //! NOTE: `SharedConfig::load` is treated as infallible at the driver call site
-//! pending https://github.com/leynos/whitaker/issues/233.
+//! pending <https://github.com/leynos/whitaker/issues/233>.
 
 use proptest::prelude::*;
 use rstest::rstest;
@@ -69,24 +69,24 @@ fn normalizes_numeric_thresholds_to_two() {
 }
 
 #[rstest]
-#[case::plain(vec!["case".to_string()], vec!["case"])]
-#[case::qualified(vec!["rstest::values".to_string()], vec!["values"])]
+#[case::plain(vec!["case".to_owned()], vec!["case"])]
+#[case::qualified(vec!["rstest::values".to_owned()], vec!["values"])]
 #[case::mixed_equivalent_spellings(
-    vec!["case".to_string(), "rstest::case".to_string()],
+    vec!["case".to_owned(), "rstest::case".to_owned()],
     vec!["case"]
 )]
-#[case::blank(vec![" ".to_string()], vec!["case", "values", "files", "future", "context"])]
+#[case::blank(vec![" ".to_owned()], vec!["case", "values", "files", "future", "context"])]
 fn normalizes_provider_attributes(#[case] input: Vec<String>, #[case] expected: Vec<&str>) {
     let normalized = normalize_provider_attributes(input);
-    let expected: Vec<String> = expected.into_iter().map(ToString::to_string).collect();
+    let expected_owned: Vec<String> = expected.into_iter().map(str::to_owned).collect();
 
-    assert_eq!(normalized, expected);
+    assert_eq!(normalized, expected_owned);
 }
 
 #[rstest]
 fn detection_options_expand_plain_and_rstest_qualified_provider_paths() {
     let config = Config {
-        provider_param_attributes: vec!["case".to_string(), "custom".to_string()],
+        provider_param_attributes: vec!["case".to_owned(), "custom".to_owned()],
         use_source_callee_fallback: true,
         ..Config::default()
     };
@@ -133,7 +133,7 @@ fn loaded_configuration_normalizes_present_config() {
     let config = Config {
         min_calls: 1,
         min_distinct_tests: 1,
-        provider_param_attributes: vec!["rstest::case".to_string()],
+        provider_param_attributes: vec!["rstest::case".to_owned()],
         ..Config::default()
     };
 
@@ -149,12 +149,12 @@ fn loaded_configuration_normalizes_present_config() {
 fn applying_crate_configuration_initializes_pass_state() {
     let mut pass = RstestHelperShouldBeFixture::default();
     let config = Config {
-        provider_param_attributes: vec!["custom".to_string()],
+        provider_param_attributes: vec!["custom".to_owned()],
         use_source_callee_fallback: true,
         ..Config::default()
     };
 
-    pass.apply_crate_configuration(config.clone(), SharedConfig::default());
+    pass.apply_crate_configuration(config.clone(), &SharedConfig::default());
 
     assert_eq!(pass.config, config.normalized());
     assert!(pass.detection_options.use_expansion_trace_fallback());
@@ -167,14 +167,14 @@ fn check_crate_configuration_loads_and_normalizes_config() {
     let config = Config {
         min_calls: 0,
         min_distinct_tests: 1,
-        provider_param_attributes: vec!["rstest::case".to_string()],
+        provider_param_attributes: vec!["rstest::case".to_owned()],
         use_source_callee_fallback: true,
         ..Config::default()
     };
 
     pass.apply_loaded_crate_configuration(
         loaded_configuration::<String>(Ok(Some(config))),
-        SharedConfig::default(),
+        &SharedConfig::default(),
     );
 
     assert_eq!(pass.config.min_calls, 2);

@@ -7,13 +7,17 @@
 use log::debug;
 use rustc_hir as hir;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
-use rustc_span::Span;
-use rustc_span::source_map::SourceMap;
-use rustc_span::symbol::Ident;
+use rustc_span::{Span, source_map::SourceMap, symbol::Ident};
 use whitaker::{ModuleMaxLinesConfig, SharedConfig, module_body_span, module_header_span};
 use whitaker_common::i18n::{
-    Arguments, DiagnosticMessageSet, Localizer, MessageKey, MessageResolution,
-    get_localizer_for_lint, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    DiagnosticMessageSet,
+    Localizer,
+    MessageKey,
+    MessageResolution,
+    get_localizer_for_lint,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 
 const LINT_NAME: &str = "module_max_lines";
@@ -26,12 +30,30 @@ enum ModuleDisposition {
     ExceedsLimit,
 }
 
-dylint_linting::impl_late_lint! {
-    pub MODULE_MAX_LINES,
-    Warn,
-    "modules should stay within the configured maximum line count",
-    ModuleMaxLines::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::ModuleMaxLines;
+
+    dylint_linting::impl_late_lint! {
+        /// Warns when a module exceeds the configured maximum line count.
+        pub MODULE_MAX_LINES,
+        Warn,
+        "modules should stay within the configured maximum line count",
+        ModuleMaxLines::default()
+    }
 }
+
+pub use declaration::MODULE_MAX_LINES;
 
 /// Lint pass that tracks configuration and localization state while checking modules.
 pub struct ModuleMaxLines {
@@ -56,9 +78,8 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     }
 
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx hir::Item<'tcx>) {
-        let (ident, module) = match item.kind {
-            hir::ItemKind::Mod(ident, module) => (ident, module),
-            _ => return,
+        let hir::ItemKind::Mod(ident, module) = item.kind else {
+            return;
         };
 
         let span = module_body_span(cx, item, module);
@@ -93,7 +114,7 @@ impl<'tcx> LateLintPass<'tcx> for ModuleMaxLines {
     }
 }
 
-fn evaluate_module(lines: usize, limit: usize, from_macro: bool) -> ModuleDisposition {
+const fn evaluate_module(lines: usize, limit: usize, from_macro: bool) -> ModuleDisposition {
     if from_macro {
         ModuleDisposition::Ignore
     } else if lines > limit {
@@ -110,8 +131,7 @@ fn load_configuration() -> usize {
         Err(error) => {
             debug!(
                 target: LINT_NAME,
-                "failed to parse `{}` configuration: {error}; using defaults",
-                LINT_NAME
+                "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
             );
             ModuleMaxLinesConfig::default().max_lines
         }
@@ -126,7 +146,7 @@ fn count_lines(source_map: &SourceMap, span: Span) -> Option<usize> {
     let contiguous = info
         .lines
         .windows(2)
-        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+        .all(|pair| matches!(pair, [previous, next] if next.line_index == previous.line_index + 1));
     if !contiguous {
         debug!(
             target: LINT_NAME,
@@ -147,14 +167,19 @@ struct ModuleDiagnosticInfo {
 }
 
 fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer: &Localizer) {
-    use fluent_templates::fluent_bundle::FluentValue;
     use std::borrow::Cow;
+
+    use fluent_templates::fluent_bundle::FluentValue;
 
     let mut args: Arguments<'_> = Arguments::default();
     let module_name = info.ident.name.as_str();
     args.insert(Cow::Borrowed("module"), FluentValue::from(module_name));
-    args.insert(Cow::Borrowed("lines"), FluentValue::from(info.lines as i64));
-    args.insert(Cow::Borrowed("limit"), FluentValue::from(info.limit as i64));
+    // Fluent arguments are `i64`; module sizes never approach the bound, so
+    // saturating keeps the diagnostic honest without a fallible path.
+    let line_count = i64::try_from(info.lines).unwrap_or(i64::MAX);
+    let line_limit = i64::try_from(info.limit).unwrap_or(i64::MAX);
+    args.insert(Cow::Borrowed("lines"), FluentValue::from(line_count));
+    args.insert(Cow::Borrowed("limit"), FluentValue::from(line_limit));
 
     let resolution = MessageResolution {
         lint_name: LINT_NAME,
@@ -169,12 +194,12 @@ fn emit_diagnostic(cx: &LateContext<'_>, info: &ModuleDiagnosticInfo, localizer:
         MODULE_MAX_LINES,
         info.ident.span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
+            lint.primary_message(messages.primary().to_owned());
             lint.span_note(
                 module_header_span(info.item_span, info.ident.span),
-                messages.note().to_string(),
+                messages.note().to_owned(),
             );
-            lint.help(messages.help().to_string());
+            lint.help(messages.help().to_owned());
         }),
     );
 }
@@ -189,8 +214,9 @@ fn fallback_messages(module: &str, lines: usize, limit: usize) -> DiagnosticMess
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(4, 5, false, ModuleDisposition::WithinLimit)]
@@ -209,10 +235,12 @@ mod tests {
 
 #[cfg(test)]
 mod behaviour {
-    use super::{ModuleDisposition, evaluate_module};
+    use std::cell::RefCell;
+
     use rstest::fixture;
     use rstest_bdd_macros::{given, scenario, then, when};
-    use std::cell::RefCell;
+
+    use super::{ModuleDisposition, evaluate_module};
 
     #[derive(Default)]
     struct ModuleWorld {
@@ -223,17 +251,11 @@ mod behaviour {
     }
 
     impl ModuleWorld {
-        fn set_lines(&self, value: usize) {
-            *self.lines.borrow_mut() = value;
-        }
+        fn set_lines(&self, value: usize) { *self.lines.borrow_mut() = value; }
 
-        fn set_limit(&self, value: usize) {
-            *self.limit.borrow_mut() = value;
-        }
+        fn set_limit(&self, value: usize) { *self.limit.borrow_mut() = value; }
 
-        fn mark_macro(&self) {
-            *self.from_macro.borrow_mut() = true;
-        }
+        fn mark_macro(&self) { *self.from_macro.borrow_mut() = true; }
 
         fn evaluate(&self) {
             let lines = *self.lines.borrow();
@@ -250,30 +272,21 @@ mod behaviour {
         }
     }
 
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
-    fn world() -> ModuleWorld {
-        ModuleWorld::default()
-    }
+    fn world() -> ModuleWorld { ModuleWorld::default() }
 
     #[given("the maximum module length is {limit}")]
-    fn given_limit(world: &ModuleWorld, limit: usize) {
-        world.set_limit(limit);
-    }
+    fn given_limit(world: &ModuleWorld, limit: usize) { world.set_limit(limit); }
 
     #[given("a module spans {lines} lines")]
-    fn given_lines(world: &ModuleWorld, lines: usize) {
-        world.set_lines(lines);
-    }
+    fn given_lines(world: &ModuleWorld, lines: usize) { world.set_lines(lines); }
 
     #[given("the module originates from a macro expansion")]
-    fn given_macro(world: &ModuleWorld) {
-        world.mark_macro();
-    }
+    fn given_macro(world: &ModuleWorld) { world.mark_macro(); }
 
     #[when("I evaluate the module length")]
-    fn when_evaluate(world: &ModuleWorld) {
-        world.evaluate();
-    }
+    fn when_evaluate(world: &ModuleWorld) { world.evaluate(); }
 
     #[then("the module is accepted")]
     fn then_accepted(world: &ModuleWorld) {
@@ -291,24 +304,16 @@ mod behaviour {
     }
 
     #[scenario(path = "tests/features/module_length.feature", index = 0)]
-    fn scenario_within_limit(world: ModuleWorld) {
-        let _ = world;
-    }
+    fn scenario_within_limit(world: ModuleWorld) { let _ = world; }
 
     #[scenario(path = "tests/features/module_length.feature", index = 1)]
-    fn scenario_exceeds_limit(world: ModuleWorld) {
-        let _ = world;
-    }
+    fn scenario_exceeds_limit(world: ModuleWorld) { let _ = world; }
 
     #[scenario(path = "tests/features/module_length.feature", index = 2)]
-    fn scenario_exact_limit(world: ModuleWorld) {
-        let _ = world;
-    }
+    fn scenario_exact_limit(world: ModuleWorld) { let _ = world; }
 
     #[scenario(path = "tests/features/module_length.feature", index = 3)]
-    fn scenario_macro(world: ModuleWorld) {
-        let _ = world;
-    }
+    fn scenario_macro(world: ModuleWorld) { let _ = world; }
 }
 
 #[cfg(test)]

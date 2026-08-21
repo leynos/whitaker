@@ -4,10 +4,10 @@
 //! from the main entrypoint to keep the binary small and focused on
 //! orchestration.
 
-use crate::crate_name::CrateName;
-use crate::resolution::EXPERIMENTAL_LINT_CRATES;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
+
+use crate::{crate_name::CrateName, resolution::EXPERIMENTAL_LINT_CRATES};
 
 /// Install Whitaker Dylint lint libraries.
 #[derive(Parser, Debug)]
@@ -83,13 +83,9 @@ pub struct InstallArgs {
     #[arg(short, long, value_name = "NAME")]
     pub lint: Vec<String>,
 
-    /// Build all individual lint crates instead of the aggregated suite.
-    #[arg(long, conflicts_with = "lint")]
-    pub individual_lints: bool,
-
-    /// Include experimental lints when available.
-    #[arg(long)]
-    pub experimental: bool,
+    /// Flags selecting which lint crates are built.
+    #[command(flatten)]
+    pub lint_selection: LintSelectionFlags,
 
     /// Number of parallel cargo build jobs.
     #[arg(short, long, value_name = "N")]
@@ -99,13 +95,9 @@ pub struct InstallArgs {
     #[arg(long, value_name = "TOOLCHAIN")]
     pub toolchain: Option<String>,
 
-    /// Install rustc-codegen-cranelift via rustup.
-    #[arg(long, default_value_t = false)]
-    pub cranelift: bool,
-
-    /// Show configuration and exit without building.
-    #[arg(long)]
-    pub dry_run: bool,
+    /// Flags adjusting how the installer executes the build.
+    #[command(flatten)]
+    pub execution: ExecutionFlags,
 
     /// Increase cargo output verbosity (repeatable: -v, -vv, -vvv).
     #[arg(
@@ -121,6 +113,48 @@ pub struct InstallArgs {
     #[arg(short, long, conflicts_with = "verbosity")]
     pub quiet: bool,
 
+    /// Flags that skip individual installation steps.
+    #[command(flatten)]
+    pub skip: SkipFlags,
+
+    /// Skip prebuilt artefact download and build from source.
+    #[arg(long = "build-only")]
+    pub is_build_only: bool,
+}
+
+/// Flags selecting which lint crates are built.
+///
+/// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct LintSelectionFlags {
+    /// Build all individual lint crates instead of the aggregated suite.
+    #[arg(long, conflicts_with = "lint")]
+    pub individual_lints: bool,
+
+    /// Include experimental lints when available.
+    #[arg(long)]
+    pub experimental: bool,
+}
+
+/// Flags adjusting how the installer executes the build.
+///
+/// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct ExecutionFlags {
+    /// Install rustc-codegen-cranelift via rustup.
+    #[arg(long, default_value_t = false)]
+    pub cranelift: bool,
+
+    /// Show configuration and exit without building.
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+/// Flags that skip individual installation steps.
+///
+/// Flattened into [`InstallArgs`] so the command-line surface is unchanged.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct SkipFlags {
     /// Skip installation of cargo-dylint and dylint-link.
     #[arg(long)]
     pub skip_deps: bool,
@@ -132,10 +166,6 @@ pub struct InstallArgs {
     /// Do not update existing repository clone.
     #[arg(long)]
     pub no_update: bool,
-
-    /// Skip prebuilt artefact download and build from source.
-    #[arg(long = "build-only")]
-    pub is_build_only: bool,
 }
 
 /// Arguments for the list command.
@@ -155,15 +185,13 @@ impl InstallArgs {
     ///
     /// Prebuilt artefacts are skipped when:
     /// - `--build-only` is set, or
-    /// - experimental lint behaviour is requested, either via
-    ///   `--experimental` (suite build) or explicit experimental crates when
-    ///   the experimental crate list is non-empty.
+    /// - experimental lint behaviour is requested, either via `--experimental` (suite build) or
+    ///   explicit experimental crates when the experimental crate list is non-empty.
     ///
     /// # Examples
     ///
     /// ```
-    /// use whitaker_installer::cli::InstallArgs;
-    /// use whitaker_installer::crate_name::CrateName;
+    /// use whitaker_installer::{cli::InstallArgs, crate_name::CrateName};
     ///
     /// let requested = vec![CrateName::from("whitaker_suite")];
     ///
@@ -178,7 +206,7 @@ impl InstallArgs {
     /// ```
     #[must_use]
     pub fn should_attempt_prebuilt(&self, requested_crates: &[CrateName]) -> bool {
-        if self.is_build_only || self.experimental {
+        if self.is_build_only || self.lint_selection.experimental {
             return false;
         }
         !requested_crates
@@ -199,25 +227,21 @@ impl Default for InstallArgs {
     /// use whitaker_installer::cli::InstallArgs;
     ///
     /// let args = InstallArgs::default();
-    /// assert!(!args.individual_lints);
-    /// assert!(!args.skip_deps);
+    /// assert!(!args.lint_selection.individual_lints);
+    /// assert!(!args.skip.skip_deps);
     /// assert!(args.lint.is_empty());
     /// ```
     fn default() -> Self {
         Self {
             target_dir: None,
             lint: Vec::new(),
-            individual_lints: false,
-            experimental: false,
+            lint_selection: LintSelectionFlags::default(),
             jobs: None,
             toolchain: None,
-            cranelift: false,
-            dry_run: false,
+            execution: ExecutionFlags::default(),
             verbosity: 0,
             quiet: false,
-            skip_deps: false,
-            skip_wrapper: false,
-            no_update: false,
+            skip: SkipFlags::default(),
             is_build_only: false,
         }
     }
@@ -256,7 +280,7 @@ impl Cli {
     /// install arguments. Callers should check `self.command` before calling
     /// this method if the `List` case needs different handling.
     #[must_use]
-    pub fn install_args(&self) -> &InstallArgs {
+    pub const fn install_args(&self) -> &InstallArgs {
         match &self.command {
             Some(Command::Install(args)) => args,
             Some(Command::List(_)) | None => &self.install,

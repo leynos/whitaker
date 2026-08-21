@@ -1,12 +1,20 @@
 //! Behaviour-driven tests for shared `rstest` fingerprint models.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
 use whitaker_common::rstest::{
-    ArgAtom, ArgFingerprint, CalleeShape, ExprShape, LocalSlot, ParagraphFingerprint,
-    ParagraphNormalizer, StmtShape,
+    ArgAtom,
+    ArgFingerprint,
+    CalleeShape,
+    ExprShape,
+    LocalSlot,
+    ParagraphFingerprint,
+    ParagraphNormalizer,
+    StmtShape,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Default)]
 struct FingerprintWorld {
@@ -48,20 +56,15 @@ impl FingerprintWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> FingerprintWorld {
-    FingerprintWorld::default()
-}
+fn world() -> FingerprintWorld { FingerprintWorld::default() }
 
 #[given("helper-call arguments for fixture db and literal 42")]
-fn given_helper_args(world: &FingerprintWorld) {
-    world.set_first_args(helper_args());
-}
+fn given_helper_args(world: &FingerprintWorld) { world.set_first_args(helper_args()); }
 
 #[given("matching helper-call arguments for fixture db and literal 42")]
-fn given_matching_helper_args(world: &FingerprintWorld) {
-    world.set_second_args(helper_args());
-}
+fn given_matching_helper_args(world: &FingerprintWorld) { world.set_second_args(helper_args()); }
 
 #[given("helper-call arguments containing an unsupported argument")]
 fn given_unsupported_args(world: &FingerprintWorld) {
@@ -92,24 +95,16 @@ fn given_two_arg_paragraph(world: &FingerprintWorld) {
 }
 
 #[when("I compare the argument fingerprints")]
-fn when_compare_args(world: &FingerprintWorld) {
-    world.compare_args();
-}
+fn when_compare_args(world: &FingerprintWorld) { world.compare_args(); }
 
 #[when("I compare the paragraph fingerprints")]
-fn when_compare_paragraphs(world: &FingerprintWorld) {
-    world.compare_paragraphs();
-}
+fn when_compare_paragraphs(world: &FingerprintWorld) { world.compare_paragraphs(); }
 
 #[when("I inspect the argument fingerprint")]
-fn when_inspect_args(world: &FingerprintWorld) {
-    let _ = world;
-}
+fn when_inspect_args(world: &FingerprintWorld) { let _ = world; }
 
 #[when("I inspect the paragraph fingerprint")]
-fn when_inspect_paragraph(world: &FingerprintWorld) {
-    let _ = world;
-}
+fn when_inspect_paragraph(world: &FingerprintWorld) { let _ = world; }
 
 #[then("the argument fingerprints match")]
 fn then_args_match(world: &FingerprintWorld) {
@@ -172,26 +167,16 @@ fn setup_paragraph(first: &str, second: &str, constructor_argc: usize) -> Paragr
 }
 
 #[scenario(path = "tests/features/rstest_fingerprint.feature", index = 0)]
-fn scenario_equivalent_arguments_match(world: FingerprintWorld) {
-    let _ = world;
-}
+fn scenario_equivalent_arguments_match(world: FingerprintWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_fingerprint.feature", index = 1)]
-fn scenario_renamed_paragraphs_match(world: FingerprintWorld) {
-    let _ = world;
-}
+fn scenario_renamed_paragraphs_match(world: FingerprintWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_fingerprint.feature", index = 2)]
-fn scenario_unsupported_arguments_remain_explicit(world: FingerprintWorld) {
-    let _ = world;
-}
+fn scenario_unsupported_arguments_remain_explicit(world: FingerprintWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_fingerprint.feature", index = 3)]
-fn scenario_structural_paragraphs_diverge(world: FingerprintWorld) {
-    let _ = world;
-}
+fn scenario_structural_paragraphs_diverge(world: FingerprintWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/rstest_fingerprint.feature", index = 4)]
-fn scenario_first_appearance_order_controls_slots(world: FingerprintWorld) {
-    let _ = world;
-}
+fn scenario_first_appearance_order_controls_slots(world: FingerprintWorld) { let _ = world; }

@@ -88,8 +88,8 @@ impl WhitakerProperties {
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{WhitakerProperties, WhitakerPropertiesBuilder};
 /// use serde_json::Value;
+/// use whitaker_sarif::{WhitakerProperties, WhitakerPropertiesBuilder};
 ///
 /// let props = WhitakerPropertiesBuilder::new("T1")
 ///     .with_k(25)
@@ -152,42 +152,42 @@ impl WhitakerPropertiesBuilder {
 
     /// Sets the k-shingle size.
     #[must_use]
-    pub fn with_k(mut self, k: usize) -> Self {
+    pub const fn with_k(mut self, k: usize) -> Self {
         self.k = k;
         self
     }
 
     /// Sets the winnowing window size.
     #[must_use]
-    pub fn with_window(mut self, window: usize) -> Self {
+    pub const fn with_window(mut self, window: usize) -> Self {
         self.window = window;
         self
     }
 
     /// Sets the Jaccard similarity score.
     #[must_use]
-    pub fn with_jaccard(mut self, jaccard: f64) -> Self {
+    pub const fn with_jaccard(mut self, jaccard: f64) -> Self {
         self.jaccard = jaccard;
         self
     }
 
     /// Sets the cosine similarity score.
     #[must_use]
-    pub fn with_cosine(mut self, cosine: f64) -> Self {
+    pub const fn with_cosine(mut self, cosine: f64) -> Self {
         self.cosine = cosine;
         self
     }
 
     /// Sets the clone group identifier.
     #[must_use]
-    pub fn with_group_id(mut self, group_id: usize) -> Self {
+    pub const fn with_group_id(mut self, group_id: usize) -> Self {
         self.group_id = group_id;
         self
     }
 
     /// Sets the clone class size.
     #[must_use]
-    pub fn with_class_size(mut self, class_size: usize) -> Self {
+    pub const fn with_class_size(mut self, class_size: usize) -> Self {
         self.class_size = class_size;
         self
     }
@@ -219,6 +219,8 @@ impl WhitakerPropertiesBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Behavioural tests for Whitaker SARIF property bags.
+
     use super::*;
 
     #[test]
@@ -232,12 +234,12 @@ mod tests {
             .with_class_size(4)
             .build();
         match props {
-            Ok(props) => {
-                assert_eq!(props.profile, "T1");
-                assert_eq!(props.k, 25);
-                assert_eq!(props.window, 16);
-                assert_eq!(props.group_id, 174);
-                assert_eq!(props.class_size, 4);
+            Ok(built) => {
+                assert_eq!(built.profile, "T1");
+                assert_eq!(built.k, 25);
+                assert_eq!(built.window, 16);
+                assert_eq!(built.group_id, 174);
+                assert_eq!(built.class_size, 4);
             }
             Err(e) => panic!("unexpected error: {e}"),
         }
@@ -247,10 +249,10 @@ mod tests {
     fn into_value_wraps_under_whitaker_key() {
         let props = WhitakerPropertiesBuilder::new("T2").build();
         match props {
-            Ok(props) => {
-                let value = props.try_to_value();
+            Ok(built) => {
+                let value = built.try_to_value();
                 match value {
-                    Ok(value) => assert!(value.get("whitaker").is_some()),
+                    Ok(wrapped) => assert!(wrapped.get("whitaker").is_some()),
                     Err(e) => panic!("unexpected serialization error: {e}"),
                 }
             }
@@ -262,9 +264,9 @@ mod tests {
     fn try_from_value_extracts_properties() {
         let props = WhitakerPropertiesBuilder::new("T1").with_k(10).build();
         match props {
-            Ok(props) => match props.try_to_value() {
+            Ok(built) => match built.try_to_value() {
                 Ok(value) => match WhitakerProperties::try_from(&value) {
-                    Ok(extracted) => assert_eq!(extracted, props),
+                    Ok(extracted) => assert_eq!(extracted, built),
                     Err(e) => panic!("unexpected extraction error: {e}"),
                 },
                 Err(e) => panic!("unexpected serialization error: {e}"),
@@ -287,11 +289,12 @@ mod tests {
             .with_cosine(0.90)
             .build();
         match props {
-            Ok(props) => {
-                let json = serde_json::to_string(&props);
+            Ok(built) => {
+                let json = serde_json::to_string(&built);
                 match json {
-                    Ok(json) => match serde_json::from_str::<WhitakerProperties>(&json) {
-                        Ok(parsed) => assert_eq!(props, parsed),
+                    Ok(serialized) => match serde_json::from_str::<WhitakerProperties>(&serialized)
+                    {
+                        Ok(parsed) => assert_eq!(built, parsed),
                         Err(e) => panic!("deserialization failed: {e}"),
                     },
                     Err(e) => panic!("serialization failed: {e}"),

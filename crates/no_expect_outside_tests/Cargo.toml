@@ -37,6 +37,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 log = { workspace = true, optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
@@ -44,3 +45,6 @@ dylint_testing = { workspace = true }
 camino = { workspace = true }
 tokio = { version = "1.50.0", features = ["macros", "rt", "rt-multi-thread"] }
 temp-env = { workspace = true }
+
+[lints]
+workspace = true

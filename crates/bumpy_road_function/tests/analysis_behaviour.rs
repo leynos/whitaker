@@ -7,13 +7,18 @@
 #[cfg(feature = "dylint-driver")]
 extern crate rustc_driver;
 
-use bumpy_road_function::analysis::{
-    DEFAULT_THRESHOLD, Settings, Weights, detect_bumps, normalise_settings, top_two_bumps,
-};
-use rstest::fixture;
-use rstest::rstest;
-use rstest_bdd_macros::{given, scenario, then, when};
 use std::cell::RefCell;
+
+use bumpy_road_function::analysis::{
+    DEFAULT_THRESHOLD,
+    Settings,
+    Weights,
+    detect_bumps,
+    normalize_settings,
+    top_two_bumps,
+};
+use rstest::{fixture, rstest};
+use rstest_bdd_macros::{given, scenario, then, when};
 
 #[rstest]
 #[case::even_window(
@@ -58,12 +63,12 @@ use std::cell::RefCell;
     },
     Settings::default(),
 )]
-fn normalise_settings_falls_back_to_defaults(
+fn normalize_settings_falls_back_to_defaults(
     #[case] settings: Settings,
     #[case] expected: Settings,
 ) {
-    let normalised = normalise_settings(settings);
-    assert_eq!(normalised, expected);
+    let normalized = normalize_settings(settings);
+    assert_eq!(normalized, expected);
 }
 
 #[rstest]
@@ -71,9 +76,11 @@ fn detect_bumps_reports_two_intervals() {
     let smoothed = vec![0.0, 3.0, 3.0, 0.0, 3.1, 3.0];
     let bumps = detect_bumps(&smoothed, 3.0, 2);
 
-    assert_eq!(bumps.len(), 2);
-    assert_eq!((bumps[0].start_index(), bumps[0].end_index()), (1, 2));
-    assert_eq!((bumps[1].start_index(), bumps[1].end_index()), (4, 5));
+    let ranges: Vec<(usize, usize)> = bumps
+        .iter()
+        .map(|bump| (bump.start_index(), bump.end_index()))
+        .collect();
+    assert_eq!(ranges, vec![(1, 2), (4, 5)]);
 }
 
 #[rstest]
@@ -90,9 +97,11 @@ fn top_two_bumps_prefers_area_then_length() {
     let bumps = detect_bumps(&smoothed, 3.0, 2);
     let top = top_two_bumps(bumps);
 
-    assert_eq!(top.len(), 2);
-    assert_eq!((top[0].start_index(), top[0].end_index()), (6, 8));
-    assert_eq!((top[1].start_index(), top[1].end_index()), (1, 2));
+    let ranges: Vec<(usize, usize)> = top
+        .iter()
+        .map(|bump| (bump.start_index(), bump.end_index()))
+        .collect();
+    assert_eq!(ranges, vec![(6, 8), (1, 2)]);
 }
 
 #[derive(Default)]
@@ -102,13 +111,12 @@ struct World {
     min_bump_lines: RefCell<usize>,
     bumps: RefCell<Vec<bumpy_road_function::analysis::BumpInterval>>,
     settings: RefCell<Settings>,
-    normalised: RefCell<Option<Settings>>,
+    normalized: RefCell<Option<Settings>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> World {
-    World::default()
-}
+fn world() -> World { World::default() }
 
 #[given("a smoothed signal with two bumps")]
 fn given_signal_two_bumps(world: &World) {
@@ -118,19 +126,13 @@ fn given_signal_two_bumps(world: &World) {
 }
 
 #[given("a smoothed signal with one bump")]
-fn given_signal_one_bump(world: &World) {
-    world.signal.replace(vec![0.0, 3.0, 3.0, 0.0]);
-}
+fn given_signal_one_bump(world: &World) { world.signal.replace(vec![0.0, 3.0, 3.0, 0.0]); }
 
 #[given("a smoothed signal with a short spike")]
-fn given_signal_short_spike(world: &World) {
-    world.signal.replace(vec![0.0, 4.0, 0.0]);
-}
+fn given_signal_short_spike(world: &World) { world.signal.replace(vec![0.0, 4.0, 0.0]); }
 
 #[given("the threshold is {threshold:f64}")]
-fn given_threshold(world: &World, threshold: f64) {
-    world.threshold.replace(threshold);
-}
+fn given_threshold(world: &World, threshold: f64) { world.threshold.replace(threshold); }
 
 #[given("the minimum bump length is {min_lines}")]
 fn given_min_bump_lines(world: &World, min_lines: usize) {
@@ -152,43 +154,46 @@ fn then_bump_count(world: &World, count: usize) {
 }
 
 #[given("default settings")]
-fn given_default_settings(world: &World) {
-    world.settings.replace(Settings::default());
-}
+fn given_default_settings(world: &World) { world.settings.replace(Settings::default()); }
 
 #[when("the smoothing window is set to {window}")]
-fn when_set_window(world: &World, window: usize) {
-    world.settings.borrow_mut().window = window;
-}
+fn when_set_window(world: &World, window: usize) { world.settings.borrow_mut().window = window; }
 
 #[when("the threshold is set to {threshold:f64}")]
 fn when_set_threshold(world: &World, threshold: f64) {
     world.settings.borrow_mut().threshold = threshold;
 }
 
-#[when("I normalise the settings")]
-fn when_normalise(world: &World) {
+#[when("I normalize the settings")]
+fn when_normalize(world: &World) {
     let settings = *world.settings.borrow();
-    let normalised = normalise_settings(settings);
-    world.normalised.replace(Some(normalised));
+    let normalized = normalize_settings(settings);
+    world.normalized.replace(Some(normalized));
 }
 
 #[then("the window becomes {window}")]
 fn then_window(world: &World, window: usize) {
     let settings = world
-        .normalised
+        .normalized
         .borrow()
-        .expect("settings should be normalised");
+        .expect("settings should be normalized");
     assert_eq!(settings.window, window);
 }
 
 #[then("the threshold becomes {threshold:f64}")]
 fn then_threshold(world: &World, threshold: f64) {
     let settings = world
-        .normalised
+        .normalized
         .borrow()
-        .expect("settings should be normalised");
-    assert_eq!(settings.threshold, threshold);
+        .expect("settings should be normalized");
+    // Compare bit patterns: the assertion is that the configured value
+    // round-tripped through parsing unchanged, which is exact equality of
+    // representation rather than numeric proximity.
+    assert_eq!(
+        settings.threshold.to_bits(),
+        threshold.to_bits(),
+        "the normalized threshold should match the configured value exactly",
+    );
 }
 
 #[scenario(path = "tests/features/bumpy_road.feature", index = 0)]
@@ -243,8 +248,11 @@ fn ui_dylint_toml_threshold_matches_default() {
         .and_then(toml::Value::as_float)
         .expect("ui/dylint.toml should contain [bumpy_road_function].threshold");
 
+    // Bit-pattern comparison: this pins the fixture to the constant exactly,
+    // so any drift in either is caught rather than tolerated.
     assert_eq!(
-        threshold, DEFAULT_THRESHOLD,
+        threshold.to_bits(),
+        DEFAULT_THRESHOLD.to_bits(),
         concat!(
             "ui/dylint.toml threshold must equal DEFAULT_THRESHOLD; ",
             "update the config file or the constant to keep them in sync"

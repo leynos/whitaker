@@ -3,7 +3,7 @@
 
 use rstest::rstest;
 use serial_test::serial;
-use whitaker_common::test_support::LocaleOverride;
+use whitaker_common::test_support::with_locale;
 
 /// Runs UI regression tests for the `module_must_have_inner_docs` lint under
 /// different locale configurations, verifying that diagnostics render correctly.
@@ -12,8 +12,8 @@ use whitaker_common::test_support::LocaleOverride;
 ///
 /// - `default_locale`: Uses the default English locale (`"ui"` fixtures, `None`).
 /// - `welsh_locale`: Uses Welsh localization (`"ui-cy"` fixtures, `Some("cy")`).
-/// - `unsupported_locale_falls_back_to_english`: Uses an unsupported locale
-///   (`"xx-YY"`), expecting fallback to English (`"ui"` fixtures).
+/// - `unsupported_locale_falls_back_to_english`: Uses an unsupported locale (`"xx-YY"`), expecting
+///   fallback to English (`"ui"` fixtures).
 ///
 /// # Example
 ///
@@ -27,6 +27,7 @@ use whitaker_common::test_support::LocaleOverride;
 #[case::unsupported_locale_falls_back_to_english("ui", Some("xx-YY"))]
 #[serial]
 fn ui_tests_across_locales(#[case] directory: &str, #[case] locale: Option<&str>) {
-    let _guard = locale.map(LocaleOverride::set);
-    whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    with_locale(locale, || {
+        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    });
 }

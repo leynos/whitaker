@@ -7,10 +7,16 @@ use std::{cell::RefCell, collections::BTreeMap};
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
-    CandidatePair, FragmentId, Run0Error, TokenFragment, TokenPassConfig, accept_candidate_pairs,
+    CandidatePair,
+    FragmentId,
+    Run0Error,
+    TokenFragment,
+    TokenPassConfig,
+    accept_candidate_pairs,
     emit_run0,
 };
 use whitaker_sarif::{Run, SarifResult, WhitakerProperties};
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug)]
 struct Run0World {
@@ -33,17 +39,16 @@ impl Default for Run0World {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> Run0World {
-    Run0World::default()
-}
+fn world() -> Run0World { Run0World::default() }
 
 fn with_results(world: &Run0World, assert_fn: impl FnOnce(&[SarifResult])) {
-    let run = world.run.borrow();
-    match run.as_ref() {
-        Some(run) => assert_fn(&run.results),
-        None => panic!("run must be emitted before checking results"),
-    }
+    let borrowed_run = world.run.borrow();
+    let Some(emitted_run) = borrowed_run.as_ref() else {
+        panic!("run must be emitted before checking results");
+    };
+    assert_fn(&emitted_run.results);
 }
 
 fn with_whitaker_properties(world: &Run0World, assert_fn: impl FnOnce(&WhitakerProperties)) {
@@ -51,12 +56,13 @@ fn with_whitaker_properties(world: &Run0World, assert_fn: impl FnOnce(&WhitakerP
         let [result] = results else {
             panic!("exactly one result must exist before checking Whitaker properties");
         };
-        let properties = result
-            .properties
-            .as_ref()
-            .unwrap_or_else(|| panic!("Whitaker properties must be present"));
-        let extracted = WhitakerProperties::try_from(properties)
-            .unwrap_or_else(|error| panic!("unexpected property extraction error: {error}"));
+        let Some(properties) = result.properties.as_ref() else {
+            panic!("Whitaker properties must be present");
+        };
+        let extracted = match WhitakerProperties::try_from(properties) {
+            Ok(extracted) => extracted,
+            Err(error) => panic!("unexpected property extraction error: {error}"),
+        };
         assert_fn(&extracted);
     });
 }
@@ -178,7 +184,13 @@ fn when_run_zero_is_emitted(world: &Run0World) {
 
 #[then("exactly {count} result is emitted")]
 fn then_exactly_one_result_is_emitted(world: &Run0World, count: usize) {
-    with_results(world, |results| assert_eq!(results.len(), count));
+    with_results(world, |results| {
+        assert_eq!(
+            results.len(),
+            count,
+            "emitted result count must match the scenario expectation"
+        );
+    });
 }
 
 #[then("the emitted rule is {rule_id}")]
@@ -187,7 +199,10 @@ fn then_emitted_rule_is(world: &Run0World, rule_id: String) {
         let [result] = results else {
             panic!("exactly one result must exist before checking the rule");
         };
-        assert_eq!(result.rule_id, rule_id);
+        assert_eq!(
+            result.rule_id, rule_id,
+            "emitted rule identifier must match the scenario expectation"
+        );
     });
 }
 
@@ -197,40 +212,71 @@ fn then_result_has_locations(world: &Run0World, primary_count: usize, related_co
         let [result] = results else {
             panic!("exactly one result must exist before checking locations");
         };
-        assert_eq!(result.locations.len(), primary_count);
-        assert_eq!(result.related_locations.len(), related_count);
+        assert_eq!(
+            result.locations.len(),
+            primary_count,
+            "primary location count must match the scenario expectation"
+        );
+        assert_eq!(
+            result.related_locations.len(),
+            related_count,
+            "related location count must match the scenario expectation"
+        );
     });
 }
 
 #[then("the Whitaker profile is {profile}")]
 fn then_whitaker_profile_is(world: &Run0World, profile: String) {
-    with_whitaker_properties(world, |props| assert_eq!(props.profile, profile));
+    with_whitaker_properties(world, |props| {
+        assert_eq!(
+            props.profile, profile,
+            "Whitaker profile must match the scenario expectation"
+        );
+    });
 }
 
 #[then("the Whitaker k is {k}")]
 fn then_whitaker_k_is(world: &Run0World, k: usize) {
-    with_whitaker_properties(world, |props| assert_eq!(props.k, k));
+    with_whitaker_properties(world, |props| {
+        assert_eq!(props.k, k, "Whitaker k must match the scenario expectation");
+    });
 }
 
 #[then("the Whitaker window is {window}")]
 fn then_whitaker_window_is(world: &Run0World, window: usize) {
-    with_whitaker_properties(world, |props| assert_eq!(props.window, window));
+    with_whitaker_properties(world, |props| {
+        assert_eq!(
+            props.window, window,
+            "Whitaker window must match the scenario expectation"
+        );
+    });
 }
 
 #[then("no results are emitted")]
 fn then_no_results_are_emitted(world: &Run0World) {
-    with_results(world, |results| assert!(results.is_empty()));
+    with_results(world, |results| {
+        assert!(
+            results.is_empty(),
+            "no results must be emitted for this scenario"
+        );
+    });
 }
 
 #[then("the emission error is {message}")]
 fn then_emission_error_is(world: &Run0World, message: String) -> Result<(), String> {
-    match world.error.borrow().as_ref() {
-        Some(error) => {
-            assert_eq!(error.to_string(), message);
-            Ok(())
-        }
-        None => Err("an emission error must be present".to_owned()),
-    }
+    world.error.borrow().as_ref().map_or_else(
+        || Err("an emission error must be present".to_owned()),
+        |error| {
+            let actual = error.to_string();
+            if actual == message {
+                Ok(())
+            } else {
+                Err(format!(
+                    "expected emission error `{message}`, but the run reported `{actual}`"
+                ))
+            }
+        },
+    )
 }
 
 #[then("the primary region is {region}")]
@@ -239,13 +285,11 @@ fn then_primary_region_is(world: &Run0World, region: String) {
         let [result] = results else {
             panic!("exactly one result must exist before checking the primary region");
         };
-        let location = match result.locations.first() {
-            Some(location) => location,
-            None => panic!("a primary location must be present"),
+        let Some(location) = result.locations.first() else {
+            panic!("a primary location must be present");
         };
-        let region_value = match location.physical_location.region.as_ref() {
-            Some(region_value) => region_value,
-            None => panic!("a primary region must be present"),
+        let Some(region_value) = location.physical_location.region.as_ref() else {
+            panic!("a primary region must be present");
         };
         let actual = format!(
             "{}:{}-{}:{}",
@@ -254,9 +298,12 @@ fn then_primary_region_is(world: &Run0World, region: String) {
             region_value.end_line.unwrap_or(region_value.start_line),
             region_value
                 .end_column
-                .unwrap_or(region_value.start_column.unwrap_or(1))
+                .unwrap_or_else(|| region_value.start_column.unwrap_or(1))
         );
-        assert_eq!(actual, region);
+        assert_eq!(
+            actual, region,
+            "primary region must match the scenario expectation"
+        );
     });
 }
 
@@ -266,40 +313,30 @@ fn then_primary_file_is(world: &Run0World, file_uri: String) {
         let [result] = results else {
             panic!("exactly one result must exist before checking the primary file");
         };
-        let location = match result.locations.first() {
-            Some(location) => location,
-            None => panic!("a primary location must be present"),
+        let Some(location) = result.locations.first() else {
+            panic!("a primary location must be present");
         };
-        assert_eq!(location.physical_location.artifact_location.uri, file_uri);
+        assert_eq!(
+            location.physical_location.artefact_location.uri, file_uri,
+            "primary file URI must match the scenario expectation"
+        );
     });
 }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 0)]
-fn scenario_type1_pair(world: Run0World) {
-    let _ = world;
-}
+fn scenario_type1_pair(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 1)]
-fn scenario_type2_pair(world: Run0World) {
-    let _ = world;
-}
+fn scenario_type2_pair(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 2)]
-fn scenario_below_threshold(world: Run0World) {
-    let _ = world;
-}
+fn scenario_below_threshold(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 3)]
-fn scenario_empty_fingerprints(world: Run0World) {
-    let _ = world;
-}
+fn scenario_empty_fingerprints(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 4)]
-fn scenario_multiline_region(world: Run0World) {
-    let _ = world;
-}
+fn scenario_multiline_region(world: Run0World) { let _ = world; }
 
 #[scenario(path = "tests/features/run0_sarif.feature", index = 5)]
-fn scenario_reversed_pair(world: Run0World) {
-    let _ = world;
-}
+fn scenario_reversed_pair(world: Run0World) { let _ = world; }

@@ -9,9 +9,7 @@
 //! extend the recognized test attributes through `dylint.toml` when bespoke
 //! macros are in play.
 
-use std::collections::HashSet;
-use std::ffi::OsStr;
-use std::path::Path;
+use std::{collections::HashSet, ffi::OsStr, path::Path};
 
 use log::debug;
 use rustc_hir as hir;
@@ -19,19 +17,38 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
 use rustc_span::{RemapPathScopeComponents, sym};
 use serde::Deserialize;
-use whitaker::SharedConfig;
-use whitaker::hir::has_test_like_hir_attributes;
+use whitaker::{SharedConfig, hir::has_test_like_hir_attributes};
 use whitaker_common::{AttributePath, Localizer, get_localizer_for_lint};
 
-use crate::context::{collect_context, is_cfg_test_attribute, summarise_context};
-use crate::diagnostics::{DiagnosticContext, emit_diagnostic};
+use crate::{
+    context::{collect_context, is_cfg_test_attribute, summarize_context},
+    diagnostics::{DiagnosticContext, emit_diagnostic},
+};
 
-dylint_linting::impl_late_lint! {
-    pub NO_EXPECT_OUTSIDE_TESTS,
-    Deny,
-    "`.expect(..)` must not be used outside of test or doctest contexts",
-    NoExpectOutsideTests::default()
+/// Dylint lint declaration and registration glue.
+///
+/// `impl_late_lint!` expands to the Dylint ABI entry point and the
+/// `impl_lint_pass!` accessor, neither of which has a source location that
+/// could carry documentation. Isolating the invocation keeps the expectation
+/// scoped to exactly those generated items.
+mod declaration {
+    #![expect(
+        missing_docs,
+        reason = "dylint_linting macro expansion emits items with no documentable source location"
+    )]
+
+    use super::NoExpectOutsideTests;
+
+    dylint_linting::impl_late_lint! {
+        /// Denies `.expect(..)` calls outside test and doctest contexts.
+        pub NO_EXPECT_OUTSIDE_TESTS,
+        Deny,
+        "`.expect(..)` must not be used outside of test or doctest contexts",
+        NoExpectOutsideTests::default()
+    }
 }
+
+pub use declaration::NO_EXPECT_OUTSIDE_TESTS;
 
 #[derive(Default, Deserialize)]
 struct Config {
@@ -122,7 +139,7 @@ impl<'tcx> LateLintPass<'tcx> for NoExpectOutsideTests {
 
         let additional = self.additional_test_attributes.as_slice();
         let (entries, has_test_context_ancestry) = collect_context(cx, expr.hir_id, additional);
-        let summary = summarise_context(entries.as_slice(), has_test_context_ancestry, additional);
+        let summary = summarize_context(entries.as_slice(), has_test_context_ancestry, additional);
 
         if summary.is_test {
             return;
@@ -153,12 +170,12 @@ fn receiver_is_option_or_result<'tcx>(
 }
 
 fn ty_is_option_or_result<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    let ty = cx
+    let normalized = cx
         .tcx
         .normalize_erasing_regions(cx.typing_env(), ty::Unnormalized::new_wip(ty))
         .peel_refs();
 
-    let Some(adt) = ty.ty_adt_def() else {
+    let Some(adt) = normalized.ty_adt_def() else {
         return false;
     };
 
@@ -193,7 +210,7 @@ fn ancestor_function_is_test<'tcx>(
         })
 }
 
-fn is_in_tests_directory<'tcx>(cx: &LateContext<'tcx>) -> bool {
+fn is_in_tests_directory(cx: &LateContext<'_>) -> bool {
     cx.tcx.sess.local_crate_source_file().is_some_and(|source| {
         is_integration_test_crate_root(source.path(RemapPathScopeComponents::DIAGNOSTICS))
     })
@@ -233,7 +250,7 @@ fn is_likely_test_function<'tcx>(
         || is_in_tests_directory(cx)
 }
 
-fn is_in_cfg_test_module<'tcx>(cx: &LateContext<'tcx>, hir_id: hir::HirId) -> bool {
+fn is_in_cfg_test_module(cx: &LateContext<'_>, hir_id: hir::HirId) -> bool {
     cx.tcx.hir_parent_iter(hir_id).any(|(ancestor_id, node)| {
         let hir::Node::Item(item) = node else {
             return false;

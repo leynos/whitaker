@@ -1,12 +1,15 @@
+//! Behaviour-driven tests for the suite registration wiring.
 #![feature(rustc_private)]
 #![cfg(feature = "dylint-driver")]
-//! Behaviour-driven tests for the suite registration wiring.
+
+use std::{
+    cell::RefCell,
+    panic::{AssertUnwindSafe, catch_unwind},
+};
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use rustc_lint::LintStore;
-use std::cell::RefCell;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use whitaker_suite::{register_suite_lints, suite_lint_decls, suite_lint_names};
 
 struct RegistrationWorld {
@@ -28,15 +31,12 @@ impl RegistrationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
-fn world() -> RegistrationWorld {
-    RegistrationWorld::new()
-}
+fn world() -> RegistrationWorld { RegistrationWorld::new() }
 
 #[given("an empty lint store")]
-fn given_empty_store(world: &RegistrationWorld) {
-    world.reset();
-}
+fn given_empty_store(world: &RegistrationWorld) { world.reset(); }
 
 #[given("the suite lints are already registered")]
 fn given_already_registered(world: &RegistrationWorld) {
@@ -49,15 +49,16 @@ fn when_register_suite(world: &RegistrationWorld) {
     let registration = catch_unwind(AssertUnwindSafe(|| {
         register_suite_lints(&mut world.store.borrow_mut());
     }))
-    .map(|_| ())
     .map_err(|panic| {
-        if let Some(message) = panic.downcast_ref::<&str>() {
-            (*message).to_string()
-        } else if let Some(message) = panic.downcast_ref::<String>() {
-            message.clone()
-        } else {
-            "registration panicked with a non-string payload".to_string()
-        }
+        panic.downcast_ref::<&str>().map_or_else(
+            || {
+                panic.downcast_ref::<String>().map_or_else(
+                    || "registration panicked with a non-string payload".to_owned(),
+                    Clone::clone,
+                )
+            },
+            |message| (*message).to_owned(),
+        )
     });
 
     *world.result.borrow_mut() = registration;
@@ -83,7 +84,7 @@ fn then_names_match(world: &RegistrationWorld) {
         .iter()
         .map(|lint| lint.name_lower())
         .collect();
-    let expected: Vec<String> = suite_lint_names().map(str::to_string).collect();
+    let expected: Vec<String> = suite_lint_names().map(str::to_owned).collect();
 
     assert_eq!(registered, expected);
 }
@@ -94,7 +95,7 @@ fn then_decls_align() {
         .iter()
         .map(|lint| lint.name_lower())
         .collect();
-    let expected: Vec<String> = suite_lint_names().map(str::to_string).collect();
+    let expected: Vec<String> = suite_lint_names().map(str::to_owned).collect();
 
     assert_eq!(declared, expected);
 }
@@ -110,11 +111,7 @@ fn then_registration_succeeds(world: &RegistrationWorld) {
 }
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 0)]
-fn scenario_registers_cleanly(world: RegistrationWorld) {
-    let _ = world;
-}
+fn scenario_registers_cleanly(world: RegistrationWorld) { let _ = world; }
 
 #[scenario(path = "tests/features/suite_registration.feature", index = 1)]
-fn scenario_double_registration(world: RegistrationWorld) {
-    let _ = world;
-}
+fn scenario_double_registration(world: RegistrationWorld) { let _ = world; }

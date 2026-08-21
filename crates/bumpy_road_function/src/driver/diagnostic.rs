@@ -3,19 +3,22 @@
 //! The lint warns when it detects two or more separated bump intervals in the
 //! smoothed signal and highlights the two most severe bumps.
 
-use std::borrow::Cow;
-use std::ops::RangeInclusive;
+use std::{borrow::Cow, ops::RangeInclusive};
 
-use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 use fluent_templates::fluent_bundle::FluentValue;
 use rustc_lint::{LateContext, LintContext};
 use rustc_span::{BytePos, Span};
-use whitaker_common::i18n::DiagnosticMessageSet;
 use whitaker_common::{
-    Arguments, Localizer, MessageResolution, noop_reporter, safe_resolve_message_set,
+    Arguments,
+    Localizer,
+    MessageResolution,
+    i18n::DiagnosticMessageSet,
+    noop_reporter,
+    safe_resolve_message_set,
 };
 
 use super::{BUMPY_ROAD_FUNCTION, LINT_NAME, MESSAGE_KEY};
+use crate::analysis::{BumpInterval, Settings, top_two_bumps};
 
 /// Payload describing a lint diagnostic to emit.
 pub(super) struct DiagnosticInput<'a> {
@@ -36,7 +39,7 @@ pub(super) fn emit_diagnostic(
     args.insert(Cow::Borrowed("name"), FluentValue::from(input.name));
     args.insert(
         Cow::Borrowed("count"),
-        FluentValue::from(input.bumps.len() as i64),
+        FluentValue::from(i64::try_from(input.bumps.len()).unwrap_or(i64::MAX)),
     );
     args.insert(
         Cow::Borrowed("threshold"),
@@ -59,19 +62,22 @@ pub(super) fn emit_diagnostic(
         BUMPY_ROAD_FUNCTION,
         input.primary_span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
-            lint.span_note(input.primary_span, messages.note().to_string());
+            lint.primary_message(messages.primary().to_owned());
+            lint.span_note(input.primary_span, messages.note().to_owned());
 
             for (ordinal, interval) in highlighted.iter().enumerate() {
                 let Some(span) = bump_spans.get(ordinal).copied().flatten() else {
                     continue;
                 };
-                let label =
-                    resolve_bump_label(localizer, (ordinal + 1) as i64, interval.len() as i64);
+                let label = resolve_bump_label(
+                    localizer,
+                    i64::try_from(ordinal + 1).unwrap_or(i64::MAX),
+                    i64::try_from(interval.len()).unwrap_or(i64::MAX),
+                );
                 lint.span_label(span, label);
             }
 
-            lint.help(messages.help().to_string());
+            lint.help(messages.help().to_owned());
         }),
     );
 }
@@ -125,7 +131,12 @@ struct LineSpanMapper {
 }
 
 impl LineSpanMapper {
-    fn new(base_span: Span, snippet_len: usize, base_line: usize, line_starts: Vec<usize>) -> Self {
+    const fn new(
+        base_span: Span,
+        snippet_len: usize,
+        base_line: usize,
+        line_starts: Vec<usize>,
+    ) -> Self {
         Self {
             base_span,
             snippet_len,
@@ -150,10 +161,10 @@ impl LineSpanMapper {
             .unwrap_or(self.snippet_len);
 
         let base = self.base_span.shrink_to_lo();
-        // `BytePos` is `u32`-backed; the snippet length is expected to fit in
-        // 4 GiB for any reasonable Rust source file.
-        let lo = base.lo() + BytePos(start_offset as u32);
-        let mut hi = base.lo() + BytePos(end_offset as u32);
+        // `BytePos` is `u32`-backed; offsets beyond 4 GiB cannot be represented
+        // as spans, so such (pathological) snippets yield no span.
+        let lo = base.lo() + BytePos(u32::try_from(start_offset).ok()?);
+        let mut hi = base.lo() + BytePos(u32::try_from(end_offset).ok()?);
         if hi <= lo {
             hi = lo + BytePos(1);
         }

@@ -1,10 +1,14 @@
 //! Unit tests validating context summarization outcomes across default and
 //! configured test attributes.
 
-use crate::context::summarise_context;
 use rstest::rstest;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
-use whitaker_common::{ContextEntry, ContextKind};
+use whitaker_common::{
+    ContextEntry,
+    ContextKind,
+    attributes::{Attribute, AttributeKind, AttributePath},
+};
+
+use crate::context::summarize_context;
 
 fn function_entry(name: &str, attrs: Vec<Attribute>) -> ContextEntry {
     ContextEntry::new(name, ContextKind::Function, attrs)
@@ -19,18 +23,18 @@ fn test_attribute() -> Attribute {
 }
 
 #[rstest]
-fn summarises_plain_context() {
+fn summarizes_plain_context() {
     let entries = vec![function_entry("handler", Vec::new())];
-    let summary = summarise_context(&entries, false, &[]);
+    let summary = summarize_context(&entries, false, &[]);
 
     assert!(!summary.is_test);
     assert_eq!(summary.function_name.as_deref(), Some("handler"));
 }
 
 #[rstest]
-fn recognises_test_attribute() {
+fn recognizes_test_attribute() {
     let entries = vec![function_entry("test_case", vec![test_attribute()])];
-    let summary = summarise_context(&entries, false, &[]);
+    let summary = summarize_context(&entries, false, &[]);
 
     assert!(summary.is_test);
     assert_eq!(summary.function_name.as_deref(), Some("test_case"));
@@ -39,7 +43,7 @@ fn recognises_test_attribute() {
 #[rstest]
 fn honours_cfg_test() {
     let entries = vec![module_entry("tests", Vec::new())];
-    let summary = summarise_context(&entries, true, &[]);
+    let summary = summarize_context(&entries, true, &[]);
 
     assert!(summary.is_test);
     assert_eq!(summary.function_name, None);
@@ -55,7 +59,7 @@ fn honours_additional_attributes() {
         )],
     )];
     let additional = vec![AttributePath::from("custom::test")];
-    let summary = summarise_context(&entries, false, additional.as_slice());
+    let summary = summarize_context(&entries, false, additional.as_slice());
 
     assert!(summary.is_test);
     assert_eq!(summary.function_name.as_deref(), Some("custom"));

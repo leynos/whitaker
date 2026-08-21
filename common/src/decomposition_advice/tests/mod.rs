@@ -6,15 +6,22 @@ mod propagation;
 mod test_fixtures;
 mod vector_algebra;
 
-use self::test_fixtures::{
-    ExpectedSuggestion, MethodInput, assert_suggestion, assert_type_decomposition_is_empty,
-    parser_serde_fs_fixture, profile,
-};
-use super::community::{build_similarity_edges, detect_communities};
-use super::profile::{DecompositionContext, SubjectKind};
-use super::suggestion::{SuggestedExtractionKind, suggest_decomposition};
-use super::vector::{build_feature_vector, dot_product, identifier_keywords};
 use std::str::FromStr;
+
+use self::test_fixtures::{
+    ExpectedSuggestion,
+    MethodInput,
+    assert_suggestion,
+    assert_type_decomposition_is_empty,
+    parser_serde_fs_fixture,
+    profile,
+};
+use super::{
+    community::{build_similarity_edges, detect_communities},
+    profile::{DecompositionContext, SubjectKind},
+    suggestion::{SuggestedExtractionKind, suggest_decomposition},
+    vector::{build_feature_vector, dot_product, identifier_keywords},
+};
 
 #[test]
 fn identifier_keywords_split_camel_case_and_remove_stop_words() {
@@ -119,8 +126,11 @@ fn similarity_edges_include_related_methods_only() {
     let edges = build_similarity_edges(&vectors);
 
     assert_eq!(edges.len(), 1);
-    assert_eq!((edges[0].left(), edges[0].right()), (0, 1));
-    assert!(edges[0].weight() > 0);
+    let edge = edges
+        .first()
+        .expect("similarity edges should contain the related parser pair");
+    assert_eq!((edge.left(), edge.right()), (0, 1));
+    assert!(edge.weight() > 0);
 }
 
 #[test]
@@ -129,13 +139,19 @@ fn detect_communities_is_order_invariant() {
     let mut original_vectors: Vec<_> = fixture.iter().map(build_feature_vector).collect();
     original_vectors.sort();
 
+    let fixture_method = |index: usize| {
+        fixture
+            .get(index)
+            .cloned()
+            .expect("parser fixture should provide six methods")
+    };
     let reordered_fixture = [
-        fixture[4].clone(),
-        fixture[1].clone(),
-        fixture[5].clone(),
-        fixture[0].clone(),
-        fixture[3].clone(),
-        fixture[2].clone(),
+        fixture_method(4),
+        fixture_method(1),
+        fixture_method(5),
+        fixture_method(0),
+        fixture_method(3),
+        fixture_method(2),
     ];
     let mut reordered_vectors: Vec<_> =
         reordered_fixture.iter().map(build_feature_vector).collect();
@@ -151,7 +167,7 @@ fn detect_communities_is_order_invariant() {
 fn suggest_decomposition_returns_empty_for_single_community() {
     assert_type_decomposition_is_empty(
         "Parser",
-        vec![
+        &[
             profile(MethodInput {
                 name: "parse_tokens",
                 fields: &["grammar"],
@@ -190,8 +206,13 @@ fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct(
     let suggestions = suggest_decomposition(&context, &parser_serde_fs_fixture());
 
     assert_eq!(suggestions.len(), 3);
+    let suggestion_at = |index: usize| {
+        suggestions
+            .get(index)
+            .expect("decomposition should yield three suggestions")
+    };
     assert_suggestion(
-        &suggestions[0],
+        suggestion_at(0),
         ExpectedSuggestion {
             label: "grammar",
             extraction_kind: SuggestedExtractionKind::HelperStruct,
@@ -199,7 +220,7 @@ fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct(
         },
     );
     assert_suggestion(
-        &suggestions[1],
+        suggestion_at(1),
         ExpectedSuggestion {
             label: "serde::json",
             extraction_kind: SuggestedExtractionKind::Module,
@@ -207,7 +228,7 @@ fn suggest_decomposition_for_type_prefers_domain_module_and_field_helper_struct(
         },
     );
     assert_suggestion(
-        &suggestions[2],
+        suggestion_at(2),
         ExpectedSuggestion {
             label: "std::fs",
             extraction_kind: SuggestedExtractionKind::Module,
@@ -294,12 +315,13 @@ fn suggest_decomposition_is_order_invariant_for_duplicate_method_names() {
         }),
     ];
 
-    let reordered = vec![
-        methods[2].clone(),
-        methods[0].clone(),
-        methods[3].clone(),
-        methods[1].clone(),
-    ];
+    let method_at = |index: usize| {
+        methods
+            .get(index)
+            .cloned()
+            .expect("importer fixture should provide four methods")
+    };
+    let reordered = vec![method_at(2), method_at(0), method_at(3), method_at(1)];
 
     assert_eq!(
         suggest_decomposition(&context, &methods),
@@ -333,7 +355,7 @@ fn suggestions_drop_singleton_noise_methods() {
 fn suggestions_skip_degenerate_groups_without_features() {
     assert_type_decomposition_is_empty(
         "Runner",
-        vec![
+        &[
             profile(MethodInput {
                 name: "build",
                 fields: &[],

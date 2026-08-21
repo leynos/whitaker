@@ -4,7 +4,12 @@ use std::fmt;
 
 use super::{LeafClass, NormalizedNode, NormalizedTree};
 use crate::hashing::{
-    FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION, mix_byte, mix_bytes, mix_u16, mix_u64,
+    FNV_OFFSET_BASIS,
+    PARSER_SCHEMA_VERSION,
+    mix_byte,
+    mix_bytes,
+    mix_u16,
+    mix_u64,
 };
 
 /// Opaque canonical AST subtree hash.
@@ -12,8 +17,10 @@ use crate::hashing::{
 /// # Examples
 ///
 /// ```
-/// use whitaker_clones_core::ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree};
-/// use whitaker_clones_core::canonical_hash;
+/// use whitaker_clones_core::{
+///     ast::{ByteSpan, KindId, NormalizedNode, NormalizedTree},
+///     canonical_hash,
+/// };
 ///
 /// let span = ByteSpan::new("fn f() {}", 0, 2)?;
 /// let tree = NormalizedTree::new(NormalizedNode::new(KindId::new(1), None, Vec::new()), span);
@@ -26,9 +33,7 @@ pub struct AstHash(u64);
 impl AstHash {
     /// Renders the hash as a fixed-width lowercase hexadecimal string.
     #[must_use]
-    pub fn to_hex(&self) -> String {
-        format!("{:016x}", self.0)
-    }
+    pub fn to_hex(&self) -> String { format!("{:016x}", self.0) }
 }
 
 impl fmt::Display for AstHash {
@@ -44,31 +49,28 @@ pub fn canonical_hash(tree: &NormalizedTree) -> AstHash {
     AstHash(hash_node(seed, tree.root()))
 }
 
-fn seed_hash() -> u64 {
-    mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes())
-}
+fn seed_hash() -> u64 { mix_bytes(FNV_OFFSET_BASIS, PARSER_SCHEMA_VERSION.as_bytes()) }
 
 fn hash_node(seed: u64, node: &NormalizedNode) -> u64 {
-    let mut pending = vec![(node, 0, hash_node_header(seed, node))];
-    loop {
-        let Some((current, child_index, _)) = pending.last_mut() else {
-            unreachable!("hash_node seeds pending with one node and returns before it empties")
-        };
-        if let Some(child) = current.children().get(*child_index) {
-            *child_index += 1;
+    // Pop-based traversal keeps every stack access provably in bounds: each
+    // iteration pops the top entry, either revisits it with the next child
+    // pushed on top, or folds its completed hash into the parent. The final
+    // completed hash is the root's, so the loop needs no unreachable arms.
+    let mut pending = vec![(node, 0_usize, hash_node_header(seed, node))];
+    let mut completed_hash = 0_u64;
+    while let Some((current, child_index, current_hash)) = pending.pop() {
+        if let Some(child) = current.children().get(child_index) {
+            pending.push((current, child_index.saturating_add(1), current_hash));
             pending.push((child, 0, hash_node_header(seed, child)));
             continue;
         }
 
-        let Some((_, _, completed_hash)) = pending.pop() else {
-            unreachable!("hash_node pops the node it just observed through last_mut")
-        };
+        completed_hash = current_hash;
         if let Some((_, _, parent_hash)) = pending.last_mut() {
-            *parent_hash = mix_u64(*parent_hash, completed_hash);
-        } else {
-            return completed_hash;
+            *parent_hash = mix_u64(*parent_hash, current_hash);
         }
     }
+    completed_hash
 }
 
 fn hash_node_header(mut hash: u64, node: &NormalizedNode) -> u64 {
@@ -83,7 +85,7 @@ fn child_count(node: &NormalizedNode) -> u64 {
     u64::try_from(node.children().len()).unwrap_or(u64::MAX)
 }
 
-fn leaf_tag(leaf: Option<LeafClass>) -> u8 {
+const fn leaf_tag(leaf: Option<LeafClass>) -> u8 {
     match leaf {
         Some(LeafClass::Ident) => b'i',
         Some(LeafClass::Literal) => b'l',

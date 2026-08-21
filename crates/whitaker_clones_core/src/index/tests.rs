@@ -1,13 +1,20 @@
-//! Unit tests for MinHash and LSH candidate generation.
+//! Unit tests for `MinHash` and LSH candidate generation.
 
 use rstest::{fixture, rstest};
-
-use crate::token::Fingerprint;
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 use super::{
-    CandidatePair, FragmentId, IndexError, LshConfig, LshIndex, MINHASH_SIZE, MinHashSignature,
-    MinHasher, minhash::unique_hashes,
+    CandidatePair,
+    FragmentId,
+    IndexError,
+    LshConfig,
+    LshIndex,
+    MINHASH_SIZE,
+    MinHashSignature,
+    MinHasher,
+    minhash::unique_hashes,
 };
+use crate::token::Fingerprint;
 
 fn fingerprints(values: &[u64]) -> Vec<Fingerprint> {
     values
@@ -17,36 +24,29 @@ fn fingerprints(values: &[u64]) -> Vec<Fingerprint> {
         .collect()
 }
 
-fn sketch(values: &[u64]) -> MinHashSignature {
-    MinHasher::new()
-        .sketch(&fingerprints(values))
-        .expect("fingerprints should sketch successfully")
+fn sketch(values: &[u64]) -> Result<MinHashSignature, IndexError> {
+    MinHasher::new().sketch(&fingerprints(values))
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn single_band_config() -> LshConfig {
-    LshConfig::new(1, MINHASH_SIZE).expect("single-band config should validate")
-}
+fn single_band_config() -> Result<LshConfig, IndexError> { LshConfig::new(1, MINHASH_SIZE) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn multi_band_config() -> LshConfig {
-    LshConfig::new(32, 4).expect("multi-band config should validate")
-}
+fn multi_band_config() -> Result<LshConfig, IndexError> { LshConfig::new(32, 4) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn shared_signature() -> MinHashSignature {
-    sketch(&[1, 2, 3, 4])
-}
+fn shared_signature() -> Result<MinHashSignature, IndexError> { sketch(&[1, 2, 3, 4]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn distinct_signature() -> MinHashSignature {
-    sketch(&[8, 9, 10, 11])
-}
+fn distinct_signature() -> Result<MinHashSignature, IndexError> { sketch(&[8, 9, 10, 11]) }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
-fn identical_signature() -> MinHashSignature {
-    sketch(&[5, 7, 11, 13])
-}
+fn identical_signature() -> Result<MinHashSignature, IndexError> { sketch(&[5, 7, 11, 13]) }
 
 struct FragmentIds {
     alpha: FragmentId,
@@ -104,8 +104,8 @@ fn config_rejects_invalid_inputs(#[case] case: ((usize, usize), IndexError)) {
 
 #[rstest]
 #[case((1, MINHASH_SIZE))]
-#[case((2, MINHASH_SIZE / 2))]
-#[case((4, MINHASH_SIZE / 4))]
+#[case((2, MINHASH_SIZE.div_euclid(2)))]
+#[case((4, MINHASH_SIZE.div_euclid(4)))]
 #[case((32, 4))]
 fn config_accepts_valid_inputs(#[case] case: (usize, usize)) {
     let (bands, rows) = case;
@@ -207,20 +207,24 @@ fn identical_sets_yield_identical_signatures(
 
 #[rstest]
 fn insertion_order_does_not_change_candidate_output(
-    single_band_config: LshConfig,
+    single_band_config: Result<LshConfig, IndexError>,
     fragment_ids: FragmentIds,
-    shared_signature: MinHashSignature,
-    distinct_signature: MinHashSignature,
+    shared_signature: Result<MinHashSignature, IndexError>,
+    distinct_signature: Result<MinHashSignature, IndexError>,
 ) {
-    let mut forward = LshIndex::new(single_band_config);
-    forward.insert(&fragment_ids.alpha, &shared_signature);
-    forward.insert(&fragment_ids.beta, &shared_signature);
-    forward.insert(&fragment_ids.gamma, &distinct_signature);
+    let config = single_band_config.expect("single-band config should validate");
+    let shared = shared_signature.expect("shared signature should sketch");
+    let distinct = distinct_signature.expect("distinct signature should sketch");
 
-    let mut reverse = LshIndex::new(single_band_config);
-    reverse.insert(&fragment_ids.gamma, &distinct_signature);
-    reverse.insert(&fragment_ids.beta, &shared_signature);
-    reverse.insert(&fragment_ids.alpha, &shared_signature);
+    let mut forward = LshIndex::new(config);
+    forward.insert(&fragment_ids.alpha, &shared);
+    forward.insert(&fragment_ids.beta, &shared);
+    forward.insert(&fragment_ids.gamma, &distinct);
+
+    let mut reverse = LshIndex::new(config);
+    reverse.insert(&fragment_ids.gamma, &distinct);
+    reverse.insert(&fragment_ids.beta, &shared);
+    reverse.insert(&fragment_ids.alpha, &shared);
 
     let expected = CandidatePair::new(fragment_ids.alpha, fragment_ids.beta)
         .expect("distinct ids should form a pair");
@@ -231,22 +235,24 @@ fn insertion_order_does_not_change_candidate_output(
 #[rstest]
 fn canonical_ordering_across_multiple_pairs_and_bands(
     fragment_ids: FragmentIds,
-    shared_signature: MinHashSignature,
-    distinct_signature: MinHashSignature,
+    shared_signature: Result<MinHashSignature, IndexError>,
+    distinct_signature: Result<MinHashSignature, IndexError>,
 ) {
-    let config = LshConfig::new(4, MINHASH_SIZE / 4).expect("LSH config should validate");
+    let config = LshConfig::new(4, MINHASH_SIZE.div_euclid(4)).expect("LSH config should validate");
+    let shared = shared_signature.expect("shared signature should sketch");
+    let distinct = distinct_signature.expect("distinct signature should sketch");
 
     let mut forward = LshIndex::new(config);
-    forward.insert(&fragment_ids.alpha, &shared_signature);
-    forward.insert(&fragment_ids.beta, &shared_signature);
-    forward.insert(&fragment_ids.gamma, &shared_signature);
-    forward.insert(&fragment_ids.delta, &distinct_signature);
+    forward.insert(&fragment_ids.alpha, &shared);
+    forward.insert(&fragment_ids.beta, &shared);
+    forward.insert(&fragment_ids.gamma, &shared);
+    forward.insert(&fragment_ids.delta, &distinct);
 
     let mut reverse = LshIndex::new(config);
-    reverse.insert(&fragment_ids.delta, &distinct_signature);
-    reverse.insert(&fragment_ids.gamma, &shared_signature);
-    reverse.insert(&fragment_ids.beta, &shared_signature);
-    reverse.insert(&fragment_ids.alpha, &shared_signature);
+    reverse.insert(&fragment_ids.delta, &distinct);
+    reverse.insert(&fragment_ids.gamma, &shared);
+    reverse.insert(&fragment_ids.beta, &shared);
+    reverse.insert(&fragment_ids.alpha, &shared);
 
     let expected = vec![
         CandidatePair::new(fragment_ids.alpha.clone(), fragment_ids.beta.clone())
@@ -263,14 +269,16 @@ fn canonical_ordering_across_multiple_pairs_and_bands(
 
 #[rstest]
 fn duplicate_band_collisions_emit_one_pair(
-    multi_band_config: LshConfig,
+    multi_band_config: Result<LshConfig, IndexError>,
     fragment_ids: FragmentIds,
-    identical_signature: MinHashSignature,
+    identical_signature: Result<MinHashSignature, IndexError>,
 ) {
-    let mut index = LshIndex::new(multi_band_config);
+    let config = multi_band_config.expect("multi-band config should validate");
+    let identical = identical_signature.expect("identical signature should sketch");
+    let mut index = LshIndex::new(config);
 
-    index.insert(&fragment_ids.beta, &identical_signature);
-    index.insert(&fragment_ids.alpha, &identical_signature);
+    index.insert(&fragment_ids.beta, &identical);
+    index.insert(&fragment_ids.alpha, &identical);
 
     assert_eq!(
         index.candidate_pairs(),
@@ -282,9 +290,13 @@ fn duplicate_band_collisions_emit_one_pair(
 }
 
 #[rstest]
-fn self_pairs_are_not_emitted(single_band_config: LshConfig, fragment_ids: FragmentIds) {
-    let signature = sketch(&[2, 4, 6, 8]);
-    let mut index = LshIndex::new(single_band_config);
+fn self_pairs_are_not_emitted(
+    single_band_config: Result<LshConfig, IndexError>,
+    fragment_ids: FragmentIds,
+) {
+    let config = single_band_config.expect("single-band config should validate");
+    let signature = sketch(&[2, 4, 6, 8]).expect("signature should sketch");
+    let mut index = LshIndex::new(config);
 
     index.insert(&fragment_ids.alpha, &signature);
     index.insert(&fragment_ids.alpha, &signature);
