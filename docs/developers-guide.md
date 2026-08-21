@@ -1907,8 +1907,6 @@ each operation is bounded by the module's five-minute Git timeout. Use these
 functions for the managed clone workflow, not to mutate a user's current
 Whitaker checkout.
 
-Triage: `type:docstyle`
-
 *Table: Public Git operation APIs.*
 
 | API | Purpose | Usage constraints |
