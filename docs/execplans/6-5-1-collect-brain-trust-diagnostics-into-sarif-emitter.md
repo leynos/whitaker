@@ -10,251 +10,402 @@ Status: DRAFT
 ## Purpose / big picture
 
 Whitaker's brain trust analysis measures how overgrown a Rust type or trait has
-become. Today those measurements can only be rendered as English sentences for
-a compiler diagnostic. Nothing can feed them to a continuous integration (CI)
-dashboard, a pull-request annotation, or an editor's problem list.
+become. Today those measurements can only be rendered as English sentences.
+Nothing can feed them to a continuous integration (CI) dashboard, a
+pull-request annotation, or an editor's problem list.
 
-After this change, a Whitaker user who opts in gets a machine-readable Static
-Analysis Results Interchange Format (SARIF) 2.1.0 file describing every brain
-type and brain trait finding, written to a predictable path under the Cargo
-target directory. SARIF is the JSON interchange format that GitHub code
-scanning, Azure DevOps, and most IDE problem viewers already understand.
+After this change, brain trust findings can be turned into a Static Analysis
+Results Interchange Format (SARIF) 2.1.0 run — the JSON interchange format that
+GitHub code scanning, Azure DevOps, and most editor problem viewers understand
+— using the **same infrastructure and the same shape as Whitaker's clone
+detector**. A caller hands the emitter evaluated diagnostics and gets back a
+`whitaker_sarif::Run` whose serialized form is deterministic, English-only, and
+carries rule metadata, source locations, measured values, and stable
+fingerprints.
 
-You can see it working like this. With the feature switched off (the default),
-nothing changes and no file appears. With `WHITAKER_BRAIN_SARIF=1` set, a run
-produces `target/whitaker/brain-trust/<unit>.sarif` containing a SARIF log
-whose `runs[0].results` array lists one entry per warned or denied subject,
-each with a rule identifier, a severity level, a source location, the measured
-values, and a stable fingerprint. The same inputs always produce byte-identical
-JSON, so the file can be committed as a golden fixture or diffed across builds.
+You can see it working by serializing that run. The plan commits golden
+snapshots of the JSON for six variants, and a behavioural suite that builds a
+run from realistic inputs and asserts its contents. Recording the same findings
+in a different order produces byte-identical JSON.
 
-The messages inside that file are always English, regardless of the locale
-Whitaker uses for compiler diagnostics, because downstream tools index and
-deduplicate on message text.
+Getting there means finishing some shared plumbing the clone detector started
+and left crate-local. Four small refactors move fingerprint hashing, file-URI
+normalization, span-to-region conversion, and the Whitaker property bag out of
+`whitaker_clones_core` and into `whitaker_sarif`, where both producers use one
+implementation. Each of those refactors also fixes a real defect in the current
+clone detector code.
 
-Scope note. This plan delivers the emitter, its collection model, its opt-in
-resolution, and its file adapter. It does **not** create the `brain_type` and
-`brain_trait` Dylint lint crates — those do not exist yet (see `Context and
-orientation`), and they are separate roadmap work. The emitter is therefore
-delivered as a library with an end-to-end, observable behaviour of its own: a
-caller hands it findings, and a SARIF file appears on disk.
+### What this item deliberately does not do
+
+It does not write SARIF to disk. That mirrors the clone detector exactly:
+roadmap 7.2.3 shipped `emit_run0`, which returns an in-memory
+`whitaker_sarif::Run` and stops there, because
+`docs/whitaker-clone-detector-design.md` §CLI surface makes file emission the
+CLI's job (roadmap 7.4.1, not yet done). Brain trust follows the same
+boundary. Everything about writing files — output paths, atomic writes,
+concurrent compilation units, incremental-build staleness, stale-file cleanup —
+is out of scope and belongs with whichever CLI or driver item takes it on.
+
+It does not define a user-facing configuration surface. Roadmap 6.6.1 owns
+brain trust configuration and explicitly requires 3.6.3, which adopts
+`ortho_config` with `whitaker.toml` as the canonical file. This item models
+opt-in as a value the caller supplies, so 6.6.1 can wire whatever surface
+3.6.3 lands on without rework.
+
+It does not create the `brain_type` and `brain_trait` Dylint lint crates. They
+do not exist, and no roadmap item creates them — see `Risks`.
 
 ## Constraints
 
-Hard invariants that must hold throughout implementation. Violating one
-requires escalation, not a workaround.
+Hard invariants. Violating one requires escalation, not a workaround.
 
-- The emitter must be **off by default**. A build that sets no environment
-  variable and adds no configuration must produce no SARIF file, must perform
-  no filesystem access, and must not allocate per-finding storage.
-- SARIF message text must be **English only**. The emitter must not read,
-  import, or transitively invoke `whitaker_common::i18n`. Locale settings must
-  not change a single byte of emitted JSON.
-- Emitted JSON must be **deterministic**: the same set of findings must produce
-  byte-identical output regardless of the order in which findings were
-  recorded, the iteration order of any hash container, or the platform.
-- No `std::fs` or `std::path` in the new crate. Filesystem access must go
-  through `cap_std::fs_utf8` and `camino`, per `AGENTS.md` and the
-  `no_std_fs_operations` lint. The new crate must **not** be added to the
-  `excluded_crates` list in `dylint.toml`.
-- No `.unwrap()` or `.expect()` in production code or shared fixtures. The
-  workspace denies `clippy::unwrap_used` and `clippy::expect_used`
-  (`Cargo.toml`, `[workspace.lints.clippy]`).
-- No file in the repository may exceed 400 lines (`AGENTS.md`).
-- Dependencies must use caret requirements and must be taken from
-  `[workspace.dependencies]` in the root `Cargo.toml` wherever a pin already
-  exists.
-- The existing public behaviour of `whitaker_clones_core::run0` must keep
-  working. Its BDD scenarios in
-  `crates/whitaker_clones_core/tests/run0_sarif_behaviour.rs` must continue to
-  pass unchanged in intent.
-- `make check-fmt`, `make typecheck`, `make lint`, and `make test` must all
-  succeed at every milestone boundary.
+- Reuse before invention. Any capability the clone detector already has —
+  builders, rules, merge, dedup, property bags, region conversion, fingerprint
+  hashing — must be reused, and refactored into `whitaker_sarif` for shared use
+  where it is currently crate-local. Adding a parallel implementation of
+  something `whitaker_sarif` or `whitaker_clones_core` already does is a design
+  failure.
+- No filesystem access, no environment reads, no process spawning, and no
+  network access anywhere in this item. Every function added is pure.
+- Emission must be **opt-in**: when the supplied mode is disabled, the
+  collection entry point returns without building a run and without allocating
+  per-finding storage.
+- SARIF message text must be **English only**. The emitter must not consult
+  `whitaker_common::i18n`.
+- Serialized output must be **deterministic**: the same set of findings must
+  produce byte-identical JSON regardless of recording order, hash-container
+  iteration order, or platform.
+- No `.unwrap()` or `.expect()` in production code or shared fixtures; the
+  workspace denies `clippy::unwrap_used` and `clippy::expect_used`.
+- No file may exceed 400 lines (`AGENTS.md`).
+- Dependencies must use caret requirements and come from
+  `[workspace.dependencies]`.
+- The clone detector's observable behaviour must keep working. Its unit tests
+  and the six scenarios in
+  `crates/whitaker_clones_core/tests/run0_sarif_behaviour.rs` must still pass.
+  Where a refactor changes the clone detector's emitted JSON, the change must be
+  deliberate, recorded in `Decision log`, and reflected in that crate's tests.
+- `make check-fmt`, `make typecheck`, `make lint`, and `make test` must succeed
+  at every milestone boundary.
 
 ## Tolerances (exception triggers)
 
-- Scope: if implementation requires touching more than 30 files, or changing
-  more than 2500 net lines of code excluding snapshots and generated fixtures,
+Thresholds are stated per milestone, because the shared refactors and the brain
+trust emitter have different blast radii.
+
+- Scope, shared refactors (`EP-M1`–`EP-M4`): if any one milestone requires
+  touching more than 15 files or changing more than 600 net lines, stop and
+  escalate.
+- Scope, emitter (`EP-M5`): if it requires more than 15 files or more than 900
+  net lines including snapshots, stop and escalate.
+- Interface: `EP-M1`–`EP-M4` deliberately change public signatures inside
+  `whitaker_sarif`. That is authorized. Changing a public signature in
+  `whitaker-common` beyond the additive module and re-exports named in
+  `Interfaces and dependencies` is not — stop and escalate.
+- Dependencies: the only authorized additions are (a) `sha2` to
+  `whitaker_sarif`, already workspace-pinned; (b) `whitaker_sarif`,
+  `serde`, and `serde_json` to `whitaker-common`, all already workspace-pinned;
+  and (c) `googletest` and `pretty_assertions` added to
+  `[workspace.dependencies]` at `EP-M1`. Any further external dependency —
+  including `cap-std`, `metrics`, or any SARIF crate from crates.io — means
   stop and escalate.
-- Interface: if the change requires altering a public signature in
-  `whitaker_common` outside the additive re-exports named in `Interfaces and
-  dependencies`, stop and escalate.
-- Dependencies: the plan authorizes exactly four new dependency edges, all onto
-  crates already pinned in `[workspace.dependencies]`: `whitaker_sarif`,
-  `serde`, `serde_json`, `cap-std`, plus `sha2` and `camino`. If any *further*
-  external dependency is required, stop and escalate.
-- Verification: if the Verus proof in `EP-M2` cannot be discharged after three
+- Verification: if the Verus proof in `EP-M2` is not discharged after three
   modelling iterations, stop and escalate rather than weakening the lemma to a
-  restatement. If the Kani harness in `EP-M5` hits CBMC state explosion after
-  three bound reductions, record the blocker as roadmap 6.4.6 did and escalate
-  before removing the harness.
+  restatement. If the Kani harness in `EP-M3` hits CBMC state explosion after
+  three bound reductions, record the blocker as roadmap 6.4.6 did and escalate.
 - Iterations: if a gate still fails after four fix attempts, stop and escalate.
-- Ambiguity: if the choice of output-file granularity (per compilation unit
-  versus per workspace) turns out to matter to a consumer this plan has not
-  identified, stop and present the options.
+- Ambiguity: if a refactor to `whitaker_sarif` turns out to change the clone
+  detector's emitted JSON in a way not anticipated in `Decision log`, stop and
+  present the options.
 
 ## Risks
 
 - Risk: `whitaker_sarif::SarifResult::partial_fingerprints` is a
   `HashMap<String, String>`, whose serialization order is randomized per
-  process. Byte-identical output is impossible without changing it.
-  Severity: high. Likelihood: certain (already observed).
-  Mitigation: `EP-M1` changes the field to `BTreeMap<String, String>` and
-  updates the single consumer in the same milestone. This is a pre-1.0,
-  `publish = false` crate with one in-repo consumer, so no compatibility layer
-  is warranted.
-- Risk: the `brain_type` and `brain_trait` Dylint crates do not exist, so there
-  is no production call site to prove the emitter is wired correctly.
+  process, so byte-identical output is currently impossible.
+  Severity: high. Likelihood: certain (observed).
+  Mitigation: `EP-M1` changes it to `BTreeMap`. Verified by review that every
+  consumer uses only `get`, `insert`, `new`, `contains_key`, and moves — all
+  available on `BTreeMap`.
+- Risk: the `brain_type` and `brain_trait` Dylint crates do not exist, **and no
+  roadmap item creates them**. Roadmap 6.2.2 and 6.3.2 are ticked but delivered
+  only the evaluation layer in `whitaker-common`; 6.6.3 presupposes
+  `crates/brain_type/ui/` that nothing produces. The emitter is therefore
+  designed without its production caller in the room.
   Severity: medium. Likelihood: certain.
-  Mitigation: deliver observable behaviour through an end-to-end test that
-  drives the public reporter API against a real temporary directory, and record
-  the wiring contract in the design document so the future lint crates have a
-  single documented entry point.
-- Risk: rustc invokes lints once per compilation unit, potentially in parallel
-  processes. A single shared output file would need locking or append
-  semantics.
-  Severity: medium. Likelihood: high once lints exist.
-  Mitigation: emit one file per compilation unit, named by a caller-supplied
-  identifier, written atomically via temporary file plus rename. Merging is
-  deferred and explicitly out of scope; `whitaker_sarif::merge_runs` already
-  exists for a later consumer.
-- Risk: Kani state explosion on collector harnesses, as encountered in roadmap
-  6.4.6.
+  Mitigation: keeping this item pure and I/O-free means the caller only has to
+  supply data it already holds. The open question this leaves — how a
+  `LateLintPass` turns a `rustc_span::Span` into a normalized file URI and a
+  `SourceSpan` — is answered concretely in `Interfaces and dependencies` and
+  recorded in the ADR so the lint crates inherit a decision rather than a gap.
+  The missing roadmap item is raised in `Outcomes & retrospective` as follow-up
+  work; fixing the roadmap is not in this item's scope.
+- Risk: promoting fingerprint hashing changes the clone detector's emitted
+  fingerprint values.
+  Severity: low. Likelihood: certain.
+  Mitigation: nothing consumes those values. There is no CLI (7.4.1) and no
+  `clone_detected` lint (7.5.x), and no SARIF file is written anywhere in the
+  tree. This is the cheapest moment this change will ever be available;
+  recorded as a decision.
+- Risk: Verus proof drifts from the shipped Rust encoder, because Verus
+  compiles its own sidecar files and cannot `use` production modules.
   Severity: medium. Likelihood: medium.
-  Mitigation: model the collector over fixed-size arrays of small integer keys
-  rather than `String`/`Vec`, keep the bound at three findings, and pin the
-  solver if needed.
-- Risk: Verus proof of encoding injectivity drifts from the shipped Rust
-  implementation, because Verus compiles its own sidecar files and cannot
-  `use` production modules.
-  Severity: medium. Likelihood: medium.
-  Mitigation: mirror the encoder as a `spec fn` with a doc comment naming the
-  production function and its file, and add a Rust unit test asserting the two
+  Mitigation: mirror the encoder as a `spec fn` whose doc comment names the
+  production function and file, and add a Rust unit test asserting the two
   agree on a fixed vector of cases including the collision witness.
-- Risk: environment-variable handling in tests violates the repository ban on
-  direct environment mutation.
-  Severity: low. Likelihood: medium.
-  Mitigation: settings resolution is a pure function over an injected snapshot;
-  only one thin adapter reads the real environment, and its test uses the
-  `temp-env` guard already pinned in `[workspace.dependencies]`.
+- Risk: `whitaker_common`'s `format_primary_message` and friends are English
+  today, but roadmap 6.6.2 plans Fluent entries for both lints. If those
+  functions become localized, the emitter silently starts emitting non-English
+  text with no change to its own source.
+  Severity: medium. Likelihood: medium.
+  Mitigation: the emitter owns its message rendering by calling the `format_*`
+  functions through a single, named seam, and `EP-M6` records in the design
+  document that 6.6.2 must localize the *diagnostic* path without localizing
+  these functions — or must fork them. A test asserts the SARIF text equals the
+  English primary message verbatim, so a divergence fails loudly.
+- Risk: `brain_methods` is an uncapped `Vec<MethodMetrics>`, and
+  `format_primary_message` already joins every entry into one sentence. A god
+  class with 30 brain methods produces a ~900-byte alert title and an unbounded
+  property bag.
+  Severity: medium. Likelihood: medium.
+  Mitigation: `EP-M5` caps the property bag at three entries with an omitted
+  count, matching the `MAX_SUGGESTIONS`/`MAX_METHODS_PER_SUGGESTION` precedent
+  in `common/src/decomposition_advice/note.rs:14`, and truncates the SARIF
+  message at the first sentence.
+- Risk: `googletest` and `pretty_assertions` are absent from this repository,
+  and execplan 7-3-1 explicitly declined to add them.
+  Severity: low. Likelihood: certain.
+  Mitigation: the task brief for this item authorizes both, so `EP-M1` adds
+  them to `[workspace.dependencies]` properly. The precedent and the contrary
+  argument are recorded in `Decision log` so the choice is visible.
 
 ## Progress
 
-- [ ] EP-M0 Understand and propose (no code changes). Completed: reconnaissance
-  of `whitaker_sarif`, `whitaker_clones_core::run0`, and the brain trust
-  modules in `common`; SARIF 2.1.0 and GitHub code-scanning research.
+- [~] (2026-08-21) EP-M0 Understand and propose. Completed: reconnaissance of
+  `whitaker_sarif`, `whitaker_clones_core::run0`, and the brain trust modules
+  in `whitaker-common`; SARIF 2.1.0 and GitHub code-scanning research; a
+  six-lens design review whose findings are folded into this revision.
   Remaining: plan approval.
-- [ ] EP-M1 Deterministic SARIF model foundation.
-- [ ] EP-M2 Fingerprint encoding and its Verus injectivity proof.
-- [ ] EP-M3 Domain finding model, ordering, and English-only rendering.
-- [ ] EP-M4 Pure mapping to a SARIF run, with snapshots.
-- [ ] EP-M5 Collector with dedup and ordering, plus the Kani harness.
-- [ ] EP-M6 Settings resolution and the opt-in truth table.
-- [ ] EP-M7 Ports, adapters, and the end-to-end file emission behaviour.
-- [ ] EP-M8 Documentation, ADR, roadmap tick, and full gate run.
+- [ ] EP-M1 Deterministic SARIF results and workspace test dependencies.
+- [ ] EP-M2 Shared fingerprint encoding, with the Verus injectivity proof.
+- [ ] EP-M3 Shared file-URI and region conversion, with the Kani harness.
+- [ ] EP-M4 Shared rule registry and an extensible Whitaker property bag.
+- [ ] EP-M5 Brain trust SARIF emitter.
+- [ ] EP-M6 Documentation, ADR, and roadmap.
 
-Timestamps are added as each milestone completes.
+Add a timestamp to each entry as it completes.
 
 ## Surprises & discoveries
 
 - Observation: the `brain_type` and `brain_trait` Dylint lint crates do not
-  exist. Roadmap items 6.2.2 and 6.3.2 are ticked, but what they delivered is
-  the pure evaluation and formatting layer in `common/src/brain_type_metrics/`
-  and `common/src/brain_trait_metrics/`.
-  Evidence: `crates/` contains no `brain_type` or `brain_trait` directory; no
-  `span_lint` call site in the repository references either lint; `dylint.toml`
-  has no section for either.
-  Impact: 6.5.1 must be scoped to the layer that exists. The emitter consumes
-  `BrainTypeDiagnostic` and `BrainTraitDiagnostic` values plus a location, and
-  the future lint crates become its callers.
-- Observation: nothing in the repository writes a SARIF file. The clone
-  detector's `emit_run0` returns an in-memory `whitaker_sarif::Run` and stops
-  there.
+  exist, and no roadmap item creates them.
+  Evidence: `crates/` contains no such directory; no `span_lint` call site
+  references either lint; `dylint.toml` has no section for either; roadmap
+  6.6.3 presupposes `crates/brain_type/ui/`.
+  Impact: 6.5.1 is scoped to the layer that exists. Recorded as follow-up.
+- Observation: nothing in the repository writes a SARIF file. `emit_run0`
+  returns an in-memory `Run` and stops.
   Evidence: `crates/whitaker_clones_core/src/run0/emit.rs:97`; no call site
   pairs `whitaker_sarif::paths::*` with a file write.
-  Impact: this plan must design the sink and the opt-in mechanism from first
-  principles rather than copying an existing one. The path-naming convention in
-  `crates/whitaker_sarif/src/paths.rs` is the only precedent.
-- Observation: `SarifResult::partial_fingerprints` is a `HashMap`, so the
-  crate cannot currently produce stable bytes.
+  Impact: file emission is out of scope here, exactly as it was for 7.2.3.
+- Observation: `SarifResult::partial_fingerprints` is a `HashMap`, so the crate
+  cannot currently produce stable bytes.
   Evidence: `crates/whitaker_sarif/src/model/result.rs:107`.
-  Impact: promoted to `EP-M1`; see `Risks`.
-- Observation: `whitaker_clones_core`'s `pair_fingerprint` concatenates
-  components with a single zero byte
-  (`crates/whitaker_clones_core/src/run0/emit.rs:285`). That encoding is not
-  injective in general.
-  Impact: the brain trust encoder uses length prefixes instead, and the Verus
-  proof establishes why. Retrofitting the clone detector is out of scope and is
-  recorded as follow-up work in the decision log.
+  Impact: `EP-M1`.
+- Observation: `pair_fingerprint` and `token_hash` concatenate components with a
+  single zero byte.
+  Evidence: `crates/whitaker_clones_core/src/run0/emit.rs:285`.
+  Impact: that encoding is not injective in general, and it is crate-local
+  rather than shared. `EP-M2` promotes and fixes it.
+- Observation: `TokenFragment::file_uri` is an unvalidated caller-supplied
+  `String`.
+  Evidence: `crates/whitaker_clones_core/src/run0/types.rs:31`.
+  Impact: an absolute or backslash-separated path would make
+  `artifactLocation.uri` unresolvable against a repository root and would make
+  fingerprints vary by working directory and platform. `EP-M3` introduces a
+  shared validated newtype for both producers.
+- Observation: `region_for_range` already counts UTF-16 code units.
+  Evidence: `crates/whitaker_clones_core/src/run0/span.rs:78`.
+  Impact: the clone detector already matches SARIF's default `columnKind`. The
+  brain trust emitter must use the same convention, and `EP-M3` makes that
+  structural by sharing the code.
+- Observation: `all_rules()` is clone-specific and its test asserts it returns
+  exactly three.
+  Evidence: `crates/whitaker_sarif/src/rules.rs:120` and `:128`.
+  Impact: the name becomes a lie once a second rule family exists. `EP-M4`
+  renames it.
+- Observation: `WhitakerProperties` already owns the `properties.whitaker`
+  extension point, with `try_to_value` and a `TryFrom<&Value>` inverse, but its
+  fields are clone-specific.
+  Evidence: `crates/whitaker_sarif/src/whitaker_properties.rs:37`.
+  Impact: `EP-M4` generalizes it into a discriminated family rather than
+  inventing a second namespace.
+- Observation: `whitaker-common` has no `serde` dependency, and
+  `BrainTypeThresholds` deliberately does not derive `Deserialize` for that
+  reason.
+  Evidence: `common/Cargo.toml`; the decision recorded in execplan 6-2-2.
+  Impact: `EP-M5` adds `serde` and `serde_json` to `whitaker-common`. Both are
+  workspace-pinned and neither pulls compiler or filesystem capability.
 
 ## Decision log
 
-- Decision: deliver the emitter as a new crate, `crates/whitaker_brain_sarif`,
-  rather than as a module inside `whitaker-common`.
-  Rationale: `whitaker-common` is the domain layer. SARIF is an outbound
-  interchange format, so under the dependency rule the domain must not depend
-  on it. Keeping the emitter separate also keeps `serde`, `serde_json`,
-  `cap-std`, and `sha2` out of `whitaker-common`, and means the new crate is
-  subject to the `no_std_fs_operations` capability policy rather than being
-  covered by the `whitaker_common` exclusion in `dylint.toml`. This mirrors the
-  existing split between `whitaker_sarif` (format) and `whitaker_clones_core`
-  (analysis).
+- Decision: follow the clone detector's architecture exactly — a pure emitter
+  returning an in-memory `whitaker_sarif::Run`, with file writing deferred to a
+  CLI or driver item.
+  Rationale: it is the house pattern (`emit_run0`), it keeps the item free of
+  every operational hazard that running inside rustc introduces (incremental
+  compilation replaying cached lint results, stale files, concurrent
+  compilation units colliding on a filename, ambient filesystem authority in a
+  crate the capability policy governs), and it matches
+  `docs/whitaker-clone-detector-design.md` §CLI surface. Note this is a
+  deliberate narrowing of `docs/brain-trust-lints-design.md`'s §SARIF output
+  wording, which says only "collect diagnostics in a shared module when SARIF
+  output is enabled" and does not name a writer. `EP-M6` updates that section.
+  Date/Author: 2026-08-21, planning agent, on the maintainer's direction.
+- Decision: promote fingerprint hashing, file-URI normalization, region
+  conversion, and the property bag from `whitaker_clones_core` into
+  `whitaker_sarif`, and migrate the clone detector onto the shared code in the
+  same milestones.
+  Rationale: the maintainer's direction is to reuse SARIF infrastructure and
+  refactor to enable reuse rather than reinvent. Each promotion also fixes a
+  real defect: a non-injective encoding, an unvalidated URI, a duplicated
+  column convention, and a single-purpose property namespace.
   Date/Author: 2026-08-21, planning agent.
-- Decision: emit one SARIF log per compilation unit into a directory, rather
-  than appending to one shared file.
-  Rationale: rustc lints run per crate and may run concurrently. Per-unit files
-  need no locking, no append semantics, and no partial-write recovery, and they
-  align with GitHub's July 2025 change that stopped combining multiple runs
-  from a single uploaded file. Merging remains available later through
-  `whitaker_sarif::merge_runs`.
-  Date/Author: 2026-08-21, planning agent.
+- Decision: put the brain trust emitter in `common/src/brain_trust_sarif/`
+  rather than in a new crate.
+  Rationale: the clone detector puts its emitter in the analysis crate
+  (`whitaker_clones_core::run0`), and `whitaker-common` is the analysis crate
+  for brain trust. With file I/O out of scope the emitter needs no `cap-std`
+  and no ambient authority, so the objection that drove the earlier
+  separate-crate proposal disappears. `whitaker_sarif` has no compiler
+  dependency, so nothing about the dependency direction is disturbed, and
+  `whitaker-common` is already covered by `make lint`'s package list.
+  Date/Author: 2026-08-21, planning agent, revising an earlier draft after
+  review.
 - Decision: change `SarifResult::partial_fingerprints` from `HashMap` to
-  `BTreeMap` and update the clone detector in the same milestone, with no
-  compatibility shim.
-  Rationale: the crate is `publish = false`, pre-1.0, and has exactly one
-  in-repo consumer. Under the ExecPlan compatibility rules, no shim is
-  warranted; the question "compatible with whom?" has no answer. Determinism is
-  a stated constraint that cannot otherwise be met.
+  `BTreeMap`, with no compatibility shim.
+  Rationale: the crate is `publish = false`, pre-1.0, with one in-repo
+  consumer. "Compatible with whom?" has no answer. Determinism is a stated
+  constraint that cannot otherwise be met. Reviewed: `merge.rs:62` uses `get`,
+  `result_builder.rs` uses `new`/`insert`, `emit.rs:351` uses `get`,
+  `tests_emit.rs` uses `get`/`contains_key` — all available on `BTreeMap`.
+  `clippy::implicit_hasher` does not interact, because it fires on public
+  parameters and impls, not public fields; `BTreeMap` makes it permanently
+  inapplicable.
   Date/Author: 2026-08-21, planning agent.
-- Decision: add two optional, additive fields to `whitaker_sarif` —
-  `ReportingDescriptor::help` and `Run::automation_details` — each with
-  `skip_serializing_if = "Option::is_none"`.
-  Rationale: rule help text is the field GitHub code scanning renders next to
-  an alert, and `automationDetails.id` is the category key that stops per-crate
-  uploads from clobbering one another. Both are `None` for existing clone
-  detector output, so no existing serialized form changes.
-  Date/Author: 2026-08-21, planning agent.
+- Decision: leave the two `HashSet` uses in `merge.rs:105` and `merge.rs:178`
+  alone.
+  Rationale: both are membership sets whose output order follows a `Vec`, so
+  neither is a determinism hazard. Recorded so a later reader does not "fix"
+  them.
+  Date/Author: 2026-08-21, Telefono (review panel).
 - Decision: use length-prefixed component encoding for fingerprint pre-images,
-  not delimiter separation.
-  Rationale: delimiter separation is only injective when the delimiter cannot
-  occur in a component, which is an assumption about all future component types
-  rather than a property of the encoding. Length prefixing is unconditionally
-  injective and the property is provable.
+  not delimiter separation, and migrate the clone detector's `pair_fingerprint`
+  and `token_hash` onto it.
+  Rationale: delimiter separation is injective only while no component can
+  contain the delimiter, which is an assumption about every future component
+  type rather than a property of the encoding. Length prefixing is
+  unconditionally injective and the property is provable. Changing the clone
+  detector's fingerprint values is free right now because nothing reads them.
   Date/Author: 2026-08-21, planning agent.
-- Decision: reserve rule identifiers `WHK101` for `brain_type` and `WHK102` for
-  `brain_trait`, leaving `WHK001`–`WHK003` to the clone detector and `WHK1xx`
-  to structural design lints.
-  Rationale: SARIF rule identifiers are a global namespace across a tool; a
-  disjoint block avoids future collisions.
-  Date/Author: 2026-08-21, planning agent.
-- Decision: notes, help text, and decomposition advice go into the result's
-  `properties` bag and the rule's `help` field, not into `message.text`.
-  Rationale: GitHub renders only the first sentence of `message.text` as an
-  alert title and indexes on the whole string. Appending multi-paragraph advice
-  would degrade the title and destabilize deduplication.
-  Date/Author: 2026-08-21, planning agent.
-- Follow-up recorded, not actioned here: `whitaker_clones_core`'s
-  `pair_fingerprint` and `token_hash` use zero-delimited concatenation. A
-  future task should migrate them to the proven encoder. Out of scope for
-  6.5.1 because it changes clone detector fingerprints, which is a persisted
-  format change for anyone holding existing SARIF output.
+- Decision: rename `whitaker_sarif::all_rules()` to `clone_detection_rules()`
+  and add `brain_trust_rules()`.
+  Rationale: `all_rules()` returns only clone rules and its test asserts an
+  arity of three. Keeping the name once a second family exists would be
+  actively misleading. One consumer (`emit.rs:112`) needs updating.
+  Date/Author: 2026-08-21, Pandalump (review panel).
+- Decision: generalize `WhitakerProperties` into an internally tagged family
+  under the existing `properties.whitaker` key rather than adding a
+  `whitakerBrainTrust` key.
+  Rationale: `whitaker_properties.rs` is the established extension point, with
+  a serializer and an inverse and round-trip tests. A second namespace would
+  duplicate it, and `AGENTS.md` requires sweeping for an existing equivalent
+  before adding an abstraction. An internally tagged enum also makes "add a new
+  metric family" a compile-time event and preserves the `TryFrom<&Value>`
+  inverse that an untyped map would have thrown away. The added `kind`
+  discriminant changes clone-detector JSON; nothing consumes it.
+  Date/Author: 2026-08-21, Telefono and Pandalump (review panel).
+- Decision: reuse `whitaker_common::decomposition_advice::SubjectKind` rather
+  than defining a second `SubjectKind { Type, Trait }`.
+  Rationale: it already exists, is already re-exported from the crate root, is
+  already used by `brain_type_metrics::diagnostic` at line 260, and already has
+  `FromStr` and `Ord`. Two identically named, identically shaped types in one
+  dependency graph is a naming accident, not a boundary.
+  Date/Author: 2026-08-21, Pandalump (review panel).
+- Decision: map disposition to level as `Warn` → `warning`, `Deny` → `error`,
+  `Pass` → no result, and do **not** add `defaultConfiguration.level` to
+  `ReportingDescriptor`.
+  Rationale: every emitted result carries an explicit `level`, and consumers
+  fall back to `defaultConfiguration.level` only when `result.level` is absent.
+  An always-`None` field for symmetry is gold-plating. Recorded explicitly
+  because silence would read as oversight. `Pass` genuinely has no result to
+  report; SARIF's `kind: "pass"` is for tools reporting proof obligations.
+  Date/Author: 2026-08-21, Telefono (review panel).
+- Decision: omit `ruleIndex`.
+  Rationale: it disambiguates result-to-descriptor binding when rules come from
+  multiple tool components. There is one driver and rule identifiers are
+  unique — an invariant the plan already asserts.
+  Date/Author: 2026-08-21, Telefono (review panel).
+- Decision: add `help` to `ReportingDescriptor` but not `automationDetails` to
+  `Run`.
+  Rationale: `help` is the field consumers render beside an alert, and the
+  brain trust rules have genuine standing guidance to put there. By contrast
+  `automationDetails.id` is a category key whose semantics only matter to an
+  upload step that does not exist, and whose format is easy to get wrong — a
+  trailing-slash mistake makes every unit share a category and clobber the
+  others. Deciding it without a real upload path is guessing. Deferred.
+  Date/Author: 2026-08-21, Telefono and Wafflecat (review panel).
+- Decision: model opt-in as a value the caller supplies
+  (`BrainTrustSarifMode`), and defer the configuration surface to roadmap
+  6.6.1.
+  Rationale: `docs/whitaker-cli-design.md` §Configuration model makes
+  `whitaker.toml` via `ortho_config` the canonical surface with
+  `WHITAKER_<SECTION>_<KEY>` variables parsed case-sensitively, and roadmap
+  6.6.1 (brain trust configuration) explicitly requires 3.6.3 (which adopts
+  `ortho_config`). Inventing a `dylint.toml` table and a case-insensitive
+  boolean grammar here would build on the surface the CLI design deprecates and
+  guarantee a migration.
+  Date/Author: 2026-08-21, Wafflecat, Doggylump, and Dinolump (review panel).
+- Decision: cut the planned Verus proof that the result ordering is a total
+  order.
+  Rationale: the ordering key is a tuple of two strings, two integers, and a
+  string. `#[derive(Ord)]` gives lexicographic total order by construction, so
+  a proof would be proving the compiler, and it could not fail when the
+  implementation is wrong. A parameterized test exercising each tie-break level
+  carries the real risk, which is choosing the wrong key.
+  Date/Author: 2026-08-21, Wafflecat, Buzzy Bee, and Dinolump (review panel).
+- Decision: cut the planned Kani harness over the collector, and spend the
+  bounded-model-checking budget on span-to-region conversion instead.
+  Rationale: a collector backed by a `BTreeMap` keyed on the ordering key makes
+  dedup and sortedness type-level facts, so the harness would verify a standard
+  library guarantee — and would verify it against a handwritten array model
+  rather than the shipped code. Span-to-region conversion is a genuine
+  arithmetic invariant over integers, is Kani-friendly, and has a real failure
+  mode: `SourceLocation::new(0, 0)` is constructible but SARIF requires 1-based
+  positions.
+  Date/Author: 2026-08-21, Buzzy Bee and Wafflecat (review panel), accepted by
+  the planning agent.
+- Decision: add `googletest` and `pretty_assertions` to
+  `[workspace.dependencies]`.
+  Rationale: the task brief for this item authorizes both and asks for them.
+  Recorded dissent: execplan 7-3-1 declined to add them, and the review panel
+  argued that 40-odd crates already use `rstest` plus plain assertions and
+  `insta`, so two new assertion frameworks add cognitive load and supply-chain
+  surface for little gain. They are introduced workspace-wide rather than with
+  literal versions in one manifest, so the repository gets one pinned decision
+  rather than a local exception.
+  Date/Author: 2026-08-21, planning agent, over Dinolump's objection.
+- Follow-up recorded, not actioned here: no roadmap item creates
+  `crates/brain_type/` or `crates/brain_trait/`, yet 6.6.3 presupposes their
+  `ui/` directories. Raise a roadmap addendum.
 
 ## Outcomes & retrospective
 
-To be completed at `EP-M8`. Before setting the plan to `COMPLETE`, reconcile
-every discovery against `docs/brain-trust-lints-design.md` §SARIF output, the
-new ADR, `docs/users-guide.md`, `docs/developers-guide.md`, and
-`docs/roadmap.md` item 6.5.1.
+To be completed at `EP-M6`. Before setting the plan to `COMPLETE`, reconcile
+every discovery against `docs/brain-trust-lints-design.md` §SARIF output,
+`docs/whitaker-clone-detector-design.md` §SARIF schema and mapping, the new
+ADR, `docs/users-guide.md`, `docs/developers-guide.md`, and `docs/roadmap.md`
+item 6.5.1.
 
 ## Context and orientation
 
@@ -265,20 +416,19 @@ Assume you have only this repository and this file.
 Whitaker is a suite of Rust lints built on **Dylint**, a tool that loads
 out-of-tree lints into the Rust compiler. Lints live in `crates/<lint_name>/`.
 Shared, compiler-independent helper logic lives in the `whitaker-common`
-package at `common/`. The workspace members are declared in the root
-`Cargo.toml` as `["common", "crates/*", "installer", "suite"]`.
+package at `common/`. Workspace members are declared in the root `Cargo.toml`
+as `["common", "crates/*", "installer", "suite"]`.
 
 ### What "brain trust" means here
 
 Two planned lints share an analysis:
 
 - `brain_type` flags a type that has grown too complex, using Weighted Method
-  Count (WMC, the sum of per-method cognitive complexity), LCOM4 (Lack of
-  Cohesion of Methods, version 4 — the number of connected components in the
-  method/field graph, where a higher number means the type is really several
-  types), foreign reach (how many other types' data the methods touch), and
-  "brain methods" (individual methods that are both very complex and very
-  long).
+  Count (WMC — the sum of per-method cognitive complexity), LCOM4 (Lack of
+  Cohesion of Methods version 4 — the number of connected components in the
+  method-and-field graph, where a higher number means the type is really
+  several types), foreign reach (how many other types' data the methods touch),
+  and "brain methods" (methods that are both very complex and very long).
 - `brain_trait` flags a trait that imposes too much on implementors, using the
   required-method count, the default-method count, the summed cognitive
   complexity of default methods, and the total item count.
@@ -294,16 +444,16 @@ The analysis is implemented and tested. The relevant modules are:
 - `common/src/brain_trait_metrics/` — the trait analogue, with
   `BrainTraitDiagnostic` and `BrainTraitDisposition`.
 - `common/src/decomposition_advice/` — clusters methods into suggested
-  extractions and renders them as a note.
-- `common/src/span.rs` — `SourceLocation` (one-based line and column) and
-  `SourceSpan` (a start and an end location, validated so the start never
-  follows the end).
+  extractions (`DecompositionSuggestion`), renders them as a note
+  (`format_diagnostic_note`), and defines `SubjectKind { Type, Trait }`.
+- `common/src/span.rs` — `SourceLocation` (line and column) and `SourceSpan`
+  (a start and an end location, validated so the start never follows the end).
 
 **Important:** the Dylint lint crates `crates/brain_type/` and
-`crates/brain_trait/` do **not** exist. Nothing in the repository currently
-calls `evaluate_brain_type` from a compiler pass. This plan therefore treats
-`BrainTypeDiagnostic` and `BrainTraitDiagnostic` as the inputs to the emitter,
-and the future lint crates as its callers.
+`crates/brain_trait/` do **not** exist. Nothing currently calls
+`evaluate_brain_type` from a compiler pass. This item therefore treats
+`BrainTypeDiagnostic` and `BrainTraitDiagnostic` as the emitter's inputs and
+the future lint crates as its callers.
 
 ### What SARIF is
 
@@ -312,720 +462,545 @@ SARIF *log* has a `$schema`, a `version`, and an array of *runs*. Each run
 names the *tool* that produced it and carries an array of *results*. A result
 has a `ruleId`, a `level` (`none`, `note`, `warning`, or `error`), a
 `message.text`, one or more `locations`, and optionally `partialFingerprints`
-— a small map of strings that consumers use to recognize "the same finding" as
-code moves between commits.
+— a small map of strings consumers use to recognize "the same finding" as code
+moves between commits.
 
-`crates/whitaker_sarif/` already models the subset Whitaker needs:
+### What `whitaker_sarif` already provides
 
-- `model/log.rs` — `SarifLog { schema, version, runs }`, with `SARIF_SCHEMA`
-  and `SARIF_VERSION = "2.1.0"`.
+`crates/whitaker_sarif/` models the subset Whitaker needs, with no compiler
+dependency and no input or output of its own:
+
+- `model/log.rs` — `SarifLog { schema, version, runs }`, plus `SARIF_SCHEMA`
+  (the OASIS schema URL) and `SARIF_VERSION`.
 - `model/run.rs` — `Run { tool, invocations, results, artefacts }`, `Tool`,
-  `ToolComponent { name, version, information_uri, rules }`, `Invocation`,
-  `Artefact`.
+  `ToolComponent`, `Invocation`, `Artefact`.
 - `model/result.rs` — `SarifResult`, `Level`, `Message`.
 - `model/location.rs` — `Location`, `PhysicalLocation`, `ArtefactLocation`,
   `Region`, `RelatedLocation`.
-- `model/descriptor.rs` — `ReportingDescriptor` (the SARIF term for a rule) and
+- `model/descriptor.rs` — `ReportingDescriptor` (SARIF's word for a rule) and
   `MultiformatMessageString`.
 - `builders/` — `SarifLogBuilder`, `RunBuilder`, `ResultBuilder`,
   `LocationBuilder`, `RegionBuilder`.
-- `merge.rs` — `merge_runs` and `deduplicate_results`.
-- `paths.rs` — `WHITAKER_DIR = "whitaker"` plus clone-detector filenames.
-- `rules.rs` — `WHK001`–`WHK003` for the clone detector.
+- `merge.rs` — `merge_runs`, `deduplicate_results`, and
+  `WHITAKER_FRAGMENT_KEY`.
+- `rules.rs` — `WHK001`–`WHK003` descriptors and `all_rules()`.
+- `whitaker_properties.rs` — the `properties.whitaker` extension point.
+- `paths.rs` — the `target/whitaker/` layout constants.
 
-The crate has no compiler dependency, uses `serde` for serialization, and
-performs no input or output of its own.
-
-### The one existing producer
+### The existing producer, and the pattern to copy
 
 `crates/whitaker_clones_core/src/run0/emit.rs` builds a `Run` from accepted
-clone pairs. Read `emit_run0` (line 97) and `build_result` (line 121) before
-starting: they are the house style for turning analysis output into SARIF.
-Note that they stop at an in-memory `Run` — nothing writes it to disk.
+clone pairs. **Read `emit_run0` (line 97) and `build_result` (line 121) before
+starting.** They are the template for this item: resolve inputs, build one
+`SarifResult` per finding through `ResultBuilder`, attach a location and a
+region, attach fingerprints, attach a Whitaker property bag, sort the results,
+deduplicate them, and assemble a `Run` through `RunBuilder` with the rule
+descriptors attached. The function returns the `Run`; nothing writes it.
 
-### Where things will go
-
-This plan adds one crate, `crates/whitaker_brain_sarif`, and makes small
-additive changes to `crates/whitaker_sarif`.
+Supporting it are `run0/span.rs` (`region_for_range`, byte range to SARIF
+`Region`, counting UTF-16 code units) and the private hashing helpers at the
+bottom of `emit.rs` (`pair_fingerprint`, `token_hash`, `digest_hex`,
+`hex_digit`, `u64_big_endian_bytes`). Those are generic SARIF plumbing living
+in the clone detector; this item promotes them.
 
 ## Conformance basis
 
-There is no Terms of Reference document in this repository. The upstream
-artefacts are:
+There is no Terms of Reference document. The upstream artefacts are:
 
-- `docs/roadmap.md` §6.5, item 6.5.1 (revision: the tree at branch
-  `harden-lint-config`, commit `02e6c1c`).
-- `docs/brain-trust-lints-design.md` §SARIF output (lines 629–641) and
-  §Configuration, localization, and testing (lines 643–668).
-- `docs/whitaker-clone-detector-design.md` §Rules and §Runs, as the precedent
-  for rule identifiers, result mapping, and file layout.
-- `docs/whitaker-dylint-suite-design.md` for suite-wide lint conventions.
-- `AGENTS.md` for code style, dependency policy, error handling, testing, and
-  observability rules.
-- `docs/documentation-style-guide.md` for the ADR shape and Markdown rules.
-- OASIS SARIF 2.1.0 (Errata 01) as the format specification, and GitHub's
-  "SARIF support for code scanning" reference for the ingestion subset.
+- `docs/roadmap.md` §6.5, item 6.5.1, at the tree of branch
+  `harden-lint-config` (`origin/main` at `02e6c1c`).
+- `docs/brain-trust-lints-design.md` §SARIF output and §Configuration,
+  localization, and testing.
+- `docs/whitaker-clone-detector-design.md` §SARIF schema and mapping, §Runs,
+  and §CLI surface — the architecture this item mirrors.
+- `docs/whitaker-cli-design.md` §Rule identifiers and selection model and
+  §Configuration model — the reason configuration is deferred.
+- `docs/whitaker-dylint-suite-design.md`, `AGENTS.md`, and
+  `docs/documentation-style-guide.md`.
+- OASIS SARIF 2.1.0 Errata 01, and GitHub's "SARIF support for code scanning".
 
-Stable identifiers introduced by this plan:
+Stable identifiers introduced here:
 
-- `BTS-REQ-01` — brain trust diagnostics are collected into a SARIF 2.1.0
-  document. (From roadmap 6.5.1.)
-- `BTS-REQ-02` — emission is opt-in and imposes no cost when disabled. (From
-  design §SARIF output, "Avoid overhead when SARIF output is disabled".)
-- `BTS-REQ-03` — messages are English only. (From design §SARIF output, "Keep
-  messages in English for consistent tool ingestion".)
+- `BTS-REQ-01` — brain trust diagnostics are collected into a SARIF 2.1.0 run.
+- `BTS-REQ-02` — collection is opt-in and costs nothing when disabled.
+- `BTS-REQ-03` — messages are English only.
 - `BTS-REQ-04` — results carry rule metadata, locations, and messages,
-  serialized with `serde`. (From design §SARIF output.)
+  serialized with `serde`.
 - `BTS-REQ-05` — output is deterministic and stable enough for tool
-  deduplication. (Derived from BTS-REQ-01's purpose; recorded in the ADR.)
+  deduplication.
+- `BTS-REQ-06` — SARIF construction reuses shared `whitaker_sarif`
+  infrastructure; no capability is implemented twice.
 
 Trace links:
 
 ```plaintext
-roadmap-6.5.1 -> BTS-REQ-01 -> EP-M3, EP-M4 -> tests::mapping::snapshot_brain_type_deny
-roadmap-6.5.1 -> BTS-REQ-02 -> EP-M6, EP-M7 -> tests::reporter::disabled_writes_nothing
-roadmap-6.5.1 -> BTS-REQ-03 -> EP-M3       -> tests::render::locale_does_not_affect_output
-roadmap-6.5.1 -> BTS-REQ-04 -> EP-M4       -> tests::mapping::round_trip_is_byte_identical
-roadmap-6.5.1 -> BTS-REQ-05 -> EP-M1, EP-M2, EP-M5 -> verus::brain_trust_fingerprint,
-                                                       verus::brain_trust_ordering,
-                                                       kani::verify_collector_dedup_bounded
+roadmap-6.5.1 -> BTS-REQ-01 -> EP-M5 -> brain_trust_sarif::tests::emits_one_result_per_finding
+roadmap-6.5.1 -> BTS-REQ-02 -> EP-M5 -> brain_trust_sarif::tests::disabled_mode_builds_no_run
+roadmap-6.5.1 -> BTS-REQ-03 -> EP-M5 -> features/brain_trust_sarif.feature: English primary message
+roadmap-6.5.1 -> BTS-REQ-04 -> EP-M4, EP-M5 -> brain_trust_sarif::tests::snapshot_brain_type_deny
+roadmap-6.5.1 -> BTS-REQ-05 -> EP-M1, EP-M2, EP-M3 -> verus::brain_trust_fingerprint,
+                                                       kani::verify_span_to_region_bounds,
+                                                       tests::emission_is_permutation_invariant
+roadmap-6.5.1 -> BTS-REQ-06 -> EP-M2, EP-M3, EP-M4 -> run0 migrated onto shared helpers
 ```
 
 ## Verification plan
 
-### Invariants and lemmas introduced
+### VP-1 — the fingerprint pre-image encoding is injective
 
-**VP-1 — Fingerprint pre-image encoding is injective.**
+Both producers derive a result's stable identity by hashing an encoding of a
+component tuple. If two different tuples can encode to the same bytes, two
+unrelated findings collapse into one alert, and `deduplicate_results` — which
+keys on a fingerprint — silently drops one of them.
 
-The emitter derives each result's stable identity by hashing an encoding of a
-component tuple: the rule identifier, the file uniform resource identifier
-(URI), the subject kind, and the subject name. If two different tuples can
-encode to the same byte string, two unrelated findings can collapse into one
-alert. The encoding is therefore required to be injective.
-
-- Obligation: for component sequences `a` and `b`,
-  `encode(a) == encode(b) ==> a == b`, where `encode` writes each component as
-  an eight-byte big-endian length prefix followed by the component's bytes.
+- Obligation: for component sequences `a` and `b`, `encode(a) == encode(b)`
+  implies `a == b`, where `encode` writes each component as an eight-byte
+  big-endian length prefix followed by its bytes.
 - Method: formal proof in Verus.
-- Rationale: the property quantifies over all byte sequences of all lengths.
-  Bounded model checking cannot cover it and property tests can only sample it.
-  It is a small, self-contained lemma about a pure function — exactly the shape
-  Verus handles well, and the repository already runs a Verus sidecar
-  (`make verus`, `scripts/run-verus.sh`).
+- Rationale: the property quantifies over all byte sequences of all lengths, so
+  bounded model checking cannot cover it and property tests can only sample it.
+  It is a small, self-contained lemma about a pure function, and after `EP-M2`
+  it protects *two* producers and replaces a shipped encoding that does not
+  have the property.
 - Domain: `Seq<Seq<u8>>` of arbitrary length, components of arbitrary length.
 - Artefact: `verus/brain_trust_fingerprint.rs`, registered in
-  `scripts/run-verus.sh` under a new `brain-trust` group and a new
-  `make verus-brain-trust` target.
-- Evidence: `make verus-brain-trust`. Before the proof is written, the file
-  contains the lemma statement with its body left as an open goal, and Verus
-  reports an unproven assertion. After, Verus reports `0 errors`.
+  `scripts/run-verus.sh` under a new `brain-trust` group, in that script's
+  argument allow-list, in its `all` arm, and behind a new
+  `make verus-brain-trust` target listed in `.PHONY`.
+- Evidence: `make verus-brain-trust`. Before the proof body exists, Verus
+  reports the postcondition unproven; after, it reports `0 errors`.
 - Proof shape: define `spec fn encode(components: Seq<Seq<u8>>) -> Seq<u8>`
   recursively with `decreases components.len()`, and a matching
   `spec fn decode(bytes: Seq<u8>) -> Option<Seq<Seq<u8>>>`. Prove
-  `lemma_decode_encode_round_trip(components)` by induction, then derive
-  injectivity as a corollary: `decode(encode(a)) == Some(a)` and
-  `decode(encode(b)) == Some(b)` with `encode(a) == encode(b)` forces
-  `Some(a) == Some(b)`. This is a genuine argument, not a restatement: the work
-  is in the round-trip lemma, and the concatenation reasoning needs
+  `lemma_decode_encode_round_trip` by induction, then derive injectivity: from
+  `encode(a) == encode(b)`, `decode` of both sides gives `Some(a) == Some(b)`.
+  The work is in the round-trip lemma; concatenation reasoning needs
   `broadcast use vstd::seq::group_seq_axioms;`.
 - Non-vacuity: the antecedent is inhabited — `encode(seq![seq![]])` is a
-  satisfying witness with an empty component, and the lemma is exercised on
-  non-empty components too. The negative control is a Rust unit test,
-  `encoding_separates_components_a_delimiter_would_merge`, asserting that the
-  tuples `("ab", "c")` and `("a", "bc")` — which produce identical bytes under
-  single-byte-delimiter concatenation — produce different bytes and different
-  fingerprints under the length-prefixed encoder. A second control mutates the
-  Verus `encode` to drop the length prefix and confirms the round-trip lemma
-  then fails; this mutation is performed once, observed, and reverted, with the
-  transcript recorded in `Artefacts and notes`.
-- Residual gap: SHA-256 collision resistance is assumed, not proved (see
-  `Axioms`). Injectivity of the pre-image encoding is what this repository
-  owns; the hash's behaviour is not.
+  witness with an empty component, and the lemma is exercised on non-empty
+  components too. The negative control is a Rust test,
+  `encoding_separates_components_a_delimiter_would_merge`, asserting that
+  `("ab", "c")` and `("a", "bc")` — identical under single-byte-delimiter
+  concatenation, which is what `emit.rs:285` ships today — produce different
+  bytes and different fingerprints under the length-prefixed encoder. A second
+  control mutates the Verus `encode` to drop the length prefix and confirms the
+  round-trip lemma then fails; performed once, observed, reverted, transcript
+  recorded in `Artefacts and notes`.
+- Residual gap: SHA-256 collision resistance is assumed (see `Axioms`).
+  Injectivity of the pre-image is the part this repository owns.
 
-**VP-2 — The result ordering is a total order.**
+### VP-2 — span-to-region conversion always yields a valid SARIF region
 
-Results are sorted before emission so that output is deterministic. If the
-comparator is not a total order, `sort_by` may produce different permutations
-for equal inputs presented in different orders, breaking determinism.
-
-- Obligation: the relation `finding_leq(a, b)` induced by lexicographic
-  comparison of `(rule_id, file_uri, start_line, start_column, subject_name)`
-  is reflexive, antisymmetric, transitive, and strongly connected.
-- Method: formal proof in Verus, composing four sub-lemmas into
-  `vstd`'s `total_ordering`.
-- Rationale: this is a contractual property of introduced business logic that
-  must hold for all inputs; the repository already has precedent for exactly
-  this proof shape in the decomposition work (roadmap 6.4.3–6.4.4).
-- Domain: all tuples of two byte sequences, two naturals, and one byte
-  sequence.
-- Artefact: `verus/brain_trust_ordering.rs`, same `brain-trust` group.
-- Evidence: `make verus-brain-trust` reports `0 errors`; the sub-lemmas fail
-  individually before their bodies are supplied.
-- Non-vacuity: each sub-lemma is instantiated on witnesses that differ at each
-  tie-break level in turn, so no level is vacuously satisfied. The negative
-  control drops `subject_name` from the key and shows antisymmetry failing for
-  two distinct subjects declared on the same line and column — a real
-  configuration, since a type and its inherent `impl` can start at the same
-  position in generated code.
-
-**VP-3 — The collector deduplicates without losing distinct subjects, and
-returns findings in sorted order.**
-
-- Obligation: for any recorded sequence of findings, `finish()` returns a
-  vector that (a) is sorted under `finding_leq`, (b) contains no two entries
-  with equal fingerprints, and (c) contains one entry for every distinct
-  fingerprint recorded.
+- Obligation: for every `SourceSpan`, `span_to_region` returns a `Region` with
+  `start_line >= 1`, `start_column >= 1`, `end_line >= start_line`, and, when
+  the lines are equal, `end_column >= start_column` — that is, it never
+  produces a value `RegionBuilder::build` would reject.
 - Method: bounded model checking with Kani.
-- Rationale: this is a transition property over a small state machine
-  (a sequence of `record` calls followed by one `finish`). Exhaustive
-  exploration within a bound of three findings covers every interleaving of the
-  duplicate, tie, and distinct cases, which is more than a property test can
-  guarantee and cheaper than a full proof.
-- Domain: at most three findings; symbolic fingerprint key in `0..3`; symbolic
-  start line in `1..3`; symbolic disposition. The model uses fixed-size arrays
-  of `u8` keys rather than `String`s and `Vec`s, following the lesson recorded
-  in roadmap 6.4.6 that heap collections hit a sharp CBMC cliff.
-- Artefact: `crates/whitaker_brain_sarif/src/domain/collector_kani.rs`, gated
-  behind `#[cfg(kani)]`, with `check-cfg = ['cfg(kani)']` declared in the
-  crate's `[lints.rust]`. Registered in `scripts/run-kani.sh` under a new
-  `brain-trust` group and a new `make kani-brain-trust` target.
-- Evidence: `make kani-brain-trust`. Expect `VERIFICATION:- SUCCESSFUL` for
-  each harness.
-- Non-vacuity: a `kani::cover` assertion proves the duplicate-key case is
-  reachable within the bound, and a second proves the all-distinct case is
-  reachable; a bound that admitted neither would be a zero-work bound. The
-  negative control mutates `finish()` to truncate its last element and confirms
-  clause (c) fails with a counter-example trace; the mutation is observed once
-  and reverted.
-- Residual gap: bounded at three findings. Behaviour at larger sizes is covered
-  by VP-4's property test, not by exhaustive search.
+- Rationale: this is arithmetic over small integers with a real failure mode.
+  `SourceSpan::new` only enforces that the start does not follow the end; it
+  permits `SourceLocation::new(0, 0)`, whereas SARIF positions are one-based.
+  Exhaustive exploration within a small bound settles whether the conversion's
+  normalization policy is correct for every reachable input, which examples
+  cannot. Integers only — no `String`, no `Vec` — so it avoids the CBMC
+  heap-collection cliff recorded in roadmap 6.4.6.
+- Domain: symbolic `line` and `column` in `0..=3` for both endpoints,
+  constrained by `kani::assume` to the invariant `SourceSpan::new` enforces.
+- Artefact: `crates/whitaker_sarif/src/location_kani.rs`, gated behind
+  `#[cfg(kani)]`; a `brain-trust` group in `scripts/run-kani.sh` that is **not**
+  added to the no-argument path (which currently runs the decomposition group,
+  still blocked by the CBMC issue recorded in 6.4.6); and a
+  `make kani-brain-trust` target listed in `.PHONY`.
+- Evidence: `make kani-brain-trust` reports `VERIFICATION:- SUCCESSFUL`.
+- Non-vacuity: a `kani::cover` assertion proves the zero-valued-position case
+  is reachable within the bound, and a second proves the multi-line case is.
+  The negative control removes the one-based normalization and confirms the
+  harness reports a counter-example with a concrete trace; performed once,
+  observed, reverted.
+- Residual gap: bounded at coordinates `0..=3`. Larger coordinates are covered
+  by VP-3's generated cases.
 
-**VP-4 — Emission is invariant under input permutation and survives a JSON
-round trip.**
+### VP-3 — emission is permutation invariant and survives a JSON round trip
 
-- Obligation: for any multiset of findings and any two orders of recording
-  them, the serialized SARIF bytes are equal; and
-  `to_json(from_json(to_json(log))) == to_json(log)`.
+- Obligation: for any multiset of findings and any two recording orders, the
+  serialized JSON is equal; and re-serializing a deserialized log reproduces
+  the original bytes.
 - Method: property test with `proptest`.
-- Rationale: the invariant ranges over generated inputs and orderings at sizes
-  beyond Kani's practical bound, and it is the property that actually protects
-  the user-visible guarantee of stable diffs.
-- Domain: 0–12 findings; file URIs drawn from a four-element alphabet so
-  collisions and ties actually occur; subject names from a five-element
-  alphabet; lines in `1..=6`; both subject kinds; `Warn` and `Deny`
-  dispositions.
-- Artefact: `crates/whitaker_brain_sarif/tests/emission_properties.rs`.
-- Evidence: `cargo nextest run -p whitaker_brain_sarif`. Regression seeds are
-  committed under `crates/whitaker_brain_sarif/proptest-regressions/`.
-- Non-vacuity: the test asserts, over the whole run, that at least one
+- Rationale: the invariant ranges over generated inputs and orderings beyond
+  Kani's practical bound, and it protects the user-visible guarantee of stable
+  diffs. It is also the test that would catch a `HashMap` sneaking back in.
+- Domain: 0–12 findings; file URIs from a four-element alphabet so collisions
+  and ties actually occur; subject names from a five-element alphabet; lines in
+  `1..=6`; both subject kinds; `Warn` and `Deny`.
+- Artefact: `common/tests/brain_trust_sarif_properties.rs`, with regression
+  seeds committed under `common/proptest-regressions/`.
+- Non-vacuity: counters accumulated across the run assert that at least one
   generated case contained two findings sharing a file URI and at least one
-  contained two findings sharing a line, using counters accumulated in a
-  `std::sync::atomic` pair and checked in a final `#[test]`. A generator that
-  produced only distinct findings would fail this check rather than passing
-  vacuously. The negative control removes the sort from the mapping function
-  and confirms the permutation property fails.
+  contained two sharing a line; a generator producing only distinct findings
+  fails this check rather than passing vacuously. The negative control removes
+  the sort from the emitter and confirms the permutation property fails.
 
-**VP-5 — Opt-in resolution is total and correct across its finite partition.**
+### VP-4 — the disposition-to-level mapping is total and correct
 
-- Obligation: `resolve_settings(env_snapshot, file_settings)` returns exactly
-  the documented result for every combination of inputs, and rejects malformed
-  boolean values with a typed error rather than silently defaulting.
+- Obligation: every `BrainTypeDisposition` and `BrainTraitDisposition` variant
+  maps to exactly one outcome; `Pass` yields no result.
 - Method: exhaustive parameterized tests with `rstest`, using `googletest`
   matchers and `pretty_assertions`.
-- Rationale: the input space is a small finite product; enumeration is
-  practical and clearer than generation.
-- Domain: the enable variable in {unset, `"1"`, `"0"`, `"true"`, `"false"`,
-  `"TRUE"`, `"  1  "`, `""`, `"maybe"`} × the directory variable in {unset,
-  set, set-to-empty} × file settings in {absent, `enabled = true`,
-  `enabled = false`, with and without `output_dir`}.
-- Artefact: `crates/whitaker_brain_sarif/src/settings_tests.rs`.
-- Evidence: every cell is an explicit `#[case]`; the count is asserted in the
-  test module's doc comment and reviewed at `EP-M6`.
-- Non-vacuity: each cell asserts a distinct expected outcome, including the two
-  error cells (`"maybe"` and set-to-empty directory). The negative control
-  changes precedence so file settings win over the environment and confirms
-  four cells fail.
+- Rationale: the input space is a finite enumeration; enumeration is clearer
+  than generation.
+- Artefact: `common/src/brain_trust_sarif/mapping_tests.rs`.
+- Non-vacuity: each variant asserts a distinct outcome, so collapsing two arms
+  fails at least one case.
 
-**VP-6 — Disabled emission performs no filesystem access and no per-finding
-work.**
+### VP-5 — the ordering key breaks ties at every level, and caps are honoured
 
-- Obligation: when settings resolve to disabled, `record()` stores nothing and
-  `finish()` makes no sink call.
-- Method: parameterized test with a `mockall` sink asserting `times(0)`, plus
-  an assertion that the collector's length stays zero after 1024 `record`
-  calls.
-- Rationale: this is BTS-REQ-02 stated as observable behaviour; a mock with a
-  zero-call expectation fails loudly if the implementation regresses.
-- Artefact: `crates/whitaker_brain_sarif/src/reporter_tests.rs`.
-- Non-vacuity: a paired positive case with `times(1)` proves the mock would
-  register a call if one occurred, so the zero-call expectation is not passing
-  because the harness is inert.
+- Obligation: results are ordered by `(rule_id, file_uri, start_line,
+  start_column, subject_name)`, with each level actually consulted; and the
+  property bag carries at most three brain methods plus an omitted count.
+- Method: parameterized tests with `rstest`.
+- Rationale: the ordering itself is a derived `Ord` on a tuple, so the risk is
+  not that comparison is wrong but that the *key* is wrong — which only a test
+  that differs at exactly one level can detect. The cap follows the
+  `MAX_SUGGESTIONS` precedent in `decomposition_advice/note.rs:14`.
+- Artefact: `common/src/brain_trust_sarif/ordering_tests.rs`.
+- Non-vacuity: one case per tie-break level, each differing only at that level;
+  dropping any level from the key fails exactly one case. The cap test supplies
+  five brain methods and asserts three plus `brainMethodsOmitted: 2`.
 
-**VP-7 — Locale does not affect emitted bytes.**
+### VP-6 — the emitted document has the shape consumers expect
 
-- Obligation: emitted SARIF bytes are identical when the Whitaker locale is
-  `en-GB`, `cy`, or `gd`.
-- Method: behavioural test (`rstest-bdd`) driving the reporter under each
-  locale, plus a structural fitness test asserting the crate's own sources
-  never mention `i18n`, `Localizer`, or `fluent`.
-- Rationale: the behavioural test catches accidental localisation at runtime;
-  the fitness test catches it at authoring time, before anyone can wire it in.
-- Artefact: `crates/whitaker_brain_sarif/tests/english_only_behaviour.rs` and
-  `crates/whitaker_brain_sarif/tests/features/english_only.feature`.
-- Non-vacuity: the fitness test is first run against a deliberately added
-  `// Localizer` comment to confirm it fails, then the comment is removed.
+- Obligation: `$schema` and `version` are correct; every result's `ruleId`
+  appears in `runs[0].tool.driver.rules`; every result has a location with a
+  one-based `startLine`; the property bag round-trips through
+  `TryFrom<&Value>`.
+- Method: `insta` snapshots across the variant matrix, plus explicit structural
+  assertions.
+- Domain: brain type warn; brain type deny with brain methods and a
+  decomposition note; brain type deny with more brain methods than the cap;
+  brain trait warn; brain trait deny; a mixed file with both kinds; and an
+  empty run.
+- Artefact: `common/src/brain_trust_sarif/mapping_tests.rs` with snapshots
+  under `common/src/brain_trust_sarif/snapshots/`.
+- Non-vacuity: the empty-run snapshot proves the mapper does not fabricate
+  results; the over-cap snapshot proves elision is exercised rather than
+  every variant coincidentally sitting under the cap.
 
-**VP-8 — The emitted document is a valid SARIF 2.1.0 subset with the shape
-downstream tools expect.**
+### VP-7 — behaviour: opt-in, English-only, and clone-detector parity
 
-- Obligation: `$schema` and `version` are present and correct; every result's
-  `ruleId` appears in `runs[0].tool.driver.rules`; every result has at least
-  one location with a one-based `startLine`; `Pass` dispositions produce no
-  result.
-- Method: `insta` snapshots across the multivariant matrix, plus explicit
-  structural assertions.
-- Rationale: output format consistency across variants is exactly what snapshot
-  testing is for, and the structural assertions state the contract in a form a
-  reviewer can read.
-- Domain: brain type warn, brain type deny with two brain methods and a
-  decomposition note, brain trait warn, brain trait deny, a mixed file with
-  both kinds, and an empty run.
-- Artefact: `crates/whitaker_brain_sarif/src/mapping_tests.rs` with snapshots
-  under `crates/whitaker_brain_sarif/src/snapshots/`.
-- Non-vacuity: the empty-run snapshot proves the mapping does not fabricate
-  results; the two-brain-method case proves the properties bag is populated
-  rather than being an empty object in every variant.
+- Obligation: a disabled mode builds no run; an enabled mode builds one result
+  per warned or denied subject; the message equals the English primary message
+  verbatim; and the clone detector still emits equivalent runs after the shared
+  refactors.
+- Method: `rstest-bdd` scenarios.
+- Artefact: `common/tests/brain_trust_sarif_behaviour.rs` and
+  `common/tests/features/brain_trust_sarif.feature`; the existing
+  `crates/whitaker_clones_core/tests/run0_sarif_behaviour.rs` serves as the
+  parity guard for the refactors.
+- Non-vacuity: the message-equality scenario compares against
+  `format_primary_message` computed independently in the test, so a change to
+  either side fails. Note that the locale-invariance question is *not* tested
+  here: `format_*` reads no locale today, so such a test could not fail. The
+  obligation is instead stated as message equality with the English formatter,
+  which does fail if 6.6.2 later localizes it — see `Risks`.
+
+### What is deliberately not verified, and why
+
+- **No proof that the result ordering is a total order.** The key is a tuple
+  with `#[derive(Ord)]`; lexicographic total order holds by construction, and a
+  proof could not fail when the implementation is wrong. VP-5 covers the real
+  risk, which is key selection.
+- **No bounded model check of the collector.** It is a `BTreeMap` keyed on the
+  ordering key, so dedup and sortedness are type-level facts; a harness would
+  verify a standard library guarantee against a handwritten model rather than
+  the shipped code. VP-3 covers the observable consequence.
+- **No verification of the English wording** of the diagnostic messages.
+  Roadmap 6.2.2 and 6.3.2 already covered `format_*` with unit and behavioural
+  tests. This item asserts that the emitter uses them unmodified.
 
 ### Axioms
 
-These are assumed, not verified. Verifying third-party internals is out of
-scope.
-
-- SHA-256 as implemented by `sha2` is collision resistant, and its output for a
-  given input is stable across platforms and versions within the pinned caret
-  range.
-- `serde_json` serializes a `BTreeMap` in ascending key order, and serializes
-  `serde_json::Value::Object` (backed by `BTreeMap` when the `preserve_order`
-  feature is off) in ascending key order. This repository must therefore never
-  enable `serde_json/preserve_order`; a comment in the new crate's
-  `Cargo.toml` records that.
-- `cap_std::fs_utf8::Dir::rename` within a single directory is atomic on the
-  platforms Whitaker supports, so a temporary-file-then-rename write is never
-  observed half-written.
-- `dylint_linting::config` reads and deserializes the correct table from
-  `dylint.toml`. Repository-owned logic around it — namespace selection,
-  defaults, and precedence against the environment — is verified by VP-5
-  against a `mockall` double of the reader trait, following the pattern already
-  used in `crates/no_std_fs_operations/src/config.rs`.
+- SHA-256 as implemented by `sha2` is collision resistant and stable across
+  platforms within the pinned caret range.
+- `serde_json` serializes `BTreeMap` and `Value::Object` (backed by `BTreeMap`
+  when `preserve_order` is off) in ascending key order. The workspace must
+  therefore never enable `serde_json/preserve_order`; a comment records this.
+- `#[derive(Ord)]` on a tuple of `Ord` fields yields a lexicographic total
+  order.
 - Verus and Kani, as pinned by `scripts/install-verus.sh` and
   `scripts/install-kani.sh`, are sound.
-
-### What is deliberately not verified
-
-The English text of the diagnostic messages is produced by
-`whitaker_common`'s existing `format_*` functions, which roadmap 6.2.2 and
-6.3.2 already covered with unit and behavioural tests. This plan asserts that
-the emitter uses them unmodified, not that their wording is correct.
 
 ## Plan of work
 
 ### Stage A — understand and propose (no code changes)
 
 Read, in order: `docs/brain-trust-lints-design.md` §SARIF output;
-`crates/whitaker_sarif/src/lib.rs` and `model/`;
-`crates/whitaker_clones_core/src/run0/emit.rs`;
+`docs/whitaker-clone-detector-design.md` §SARIF schema and mapping and §CLI
+surface; `crates/whitaker_sarif/src/` in full;
+`crates/whitaker_clones_core/src/run0/emit.rs` and `span.rs`;
 `common/src/brain_type_metrics/diagnostic.rs` and `evaluation.rs`;
-`common/src/brain_trait_metrics/diagnostic.rs`; `common/src/span.rs`;
-`crates/no_std_fs_operations/src/config.rs` for the configuration-reader trait
-pattern. Then obtain approval for this plan.
-
-Stage A ends when the plan is approved.
+`common/src/brain_trait_metrics/diagnostic.rs`;
+`common/src/decomposition_advice/note.rs` and `profile.rs`;
+`common/src/span.rs`. Then obtain approval.
 
 ### Stage B — red tests and open proof obligations
 
-For each milestone below, write the failing test or the open proof goal first
-and observe it fail for the stated reason, then implement. The milestone
-descriptions name the red artefact explicitly.
+For each milestone, write the failing test or the open proof goal first and
+observe it fail for the stated reason.
 
 ### Stage C — implementation and verification together
 
-Milestones `EP-M1` through `EP-M7`, in order. Each ends at a coherent,
-validated repository state.
+`EP-M1` through `EP-M5`, in order. `EP-M1` through `EP-M4` are shared-
+infrastructure refactors, each independently valuable and each ending at a
+coherent state where the clone detector still works.
 
-### Stage D — documentation, proof cleanup, and wider validation
+### Stage D — documentation and wider validation
 
-Milestone `EP-M8`.
+`EP-M6`.
 
 ## Milestones and plateaus
 
-### EP-M1 — deterministic SARIF model foundation
+### EP-M1 — deterministic SARIF results and workspace test dependencies
 
-- Identifier and outcome: `whitaker_sarif` produces byte-stable JSON, and gains
-  the two optional fields the brain trust emitter needs.
-- Requirements and gaps: `BTS-REQ-05`, partially `BTS-REQ-04`.
-- Changes:
-  - `crates/whitaker_sarif/src/model/result.rs`: change
-    `partial_fingerprints` from `HashMap<String, String>` to
-    `BTreeMap<String, String>`; update the `skip_serializing_if` to
-    `BTreeMap::is_empty`; update the doc example.
-  - `crates/whitaker_sarif/src/builders/result_builder.rs`: same container
-    change in the builder's field.
-  - `crates/whitaker_sarif/src/merge.rs`: adjust the `ResultKey` construction
-    if it depends on `HashMap` methods.
-  - `crates/whitaker_sarif/src/model/descriptor.rs`: add
-    `pub help: Option<MultiformatMessageString>` with
-    `#[serde(default, skip_serializing_if = "Option::is_none")]`.
-  - `crates/whitaker_sarif/src/model/run.rs`: add
-    `pub automation_details: Option<RunAutomationDetails>` with the same serde
-    attributes, and define
-    `pub struct RunAutomationDetails { pub id: String }`.
-  - `crates/whitaker_sarif/src/builders/run_builder.rs`: add
-    `with_automation_details(self, id: impl Into<String>) -> Self`.
-  - `crates/whitaker_clones_core/src/run0/emit.rs` and any other consumer:
-    update to the new container type. No behaviour change is expected.
-- Red artefact: a new test in
-  `crates/whitaker_sarif/tests/sarif_behaviour.rs` named
-  `partial_fingerprints_serialize_in_key_order`, asserting that a result with
-  fingerprint keys inserted as `zeta`, `alpha`, `mu` serializes with `alpha`
-  first. Under `HashMap` this fails intermittently; run it with
-  `cargo nextest run -p whitaker_sarif --no-capture` a few times, or construct
-  the map with enough keys that the failure is reliable, and record the
+- Outcome: `whitaker_sarif` produces byte-stable JSON, and the two authorized
+  test crates are pinned workspace-wide.
+- Requirements: `BTS-REQ-05`.
+- Changes: in `crates/whitaker_sarif/src/model/result.rs`, change
+  `partial_fingerprints` to `BTreeMap<String, String>` and update the
+  `skip_serializing_if` to `BTreeMap::is_empty`; make the same container change
+  in `builders/result_builder.rs`; update the doc examples in both. Add
+  `googletest` and `pretty_assertions` to `[workspace.dependencies]` in the
+  root `Cargo.toml` with caret requirements.
+- Red artefact: `partial_fingerprints_serialize_in_key_order` in
+  `crates/whitaker_sarif/tests/sarif_behaviour.rs`, inserting keys as `zeta`,
+  `alpha`, `mu` and asserting `alpha` serializes first. Use enough keys that
+  the `HashMap` failure is reliable rather than intermittent, and record the
   observed failure.
-- Acceptance evidence: `partial_fingerprints_serialize_in_key_order` passes;
-  the existing eight BDD scenarios in `crates/whitaker_sarif/tests/` still
-  pass; `crates/whitaker_clones_core` tests still pass; no existing serialized
-  form gained a field, verified by a test asserting that a clone-detector
-  result serializes without `help` or `automationDetails` keys.
-- Conformance check: the two added fields are optional and default to `None`,
-  so `docs/whitaker-clone-detector-design.md`'s documented result shape is
-  unchanged. No new dependency, no trust boundary change.
-- Recovery: the milestone is a mechanical container swap plus two additive
-  fields; revert with `git revert` if a consumer proves harder than expected.
-- Remaining gaps: nothing brain-trust-specific yet.
-- Compatibility decision: none required. `whitaker_sarif` is `publish = false`,
-  pre-1.0, with one in-repo consumer.
+- Acceptance evidence: the new test passes; the eight existing scenarios in
+  `crates/whitaker_sarif/tests/` pass; `whitaker_clones_core` tests pass.
+- Conformance check: no wire-format change beyond key ordering; no new runtime
+  dependency; `merge.rs` needs no edit (verified: it uses only `get`).
+- Recovery: mechanical; revert with `git revert`.
+- Remaining gaps: nothing brain-trust-specific.
+- Compatibility decision: none required — `publish = false`, pre-1.0, one
+  in-repo consumer.
 
-### EP-M2 — fingerprint encoding and its Verus injectivity proof
+### EP-M2 — shared fingerprint encoding, with the Verus proof
 
-- Identifier and outcome: a proven-injective component encoder and a stable
-  fingerprint function exist in the new crate.
-- Requirements and gaps: `BTS-REQ-05`; discharges `VP-1`.
-- Changes:
-  - Create `crates/whitaker_brain_sarif/` with `Cargo.toml` (edition 2024,
-    `publish = false`, version `0.2.7`, `[lints] workspace = true`, and
-    `[lints.rust] unexpected_cfgs = { level = "warn", check-cfg =
-    ['cfg(kani)'] }`), and register the crate in `[workspace.dependencies]`.
-  - `src/lib.rs` with a module-level `//!` doc comment.
-  - `src/domain/fingerprint.rs`: `encode_components(components: &[&str]) ->
-    Vec<u8>` (eight-byte big-endian length prefix per component, written with
-    explicit shifts because `clippy::host_endian_bytes` is denied) and
-    `subject_fingerprint(rule_id, file_uri, subject_kind, subject_name) ->
-    String` returning lowercase hexadecimal SHA-256.
-  - `verus/brain_trust_fingerprint.rs` with the round-trip lemma and the
-    injectivity corollary.
-  - `scripts/run-verus.sh`: add a `brain-trust` group and include the new file
-    in `all`.
-  - `Makefile`: add `verus-brain-trust`.
-- Red artefact: the Verus file with `lemma_decode_encode_round_trip`'s body
-  left as `assume(false);` replaced by nothing — Verus reports the
-  postcondition unproven. Also
-  `encoding_separates_components_a_delimiter_would_merge` in
-  `src/domain/fingerprint_tests.rs`, written before the encoder exists.
+- Outcome: one injective fingerprint implementation, used by both producers.
+- Requirements: `BTS-REQ-05`, `BTS-REQ-06`; discharges `VP-1`.
+- Changes: add `crates/whitaker_sarif/src/fingerprint.rs` with
+  `encode_components(&[&str]) -> Vec<u8>` (eight-byte big-endian length prefix
+  per component, written with explicit shifts because the workspace denies
+  `clippy::host_endian_bytes`, `little_endian_bytes`, **and**
+  `big_endian_bytes`), `fingerprint_hex(&[&str]) -> String` returning lowercase
+  hexadecimal SHA-256, and `digest_hex`. Add `sha2` to `whitaker_sarif`'s
+  dependencies. Delete `pair_fingerprint`, `token_hash`, `digest_hex`,
+  `hex_digit`, and `u64_big_endian_bytes` from
+  `crates/whitaker_clones_core/src/run0/emit.rs` and call the shared functions
+  instead. Add `verus/brain_trust_fingerprint.rs`, extend
+  `scripts/run-verus.sh` in all three places (group function, argument
+  allow-list at line 53, and the `all` arm), and add `verus-brain-trust` to the
+  `Makefile` including `.PHONY`.
+- Red artefact: the Verus round-trip lemma with no body, reporting an unproven
+  postcondition; and
+  `encoding_separates_components_a_delimiter_would_merge`.
 - Acceptance evidence: `make verus-brain-trust` reports `0 errors`;
-  `cargo nextest run -p whitaker_brain_sarif` passes; the delimiter-collision
-  control test passes.
-- Conformance check: no public interface outside the new crate; one new
-  dependency edge onto `sha2`, already workspace-pinned, within tolerance.
-- Recovery: the crate is additive; delete the directory and the script entry to
-  revert.
-- Remaining gaps: no findings, mapping, or emission yet.
-- Compatibility decision: none required; the crate is new.
+  `cargo nextest run -p whitaker_sarif -p whitaker_clones_core` passes with
+  clone-detector fingerprint expectations updated to the new values.
+- Conformance check: the clone detector's fingerprint values change
+  deliberately; nothing consumes them; recorded in `Decision log`.
+- Recovery: the shared module is additive; the `run0` migration is a
+  call-site swap.
+- Remaining gaps: URIs and regions still crate-local.
+- Compatibility decision: none required; no consumer of the old values exists.
 
-### EP-M3 — domain finding model, ordering, and English-only rendering
+### EP-M3 — shared file-URI and region conversion, with the Kani harness
 
-- Identifier and outcome: brain type and brain trait diagnostics can be
-  converted into a common, ordered, English-rendered finding type.
-- Requirements and gaps: `BTS-REQ-01`, `BTS-REQ-03`; discharges `VP-2`,
-  `VP-7`.
-- Changes:
-  - `src/domain/finding.rs`: `SubjectKind` (`Type` | `Trait`),
-    `FindingSeverity` (`Warning` | `Error`), `SubjectRef { kind, name,
-    file_uri, span }`, and `BrainTrustFinding` carrying the subject, the
-    severity, the rule identifier, the rendered English message, the measured
-    values as an ordered property map, and the optional notes.
-  - `src/domain/finding_from.rs`: `from_brain_type(diagnostic, subject) ->
-    Option<BrainTrustFinding>` and `from_brain_trait(...)`, returning `None`
-    for `Pass`.
-  - `src/domain/ordering.rs`: `finding_key` and `finding_order`.
-  - `src/domain/render.rs`: thin wrappers over `whitaker_common`'s
-    `format_primary_message`, `format_note`, `format_help`, and
-    `format_decomposition_note`. This module and the crate as a whole must
-    not reference `i18n`.
-  - `verus/brain_trust_ordering.rs` and its `run-verus.sh` entry.
-  - `tests/features/english_only.feature` and
-    `tests/english_only_behaviour.rs`.
-- Red artefact: `finding_order_is_a_total_order` sub-lemmas open in Verus; the
-  BDD scenario `Locale does not change SARIF message text`; and the fitness
-  test `crate_sources_never_reference_localisation`, first observed failing
-  against a deliberately inserted `Localizer` mention.
-- Acceptance evidence: `make verus-brain-trust` reports `0 errors` for both
-  proof files; the three English-only scenarios pass;
-  `Pass` dispositions produce `None`, asserted by a parameterized test over all
-  three disposition variants for each of the two subject kinds.
-- Conformance check: `BTS-REQ-03` is now structurally enforced (no
-  `fluent-templates` dependency in the new crate) as well as behaviourally
-  tested.
-- Recovery: additive within the new crate.
-- Remaining gaps: nothing is serialized yet.
-- Compatibility decision: none required.
-
-Feature specification, `crates/whitaker_brain_sarif/tests/features/english_only.feature`:
-
-```gherkin
-Feature: SARIF messages are English regardless of locale
-
-  Scenario: Welsh locale does not change SARIF output
-    Given a denied brain type finding for "OrderProcessor"
-    When the SARIF log is emitted with the locale set to "cy"
-    Then the emitted bytes are identical to the "en-GB" emission
-
-  Scenario: Scottish Gaelic locale does not change SARIF output
-    Given a denied brain trait finding for "Repository"
-    When the SARIF log is emitted with the locale set to "gd"
-    Then the emitted bytes are identical to the "en-GB" emission
-
-  Scenario: The message text is the English primary message
-    Given a warned brain type finding for "Ledger"
-    When the SARIF log is emitted
-    Then the first result message equals the English primary message
-```
-
-### EP-M4 — pure mapping to a SARIF run, with snapshots
-
-- Identifier and outcome: an ordered slice of findings maps to a complete,
-  deterministic `whitaker_sarif::SarifLog`.
-- Requirements and gaps: `BTS-REQ-01`, `BTS-REQ-04`; discharges `VP-4`,
-  `VP-8`.
-- Changes:
-  - `src/domain/rules.rs`: `WHK101_ID`, `WHK102_ID`, `whk101_rule()`,
-    `whk102_rule()`, `all_brain_trust_rules()`. Each descriptor sets `name`,
-    `short_description`, `help` (the English guidance text), and `help_uri`
-    pointing at `docs/brain-trust-lints-design.md`.
-  - `src/mapping.rs`: `to_run(findings, tool) -> Result<Run, BrainSarifError>`
-    and `to_log(findings, tool, automation_id) -> Result<SarifLog, _>`. Sorts
-    with `finding_order`, builds one `SarifResult` per finding via
-    `ResultBuilder`, attaches `partialFingerprints` under
-    `whitakerBrainSubject`, attaches the measured values under
-    `properties.whitakerBrainTrust`, and sets `automationDetails.id`.
-  - `src/error.rs`: `BrainSarifError` via `thiserror`, wrapping
-    `whitaker_sarif::SarifError` and adding typed variants for invalid subject
-    identifiers and invalid output targets.
-  - `src/mapping_tests.rs` with the six `insta` snapshots.
-  - `tests/emission_properties.rs` with the `proptest` properties.
-- Red artefact: the six snapshot tests, written before `to_run` exists, plus
-  `emission_is_permutation_invariant`.
-- Acceptance evidence: `cargo nextest run -p whitaker_brain_sarif` passes;
-  `cargo insta test --check` reports no pending snapshots; the permutation and
-  round-trip properties pass with the non-vacuity counters satisfied.
-- Conformance check: rule identifiers do not collide with `WHK001`–`WHK003`,
-  asserted by a test that intersects `whitaker_sarif::all_rules()` identifiers
-  with `all_brain_trust_rules()` identifiers and expects an empty set.
-- Recovery: additive.
-- Remaining gaps: findings must still be collected and written.
-- Compatibility decision: none required.
-
-### EP-M5 — collector with dedup and ordering, plus the Kani harness
-
-- Identifier and outcome: a collector accumulates findings, deduplicates by
-  fingerprint, and returns them ordered.
-- Requirements and gaps: `BTS-REQ-05`; discharges `VP-3`.
-- Changes:
-  - `src/domain/collector.rs`: `BrainTrustCollector` with `record`, `len`,
-    `is_empty`, and `finish(self) -> Vec<BrainTrustFinding>`. Backed by a
-    `BTreeMap` keyed on the ordering key so insertion order cannot leak.
-  - `src/domain/collector_kani.rs` behind `#[cfg(kani)]`, with the bounded
-    model over three findings, `kani::cover` reachability assertions, and
-    `#[kani::unwind(5)]`.
-  - `scripts/run-kani.sh`: add a `brain-trust` group listing the harnesses.
-  - `Makefile`: add `kani-brain-trust`.
-- Red artefact: `collector_keeps_first_of_duplicate_subjects` and
-  `collector_returns_sorted_findings`, both written first; then the Kani
-  harnesses, with the deliberate truncation mutation observed failing.
+- Outcome: one normalized URI type and one region-conversion implementation,
+  used by both producers.
+- Requirements: `BTS-REQ-05`, `BTS-REQ-06`; discharges `VP-2`.
+- Changes: add `FileUri` to `crates/whitaker_sarif/src/model/location.rs` (or a
+  sibling module) — a newtype validated as non-empty, repository-root-relative,
+  forward-slashed, with no drive letter and no `.` or `..` component, with
+  `TryFrom<&str>`, `AsRef<str>`, and a typed error. Move `region_for_range`
+  from `crates/whitaker_clones_core/src/run0/span.rs` into `whitaker_sarif`,
+  preserving its UTF-16 code-unit column convention, and add a sibling
+  `span_to_region(SourceSpan) -> Region` for line-and-column inputs with a
+  documented one-based normalization policy. Migrate `run0` onto both. Add
+  `crates/whitaker_sarif/src/location_kani.rs`, a `brain-trust` group in
+  `scripts/run-kani.sh` (not on the no-argument path), and
+  `kani-brain-trust` to the `Makefile` including `.PHONY`.
+- Red artefact: `file_uri_rejects_absolute_and_backslash_paths`, and the Kani
+  harness before the normalization policy is implemented, which should report a
+  counter-example at line zero.
 - Acceptance evidence: `make kani-brain-trust` reports
-  `VERIFICATION:- SUCCESSFUL` for every harness including the cover checks;
-  unit tests pass.
-- Conformance check: the collector holds no I/O and no configuration, keeping
-  the domain pure.
-- Recovery: additive; if Kani proves intractable, follow the escalation rule in
-  `Tolerances` rather than deleting the harness.
-- Remaining gaps: no opt-in, no file output.
+  `VERIFICATION:- SUCCESSFUL` for the harnesses and the two cover checks; both
+  crates' tests pass.
+- Conformance check: `columnKind` semantics are now shared rather than
+  duplicated; `crates/whitaker_sarif/src/paths.rs:24` already documents the
+  forward-slash requirement, and `FileUri` now enforces it.
+- Recovery: additive plus a call-site migration.
+- Remaining gaps: rules and property bag.
 - Compatibility decision: none required.
 
-### EP-M6 — settings resolution and the opt-in truth table
+### EP-M4 — shared rule registry and an extensible property bag
 
-- Identifier and outcome: the emitter's on/off state and output directory are
-  resolved by a pure function from an injected environment snapshot and
-  optional file configuration.
-- Requirements and gaps: `BTS-REQ-02`; discharges `VP-5`.
-- Changes:
-  - `src/settings.rs`: `SarifSettings { enabled, output_dir, tool_version }`,
-    `EnvSnapshot { enable: Option<String>, dir: Option<String> }`,
-    `FileSettings { enabled: Option<bool>, output_dir: Option<String> }`, and
-    `resolve_settings(&EnvSnapshot, Option<&FileSettings>) ->
-    Result<SarifSettings, SettingsError>`.
-  - Precedence, documented and tested: the environment wins over file
-    configuration, which wins over the default of disabled. Setting
-    `WHITAKER_BRAIN_SARIF_DIR` to a non-empty path implies enabled unless
-    `WHITAKER_BRAIN_SARIF` explicitly says otherwise. Booleans accept `1`,
-    `true`, `0`, `false`, case-insensitively, after trimming; an empty value is
-    treated as unset; anything else is a typed error.
-  - `src/ports.rs`: `trait FileSettingsSource { fn load(&self) ->
-    Result<Option<FileSettings>, SettingsError>; }` with a `mockall`
-    double, and a `DylintFileSettingsSource` adapter that calls
-    `dylint_linting::config` for the `brain_trust_sarif` namespace. The adapter
-    is feature-gated so the crate builds without a compiler dependency.
-  - `src/settings_tests.rs` with the exhaustive truth table.
-- Red artefact: the truth table, written before `resolve_settings` exists.
-- Acceptance evidence: every cell passes; the two error cells produce
-  `SettingsError` values asserted with `googletest` matchers.
-- Conformance check: no test mutates the process environment directly; the
-  single adapter test that must read real environment variables uses
-  `temp-env`'s guard.
-- Recovery: additive.
-- Remaining gaps: nothing is written to disk yet.
+- Outcome: `whitaker_sarif` hosts both rule families and one discriminated
+  property bag.
+- Requirements: `BTS-REQ-04`, `BTS-REQ-06`.
+- Changes: in `crates/whitaker_sarif/src/rules.rs`, rename `all_rules()` to
+  `clone_detection_rules()`, update its arity test and the one consumer at
+  `emit.rs:112`, and add `WHK101_ID`/`WHK102_ID`, `whk101_rule()`,
+  `whk102_rule()`, and `brain_trust_rules()`. Add
+  `help: Option<MultiformatMessageString>` to `ReportingDescriptor` with
+  `#[serde(default, skip_serializing_if = "Option::is_none")]`. In
+  `whitaker_properties.rs`, convert `WhitakerProperties` into an internally
+  tagged enum — `#[serde(tag = "kind", rename_all = "camelCase")]` with a
+  `Clone` variant holding today's fields and a `BrainTrust` variant holding the
+  brain trust metrics — preserving `try_to_value`, `TryFrom<&Value>`, and the
+  `"whitaker"` wrapper key. Rename the existing builder to match the clone
+  variant and update `emit.rs`.
+- Red artefact: `whitaker_properties_round_trip_preserves_brain_trust_variant`,
+  and `rule_ids_are_disjoint_across_families` asserting the intersection of
+  clone and brain trust rule identifiers is empty.
+- Acceptance evidence: both crates' tests pass; the clone detector's property
+  bag gains a `kind` discriminant, asserted in an updated test.
+- Conformance check: rule identifiers `WHK101`/`WHK102` extend the clone
+  detector's SARIF `ruleId` namespace, which is distinct from the selector
+  codes (`DOC001`, `MOD001`) that roadmap 3.6.1 owns. Record that distinction
+  in the ADR so 3.6.1 remains free to assign selector codes.
+- Recovery: additive plus mechanical renames.
+- Remaining gaps: the emitter itself.
 - Compatibility decision: none required.
 
-### EP-M7 — ports, adapters, and end-to-end file emission
+### EP-M5 — brain trust SARIF emitter
 
-- Identifier and outcome: a caller records findings and, when enabled, a SARIF
-  file appears at a predictable path; when disabled, nothing happens.
-- Requirements and gaps: `BTS-REQ-01`, `BTS-REQ-02`; discharges `VP-6`.
-- Changes:
-  - `src/ports.rs`: `trait SarifSink { fn write(&self, unit: &UnitId, log:
-    &SarifLog) -> Result<(), BrainSarifError>; }` with a `mockall` double.
-  - `src/domain/unit.rs`: `UnitId`, a newtype over a non-empty string
-    validated to contain no path separator, no `..`, and no character outside
-    `[A-Za-z0-9_.-]`, with `TryFrom<&str>` and `AsRef<str>`.
-  - `src/adapters/cap_std_sink.rs`: `CapStdSarifSink::new(dir: Dir)` writing
-    `<unit>.sarif` by creating `<unit>.sarif.tmp`, writing pretty JSON with a
-    trailing newline, syncing, and renaming. Uses `cap_std::fs_utf8` only.
-  - `src/reporter.rs`: `BrainTrustSarifReporter`, an application service with
-    `disabled()`, `new(settings, sink)`, `record_brain_type`,
-    `record_brain_trait`, and `finish(self, unit) -> Result<Option<Utf8PathBuf>,
-    BrainSarifError>` returning `Ok(None)` when disabled or when there are no
-    findings.
-  - `src/paths.rs` or an addition to `whitaker_sarif::paths`: the default
-    output directory `target/whitaker/brain-trust` and a
-    `brain_trust_dir(target_dir)` helper. Prefer extending
-    `whitaker_sarif::paths` so the layout stays in one place.
-  - `src/test_support.rs` behind `#[cfg(any(test, feature = "test-support"))]`:
-    an in-memory sink and finding builders.
-  - `tests/features/brain_trust_sarif.feature` and
-    `tests/brain_trust_sarif_behaviour.rs` for the end-to-end scenarios.
-- Red artefact: the end-to-end scenario `An enabled reporter writes a SARIF
-  file`, written before the sink exists.
-- Acceptance evidence: running the behavioural suite creates and then reads
-  back a real file under a `tempfile` directory whose contents parse as a
-  `SarifLog` with one run and the expected results; the disabled scenario
-  asserts the directory is still empty; the mock sink asserts `times(0)` when
-  disabled and `times(1)` when enabled with at least one finding.
-- Conformance check: `make lint` runs the Whitaker suite over the new crate;
-  `no_std_fs_operations` must pass without adding the crate to
-  `excluded_crates`. If it does not, that is a design failure, not a
-  configuration problem — fix the code.
-- Recovery: additive; the sink writes to a temporary file first, so a failed
-  write leaves no partial output.
-- Remaining gaps: documentation.
+- Outcome: brain trust diagnostics become a deterministic
+  `whitaker_sarif::Run`, opt-in and English-only.
+- Requirements: `BTS-REQ-01`–`BTS-REQ-05`; discharges `VP-3`–`VP-7`.
+- Changes: add `whitaker_sarif`, `serde`, and `serde_json` to
+  `common/Cargo.toml`. Add `common/src/brain_trust_sarif/` with:
+  - `mod.rs` — module documentation and re-exports.
+  - `finding.rs` — `BrainTrustSubject { kind: SubjectKind, name, file_uri:
+    FileUri, span: SourceSpan }` (reusing `decomposition_advice::SubjectKind`)
+    and `BrainTrustFinding`, built from a diagnostic plus a subject plus an
+    optional `&[DecompositionSuggestion]`, returning `None` for `Pass`.
+  - `mapping.rs` — `emit_brain_trust_run(findings, tool) -> Result<Run, _>`,
+    mirroring `emit_run0`: sort, `deduplicate_results`, `RunBuilder` with
+    `brain_trust_rules()`.
+  - `collector.rs` — a `BTreeMap`-backed collector keyed on the ordering key.
+  - `mode.rs` — `BrainTrustSarifMode { Disabled, Enabled }`, with the
+    collection entry point returning early when disabled.
+  - `ordering.rs`, plus the colocated `*_tests.rs` modules the repository's
+    convention uses.
+- Red artefacts: `disabled_mode_builds_no_run`;
+  `emits_one_result_per_finding`; the six `insta` snapshots; and the BDD
+  scenarios below.
+- Acceptance evidence: `cargo nextest run -p whitaker-common` passes;
+  `cargo insta test --package whitaker-common --check` reports no pending
+  snapshots; VP-3's non-vacuity counters are satisfied.
+- Conformance check: `make lint` already covers `whitaker-common`
+  (`Makefile:81` lists `-p whitaker-common`), so no Makefile change is needed
+  for the lint gate. No file exceeds 400 lines. No `HashMap` appears in any
+  serialized position.
+- Recovery: additive within `whitaker-common`.
+- Remaining gaps: documentation; and, out of scope, the lint crates and file
+  emission.
 - Compatibility decision: none required.
 
 Feature specification,
-`crates/whitaker_brain_sarif/tests/features/brain_trust_sarif.feature`:
+`common/tests/features/brain_trust_sarif.feature`:
 
 ```gherkin
 Feature: Opt-in SARIF emission for brain trust findings
 
-  Scenario: An enabled reporter writes a SARIF file
-    Given SARIF emission is enabled for a temporary output directory
-    And a denied brain type finding for "OrderProcessor" in "src/orders.rs"
-    When the reporter finishes for compilation unit "my_crate"
-    Then a file named "my_crate.sarif" exists in the output directory
-    And the file parses as a SARIF 2.1.0 log with one run
-    And the run contains one result with rule identifier "WHK101"
+  Scenario: A denied brain type becomes an error-level result
+    Given SARIF collection is enabled
+    And a denied brain type evaluation for "OrderProcessor" in "src/orders.rs"
+    When the brain trust run is emitted
+    Then the run contains one result with rule identifier "WHK101"
     And the result level is "error"
+    And the result location file is "src/orders.rs"
 
-  Scenario: A disabled reporter writes nothing
-    Given SARIF emission is disabled
-    And a denied brain type finding for "OrderProcessor" in "src/orders.rs"
-    When the reporter finishes for compilation unit "my_crate"
-    Then the output directory is empty
+  Scenario: A warned brain trait becomes a warning-level result
+    Given SARIF collection is enabled
+    And a warned brain trait evaluation for "Repository" in "src/repo.rs"
+    When the brain trust run is emitted
+    Then the run contains one result with rule identifier "WHK102"
+    And the result level is "warning"
+
+  Scenario: Disabled collection builds no run
+    Given SARIF collection is disabled
+    And a denied brain type evaluation for "OrderProcessor" in "src/orders.rs"
+    When the brain trust run is emitted
+    Then no run is produced
 
   Scenario: A passing subject produces no result
-    Given SARIF emission is enabled for a temporary output directory
-    And a passing brain trait evaluation for "Repository"
-    When the reporter finishes for compilation unit "my_crate"
-    Then the output directory is empty
+    Given SARIF collection is enabled
+    And a passing brain trait evaluation for "Repository" in "src/repo.rs"
+    When the brain trust run is emitted
+    Then the run contains no results
 
-  Scenario: The same findings recorded in either order produce the same file
-    Given SARIF emission is enabled for a temporary output directory
-    And two warned brain trait findings recorded in ascending name order
-    When the reporter finishes for compilation unit "first_unit"
-    And the same findings are recorded in descending name order
-    And the reporter finishes for compilation unit "second_unit"
-    Then the two files differ only in their automation identifier
+  Scenario: The message text is the English primary message
+    Given SARIF collection is enabled
+    And a warned brain type evaluation for "Ledger" in "src/ledger.rs"
+    When the brain trust run is emitted
+    Then the first result message equals the English primary message
 
-  Scenario: An invalid compilation unit identifier is rejected
-    Given SARIF emission is enabled for a temporary output directory
-    And a warned brain type finding for "Ledger" in "src/ledger.rs"
-    When the reporter finishes for compilation unit "../escape"
-    Then the reporter reports an invalid unit identifier error
-    And the output directory is empty
+  Scenario: Recording order does not change the emitted run
+    Given SARIF collection is enabled
+    And two warned brain type evaluations recorded in ascending name order
+    When the brain trust run is emitted
+    And the same evaluations are recorded in descending name order
+    Then both runs serialize to identical JSON
 ```
 
-### EP-M8 — documentation, ADR, roadmap, and full gate run
+### EP-M6 — documentation, ADR, and roadmap
 
-- Identifier and outcome: the change is documented everywhere the repository
-  requires, and every gate passes.
-- Requirements and gaps: closes out all five `BTS-REQ` items.
+- Outcome: the change is documented everywhere the repository requires.
 - Changes:
-  - `docs/adr-005-brain-trust-sarif-emission.md`, following the required ADR
-    sections. It records: the separate-crate decision; per-unit files versus a
-    shared file; the `BTreeMap` determinism fix; length-prefixed encoding and
-    why delimiter separation was rejected; the rule identifier block; and the
-    English-only constraint.
-  - `docs/brain-trust-lints-design.md` §SARIF output: replace the four-line
-    "planned approach" with the delivered design, and reference the ADR.
-  - `docs/users-guide.md`: a new section describing the environment variables,
-    the `dylint.toml` section, the output location, the rule identifiers, and
-    the English-only guarantee.
-  - `docs/developers-guide.md`: the internal conventions — the ports and
-    adapters layout, how to add a new brain trust rule, the determinism rules
-    (no `HashMap` in serialized models, no `serde_json/preserve_order`), and
-    how to run the new proof targets.
-  - `docs/repository-layout.md` and `docs/contents.md`: register the new crate
-    and the new ADR.
-  - `docs/roadmap.md`: mark 6.5.1 as done.
-  - `typos.local.toml` if any new term trips the spelling gate, followed by
-    `make spelling-config-write`.
+  - `docs/adr-005-brain-trust-sarif-emission.md`, using the required ADR
+    sections. It records: mirroring the clone detector's pure-emitter
+    architecture and why file writing is deferred; promoting four helpers into
+    `whitaker_sarif` and the defects each promotion fixed; the `BTreeMap`
+    determinism fix and why `implicit_hasher` does not apply; length-prefixed
+    encoding versus delimiter separation; the discriminated property bag; the
+    `WHK1xx` SARIF rule block and its distinction from the roadmap-3.6.1
+    selector codes; deferring configuration to 6.6.1; omitting
+    `defaultConfiguration.level`, `ruleIndex`, and `automationDetails`; and the
+    span-to-URI contract the future lint crates must satisfy.
+  - `docs/brain-trust-lints-design.md` §SARIF output: replace the planned
+    approach with the delivered design, note that 6.6.2 must not localize the
+    `format_*` functions the emitter depends on without forking them, and
+    reference the ADR.
+  - `docs/whitaker-clone-detector-design.md`: record the shared-helper
+    promotions and the fingerprint-value change.
+  - `docs/users-guide.md`: describe the rule identifiers, the SARIF shape, and
+    that emission is a library capability with no user-facing switch yet,
+    pointing at 6.6.1.
+  - `docs/developers-guide.md`: the internal conventions — where shared SARIF
+    helpers live, how to add a rule family, the determinism rules (no `HashMap`
+    in serialized positions, never enable `serde_json/preserve_order`), and how
+    to run the new proof targets.
+  - `docs/contents.md` and `docs/repository-layout.md`: register the ADR and
+    the new module.
+  - `docs/roadmap.md`: mark 6.5.1 done.
+  - `typos.local.toml` then `make spelling-config-write`, if a new term trips
+    the gate.
 - Acceptance evidence: `make check-fmt`, `make typecheck`, `make lint`,
   `make test`, `make markdownlint`, `make nixie`, `make verus-brain-trust`, and
-  `make kani-brain-trust` all succeed, with output captured to
-  `/tmp/<action>-whitaker-6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter.out`.
-- Conformance check: every `BTS-REQ` identifier maps to a passing test named in
-  `Conformance basis`; the design document no longer describes the work as
-  planned; no upstream assumption is left falsified and unrecorded.
-- Recovery: documentation-only; safe to iterate.
-- Remaining gaps: the `brain_type` and `brain_trait` Dylint crates remain
-  unimplemented, as does merging per-unit SARIF files. Both are recorded in
-  `Outcomes & retrospective` and belong to later roadmap items.
-- Compatibility decision: none required.
+  `make kani-brain-trust` all succeed; `mbake validate Makefile` passes.
+- Conformance check: every `BTS-REQ` maps to a passing test named in
+  `Conformance basis`; no upstream deviation is left unrecorded.
+- Recovery: documentation only.
+- Remaining gaps: the lint crates, file emission, and the configuration
+  surface, all out of scope and all recorded.
 
 ## Concrete steps
 
-Run everything from the repository root,
-`/home/leynos/.lody/repos/github---leynos---whitaker/worktrees/b09a23bd-30c3-4848-9f03-29d31d2244b2`,
-on branch `6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter`.
+Run everything from the repository root of your checkout, on branch
+`6-5-1-collect-brain-trust-diagnostics-into-sarif-emitter`.
 
-Tee long output to a log so nothing is truncated:
+Tee long output so nothing is truncated:
 
 ```bash
 ACTION=test
@@ -1033,21 +1008,20 @@ LOG="/tmp/${ACTION}-whitaker-$(git branch --show-current).out"
 make "${ACTION}" 2>&1 | tee "${LOG}"
 ```
 
-Focused test runs during development:
+Focused runs during development:
 
 ```bash
-cargo nextest run -p whitaker_brain_sarif 2>&1 | tee /tmp/nextest-brain-sarif.out
 cargo nextest run -p whitaker_sarif -p whitaker_clones_core
+cargo nextest run -p whitaker-common 2>&1 | tee /tmp/nextest-brain-sarif.out
 ```
 
-Expected transcript shape for a green focused run:
+Expected shape of a green focused run:
 
 ```plaintext
-    Starting 41 tests across 4 binaries
-        PASS [   0.004s] whitaker_brain_sarif domain::fingerprint_tests::encoding_separates_components_a_delimiter_would_merge
-        PASS [   0.006s] whitaker_brain_sarif mapping_tests::snapshot_brain_type_deny
-...
-     Summary [   0.412s] 41 tests run: 41 passed, 0 skipped
+    Starting 38 tests across 4 binaries
+        PASS [   0.004s] whitaker_sarif fingerprint::tests::encoding_separates_components_a_delimiter_would_merge
+        PASS [   0.006s] whitaker-common brain_trust_sarif::mapping_tests::snapshot_brain_type_deny
+     Summary [   0.389s] 38 tests run: 38 passed, 0 skipped
 ```
 
 Proof sidecars:
@@ -1057,143 +1031,118 @@ make verus-brain-trust 2>&1 | tee /tmp/verus-brain-trust.out
 make kani-brain-trust  2>&1 | tee /tmp/kani-brain-trust.out
 ```
 
-Expected Verus tail:
+Expected tails:
 
 ```plaintext
-verification results:: 7 verified, 0 errors
-```
-
-Expected Kani tail per harness:
-
-```plaintext
+verification results:: 4 verified, 0 errors
 VERIFICATION:- SUCCESSFUL
 ```
 
 Snapshot review:
 
 ```bash
-cargo insta test --package whitaker_brain_sarif
+cargo insta test --package whitaker-common
 cargo insta review
 ```
 
-Full gate sequence before each commit. Run these **sequentially**, never in
-parallel, so the build cache is used:
+Full gate sequence before each commit, run **sequentially** so the build cache
+is used:
 
 ```bash
 make check-fmt && make typecheck && make lint && make test
 ```
 
-Manual demonstration of the user-visible behaviour, using the end-to-end test
-binary as the driver (there is no lint crate to run yet):
-
-```bash
-WHITAKER_BRAIN_SARIF=1 cargo nextest run -p whitaker_brain_sarif \
-    -E 'test(/brain_trust_sarif_behaviour/)' --no-capture
-```
+Delegate full gate runs to the `scrutineer` sub-agent rather than running them
+in the planning context.
 
 ## Validation and acceptance
 
 Acceptance is phrased as behaviour.
 
-1. With no environment variable set and no `dylint.toml` section, a caller that
-   records ten denied findings and calls `finish` receives `Ok(None)` and the
-   output directory contains zero files. Test:
-   `disabled_reporter_writes_nothing`.
-2. With `WHITAKER_BRAIN_SARIF=1` and an output directory, the same caller
-   receives `Ok(Some(path))`, and reading `path` yields JSON whose `$schema` is
-   the SARIF 2.1.0 schema URI, whose `version` is `"2.1.0"`, and whose
-   `runs[0].results` has ten entries sorted by file then line. Test:
-   `enabled_reporter_writes_sorted_results`.
-3. Recording the same findings in reverse order produces byte-identical file
-   contents apart from the automation identifier. Test:
-   `emission_is_permutation_invariant` and the fourth BDD scenario.
-4. Setting the Whitaker locale to `cy` changes no byte. Tests: the three
-   English-only scenarios.
-5. A `Pass` disposition never appears in the output. Test:
+1. Given a disabled mode and ten denied findings, the entry point produces no
+   run and the collector holds nothing. Test: `disabled_mode_builds_no_run`.
+2. Given an enabled mode and the same findings, the entry point produces a
+   `Run` whose `results` has ten entries ordered by rule, file, line, column,
+   and subject name, each with a location and a one-based `startLine`. Test:
+   `emits_one_result_per_finding`.
+3. Serializing that run yields JSON whose `$schema` is
+   `whitaker_sarif::SARIF_SCHEMA` and whose `version` is `"2.1.0"`. Test:
+   `snapshot_brain_type_deny`.
+4. Recording the same findings in reverse order yields byte-identical JSON.
+   Tests: `emission_is_permutation_invariant` and the sixth BDD scenario.
+5. A `Pass` disposition never appears. Test:
    `passing_subject_produces_no_result`.
-6. A compilation unit identifier containing `..` or a path separator is
-   rejected before any file is created. Test:
-   `invalid_unit_identifier_is_rejected`.
+6. A subject with five brain methods yields three in the property bag plus
+   `brainMethodsOmitted: 2`. Test: `brain_methods_are_capped`.
+7. After the shared refactors, the clone detector's six BDD scenarios still
+   pass, with fingerprint expectations updated once and deliberately.
 
-Red-Green-Refactor evidence to record for each milestone:
-
-- Red: the named test or open proof goal, the exact command, and the observed
-  failure message. For proofs, the Verus error or the Kani counter-example.
-- Green: the same command passing after the minimal implementation.
-- Refactor: `make check-fmt && make typecheck && make lint && make test`
-  passing after cleanup.
+Record Red-Green-Refactor evidence per milestone: the red command and its
+observed failure (for proofs, the Verus error or Kani counter-example); the
+green command passing after the minimal implementation; and
+`make check-fmt && make typecheck && make lint && make test` passing after
+cleanup.
 
 Quality criteria (what "done" means):
 
-- Tests: `make test` passes with no new ignored or skipped tests. Every new
+- Tests: `make test` passes with no new ignored or skipped tests; every new
   public item has a Rustdoc example that runs as a doctest.
-- Verification: `VP-1` and `VP-2` discharged by Verus with `0 errors`; `VP-3`
-  discharged by Kani with `VERIFICATION:- SUCCESSFUL` including both cover
-  checks; `VP-4` through `VP-8` discharged by their named test artefacts, each
-  with its non-vacuity check recorded.
+- Verification: `VP-1` discharged by Verus with `0 errors`; `VP-2` by Kani with
+  `VERIFICATION:- SUCCESSFUL` including both cover checks; `VP-3`–`VP-7` by
+  their named artefacts, each with its non-vacuity check recorded.
 - Lint and typecheck: `make lint` and `make typecheck` pass with warnings
-  denied. The new crate is not added to `dylint.toml`'s `excluded_crates`.
-- Documentation: `make markdownlint` and `make nixie` pass.
-- Performance: no benchmark is required. The disabled path must perform zero
-  allocations per recorded finding, asserted structurally by the collector
-  being absent from the disabled reporter variant rather than by measurement.
-- Security: no new network access, no new process spawning. The sink writes
-  only inside the capability-scoped directory it is handed.
-
-Quality method (how we check): the gate sequence above, run sequentially, with
-output captured to `/tmp` for review. Delegate full gate runs to the
-`scrutineer` sub-agent rather than running them in the planning context.
+  denied.
+- Documentation: `make markdownlint` and `make nixie` pass; `mbake validate
+  Makefile` passes.
+- Performance: no benchmark required. The disabled path builds no run and
+  allocates no per-finding storage; note honestly that a caller still pays to
+  construct a `BrainTrustSubject` before calling, so the emitter exposes
+  `BrainTrustSarifMode::is_enabled` as the documented call-site gate.
+- Security: no new network access, no filesystem access, no process spawning.
 
 ## Idempotence and recovery
 
-Every step is re-runnable. The sink writes to `<unit>.sarif.tmp` and renames,
-so a repeated run overwrites cleanly and an interrupted run leaves no partial
-`.sarif` file. Deleting the output directory between runs is always safe;
-nothing reads it back except the tests.
+Every step is re-runnable; nothing in this item touches the filesystem at
+runtime, so there is no partial-write or cleanup story to manage. The proof
+sidecars cache their toolchains and are safe to re-run; if `make
+kani-brain-trust` is interrupted, re-run it (the install step is idempotent —
+note the warm-cache trap fixed during roadmap 6.4.6).
 
-The proof sidecars install their toolchains into a cache directory and are safe
-to re-run. If `make kani-brain-trust` is interrupted, re-run it; the install
-step is idempotent (note the warm-cache trap fixed during roadmap 6.4.6).
-
-To abandon the work entirely: `git checkout main -- docs/roadmap.md` and delete
-`crates/whitaker_brain_sarif/`, `verus/brain_trust_*.rs`, and the new Makefile
-targets. `EP-M1`'s changes to `whitaker_sarif` are independently valuable and
-can be kept.
+To abandon: `git checkout main -- docs/roadmap.md`, delete
+`common/src/brain_trust_sarif/` and `verus/brain_trust_fingerprint.rs`, and
+revert the script and `Makefile` entries. `EP-M1` through `EP-M4` are
+independently valuable shared-infrastructure improvements and can be kept.
 
 ## Artefacts and notes
 
-Illustrative shape of the emitted document, for one denied brain type finding:
+Illustrative shape of one emitted result, serialized:
 
 ```json
 {
-  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
   "version": "2.1.0",
   "runs": [
     {
       "tool": {
         "driver": {
-          "name": "whitaker-brain-trust",
+          "name": "whitaker_brain_trust",
           "version": "0.2.7",
-          "informationUri": "https://github.com/leynos/whitaker",
           "rules": [
             {
               "id": "WHK101",
               "name": "BrainType",
               "shortDescription": { "text": "Type has grown into a brain class" },
               "help": { "text": "Split the type along the suggested method clusters." },
-              "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/brain-trust-lints-design.md#brain_type-signals"
+              "helpUri": "https://github.com/leynos/whitaker/blob/main/docs/brain-trust-lints-design.md"
             }
           ]
         }
       },
-      "automationDetails": { "id": "whitaker/brain-trust/my_crate" },
       "results": [
         {
           "ruleId": "WHK101",
           "level": "error",
-          "message": {
-            "text": "`OrderProcessor` has WMC=118 and LCOM4=4, with 2 brain methods."
-          },
+          "message": { "text": "`OrderProcessor` has WMC=118 and LCOM4=4." },
           "locations": [
             {
               "physicalLocation": {
@@ -1202,19 +1151,16 @@ Illustrative shape of the emitted document, for one denied brain type finding:
               }
             }
           ],
-          "partialFingerprints": {
-            "whitakerBrainSubject": "6f1c…"
-          },
+          "partialFingerprints": { "whitakerBrainSubject/v1": "6f1c" },
           "properties": {
-            "whitakerBrainTrust": {
+            "whitaker": {
               "brainMethods": [
-                { "cognitiveComplexity": 41, "linesOfCode": 96, "name": "reconcile" },
-                { "cognitiveComplexity": 33, "linesOfCode": 88, "name": "settle" }
+                { "cognitiveComplexity": 41, "linesOfCode": 96, "name": "reconcile" }
               ],
-              "disposition": "deny",
+              "brainMethodsOmitted": 0,
               "foreignReach": 14,
+              "kind": "brainTrust",
               "lcom4": 4,
-              "notes": ["Consider extracting `reconcile` and `settle` into a helper struct."],
               "subjectKind": "type",
               "wmc": 118
             }
@@ -1226,261 +1172,195 @@ Illustrative shape of the emitted document, for one denied brain type finding:
 }
 ```
 
-The `properties.whitakerBrainTrust` keys are alphabetically ordered because
-`serde_json::Value::Object` is a `BTreeMap`. That ordering is load-bearing for
-determinism; do not enable `serde_json/preserve_order` anywhere in the
-workspace.
+Object keys are alphabetical because `serde_json::Value::Object` is a
+`BTreeMap`. That ordering is load-bearing; never enable
+`serde_json/preserve_order`.
 
 ## Interfaces and dependencies
 
-### New crate
-
-`crates/whitaker_brain_sarif/Cargo.toml`:
-
-```toml
-[package]
-name = "whitaker_brain_sarif"
-version = "0.2.7"
-edition = "2024"
-publish = false
-description = "Opt-in SARIF 2.1.0 emission for Whitaker brain trust findings"
-license.workspace = true
-repository.workspace = true
-
-[features]
-default = []
-test-support = []
-# Enables the `dylint.toml` configuration adapter, which requires the Dylint
-# driver environment. Off by default so the crate builds and tests standalone.
-dylint-config = ["dep:dylint_linting"]
-
-[dependencies]
-camino = { workspace = true }
-cap-std = { workspace = true }
-serde = { workspace = true }
-# Never enable `serde_json/preserve_order`: object key order is load-bearing
-# for byte-identical output.
-serde_json = { workspace = true }
-sha2 = { workspace = true }
-thiserror = { workspace = true }
-whitaker-common = { workspace = true }
-whitaker_sarif = { workspace = true }
-dylint_linting = { workspace = true, optional = true }
-
-[dev-dependencies]
-googletest = "0.15"
-insta = { workspace = true }
-mockall = { workspace = true }
-pretty_assertions = "1"
-proptest = { workspace = true }
-rstest = { workspace = true }
-rstest-bdd = { workspace = true }
-rstest-bdd-macros = { workspace = true }
-temp-env = { workspace = true }
-tempfile = { workspace = true }
-whitaker_test_macros = { workspace = true }
-
-[lints]
-workspace = true
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
-```
-
-Note: `googletest` and `pretty_assertions` are not yet in
-`[workspace.dependencies]`. Add them there at `EP-M4` with caret requirements
-and reference them as `{ workspace = true }`, matching the repository's
-dependency policy. Confirm `insta`, `mockall`, `proptest`, `tempfile`, and
-`temp-env` pins already exist before use.
-
-### Required signatures at the end of the work
-
-In `crates/whitaker_brain_sarif/src/domain/fingerprint.rs`:
+### Promoted into `whitaker_sarif`
 
 ```rust
+// crates/whitaker_sarif/src/fingerprint.rs
+
 /// Encodes components with an injective, length-prefixed framing.
 #[must_use]
 pub fn encode_components(components: &[&str]) -> Vec<u8>;
 
-/// Returns the lowercase hexadecimal SHA-256 fingerprint of a subject.
+/// Returns the lowercase hexadecimal SHA-256 fingerprint of the components.
 #[must_use]
-pub fn subject_fingerprint(
-    rule_id: &str,
-    file_uri: &str,
-    subject_kind: SubjectKind,
-    subject_name: &str,
-) -> String;
+pub fn fingerprint_hex(components: &[&str]) -> String;
 ```
 
-In `crates/whitaker_brain_sarif/src/domain/finding.rs`:
+```rust
+// crates/whitaker_sarif/src/model/location.rs
+
+/// A repository-root-relative, forward-slashed SARIF artefact URI.
+pub struct FileUri(String);
+
+impl TryFrom<&str> for FileUri { type Error = SarifError; /* ... */ }
+
+/// Converts a line-and-column span into a one-based SARIF region.
+#[must_use]
+pub fn span_to_region(span: SourceSpan) -> Region;
+
+/// Converts a byte range into a SARIF region, counting UTF-16 code units.
+///
+/// Moved here from `whitaker_clones_core::run0::span`.
+pub fn region_for_range(
+    subject_id: &str,
+    source_text: &str,
+    range: std::ops::Range<usize>,
+) -> Result<Region, SarifError>;
+```
 
 ```rust
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SubjectKind { Type, Trait }
+// crates/whitaker_sarif/src/rules.rs
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubjectRef {
-    kind: SubjectKind,
+pub const WHK101_ID: &str = "WHK101";
+pub const WHK102_ID: &str = "WHK102";
+
+#[must_use] pub fn whk101_rule() -> ReportingDescriptor;
+#[must_use] pub fn whk102_rule() -> ReportingDescriptor;
+#[must_use] pub fn brain_trust_rules() -> Vec<ReportingDescriptor>;
+
+/// Renamed from `all_rules`, which no longer described its contents.
+#[must_use] pub fn clone_detection_rules() -> Vec<ReportingDescriptor>;
+```
+
+```rust
+// crates/whitaker_sarif/src/whitaker_properties.rs
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum WhitakerProperties {
+    Clone(CloneProperties),
+    BrainTrust(BrainTrustProperties),
+}
+
+impl WhitakerProperties {
+    /// Wraps these properties under the `"whitaker"` key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SarifError::Serialization`] when serialization fails.
+    pub fn try_to_value(&self) -> crate::error::Result<Value>;
+}
+```
+
+### Added to `whitaker-common`
+
+```rust
+// common/src/brain_trust_sarif/finding.rs
+
+pub struct BrainTrustSubject {
+    kind: whitaker_common::decomposition_advice::SubjectKind,
     name: String,
-    file_uri: String,
+    file_uri: whitaker_sarif::FileUri,
     span: whitaker_common::span::SourceSpan,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BrainTrustFinding { /* private fields */ }
 
 impl BrainTrustFinding {
+    /// Builds a finding, or `None` when the disposition is `Pass`.
     #[must_use]
     pub fn from_brain_type(
-        diagnostic: &whitaker_common::BrainTypeDiagnostic,
-        subject: SubjectRef,
+        diagnostic: &crate::BrainTypeDiagnostic,
+        subject: BrainTrustSubject,
+        suggestions: &[crate::DecompositionSuggestion],
     ) -> Option<Self>;
 
     #[must_use]
     pub fn from_brain_trait(
-        diagnostic: &whitaker_common::BrainTraitDiagnostic,
-        subject: SubjectRef,
+        diagnostic: &crate::BrainTraitDiagnostic,
+        subject: BrainTrustSubject,
+        suggestions: &[crate::DecompositionSuggestion],
     ) -> Option<Self>;
 }
 ```
 
-In `crates/whitaker_brain_sarif/src/ports.rs`:
-
 ```rust
-/// Writes a completed SARIF log for one compilation unit.
-pub trait SarifSink {
-    /// # Errors
-    ///
-    /// Returns an error when the log cannot be serialized or written.
-    fn write(&self, unit: &UnitId, log: &SarifLog) -> Result<(), BrainSarifError>;
+// common/src/brain_trust_sarif/mode.rs
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BrainTrustSarifMode {
+    #[default]
+    Disabled,
+    Enabled,
 }
 
-/// Loads optional file-based SARIF settings.
-pub trait FileSettingsSource {
-    /// # Errors
-    ///
-    /// Returns an error when the configuration exists but cannot be parsed.
-    fn load(&self) -> Result<Option<FileSettings>, SettingsError>;
-}
-```
-
-In `crates/whitaker_brain_sarif/src/reporter.rs`:
-
-```rust
-pub struct BrainTrustSarifReporter<S: SarifSink> { /* private fields */ }
-
-impl<S: SarifSink> BrainTrustSarifReporter<S> {
+impl BrainTrustSarifMode {
     #[must_use]
-    pub fn new(settings: SarifSettings, sink: S) -> Self;
-
-    pub fn record_brain_type(
-        &mut self,
-        diagnostic: &whitaker_common::BrainTypeDiagnostic,
-        subject: SubjectRef,
-    );
-
-    pub fn record_brain_trait(
-        &mut self,
-        diagnostic: &whitaker_common::BrainTraitDiagnostic,
-        subject: SubjectRef,
-    );
-
-    /// # Errors
-    ///
-    /// Returns an error when the unit identifier is invalid or the sink fails.
-    pub fn finish(self, unit: &UnitId) -> Result<Option<Utf8PathBuf>, BrainSarifError>;
+    pub const fn is_enabled(self) -> bool { matches!(self, Self::Enabled) }
 }
 ```
-
-### Changes to `whitaker_sarif`
 
 ```rust
-// crates/whitaker_sarif/src/model/result.rs
-pub struct SarifResult {
-    // ...
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub partial_fingerprints: BTreeMap<String, String>,
-    // ...
-}
+// common/src/brain_trust_sarif/mapping.rs
 
-// crates/whitaker_sarif/src/model/descriptor.rs
-pub struct ReportingDescriptor {
-    // ...
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub help: Option<MultiformatMessageString>,
-}
-
-// crates/whitaker_sarif/src/model/run.rs
-pub struct RunAutomationDetails { pub id: String }
-
-pub struct Run {
-    // ...
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub automation_details: Option<RunAutomationDetails>,
-}
+/// Builds a SARIF run from brain trust findings, mirroring `emit_run0`.
+///
+/// Returns `Ok(None)` when the mode is disabled.
+///
+/// # Errors
+///
+/// Returns an error when a result cannot be constructed.
+pub fn emit_brain_trust_run(
+    mode: BrainTrustSarifMode,
+    findings: &[BrainTrustFinding],
+    tool_name: &str,
+    tool_version: &str,
+) -> Result<Option<whitaker_sarif::Run>, BrainTrustSarifError>;
 ```
+
+Note the `Option` here carries exactly one meaning — disabled. An enabled run
+with no findings returns `Ok(Some(run))` with an empty `results` array, so a
+future consumer can tell "clean" from "not asked".
+
+### The contract the future lint crates must satisfy
+
+A `LateLintPass` holds a `rustc_span::Span` and a `TyCtxt`. To build a
+`BrainTrustSubject` it must produce a repository-root-relative, forward-slashed
+path for `FileUri::try_from`, and a `SourceSpan` from the span's start and end
+line and column. Record this in the ADR; it is the seam roadmap 6.6.x inherits.
 
 ### Signposted documentation and skills
 
-Read before or during the work:
+Read before or during the work: `AGENTS.md`;
+`docs/brain-trust-lints-design.md`;
+`docs/whitaker-clone-detector-design.md` §SARIF schema and mapping, §Runs, and
+§CLI surface; `docs/whitaker-dylint-suite-design.md`;
+`docs/whitaker-cli-design.md` §Rule identifiers and §Configuration model;
+`docs/rust-testing-with-rstest-fixtures.md`;
+`docs/rstest-bdd-users-guide.md`; `docs/rust-doctest-dry-guide.md`;
+`docs/complexity-antipatterns-and-refactoring-strategies.md`;
+`docs/reliable-testing-in-rust-via-dependency-injection.md`;
+`docs/documentation-style-guide.md`; `docs/repository-layout.md`;
+`docs/contents.md`.
 
-- `AGENTS.md` — code style, dependency, error-handling, and testing policy.
-- `docs/brain-trust-lints-design.md` — the upstream design, especially §SARIF
-  output and §Diagnostic output.
-- `docs/whitaker-clone-detector-design.md` §Rules, §Result mapping, §Runs — the
-  precedent this plan follows and deviates from.
-- `docs/whitaker-dylint-suite-design.md` — suite-wide lint conventions.
-- `docs/rust-testing-with-rstest-fixtures.md` — fixture design and
-  parameterization.
-- `docs/rstest-bdd-users-guide.md` — the Gherkin runner used for the feature
-  files above.
-- `docs/rust-doctest-dry-guide.md` — keeping Rustdoc examples non-repetitive
-  while still exercising the API.
-- `docs/complexity-antipatterns-and-refactoring-strategies.md` — the
-  vocabulary the brain trust lints are built on.
-- `docs/reliable-testing-in-rust-via-dependency-injection.md` — the port and
-  double pattern used for the sink and the settings source.
-- `docs/documentation-style-guide.md` — ADR shape and Markdown rules.
-- `docs/repository-layout.md` and `docs/contents.md` — where new files are
-  registered.
-
-Skills to load:
-
-- `leta` for symbol navigation; prefer `leta show`, `leta refs`, and
-  `leta calls` over reading files or grepping for symbols.
-- `hexagonal-architecture` for the port and adapter boundaries; the point is to
-  keep the domain free of SARIF, configuration, and filesystem concerns, not to
-  add layers for their own sake.
-- `kani` for the collector harness, particularly the unwind off-by-one rule and
-  the heap-collection cliff.
-- `verus` for the two proofs, particularly triggers, `assert ... by { }`
-  scoping, and `broadcast use vstd::seq::group_seq_axioms;`.
-- `rust-unit-testing` for `rstest`, `googletest`, `pretty_assertions`, and
-  `insta` conventions.
-- `proptest` for generator design and shrinking discipline.
-- `rust-errors` for the `thiserror` enum shape at the crate boundary.
-- `arch-crate-design` for the new crate's feature flags and public surface.
-- `arch-decision-records` for the Y-statement ADR content.
-- `execplans` for keeping this document current.
+Skills to load: `leta` for symbol navigation (prefer `leta show`, `leta refs`,
+and `leta calls` over reading files or grepping for symbols);
+`hexagonal-architecture` for keeping the emitter's pure core free of
+configuration and I/O concerns — noting that with no adapters in this item the
+relevant guidance is boundary discipline, not a ports-and-adapters transplant;
+`verus` for VP-1, particularly triggers, `assert ... by { }` scoping, and
+`broadcast use vstd::seq::group_seq_axioms;`; `kani` for VP-2, particularly the
+unwind off-by-one rule and the heap-collection cliff; `rust-unit-testing` for
+`rstest`, `googletest`, `pretty_assertions`, and `insta`; `proptest` for
+generator design and shrinking; `rust-errors` for the `thiserror` boundary;
+`arch-crate-design` for the shared-crate surface; `arch-decision-records` for
+the ADR; and `execplans` for keeping this document current.
 
 ### External references
 
 - OASIS, *Static Analysis Results Interchange Format (SARIF) Version 2.1.0
-  Errata 01*,
-  <https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/sarif-v2.1.0-errata01-os-complete.html>.
-  Relevant sections: §3.27.17 `partialFingerprints`, §3.17 `runAutomationDetails`,
-  §3.49 `reportingDescriptor`.
-- GitHub, *SARIF support for code scanning*,
-  <https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support>.
-  Defines the ingested subset, the `automationDetails.id` category convention,
-  and confirms that only `primaryLocationLineHash` is read from
-  `partialFingerprints`.
-- GitHub, *SARIF results exceed one or more limits*,
-  <https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/troubleshoot-sarif-uploads/results-exceed-limit>.
-  Limits: 20 runs per file, 25,000 results per run (top 5,000 retained),
-  25,000 rules per run, 20 tags per rule. Per-unit files keep Whitaker well
-  inside these.
-- GitHub Changelog, *Code scanning will stop combining multiple SARIF runs
-  uploaded in the same SARIF file* (21 July 2025),
-  <https://github.blog/changelog/2025-07-21-code-scanning-will-stop-combining-multiple-sarif-runs-uploaded-in-the-same-sarif-file/>.
-  The reason this plan emits one run per file.
+  Errata 01*. Relevant sections: §3.27.16 `partialFingerprints` (the `/v<n>`
+  key-suffix convention), §3.49 `reportingDescriptor`, §3.14.6 `columnKind`.
+- GitHub, *SARIF support for code scanning* — the ingested subset, and
+  confirmation that only `primaryLocationLineHash` is read from
+  `partialFingerprints`. Whitaker's subject fingerprint is for its own
+  `deduplicate_results` and for future merge, not for that consumer.
+- GitHub, *SARIF results exceed one or more limits* — 20 runs per file, 25,000
+  results per run, 25,000 rules per run. A single brain trust run is well
+  inside these; whichever item takes on file emission must revisit them.
