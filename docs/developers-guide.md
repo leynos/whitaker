@@ -291,7 +291,6 @@ make check-fmt  # Verify formatting
 make fmt        # Apply formatting
 ```
 
-
 ## Mutation-testing workflow contract tests
 
 Whitaker runs scheduled, informational mutation testing through a thin caller
