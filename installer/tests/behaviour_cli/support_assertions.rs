@@ -20,6 +20,30 @@ fn assert_exit_status(cli_world: &CliWorld, expected_success: bool) {
     );
 }
 
+fn assert_error_output_is_shown(cli_world: &CliWorld, error_kind: &str, expected_error: &str) {
+    if cli_world.skip_assertions.get() {
+        return;
+    }
+
+    let output = get_output(cli_world);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !stderr.contains("Dry run - no files will be modified"),
+        "dry-run configuration output should not be printed on {error_kind} error, stderr: \
+         {stderr}"
+    );
+    assert!(
+        !stderr.contains("Crates to build:"),
+        "dry-run configuration output should not be printed on {error_kind} error, stderr: \
+         {stderr}"
+    );
+    assert!(
+        stderr.contains(expected_error),
+        "unexpected stderr: {stderr}"
+    );
+}
+
 pub(crate) fn assert_cli_exits_successfully(cli_world: &CliWorld) {
     assert_exit_status(cli_world, true);
 }
@@ -76,52 +100,18 @@ pub(crate) fn assert_cli_exits_with_error(cli_world: &CliWorld) {
 }
 
 pub(crate) fn assert_unknown_lint_message_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(
-        !stderr.contains("Dry run - no files will be modified"),
-        "dry-run configuration output should not be printed on unknown-lint error, stderr: \
-         {stderr}"
-    );
-    assert!(
-        !stderr.contains("Crates to build:"),
-        "dry-run configuration output should not be printed on unknown-lint error, stderr: \
-         {stderr}"
-    );
-    assert!(
-        stderr.contains("lint crate nonexistent_lint not found"),
-        "unexpected stderr: {stderr}"
+    assert_error_output_is_shown(
+        cli_world,
+        "unknown-lint",
+        "lint crate nonexistent_lint not found",
     );
 }
 
 pub(crate) fn assert_experimental_lint_opt_in_message_is_shown(cli_world: &CliWorld) {
-    if cli_world.skip_assertions.get() {
-        return;
-    }
-
-    let output = get_output(cli_world);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(
-        !stderr.contains("Dry run - no files will be modified"),
-        "dry-run configuration output should not be printed on experimental-lint error, stderr: \
-         {stderr}"
-    );
-    assert!(
-        !stderr.contains("Crates to build:"),
-        "dry-run configuration output should not be printed on experimental-lint error, stderr: \
-         {stderr}"
-    );
-    assert!(
-        stderr.contains(
-            "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
-        ),
-        "unexpected stderr: {stderr}"
+    assert_error_output_is_shown(
+        cli_world,
+        "experimental-lint",
+        "experimental lint crate rstest_helper_should_be_fixture requires --experimental",
     );
 }
 

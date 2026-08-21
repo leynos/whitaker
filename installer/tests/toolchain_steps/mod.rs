@@ -42,6 +42,49 @@ macro_rules! skip_if_needed {
     };
 }
 
+fn assert_toolchain_install_message_presence(
+    world: &ToolchainWorld,
+    expected_presence: bool,
+) -> Result<(), String> {
+    skip_if_needed!(world);
+
+    let output = get_combined_output_string(world)?;
+    let channel = world.pinned_channel.borrow().clone();
+    let output_lowercase = output.to_lowercase();
+    let channel_lowercase = channel.to_lowercase();
+    let expected_message = format!("toolchain {channel} installed successfully").to_lowercase();
+    let has_install_message = output_lowercase.contains(&expected_message)
+        || output_lowercase.contains(&channel_lowercase)
+            && output_lowercase.contains(TOOLCHAIN_INSTALLED_MARKER);
+
+    if has_install_message == expected_presence {
+        Ok(())
+    } else if expected_presence {
+        Err(format!(
+            "expected success marker for channel '{channel}' in output, got:\n{output}"
+        ))
+    } else {
+        Err(format!(
+            "expected no installation message for channel '{channel}' in output, got:\n{output}"
+        ))
+    }
+}
+
+fn assert_stderr_contains(
+    world: &ToolchainWorld,
+    expected: &str,
+    failure_message: impl FnOnce(&str) -> String,
+) -> Result<(), String> {
+    skip_if_needed!(world);
+
+    let stderr = get_stderr_string(world)?;
+    if stderr.contains(expected) {
+        Ok(())
+    } else {
+        Err(failure_message(&stderr))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------
@@ -160,37 +203,12 @@ pub fn then_dry_run_shows_toolchain(world: &ToolchainWorld) -> Result<(), String
 
 #[then("no toolchain installation message is shown")]
 pub fn then_no_install_message(world: &ToolchainWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-    let out = get_combined_output_string(world)?;
-    let channel = world.pinned_channel.borrow().clone();
-    let out_lc = out.to_lowercase();
-    let needle = format!("toolchain {channel} installed successfully").to_lowercase();
-    let has_install_message = out_lc.contains(&needle)
-        || out_lc.contains(&channel.to_lowercase()) && out_lc.contains(TOOLCHAIN_INSTALLED_MARKER);
-    if has_install_message {
-        return Err(format!(
-            "expected no installation message for channel '{channel}' in output, got:\n{out}"
-        ));
-    }
-    Ok(())
+    assert_toolchain_install_message_presence(world, false)
 }
 
 #[then("the toolchain installation message is shown")]
 pub fn then_install_message_shown(world: &ToolchainWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-    let out = get_combined_output_string(world)?;
-    let channel = world.pinned_channel.borrow().clone();
-    let out_lc = out.to_lowercase();
-    let needle = format!("toolchain {channel} installed successfully").to_lowercase();
-    let has_success_marker = out_lc.contains(&needle)
-        || (out_lc.contains("installed successfully") && out_lc.contains(&channel.to_lowercase()));
-    if has_success_marker {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected success marker for channel '{channel}' in output, got:\n{out}"
-        ))
-    }
+    assert_toolchain_install_message_presence(world, true)
 }
 
 #[then("installation succeeds or is skipped")]
@@ -248,28 +266,16 @@ pub fn then_cli_exits_with_error(world: &ToolchainWorld) -> Result<(), String> {
 
 #[then("the error mentions toolchain installation failure")]
 pub fn then_error_mentions_install_failure(world: &ToolchainWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-    let stderr = get_stderr_string(world)?;
-    if stderr.contains(TOOLCHAIN_ERROR_MARKER) {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected '{TOOLCHAIN_ERROR_MARKER}' in stderr: {stderr}"
-        ))
-    }
+    assert_stderr_contains(world, TOOLCHAIN_ERROR_MARKER, |stderr| {
+        format!("expected '{TOOLCHAIN_ERROR_MARKER}' in stderr: {stderr}")
+    })
 }
 
 #[then("the error includes the toolchain name")]
 pub fn then_error_includes_toolchain_name(world: &ToolchainWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-    let stderr = get_stderr_string(world)?;
-    if stderr.contains(FAKE_TOOLCHAIN) {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected toolchain name '{FAKE_TOOLCHAIN}' in error output, stderr: {stderr}"
-        ))
-    }
+    assert_stderr_contains(world, FAKE_TOOLCHAIN, |stderr| {
+        format!("expected toolchain name '{FAKE_TOOLCHAIN}' in error output, stderr: {stderr}")
+    })
 }
 
 #[then("the error output is minimal")]

@@ -114,6 +114,36 @@ fn get_output(world: &WorkflowWorld) -> Result<std::cell::Ref<'_, Output>, Strin
         .map_err(|_| String::from("CLI output not set; run the installer step first"))
 }
 
+fn require_successful_output(world: &WorkflowWorld, failure_prefix: &str) -> Result<(), String> {
+    skip_if_needed!(world);
+
+    let output = get_output(world)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{failure_prefix}, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    }
+}
+
+fn require_stderr_contains(
+    world: &WorkflowWorld,
+    expected: &str,
+    failure_prefix: &str,
+) -> Result<(), String> {
+    skip_if_needed!(world);
+
+    let output = get_output(world)?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains(expected) {
+        Ok(())
+    } else {
+        Err(format!("{failure_prefix}, stderr: {stderr}"))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
@@ -189,96 +219,48 @@ fn when_installer_cli_run(world: &WorkflowWorld) -> Result<(), String> {
 
 #[then("the CLI exits successfully")]
 fn then_cli_exits_successfully(world: &WorkflowWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-
-    let output = get_output(world)?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected success, stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ))
-    }
+    require_successful_output(world, "expected success")
 }
 
 #[then("installation succeeds or is skipped")]
 fn then_installation_succeeds_or_is_skipped(world: &WorkflowWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-
-    let output = get_output(world)?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "installation failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ))
-    }
+    require_successful_output(world, "installation failed")
 }
 
 #[then("dry-run output shows skip_deps is true")]
 fn then_skip_deps_is_true(world: &WorkflowWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-
-    let output = get_output(world)?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if stderr.contains("Skip deps: true") {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected skip_deps to be true in output, stderr: {stderr}"
-        ))
-    }
+    require_stderr_contains(
+        world,
+        "Skip deps: true",
+        "expected skip_deps to be true in output",
+    )
 }
 
 #[then("dry-run output shows no_update is true")]
 fn then_no_update_is_true(world: &WorkflowWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-
-    let output = get_output(world)?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if stderr.contains("No update: true") {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected no_update to be true in output, stderr: {stderr}"
-        ))
-    }
+    require_stderr_contains(
+        world,
+        "No update: true",
+        "expected no_update to be true in output",
+    )
 }
 
 #[then("dry-run output shows skip_wrapper is true")]
 fn then_skip_wrapper_is_true(world: &WorkflowWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-
-    let output = get_output(world)?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if stderr.contains("Skip wrapper: true") {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected skip_wrapper to be true in output, stderr: {stderr}"
-        ))
-    }
+    require_stderr_contains(
+        world,
+        "Skip wrapper: true",
+        "expected skip_wrapper to be true in output",
+    )
 }
 
 #[then("output includes DYLINT_LIBRARY_PATH instructions")]
 fn then_output_includes_library_path_instructions(world: &WorkflowWorld) -> Result<(), String> {
-    skip_if_needed!(world);
-
-    let output = get_output(world)?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if stderr.contains("DYLINT_LIBRARY_PATH") {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected DYLINT_LIBRARY_PATH instructions in output, stderr: {stderr}"
-        ))
-    }
+    require_stderr_contains(
+        world,
+        "DYLINT_LIBRARY_PATH",
+        "expected DYLINT_LIBRARY_PATH instructions in output",
+    )
 }
 
 // ---------------------------------------------------------------------------
