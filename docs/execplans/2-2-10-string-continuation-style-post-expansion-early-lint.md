@@ -242,8 +242,8 @@ prescribed approach.
 
 - **SURP-005: `LintStore::register_early_pass` exists and takes a
   `TyCtxt`-free factory.**
-  Observation:
-  `pub fn register_early_pass(&mut self, pass: impl Fn() -> EarlyLintPassObject + ...)`
+  Observation: `register_early_pass` takes
+  `impl Fn() -> EarlyLintPassObject`
   (`compiler/rustc_lint/src/context.rs:168`), alongside the public
   `early_passes` / `late_passes` fields.
   Impact: RFC 0002 §Suite integration's snippet compiles as written. The suite's
@@ -291,7 +291,8 @@ prescribed approach.
   evaluated value". See `DEC-007`.
 
 - **SURP-010: `log 0.4.33`'s facade macros capture `$($arg:tt)+`.**
-  Observation: `log::info!` matches `(logger: $logger:expr, target: $target:expr, $($arg:tt)+)`,
+  Observation: `log::info!` matches
+  `(logger: $logger:expr, target: $target:expr, $($arg:tt)+)`,
   `(target: $target:expr, $($arg:tt)+)`, `(logger: $logger:expr, $($arg:tt)+)`,
   and `($($arg:tt)+)`, forwarding to `log!` and then `__log!`; key-value fields
   are separated from the message by `;`
@@ -326,7 +327,7 @@ prescribed approach.
      `FormatArgsStorage`: an `EarlyLintPass` records `FormatArgs` nodes keyed by
      span into shared storage; a `LateLintPass` (which has `TyCtxt`) resolves
      identity, handles plain literals from HIR, and emits every diagnostic.
-     Most faithful to the RFC and to established prior art; costs a hand-written
+     Most faithful to the RFC and to established prior art; costs a handwritten
      two-pass registration in the lint crate and in the suite.
   Recommendation to the reviewer: option 3 if `EP-M0` shows that
   `log`/`tracing` invocations reach the AST as `ExprKind::FormatArgs` with
@@ -553,8 +554,9 @@ let shared_config = SharedConfig::load();
 self.localizer = get_localizer_for_lint(LINT_NAME, shared_config.locale());
 ```
 
-and resolves the primary/note/help triple with
-`safe_resolve_message_set(&localizer, MessageResolution { lint_name, key, args }, noop_reporter, fallback)`.
+and resolves the primary/note/help triple by passing a
+`MessageResolution { lint_name, key, args }` to
+`safe_resolve_message_set(&localizer, resolution, noop_reporter, fallback)`.
 Per-label strings use `localizer.attribute_with_args(LINT_NAME, "label", &args)`
 and must have Fluent's bidirectional isolation marks (`U+2068`, `U+2069`) and
 `U+FFFD` filtered out, exactly as `resolve_bump_label` does at
@@ -698,33 +700,33 @@ the check is not vacuous.
 
 ### Axioms (assumed, not verified)
 
-- **AX-1.** `rustc_ast::FormatArgs::is_source_literal == true` implies the
+- **AXIOM-1.** `rustc_ast::FormatArgs::is_source_literal == true` implies the
   format string was written as a direct literal in the source file and its
   recovered snippet matches the parsed input. Basis: `SURP-001`. This is a
   third-party interface contract; we do not verify rustc's internals. We *do*
   verify our repository-owned use of it: `EP-M3` includes UI fixtures for a
   `concat!()`-generated format string and an `include_str!()`-generated one,
   both of which must produce silence.
-- **AX-2.** `FormatArgs::span` is the format-string literal token's span, and
+- **AXIOM-2.** `FormatArgs::span` is the format-string literal token's span, and
   `Span::from_inner(InnerSpan::new(a, b))` yields the sub-span at byte offsets
   `a..b` from that token's start. Basis: `SURP-002`. Verified at the boundary by
   the byte-exact `.stderr` fixtures, whose caret positions would move if this
   were wrong.
-- **AX-3.** `FormatArgs::uncooked_fmt_str.1` is the raw source body between the
+- **AXIOM-3.** `FormatArgs::uncooked_fmt_str.1` is the raw source body between the
   quotes, unmodified by the `println!` newline append. Basis: `SURP-003`.
   Boundary-verified by `fail_println_join.rs`, whose expected suggestion would
   gain a stray `\n` fragment if this were false.
-- **AX-4.** Rust consumes, after a continuation escape's newline, every
+- **AXIOM-4.** Rust consumes, after a continuation escape's newline, every
   subsequent space, tab, and newline until the first other character. Basis:
   the Rust Reference §String literals, and rustc's `skip_ascii_whitespace`.
   This is the rule the scanner implements; `INV-SCAN-3` and its oracle test it.
-- **AX-5.** `concat!()` yields a `&'static str` and, when it supplies a format
+- **AXIOM-5.** `concat!()` yields a `&'static str` and, when it supplies a format
   string, disables implicit named capture. Basis: RFC-0002 §Source basis and
   rust-lang/rust's own UI test. Boundary-verified by
   `pass_implicit_format_capture.rs`.
-- **AX-6.** rustc normalizes CRLF to LF before lexing, so adapter-supplied
+- **AXIOM-6.** rustc normalizes CRLF to LF before lexing, so adapter-supplied
   literal bodies contain LF only. Basis: `SURP-007`.
-- **AX-7.** `LintStore::register_early_pass` causes the pass to run once per
+- **AXIOM-7.** `LintStore::register_early_pass` causes the pass to run once per
   crate, after expansion, before HIR lowering. Basis: `SURP-005` and
   `compiler/rustc_interface/src/passes.rs:400`.
 
@@ -861,7 +863,7 @@ the check is not vacuous.
   real compiled Rust.
 - Rationale: `LEM-REWRITE-1` is about source bytes; this is about *evaluated*
   bytes, and the bridge between them is the escaping rule, which is external
-  (`AX-4`). Verifying against an independent implementation of that rule, and
+  (`AXIOM-4`). Verifying against an independent implementation of that rule, and
   then grounding a few points in actual compiler output, covers both the
   general case and the "did we understand the rule at all" case.
 - Domain: generated bodies containing Unicode above the basic multilingual
