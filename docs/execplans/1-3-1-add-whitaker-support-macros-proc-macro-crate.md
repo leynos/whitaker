@@ -5,180 +5,197 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: BLOCKED
 
 This document must be maintained in accordance with `AGENTS.md`. The canonical
 plan file is
 `docs/execplans/1-3-1-add-whitaker-support-macros-proc-macro-crate.md`.
 
+## Why this plan is BLOCKED
+
+The prototyping milestone EP-M0 ran during planning, ahead of any production
+code, and falsified a premise of the governing decision record.
+
+**ADR 002's mandated expansion does not achieve ADR 002's own primary
+technical requirement.** The four attributes it specifies do not suppress
+`unexpected_cfgs`, because that diagnostic is resolved during cfg-expansion,
+before the annotated item's own lint levels are in scope. A _sibling_
+`#[allow(unexpected_cfgs)]` on the same item arrives too late. An attribute
+macro cannot place the `allow` in an enclosing scope without wrapping the item,
+which would change its visibility and name resolution.
+
+Two of the remaining three mandated attributes suppress diagnostics that the
+gated form never emits, and the third actively removes the only safety net that
+catches a misspelt lint name.
+
+The evidence is in `Artefacts and notes` §EP-M0 transcripts and is reproducible
+in under a minute. Per the ExecPlan standard, an implementation must not be
+quietly amended around evidence that the approved design cannot be followed.
+The proposed deviation is recorded as D-9 in `Decision log`, with three
+options and a recommendation. **This plan must not be implemented until one of
+those options is explicitly accepted.**
+
+Everything below is written for option D-9(b), the recommended direction, and
+is ready to execute the moment that option is accepted. Sections that would
+change materially under D-9(a) or D-9(c) are marked.
+
 ## Purpose / big picture
 
 Whitaker enforces project conventions through Dylint lint libraries. Dylint
-lints are unknown to `rustc` during ordinary compilation, so writing
-`#[expect(some_whitaker_lint)]` next to a deliberate exception produces
-`unknown_lints` noise in every non-Dylint build. The documented workaround is a
-four-attribute incantation that nobody remembers and that drifts between
-call-sites.
+lints are unknown to `rustc` during ordinary compilation, so a deliberate,
+narrowly-scoped exception cannot simply be written as
+`#[expect(some_whitaker_lint)]`.
 
-After this change, a maintainer can write one attribute:
+Dylint's answer is conditional compilation: for each lint library it loads it
+passes `--cfg=dylint_lib="LIBRARY_NAME"`, so an exception can be written as
+
+```rust,no_run
+#[cfg_attr(dylint_lib = "whitaker_suite", expect(no_std_fs_operations, reason = "legacy"))]
+fn read_legacy_config() {}
+```
+
+That form works, and — given one `check-cfg` entry in the consuming manifest —
+is completely warning-free. It is also verbose, easy to misspell, and drifts
+between call-sites.
+
+After this change a maintainer writes one attribute:
 
 ```rust,no_run
 #[whitaker_support_macros::dylint_expect(
-    lib = "whitaker_lints",
+    lib = "whitaker_suite",
     lints(no_std_fs_operations),
     reason = "legacy call-site; remove once the cap-std migration lands"
 )]
 fn read_legacy_config() {}
 ```
 
-and the expansion emits the full incantation, enabling `#[expect(...)]` only
-when Dylint is actually running the named library. Because `expect` (rather
-than `allow`) is used, the suppression announces itself the moment it becomes
-stale.
+Because `expect` rather than `allow` is used, the suppression announces itself
+the moment it becomes stale.
 
-Concretely, after this ExecPlan is complete:
+Concretely, once this plan is complete:
 
 1. `crates/whitaker_support_macros` exists as a `proc-macro = true` crate
    exporting one attribute macro, `dylint_expect`, accepting `lib = "..."`,
    `lints(path, ...)`, and an optional `reason = "..."`.
-2. Applying the attribute to a function, method, `impl` block, module,
-   `struct`, or trait compiles cleanly with warnings denied, under both
-   `cargo check` and `cargo clippy`.
-3. Malformed invocations produce precise, span-anchored compiler errors that
-   name the offending argument, proven by `trybuild` compile-fail fixtures with
-   byte-exact `.stderr` snapshots.
-4. The argument grammar's well-formedness and order-independence are discharged
-   by an unbounded Verus proof, an exhaustive enumeration test, and `proptest`
-   permutation properties.
-5. The crate is publish-ready and wired into the release pipeline.
-6. ADR 002 moves from `Proposed` to `Accepted`, and the users' guide,
-   developers' guide, repository layout, and Dylint suite design document all
-   describe the new attribute.
-7. `make check-fmt`, `make typecheck`, `make lint`, and `make test` all pass,
-   and `docs/roadmap.md` item 1.3.1 is marked done.
+2. The expansion is the `cfg_attr` gate and nothing else, so a misspelt lint
+   name still trips `unknown_lints` inside a Dylint run.
+3. The workspace manifest carries `cfg(dylint_lib, values(any()))` in its
+   `check-cfg` list, and that one line is documented as the prerequisite for
+   warning-free use, in this workspace and downstream.
+4. Malformed invocations produce precise, span-anchored errors, proven by
+   `trybuild` compile-fail fixtures with reviewed `.stderr` snapshots.
+5. The crate is publish-ready and wired into the release pipeline, published
+   last so it cannot strand the crates users actually consume.
+6. ADR 002 is amended and moved to `Accepted`; `docs/repository-layout.md` and
+   `docs/whitaker-dylint-suite-design.md` are updated; `docs/roadmap.md` 1.3.1
+   is marked done.
+7. `make check-fmt`, `make typecheck`, `make lint`, and `make test` all pass.
 
-Note the deliberate spelling of the attribute path during this milestone.
-ADR 002 specifies the eventual call-site spelling as
-`#[whitaker_support::dylint_expect(...)]`, but the `whitaker_support` facade
-crate is roadmap item 1.3.2. Within 1.3.1 the macro is reached at
-`#[whitaker_support_macros::dylint_expect(...)]`. This is not a compatibility
-shim: it is the crate's own real path, and 1.3.2 adds the facade re-export
-without changing anything delivered here.
+Note the attribute path. ADR 002 specifies the eventual spelling as
+`#[whitaker_support::dylint_expect(...)]`, but the `whitaker_support` facade is
+roadmap item 1.3.2. Within 1.3.1 the macro is reached at its own real path,
+`#[whitaker_support_macros::dylint_expect(...)]`. That is not a compatibility
+shim; 1.3.2 adds the facade re-export without changing anything delivered here.
 
 ## Context and orientation
 
 Assume no prior knowledge of this repository.
 
-### What Dylint is, and why this is hard
+### The four diagnostics, and which actually fire
 
-Dylint is a tool that loads out-of-tree lint libraries into the Rust compiler.
-A Dylint lint such as `no_std_fs_operations` only exists while Dylint is
-driving the compiler. During an ordinary `cargo check`, `rustc` has never heard
-of it, so `#[expect(no_std_fs_operations)]` triggers the built-in
-`unknown_lints` diagnostic.
+ADR 002 §Context names three diagnostics that get in the way. EP-M0 measured
+all of them against this workspace's real lint policy. The results are the
+foundation of this plan, so they are stated here rather than buried:
 
-Dylint's answer is conditional compilation. For every lint library it loads, it
-passes `--cfg=dylint_lib="LIBRARY_NAME"` to `rustc`. Code can therefore write:
+| Diagnostic                                | Level here                                                    | Fires on the bare `cfg_attr` gate?                                                          |
+| ----------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `unexpected_cfgs`                         | `warn` in `[workspace.lints.rust]`, promoted by `-D warnings` | **Yes** — and only a manifest `check-cfg` entry or an enclosing-scope `allow` suppresses it |
+| `unknown_lints`                           | `deny` in `[workspace.lints.rust]`                            | **No** outwith Dylint; **yes** inside a Dylint run if the lint name is wrong                |
+| `clippy::allow_attributes`                | `deny` in `[workspace.lints.clippy]`                          | **No** — there are no `allow` attributes to lint                                            |
+| `clippy::allow_attributes_without_reason` | `deny` in `[workspace.lints.clippy]`                          | **No** — same reason                                                                        |
 
-```rust,no_run
-#[cfg_attr(dylint_lib = "whitaker_lints", expect(no_std_fs_operations))]
-fn f() {}
-```
+_Table 1: Which diagnostics the gated form actually produces._
 
-The `expect` exists only when Dylint is running that library. Three further
-diagnostics get in the way, and all three are denied in this workspace:
-
-- `unexpected_cfgs` (root `Cargo.toml`, `[workspace.lints.rust]`, configured
-  with `check-cfg = ['cfg(kani)']`) fires because `dylint_lib` is not an
-  expected cfg key here.
-- `clippy::allow_attributes` (root `Cargo.toml`, `[workspace.lints.clippy]`,
-  level `deny`) fires on `#[allow(...)]` attributes, which the incantation
-  needs.
-- `clippy::allow_attributes_without_reason` (same stanza, level `deny`)
-  requires every `allow` to carry a `reason = "..."`.
-
-`unknown_lints` is also set to `deny` at `[workspace.lints.rust]`. Item-level
-lint attributes override manifest levels, so an item-scoped
-`#[allow(unknown_lints, reason = "...")]` still works.
-
-The macro's job is to emit all of this correctly, once, from one legible
-call-site.
+Two consequences follow, and they drive the whole design. First, only
+`unexpected_cfgs` is a real problem, and a macro cannot solve it. Second,
+`unknown_lints` firing inside a Dylint run is not an obstacle — it is the only
+mechanism that catches a misspelt lint name, and suppressing it would make
+every typo a silent no-op.
 
 ### Key files a newcomer needs
 
 - `docs/adr-002-dylint-expect-attribute-macro.md` — the governing decision.
-  Read §Decision outcome / proposed direction and §Functional requirements
-  before writing any code. It specifies the crate name, the argument shape, and
-  the exact set of attributes the expansion must emit.
-- `docs/roadmap.md` lines 28–47 — the 1.3.x task group. 1.3.1 is this plan;
-  1.3.2 adds the `whitaker_support` facade; 1.3.3 adds cross-configuration
+  Read §Decision outcome / proposed direction, §Functional requirements, and
+  §Known risks. Note that D-9 proposes amending it.
+- `docs/roadmap.md` lines 28–47 — the 1.3.x group. 1.3.1 is this plan; 1.3.2
+  adds the `whitaker_support` facade; 1.3.3 adds cross-configuration
   compatibility coverage; 1.3.4 completes the narrative documentation.
-- `crates/whitaker_test_macros/` — the only existing `proc-macro = true` crate
-  in the workspace, and the manifest precedent to follow. It is 32 lines, has
-  no tests of its own, and ignores its attribute arguments entirely, so it
-  offers no precedent for argument parsing or diagnostics.
+- `crates/whitaker_test_macros/` — the only other `proc-macro = true` crate in
+  the workspace, and the manifest precedent. Thirty-two lines; ignores its
+  attribute arguments entirely, so no precedent for parsing or diagnostics.
+  See `Surprises & discoveries` S-3: its emitted prelude now trips a Clippy
+  lint that did not exist when it was written.
 - `Cargo.toml` (root) — `members = ["common", "crates/*", "installer",
-  "suite"]`. A new directory under `crates/` joins the workspace automatically;
-  no `members` edit is required. `[workspace.dependencies]` (lines 12–66) is
-  where shared version pins live. `[workspace.lints.*]` (lines 105 onward) is
-  the lint policy the expansion must satisfy.
-- `Makefile` — `WHITAKER_PACKAGES` (line 81) enumerates the crates the Whitaker
-  Dylint suite lints. `typecheck` (223–224), `lint-clippy` (179–181), and
-  `test` (92–139) all operate workspace-wide and need no per-crate edit.
+  "suite"]`, so a new directory under `crates/` joins the workspace
+  automatically. `[workspace.lints.rust]` line 180 holds the `check-cfg` array
+  this plan extends.
+- `Makefile` — `WHITAKER_PACKAGES` (line 81) lists crates the Whitaker suite
+  lints. `typecheck` (223–224), `lint-clippy` (179–181), and `test` (92–139)
+  are workspace-wide and need no per-crate edit. `publish-check` (316–348) is
+  **not** a quick packaging check — see `Risks` R-7.
+- `.config/nextest.toml` line 46 — the `serial-dylint-ui` override matches
+  `binary(ui) & test(=ui)`, which the obvious naming for a trybuild harness
+  would collide with. See R-8.
 - `.github/workflows/ci.yml` line 160 and `.github/workflows/release.yml`
-  lines 334–339 — the two places crates are enumerated for packaging and
-  publishing.
-- `verus/` and `scripts/run-verus.sh` — the Verus proof sidecar. Proof files
-  live at the repository root under `verus/`, outside the Cargo workspace, and
-  are grouped by `proof_files_for_group` in the script.
+  lines 334–341 — the two places crates are enumerated for packaging and
+  publishing. The publish step runs under `set -euxo pipefail` with no
+  per-crate guard.
 - `rust-toolchain.toml` — pinned to `nightly-2026-05-28`.
 
 ### Terms defined
 
 - **Attribute macro**: a procedural macro invoked as `#[name(args)] item`. It
-  receives the argument tokens and the item tokens, and returns replacement
+  receives the argument tokens and the item tokens and returns replacement
   tokens.
-- **Pre-expansion lint**: a lint that runs before macro expansion. `cfg_attr`
-  gating cannot help such a lint, because the gating has not been applied when
-  the lint runs. ADR 002 §Known risks names this as an accepted limitation.
-- **`expect` versus `allow`**: `#[allow(L)]` silences `L` forever.
-  `#[expect(L)]` silences `L` but emits `unfulfilled_lint_expectations` if `L`
+- **Pre-expansion lint**: a lint running before macro expansion, which
+  `cfg_attr` gating cannot help. ADR 002 §Known risks accepts this limitation.
+- **`expect` versus `allow`**: `#[allow(L)]` silences `L` forever;
+  `#[expect(L)]` silences it but emits `unfulfilled_lint_expectations` if `L`
   never fires, so stale suppressions surface.
-- **Sidecar proof**: a Verus source file under `verus/` that models repository
-  logic. Verus compiles its own files and cannot `use` crate modules, so the
-  model is kept in step with the implementation by review.
+- **Silent no-op**: a `dylint_expect` attribute that compiles cleanly and
+  suppresses nothing, because the `lib` value or a lint name is wrong. Three
+  independent routes to this exist; see R-2.
 
 ## Conformance basis
 
 - Governing decision record: `docs/adr-002-dylint-expect-attribute-macro.md`,
-  as at commit `02e6c1c` (status `Proposed` at plan authoring time; this plan
-  moves it to `Accepted`).
+  as at commit `02e6c1c`, status `Proposed`. **D-9 proposes amending §Options
+  considered, §Decision outcome, and §Known risks before implementation.**
 - Roadmap: `docs/roadmap.md` §1.3, item 1.3.1.
 - Governing standards: `AGENTS.md`, `docs/documentation-style-guide.md`,
   `docs/rust-testing-with-rstest-fixtures.md`,
-  `docs/rust-doctest-dry-guide.md`, `docs/rstest-bdd-users-guide.md`,
+  `docs/rust-doctest-dry-guide.md`,
   `docs/complexity-antipatterns-and-refactoring-strategies.md`.
-- There is no Terms of Reference artefact for this work. ADR 002 is the sole
-  upstream requirements source; do not invent a higher-level document.
+- There is no Terms of Reference artefact. ADR 002 is the sole upstream
+  requirements source; none has been invented.
 
-Traced requirement identifiers are taken from ADR 002 §Functional requirements
-and §Technical requirements, which are unnumbered in the source. This plan
-assigns stable local identifiers and states the source sentence for each, so
-the mapping is auditable.
+ADR 002's requirements are unnumbered in the source, so this plan assigns local
+identifiers and quotes the source sentence for each, keeping the mapping
+auditable.
 
-| Identifier    | ADR 002 source                                                             |
-| ------------- | -------------------------------------------------------------------------- |
-| ADR002-FR-1   | "Provide an item attribute usable on functions, impl blocks, modules, and other Rust items." |
-| ADR002-FR-2   | "Support one or multiple lint names per annotation."                       |
-| ADR002-FR-3   | "Support an optional human-readable reason."                               |
-| ADR002-FR-4   | "Enable `#[expect(...)]` only when Dylint runs the specified lint library." |
-| ADR002-TR-1   | "Avoid warnings in non-Dylint builds" (`unknown_lints`, `unexpected_cfgs`, `clippy::allow_attributes`). |
-| ADR002-TR-2   | "Keep the macro's expansion explicit and reviewable."                      |
-| ADR002-TR-3   | "Maintain a clear separation between proc-macro code and lint implementation code." |
-| ADR002-TR-4   | "Document limitations for 'pre-expansion' lints."                          |
-| ADR002-MIG-1  | §Migration plan phase 1: "Add `crates/whitaker_support_macros` with the proc-macro implementation." |
+| Identifier   | ADR 002 source                                                                                      |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| ADR002-FR-1  | "Provide an item attribute usable on functions, impl blocks, modules, and other Rust items."        |
+| ADR002-FR-2  | "Support one or multiple lint names per annotation."                                                |
+| ADR002-FR-3  | "Support an optional human-readable reason."                                                        |
+| ADR002-FR-4  | "Enable `#[expect(...)]` only when Dylint runs the specified lint library."                         |
+| ADR002-TR-1  | "Avoid warnings in non-Dylint builds."                                                              |
+| ADR002-TR-2  | "Keep the macro's expansion explicit and reviewable."                                               |
+| ADR002-TR-3  | "Maintain a clear separation between proc-macro code and lint implementation code."                 |
+| ADR002-TR-4  | "Document limitations for 'pre-expansion' lints."                                                   |
+| ADR002-MIG-1 | §Migration plan phase 1: "Add `crates/whitaker_support_macros` with the proc-macro implementation." |
 
-_Table 1: Local identifiers assigned to ADR 002's unnumbered requirements._
+_Table 2: Local identifiers assigned to ADR 002's unnumbered requirements._
 
 Trace chains:
 
@@ -186,542 +203,490 @@ Trace chains:
 ADR002-FR-1 -> EP-M3 -> crates/whitaker_support_macros/tests/applies_to_items.rs
 ADR002-FR-2 -> EP-M2 -> expand::tests::preserves_lint_order_and_multiplicity
 ADR002-FR-3 -> EP-M2 -> expand::tests::reason_is_propagated_into_expect
-ADR002-FR-4 -> EP-M2 -> snapshots/dylint_expect@cfg_attr_gate.snap
-ADR002-TR-1 -> EP-M3 -> make lint (clippy, warnings denied) over the new crate
+ADR002-FR-4 -> EP-M2 -> src/expand/snapshots/*cfg_attr_gate*.snap
+ADR002-TR-1 -> EP-M3 -> make lint, contrasted against the EP-M0 transcript
 ADR002-TR-2 -> EP-M2 -> insta snapshots of every expansion variant
-ADR002-TR-3 -> EP-M1 -> crate layout review: only src/lib.rs names `proc_macro`
-ADR002-TR-4 -> EP-M5 -> docs/users-guide.md, docs/developers-guide.md
+ADR002-TR-3 -> EP-M1 -> only src/lib.rs names `proc_macro`
+ADR002-TR-4 -> 1.3.4 -> deferred by D-10
 ADR002-MIG-1 -> EP-M1 -> cargo metadata lists whitaker_support_macros
-INV-SHAPE-1 -> EP-M2 -> verus/whitaker_support_dylint_expect_args.rs
-INV-SHAPE-2 -> EP-M2 -> args::grammar::tests::exhaustive_key_sequences_to_length_four
+INV-SHAPE   -> EP-M2 -> keys::tests::exhaustive_key_sequences_to_length_four
 ```
 
 ## Constraints
 
-These are hard invariants. Violation requires escalation, not a workaround.
+Hard invariants. Violation requires escalation, not a workaround.
 
-- The macro's public argument surface is fixed by ADR 002: `lib = "..."`
-  (string literal), `lints(path, ...)` (one or more), optional
-  `reason = "..."`. Do not add, rename, or reorder these.
-- The expansion must emit exactly the attribute set ADR 002 §Decision outcome
-  lists: `allow(clippy::allow_attributes)`, `allow(unknown_lints)`,
-  `allow(unexpected_cfgs)`, and `cfg_attr(dylint_lib = "...", expect(...))`.
-  Adding `reason = "..."` to the three `allow` attributes is a required
-  addition (see `Decision log`, D-4); adding anything else is not.
+- The macro's argument surface is fixed by ADR 002: `lib = "..."` (string
+  literal), `lints(path, ...)` (one or more), optional `reason = "..."`. Do not
+  add, rename, or reorder these.
+- The expansion emits **only** the `cfg_attr(dylint_lib = "...", expect(...))`
+  gate. It must not emit `allow(unknown_lints)`, because that converts every
+  misspelt lint name into a silent no-op. _This constraint is contingent on
+  D-9(b) being accepted; under D-9(a) it is replaced by ADR 002's four-attribute
+  set._
 - Only `crates/whitaker_support_macros/src/lib.rs` may name the `proc_macro`
-  crate. Every other module operates on `proc_macro2` and `syn` types so that
-  it is unit-testable outside a compiler invocation. This is the ADR002-TR-3
-  boundary.
+  crate. Every other module operates on `proc_macro2` and `syn` types so it is
+  callable from a plain unit test. This is the ADR002-TR-3 boundary.
 - No file may exceed 400 lines (`AGENTS.md`).
-- The `mod.rs` module-file style is required: `clippy::self_named_module_files`
-  is denied workspace-wide, so a directory module `args/` must contain
-  `args/mod.rs`, never `args.rs` beside it.
 - `clippy::unwrap_used`, `clippy::expect_used`, `clippy::indexing_slicing`, and
-  `clippy::panic_in_result_fn` are denied. Proc-macro code must return
-  `syn::Result` and convert to `compile_error!` at the single adapter boundary.
+  `clippy::panic_in_result_fn` are denied. The macro returns `syn::Result` and
+  converts to `compile_error!` at the single adapter boundary.
 - `unsafe_code` is forbidden; `missing_docs` and
   `rustdoc::missing_crate_level_docs` are denied.
 - Do not modify any existing lint crate, `common/`, `suite/`, `installer/`, or
-  `src/`. This plan adds one crate and edits manifests, workflows, the Verus
-  sidecar, and documentation only.
+  `src/`. This plan adds one crate and edits manifests, workflows, and
+  documentation only. The single exception is `crates/whitaker_test_macros`,
+  per D-8.
 - Comments and documentation use en-GB-oxendict spelling. Markdown prose wraps
   at 80 columns; code blocks at 120.
-- Do not mutate the parent process environment in tests. Where a test needs a
-  different environment, set it on a child process.
-- Use the shared default Cargo cache. Do not create an isolated `CARGO_HOME`.
+- Do not mutate the parent process environment in tests.
+- Use the shared default Cargo cache; do not create an isolated `CARGO_HOME`.
 
 ## Tolerances (exception triggers)
 
-- Scope: if implementation requires touching more than 25 files or more than
-  1200 net lines, stop and escalate.
-- Interface: if the ADR 002 argument surface or the mandated expansion set must
-  change, stop and escalate — that is an ADR amendment, not an implementation
-  detail.
-- Dependencies: the plan already adds `syn`, `quote`, `proc-macro2`,
-  `googletest`, and `pretty_assertions`. Any further new external dependency
-  requires escalation.
-- Verification: if the Verus proof for INV-SHAPE-1 cannot be discharged within
-  6 attempts, stop and escalate with the failing goal, rather than weakening the
-  lemma.
-- Iterations: if `make check-fmt`, `make typecheck`, `make lint`, or `make test`
-  still fail after 3 targeted fix attempts on the same milestone, stop and
-  escalate with the `tee`'d log path.
-- Prototype outcome: if EP-M0 shows that `#[expect(...)]` cannot work for
-  Dylint lints at all, stop and escalate. That falsifies ADR 002 §Decision
-  outcome and requires an ADR amendment before any further work.
-- Ambiguity: if two readings of ADR 002 lead to materially different
+- Scope: more than 20 files or 900 net lines — stop and escalate.
+- Interface: any change to the ADR 002 argument surface — stop and escalate.
+- Dependencies: the plan adds `syn`, `quote`, and `proc-macro2` only. Any
+  further dependency — including `googletest` and `pretty_assertions`, which
+  D-11 removes from the earlier draft — requires escalation.
+- Iterations: if any gate still fails after 3 targeted fix attempts on one
+  milestone, stop and escalate with the `tee`'d log path.
+- Ambiguity: if two readings of the amended ADR 002 give materially different
   expansions, present both with trade-offs rather than choosing silently.
+- Deviation: if implementation evidence contradicts the amended ADR 002 again,
+  set status `BLOCKED` and escalate. Do not amend the implementation around it.
 
 ## Risks
 
-- Risk: `#[expect(LINT)]` may not work for Dylint-registered lints. Dylint's
-  own documentation consistently demonstrates `allow`, never `expect`, and a
-  documentation query returned no evidence that `unfulfilled_lint_expectations`
-  fires correctly for out-of-tree lints. ADR 002's entire value proposition
-  depends on `expect` working.
+- **R-1 — `#[expect(L)]` may not work for Dylint-registered lints.** ADR 002's
+  entire value proposition depends on it, and Dylint's documentation
+  consistently demonstrates `allow`, never `expect`.
   Severity: high. Likelihood: medium.
-  Mitigation: EP-M0 is a prototyping milestone that answers this empirically
-  before any production code is written. If `expect` does not work, escalate;
-  do not silently substitute `allow`.
+  Mitigation: EP-M0 probe 1 remains **open**. It cannot be answered with plain
+  `rustc`, because it requires a real Dylint session with a registered lint.
+  It must be run before EP-M2 closes. If `expect` does not work, escalate — do
+  not silently substitute `allow`.
 
-- Risk: `#[allow(clippy::allow_attributes, reason = "...")]` may not suppress
-  `clippy::allow_attributes` on its own attribute list, producing a
-  self-referential warning that makes the expansion un-lintable.
+- **R-2 — three independent routes to a silent no-op.** A misspelt lint name, a
+  `lib` value naming a library the consumer did not load, or a `lib` written
+  with hyphens rather than underscores all produce an attribute that compiles
+  cleanly and suppresses nothing.
+  Severity: high. Likelihood: high once adoption begins.
+  Mitigation: not emitting `allow(unknown_lints)` closes the first route inside
+  a Dylint run — that is the main reason D-9(b) is recommended. The other two
+  cannot be closed by a macro: they need a lint that inspects call-sites
+  against loaded libraries and registered lint names. Three of the six
+  reviewers converged independently on this. Book it as roadmap 1.3.5 before
+  ADR 002 phase 3 adoption makes the attribute widespread. Meanwhile the wrong
+  `lib` case fails closed — the underlying lint fires and CI goes red.
+
+- **R-3 — Whitaker ships two deployment modes, and one `lib` cannot name
+  both.** The suite is published both as an aggregated `whitaker_suite` cdylib
+  and as per-lint libraries. Which `dylint_lib` cfg is set depends on what the
+  consumer installed, so a suppression written for one is inert for the other.
+  Severity: medium. Likelihood: high.
+  Mitigation: implement the scalar `lib = "..."` form only, but reserve the
+  additive escape hatch now by specifying that the `Lib` key may later carry
+  either `lib = "x"` or `lib("a", "b")`. Because the key-shape policy quantifies
+  over keys and not payloads, that extension costs nothing later, whereas a
+  fourth `libs` key would perturb the "exactly one `Lib`" rule. Record the
+  reservation in ADR 002 §Outstanding decisions at EP-M5.
+
+- **R-4 — publishing a new, unproven crate first in an all-or-nothing step.**
+  `release.yml` runs its publish block under `set -euxo pipefail` with no
+  per-crate guard. A failure on the new crate aborts the step, so
+  `whitaker-common` and `whitaker-installer` never publish, and crates.io
+  publishes cannot be undone.
   Severity: high. Likelihood: medium.
-  Mitigation: EP-M0 probes this directly. Contingency, in preference order:
-  (a) reorder so the suppressing attribute precedes the others; (b) collapse
-  the three `allow` attributes into one; (c) escalate, because switching to
-  `expect(clippy::allow_attributes)` changes the ADR-mandated expansion set.
+  Mitigation: publish `whitaker_support_macros` **last**, and guard each
+  publish so an already-uploaded version is skipped rather than fatal. Both
+  names are currently free on crates.io — `whitaker_support_macros` and
+  `whitaker_support` return 404 against the registry API, with `whitaker-common`
+  returning 200 as a control.
 
-- Risk: emitting `#[allow(unknown_lints)]` unconditionally masks a genuine
-  typo. If a maintainer misspells a lint name, the `expect` silently does
-  nothing and the `unknown_lints` diagnostic that would have caught it is
-  suppressed. ADR 002 §Known risks names the adjacent `lib`-mismatch case but
-  not this one.
+- **R-5 — version drift across ~20 hardcoded manifests.** There is no bump
+  tooling in `scripts/`, and `release.yml` verifies the tag against
+  `whitaker-installer` only. Missing the new crate in a bump triggers R-4 on a
+  release that cannot be retried cleanly.
   Severity: medium. Likelihood: medium.
-  Mitigation: ADR 002 mandates the attribute, so emit it. Document the hazard
-  in the users' guide and developers' guide as part of EP-M5, and record it in
-  ADR 002 §Known risks when moving the status to `Accepted`. Note that the
-  `unfulfilled_lint_expectations` diagnostic does not rescue this case, because
-  a misspelled lint never registers an expectation.
+  Mitigation: use `version.workspace = true` in the new manifest so there is
+  one fewer place to drift, and extend the tag-version check to every
+  publishable crate.
 
-- Risk: Kani cannot compile a `proc-macro = true` crate, removing bounded model
-  checking as an option for the in-crate grammar policy.
+- **R-6 — the crate is published before it has ever been compiled under
+  Dylint.** D-10 defers the Dylint-run configuration to roadmap 1.3.3, so every
+  expansion obligation in 1.3.1 is self-referential: the snapshots assert that
+  the macro emits what the macro emits.
+  Severity: medium. Likelihood: high.
+  Mitigation: R-1's probe is the minimum. Prefer completing roadmap 1.3.3
+  before the first release tag that would publish this crate; the release
+  wiring is inert until then, so this costs nothing to honour.
+
+- **R-7 — `make publish-check` is not a packaging check.** It adds rustup
+  components, builds the workspace, runs the entire nextest suite, installs
+  cargo-dylint, clones the repository, and builds all ten lint crates in
+  release into a cold target directory. Budget 20–40 minutes.
   Severity: low. Likelihood: high.
-  Mitigation: EP-M0 confirms this with a one-command probe. The fallback is
-  strictly stronger for this obligation than a bounded Kani run would be: the
-  argument-key alphabet has three symbols, so an exhaustive enumeration test
-  over all sequences to length 4 (121 cases) is a complete decision procedure
-  within that bound, and the Verus proof covers the unbounded case. See
-  `Verification plan`, D-6.
+  Mitigation: use `cargo package -p whitaker_support_macros --allow-dirty`
+  (10–20 s) for the EP-M4 loop. The `ci.yml` addition itself is cheap.
 
-- Risk: publishing wiring lands before the `whitaker_support` facade exists, so
-  the first published version of `whitaker_support_macros` has no companion.
+- **R-8 — the trybuild harness would silently join a serial test group.**
+  `.config/nextest.toml` line 46 matches `binary(ui) & test(=ui)`, which the
+  obvious `tests/ui.rs` with `fn ui()` satisfies. It would inherit
+  `max-threads = 1` and two exponential retries, so a legitimately failing
+  `.stderr` costs three full trybuild runs before reporting.
   Severity: low. Likelihood: high.
-  Mitigation: this is intended and harmless — the macro crate is usable on its
-  own at its own path. `release.yml` must publish `whitaker_support_macros`
-  before any future crate that depends on it; order the step accordingly now.
+  Mitigation: name the harness function something other than `ui`, or add an
+  explicit override with `retries = 0`. Decide deliberately, do not inherit.
 
-- Risk: `cargo package` verification fails because a test fixture confuses the
-  packaging build.
+- **R-9 — snapshot brittleness.** Raw `TokenStream::to_string()` output is
+  sensitive to `quote` spacing.
   Severity: low. Likelihood: low.
-  Mitigation: no nested `Cargo.toml` is committed anywhere under the new crate.
-  EP-M4 runs `make publish-check PUBLISH_PACKAGES="whitaker_support_macros"`
-  explicitly to prove packaging works.
-
-- Risk: `insta` snapshots of token streams are brittle against `prettyplease`
-  or `quote` formatting changes.
-  Severity: low. Likelihood: low.
-  Mitigation: snapshot the parsed-and-reprinted attribute list via a stable
-  normalizer rather than raw `TokenStream::to_string()` output, and pin the
-  normalizer in one helper so a formatting change is a one-line re-bless.
+  Mitigation: snapshot a normalized rendering through one helper, so a
+  formatting change is a one-line re-bless.
 
 ## Verification plan
 
-The implementation is decomposed specifically so that the interesting
-obligations land on a pure function over a three-symbol alphabet, rather than
-on token trees. That decomposition is the point: token-tree properties are
-verified by example and snapshot, and the one genuinely general property is
-verified by proof.
+The earlier draft carried a Verus sidecar proof, a permutation property test,
+seven BDD scenarios, and two new assertion crates. D-11 removes all of them.
+The reasoning is recorded here rather than in a footnote, because the removal
+is the single largest change in this revision.
+
+### Why the Verus obligation was cut
+
+The argument-key alphabet has three symbols, and a well-shaped sequence has
+exactly one `Lib`, exactly one `Lints`, and at most one `Reason`. The longest
+accepting sequence therefore has length 3. By the pigeonhole principle any
+sequence of length 4 or more contains a repeated symbol, hence a duplicate key,
+hence is rejected.
+
+An exhaustive enumeration to length 4 is consequently not merely "complete
+within a bound" — it is a **total decision procedure over the infinite
+domain**, at 1 + 3 + 9 + 27 + 81 = 121 cases and sub-millisecond cost. Order
+independence follows immediately, because counting is order-independent.
+
+The proposed Verus lemma would have modelled the policy as a left fold and the
+specification as a multiset predicate, then proved the two agree — two
+notations for one decidable property. `AGENTS.md` requires proofs to be
+"substantive, rigorous, and well-founded, not merely a restatement of the
+assumed property", and that lemma would have been exactly the restatement.
+
+Two further facts confirmed the removal. `make verus` and `make kani` run in no
+CI workflow — only `scripts/check-verus-fragment-id-bridge.sh` does — so the
+obligation would never have been enforced. And every existing sidecar in
+`verus/` has an executable partner (Kani drives the real code while Verus
+models it); this one would have been the first with no runtime counterpart,
+guarding the most trivial property in the repository.
 
 ### Axioms (assumed, not verified)
 
-- A-1: `syn` 2.x parses `lib = "..."`, `lints(a, b)`, and `reason = "..."`
-  argument forms into the token structures its documentation describes. Third-
-  party internals are not verified. Repository-owned logic built on this
-  interface is verified against the real `syn` parser in unit tests.
-- A-2: `rustc` applies item-level lint-level attributes in preference to
-  manifest-level `[lints]` configuration. Exercised concretely by EP-M0 and by
-  every warning-free compile in `make lint`.
-- A-3: Dylint passes `--cfg=dylint_lib="LIBRARY_NAME"` for each loaded library,
-  with that exact key and value form. Sourced from Dylint's documentation;
-  ADR 002 §Known risks already records the mismatch hazard. This axiom is
-  discharged empirically at roadmap 1.3.3, not here.
-- A-4: `#[expect(L)]` for a lint `L` registered by a Dylint library behaves as
-  `expect` does for built-in lints. **This axiom is not assumed — EP-M0
-  establishes it empirically, because ADR 002 depends on it and the evidence
-  for it is currently absent.**
+- **A-1**: `syn` 2.x parses `lib = "..."`, `lints(a, b)`, and `reason = "..."`
+  into the token structures its documentation describes. Third-party internals
+  are not verified; repository-owned logic built on this interface is verified
+  against the real parser.
+- **A-2**: `rustc` applies item-level lint attributes in preference to manifest
+  `[lints]` levels — **except** for `unexpected_cfgs` arising from an
+  attribute on the same item, which EP-M0 showed requires an enclosing scope.
+- **A-3**: Dylint passes `--cfg=dylint_lib="LIBRARY_NAME"` for each loaded
+  library. Discharged empirically at roadmap 1.3.3, not here.
+- **A-4**: `#[expect(L)]` for a Dylint-registered lint behaves as it does for
+  built-in lints. **Not assumed — R-1's probe must establish it.**
 
-### Obligation INV-SHAPE-1: argument validation is order-independent
+### INV-SHAPE: argument keys are validated exactly and order-independently
 
-- Obligation: for any two sequences of supplied argument keys `a` and `b` with
-  equal multisets, `validate_key_sequence(a)` succeeds exactly when
-  `validate_key_sequence(b)` succeeds.
-- Method: Verus deductive proof over `Seq<ArgKey>`, plus a `proptest`
-  permutation property against the real Rust implementation.
-- Rationale: the property quantifies over unbounded sequences and over all
-  permutations, which no finite test can establish. It is also the property a
-  naive implementation most plausibly breaks: an accumulator-based parser that
-  records "the last `lib` wins" satisfies every single-order example test while
-  violating order-independence for duplicate inputs. The Verus proof discharges
-  the model; the `proptest` property ties the Rust implementation to it.
-- Domain: `Seq<ArgKey>` for `ArgKey ∈ {Lib, Lints, Reason}`, unbounded length
-  in Verus; generated sequences of length 0–8 with generated permutations in
-  `proptest`.
-- Artefact: `verus/whitaker_support_dylint_expect_args.rs`;
-  `crates/whitaker_support_macros/src/args/grammar/tests.rs`.
-- Evidence: `make verus` (after adding a `support-macros` group to
-  `scripts/run-verus.sh`) reports `verification results:: N verified, 0 errors`.
-  Before the implementation exists the proof file does not compile, which is the
-  red state. `cargo nextest run -p whitaker_support_macros` runs the property.
-- Non-vacuity: the proof's antecedent `a.to_multiset() == b.to_multiset()` is
-  inhabited by `a = [Lib, Lints]`, `b = [Lints, Lib]`, and the `ensures` is
-  non-trivial because `validate` is modelled as a left fold with an
-  accumulator, not as a multiset predicate — the lemma has to bridge the two.
-  Negative control: temporarily remove the duplicate-key guard from `validate`
-  in the Verus model and confirm `lemma_validate_matches_shape` fails; remove
-  it from the Rust implementation and confirm the `proptest` property shrinks
-  to a `[Lib, Lib, Lints]`-shaped counterexample. Both mutations must be
-  reverted before the milestone closes.
-
-### Obligation INV-SHAPE-2: validation accepts exactly the well-shaped sequences
-
-- Obligation: `validate_key_sequence(keys)` succeeds if and only if `keys`
+- Obligation: validation succeeds if and only if the supplied key sequence
   contains exactly one `Lib`, exactly one `Lints`, and at most one `Reason`.
-- Method: Verus proof (`lemma_validate_matches_shape`) for the unbounded case,
-  plus an exhaustive enumeration test over every sequence of length 0–4.
-- Rationale: the "if and only if" is what makes the error taxonomy trustworthy;
-  a one-directional test suite would pass against an implementation that
-  rejects valid inputs. Exhaustive enumeration over a three-symbol alphabet to
-  length 4 is 1 + 3 + 9 + 27 + 81 = 121 cases and is a complete decision
-  procedure within that bound — strictly more than a bounded model checker
-  would give, at negligible cost. See `Decision log` D-6 for why Kani is not
-  used.
-- Domain: all `s ∈ {Lib, Lints, Reason}*` with `|s| ≤ 4` exhaustively;
-  unbounded in Verus.
-- Artefact: `crates/whitaker_support_macros/src/args/grammar/tests.rs`,
-  test `exhaustive_key_sequences_to_length_four`;
-  `verus/whitaker_support_dylint_expect_args.rs`.
+- Method: exhaustive enumeration over every sequence of length 0–4, plus a
+  stated pigeonhole argument in a comment covering all longer sequences.
+- Rationale: total, cheap, and directly readable. See above.
+- Domain: all of `{Lib, Lints, Reason}*`.
+- Artefact: `crates/whitaker_support_macros/src/keys.rs`, test
+  `exhaustive_key_sequences_to_length_four`.
 - Evidence: `cargo nextest run -p whitaker_support_macros -E
-  'test(exhaustive_key_sequences)'` reports 1 passed. The test fails before
-  `validate_key_sequence` exists (compile error) and after the seeded mutation.
-- Non-vacuity: the enumeration includes the empty sequence (must be rejected
-  for `MissingLib`), every singleton (all rejected), the two accepting
-  two-element orders, both three-element accepting orders with `Reason`, and
-  every duplicate-bearing sequence. The test asserts the *specific* error
-  variant, not merely that an error occurred, so an implementation that
-  collapses all failures into one variant is rejected. Negative control:
-  changing `MissingLints` to `MissingLib` in one branch must fail the test.
+  'test(exhaustive_key_sequences)'`. Fails to compile before `validate_keys`
+  exists.
+- Non-vacuity: the enumeration covers the empty sequence (rejected,
+  `MissingLib`), every singleton (all rejected), both accepting two-element
+  orders, all accepting three-element orders, and every duplicate-bearing
+  sequence. It asserts the **specific error variant**, so an implementation
+  collapsing all failures into one variant is rejected. Negative control:
+  swapping `MissingLints` for `MissingLib` in one branch must fail the test.
 
-### Obligation INV-EXP-1: the annotated item is preserved verbatim
+Note that arity is deliberately **not** part of this obligation. `lints()` with
+zero paths supplies the `Lints` key and passes key validation; the empty-list
+rejection lives in the parser, where the span needed to report it exists. The
+earlier draft called this module `grammar` and claimed it covered the grammar;
+it does not, and it is now named `keys` accordingly.
 
-- Obligation: the expansion's token stream ends with exactly the input item
-  tokens, with nothing inserted, removed, or reordered inside them.
-- Method: parameterized `rstest` cases comparing the expansion's item suffix
-  against the input, across item kinds; plus compile-level evidence from
-  `tests/applies_to_items.rs`.
-- Rationale: this is a finite partition over Rust item kinds, so parameterized
-  cases are proportionate. A property test over arbitrary token trees would
-  test `quote`'s interpolation, which is a third-party internal (A-1).
-- Domain: `fn`, `fn` with generics and where-clause, `impl` block, inherent
-  method, `mod`, `struct`, `trait`, and an item that already carries other
-  attributes and doc comments.
-- Artefact: `crates/whitaker_support_macros/src/expand/tests.rs`;
+### INV-EXP-1: the annotated item is preserved verbatim
+
+- Obligation: the expansion ends with exactly the input item tokens, nothing
+  inserted, removed, or reordered.
+- Method: parameterized `rstest` cases across item kinds, plus compile-level
+  evidence.
+- Rationale: a finite partition over Rust item kinds. A property test over
+  arbitrary token trees would test `quote`'s interpolation, a third-party
+  internal (A-1).
+- Domain: `fn`; `fn` with generics and a where-clause; `impl` block; inherent
+  method; `mod`; `struct`; `trait`; and an item that already carries doc
+  comments and other attributes.
+- Artefact: `crates/whitaker_support_macros/src/expand.rs` tests;
   `crates/whitaker_support_macros/tests/applies_to_items.rs`.
-- Evidence: `cargo nextest run -p whitaker_support_macros`. Red state: the
-  cases do not compile before `expand` exists.
-- Non-vacuity: the "item already carries attributes and doc comments" case is
-  the one that fails if the implementation re-parses and re-emits the item
-  rather than passing tokens through. Negative control: make `expand` drop the
-  item's existing attributes and confirm that case fails.
+- Evidence: `cargo nextest run -p whitaker_support_macros`.
+- Non-vacuity: the "already carries doc comments and attributes" case fails if
+  the implementation re-parses and re-emits the item instead of passing tokens
+  through. Negative control: make the expansion drop existing attributes and
+  confirm that case fails.
 
-### Obligation INV-EXP-2: the mandated attribute set is emitted, in order
+### INV-EXP-2: the expansion is exactly the gate
 
-- Obligation: the expansion emits exactly the four ADR 002 attributes, in the
-  documented order, before the item.
-- Method: `insta` snapshot tests over the normalized attribute prelude, one
-  snapshot per variant.
-- Rationale: ADR002-TR-2 requires the expansion be "explicit and reviewable".
-  Snapshots make every change to the emitted attributes visible in review,
-  which is precisely the multivariant output-format-consistency case snapshots
-  exist for.
-- Domain: single lint; multiple lints; with reason; without reason;
-  tool-qualified lint path (`clippy::needless_return`); library name containing
-  underscores.
-- Artefact: `crates/whitaker_support_macros/src/expand/tests.rs` with snapshots
-  under `crates/whitaker_support_macros/src/snapshots/`.
+- Obligation: the expansion emits the `cfg_attr` gate and nothing else, with
+  the lint paths in source order and the reason present only when supplied.
+- Method: `insta` snapshots over a normalized rendering, one per variant.
+- Rationale: ADR002-TR-2 requires the expansion be "explicit and reviewable",
+  and this is the multivariant output-consistency case snapshots exist for.
+- Domain: single lint; multiple lints; with reason; without reason; a library
+  name containing underscores.
+- Artefact: `crates/whitaker_support_macros/src/expand.rs`, snapshots in
+  `crates/whitaker_support_macros/src/snapshots/` — `insta` resolves snapshot
+  directories relative to the test file, so this follows the test module's
+  location, matching `crates/whitaker_clones_core/src/ast/snapshots`.
 - Evidence: `cargo nextest run -p whitaker_support_macros` with
-  `INSTA_UPDATE=no`; new snapshots are unreviewed (red) until blessed.
-- Non-vacuity: the six variants differ from one another in the snapshot output,
-  so a implementation that ignores `reason` or flattens the lint list produces
-  identical snapshots for distinct inputs, which review catches. Negative
-  control: drop `allow(unexpected_cfgs)` from the expansion and confirm all six
-  snapshots fail.
+  `INSTA_UPDATE=no`; new snapshots are unreviewed until blessed.
+- Non-vacuity: all five variants must differ from one another, so an
+  implementation ignoring `reason` or flattening the lint list produces
+  identical snapshots for distinct inputs. Negative control: add a stray
+  `allow` to the expansion and confirm all five fail.
 
-### Obligation INV-EXP-3: lint order and multiplicity are preserved
+### INV-EXP-3: lint order and multiplicity are preserved
 
-- Obligation: the lint paths inside `expect(...)` are exactly the paths given
-  to `lints(...)`, in the same order, with the same multiplicity.
-- Method: `proptest` property over generated lists of lint paths.
-- Rationale: this is an invariant over a range of inputs — arbitrary-length
-  lists of arbitrary identifiers — so a property test is the proportionate
-  choice. Diagnostics quality depends on it: silently deduplicating or sorting
-  lints would make the expansion diverge from the call-site a reviewer reads.
-- Domain: generated `Vec<Path>` of length 1–8 drawn from a pool of identifier
-  and `tool::lint` shapes, including deliberate repeats.
-- Artefact: `crates/whitaker_support_macros/src/expand/tests.rs`.
-- Evidence: `cargo nextest run -p whitaker_support_macros`; regression seeds
+- Obligation: the paths inside `expect(...)` are exactly those given to
+  `lints(...)`, same order, same multiplicity.
+- Method: `proptest` over generated path lists.
+- Rationale: an invariant over arbitrary-length lists, so a property test is
+  proportionate. Silently deduplicating or sorting would make the expansion
+  diverge from the call-site a reviewer reads.
+- Domain: generated lists of length 1–8 from a pool that deliberately contains
+  repeats.
+- Artefact: `crates/whitaker_support_macros/src/expand.rs`; regression seeds
   under `crates/whitaker_support_macros/proptest-regressions/`.
-- Non-vacuity: the generator's pool deliberately contains repeats, so the
-  "same multiplicity" clause is reachable; record `proptest` classification
-  showing at least 20% of generated cases contain a repeat, and treat a lower
-  rate as a generator defect. Negative control: insert a `.dedup()` into the
-  expansion and confirm the property shrinks to a two-element repeated list.
+- Evidence: `cargo nextest run -p whitaker_support_macros`. Honour
+  `PROPTEST_CASES` so the case count is tunable without editing code.
+- Non-vacuity: record classification showing at least 20% of generated cases
+  contain a repeat; a lower rate is a generator defect, not a pass. Negative
+  control: insert `.dedup()` and confirm the property shrinks to a two-element
+  repeated list.
 
-### Obligation INV-DIAG-1: malformed invocations produce specific diagnostics
+### INV-DIAG-1: malformed invocations produce specific diagnostics
 
 - Obligation: each malformed-argument class produces a distinct, span-anchored
-  compiler error naming the offending argument.
-- Method: `trybuild` compile-fail fixtures with byte-exact `.stderr` snapshots.
+  error naming the offending argument.
+- Method: `trybuild` compile-fail fixtures with reviewed `.stderr` snapshots.
 - Rationale: diagnostic text and span placement are only observable through a
-  real compilation. This is the standard, and only faithful, boundary test for
-  proc-macro error reporting.
+  real compilation. This is also the **only** compatibility net this API will
+  ever have: `cargo-semver-checks` inspects rustdoc and is blind to a proc
+  macro's argument grammar.
 - Domain: missing `lib`; missing `lints`; empty `lints()`; duplicate `lib`;
   duplicate `lints`; duplicate `reason`; non-string-literal `lib`;
-  non-string-literal `reason`; unknown argument key; empty argument list.
-- Artefact: `crates/whitaker_support_macros/tests/ui.rs` with fixtures under
-  `crates/whitaker_support_macros/tests/ui/`.
+  non-string-literal `reason`; unknown argument key; `lints` given as a string
+  rather than a list; a non-path inside `lints(...)`; a path with generics or a
+  leading `::`; `lib = ""`; `lib` containing a hyphen; trailing commas in both
+  `lints(a,)` and the top-level list.
+- Artefact: `crates/whitaker_support_macros/tests/ui.rs` (harness function
+  **not** named `ui`, per R-8) with fixtures under `tests/ui/`.
 - Evidence: `cargo nextest run -p whitaker_support_macros -E
-  'binary(ui)'`. Each fixture fails with no `.stderr` present (red), then
-  passes once the `.stderr` is blessed from a reviewed `wip` file.
-- Non-vacuity: the ten fixtures must produce ten distinct `.stderr` contents; a
-  review step compares them and treats any two identical files as a failure,
-  because that means the implementation collapsed two error classes. Negative
-  control: replace the duplicate-key error message with the missing-key message
-  and confirm two `.stderr` files then mismatch.
+  'binary(ui)'`. Each fixture fails with no `.stderr` present, then passes once
+  a reviewed `.stderr` is blessed.
+- Non-vacuity: the earlier draft's control — "all `.stderr` files must differ"
+  — was itself vacuous, because trybuild embeds the fixture path and line
+  number in every file, so they always differ. Compare **normalized message
+  text** with paths and line numbers stripped. Note that an empty argument list
+  and a missing `lib` genuinely collapse onto the same error today; either add
+  an `EmptyArguments` variant or record the collapse as deliberate, rather than
+  letting a broken control paper over it.
 
-### Obligation INV-WARN-1: the expansion is warning-free in a non-Dylint build
+### INV-WARN-1: warning-free with the check-cfg entry present
 
 - Obligation: applying the attribute to any supported item kind produces no
   diagnostic under `cargo check` or `cargo clippy` with warnings denied and
   this workspace's full lint policy in force.
-- Method: compile-level evidence from the repository's own gates, applied to
-  real usages of the macro inside the new crate.
-- Rationale: this is ADR002-TR-1, and the honest way to check it is to
-  actually compile code that uses the macro under the exact lint configuration
-  the workspace enforces. `crates/whitaker_support_macros/tests/*.rs` and the
-  crate's doctests are compiled under `RUSTFLAGS="-D warnings"` by `make test`
-  and by `cargo clippy ... -- -D warnings` in `make lint-clippy`, and the crate
-  inherits `[lints] workspace = true`. No bespoke harness is needed.
+- Method: compile-level evidence from the repository's own gates. The crate's
+  integration tests and rustdoc examples use the macro, are compiled under
+  `RUSTFLAGS="-D warnings"` by `make test` and under `cargo clippy -- -D
+  warnings` by `make lint-clippy`, and inherit `[lints] workspace = true`. No
+  bespoke harness is needed.
+- Rationale: this is ADR002-TR-1, and the honest check is to compile real
+  usages under the exact policy the workspace enforces.
 - Domain: the non-Dylint configuration only. The Clippy-run and Dylint-run
-  configurations across a matrix are roadmap 1.3.3's scope; do not build that
-  harness here.
+  matrix is roadmap 1.3.3's scope, per D-10.
 - Artefact: `crates/whitaker_support_macros/tests/applies_to_items.rs`, the
-  crate's rustdoc examples, and the `make lint` / `make test` gates.
-- Evidence: `make lint 2>&1 | tee /tmp/lint-whitaker-1-3-1.out` exits 0 with no
-  warning lines mentioning `whitaker_support_macros`.
-- Non-vacuity: EP-M0 establishes that the naive expansion *does* warn under
-  this configuration, so the gate is known to be capable of failing. Record
-  that EP-M0 transcript as the negative control; without it, a clean `make
-  lint` proves nothing.
+  crate's rustdoc examples, and the gates.
+- Evidence: `make lint` exits 0 with no warning mentioning the new crate.
+- Non-vacuity: EP-M0 established that the same code **does** warn without the
+  `check-cfg` entry. That transcript is the negative control, and it is
+  recorded in `Artefacts and notes`. Without it a clean `make lint` proves
+  nothing.
 
-### Obligations deliberately not taken
+### Stacking
 
-No unbounded lemma is introduced by the expansion logic itself: `expand` is a
-straight-line render of a validated struct into a token stream, and its
-correctness is fully characterized by the finite variant matrix in INV-EXP-2
-together with the pass-through property in INV-EXP-1. Stating a Verus lemma
-over a hand-written model of `TokenStream` would restate the rendering code in
-a second notation and prove that the two agree, which is the vacuous pattern
-the ExecPlan standard forbids. The genuine general property in this change is
-the argument grammar, and it is proved.
+Two `dylint_expect` attributes on one item is the only route to covering both
+deployment modes until R-3's extension lands, so it must be a tested,
+documented case. Under D-9(b) the expansion is a single `cfg_attr` with no
+`allow` attributes, so stacking cannot produce duplicate attributes and
+`clippy::duplicated_attributes` has nothing to fire on — but assert it rather
+than assume it.
 
 ## Plan of work
 
-### Stage A — prototype and de-risk (no production code)
+### Stage A — complete EP-M0
 
-Answer the three empirical questions the design rests on, in a scratch
-directory outside the repository, then delete the scratch work. Nothing in this
-stage is committed except the recorded findings.
+Probes 2, 3, and 4 were run during planning; their transcripts are in
+`Artefacts and notes`. Probe 1 (R-1) remains open and requires a real Dylint
+session. Commit the probes as `scripts/probe-dylint-expect-viability.sh` with
+asserted exit codes, so the gate is a re-runnable artefact rather than
+self-attested prose, and so that INV-WARN-1's negative control cannot evaporate.
 
-1. Does `#[expect(L)]` work for a Dylint-registered lint, and does
-   `unfulfilled_lint_expectations` fire when `L` stops triggering? Build one of
-   the existing lint crates (for example `no_std_fs_operations`) as a Dylint
-   library and run it over a two-file fixture: one where the lint fires under an
-   `expect`, one where it does not.
-2. Does `#[allow(clippy::allow_attributes, reason = "...")]` suppress
-   `clippy::allow_attributes` for the sibling `allow` attributes on the same
-   item, and for itself? Test under `cargo clippy -- -D
-   clippy::allow_attributes -D clippy::allow_attributes_without_reason`.
-3. Record the *unmitigated* diagnostic output: compile the naive
-   `#[cfg_attr(dylint_lib = "x", expect(y))] fn f() {}` with no `allow`
-   attributes, under this workspace's lint policy, and capture the warnings.
-   This transcript is the negative control for INV-WARN-1.
-4. Confirm whether `cargo kani` can compile a `proc-macro = true` crate.
-
-Go/no-go: if (1) shows `expect` does not work for Dylint lints, stop and
-escalate — ADR 002 needs amending. If (2) shows self-suppression fails, apply
-the ordering or collapsing contingency from `Risks` and re-probe; escalate only
-if neither works.
+Go/no-go: if probe 1 shows `expect` does not work for Dylint lints, stop and
+escalate — ADR 002 needs a second amendment.
 
 ### Stage B — red tests and the specification
 
-Create the crate skeleton and every failing test before any logic exists.
+1. `crates/whitaker_support_macros/Cargo.toml` with `[lib] proc-macro = true`
+   and full publish metadata.
+2. `src/lib.rs` containing only crate documentation, module declarations, and a
+   `dylint_expect` that returns `compile_error!("not yet implemented")`.
+3. All unit, exhaustive, property, and snapshot tests, written against the
+   intended API. They will not compile — that is the red state.
+4. All compile-fail fixtures with no `.stderr` files.
 
-1. `crates/whitaker_support_macros/Cargo.toml` with `[lib] proc-macro = true`,
-   full publish metadata, and dev-dependencies.
-2. `crates/whitaker_support_macros/src/lib.rs` containing only the crate-level
-   `//!` documentation, the module declarations, and a `dylint_expect` entry
-   point that returns `compile_error!("not yet implemented")`.
-3. The feature specification at
-   `crates/whitaker_support_macros/tests/features/dylint_expect.feature`,
-   quoted in full under `Artefacts and notes` below.
-4. All unit, property, exhaustive, snapshot, and BDD tests, written against
-   the intended API. They will not compile — that is the red state, and it is
-   the expected failure reason.
-5. All ten `trybuild` compile-fail fixtures with no `.stderr` files.
-6. `verus/whitaker_support_dylint_expect_args.rs` containing the `ArgKey` spec
-   type, `count_of`, `is_well_shaped`, `validate`, and the two lemma signatures
-   with `assume(false)` placeholders, so `make verus` reports the goals as open.
+Validation: `cargo nextest run -p whitaker_support_macros` fails to compile
+with errors naming the missing items. Record the transcript.
 
-Validation for Stage B: `cargo nextest run -p whitaker_support_macros` fails to
-compile with errors naming the missing items. Record the transcript.
+### Stage C — implementation
 
-### Stage C — implementation and proof, developed together
+1. `src/keys.rs` — `ArgKey`, `ArgShapeError`, and `validate_keys`. Turn the
+   exhaustive test green.
+2. `src/args.rs` — the `syn::parse::Parse` implementation mapping tokens to
+   keyed payloads, calling `validate_keys`, validating payloads (non-empty
+   lint list, path shape, non-empty `lib`, underscore-only `lib`), then
+   assembling `DylintExpect`.
+3. `src/expand.rs` — the renderer. Turn INV-EXP-1 through INV-EXP-3 green and
+   bless the snapshots after reading each one.
+4. `src/lib.rs` — wire the adapter and convert `syn::Error` via
+   `to_compile_error()`. Bless the `.stderr` fixtures after reviewing each for
+   span placement and wording, comparing normalized message text.
 
-Work in this order, because each step's tests are already red:
+Validation: `cargo nextest run -p whitaker_support_macros` passes.
 
-1. `src/args/grammar/mod.rs` — the `ArgKey` and `ArgShapeError` enums and
-   `validate_key_sequence`. This is the pure policy, and the only module the
-   Verus model mirrors. Turn `exhaustive_key_sequences_to_length_four` green.
-2. `verus/whitaker_support_dylint_expect_args.rs` — replace the `assume(false)`
-   placeholders with real proofs. Discharge INV-SHAPE-1 and INV-SHAPE-2. Run
-   the seeded-mutation negative controls and revert them.
-3. `src/args/parse.rs` — the `syn::parse::Parse` implementation that maps
-   tokens to `(ArgKey, payload)` pairs, calls `validate_key_sequence`, then
-   assembles `DylintExpect`. Turn the parsing unit tests green.
-4. `src/expand/mod.rs` — the renderer. Turn INV-EXP-1, INV-EXP-2, and
-   INV-EXP-3 green, and bless the snapshots after reviewing each one.
-5. `src/lib.rs` — wire the adapter: parse, expand, and convert
-   `syn::Error` to `to_compile_error()` on the failure path. Bless the
-   `trybuild` `.stderr` fixtures after reviewing each for span placement and
-   wording, and confirm all ten differ.
+### Stage D — wiring and documentation
 
-Validation for Stage C: `cargo nextest run -p whitaker_support_macros` passes;
-`make verus` reports zero errors.
-
-### Stage D — wiring, documentation, and wider validation
-
-1. Root `Cargo.toml`: add `syn`, `quote`, `proc-macro2`, `googletest`, and
-   `pretty_assertions` to `[workspace.dependencies]`, and add the
-   `whitaker_support_macros` path-and-version entry.
-2. `Makefile`: append `-p whitaker_support_macros` to `WHITAKER_PACKAGES`.
-3. `scripts/run-verus.sh`: add a `support-macros` group and include the new
-   proof file in the `all` group.
-4. `.github/workflows/ci.yml` line 160: add `whitaker_support_macros` to
-   `PUBLISH_PACKAGES`.
+1. Root `Cargo.toml`: add `cfg(dylint_lib, values(any()))` to the
+   `[workspace.lints.rust]` `check-cfg` array; add `syn`, `quote`, and
+   `proc-macro2` to `[workspace.dependencies]`; add the
+   `whitaker_support_macros` entry.
+2. `crates/whitaker_test_macros/Cargo.toml`: migrate to the shared pins (D-8).
+3. `Makefile`: append `-p whitaker_support_macros` to `WHITAKER_PACKAGES`.
+4. `.github/workflows/ci.yml` line 160: add the crate to `PUBLISH_PACKAGES`.
 5. `.github/workflows/release.yml`: add `cargo publish -p
-   whitaker_support_macros` as the *first* publish step.
-6. Documentation, in this order: ADR 002 status and known-risks update;
-   `docs/whitaker-dylint-suite-design.md` cross-reference;
-   `docs/repository-layout.md` support-crate bullet;
-   `docs/developers-guide.md` convention section;
-   `docs/users-guide.md` suppression section; `docs/roadmap.md` 1.3.1 to `[x]`.
+   whitaker_support_macros` as the **last** publish step, with an
+   already-published guard on every step in the block (R-4).
+6. Documentation: amend and accept ADR 002; cross-reference from
+   `docs/whitaker-dylint-suite-design.md`; add the crate to
+   `docs/repository-layout.md`; mark `docs/roadmap.md` 1.3.1 done. The users'
+   and developers' guide narratives are deferred to 1.3.4 per D-10.
 7. Run the full gate set.
 
-Validation for Stage D: `make check-fmt`, `make typecheck`, `make lint`,
-`make test`, `make markdownlint`, `make nixie`, and `make verus` all pass.
+Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+`make markdownlint`, and `make nixie` all pass.
 
 ## Milestones and plateaus
 
 ### EP-M0 — prototype findings recorded (prototyping milestone)
 
-- Outcome: the four Stage A questions are answered with transcripts, recorded
-  in `Surprises & discoveries` and `Decision log`. No repository files change
-  except this plan.
-- Requirements and gaps: de-risks ADR002-FR-4 and ADR002-TR-1; establishes
-  axiom A-4.
-- Acceptance evidence: EV-M0, a transcript in `Artefacts and notes` showing the
-  `expect` behaviour, the Clippy self-suppression behaviour, the unmitigated
-  warning output, and the Kani result.
-- Conformance check: does the evidence still support ADR 002 §Decision
-  outcome? If not, set status `BLOCKED` and propose an ADR amendment.
-- Recovery: the scratch directory is outside the repository; delete it.
-- Remaining gaps: everything.
+- Outcome: probes 2–4 answered with transcripts; probe 1 (R-1) explicitly open;
+  probes committed as a script with asserted exit codes.
+- Requirements and gaps: de-risks ADR002-FR-4 and ADR002-TR-1; targets A-4.
+- Acceptance evidence: EV-M0 — `scripts/probe-dylint-expect-viability.sh` exits
+  0, and its recorded output matches `Artefacts and notes`.
+- Conformance check: **failed at planning time.** The evidence contradicts
+  ADR 002 §Decision outcome; D-9 records the deviation and the plan is BLOCKED
+  pending acceptance.
+- Recovery: the probe script is additive and independently revertible.
+- Remaining gaps: probe 1; everything downstream.
 - Compatibility decision: none required.
 
 ### EP-M1 — crate skeleton exists and the workspace still builds
 
-- Outcome: `crates/whitaker_support_macros` is a workspace member with correct
-  metadata and lint inheritance; `cargo metadata` lists it; `make typecheck`
-  passes. The macro is a stub that always errors.
+- Outcome: the crate is a workspace member with correct metadata and lint
+  inheritance; `make typecheck` passes; the macro is a stub that always errors.
 - Requirements and gaps: ADR002-MIG-1, ADR002-TR-3.
-- Acceptance evidence: EV-M1 — `cargo metadata --format-version 1 --no-deps |
-  jq -r '.packages[].name' | grep whitaker_support_macros` prints the name, and
-  `make typecheck` exits 0.
-- Conformance check: only `src/lib.rs` names `proc_macro`; `publish` metadata
-  matches the crates.io decision; no new dependency beyond those approved.
-- Recovery: `git checkout -- crates/whitaker_support_macros` and remove the
-  directory; the `crates/*` glob makes removal complete.
+- Acceptance evidence: EV-M1 — `cargo metadata --format-version 1 --no-deps`
+  lists the crate, and `make typecheck` exits 0.
+- Conformance check: only `src/lib.rs` names `proc_macro`; `version.workspace =
+  true`; `rust-version` declared; no dependency beyond the three approved.
+- Recovery: delete the directory; the `crates/*` glob makes removal complete.
 - Remaining gaps: all behaviour.
-- Compatibility decision: none. The crate is new and has no consumers.
+- Compatibility decision: none. New crate, no consumers.
 
-### EP-M2 — the grammar and expansion are correct and proved
+### EP-M2 — the macro is correct
 
-- Outcome: `dylint_expect` parses, validates, and expands correctly; every
-  unit, exhaustive, property, snapshot, and BDD test passes; the Verus proof
-  discharges INV-SHAPE-1 and INV-SHAPE-2; `trybuild` fixtures are blessed.
-- Requirements and gaps: ADR002-FR-1 through ADR002-FR-4, ADR002-TR-2;
-  INV-SHAPE-1, INV-SHAPE-2, INV-EXP-1, INV-EXP-2, INV-EXP-3, INV-DIAG-1.
+- Outcome: parsing, validation, and expansion are correct; every test passes;
+  fixtures and snapshots are reviewed and blessed; R-1's probe has answered.
+- Requirements and gaps: ADR002-FR-1 through FR-4, ADR002-TR-2; INV-SHAPE,
+  INV-EXP-1, INV-EXP-2, INV-EXP-3, INV-DIAG-1.
 - Acceptance evidence: EV-M2 — `cargo nextest run -p whitaker_support_macros`
-  reports all tests passed with the count recorded, and `make verus` reports
-  `0 errors`. Both negative-control mutations have been run and reverted, with
-  their failing output recorded.
-- Conformance check: the emitted attribute set matches ADR 002 §Decision
-  outcome exactly, apart from the D-4 reason additions; no file exceeds 400
-  lines; no `unwrap`/`expect` in non-test code.
-- Recovery: snapshots and `.stderr` fixtures are regenerable with
-  `INSTA_UPDATE=always` and `TRYBUILD=overwrite`, but must be re-reviewed
-  before committing, never blessed blind.
-- Remaining gaps: workspace wiring, release wiring, documentation.
+  reports all tests passed with the count recorded. Every negative control has
+  been run and reverted, with its failing output recorded.
+- Conformance check: the expansion matches the amended ADR 002 exactly; no file
+  exceeds 400 lines; no `unwrap`/`expect` in non-test code.
+- Recovery: snapshots and `.stderr` files regenerate with `INSTA_UPDATE=always`
+  and `TRYBUILD=overwrite`, but must be re-read before committing.
+- Remaining gaps: wiring, release, documentation.
 - Compatibility decision: none.
 
-### EP-M3 — the crate is warning-free under the full workspace lint policy
+### EP-M3 — warning-free under the full workspace lint policy
 
-- Outcome: `make lint` and `make test` pass with the new crate included, and
-  the Whitaker Dylint suite lints it via `WHITAKER_PACKAGES`.
+- Outcome: `make lint` and `make test` pass with the crate included and the
+  `check-cfg` entry present.
 - Requirements and gaps: ADR002-TR-1; INV-WARN-1.
-- Acceptance evidence: EV-M3 — `make lint 2>&1 | tee
-  /tmp/lint-whitaker-1-3-1.out` exits 0 with no warnings referencing the new
-  crate, contrasted against the EP-M0 unmitigated transcript.
+- Acceptance evidence: EV-M3 — `make lint` exits 0 with no warning referencing
+  the crate, contrasted against the EP-M0 transcript.
 - Conformance check: if adding the crate to `WHITAKER_PACKAGES` breaks the
-  Dylint check build (as it may for proc-macro crates), record the failure,
-  revert that one line, and note the deviation in `Decision log` rather than
-  weakening any lint.
-- Recovery: revert the `Makefile` line; the rest of the milestone stands.
-- Remaining gaps: release wiring, documentation.
+  Dylint check build, as it may for a proc-macro crate, record the failure,
+  revert that one line, and note the deviation — do not weaken any lint.
+- Recovery: revert the `Makefile` line; the rest stands.
+- Remaining gaps: release, documentation.
 - Compatibility decision: none.
 
-### EP-M4 — the crate is publish-ready and wired into release
+### EP-M4 — publish-ready and wired into release
 
-- Outcome: `make publish-check PUBLISH_PACKAGES="whitaker_support_macros"`
-  succeeds; `ci.yml` and `release.yml` include the crate.
+- Outcome: `cargo package -p whitaker_support_macros --allow-dirty` succeeds;
+  `ci.yml` and `release.yml` include the crate, published last and guarded.
 - Requirements and gaps: resolves ADR 002 §Outstanding decisions item 3.
-- Acceptance evidence: EV-M4 — the `cargo package` step completes and the
-  produced `.crate` file lists `src/`, `Cargo.toml`, and the licence, with no
-  nested manifest.
-- Conformance check: `cargo publish -p whitaker_support_macros` is ordered
-  before any dependent crate's publish step; all dependencies are published
-  crates with caret version requirements.
-- Recovery: revert the two workflow edits; nothing has been published, because
-  publishing only happens on a release tag.
+- Acceptance evidence: EV-M4 — the packaging step completes and the `.crate`
+  lists `src/`, `Cargo.toml`, and the licence, with no nested manifest.
+- Conformance check: the new crate publishes **after** every existing one; each
+  publish skips an already-uploaded version rather than aborting; the tag
+  version check covers every publishable crate.
+- Recovery: revert the two workflow edits. **This is the one milestone whose
+  rollback expires** — after the first release tag, publication is irreversible
+  and the crates.io name is permanent.
 - Remaining gaps: documentation.
-- Compatibility decision: none. First publication of a new crate.
+- Compatibility decision: none. First publication.
 
-### EP-M5 — documentation is complete and the roadmap is updated
+### EP-M5 — documentation and roadmap
 
-- Outcome: ADR 002 is `Accepted` with a dated summary and an expanded
-  §Known risks; the suite design, repository layout, developers' guide, and
-  users' guide describe the attribute; `docs/roadmap.md` 1.3.1 is `[x]`.
-- Requirements and gaps: ADR002-TR-4.
+- Outcome: ADR 002 amended and `Accepted` with a dated summary; suite design
+  cross-referenced; repository layout updated; roadmap 1.3.1 marked `[x]`.
+- Requirements and gaps: ADR002-TR-4 is explicitly **deferred to 1.3.4**.
 - Acceptance evidence: EV-M5 — `make markdownlint` and `make nixie` pass, and
-  `rg -n 'dylint_expect' docs/` lists ADR 002, the suite design, the
-  developers' guide, the users' guide, the repository layout, and this plan.
-- Conformance check: reconcile every EP-M0 discovery against ADR 002. The
-  `unknown_lints` masking hazard and the `expect`-viability finding must both
-  appear in ADR 002 §Known risks before the status moves to `Accepted`.
+  `rg -n 'dylint_expect' docs/` lists ADR 002, the suite design, the repository
+  layout, and this plan.
+- Conformance check: ADR 002 §Options considered must record that Option D's
+  original rejection rationale was factually wrong; §Decision outcome must
+  carry the amended expansion; §Known risks must carry R-2 and R-3.
 - Recovery: documentation edits are independently revertible.
-- Remaining gaps: roadmap items 1.3.2, 1.3.3, and 1.3.4 remain open by design.
+- Remaining gaps: roadmap 1.3.2, 1.3.3, 1.3.4, and the proposed 1.3.5 lint.
 - Compatibility decision: none.
 
 ## Interfaces and dependencies
@@ -732,39 +697,38 @@ Validation for Stage D: `make check-fmt`, `make typecheck`, `make lint`,
 crates/whitaker_support_macros/
 ├── Cargo.toml
 ├── src/
-│   ├── lib.rs                  # adapter: the ONLY file naming `proc_macro`
-│   ├── model.rs                # domain value types
-│   ├── args/
-│   │   ├── mod.rs              # re-exports; module documentation
-│   │   ├── grammar/
-│   │   │   ├── mod.rs          # pure key-shape policy (the proof target)
-│   │   │   └── tests.rs        # exhaustive + property tests
-│   │   └── parse.rs            # syn adapter: tokens -> keyed payloads
-│   └── expand/
-│       ├── mod.rs              # renderer: DylintExpect -> TokenStream
-│       └── tests.rs            # unit, snapshot, property, BDD tests
+│   ├── lib.rs         # adapter: the ONLY file naming `proc_macro`
+│   ├── model.rs       # domain value types
+│   ├── keys.rs        # pure key-shape policy + exhaustive tests
+│   ├── args.rs        # syn adapter: tokens -> validated DylintExpect
+│   ├── expand.rs      # renderer + unit, snapshot, property tests
+│   └── snapshots/     # insta snapshots, resolved relative to src/
 └── tests/
-    ├── applies_to_items.rs     # compile-level usage across item kinds
-    ├── features/
-    │   └── dylint_expect.feature
-    ├── ui.rs                   # trybuild harness
-    └── ui/                     # ten compile-fail fixtures plus .stderr
+    ├── applies_to_items.rs
+    ├── ui.rs          # trybuild harness; fn NOT named `ui` (R-8)
+    └── ui/            # compile-fail fixtures plus .stderr
 ```
 
-The hexagonal boundary here is narrow and real, and it is worth stating
-precisely rather than gesturing at layers. The infrastructure in a procedural
-macro is `proc_macro::TokenStream`: it exists only inside a compiler invocation
-and cannot be constructed in a unit test. Everything else — `syn`, `quote`,
-`proc_macro2` — is pure compile-time data with no ambient effects, so it is
-legitimately part of the domain's vocabulary rather than something to abstract
-away. `src/lib.rs` is therefore the sole driving adapter, and every other module
-is domain logic that a plain `#[test]` can call directly. Within the domain,
-`args/grammar` is deliberately isolated further, expressed over a three-symbol
-enum with no `syn` types at all, because that is what makes it provable.
+Flat modules, not directories. The earlier draft used `args/mod.rs` and
+`args/grammar/mod.rs` on the belief that
+`clippy::self_named_module_files` requires the `mod.rs` style. It does not — it
+forbids `args/args.rs`. A flat `src/args.rs` with no sibling directory is fully
+compliant, and every file here sits well under 400 lines.
+
+On the boundary: the infrastructure in a procedural macro is
+`proc_macro::TokenStream`, which exists only inside a compiler invocation and
+cannot be constructed in a unit test. Everything else — `syn`, `quote`,
+`proc_macro2` — is pure compile-time data with no ambient effects, so it
+belongs to the domain's vocabulary rather than being something to abstract
+away. `src/lib.rs` is therefore the sole adapter and every other module is
+directly unit-testable. That is the whole of the architectural claim; it is the
+standard `proc_macro2` hygiene idiom, and calling it "hexagonal" would invite a
+future contributor to add a trait to complete a pattern that has no second
+implementation to abstract over.
 
 ### Signatures that must exist at the end of EP-M2
 
-In `crates/whitaker_support_macros/src/args/grammar/mod.rs`:
+In `crates/whitaker_support_macros/src/keys.rs`:
 
 ```rust
 /// Identifies which keyword an argument in a `dylint_expect` list supplied.
@@ -784,18 +748,28 @@ pub(crate) enum ArgShapeError {
 }
 
 /// Accepts a key sequence with exactly one `lib`, exactly one `lints`, and at
-/// most one `reason`, in any order.
-pub(crate) fn validate_key_sequence(keys: &[ArgKey]) -> Result<(), ArgShapeError>;
+/// most one `reason`, in any order. The `usize` locates the offending key so
+/// the caller can anchor a diagnostic span on it.
+pub(crate) fn validate_keys(keys: &[ArgKey]) -> Result<(), (usize, ArgShapeError)>;
 ```
+
+The index is load-bearing. `Duplicate(ArgKey)` alone says _which key_ but never
+_which occurrence_, forcing the parser to re-scan to find the second `lib` to
+point at. Returning the position keeps the policy pure and the diagnostics
+precise, and hardens before ten `.stderr` files are blessed.
 
 In `crates/whitaker_support_macros/src/model.rs`:
 
 ```rust
 /// Names the Dylint library whose `dylint_lib` cfg gates the expectation.
-pub(crate) struct LibraryName(String);
+///
+/// Construction rejects an empty name and any name containing a hyphen, since
+/// Dylint injects a Rust identifier and a hyphenated package name silently
+/// produces a suppression that never applies.
+pub(crate) struct LibraryName(syn::LitStr);
 
 /// Carries the human-readable justification for a suppression.
-pub(crate) struct Reason(String);
+pub(crate) struct Reason(syn::LitStr);
 
 /// Holds a validated `dylint_expect` invocation.
 pub(crate) struct DylintExpect {
@@ -805,10 +779,14 @@ pub(crate) struct DylintExpect {
 }
 ```
 
-In `crates/whitaker_support_macros/src/expand/mod.rs`:
+Both newtypes hold `syn::LitStr` rather than `String`, so the span survives for
+diagnostics and `LibraryName` has a real invariant to enforce — which is the
+one route to R-2's silent no-op that the macro _can_ close by itself.
+
+In `crates/whitaker_support_macros/src/expand.rs`:
 
 ```rust
-/// Renders the attribute prelude and the untouched item.
+/// Renders the cfg-gated expectation followed by the untouched item.
 pub(crate) fn expand(spec: &DylintExpect, item: &proc_macro2::TokenStream) -> proc_macro2::TokenStream;
 ```
 
@@ -821,24 +799,34 @@ pub fn dylint_expect(attr: TokenStream, item: TokenStream) -> TokenStream;
 
 ### Required expansion
 
-For `lib = "whitaker_lints"`, `lints(no_std_fs_operations, module_max_lines)`,
-`reason = "legacy call-site"`, the expansion is:
+For `lib = "whitaker_suite"`, `lints(no_std_fs_operations, module_max_lines)`,
+`reason = "legacy call-site"`:
 
 ```rust,no_run
-#[allow(clippy::allow_attributes, reason = "dylint_expect emits allow attributes by design")]
-#[allow(unknown_lints, reason = "the gated lints are unknown outwith a Dylint run")]
-#[allow(unexpected_cfgs, reason = "dylint_lib is injected by Dylint, not declared in check-cfg")]
 #[cfg_attr(
-    dylint_lib = "whitaker_lints",
+    dylint_lib = "whitaker_suite",
     expect(no_std_fs_operations, module_max_lines, reason = "legacy call-site")
 )]
 fn read_legacy_config() {}
 ```
 
-When `reason` is omitted, the `reason = "..."` key is omitted from `expect(...)`
-only; the three `allow` attributes keep their fixed macro-authored reasons.
-Those reasons justify the macro's own plumbing and are deliberately distinct
-from the user's justification for the suppression.
+When `reason` is omitted, the `reason = "..."` key is omitted from
+`expect(...)`. Nothing else is emitted. _This is the D-9(b) expansion; under
+D-9(a) it would instead be ADR 002's four-attribute set._
+
+Note the library name. The earlier draft used `whitaker_lints` throughout,
+copied from ADR 002. No such library exists: `rg whitaker_lints` finds nothing
+outwith ADR 002 and this plan. The real names are `whitaker_suite`
+(`suite/Cargo.toml`, `installer/src/resolution.rs`) and the individual lint
+crates listed in `Makefile` `LINT_CRATES`. Shipping the ADR's string as the
+canonical example would have made every copied call-site a guaranteed silent
+no-op, and it must be corrected in ADR 002 too.
+
+Lint paths are accepted as `syn::Path` but validated to Dylint's actual shape:
+a single-segment identifier, no leading `::`, no generics. Dylint registers
+plain names, so a tool-qualified path such as `clippy::needless_return` gated
+on `dylint_lib` would be absent during every Clippy run — the only run where it
+could fire. Accepting it is a footgun, not future-proofing.
 
 ### Dependencies
 
@@ -847,13 +835,16 @@ from the user's justification for the suppression.
 ```toml
 [package]
 name = "whitaker_support_macros"
-version = "0.2.7"
+version.workspace = true
 edition = "2024"
+rust-version = "1.81"
 description = "Attribute macro for conditional Dylint expect suppressions"
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
+keywords = ["dylint", "lint", "macro", "expect"]
+categories = ["development-tools"]
 
 [lib]
 proc-macro = true
@@ -864,74 +855,63 @@ quote = { workspace = true }
 syn = { workspace = true }
 
 [dev-dependencies]
-googletest = { workspace = true }
 insta = { workspace = true }
-pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 rstest = { workspace = true }
-rstest-bdd = { workspace = true }
-rstest-bdd-macros = { workspace = true }
 trybuild = { workspace = true }
 
 [lints]
 workspace = true
 ```
 
-New `[workspace.dependencies]` entries in the root `Cargo.toml`, all with caret
-requirements as `AGENTS.md` mandates:
+`rust-version = "1.81"` is a contract, not decoration: the expansion relies on
+`#[expect]` and `reason =` in lint attributes, both stabilized in 1.81.
+
+New `[workspace.dependencies]` entries in the root `Cargo.toml`:
 
 ```toml
 proc-macro2 = "1.0.106"
 quote = "1.0.46"
-syn = { version = "2.0.119", features = ["full", "parsing", "printing", "proc-macro"] }
-googletest = "0.14.2"
-pretty_assertions = "1.4.1"
+syn = { version = "2.0.119", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
 whitaker_support_macros = { path = "crates/whitaker_support_macros", version = "0.2.7" }
 ```
 
-`googletest` and `pretty_assertions` are new to this workspace. The task
-authorization explicitly names both as approved dependencies. Verify the exact
-current versions with `cargo search` before pinning; the values above are
-placeholders to be confirmed at EP-M1.
+`syn` is pinned **without** the `full` feature. The item is passed through as an
+opaque `proc_macro2::TokenStream` (INV-EXP-1), so only `Path`, `LitStr`,
+`Punctuated`, and `parenthesized!` are parsed. `full` is the expensive feature,
+and a `[workspace.dependencies]` feature set is baked into the published
+manifest — so once roadmap 1.3.2 puts this crate on downstream build graphs,
+`full` would cost every consumer 5–10 s of cold compile for nothing.
+`crates/whitaker_test_macros` genuinely needs `full` and is `publish = false`,
+so it adds that feature at its own use site.
 
-Existing `crates/whitaker_test_macros` declares `syn`, `quote`, and
-`proc-macro2` directly rather than through the workspace. Promoting them to
-`[workspace.dependencies]` and leaving `whitaker_test_macros` unchanged would
-leave two pins for the same crates. Migrate `whitaker_test_macros` to the
-workspace entries in the same commit — it is a three-line change with no
-behavioural effect, and leaving the drift would be the worse outcome.
+Verify the exact current versions with `cargo search` before pinning; the
+values above come from `Cargo.lock` at planning time.
+
+Also add to `[workspace.lints.rust]`:
+
+```toml
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(dylint_lib, values(any()))'] }
+```
+
+This one line is what actually makes the gated form warning-free. Everything
+the macro does is ergonomics on top of it, and the plan should not pretend
+otherwise.
 
 ## Concrete steps
 
 Run everything from the repository root,
 `/home/leynos/.lody/repos/github---leynos---whitaker/worktrees/c0b1e9dd-2aff-4206-8bb8-19335d3fa354`.
 
-Every gate command is piped through `tee` to a log under `/tmp`, because gate
-output is long and the terminal truncates the middle:
+Gate output is long and the terminal truncates the middle, so pipe through
+`tee`:
 
 ```bash
 set -o pipefail
 make check-fmt 2>&1 | tee "/tmp/check-fmt-whitaker-$(git branch --show-current | tr '/' '-').out"
 ```
 
-### Stage A commands
-
-```bash
-SCRATCH=$(mktemp -d /tmp/dylint-expect-probe.XXXXXX)
-# 1. expect-viability probe: build a lint library, then compile a fixture that
-#    does and does not trigger it under `#[expect(...)]`.
-# 2. clippy self-suppression probe.
-cargo clippy -- -D clippy::allow_attributes -D clippy::allow_attributes_without_reason
-# 3. unmitigated-warning transcript (the INV-WARN-1 negative control).
-# 4. kani probe.
-cargo kani --help >/dev/null && echo "kani present"
-rm -rf "$SCRATCH"
-```
-
-Record each transcript in `Artefacts and notes` before deleting the scratch
-directory.
-
-### Stage B and C commands
+### Focused loops
 
 ```bash
 cargo nextest run -p whitaker_support_macros 2>&1 | tee /tmp/nextest-support-macros.out
@@ -939,20 +919,16 @@ cargo nextest run -p whitaker_support_macros -E 'test(exhaustive_key_sequences)'
 TRYBUILD=overwrite cargo nextest run -p whitaker_support_macros -E 'binary(ui)'
 INSTA_UPDATE=always cargo nextest run -p whitaker_support_macros
 cargo insta review
-make verus 2>&1 | tee /tmp/verus-support-macros.out
-```
-
-Expected Verus transcript once EP-M2 closes:
-
-```plaintext
-verification results:: 4 verified, 0 errors
+cargo package -p whitaker_support_macros --allow-dirty
 ```
 
 `TRYBUILD=overwrite` and `INSTA_UPDATE=always` regenerate expected output.
 Never commit output blessed this way without reading every regenerated file —
 blessing blind converts a test into a tautology.
 
-### Stage D commands
+Use `cargo package` for the EP-M4 loop, **not** `make publish-check` (R-7).
+
+### Full gates
 
 ```bash
 make check-fmt 2>&1 | tee /tmp/check-fmt-support-macros.out
@@ -961,8 +937,6 @@ make lint      2>&1 | tee /tmp/lint-support-macros.out
 make test      2>&1 | tee /tmp/test-support-macros.out
 make markdownlint 2>&1 | tee /tmp/markdownlint-support-macros.out
 make nixie        2>&1 | tee /tmp/nixie-support-macros.out
-make publish-check PUBLISH_PACKAGES="whitaker_support_macros" 2>&1 \
-  | tee /tmp/publish-check-support-macros.out
 ```
 
 Delegate full gate runs to the `scrutineer` sub-agent rather than running them
@@ -972,318 +946,389 @@ build caching, and sequential execution is what benefits from it.
 
 ## Validation and acceptance
 
-A reader can confirm this work by doing the following.
+A reader can confirm this work as follows.
 
-Write a file `/tmp/check.rs` containing a function annotated with
-`#[whitaker_support_macros::dylint_expect(lib = "whitaker_lints", lints(
-no_std_fs_operations), reason = "probe")]` inside the crate's own test tree,
-and run `make test`. Expect a clean pass with no warnings. Then run `make lint`
-and expect the same. That is INV-WARN-1 in observable form.
+Apply the attribute to a function in the crate's own test tree and run
+`make test`, then `make lint`. Expect a clean pass with no warnings. That is
+INV-WARN-1. Then remove `cfg(dylint_lib, values(any()))` from the workspace
+`check-cfg` array and re-run: expect `unexpected_cfgs` at the call-site. That
+contrast is the point of the whole change, and it is the negative control that
+makes the clean run meaningful.
 
-Introduce a deliberate error — remove the `lints(...)` argument from one of the
-`trybuild` fixtures' sibling files — and expect a compiler error reading
-``dylint_expect` requires a `lints(...)` argument with at least one lint path``
-anchored at the attribute's span.
+Remove the `lints(...)` argument from a fixture and expect a compiler error
+reading ``dylint_expect` requires a `lints(...)` argument with at least one lint
+path`` anchored at the attribute's span.
 
 ### Red-Green-Refactor evidence to record
 
 - Red: `cargo nextest run -p whitaker_support_macros` at the end of Stage B
-  fails to compile, with errors naming `validate_key_sequence`, `expand`, and
-  `DylintExpect` as unresolved. That is the intended failure reason — the tests
-  specify an API that does not yet exist.
+  fails to compile, with errors naming `validate_keys`, `expand`, and
+  `DylintExpect` as unresolved. That is the intended failure reason.
 - Green: the same command at the end of Stage C reports all tests passed.
   Record the exact count.
-- Refactor: after extracting any helper that keeps a file under 400 lines,
-  re-run `cargo nextest run -p whitaker_support_macros` and then `make lint`,
-  and expect both to pass unchanged.
-
-### Verification evidence to record
-
-- `make verus` reports `0 errors` and names the four discharged obligations.
-- Each negative control from `Verification plan` has been run, produced the
-  predicted failure, and been reverted. Record the failure output for each; a
-  verification suite whose negative controls were never exercised is not
-  evidence.
-- `proptest` classification output for INV-EXP-3 shows at least 20% of
-  generated lint lists contain a repeated path.
+- Refactor: after any extraction, re-run the focused command and then
+  `make lint`; both must pass unchanged.
 
 ### Quality criteria
 
-- Tests: `make test` passes; the new crate's tests all pass under `cargo
-  nextest run -p whitaker_support_macros`.
-- Verification: INV-SHAPE-1 and INV-SHAPE-2 discharged in Verus with zero
-  errors and zero remaining `assume` statements; INV-EXP-1 through INV-EXP-3
-  and INV-DIAG-1 discharged by their named artefacts; INV-WARN-1 discharged by
-  `make lint` contrasted against the EP-M0 negative control.
-- Lint and typecheck: `make check-fmt`, `make typecheck`, and `make lint` all
-  exit 0.
-- Documentation: `make markdownlint` and `make nixie` exit 0.
-- Packaging: `make publish-check PUBLISH_PACKAGES="whitaker_support_macros"`
-  exits 0.
-- Performance: no threshold. The macro runs at compile time on a handful of
-  tokens; ADR 002 §Known risks already accepts the modest `syn`/`quote`
-  compile-time cost.
-- Security: none beyond the workspace's existing `unsafe_code = "forbid"`.
+- Tests: `make test` passes; `cargo nextest run -p whitaker_support_macros`
+  passes.
+- Verification: INV-SHAPE, INV-EXP-1 through INV-EXP-3, INV-DIAG-1, and
+  INV-WARN-1 discharged by their named artefacts, each with its negative
+  control run and recorded. R-1's probe answered.
+- Lint and typecheck: `make check-fmt`, `make typecheck`, `make lint` exit 0.
+- Documentation: `make markdownlint`, `make nixie` exit 0.
+- Packaging: `cargo package -p whitaker_support_macros` exits 0.
+- Performance: no threshold, but `syn` must not carry `full`.
+- Security: none beyond the workspace's `unsafe_code = "forbid"`.
 
 ## Idempotence and recovery
 
 Every step is re-runnable. The crate directory can be deleted and recreated
-without touching any other workspace member, because `crates/*` globbing means
-there is no `members` list to keep in step.
+without touching any other member, because `crates/*` globbing means there is
+no `members` list to keep in step.
 
 Snapshot and `trybuild` fixtures are regenerable, but regeneration is not
 recovery — a regenerated expectation must be read before it is committed.
 
-The Verus sidecar is independent of the Cargo build; a broken proof file fails
-`make verus` and nothing else.
-
-Nothing in this plan publishes anything. `cargo publish` runs only from
+Nothing in this plan publishes anything: `cargo publish` runs only from
 `release.yml` on a release tag, so the release wiring is inert until a tag is
-pushed. Reverting the two workflow edits fully undoes EP-M4.
-
-The Stage A scratch directory lives under `/tmp` and must be deleted at the end
-of EP-M0. `/tmp` has 32 GB; if it fills, stop and report rather than working
-around it.
+pushed. **After that first tag it is irreversible**, which is why R-4's
+ordering and guards are not optional.
 
 ## Artefacts and notes
 
-### Feature specification
+### EP-M0 transcripts
 
-`crates/whitaker_support_macros/tests/features/dylint_expect.feature`:
+All commands below were run on the pinned toolchain during planning and are
+reproducible in under a minute. Probe 1 (R-1) is **not** among them and remains
+open.
 
-```gherkin
-Feature: Conditional Dylint expect suppression
+**Probe 3 — the unmitigated baseline, and INV-WARN-1's negative control.**
+A bare gated attribute, no `allow` attributes, warnings denied,
+`check-cfg = 'cfg(kani)'` only:
 
-  Scenario: A single lint is gated behind the named library
-    Given a dylint_expect invocation naming library "whitaker_lints"
-    And the invocation lists the lint "no_std_fs_operations"
-    When the attribute is expanded
-    Then the expansion gates an expect attribute on cfg dylint_lib "whitaker_lints"
-    And the expect attribute names "no_std_fs_operations"
-
-  Scenario: Several lints keep their source order
-    Given a dylint_expect invocation naming library "whitaker_lints"
-    And the invocation lists the lints "module_max_lines, no_std_fs_operations"
-    When the attribute is expanded
-    Then the expect attribute names the lints in the order "module_max_lines, no_std_fs_operations"
-
-  Scenario: A supplied reason reaches the expect attribute
-    Given a dylint_expect invocation naming library "whitaker_lints"
-    And the invocation lists the lint "no_std_fs_operations"
-    And the invocation supplies the reason "legacy call-site"
-    When the attribute is expanded
-    Then the expect attribute carries the reason "legacy call-site"
-
-  Scenario: An omitted reason leaves the expect attribute without one
-    Given a dylint_expect invocation naming library "whitaker_lints"
-    And the invocation lists the lint "no_std_fs_operations"
-    When the attribute is expanded
-    Then the expect attribute carries no reason
-
-  Scenario: Arguments may be supplied in any order
-    Given a dylint_expect invocation whose arguments are ordered "reason, lints, lib"
-    When the attribute is expanded
-    Then the expansion matches the canonical ordering
-
-  Scenario: A duplicated argument is rejected
-    Given a dylint_expect invocation that supplies "lib" twice
-    When the attribute is expanded
-    Then expansion fails reporting a duplicate "lib" argument
-
-  Scenario: An empty lint list is rejected
-    Given a dylint_expect invocation naming library "whitaker_lints"
-    And the invocation lists no lints
-    When the attribute is expanded
-    Then expansion fails reporting that at least one lint path is required
+```plaintext
+error: unexpected `cfg` condition name: `dylint_lib`
+ --> probe.rs:1:12
+  |
+1 | #[cfg_attr(dylint_lib = "whitaker_suite", expect(no_std_fs_operations, reason = "legacy"))]
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: `-D unexpected-cfgs` implied by `-D warnings`
 ```
 
-Wire each scenario with `#[scenario(path = "tests/features/dylint_expect.feature",
-index = N)]` from an in-crate `#[cfg(test)]` module, following the pattern in
-`crates/bumpy_road_function/tests/analysis_behaviour.rs`. The `path` is
-resolved relative to `CARGO_MANIFEST_DIR`, so an in-crate unit-test module can
-reach a feature file under `tests/`.
+One diagnostic. No `unknown_lints`: a false `cfg_attr` predicate is stripped
+before lint-attribute processing, so `rustc` never sees the unknown lint name.
+No `clippy::allow_attributes`: there are no `allow` attributes to lint.
+
+**Probe 3b — the same file with `dylint_lib` added to `check-cfg`.** Exit 0,
+no output. This is the entire fix.
+
+**Probe 3c — the cfg active with an unregistered lint name.**
+
+```plaintext
+error: unknown lint: `no_std_fs_operations`
+ --> probe.rs:1:50
+  = note: `-D unknown-lints` implied by `-D warnings`
+```
+
+This is the misspelt-lint safety net. ADR 002's mandated
+`#[allow(unknown_lints)]` would remove it, converting every typo into a silent
+no-op. That is the strongest single argument for D-9(b).
+
+**Probe 3d — where `allow(unexpected_cfgs)` actually works.** Three placements
+of the same suppression against the same gated attribute:
+
+```plaintext
+(a) allow as a SIBLING attribute on the same item   -> WARNS
+(b) allow on an ENCLOSING module                    -> silent
+(c) allow as an INNER attribute of the item's body  -> silent
+```
+
+Only the ADR 002 shape fails. `unexpected_cfgs` is resolved during
+cfg-expansion, before the item's own lint levels are in scope.
+
+**Probe 3e — the decisive one.** A real `proc-macro = true` crate emitting
+ADR 002's exact four-attribute expansion, consumed by a second crate carrying
+this workspace's lint policy:
+
+```plaintext
+warning: unexpected `cfg` condition name: `dylint_lib`
+ --> src/lib.rs:1:1
+```
+
+The macro, built and run exactly as ADR 002 specifies, still warns — at the
+call-site. This is the finding that blocks the plan.
+
+**Probe 2 — Clippy self-suppression.** `#[allow(clippy::allow_attributes,
+reason = "...")]` does suppress `clippy::allow_attributes` for its own
+attribute list, so ADR 002's shape would have worked had it been needed. Under
+D-9(b) it is not needed, because no `allow` attributes are emitted.
+
+**Probe 4 — Kani.** Moot under D-11, which removes the bounded-model-checking
+question entirely.
+
+**Crates.io name availability**, checked against the registry API:
+
+```plaintext
+whitaker_support_macros -> 404   (free)
+whitaker_support        -> 404   (free)
+whitaker-common         -> 200   (control: exists)
+```
 
 ### Compile-fail fixture inventory
 
-Ten fixtures under `crates/whitaker_support_macros/tests/ui/`, each paired with
-a reviewed `.stderr`: `missing_lib.rs`, `missing_lints.rs`, `empty_lints.rs`,
+Fixtures under `crates/whitaker_support_macros/tests/ui/`, each paired with a
+reviewed `.stderr`: `missing_lib.rs`, `missing_lints.rs`, `empty_lints.rs`,
 `duplicate_lib.rs`, `duplicate_lints.rs`, `duplicate_reason.rs`,
-`non_string_lib.rs`, `non_string_reason.rs`, `unknown_argument.rs`, and
-`empty_argument_list.rs`. All ten `.stderr` files must differ from one another;
-two identical files mean two error classes were collapsed.
+`non_string_lib.rs`, `non_string_reason.rs`, `unknown_argument.rs`,
+`empty_argument_list.rs`, `lints_as_string.rs`, `non_path_in_lints.rs`,
+`generic_lint_path.rs`, `leading_colons_lint_path.rs`, `empty_lib.rs`,
+`hyphenated_lib.rs`, `trailing_comma_in_lints.rs`, and
+`trailing_comma_top_level.rs`.
 
-### EP-M0 transcripts
-
-To be recorded here during Stage A. Leave this subsection in place with the
-heading and fill it in; do not delete it if the probes are inconclusive —
-record the inconclusive result and escalate.
+Compare **normalized** message text across them, with paths and line numbers
+stripped; trybuild embeds the fixture path in every `.stderr`, so raw file
+comparison always shows a difference and proves nothing.
 
 ## Progress
 
-- [ ] EP-M0: Stage A prototyping — the four empirical questions answered and
-      transcripts recorded.
-- [ ] EP-M1: crate skeleton, manifest, and workspace dependency entries.
-- [ ] EP-M2: grammar, parser, expansion, all tests green, Verus proof
-      discharged, snapshots and `.stderr` fixtures reviewed and blessed.
-- [ ] EP-M3: warning-free under the full workspace lint policy; Makefile
-      `WHITAKER_PACKAGES` updated.
-- [ ] EP-M4: publish metadata verified; `ci.yml` and `release.yml` wired.
-- [ ] EP-M5: ADR 002 accepted; suite design, repository layout, developers'
-      guide, and users' guide updated; roadmap 1.3.1 marked done.
+- [x] (2026-08-21) EP-M0 probes 2, 3, and 4 run; transcripts recorded above.
+- [ ] EP-M0 remaining: probe 1 (R-1, `expect` viability under a real Dylint
+      session); commit the probes as a script with asserted exit codes.
+- [ ] **BLOCKED**: D-9 deviation awaiting explicit acceptance. No
+      implementation may begin until a direction is chosen.
+- [ ] EP-M1: crate skeleton, manifest, workspace dependency and `check-cfg`
+      entries.
+- [ ] EP-M2: keys, parser, expansion, all tests green, snapshots and `.stderr`
+      fixtures reviewed and blessed.
+- [ ] EP-M3: warning-free under the full workspace lint policy.
+- [ ] EP-M4: packaging verified; `ci.yml` and `release.yml` wired, new crate
+      published last and guarded.
+- [ ] EP-M5: ADR 002 amended and accepted; suite design and repository layout
+      updated; roadmap 1.3.1 marked done.
 
 ## Surprises & discoveries
 
-None yet. Record Stage A findings here as they arrive, with evidence and
-impact, before acting on them.
+- **S-1 — ADR 002's expansion does not suppress `unexpected_cfgs`.**
+  Evidence: probes 3d and 3e above. Impact: blocks the plan; drives D-9. The
+  only working mitigations are a manifest `check-cfg` entry or an
+  enclosing-scope `allow`, neither of which an attribute macro can provide for
+  an arbitrary item.
+
+- **S-2 — the diagnostics ADR 002 sets out to suppress mostly do not fire.**
+  Evidence: probe 3. Impact: `allow(unknown_lints)` and
+  `allow(clippy::allow_attributes)` address diagnostics the gated form never
+  emits outwith Dylint, and the former destroys the misspelt-lint safety net
+  inside Dylint. ADR 002 §Options considered rejects Option D partly on this
+  basis, so that rejection rationale must be corrected.
+
+- **S-3 — `whitaker_test_macros` now emits a pattern that trips a Clippy
+  lint.** Its expansion uses `#[cfg_attr(clippy, expect(clippy::allow_attributes,
+  ...))]`, which the current toolchain rejects with
+  `clippy::unnecessary_clippy_cfg` ("no need to put clippy lints behind a
+  `clippy` cfg"). Evidence: probe 2's scratch crate. Impact: out of scope here,
+  but worth raising as separate follow-up work before it surfaces in a gate.
+
+- **S-4 — the library name in ADR 002 does not exist.** `whitaker_lints`
+  appears nowhere in the repository. Impact: corrected throughout this plan to
+  `whitaker_suite`; ADR 002 must be corrected at EP-M5, before the string
+  becomes copy-paste canon.
+
+- **S-5 — `make verus` and `make kani` run in no CI workflow.** Only
+  `scripts/check-verus-fragment-id-bridge.sh` does. Impact: contributed to
+  D-11; a Verus obligation here would never have been enforced.
+
+- **S-6 — no proof file in `verus/` has ever been modified.** All five are
+  single "Add" commits, while `common/src` has taken 19 commits and
+  `whitaker_clones_core/src` 8 over the same period. Impact: corroborates that
+  a sidecar with no executable partner drifts silently.
 
 ## Decision log
 
-- Decision (D-1): scope 1.3.1 to the macro crate alone, and use the
-  `#[whitaker_support_macros::dylint_expect(...)]` path throughout its own
-  tests and documentation.
+- **D-1**: scope 1.3.1 to the macro crate alone, using the
+  `#[whitaker_support_macros::dylint_expect(...)]` path in its own tests and
+  documentation.
   Rationale: ADR 002 §Migration plan phase 1 covers exactly this crate, and
-  roadmap 1.3.2 owns the `whitaker_support` facade. Introducing a placeholder
-  facade now would be compatibility theatre — there is no consumer to be
-  compatible with, and 1.3.2 adds the real re-export without changing anything
-  delivered here.
+  roadmap 1.3.2 owns the facade. A placeholder facade now would be
+  compatibility theatre — there is no consumer to be compatible with.
   Date/Author: 2026-08-21, planning agent.
 
-- Decision (D-2): make the crate publish-ready and wire the release pipeline
-  within 1.3.1.
-  Rationale: user direction at plan approval, resolving ADR 002 §Outstanding
-  decisions item 3. ADR 002's comparison table claims Option C "works in
-  downstream crates without extra config", which is only true if the crate is
-  published. Nothing is actually published until a release tag is pushed, so
-  the wiring is inert and reversible.
-  Date/Author: 2026-08-21, user.
-
-- Decision (D-3): move ADR 002 from `Proposed` to `Accepted` within 1.3.1.
-  Rationale: user direction. Implementing the decision commits to it. The
-  status change carries a dated summary and must incorporate the EP-M0
-  findings, so acceptance is evidence-backed rather than nominal.
-  Date/Author: 2026-08-21, user.
-
-- Decision (D-4): add `reason = "..."` to each of the three `allow` attributes
-  the expansion emits, beyond ADR 002's literal text.
-  Rationale: this workspace denies `clippy::allow_attributes_without_reason`.
-  ADR 002's expansion as written would fail Whitaker's own lint policy, which
-  cannot be the intent of a document whose stated goal is warning-free output
-  (ADR002-TR-1). The addition is mechanical and changes no requirement, so it
-  is recorded here rather than raised as an architecture deviation. It must be
-  reflected in ADR 002 §Decision outcome at EP-M5.
-  Date/Author: 2026-08-21, planning agent.
-
-- Decision (D-5): keep the macro-authored `allow` reasons distinct from the
-  user's `reason` argument.
-  Rationale: they justify different things. The `allow` reasons explain the
-  Dylint plumbing and are identical at every call-site; the user's reason
-  explains why this particular suppression exists. Merging them would make
-  every expansion claim the user's justification for the plumbing, which is
-  misleading at review time.
-  Date/Author: 2026-08-21, planning agent.
-
-- Decision (D-6): use Verus plus exhaustive enumeration rather than Kani for
-  the argument-grammar obligations.
-  Rationale: Kani cannot compile a `proc-macro = true` crate, and relocating
-  the grammar policy out of the crate purely to satisfy a tool would let tool
-  choice dictate architecture. The substitute is stronger for this obligation,
-  not weaker: with a three-symbol alphabet, exhaustive enumeration to length 4
-  is a complete decision procedure within that bound — everything a bounded
-  model check would deliver — while the Verus proof covers the unbounded case
-  that Kani could never reach. EP-M0 confirms the Kani limitation empirically
-  rather than assuming it.
-  Date/Author: 2026-08-21, planning agent.
-
-- Decision (D-7): do not build a three-configuration compatibility harness in
+- **D-2**: make the crate publish-ready and wire the release pipeline within
   1.3.1.
-  Rationale: roadmap 1.3.3 is explicitly "Add compatibility coverage that
-  proves the attribute stays warning free in non-Dylint builds, Clippy runs,
-  and Dylint runs with the matching `dylint_lib` value". Building it here would
-  duplicate that task. 1.3.1 covers the non-Dylint configuration only, and gets
-  it free: the crate's own tests and doctests use the macro and are compiled
-  under `-D warnings` with the full workspace lint policy.
+  Rationale: user direction, resolving ADR 002 §Outstanding decisions item 3.
+  Amended by R-4: the new crate publishes **last**, not first, and every
+  publish in the block is guarded against an already-uploaded version. The
+  user's decision predates the discovery that `release.yml`'s publish block is
+  all-or-nothing under `set -euxo pipefail`.
+  Date/Author: 2026-08-21, user; amended by planning agent.
+
+- **D-3**: move ADR 002 to `Accepted` within 1.3.1.
+  Rationale: user direction. Now conditional on D-9: the ADR must first be
+  **amended**, because accepting it unchanged would ratify an expansion that
+  provably does not work.
+  Date/Author: 2026-08-21, user; qualified by planning agent.
+
+- **D-8**: migrate `crates/whitaker_test_macros` to the promoted workspace pins
+  for `syn`, `quote`, and `proc-macro2`, with `full` added at its use site.
+  Rationale: two pins for the same dependency is a second version of truth. The
+  `full` feature stays local so it does not leak into the published manifest.
   Date/Author: 2026-08-21, planning agent.
 
-- Decision (D-8): migrate `crates/whitaker_test_macros` to the newly promoted
-  workspace pins for `syn`, `quote`, and `proc-macro2`.
-  Rationale: promoting those crates to `[workspace.dependencies]` for the new
-  crate while leaving the existing one on its own pins would create two
-  versions of truth for the same dependency. The migration is three lines and
-  behaviourally inert.
+- **D-9 — PROPOSED ARCHITECTURE DEVIATION. Status: awaiting acceptance.**
+  Affected upstream identifiers: ADR002-TR-1 (primary), ADR002-FR-4, and
+  ADR 002 §Options considered, §Decision outcome, §Known risks.
+  Finding: the mandated four-attribute expansion does not suppress
+  `unexpected_cfgs` (S-1), two of its attributes suppress diagnostics that never
+  fire (S-2), and the third removes the misspelt-lint safety net.
+  Options:
+  - **(a) Implement ADR 002 verbatim.** Roadmap-faithful. Ships a macro that
+    does not achieve warning-freedom and that masks misspelt lint names.
+    Requires no ADR amendment but knowingly delivers a broken requirement.
+  - **(b) Amend ADR 002 and ship a minimal macro (recommended).** The
+    expansion becomes the `cfg_attr` gate alone; Whitaker adds one `check-cfg`
+    entry and documents it as the prerequisite for consumers. Preserves typo
+    detection. Requires correcting §Options considered (Option D's rejection
+    rationale is factually wrong), §Decision outcome, and §Known risks.
+  - **(c) Supersede ADR 002 with Option D plus a lint.** No macro: one
+    `check-cfg` line, plus a `dylint_expect_shape` lint that validates
+    call-sites against loaded libraries and registered lint names — closing all
+    three silent-no-op routes in R-2, which no macro can. On-thesis for a lint
+    suite. Removes roadmap 1.3.1–1.3.4 as written.
+  Recommendation: (b), with (c)'s lint booked as roadmap 1.3.5 regardless,
+  since R-2's remaining two routes survive under every option.
+  Required upstream change: ADR 002 amendment before EP-M1.
+  Approving authority: repository owner.
   Date/Author: 2026-08-21, planning agent.
+
+- **D-10**: defer the users' and developers' guide narratives to roadmap 1.3.4.
+  Rationale: 1.3.4 is literally "Document intended usage, narrow-scope review
+  guidance, and pre-expansion limitations". The earlier draft mapped
+  ADR002-TR-4 into EP-M5, duplicating a later roadmap item. The same reasoning
+  that correctly refuses to pre-empt 1.3.3 applies here. ADR 002, the suite
+  design cross-reference, the repository layout, and the roadmap tick stay in
+  EP-M5.
+  Date/Author: 2026-08-21, planning agent, on reviewer finding.
+
+- **D-11**: cut the Verus sidecar, the permutation property test, the BDD
+  feature file, and the `googletest`/`pretty_assertions` dependencies.
+  Rationale: the pigeonhole argument makes the 121-case enumeration a total
+  decision procedure, so the Verus lemma would restate a decidable property —
+  which `AGENTS.md` forbids. `make verus` runs in no CI workflow (S-5) and no
+  proof file has ever been maintained (S-6). The seven BDD scenarios restate
+  the `insta` snapshots with no stakeholder who reads `.feature` files but not
+  `#[expect(...)]`, and `rstest-bdd-macros` is documented in
+  `.config/nextest.toml` as hanging during dependency resolution on Windows CI.
+  `googletest` and `pretty_assertions` appear in none of the repository's 20-plus
+  crates; adding two assertion libraries for one crate forks the testing dialect
+  and is its own decision, not a side-effect of this one. Net effect: three
+  fewer verification layers, no loss of coverage.
+  Date/Author: 2026-08-21, planning agent, on reviewer findings.
+
+- **D-12**: hold `syn::LitStr` in `LibraryName` and `Reason` rather than
+  `String`, and give `LibraryName` a validating constructor.
+  Rationale: the earlier draft's newtypes carried no invariant and discarded the
+  span. Rejecting an empty or hyphenated library name closes the one route to a
+  silent no-op that the macro can close unaided, and keeping the span is what
+  makes the diagnostics anchorable.
+  Date/Author: 2026-08-21, planning agent, on reviewer finding.
 
 ## Outcomes & retrospective
 
 To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
-every EP-M0 discovery against ADR 002:
+every discovery against ADR 002:
 
-- If the `expect`-viability probe contradicts ADR 002 §Decision outcome, the
-  ADR must be amended and re-accepted, not worked around.
-- If the `unknown_lints` masking hazard is confirmed, it must appear in ADR 002
-  §Known risks and in the users' guide.
-- Purely mechanical differences from ADR 002's text — the D-4 reason additions
-  are the known example — are recorded in `Decision log` and reflected in the
-  ADR, and require no requirements change.
+- S-1, S-2, and S-4 require ADR 002 amendments and cannot be recorded as
+  mechanical differences.
+- R-2's surviving silent-no-op routes must appear in ADR 002 §Known risks and
+  be booked as roadmap 1.3.5.
+- R-3's deployment-mode problem must appear in ADR 002 §Outstanding decisions
+  with the reserved `lib(...)` extension.
+- S-3 must be raised as separate follow-up work against
+  `crates/whitaker_test_macros`.
 
 Do not mark this plan `COMPLETE` while any upstream change or deviation remains
-unrecorded.
+unrecorded or unaccepted.
 
 ## Signposts
 
 Documentation to read before starting:
 
-- `docs/adr-002-dylint-expect-attribute-macro.md` — the governing decision.
+- `docs/adr-002-dylint-expect-attribute-macro.md` — the governing decision,
+  pending the D-9 amendment.
 - `docs/whitaker-dylint-suite-design.md` — how the suite is assembled and where
   support crates sit.
-- `docs/repository-layout.md` — the directory map, and where the new crate is
-  listed.
+- `docs/repository-layout.md` — the directory map.
 - `docs/documentation-style-guide.md` — ADR section requirements, sentence-case
-  headings, 80-column prose wrapping, table and figure captions, en-GB-oxendict
-  spelling.
-- `docs/developers-guide.md` §Creating a New Lint — the neighbourhood where the
-  new convention section belongs.
+  headings, 80-column prose, table and figure captions, en-GB-oxendict spelling.
+- `docs/developers-guide.md` §Creating a New Lint — relevant if D-9(c) is
+  chosen, or for the 1.3.5 lint.
 - `docs/rust-testing-with-rstest-fixtures.md` — fixture and parameterization
   conventions.
-- `docs/rstest-bdd-users-guide.md` — `#[scenario]` wiring and step-definition
-  layout for the v0.5 API.
-- `docs/rust-doctest-dry-guide.md` — keeping the rustdoc examples that
-  `AGENTS.md` requires from duplicating test logic.
+- `docs/rust-doctest-dry-guide.md` — keeping the rustdoc examples `AGENTS.md`
+  requires from duplicating test logic.
 - `docs/complexity-antipatterns-and-refactoring-strategies.md` — the standard
   the 400-line and small-function rules serve.
 - `AGENTS.md` — the binding style, testing, dependency, and commit rules.
 
 Skills to load before starting:
 
-- `leta` — semantic navigation. Load at session start and prefer it to text
-  search for any symbol lookup.
-- `rust-router` — routes to the narrower Rust skills; load it first and follow
-  where it points.
+- `leta` — semantic navigation; load at session start and prefer it to text
+  search for symbol lookup.
+- `rust-router` — routes to the narrower Rust skills; load first and follow.
 - `arch-crate-design` — crate boundaries, `publish` decisions, and public
-  versus internal API shape, all of which this plan touches.
-- `rust-unit-testing` — `rstest` parameterization, `googletest` matchers,
-  `pretty_assertions`, and `insta` snapshot discipline.
-- `proptest` — strategy design and shrinking for INV-EXP-3 and INV-SHAPE-1.
-- `verus` — the deductive proof for INV-SHAPE-1 and INV-SHAPE-2, especially the
-  trigger and `assert(...) by { ... }` guidance.
-- `hexagonal-architecture` — the port boundary rationale in
-  `Interfaces and dependencies`.
-- `arch-decision-records` — for the ADR 002 status change at EP-M5.
-- `execplans` — for keeping this document current as work proceeds.
+  versus internal API shape.
+- `rust-unit-testing` — `rstest` parameterization and `insta` snapshot
+  discipline.
+- `proptest` — strategy design and shrinking for INV-EXP-3.
+- `arch-decision-records` — for the ADR 002 amendment at EP-M5.
+- `nextest` — filtersets for the focused commands, and R-8's group interaction.
+- `execplans` — for keeping this document current.
 - `commit-message` — file-based commit messages, never `-m`.
-- `nextest` — filtersets for the focused test commands above.
+
+The `verus`, `kani`, and `hexagonal-architecture` skills were loaded during
+planning and informed D-11 and the boundary discussion in `Interfaces and
+dependencies`. They are **not** needed during implementation: there is no
+proof obligation and no port to invert.
 
 Sub-agents to use:
 
-- `scrutineer` — the exclusive runner of full commit gates. Delegate every
-  `make` gate run to it; read its cited log rather than re-running a gate.
+- `scrutineer` — the exclusive runner of full commit gates. Read its cited log
+  rather than re-running a gate.
 - `scribe` — the documentation edits at EP-M5.
 - `wyvern` — read-only reconnaissance when a file's shape is unclear.
 - `alchemist` — only for a single falsifiable hypothesis with a supplied
-  prediction and minimal experiment, such as one of the Stage A probes.
+  prediction and minimal experiment, such as R-1's probe.
 
 ## Revision note
 
-Initial draft, 2026-08-21. Covers roadmap 1.3.1 in full, with scope extended by
-user direction at approval time to include crates.io publish wiring (D-2), the
-ADR 002 status change (D-3), and the Dylint suite design cross-reference. No
-work has begun; the plan awaits approval.
+**Revision 2, 2026-08-21.** Status moved from `DRAFT` to `BLOCKED`.
+
+What changed. EP-M0's probes were run during planning rather than deferred, and
+falsified a premise of ADR 002: the mandated expansion does not suppress
+`unexpected_cfgs`, verified end-to-end with a real proc macro (S-1, probe 3e).
+D-9 records the resulting proposed deviation with three options and a
+recommendation. A six-lens design review then drove eleven further changes: the
+verification apparatus was cut by three layers on a pigeonhole argument that
+makes the enumeration total (D-11); the module layout was flattened after a
+misread of `clippy::self_named_module_files`; `args/grammar` was renamed `keys`
+because it never covered arity; `ArgShapeError` now carries position so
+diagnostics can be anchored; the newtypes now hold `LitStr` and enforce an
+invariant (D-12); `syn` lost the `full` feature that would have leaked to every
+downstream consumer; the publish step was reordered and guarded (R-4); the
+non-existent `whitaker_lints` library name was corrected throughout (S-4);
+INV-DIAG-1's non-vacuity control was replaced because the original was itself
+vacuous; the fixture inventory grew from ten to eighteen; and the guide
+narratives were deferred to roadmap 1.3.4 (D-10).
+
+Why. The plan's own prototyping milestone did its job. Acting on its findings
+rather than proceeding around them is the point of having the milestone, and
+the ExecPlan standard requires a deviation to be recorded and accepted rather
+than absorbed.
+
+Effect on remaining work. No implementation may begin until D-9 is resolved.
+Under the recommended option (b) the plan is ready to execute as written; under
+(a) the `Constraints` expansion clause and INV-EXP-2 revert to ADR 002's
+four-attribute set; under (c) roadmap items 1.3.1–1.3.4 are superseded and this
+plan is withdrawn. R-1 remains the one open empirical question under every
+option, and must be answered before EP-M2 closes.
