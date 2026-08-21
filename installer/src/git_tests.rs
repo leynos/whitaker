@@ -88,16 +88,22 @@ fn git_fixture() -> GitFixture {
 #[rstest]
 fn resolve_commit_resolves_tag_branch_and_sha(git_fixture: GitFixture) {
     assert_eq!(
-        resolve_commit(&git_fixture.clone, "v1").expect("resolve tag"),
-        git_fixture.first
+        resolve_commit(&git_fixture.clone, "v1")
+            .expect("resolve tag")
+            .as_str(),
+        git_fixture.first.as_str()
     );
     assert_eq!(
-        resolve_commit(&git_fixture.clone, "main").expect("resolve branch"),
-        git_fixture.second
+        resolve_commit(&git_fixture.clone, "main")
+            .expect("resolve branch")
+            .as_str(),
+        git_fixture.second.as_str()
     );
     assert_eq!(
-        resolve_commit(&git_fixture.clone, &git_fixture.second).expect("resolve sha"),
-        git_fixture.second
+        resolve_commit(&git_fixture.clone, &git_fixture.second)
+            .expect("resolve sha")
+            .as_str(),
+        git_fixture.second.as_str()
     );
 }
 
@@ -110,7 +116,8 @@ fn resolve_commit_errors_on_garbage(git_fixture: GitFixture) {
 
 #[rstest]
 fn checkout_detached_leaves_head_at_commit(git_fixture: GitFixture) {
-    checkout_detached(&git_fixture.clone, &git_fixture.first).expect("checkout detached");
+    let commit = resolve_commit(&git_fixture.clone, "v1").expect("resolve tag");
+    checkout_detached(&git_fixture.clone, &commit).expect("checkout detached");
     assert_eq!(
         git(&git_fixture.clone, &["rev-parse", "HEAD"]),
         git_fixture.first
@@ -137,11 +144,11 @@ fn unpinned_no_update_preserves_detached_commit_gate(git_fixture: GitFixture) {
 
     assert_eq!(checkout.pinned_commit, None);
     assert_eq!(
-        checkout.detached_commit.as_deref(),
+        checkout.detached_commit.as_ref().map(CommitSha::as_str),
         Some(git_fixture.first.as_str())
     );
     assert_eq!(
-        checkout.expected_git_sha(),
+        checkout.expected_git_sha().map(CommitSha::as_str),
         Some(git_fixture.first.as_str())
     );
 }
@@ -150,7 +157,7 @@ fn unpinned_no_update_preserves_detached_commit_gate(git_fixture: GitFixture) {
 fn pinned_checkout_reattaches_for_unpinned_update(git_fixture: GitFixture) {
     let pinned_commit =
         crate::workspace::pin_to_ref(&git_fixture.clone, "v1").expect("pin checkout to v1");
-    assert_eq!(pinned_commit, git_fixture.first);
+    assert_eq!(pinned_commit.as_str(), git_fixture.first);
     assert_eq!(
         git(&git_fixture.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
         "HEAD"
@@ -180,7 +187,8 @@ fn ensure_default_branch_is_noop_on_a_branch(git_fixture: GitFixture) {
 
 #[rstest]
 fn ensure_default_branch_repairs_missing_remote_head(git_fixture: GitFixture) {
-    checkout_detached(&git_fixture.clone, &git_fixture.first).expect("checkout detached");
+    let commit = resolve_commit(&git_fixture.clone, "v1").expect("resolve tag");
+    checkout_detached(&git_fixture.clone, &commit).expect("checkout detached");
     git(
         &git_fixture.clone,
         &["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"],
@@ -213,13 +221,17 @@ fn fetch_ref_retrieves_a_new_tag(git_fixture: GitFixture) {
     // The clone cannot resolve the new tag until it fetches.
     assert!(resolve_commit(&git_fixture.clone, "v2").is_err());
     let fetched = fetch_ref(&git_fixture.clone, "v2").expect("fetch new tag");
-    assert_eq!(fetched, third);
+    assert_eq!(fetched.as_str(), third);
     assert_eq!(
-        resolve_commit(&git_fixture.clone, PINNED_REF).expect("resolve private pinned ref"),
+        resolve_commit(&git_fixture.clone, PINNED_REF)
+            .expect("resolve private pinned ref")
+            .as_str(),
         third
     );
     assert_eq!(
-        resolve_commit(&git_fixture.clone, "v2").expect("resolve v2"),
+        resolve_commit(&git_fixture.clone, "v2")
+            .expect("resolve v2")
+            .as_str(),
         third
     );
     assert!(
@@ -238,7 +250,7 @@ fn pin_to_ref_fetches_and_checks_out_a_new_remote_branch(git_fixture: GitFixture
     let pinned_commit = crate::workspace::pin_to_ref(&git_fixture.clone, "release-candidate")
         .expect("fetch and pin new remote branch");
 
-    assert_eq!(pinned_commit, branch_commit);
+    assert_eq!(pinned_commit.as_str(), branch_commit);
     assert_eq!(
         git(&git_fixture.clone, &["rev-parse", "HEAD"]),
         branch_commit
@@ -257,7 +269,7 @@ fn pin_to_ref_prefers_an_updated_remote_branch(git_fixture: GitFixture) {
     let pinned_commit = crate::workspace::pin_to_ref(&git_fixture.clone, "main")
         .expect("fetch and pin updated main");
 
-    assert_eq!(pinned_commit, third);
+    assert_eq!(pinned_commit.as_str(), third);
     assert_eq!(git(&git_fixture.clone, &["rev-parse", "HEAD"]), third);
 }
 
@@ -268,7 +280,7 @@ fn pin_to_ref_falls_back_to_a_local_ref_offline(git_fixture: GitFixture) {
     let pinned_commit = crate::workspace::pin_to_ref(&git_fixture.clone, "v1")
         .expect("pin locally available tag while offline");
 
-    assert_eq!(pinned_commit, git_fixture.first);
+    assert_eq!(pinned_commit.as_str(), git_fixture.first);
     assert_eq!(
         git(&git_fixture.clone, &["rev-parse", "--abbrev-ref", "HEAD"]),
         "HEAD"

@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use whitaker_installer::artefact::download::{ArtefactDownloader, DownloadError};
 use whitaker_installer::artefact::extraction::{ArtefactExtractor, ExtractionError};
 use whitaker_installer::cli::{Cli, InstallArgs};
+use whitaker_installer::git::CommitSha;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt_with};
 use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
 use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
@@ -228,12 +229,18 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
             .join("lib")
     };
     world.attempted_destination = Some(destination_dir.clone());
+    let expected_commit = world
+        .expected_git_sha
+        .as_deref()
+        .map(CommitSha::try_from)
+        .transpose()
+        .expect("full expected Git SHA");
     let config = PrebuiltConfig {
         target,
         toolchain,
         destination_dir: &destination_dir,
         quiet: true,
-        expected_git_sha: world.expected_git_sha.as_deref(),
+        expected_git_sha: expected_commit.as_ref(),
     };
 
     let manifest_behaviour = world

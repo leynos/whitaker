@@ -5,6 +5,7 @@
 
 use std::io::Write;
 use whitaker_installer::cli::InstallArgs;
+use whitaker_installer::git::CommitSha;
 use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::workspace::{WorkspaceAction, WorkspaceCheckout};
 
@@ -58,7 +59,8 @@ pub(super) fn report_pinned_checkout(
 }
 
 /// Abbreviates a commit SHA to its leading 12 characters for display.
-fn short_commit(commit: &str) -> &str {
+fn short_commit(commit: &CommitSha) -> &str {
+    let commit = commit.as_str();
     let end = commit.len().min(12);
     &commit[..end]
 }
@@ -75,7 +77,7 @@ mod tests {
         let root = Utf8PathBuf::from("/managed/whitaker");
         WorkspaceCheckout {
             root: root.clone(),
-            pinned_commit: Some(COMMIT.to_owned()),
+            pinned_commit: Some(CommitSha::try_from(COMMIT).expect("full test commit SHA")),
             detached_commit: None,
             action: WorkspaceAction::UseExisting(root),
         }

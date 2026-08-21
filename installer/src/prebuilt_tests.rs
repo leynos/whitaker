@@ -3,6 +3,7 @@
 use super::*;
 use crate::artefact::download::MockArtefactDownloader;
 use crate::artefact::extraction::MockArtefactExtractor;
+use crate::git::CommitSha;
 use crate::test_utils::{prebuilt_manifest_json, sha256_hex};
 use cap_std::{ambient_authority, fs::Dir};
 use proptest::prelude::*;
@@ -65,10 +66,12 @@ proptest! {
     fn equal_full_git_shas_are_accepted(
         commit in commit_sha_strategy(),
     ) {
+        let expected = CommitSha::try_from(commit.as_str())
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
         let manifest = manifest_with_git_sha(&commit, &"a".repeat(64))
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
-        prop_assert!(validate_git_sha(&manifest, Some(&commit)).is_ok());
+        prop_assert!(validate_git_sha(&manifest, Some(&expected)).is_ok());
     }
 
     #[test]
@@ -76,11 +79,13 @@ proptest! {
         commit in commit_sha_strategy(),
         prefix_len in 7_usize..40,
     ) {
+        let expected = CommitSha::try_from(commit.as_str())
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
         let manifest_sha = &commit[..prefix_len];
         let manifest = manifest_with_git_sha(manifest_sha, &"a".repeat(64))
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
-        match validate_git_sha(&manifest, Some(&commit)) {
+        match validate_git_sha(&manifest, Some(&expected)) {
             Err(PrebuiltError::GitShaMismatch { manifest, expected }) => {
                 prop_assert_eq!(manifest, manifest_sha);
                 prop_assert_eq!(expected, commit);
@@ -98,6 +103,8 @@ proptest! {
         commit in commit_sha_strategy(),
         shared_prefix_len in 7_usize..40,
     ) {
+        let expected = CommitSha::try_from(commit.as_str())
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
         let mut manifest_sha = commit.clone();
         let replacement = if manifest_sha.as_bytes()[shared_prefix_len] == b'0' {
             "1"
@@ -108,7 +115,7 @@ proptest! {
         let manifest = manifest_with_git_sha(&manifest_sha, &"a".repeat(64))
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
-        match validate_git_sha(&manifest, Some(&commit)) {
+        match validate_git_sha(&manifest, Some(&expected)) {
             Err(PrebuiltError::GitShaMismatch { manifest, expected }) => {
                 prop_assert_eq!(manifest, manifest_sha);
                 prop_assert_eq!(expected, commit);
@@ -171,8 +178,12 @@ fn prebuilt_git_sha_gate(
     #[case] expects_success: bool,
 ) {
     let (_temp, destination_dir) = destination_dir();
+    let expected_commit = expected_git_sha
+        .map(CommitSha::try_from)
+        .transpose()
+        .expect("full test commit SHA");
     let config = PrebuiltConfig {
-        expected_git_sha,
+        expected_git_sha: expected_commit.as_ref(),
         ..base_config(&destination_dir)
     };
     let (downloader, extractor) = success_mocks_with_git_sha(manifest_git_sha);

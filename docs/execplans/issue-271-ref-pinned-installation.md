@@ -27,7 +27,8 @@ whitaker-installer --ref 1a2b3c4d…   # a commit SHA
 ```
 
 and the installer will build and stage the lint suite from exactly that
-commit of `leynos/whitaker`. Running `whitaker-installer` with no `--ref`
+commit of `leynos/whitaker`, carrying its resolved full object ID as
+provenance. Running `whitaker-installer` with no `--ref`
 behaves exactly as today (rolling prebuilt artefacts, default-branch source
 fallback). Rolling remains the intentional default; the maintainer does not
 want to cut a new installer release for every suite update. This plan
@@ -39,7 +40,8 @@ machine stages libraries built from the tagged commit (verifiable because the
 staged filenames embed the toolchain channel recorded in that commit's
 `rust-toolchain.toml`), `whitaker-installer --dry-run --ref <tag>` reports the
 ref, and a subsequent un-pinned `whitaker-installer` run still works (the
-clone recovers from the detached checkout).
+clone recovers from the detached checkout). A pinned prebuilt is accepted only
+when its manifest records the same full object ID as the resolved ref.
 
 ## Constraints
 
@@ -88,13 +90,11 @@ clone recovers from the detached checkout).
   Severity: high. Likelihood: certain without mitigation.
   Mitigation: the update path must reattach the clone to the default branch
   before pulling (Stage C step 3). This is a required behaviour, tested.
-- Risk (resolved in Stage A): the prebuilt manifest's `git_sha` format could
-  have made comparison against a resolved ref incorrect. Stage A confirmed
-  that current rolling producers emit abbreviated SHAs.
-  Severity: medium. Likelihood: resolved.
-  Resolution: require the resolved full commit SHA to start with the
-  manifest's abbreviated SHA. Exact full-SHA equality remains rejected while
-  the producer contract is abbreviated.
+- Risk: a prebuilt manifest could claim a different commit from the resolved
+  pin. Severity: high. Likelihood: possible when rolling artefacts are reused.
+  Mitigation: `resolve_commit` and `fetch_ref` return a validated full
+  `CommitSha`; pinned installs require exact full-object-ID equality before
+  accepting a prebuilt. Rolling installs leave this expectation unset.
 - Risk: tags in the whitaker repository may not exist for every released
   installer version, making `--ref v0.2.5` fail for users.
   Severity: low (documentation issue, not a code defect).
@@ -118,9 +118,10 @@ clone recovers from the detached checkout).
   detached-HEAD recovery requirement.
 - [x] (2026-07-08 12:50Z) Drafted this ExecPlan.
 - [x] (2026-07-08) User approved the plan; proceeding through all stages.
-- [x] (2026-07-08) Stage A: confirmed manifest `git_sha` is abbreviated
-  (`git rev-parse --short HEAD`) and default-branch discovery command
-  (`git rev-parse --abbrev-ref origin/HEAD`); findings recorded below.
+- [x] (2026-07-08, superseded historical record) Stage A confirmed the
+  manifest `git_sha` was abbreviated (`git rev-parse --short HEAD`) and fixed
+  the then-current comparison rule; the full-object-ID contract below now
+  supersedes that rule.
 - [x] (2026-07-08) Stage B/C slice 1: `--ref` CLI field. Red (E0609 no field
   `git_ref`) → green (26 cli tests). Commit 6e36c2d.
 - [x] (2026-07-08) Stage B/C slice 2: git helpers `resolve_commit`,
@@ -133,9 +134,9 @@ clone recovers from the detached checkout).
   update. Red (E0425/E0599) → green.
   See
   <https://github.com/leynos/whitaker/commit/ded3ac53dd40feee95f4e0d698053b0d019876b0>.
-- [x] (2026-07-08) Stage B/C slice 4: prebuilt `expected_git_sha` validation
-  (prefix-tolerant) threaded through the fast path. Red (mismatch returned
-  Success) → green (3 unit + 1 BDD). Commit c65281c.
+- [x] (2026-07-08, superseded historical record) Stage B/C slice 4 added
+  prefix-tolerant prebuilt `expected_git_sha` validation. The current
+  contract requires exact full-object-ID provenance.
 - [x] (2026-07-08) Stage B/C slice 5: dry-run `git_ref` field, pinning progress
   messages, 2 CLI BDD scenarios (pinned dry-run, refuse in workspace). Red
   (missing "Pinned ref:" line) → green. Commit 4caa7d6.
@@ -148,14 +149,15 @@ clone recovers from the detached checkout).
   construction checks with failures driven through `clone_repository` and
   `update_repository`, and added a real-Git pin, detach, reattach, and update
   lifecycle test.
-- [x] (2026-08-01) Added two proptest properties for accepted 7–40 character
-  SHA prefixes and rejection after changing a prefix nibble.
+- [x] (2026-08-01, superseded historical record) Added two proptest properties
+  for accepted 7–40 character SHA prefixes and rejection after changing a
+  prefix nibble.
 - [x] (2026-08-01) Full review gates passed: formatting, tests, type-checking,
   linting, Markdown, and Mermaid validation.
-- [x] (2026-08-01) Verified the latest review findings. The full-SHA-only
-  proposal was rejected because rolling producers record abbreviated SHAs; the
-  fixture, Git recovery and pinning, capability-write, helper-boundary, and
-  documentation findings remained valid.
+- [x] (2026-08-01, superseded historical record) Verified the review findings
+  and rejected the full-SHA-only proposal because rolling producers recorded
+  abbreviated SHAs. The current implementation has since adopted exact
+  full-object-ID validation.
 - [x] (2026-08-01) Converted `git_fixture` to an injected `rstest` fixture;
   added real-Git coverage for missing `origin/HEAD` repair and fetched pinning;
   extracted `finalize_workspace_checkout`; routed prebuilt test writes through
@@ -186,17 +188,18 @@ clone recovers from the detached checkout).
   extra blank line; after the Scribe correction it passed 76 files with 0
   errors (`/tmp/issue271-rebase-docfix-markdownlint.log`). Nixie passed 76
   files and 15 Mermaid diagrams (`/tmp/issue271-rebase-docfix-nixie.log`).
+- [x] (2026-08-22) Current interface and provenance follow-up: Git commit
+  resolution returns `CommitSha` full object IDs; workspace and prebuilt
+  interfaces carry and compare that provenance exactly. Current tests cover
+  clone/update, ref resolution and fetching, detached checkout and recovery,
+  workspace provenance, and exact prebuilt match/mismatch behaviour.
 
 ## Surprises & discoveries
 
-- (2026-07-08, Stage A) The manifest `git_sha` is **abbreviated**, not a full
-  40-hex SHA. `.github/workflows/rolling-release.yml` line 142 writes it from
-  `git rev-parse --short HEAD` into the package tool's `--git-sha`. Git's
-  `--short` yields the shortest unambiguous prefix (7+ hex). The `GitSha`
-  newtype in `installer/src/artefact/git_sha.rs` accepts 7–40 hex chars,
-  consistent with this. **Comparison rule fixed:** a pinned install may use the
-  rolling prebuilt only when the resolved *full* commit SHA `starts_with` the
-  manifest's abbreviated `git_sha` (prefix-tolerant), not exact equality.
+- (2026-07-08, Stage A, superseded historical record) The manifest `git_sha`
+  was **abbreviated**, not a full 40-hex SHA, and the then-current comparison
+  rule was prefix-tolerant. The current pinned-install contract requires a
+  manifest full object ID to equal the resolved `CommitSha` exactly.
 - (2026-07-08, Stage A) Default-branch discovery: the platform clone carries
   `refs/remotes/origin/HEAD` symbolic ref (`git symbolic-ref
   refs/remotes/origin/HEAD` → `refs/remotes/origin/main`; `git rev-parse
@@ -205,10 +208,11 @@ clone recovers from the detached checkout).
   the branch name, and falls back to `git remote set-head origin --auto` once
   when the symbolic ref is absent from an older clone. The repository default
   branch is `main`.
-- (2026-07-08, Stage A) The shared test manifest helper
-  `test_utils::prebuilt_manifest_json` hardcodes `"git_sha":"abc1234"`. The
-  prebuilt SHA-match tests therefore key off that literal: a full SHA beginning
-  `abc1234…` matches; any other value is a mismatch.
+- (2026-07-08, Stage A, superseded historical record) The shared test manifest
+  helper `test_utils::prebuilt_manifest_json` hardcodes `"git_sha":"abc1234"`.
+  The
+  prebuilt SHA-match tests therefore keyed off that literal and a shared
+  prefix. Current tests use full-object-ID match and mismatch cases.
 - (2026-08-04, review pass) Resolving `FETCH_HEAD` after a fetch is ambiguous
   when Git records more than one fetched object. Fetching the requested
   refspec into `refs/whitaker/pinned-ref` gives pinning a stable name to resolve
@@ -251,11 +255,10 @@ clone recovers from the detached checkout).
   Rationale: checking out a ref in the user's own working tree could destroy
   uncommitted work; refusing is the only safe behaviour.
   Date/Author: 2026-07-08, agent.
-- Decision (implementation): the prebuilt SHA match is *prefix-tolerant in one
-  direction* — the resolved full commit must `starts_with` the manifest's
-  abbreviated `git_sha` (confirmed abbreviated in Stage A). Exact equality would
-  never match, since the manifest stores a short SHA and `resolve_commit`
-  returns the full one.
+- Decision (implementation, superseded historical record): the prebuilt SHA
+  match was *prefix-tolerant in one direction* because the manifest stored an
+  abbreviated SHA. The current decision requires exact full-object-ID
+  equality.
   Date/Author: 2026-07-08, agent.
 - Decision (process): BDD scenarios were landed with their related
   implementation slice (prebuilt-mismatch with slice 4; pinned dry-run and the
@@ -278,7 +281,8 @@ clone recovers from the detached checkout).
   orchestration calls git operations, while the git module does not depend on
   workspace orchestration.
   Date/Author: 2026-08-01, agent.
-- Decision (verification): use proptest for the pure SHA-prefix invariant and
+- Decision (verification, superseded historical record): use proptest for the
+  pure SHA-prefix invariant and
   real Git repositories for detached-HEAD recovery. Do not add Kani or Verus
   coverage for Git subprocess state.
   Rationale: Kani cannot directly model the external Git process and
@@ -295,13 +299,18 @@ clone recovers from the detached checkout).
   Rationale: this removes repeated result construction without hiding the
   orchestration that distinguishes the workspace setup paths.
   Date/Author: 2026-08-01, review feedback.
-- Decision (review provenance): retain prefix-tolerant pinned-prebuilt
-  validation and its existing proptest properties; do not require a full
-  manifest object ID in this review pass.
-  Rationale: both rolling-release producers record `git rev-parse --short HEAD`
-  and `GitSha` accepts 7–40 hexadecimal characters. Exact equality would reject
-  every current abbreviated rolling manifest, disabling valid prebuilt reuse.
+- Decision (review provenance, superseded historical record): retain
+  prefix-tolerant pinned-prebuilt validation and its existing proptest
+  properties; do not require a full manifest object ID in that review pass.
+  Rationale: both rolling-release producers recorded abbreviated SHAs.
   Date/Author: 2026-08-01, agent.
+- Decision (current provenance): represent resolved Git commits as `CommitSha`
+  full object IDs. A pinned or inherited detached checkout may reuse a
+  prebuilt only when the manifest's full object ID equals the expected value;
+  rolling installs leave the expected value unset.
+  Rationale: a short or shared-prefix SHA cannot prove that the artefact was
+  built from the selected commit.
+  Date/Author: 2026-08-22, agent.
 - Decision (review tests): inject the shared real-Git repository through an
   `rstest` fixture, exercise missing-default-ref recovery and remote-only
   pinning through production flows, and use a `cap_std::fs::Dir` rooted at each
@@ -338,26 +347,29 @@ signature change (`ensure_workspace`). Rolling remains the default; only the
 explicit-pin part of issue #271 is implemented, and the version-matched default
 proposed there was deliberately not built (Decision Log).
 
-Lessons: (1) confirming the manifest SHA width in Stage A was load-bearing — the
-match is prefix-tolerant, and exact equality would have silently disabled the
-prebuilt fast path for every pin. (2) Adding a field to `PrebuiltConfig` and the
+Superseded historical lesson: confirming the manifest SHA width in Stage A was
+load-bearing — the match was prefix-tolerant, and exact equality would have
+silently disabled the prebuilt fast path for every pin. (2) Adding a field to
+`PrebuiltConfig` and the
 context structs surfaced literal constructors in the binary's own test modules
 (`install_flow/tests.rs`, `tests/fast_path.rs`) that `cargo test --lib` did not
 compile; an early `cargo check --all-targets` sweep catches these.
 
-The latest review follow-up now contains the minimal valid changes: reusable
+Superseded historical review record: the latest review follow-up then
+contained the minimal valid changes: reusable
 `rstest` Git setup, real-Git regressions for default-branch repair and fetched
 pinning, capability-scoped prebuilt fixture writes, a private
 checkout finalizer with an explicit orchestration boundary, and terminology
 corrections. The test-only `cap-std` declaration makes an already-resolved
 crate available directly to the installer tests; no runtime dependency was
-added. The requested full-SHA-only comparison remains deliberately
-unimplemented because it conflicts with the rolling manifest format. A
+added. The requested full-SHA-only comparison was deliberately unimplemented
+at that point because it conflicted with the rolling manifest format. A
 historical review snapshot reported 1,482/1,482 tests passed with 3 skipped;
 formatting, type-checking, Cargo documentation, Clippy, Markdownlint, and Nixie
 were clean.
 
-The 2026-08-01 review follow-up strengthens the real-Git failure and lifecycle
+Superseded historical review record (2026-08-01): the follow-up strengthened
+the real-Git failure and lifecycle
 coverage, adds SHA-prefix property tests, and removes the workspace-to-git
 module cycle. `make check-fmt`, `make typecheck`, and `make lint` passed; lint
 included rustdoc and Clippy with warnings denied. That historical pre-rebase
@@ -365,16 +377,24 @@ included rustdoc and Clippy with warnings denied. That historical pre-rebase
 `make markdownlint` checked 70 files with 0 errors, and `make nixie` reported
 all diagrams valid.
 
-The 2026-08-04 review pass makes pinning fetch the requested ref into a
+Superseded historical review record (2026-08-04): the review pass made pinning
+fetch the requested ref into a
 dedicated local ref before resolving it, with local resolution as the offline
 fallback. It also records the selected `WorkspaceAction` in
 `WorkspaceCheckout`, so progress output describes the operation that
-`ensure_workspace` actually selected. The exact-full-SHA proposal remains
-rejected because current rolling producers emit abbreviated SHAs. The
+`ensure_workspace` actually selected. The exact-full-SHA proposal was then
+rejected because current rolling producers emitted abbreviated SHAs. The
 authoritative final `make test` result is 1,688/1,688 passed, with 5 skipped
 and 7 slow. Formatting, type-checking, Cargo documentation, Clippy,
 Markdownlint, and Nixie also passed; the final documentation checks covered 76
 files and 15 Mermaid diagrams.
+
+Current contract: `resolve_commit` and `fetch_ref` return `CommitSha`, a
+validated full object ID. `WorkspaceCheckout` carries `pinned_commit` or an
+inherited `detached_commit`, and `expected_git_sha()` supplies that provenance
+to exact prebuilt validation. Current coverage exercises all public Git
+operations, detached-checkout recovery, workspace provenance, and exact
+prebuilt match and mismatch outcomes.
 
 ## Context and orientation
 
@@ -402,12 +422,14 @@ relative to the repository root:
   `decide_workspace_action(cwd, clone_dir, update)`, and
   `resolve_workspace_action(dirs, update)`. The latter selects from the live
   environment, while `ensure_workspace(dirs, update, git_ref)` executes that
-  action and returns it in `WorkspaceCheckout` with the root and optional
-  pinned commit.
-- `installer/src/git.rs` — the owning definition of `WHITAKER_REPO_URL`,
-  `clone_repository`, `update_repository`, and the private
+  action and returns it in `WorkspaceCheckout` with the root, selected action,
+  and optional pinned or inherited detached commit provenance.
+- `installer/src/git.rs` — the owning definition of `WHITAKER_REPO_URL`, the
+  public clone, update, ref-resolution, fetch, detached-checkout, detached
+  HEAD, and default-branch operations, and the private
   `run_git_with_timeout(args, working_dir, operation)` helper (5-min timeout,
-  threaded pipe draining). All new git operations reuse this helper.
+  threaded pipe draining). All new Git operations reuse this helper. Commit
+  resolution returns the full-object-ID `CommitSha` type.
 - `installer/src/prebuilt.rs` — `PrebuiltConfig` (target, toolchain,
   destination, quiet), `attempt_prebuilt`, and the private `run_pipeline`
   that downloads the manifest, validates toolchain and target, downloads and
@@ -415,8 +437,9 @@ relative to the repository root:
   `PrebuiltResult::Fallback` — never fatal.
 - `installer/src/artefact/download.rs` — `ROLLING_TAG = "rolling"` and URL
   construction; `installer/src/artefact/manifest.rs` and
-  `artefact/git_sha.rs` — the manifest carries a `git_sha()` accessor whose
-  exact width Stage A confirms.
+  `artefact/git_sha.rs` — the manifest carries a `git_sha()` accessor. Rolling
+  manifests may remain abbreviated; pinned prebuilt reuse requires a full
+  object ID matching the expected `CommitSha` exactly.
 - `installer/src/install_flow.rs` — `PrebuiltInstallationContext` and
   `try_prebuilt_installation`, the seam through which `main.rs` passes data
   into `prebuilt.rs`.
@@ -434,12 +457,14 @@ installer-managed copy of this repository under the user's data directory.
 
 ## Plan of work
 
-Stage A — confirm two facts, no code changes. First, read
+Stage A (superseded historical plan) — confirm two facts, no code changes.
+First, read
 `installer/src/artefact/git_sha.rs`, `artefact/manifest.rs`, and the release
 workflow under `.github/workflows/` to establish whether the manifest
 `git_sha` is a full 40-hex SHA or abbreviated; record the answer in
-`Surprises & Discoveries` and fix the comparison rule (exact match for full,
-`starts_with` for abbreviated). Second, decide the default-branch discovery
+`Surprises & Discoveries` and fix the then-current comparison rule (exact match
+for full, `starts_with` for abbreviated). The current rule is exact equality
+between full object IDs. Second, decide the default-branch discovery
 command for detached-HEAD recovery: prefer
 `git rev-parse --abbrev-ref origin/HEAD` (strips to `origin/main`), falling
 back to `git remote set-head origin --auto` once if the symbolic ref is
@@ -479,11 +504,12 @@ Stage C — implementation, in five small commits:
    rolling]". Update `Default`, the `after_help` examples, and any literal
    constructors that fail to compile.
 2. Git helpers in `installer/src/git.rs`: `resolve_commit(repo, refspec) ->
-   Result<String>` (`git rev-parse --verify <refspec>^{commit}`),
-   `fetch_ref(repo, refspec) -> Result<String>`
+   Result<CommitSha>` (`git rev-parse --verify <refspec>^{commit}`),
+   `fetch_ref(repo, refspec) -> Result<CommitSha>`
    (fetch the requested refspec into `refs/whitaker/pinned-ref`, then resolve
    that dedicated ref),
-   `checkout_detached(repo, commit)` (`git checkout --detach <commit>`), and
+   `checkout_detached(repo, commit: &CommitSha)` (`git checkout --detach
+   <commit>`), `detached_head_commit(repo) -> Result<Option<CommitSha>>`, and
    `ensure_default_branch(repo)` (no-op when already on a branch; otherwise
    discover the default branch per Stage A and check it out). All through
    `run_git_with_timeout`.
@@ -496,12 +522,14 @@ Stage C — implementation, in five small commits:
    `fetch_ref` first; if fetching fails, try `resolve_commit` locally; then
    `checkout_detached`. Crucially, even an unpinned
    `UpdateAt` calls `ensure_default_branch` first, fixing the recovery risk.
-   Return the selected action, workspace path, and resolved commit SHA in
-   `WorkspaceCheckout` so `main.rs` can hand the SHA to the prebuilt path and
-   render progress from the action that was actually selected.
-4. Prebuilt: add `expected_git_sha: Option<&'a str>` to `PrebuiltConfig`,
-   validate in `run_pipeline` after the target check using the Stage A
-   comparison rule, and thread the value from `run_install` through
+   Return the selected action, workspace path, and resolved full-object-ID
+   `CommitSha` in `WorkspaceCheckout` so `main.rs` can hand provenance to the
+   prebuilt path and render progress from the action that was actually
+   selected. Preserve an inherited detached `CommitSha` for an unpinned
+   `--no-update` checkout.
+4. Prebuilt: add `expected_git_sha: Option<&'a CommitSha>` to `PrebuiltConfig`,
+   validate in `run_pipeline` after the target check using exact full-object-ID
+   equality, and thread the value from `run_install` through
    `PrebuiltInstallationContext` and `try_prebuilt_installation`. Update the
    fixed-signature `AttemptPrebuiltFn` type alias and hooks in
    `install_flow.rs` as needed.
@@ -580,14 +608,15 @@ Acceptance is behavioural:
    working tree.
 4. After a pinned install, a plain `whitaker-installer` run succeeds (the
    clone reattaches to the default branch and pulls).
-5. With `--ref` set and the rolling manifest's `git_sha` differing from the
-   resolved commit, the installer prints the fallback message and builds
-   from source; when they match, the prebuilt path is used.
+5. With `--ref` set and the rolling manifest's full object ID differing from
+   the resolved `CommitSha`, the installer prints the fallback message and
+   builds from source; when they match exactly, the prebuilt path is used.
 6. `make test` passes with the new unit and behaviour tests; each new test
    demonstrably failed first (Red evidence retained in the tee'd logs under
    `/tmp/test-whitaker-issue-271.out` and summarized in `Artefacts`).
-7. The SHA-prefix proptest properties accept every generated valid 7–40
-   character prefix and reject a generated prefix with one changed nibble.
+7. Commit-resolution and prebuilt tests preserve full-object-ID provenance:
+   matching full IDs are accepted and abbreviated or shared-prefix IDs are
+   rejected for pinned installs.
 8. `make check-fmt`, `make lint` (clippy plus the dylint suite), and
    `make markdownlint` pass.
 
@@ -644,7 +673,7 @@ Red/Green evidence (gate logs under `/tmp/*-whitaker-issue-271*.out`):
 - Full suite green each slice: the historical initial-implementation
   `make test` snapshot reported 1,472 tests run, 1,472 passed, and 3 skipped.
 
-Review follow-up test inventory (full gates passed):
+Superseded historical review follow-up test inventory (full gates passed):
 
 - `installer/src/git_tests.rs` has nine real-Git tests. The lifecycle test pins
   through `workspace::pin_to_ref`, confirms detached HEAD, advances the remote,
@@ -653,8 +682,15 @@ Review follow-up test inventory (full gates passed):
 - The clone and update error tests invoke `clone_repository` and
   `update_repository` against failing repositories before inspecting their
   semantic `InstallerError::Git` fields.
-- `installer/src/prebuilt_tests.rs` has two proptest properties covering valid
-  manifest prefixes and a mismatched prefix across the supported SHA lengths.
+- `installer/src/prebuilt_tests.rs` then had two proptest properties covering
+  valid manifest prefixes and a mismatched prefix across the supported SHA
+  lengths.
+
+Current test inventory covers every public Git operation: resolution across
+tags, branches, and SHAs; fetching; detached checkout; default-branch repair;
+the pin-and-recover lifecycle; and clone/update errors. Workspace tests cover
+action selection and ref guarding. Prebuilt tests cover exact full-object-ID
+matches, abbreviated IDs, and shared-prefix mismatches.
 
 Manual smoke test (Stage D), run against tag `v0.2.4`
 (commit `8512ee63a212abd175c31501a57e10a713881873`):
@@ -697,9 +733,12 @@ In `installer/src/git.rs` (all `pub`, all routed through
 
 ```rust
 pub const WHITAKER_REPO_URL: &str = "https://github.com/leynos/whitaker";
-pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String>;
-pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String>;
-pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()>;
+pub fn clone_repository(target: &Utf8Path) -> Result<()>;
+pub fn update_repository(repo: &Utf8Path) -> Result<()>;
+pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<CommitSha>;
+pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<CommitSha>;
+pub fn checkout_detached(repo: &Utf8Path, commit: &CommitSha) -> Result<()>;
+pub fn detached_head_commit(repo: &Utf8Path) -> Result<Option<CommitSha>>;
 pub fn ensure_default_branch(repo: &Utf8Path) -> Result<()>;
 ```
 
@@ -713,7 +752,8 @@ breaking change; all in-repo callers updated in the same commit):
 ```rust
 pub struct WorkspaceCheckout {
     pub root: Utf8PathBuf,
-    pub pinned_commit: Option<String>,
+    pub pinned_commit: Option<CommitSha>,
+    pub detached_commit: Option<CommitSha>,
     pub action: WorkspaceAction,
 }
 
@@ -729,13 +769,17 @@ pub fn ensure_workspace(
 ) -> Result<WorkspaceCheckout>;
 ```
 
+`WorkspaceCheckout::expected_git_sha()` returns the pinned commit, or the
+inherited detached commit, for exact prebuilt provenance validation. It is
+unset for an ordinary rolling checkout.
+
 In `installer/src/prebuilt.rs`:
 
 ```rust
 pub struct PrebuiltConfig<'a> {
     // …existing fields…
-    /// When set, require the manifest git SHA to match this commit.
-    pub expected_git_sha: Option<&'a str>,
+    /// When set, require the manifest git SHA to match this full object ID.
+    pub expected_git_sha: Option<&'a CommitSha>,
 }
 ```
 
@@ -744,7 +788,7 @@ pub struct PrebuiltConfig<'a> {
 `PrebuiltConfig`. `installer/src/output.rs`'s `DryRunInfo` gains a
 `git_ref: Option<&'a str>` field rendered in `display_text`.
 
-## Revision note (2026-08-01)
+## Revision note (2026-08-01, superseded historical record)
 
 Review follow-up clarified that `installer/src/git.rs` owns the repository URL
 and `installer/src/workspace.rs` keeps only a compatibility re-export. It also
@@ -753,17 +797,18 @@ properties, the Kani and Verus scope decision, and `fetch_ref`'s
 commit-returning signature. Full-gate validation passed with the results
 recorded in `Outcomes & retrospective`.
 
-## Revision note (2026-08-01, latest review pass)
+## Revision note (2026-08-01, latest review pass, superseded historical record)
 
 This revision uses “artefacts” consistently and clarifies that ordinary no-ref
 behaviour remains rolling while allowing recovery from a detached clone left
 by a prior pin. It records the verified finding dispositions, the implemented
-test and helper changes, and the reason full-SHA-only validation was rejected.
+test and helper changes, and the reason full-SHA-only validation was rejected
+at that time.
 That historical review validation included 1,482/1,482 tests with 3 skipped,
 plus formatting, type-checking, Cargo documentation, Clippy, Markdownlint, and
 Nixie.
 
-## Revision note (2026-08-04, rebase review pass)
+## Revision note (2026-08-04, rebase review pass, superseded historical record)
 
 This revision marks the abbreviated-SHA risk resolved by Stage A, labels the
 1,472, 1,482, and 1,481 test snapshots as historical, and records the
@@ -771,6 +816,15 @@ authoritative final result of 1,688/1,688 passed, with 5 skipped and 7 slow. It
 synchronizes the plan with fetch-first pinning through a dedicated local ref
 and local fallback on fetch failure, action-carrying `WorkspaceCheckout`, and
 progress rendered from the selected action. It also records the implemented
-two-message pinning output, reaffirms that exact full-SHA validation is
+two-message pinning output, reaffirmed that exact full-SHA validation was
 incompatible with abbreviated rolling producers, and records the clean final
 formatting, type-checking, lint, Markdownlint, and Nixie results.
+
+## Revision note (2026-08-22)
+
+The current provenance contract uses the public `git::CommitSha` type for
+full 40-hex object IDs returned by `resolve_commit` and `fetch_ref`. Git's
+clone, update, checkout, detached-HEAD, and default-branch APIs are all
+documented, and `WorkspaceCheckout` preserves pinned or inherited detached
+provenance for exact prebuilt validation. Historical prefix-tolerant
+comparison decisions remain above, explicitly labelled as superseded.

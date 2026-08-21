@@ -20,6 +20,7 @@ use whitaker_installer::deps::{
 use whitaker_installer::deps::{DependencyInstallOptions, install_dylint_tools_with_options};
 use whitaker_installer::dirs::BaseDirs;
 use whitaker_installer::error::{InstallerError, Result};
+use whitaker_installer::git::CommitSha;
 use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_install};
 use whitaker_installer::output::write_stderr_line;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
@@ -102,7 +103,7 @@ pub(crate) struct PrebuiltInstallationContext<'a> {
     /// Toolchain channel resolved for this install.
     pub(crate) toolchain_channel: &'a str,
     /// Resolved pinned commit SHA, when installing at a specific `--ref`.
-    pub(crate) expected_git_sha: Option<&'a str>,
+    pub(crate) expected_git_sha: Option<&'a CommitSha>,
 }
 
 /// Context for recording one successful install in aggregate metrics.

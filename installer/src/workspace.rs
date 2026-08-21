@@ -1,10 +1,14 @@
-//! Workspace detection and path resolution.
+//! Managed Whitaker workspace selection and preparation.
 //!
-//! This module provides utilities for detecting whether the current directory
-//! is a Whitaker workspace and for resolving platform-specific clone locations.
+//! This module detects local workspaces, selects the managed-clone action, and
+//! orchestrates clone, update, pinning, and detached-checkout recovery through
+//! [`crate::git`]. It returns checkout provenance for prebuilt validation while
+//! the CLI presentation boundary reports the completed action.
 
 use crate::dirs::BaseDirs;
 use crate::error::{InstallerError, Result};
+use crate::git::CommitSha;
+use crate::workspace_lock::ManagedCloneLock;
 use camino::{Utf8Path, Utf8PathBuf};
 use tracing::debug;
 
@@ -124,9 +128,9 @@ pub struct WorkspaceCheckout {
     /// Path to the workspace root the install should build from.
     pub root: Utf8PathBuf,
     /// The full commit SHA a `--ref` pin resolved to, if any.
-    pub pinned_commit: Option<String>,
+    pub pinned_commit: Option<CommitSha>,
     /// The existing detached HEAD reused by an unpinned `--no-update` install.
-    pub detached_commit: Option<String>,
+    pub detached_commit: Option<CommitSha>,
     /// The action selected to prepare this workspace.
     pub action: WorkspaceAction,
 }
@@ -155,7 +159,18 @@ pub fn ensure_workspace(
     update: bool,
     git_ref: Option<&str>,
 ) -> Result<WorkspaceCheckout> {
-    let action = resolve_workspace_action(dirs, update)?;
+    let cwd = current_dir_utf8()?;
+    let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
+        reason: "could not determine data directory for cloning".to_owned(),
+    })?;
+    if is_whitaker_workspace(&cwd) {
+        let action = WorkspaceAction::UseCurrentDir(cwd.clone());
+        ensure_ref_allowed(&action, git_ref)?;
+        return finalize_workspace_checkout(cwd, git_ref, action);
+    }
+
+    let _lock = ManagedCloneLock::acquire(&clone_dir)?;
+    let action = decide_workspace_action(&cwd, &clone_dir, update);
     ensure_ref_allowed(&action, git_ref)?;
 
     let root = match &action {
@@ -203,7 +218,7 @@ fn inherited_detached_commit(
     root: &Utf8Path,
     git_ref: Option<&str>,
     action: &WorkspaceAction,
-) -> Result<Option<String>> {
+) -> Result<Option<CommitSha>> {
     if git_ref.is_none() && matches!(action, WorkspaceAction::UseExisting(_)) {
         return crate::git::detached_head_commit(root);
     }
@@ -213,10 +228,10 @@ fn inherited_detached_commit(
 impl WorkspaceCheckout {
     /// Returns the commit that a downloaded prebuilt artefact must match.
     #[must_use]
-    pub fn expected_git_sha(&self) -> Option<&str> {
+    pub fn expected_git_sha(&self) -> Option<&CommitSha> {
         self.pinned_commit
-            .as_deref()
-            .or(self.detached_commit.as_deref())
+            .as_ref()
+            .or(self.detached_commit.as_ref())
     }
 }
 
@@ -241,7 +256,7 @@ pub fn ensure_ref_allowed(action: &WorkspaceAction, git_ref: Option<&str>) -> Re
 /// Pins the managed clone to `git_ref` when one is requested.
 ///
 /// Returns the resolved commit SHA, or `None` when no ref was requested.
-fn pin_if_requested(repo: &Utf8Path, git_ref: Option<&str>) -> Result<Option<String>> {
+fn pin_if_requested(repo: &Utf8Path, git_ref: Option<&str>) -> Result<Option<CommitSha>> {
     match git_ref {
         Some(git_ref) => Ok(Some(pin_to_ref(repo, git_ref)?)),
         None => Ok(None),
@@ -249,7 +264,7 @@ fn pin_if_requested(repo: &Utf8Path, git_ref: Option<&str>) -> Result<Option<Str
 }
 
 /// Fetches and checks out `git_ref`, falling back to local resolution offline.
-pub(super) fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<String> {
+pub(super) fn pin_to_ref(repo: &Utf8Path, git_ref: &str) -> Result<CommitSha> {
     let commit = match crate::git::fetch_ref(repo, git_ref) {
         Ok(commit) => commit,
         Err(fetch_error) => {

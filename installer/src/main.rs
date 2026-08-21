@@ -4,6 +4,7 @@
 //! After installation, it prints shell configuration snippets for enabling
 //! library discovery.
 
+mod diagnostics;
 mod install_flow;
 mod staged_suite;
 mod workspace_progress;
@@ -24,6 +25,7 @@ use whitaker_installer::crate_name::CrateName;
 use whitaker_installer::deps::SystemCommandExecutor;
 use whitaker_installer::dirs::{BaseDirs, SystemBaseDirs};
 use whitaker_installer::error::{InstallerError, Result};
+use whitaker_installer::git::CommitSha;
 use whitaker_installer::install_metrics::InstallMode;
 use whitaker_installer::list::{determine_target_dir, run_list};
 use whitaker_installer::output::{DryRunInfo, ShellSnippet, write_stderr_line};
@@ -37,6 +39,7 @@ use whitaker_installer::workspace::{WorkspaceAction, WorkspaceCheckout};
 use whitaker_installer::wrapper::{generate_wrapper_scripts, path_instructions};
 
 fn main() {
+    diagnostics::initialize();
     let cli = Cli::parse();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
@@ -112,7 +115,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
     // Reject unsafe pin requests before dependency installation can mutate the host.
     validate_ref_then_ensure_dependencies(args, &dirs, stderr, ensure_dylint_tools)?;
     let workspace = ensure_whitaker_workspace(args, &dirs, stderr)?;
-    let expected_git_sha = workspace.expected_git_sha().map(str::to_owned);
+    let expected_git_sha = workspace.expected_git_sha().cloned();
     let workspace_root = workspace.root;
     let requested_crates = resolve_requested_crates(args)?;
     let toolchain = resolve_toolchain(&workspace_root, args.toolchain.as_deref())?;
@@ -129,7 +132,7 @@ fn run_install(args: &InstallArgs, stderr: &mut dyn Write) -> Result<()> {
         requested_crates: &requested_crates,
         toolchain: &toolchain,
         target_dir: &target_dir,
-        expected_git_sha: expected_git_sha.as_deref(),
+        expected_git_sha: expected_git_sha.as_ref(),
     };
     if let Some((staging_path, install_mode)) =
         try_fast_path_installation(&fast_path_context, stderr)?
@@ -311,7 +314,7 @@ struct FastPathContext<'a> {
     requested_crates: &'a [CrateName],
     toolchain: &'a Toolchain,
     target_dir: &'a Utf8PathBuf,
-    expected_git_sha: Option<&'a str>,
+    expected_git_sha: Option<&'a CommitSha>,
 }
 
 /// Finalize installation and record aggregate installer metrics.

@@ -1911,10 +1911,49 @@ Whitaker checkout.
 
 | API | Purpose | Usage constraints |
 | --- | --- | --- |
-| `resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String>` | Resolves a local commit-ish (SHA, tag, or branch) to its full commit SHA and peels annotated tags. | Does not fetch. Call it when the ref is expected to exist locally, or after `fetch_ref` has populated the clone. |
-| `fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String>` | Fetches the requested ref from `origin` into the private `refs/whitaker/pinned-ref` ref and returns its full commit SHA. | Use it to refresh a requested pin before checkout. It force-updates only the private pin ref; it does not move the current branch or check out the result. |
-| `checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()>` | Checks out exactly `commit` with a detached `HEAD`. | Use only for the installer-managed clone after resolving the requested ref. The workspace layer must reject pinning in the user's current Whitaker workspace first. |
+| `clone_repository(target: &Utf8Path) -> Result<()>` | Clones the public Whitaker repository into `target`. | Creates missing parent directories and uses the five-minute Git timeout. Use only for the installer-managed clone. |
+| `update_repository(repo: &Utf8Path) -> Result<()>` | Pulls the latest changes into an existing Whitaker clone. | Call `ensure_default_branch` first when a prior pin may have detached `HEAD`; this function does not reattach a checkout. |
+| `resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<CommitSha>` | Resolves a local commit-ish (SHA, tag, or branch) to a validated full object ID and peels annotated tags. | Does not fetch. Call it when the ref is expected to exist locally, or after `fetch_ref` has populated the clone. |
+| `fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<CommitSha>` | Fetches the requested ref from `origin` into the private `refs/whitaker/pinned-ref` ref and returns its validated full object ID. | Use it to refresh a requested pin before checkout. It force-updates only the private pin ref; it does not move the current branch or check out the result. |
+| `checkout_detached(repo: &Utf8Path, commit: &CommitSha) -> Result<()>` | Checks out exactly `commit` with a detached `HEAD`. | Use only for the installer-managed clone after resolving the requested ref. The workspace layer must reject pinning in the user's current Whitaker workspace first. |
+| `detached_head_commit(repo: &Utf8Path) -> Result<Option<CommitSha>>` | Returns the full object ID when `HEAD` is detached, or `None` when `HEAD` names a branch. | Use to preserve provenance for an unpinned `--no-update` install that reuses a detached managed clone. |
 | `ensure_default_branch(repo: &Utf8Path) -> Result<()>` | Reattaches a detached clone to the branch named by `origin/HEAD`; repairs a missing `origin/HEAD` with `git remote set-head origin --auto`. | Call before `update_repository` when a previous pin may have detached the managed clone. It is a no-op when `HEAD` already names a branch and does not pull changes itself. |
+
+`CommitSha` is the Git adapter's validated full object-ID type. Keep commit
+provenance in this type across Git and workspace boundaries; convert to text
+only at output or external-format boundaries.
+
+#### Workspace API and provenance
+
+`workspace::ensure_workspace(dirs, update, git_ref)` returns a
+`WorkspaceCheckout` containing the prepared `root`, the selected
+`WorkspaceAction`, and commit provenance. `pinned_commit` is the resolved
+`CommitSha` when `git_ref` pins the managed clone. `detached_commit` records the
+existing detached `HEAD` reused by an unpinned `--no-update` install. These
+fields are mutually exclusive for a single checkout.
+
+`WorkspaceCheckout::expected_git_sha() -> Option<&CommitSha>` returns the pinned
+commit, or the inherited detached commit, as an optional full object ID. Pass
+that value to the prebuilt path so a pinned or detached checkout can reuse an
+artefact only when its manifest records the same full object ID. A rolling
+install with no commit provenance leaves it unset. `ensure_ref_allowed` must
+reject a pin when
+the selected action is `UseCurrentDir`, because checking out a ref there would
+mutate the user's working tree.
+
+`workspace::ensure_workspace` acquires the internal `ManagedCloneLock` while
+preparing the installer-managed clone. The exclusive advisory sidecar is
+stored beside the clone as `<clone-directory>.lock` and covers action
+selection, ref resolution, checkout, and update, so concurrent installers do
+not race on shared Git state. Current-directory workspaces do not need this
+lock; keep the lock scoped to workspace preparation and surface acquisition
+failures as `InstallerError::WorkspaceLock`.
+
+The installer binary initializes one stderr tracing subscriber at startup.
+`RUST_LOG` controls its `EnvFilter`; without it, the default level is `warn`.
+Use, for example, `RUST_LOG=whitaker_installer=debug` when diagnosing Git or
+workspace preparation. Library code must continue emitting events through
+`tracing` without installing a global subscriber.
 
 #### `resolve_additional_components`
 

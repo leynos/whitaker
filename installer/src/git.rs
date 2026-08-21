@@ -1,8 +1,14 @@
-//! Git operations for cloning and updating the Whitaker repository.
+//! Git operations for managed Whitaker checkouts.
 //!
-//! This module provides functions for managing the local Whitaker clone,
-//! including initial cloning and subsequent updates. Operations have a
-//! configurable timeout to prevent hangs on network issues.
+//! This module clones and updates the managed repository, resolves requested
+//! refs, performs detached pinned checkouts, and repairs a detached checkout
+//! before an unpinned update. Workspace orchestration selects when to call
+//! these helpers; the CLI reports the resulting action and pin progress.
+//! Operations have a configurable timeout to prevent hangs on network issues.
+
+mod commit_sha;
+
+pub use commit_sha::CommitSha;
 
 use crate::error::{InstallerError, Result};
 use camino::Utf8Path;
@@ -63,7 +69,7 @@ pub fn update_repository(repo: &Utf8Path) -> Result<()> {
 ///
 /// Returns `InstallerError::Git` if the ref cannot be resolved or the command
 /// times out.
-pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
+pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<CommitSha> {
     debug!(
         operation = "rev-parse",
         refspec, "resolving requested Git ref"
@@ -80,7 +86,11 @@ pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
         });
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    let commit = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    CommitSha::try_from(commit.as_str()).map_err(|error| InstallerError::Git {
+        operation: "rev-parse",
+        message: format!("resolved ref '{refspec}' returned an invalid commit SHA: {error}"),
+    })
 }
 
 /// Fetches a specific ref from `origin` into the private pinned ref.
@@ -92,7 +102,7 @@ pub fn resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String> {
 /// # Errors
 ///
 /// Returns `InstallerError::Git` if the fetch fails or times out.
-pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
+pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<CommitSha> {
     debug!(
         operation = "fetch",
         refspec,
@@ -112,14 +122,18 @@ pub fn fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<String> {
 /// # Errors
 ///
 /// Returns `InstallerError::Git` if the checkout fails or times out.
-pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
+pub fn checkout_detached(repo: &Utf8Path, commit: &CommitSha) -> Result<()> {
     debug!(
         operation = "checkout",
-        commit,
+        commit = commit.as_str(),
         attempt = "detached",
         "checking out pinned commit"
     );
-    run_git_checked(&["checkout", "--detach", commit], Some(repo), "checkout")
+    run_git_checked(
+        &["checkout", "--detach", commit.as_str()],
+        Some(repo),
+        "checkout",
+    )
 }
 
 /// Returns the detached HEAD commit, or `None` when HEAD names a branch.
@@ -127,7 +141,7 @@ pub fn checkout_detached(repo: &Utf8Path, commit: &str) -> Result<()> {
 /// # Errors
 ///
 /// Returns `InstallerError::Git` if HEAD is detached but cannot be resolved.
-pub fn detached_head_commit(repo: &Utf8Path) -> Result<Option<String>> {
+pub fn detached_head_commit(repo: &Utf8Path) -> Result<Option<CommitSha>> {
     let symbolic =
         run_git_with_timeout(&["symbolic-ref", "-q", "HEAD"], Some(repo), "symbolic-ref")?;
     if symbolic.status.success() {

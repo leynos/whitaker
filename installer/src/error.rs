@@ -105,6 +105,16 @@ pub enum InstallerError {
         reason: String,
     },
 
+    /// Acquiring the managed-clone preparation lock failed.
+    #[error("failed to lock managed Whitaker workspace {path}: {source}")]
+    WorkspaceLock {
+        /// Sidecar lock file path.
+        path: Utf8PathBuf,
+        /// Underlying lock or file-system error.
+        #[source]
+        source: std::io::Error,
+    },
+
     /// Pinning a ref is not supported for the current directory workspace.
     #[error(
         "cannot pin --ref {git_ref}: the current directory is itself a Whitaker workspace; run the installer from outside a checkout to pin the suite"
@@ -239,6 +249,10 @@ impl Clone for InstallerError {
             }
             Self::WorkspaceNotFound { reason } => Self::WorkspaceNotFound {
                 reason: reason.clone(),
+            },
+            Self::WorkspaceLock { path, source } => Self::WorkspaceLock {
+                path: path.clone(),
+                source: clone_io_error(source),
             },
             Self::RefUnsupported { git_ref } => Self::RefUnsupported {
                 git_ref: git_ref.clone(),

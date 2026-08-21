@@ -172,9 +172,8 @@ fn resolve_workspace_path_returns_clone_dir_when_not_in_workspace(temp_workspace
     );
 }
 
-#[rstest]
-fn resolve_workspace_path_errors_when_data_dir_unavailable(temp_workspace: TempWorkspace) {
-    let _ = temp_workspace; // Ensure fixture is used
+#[test]
+fn resolve_workspace_path_errors_when_data_dir_unavailable() {
     let mock = mock_dirs_returning(None);
 
     let result = resolve_workspace_path(&mock);

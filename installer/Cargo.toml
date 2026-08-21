@@ -72,6 +72,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ureq = { workspace = true }
 wait-timeout = { workspace = true }
 zip = { workspace = true }

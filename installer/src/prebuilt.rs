@@ -20,6 +20,7 @@ use crate::artefact::packaging::compute_sha256;
 use crate::artefact::packaging_error::PackagingError;
 use crate::artefact::verification::VerificationPolicy;
 use crate::builder::{library_extension, library_prefix};
+use crate::git::CommitSha;
 use crate::output::write_stderr_line;
 
 /// The outcome of a prebuilt download attempt.
@@ -57,7 +58,7 @@ pub struct PrebuiltConfig<'a> {
     /// Pinned installs may only reuse a prebuilt artefact whose manifest names
     /// the resolved full commit SHA exactly; abbreviated provenance falls back
     /// to a source build. Rolling installations leave this unset.
-    pub expected_git_sha: Option<&'a str>,
+    pub expected_git_sha: Option<&'a CommitSha>,
 }
 
 /// Internal error type for the prebuilt pipeline.
@@ -212,15 +213,18 @@ fn validate_target(manifest: &Manifest, expected: &str) -> Result<(), PrebuiltEr
 /// An abbreviated manifest SHA is suitable for rolling installations only.
 /// Pinned installations require a full object ID equal to the resolved commit.
 /// When no commit is pinned this is a no-op, preserving rolling behaviour.
-fn validate_git_sha(manifest: &Manifest, expected: Option<&str>) -> Result<(), PrebuiltError> {
+fn validate_git_sha(
+    manifest: &Manifest,
+    expected: Option<&CommitSha>,
+) -> Result<(), PrebuiltError> {
     let Some(expected) = expected else {
         return Ok(());
     };
     let manifest_sha = manifest.git_sha().as_str();
-    if manifest_sha.len() != 40 || manifest_sha != expected {
+    if manifest_sha.len() != 40 || manifest_sha != expected.as_str() {
         return Err(PrebuiltError::GitShaMismatch {
             manifest: manifest_sha.to_owned(),
-            expected: expected.to_owned(),
+            expected: expected.to_string(),
         });
     }
     Ok(())
