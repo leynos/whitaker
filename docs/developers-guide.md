@@ -2575,6 +2575,10 @@ each operation is bounded by the module's five-minute Git timeout. Use these
 functions for the managed clone workflow, not to mutate a user's current
 Whitaker checkout.
 
+Triage: `type:docstyle`
+
+*Table: Public Git operation APIs.*
+
 | API | Purpose | Usage constraints |
 | --- | --- | --- |
 | `resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<String>` | Resolves a local commit-ish (SHA, tag, or branch) to its full commit SHA and peels annotated tags. | Does not fetch. Call it when the ref is expected to exist locally, or after `fetch_ref` has populated the clone. |
