@@ -30,7 +30,7 @@ fn commit_sha_strategy() -> impl Strategy<Value = String> {
     })
 }
 
-fn manifest_with_git_sha(git_sha: &str) -> serde_json::Result<Manifest> {
+fn manifest_with_git_sha(git_sha: &str, sha256: &str) -> serde_json::Result<Manifest> {
     serde_json::from_value(serde_json::json!({
         "git_sha": git_sha,
         "schema_version": 1,
@@ -38,7 +38,7 @@ fn manifest_with_git_sha(git_sha: &str) -> serde_json::Result<Manifest> {
         "target": TARGET,
         "generated_at": "2026-02-03T00:00:00Z",
         "files": ["libwhitaker_suite.so"],
-        "sha256": "a".repeat(64),
+        "sha256": sha256,
     }))
 }
 
@@ -65,7 +65,7 @@ proptest! {
     fn equal_full_git_shas_are_accepted(
         commit in commit_sha_strategy(),
     ) {
-        let manifest = manifest_with_git_sha(&commit)
+        let manifest = manifest_with_git_sha(&commit, &"a".repeat(64))
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         prop_assert!(validate_git_sha(&manifest, Some(&commit)).is_ok());
@@ -77,7 +77,7 @@ proptest! {
         prefix_len in 7_usize..40,
     ) {
         let manifest_sha = &commit[..prefix_len];
-        let manifest = manifest_with_git_sha(manifest_sha)
+        let manifest = manifest_with_git_sha(manifest_sha, &"a".repeat(64))
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         match validate_git_sha(&manifest, Some(&commit)) {
@@ -105,7 +105,7 @@ proptest! {
             "0"
         };
         manifest_sha.replace_range(shared_prefix_len..=shared_prefix_len, replacement);
-        let manifest = manifest_with_git_sha(&manifest_sha)
+        let manifest = manifest_with_git_sha(&manifest_sha, &"a".repeat(64))
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         match validate_git_sha(&manifest, Some(&commit)) {
@@ -140,8 +140,9 @@ fn success_mocks() -> (MockArtefactDownloader, MockArtefactExtractor) {
 /// Construct successful mocks with the supplied manifest provenance.
 fn success_mocks_with_git_sha(git_sha: &str) -> (MockArtefactDownloader, MockArtefactExtractor) {
     let fake_sha = sha256_hex(FAKE_ARCHIVE);
-    let manifest_json =
-        prebuilt_manifest_json(TOOLCHAIN, TARGET, &fake_sha).replacen("abc1234", git_sha, 1);
+    let manifest =
+        manifest_with_git_sha(git_sha, &fake_sha).expect("construct manifest with Git SHA");
+    let manifest_json = serde_json::to_string(&manifest).expect("serialize manifest with Git SHA");
     let mut downloader = MockArtefactDownloader::new();
     downloader
         .expect_download_manifest()
@@ -160,54 +161,37 @@ fn success_mocks_with_git_sha(git_sha: &str) -> (MockArtefactDownloader, MockArt
     (downloader, extractor)
 }
 
-#[test]
-fn expected_git_sha_mismatch_returns_fallback() {
+#[rstest]
+#[case::mismatch(Some(MISMATCHED_COMMIT), "abc1234", false)]
+#[case::matching_full_sha(Some(MATCHING_COMMIT), MATCHING_COMMIT, true)]
+#[case::unpinned_abbreviated_sha(None, "abc1234", true)]
+fn prebuilt_git_sha_gate(
+    #[case] expected_git_sha: Option<&str>,
+    #[case] manifest_git_sha: &str,
+    #[case] expects_success: bool,
+) {
     let (_temp, destination_dir) = destination_dir();
     let config = PrebuiltConfig {
-        expected_git_sha: Some(MISMATCHED_COMMIT),
+        expected_git_sha,
         ..base_config(&destination_dir)
     };
-    let (downloader, extractor) = success_mocks();
+    let (downloader, extractor) = success_mocks_with_git_sha(manifest_git_sha);
     let mut stderr = Vec::new();
     let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    match result {
-        PrebuiltResult::Fallback { reason } => {
-            assert!(reason.contains("SHA mismatch"), "reason: {reason}");
+
+    if expects_success {
+        assert!(
+            matches!(result, PrebuiltResult::Success { .. }),
+            "expected Success, got {result:?}"
+        );
+    } else {
+        match result {
+            PrebuiltResult::Fallback { reason } => {
+                assert!(reason.contains("SHA mismatch"), "reason: {reason}");
+            }
+            other => panic!("expected Fallback, got {other:?}"),
         }
-        other => panic!("expected Fallback, got {other:?}"),
     }
-}
-
-#[test]
-fn matching_full_git_sha_returns_success() {
-    let (_temp, destination_dir) = destination_dir();
-    let config = PrebuiltConfig {
-        expected_git_sha: Some(MATCHING_COMMIT),
-        ..base_config(&destination_dir)
-    };
-    let (downloader, extractor) = success_mocks_with_git_sha(MATCHING_COMMIT);
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    assert!(
-        matches!(result, PrebuiltResult::Success { .. }),
-        "expected Success, got {result:?}"
-    );
-}
-
-#[test]
-fn unpinned_git_sha_returns_success_with_an_abbreviated_manifest_sha() {
-    let (_temp, destination_dir) = destination_dir();
-    let config = PrebuiltConfig {
-        expected_git_sha: None,
-        ..base_config(&destination_dir)
-    };
-    let (downloader, extractor) = success_mocks();
-    let mut stderr = Vec::new();
-    let result = attempt_prebuilt_with(&config, &downloader, &extractor, &mut stderr);
-    assert!(
-        matches!(result, PrebuiltResult::Success { .. }),
-        "expected Success, got {result:?}"
-    );
 }
 
 fn destination_dir() -> (tempfile::TempDir, Utf8PathBuf) {
