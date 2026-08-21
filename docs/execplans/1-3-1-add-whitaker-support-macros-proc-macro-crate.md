@@ -5,39 +5,60 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: BLOCKED
+Status: APPROVED
 
 This document must be maintained in accordance with `AGENTS.md`. The canonical
 plan file is
 `docs/execplans/1-3-1-add-whitaker-support-macros-proc-macro-crate.md`.
 
-## Why this plan is BLOCKED
+## Deviation D-9: accepted as option (b)
 
 The prototyping milestone EP-M0 ran during planning, ahead of any production
-code, and falsified a premise of the governing decision record.
-
-**ADR 002's mandated expansion does not achieve ADR 002's own primary
-technical requirement.** The four attributes it specifies do not suppress
+code, and falsified a premise of the governing decision record. **ADR 002's
+mandated expansion did not achieve ADR 002's own primary technical
+requirement**: the four attributes it specified do not suppress
 `unexpected_cfgs`, because that diagnostic is resolved during cfg-expansion,
 before the annotated item's own lint levels are in scope. A _sibling_
-`#[allow(unexpected_cfgs)]` on the same item arrives too late. An attribute
-macro cannot place the `allow` in an enclosing scope without wrapping the item,
-which would change its visibility and name resolution.
+`#[allow(unexpected_cfgs)]` arrives too late, and an attribute macro cannot
+reach an enclosing scope without wrapping the item and changing its semantics.
+Two of the remaining three attributes suppressed diagnostics the gated form
+never emits, and the third removed the only safety net catching a misspelt lint
+name.
 
-Two of the remaining three mandated attributes suppress diagnostics that the
-gated form never emits, and the third actively removes the only safety net that
-catches a misspelt lint name.
+The repository owner accepted option D-9(b) on 2026-08-21: amend ADR 002 and
+ship a minimal macro whose expansion is the `cfg_attr` gate alone, paired with
+one `check-cfg` manifest entry. ADR 002 has been amended accordingly and moved
+to `Accepted`. This plan is now approved for implementation.
 
-The evidence is in `Artefacts and notes` §EP-M0 transcripts and is reproducible
-in under a minute. Per the ExecPlan standard, an implementation must not be
-quietly amended around evidence that the approved design cannot be followed.
-The proposed deviation is recorded as D-9 in `Decision log`, with three
-options and a recommendation. **This plan must not be implemented until one of
-those options is explicitly accepted.**
+## Prerequisite discovered by the R-1 spike
 
-Everything below is written for option D-9(b), the recommended direction, and
-is ready to execute the moment that option is accepted. Sections that would
-change materially under D-9(a) or D-9(c) are marked.
+A spike implementation, since discarded, answered the one empirical question
+this plan left open — and found a second, larger problem.
+
+**Good news.** `#[expect(...)]` does work for Dylint-registered Whitaker lints.
+Against a `no_std_fs_operations` library built from current source, item-level
+`#[allow]`, item-level `#[expect]`, module-level `#![allow]`, and the
+`cfg_attr`-gated `#[expect]` all suppressed correctly, and expectations were
+fulfilled with no spurious `unfulfilled_lint_expectations`. Axiom A-4 is
+discharged and R-1 is closed.
+
+**Bad news.** The aggregated `whitaker_suite` library ignores lint-level
+attributes entirely. A controlled experiment — identical fixture, identical
+source revision, identical toolchain, only the loaded library differing —
+produced one diagnostic under the individual library (the unannotated control)
+and three under the suite, plus a spurious unfulfilled-expectation warning for
+every `expect`.
+
+Since `whitaker_suite` is what `whitaker --all`, `make lint-whitaker`, and every
+installed consumer load, **no attribute-based suppression currently works in
+the configuration this macro targets**. The evidence is in `Artefacts and
+notes` §R-1 spike.
+
+This does not block delivery of 1.3.1. The macro's obligations are all
+token-level: what it parses, what it rejects, and what tokens it emits. None of
+them depend on suite behaviour. It does block the macro from being _useful_,
+and therefore blocks ADR 002 migration phase 3. It is recorded in ADR 002
+§Known risks and tracked as separate work; see `Decision log` D-13.
 
 ## Purpose / big picture
 
@@ -258,14 +279,24 @@ Hard invariants. Violation requires escalation, not a workaround.
 
 ## Risks
 
-- **R-1 — `#[expect(L)]` may not work for Dylint-registered lints.** ADR 002's
-  entire value proposition depends on it, and Dylint's documentation
-  consistently demonstrates `allow`, never `expect`.
-  Severity: high. Likelihood: medium.
-  Mitigation: EP-M0 probe 1 remains **open**. It cannot be answered with plain
-  `rustc`, because it requires a real Dylint session with a registered lint.
-  It must be run before EP-M2 closes. If `expect` does not work, escalate — do
-  not silently substitute `allow`.
+- **R-1 — CLOSED, 2026-08-21.** `#[expect(L)]` does work for Dylint-registered
+  Whitaker lints. Discharged by the spike recorded in `Artefacts and notes`
+  §R-1 spike. Axiom A-4 is established.
+
+- **R-1b — the aggregated suite ignores lint-level attributes.** Superseding
+  R-1 as the material risk. `libwhitaker_suite` honours neither `#[allow]` nor
+  `#[expect]`, and emits a spurious `unfulfilled_lint_expectations` warning for
+  every `expect`, while the individual lint libraries built from the same
+  source behave correctly.
+  Severity: high. Likelihood: certain — reproduced under a controlled
+  experiment.
+  Mitigation: none available within 1.3.1, and none needed for delivery, since
+  every obligation in this plan is token-level. Tracked as separate work (D-13)
+  and recorded in ADR 002 §Known risks. It must be fixed before ADR 002
+  migration phase 3 begins adopting the attribute across the estate, or the
+  estate will fill with annotations that suppress nothing. Do **not** attempt
+  the fix inside this plan: it touches suite wiring that `Constraints` places
+  out of scope.
 
 - **R-2 — three independent routes to a silent no-op.** A misspelt lint name, a
   `lib` value naming a library the consumer did not load, or a `lib` written
@@ -390,7 +421,11 @@ guarding the most trivial property in the repository.
 - **A-3**: Dylint passes `--cfg=dylint_lib="LIBRARY_NAME"` for each loaded
   library. Discharged empirically at roadmap 1.3.3, not here.
 - **A-4**: `#[expect(L)]` for a Dylint-registered lint behaves as it does for
-  built-in lints. **Not assumed — R-1's probe must establish it.**
+  built-in lints. **Established empirically, 2026-08-21**, against an
+  individual lint library built from current source. Note the scope limit: it
+  holds for individual libraries and **not** for the aggregated
+  `whitaker_suite` (R-1b), so this axiom supports the macro's design but not
+  yet its usefulness in the shipping configuration.
 
 ### INV-SHAPE: argument keys are validated exactly and order-independently
 
@@ -1068,6 +1103,55 @@ D-9(b) it is not needed, because no `allow` attributes are emitted.
 **Probe 4 — Kani.** Moot under D-11, which removes the bounded-model-checking
 question entirely.
 
+### R-1 spike
+
+A throwaway crate was compiled under a real Dylint session against libraries
+built from this worktree's source, then discarded. The fixture annotated
+identical `std::fs::read_to_string` call-sites four ways and compared which
+were suppressed.
+
+Against `libno_std_fs_operations` — an individual lint library:
+
+```plaintext
+error: std::fs operation ... bypasses the capability-based filesystem policy.
+ --> src/lib.rs:2:46          <- a_none, no attribute (the control)
+error: could not compile `spike_expect` (lib) due to 1 previous error
+```
+
+One diagnostic, from the unannotated control. Item-level `#[allow]`,
+item-level `#[expect]`, module-level `#![allow]`, and the `cfg_attr`-gated
+`#[expect]` were all suppressed, and no `unfulfilled_lint_expectations` warning
+was emitted for the fulfilled expectations. **R-1 is answered: `expect` works.**
+
+The controlled experiment, same fixture and source, only the library differing:
+
+```plaintext
+########## LIBRARY: no_std_fs_operations ##########
+error: LINT FIRED
+ --> src/lib.rs:2:46          <- control only
+########## LIBRARY: whitaker_suite ##########
+error: LINT FIRED
+ --> src/lib.rs:2:46          <- control
+error: LINT FIRED
+ --> src/lib.rs:5:52          <- #[allow(no_std_fs_operations)]  IGNORED
+error: LINT FIRED
+ --> src/lib.rs:8:53          <- #[expect(no_std_fs_operations)] IGNORED
+warning: this lint expectation is unfulfilled
+ --> src/lib.rs:7:10          <- spurious
+```
+
+Both libraries were built from the same commit with
+`cargo build --release --features dylint-driver`. The aggregated suite ignores
+lint levels; the individual library honours them. This is R-1b.
+
+Ruled out as causes: staleness of the installed release build (the suite was
+rebuilt from source and behaved identically), lint-identity mismatch
+(`suite/src/lints.rs` registers the same `&'static Lint` statics the
+constituent passes emit with), and `cfg_attr` interaction (plain `#[allow]`
+with no gating fails too). The remaining suspect is the
+`declare_combined_late_lint_pass!` aggregation in `suite/src/driver.rs`, but
+root-causing it is out of scope here and belongs to D-13.
+
 **Crates.io name availability**, checked against the registry API:
 
 ```plaintext
@@ -1094,10 +1178,14 @@ comparison always shows a difference and proves nothing.
 ## Progress
 
 - [x] (2026-08-21) EP-M0 probes 2, 3, and 4 run; transcripts recorded above.
-- [ ] EP-M0 remaining: probe 1 (R-1, `expect` viability under a real Dylint
-      session); commit the probes as a script with asserted exit codes.
-- [ ] **BLOCKED**: D-9 deviation awaiting explicit acceptance. No
-      implementation may begin until a direction is chosen.
+- [x] (2026-08-21) D-9 deviation accepted as option (b) by the repository
+      owner. ADR 002 amended and moved to `Accepted`.
+- [x] (2026-08-21) R-1 discharged by spike: `#[expect(...)]` works for
+      Dylint-registered lints. Spike discarded as planned. Discovered R-1b —
+      the aggregated suite ignores lint-level attributes — recorded in ADR 002
+      §Known risks and tracked as D-13.
+- [ ] EP-M0 remaining: commit the probes as a script with asserted exit codes,
+      so INV-WARN-1's negative control is a re-runnable artefact.
 - [ ] EP-M1: crate skeleton, manifest, workspace dependency and `check-cfg`
       entries.
 - [ ] EP-M2: keys, parser, expansion, all tests green, snapshots and `.stderr`
@@ -1175,7 +1263,13 @@ comparison always shows a difference and proves nothing.
   `full` feature stays local so it does not leak into the published manifest.
   Date/Author: 2026-08-21, planning agent.
 
-- **D-9 — PROPOSED ARCHITECTURE DEVIATION. Status: awaiting acceptance.**
+- **D-9 — ARCHITECTURE DEVIATION. Status: ACCEPTED as option (b), 2026-08-21,
+  by the repository owner.** ADR 002 has been amended: §Status, §Decision
+  drivers, §Technical requirements, §Options considered (Option D and Table 1),
+  §Decision outcome, §Known risks, and §Outstanding decisions. The macro emits
+  the `cfg_attr` gate alone; the `check-cfg` entry is documented as the
+  mechanism rather than a convenience. The original deviation record follows,
+  retained for provenance.
   Affected upstream identifiers: ADR002-TR-1 (primary), ADR002-FR-4, and
   ADR 002 §Options considered, §Decision outcome, §Known risks.
   Finding: the mandated four-attribute expansion does not suppress
@@ -1232,6 +1326,27 @@ comparison always shows a difference and proves nothing.
   silent no-op that the macro can close unaided, and keeping the span is what
   makes the diagnostics anchorable.
   Date/Author: 2026-08-21, planning agent, on reviewer finding.
+
+- **D-13**: do not fix the aggregated-suite lint-level bug (R-1b) inside this
+  plan.
+  Rationale: the fix touches `suite/src/driver.rs` wiring, which `Constraints`
+  places out of scope, and its blast radius covers every lint in the suite
+  rather than anything this plan adds. It also needs its own regression
+  coverage — a UI fixture per lint proving that `#[allow]` and `#[expect]`
+  suppress under the aggregated library, which is exactly the coverage roadmap
+  1.3.3 was scoped to build. Recorded in ADR 002 §Known risks, tracked as
+  separate work, and gating ADR 002 migration phase 3 rather than 1.3.1
+  delivery. Attempting it here would silently double the plan's scope and blur
+  which change caused which regression.
+  Date/Author: 2026-08-21, planning agent.
+
+- **D-14**: keep `lib = "whitaker_suite"` as the canonical documented example
+  despite R-1b.
+  Rationale: it is the correct value for the shipping configuration, and will
+  be correct once R-1b is fixed. Documenting the individual-library form
+  instead would optimize the examples for a bug. R-1b is disclosed in ADR 002
+  §Known risks so nobody adopts the attribute expecting it to work today.
+  Date/Author: 2026-08-21, planning agent.
 
 ## Outcomes & retrospective
 
@@ -1298,7 +1413,7 @@ Sub-agents to use:
 - `scribe` — the documentation edits at EP-M5.
 - `wyvern` — read-only reconnaissance when a file's shape is unclear.
 - `alchemist` — only for a single falsifiable hypothesis with a supplied
-  prediction and minimal experiment, such as R-1's probe.
+  prediction and minimal experiment.
 
 ## Revision note
 
@@ -1332,3 +1447,34 @@ Under the recommended option (b) the plan is ready to execute as written; under
 four-attribute set; under (c) roadmap items 1.3.1–1.3.4 are superseded and this
 plan is withdrawn. R-1 remains the one open empirical question under every
 option, and must be answered before EP-M2 closes.
+
+**Revision 3, 2026-08-21.** Status moved from `BLOCKED` to `APPROVED`.
+
+What changed. The repository owner accepted deviation D-9 as option (b), so
+ADR 002 was amended — §Status to `Accepted`, plus corrections to §Decision
+drivers, §Technical requirements, §Options considered (Option D's rejection
+rationale and two rows of Table 1), §Decision outcome, §Known risks, and
+§Outstanding decisions — and the non-existent `whitaker_lints` library name was
+corrected there too.
+
+A spike then settled R-1, the last open empirical question, and was discarded
+as instructed. `#[expect(...)]` **does** work for Dylint-registered Whitaker
+lints, so axiom A-4 is established and R-1 is closed. The spike also surfaced
+R-1b: the aggregated `whitaker_suite` library ignores lint-level attributes
+entirely and emits spurious unfulfilled-expectation warnings, while individual
+lint libraries built from the same commit behave correctly. Staleness,
+lint-identity mismatch, and `cfg_attr` interaction were each ruled out by
+controlled comparison.
+
+Why it matters, and why it does not block. R-1b means no attribute-based
+suppression works today in the configuration the macro targets, which is what
+every installed consumer loads. It is disclosed in ADR 002 §Known risks and
+tracked as D-13. It does not block 1.3.1, whose obligations are all
+token-level, but it does gate ADR 002 migration phase 3 — adopting the
+attribute across the estate before the fix would fill the estate with
+annotations that suppress nothing.
+
+Effect on remaining work. Implementation may begin at EP-M1. The one
+outstanding EP-M0 item is committing the probes as a script with asserted exit
+codes, so INV-WARN-1's negative control survives as a re-runnable artefact
+rather than a transcript in this document.
