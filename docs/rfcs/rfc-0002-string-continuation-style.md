@@ -6,9 +6,40 @@
 - **Status:** Proposed
 - **Repository:** `leynos/whitaker`
 - **Created:** 2026-07-26
+- **Revised:** 2026-08-21
 - **Proposed lint:** `string_continuation_style`
 - **Default level:** `Warn`
 - **Suite status:** Proposed for the standard suite after implementation
+
+## Revision history
+
+**2026-08-21.** Substantive revision, following validation of the original
+text against the pinned `nightly-2026-05-28` compiler sources and a six-lens
+design review. Two defects were corrected rather than annotated:
+
+1. **Root syntax context does not prove a literal is unwrapped.** The original
+   §Ordinary string expressions relied on `Span::ctxt().is_root()` to reject
+   literals arriving through a macro. A literal captured by a `$l:literal`
+   matcher reaches a post-expansion pass with a root context, so the rule as
+   written would have emitted a machine-applicable rewrite that does not
+   compile. §Wrapper depth replaces it.
+2. **The continuation whitespace rule was wrong.** The original
+   §Continuation scanner specified "spaces and tabs, plus complete LF or CRLF
+   sequences" and rejected a lone carriage return. Rust skips every byte in
+   `{space, tab, LF, CR}`, in any order. §Continuation scanner now states the
+   real rule.
+
+Six further findings changed the mechanics — the compiler already supplies the
+source-literal proof and the literal's span, so the format-string
+position-proving machinery is unnecessary; rustc normalizes CRLF out of source
+before lexing; and the `log` facade grammar had already drifted. Two decisions
+changed the shape of the delivery: the `log` and `tracing` allowlist is staged
+into a follow-up, and the lint ships with a configuration table whose default
+withholds unattended fixes.
+
+Each change is attributed at the point where it applies. The delivery plan is
+[ExecPlan 2.4.1](../execplans/2-4-1-string-continuation-style-post-expansion-early-lint.md);
+the status moves to *Accepted* when that plan is approved.
 
 ## Summary
 
@@ -85,7 +116,9 @@ A naive textual rule would be wrong in several important cases:
 - `b"..."` and `c"..."` literals have different types, and stable `concat!()`
   produces only `&'static str`;
 - macros with a `$literal:literal` contract require a literal token rather than
-  a general expression;
+  a general expression, and — the trap that is easiest to miss — a literal
+  substituted from such a matcher arrives with a *root* syntax context, so
+  hygiene alone does not reveal it (see §Wrapper depth);
 - a leading continuation immediately after the opening quote commonly trims
   the source layout's initial newline and indentation rather than joining two
   semantic fragments;
@@ -100,16 +133,19 @@ compiler badge.
 - Enforce `concat!()` for interior source-line joins in ordinary cooked string
   expressions.
 - Enforce the same rule in source-authored format strings when no argument is
-  implicitly captured and the originating macro accepts an expression in the
-  format-string position.
+  implicitly captured and the format string was supplied directly to a
+  compiler built-in formatting macro.
 - Retain escaped-newline continuations when direct-literal status, literal
   type, literal-token grammar, or layout trimming requires them.
-- Provide a whole-literal, machine-applicable suggestion whenever the proof
-  succeeds.
+- Provide a whole-literal suggestion whenever the proof succeeds, and prove at
+  emission time that it preserves the evaluated value.
 - Preserve the evaluated string byte for byte.
 - Catch multiple join continuations with one diagnostic and one replacement.
 - Work in the standalone lint crate and the aggregated Whitaker suite.
-- Localize the primary message, note, and help in `en-GB`, `cy`, and `gd`.
+- Localize the primary message, note, help, and per-join labels in `en-GB`,
+  `cy`, and `gd`.
+- Give users a way to disarm the fix and to exclude paths and crates, without
+  rebuilding the lint.
 
 ## Non-goals
 
@@ -117,9 +153,32 @@ compiler badge.
 - Rewriting actual newline characters embedded in a string.
 - Rewriting raw strings, which do not interpret continuation escapes.
 - Adding explicit format arguments to replace implicit captures.
-- Inspecting arbitrary macro token trees whose grammar Whitaker cannot prove.
+- Inspecting macro token trees. The original text qualified this with "whose
+  grammar Whitaker cannot prove" and then, in §Format strings, required
+  exactly such inspection to prove a literal's argument position. That
+  contradiction is resolved in favour of the non-goal: the compiler hands the
+  lint the format string's span directly, so there is no token tree to parse
+  and no argument index to count.
+- Identifying *which* macro produced a literal. The lint proves the literal's
+  position instead; see §Wrapper depth.
 - Reversing already-valid `concat!()` expressions into continuation escapes.
 - Acting as a general-purpose formatter.
+
+## Staging
+
+This RFC describes the whole rule. Delivery is staged, because the parts carry
+very different risk:
+
+1. **Plain cooked string expressions and compiler built-in formatting macros.**
+   The proof obligations are entirely local and the macro set is fixed by the
+   language. Suggestions ship at manual applicability.
+2. **The `log` and `tracing` facades.** These need a policy table over
+   third-party macro grammars that change between crate versions — as this RFC
+   itself demonstrated by going stale (see §Deferred: facade macros).
+3. **Machine applicability.** Promoted once field evidence from an
+   apply-and-recompile pass over real repositories supports it.
+
+Roadmap items 2.4.1, 2.4.2, and 2.4.3 respectively.
 
 ## Terminology
 
@@ -155,6 +214,36 @@ let text = "\
 A continuation for which replacing the literal expression with `concat!()` is
 not proven to preserve the relevant language or macro contract.
 
+### Wrapper depth
+
+The number of enclosing abstract-syntax-tree nodes whose span came from a
+macro expansion. Zero means nothing stands between the literal and the
+compiler, so replacing the literal with a general expression cannot break an
+enclosing macro's matcher.
+
+This replaces the original text's reliance on root syntax context, which does
+not carry that meaning. When `macro_rules!` substitutes a metavariable,
+`rustc_expand`'s `maybe_use_metavar_location` returns either the original
+token or one respanned with the call-site context; either way the substituted
+token keeps the call site's syntax context. So in
+
+```rust
+macro_rules! shout { ($l:literal) => { let _x = $l; } }
+shout!("alpha \
+        beta");
+```
+
+the literal reaches a post-expansion pass with `span.ctxt().is_root() == true`
+and a snippet that lexes as exactly one cooked string token. Every gate in the
+original §Ordinary string expressions passes, and a `concat!()` rewrite would
+stop the outer matcher matching.
+
+The *container* of the substituted literal does carry the macro definition's
+marked context, because `Marker::mark_span` applies to the transcribed
+structure rather than to tokens passed in from the call site. Tracking
+enclosing expansion-derived nodes is therefore the discriminator that root
+context is not.
+
 ## Rule semantics
 
 The implementation centres on a pure classification result:
@@ -171,26 +260,32 @@ pub(crate) enum RequiredReason {
     NonStringLiteralType,
     LeadingOrTrailingLayoutTrim,
     UnknownMacroContract,
-    GeneratedFormatString,
-    UnrecoverableSourceSpan,
+    GeneratedSourceFile,
 }
 ```
 
 Only `PreferConcat` emits a lint. The `RequireContinuation` variants exist to
 make the negative policy explicit and directly testable.
 
+Two variants from the original text are gone. `GeneratedFormatString` and
+`UnrecoverableSourceSpan` named situations the decision matrix routes to
+`Ignore`, so as `RequireContinuation` reasons they were unreachable — and two
+encodings of one outcome cannot be told apart end to end, because both produce
+silence. `GeneratedSourceFile` is new; see §Configuration.
+
 ### Decision matrix
 
 | Source situation                                                                     | Decision                                  | Rationale                                                                      |
 | ------------------------------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------ |
-| Root-context cooked `str` expression with an interior join                           | Diagnose and suggest `concat!()`          | A general expression is valid and type/value are preserved                     |
+| Cooked `str` expression at wrapper depth zero with an interior join                  | Diagnose and suggest `concat!()`          | A general expression is valid and type and value are preserved                 |
 | Source-authored format string with positional or explicitly named arguments only     | Diagnose and suggest `concat!()`          | No implicit capture is lost                                                    |
 | Source-authored format string containing any `FormatArgumentKind::Captured` argument | Require continuation                      | `concat!()` would turn the format string into macro output and disable capture |
 | Cooked byte string or C string                                                       | Require continuation                      | `concat!()` changes the type or has no stable equivalent                       |
 | Raw string, raw byte string, or raw C string                                         | Ignore                                    | Continuation escapes are not interpreted                                       |
 | Leading or trailing layout trim                                                      | Require continuation                      | It expresses source layout rather than a fragment boundary                     |
-| Literal passed through an unknown `$literal` macro contract                          | Require continuation                      | Replacement may stop the outer macro matching                                  |
-| Format string generated by `concat!`, `include_str!`, or another eager macro         | Ignore                                    | There is no direct source literal to rewrite safely                            |
+| Literal at wrapper depth greater than zero                                           | Require continuation                      | An enclosing macro may have matched `$literal` (see §Wrapper depth)            |
+| Format string generated by `concat!`, `include_str!`, or another eager macro         | Ignore                                    | `is_source_literal` is false; there is no direct source literal to rewrite     |
+| Literal in a file outside the workspace root or under the target directory           | Require continuation                      | The user cannot annotate a file they do not write (see §Configuration)         |
 | Literal whose editable source span cannot be recovered exactly                       | Ignore                                    | No trustworthy suggestion range exists                                         |
 | Several interior joins in one eligible literal                                       | One diagnostic, one whole-literal rewrite | Avoid cascaded diagnostics and conflicting fixes                               |
 
@@ -238,12 +333,20 @@ This is the narrow sweet spot:
 - `FormatArgs::is_source_literal` tells the lint whether the format string was
   written directly rather than produced by `concat!()` or `include_str!()`;
 - ordinary source string expressions still appear as AST literal expressions;
-- High-level Intermediate Representation (HIR) lowering has not yet erased the
-  source spelling that distinguishes a continuation from an ordinary evaluated
-  string.
+- lowering to the High-level Intermediate Representation (HIR) has not yet
+  discarded `FormatArgs`, which is where the argument classification lives.
 
 Use `dylint_linting::impl_early_lint!`, not a late HIR pass and not a blind
 pre-expansion token scan.
+
+The original text justified rejecting a late pass by saying HIR "no longer
+retains the exact source spelling that distinguishes an escaped newline from an
+equivalent evaluated string". That is imprecise. The HIR node holds the
+*cooked* symbol, but its span still points at the source, so the spelling is
+recoverable at any phase with `span_to_snippet`. The real disqualifier is
+narrower and firmer: format arguments are lowered away, so a late pass cannot
+see `FormatArgs` at all, and therefore cannot distinguish a captured argument
+from an explicitly named one.
 
 ### AST entry points
 
@@ -261,83 +364,146 @@ The rule analyses expression literals and source-authored format arguments
 only. It does not visit or claim classification coverage for patterns,
 attributes, or meta-item literals.
 
+The pass additionally implements `check_item`, `check_item_post`,
+`check_stmt`, `check_expr_post`, and `check_mac_def`. The first four maintain
+wrapper depth; the last participates in the shadow check of §Macro position.
+None of them classifies a literal.
+
+### Check ordering
+
+Order the checks so that the cheapest run first. This is normative, not an
+optimization note. The original §Ordinary string expressions put snippet
+recovery and a re-lex at step 2, before anything had established the literal
+was even a candidate — a source-map binary search and a string allocation for
+every cooked literal in the crate, against a candidate rate that is very close
+to zero in practice. Worse, recovering a snippet from a foreign source file
+decodes an external crate's source out of crate metadata and retains it for
+the remainder of the compilation.
+
+1. The token is `token::LitKind::Str`. Touches no source map.
+2. The uncooked symbol contains a backslash followed by a line feed. Symbol
+   resolution is an interned lookup and the scan allocates nothing.
+3. Wrapper depth is zero and the span is not from an expansion.
+4. Only now recover the snippet and re-lex it.
+
+### What the compiler already proves
+
+Two properties the original text asked the lint to establish for itself are
+supplied by `rustc_ast::FormatArgs`, and establishing them again would be
+weaker, not stronger.
+
+`is_source_literal` is computed by comparing the recovered source snippet
+against the parsed input, and is `false` when a procedural macro has respanned
+the literal. That is the fix for rust-lang/rust#114865, and it discharges both
+"verify that its snippet lexes as one cooked string token" and "reject spans
+attributable only to an external or proc-macro expansion". The lint still
+re-lexes the snippet, but as defence in depth rather than as the primary proof.
+
+`FormatArgs::span` **is** the format-string literal token's span, including its
+quotes: the builtin macro sets it from the fully-expanded format-string
+expression. `Span::from_inner` maps a byte offset within that token to a source
+span. So the literal's location is handed to the lint directly.
+
+That second fact is what removes the argument-position machinery. There is no
+token tree to parse and no argument index to count, which is just as well,
+because parsing one contradicted §Non-goals.
+
+`uncooked_fmt_str` carries the raw source body between the quotes, and the
+`println!` family's appended newline goes onto the *cooked* symbol only, so the
+scanner's input needs no adjustment for it.
+
 ### Format strings
 
 For `ExprKind::FormatArgs`:
 
 1. Require `is_source_literal`.
-2. Require a cooked `LitKind::Str` uncooked format string.
-3. Recover an exact source literal span and verify that its snippet lexes as
-   one cooked string token.
-4. Reject spans attributable only to an external or proc-macro expansion.
-5. Resolve and validate the originating macro identity, variant, argument
-   grammar, and format-string position against the allowlist below.
-6. Scan the uncooked source for join continuations.
-7. If any argument is `Captured`, return
+2. Require a cooked `token::LitKind::Str` uncooked format string.
+3. Require wrapper depth zero.
+4. Require the macro position to be provable (§Macro position).
+5. Scan `uncooked_fmt_str` for join continuations.
+6. If any argument is `Captured`, return
    `RequireContinuation(ImplicitFormatCapture)`.
-8. Otherwise, build and emit the `concat!()` rewrite.
+7. Otherwise build the `concat!()` rewrite and emit it, subject to
+   §Applicability.
 
-Macro names are not identities. Walk the expansion backtrace to the macro
-definition, then require its resolved definition identifier, defining crate,
-and canonical definition path to match an entry below. Compiler built-ins use
-their stable diagnostic identity plus canonical `core`, `alloc`, or `std` macro
-path. A re-export is acceptable only when it resolves to that same definition.
-The initial allowlist is:
+### Macro position
 
-- `core::format_args!`, `alloc::format!`, and
-  `std::{print, println, eprint, eprintln}!`: accept only
-  `(format, arguments...)`; the format string is syntactic argument 0.
-- `std::{write, writeln}!`: accept only `(destination, format, arguments...)`;
-  the format string is syntactic argument 1.
-- `core::{panic, todo, unimplemented, unreachable}!`: accept only the modern
-  formatting branch represented by `ExprKind::FormatArgs`; the format string is
-  syntactic argument 0.
-- `core::{assert, debug_assert}!`: accept only the custom-message branch
-  `(condition, format, arguments...)`; the format string is syntactic argument
-  1.
-- `core::{assert_eq, assert_ne, debug_assert_eq, debug_assert_ne}!`: accept only
-  the custom-message branch `(left, right, format, arguments...)`; the format
-  string is syntactic argument 2.
-- `log::{trace, debug, info, warn, error}!`: accept `(format, arguments...)` and
-  `(target: target_expression, format, arguments...)`. The format string is the
-  first argument, or the first argument after the validated `target:` prefix.
-  Key-value and other facade variants are not initially supported.
-- `tracing::{trace, debug, info, warn, error}!`: accept a message tail after
-  zero or more validated controls and structured fields. Controls may be
-  `target: expression`, `parent: expression`, and `name: expression`, in the
-  combinations and order accepted by the resolved macro definition, with each
-  control present at most once. A field must use one of the documented tracing
-  forms `field = expression`, `field = ?expression`, `field = %expression`,
-  `?field`, or `%field`, followed by a comma. The format string is the first
-  cooked string literal after those controls and fields; the remaining tail
-  must parse as format arguments.
+The original text required the lint to prove a macro's *identity*: its
+"resolved definition identifier, defining crate, and canonical definition
+path". That is not obtainable in a post-expansion early pass, because
+`EarlyContext` holds no `TyCtxt` and a `DefId` cannot be resolved to a crate
+name without one.
 
-For every family, parse the source-authored token tree and prove that the
-selected literal occupies the stated position. Confirm that the recovered
-literal span is the same source literal retained in
-`FormatArgs::uncooked_fmt_str`, that separators and labelled prefixes match the
-family grammar, and that replacing only that expression leaves a valid macro
-invocation. A tracing invocation without a message literal, or any unlisted
-variant, is not a candidate.
+It is also more than the rule needs. The lint does not need to know which macro
+produced a literal. It needs to know whether anything stands between that
+literal and the compiler — and that is answerable locally. Three conditions,
+all biased towards silence:
 
-Skip local macros and unrelated external macros even when they use short names
-such as `info`, `warn`, `error`, `format`, or `println`. Also skip when the
-lint cannot prove the resolved identity, canonical path, format-string
-position, or complete argument grammar. An uncertain contract produces neither
-a diagnostic nor a suggestion.
+1. **Wrapper depth is zero.** Nothing enclosing the literal came from an
+   expansion, so no enclosing matcher can be broken. This is the condition that
+   closes the `$literal` hole described in §Wrapper depth, and it subsumes the
+   original decision-matrix row for unknown literal contracts.
+2. **The outermost non-root expansion frame is a known formatting macro.** Walk
+   the literal span's expansion chain to its outermost frame — the invocation
+   the user actually typed — and require it to be a bang macro whose name is in
+   this fixed set: `format_args`, `format`, `print`, `println`, `eprint`,
+   `eprintln`, `write`, `writeln`, `panic`, `todo`, `unimplemented`,
+   `unreachable`, `assert`, `debug_assert`, `assert_eq`, `assert_ne`,
+   `debug_assert_eq`, `debug_assert_ne`. These are language built-ins with no
+   macro-by-example matcher to break: `format_args!` parses an expression, and
+   `write!`/`writeln!` forward through `$($arg:tt)*`.
+3. **The crate does not shadow any of those names.** A bare name check is sound
+   only if the name cannot be shadowed. If the crate under compilation defines
+   a `macro_rules!` or `macro` with a name in the set, or contains a `use`
+   whose terminal segment is one, or a `#[macro_use] extern crate`, the lint
+   disables itself for that crate entirely.
+
+Condition 3 is blunt. It will occasionally silence the lint across a whole
+crate that had no real conflict, and its residual hole — a crate reaching a
+same-named macro by a path none of the three checks observes — fails silently
+rather than loudly. Both are the correct direction under a near-zero
+false-positive budget, but they mean the lint's real-world hit rate cannot be
+measured from inside the lint.
+
+### Deferred: facade macros
+
+The original allowlist also covered `log::{trace, debug, info, warn, error}!`
+and `tracing::{trace, debug, info, warn, error}!`. Under §Macro position those
+now produce silence by construction, because their invocation is not in the
+built-in set.
+
+That is deliberate, and staged rather than abandoned. Three reasons:
+
+- An allowlist over third-party macro grammars is a policy table that decays.
+  This RFC is the evidence: by `log` 0.4.33 the facade macros had grown a
+  `logger:` control that the text above does not mention, and their key-value
+  form is separated from the message by `;`, so the original grammar was
+  already incomplete roughly a year after it was written.
+- The two crates are the only reason the lint would need macro identity at all,
+  and therefore the only reason to reach for a `TyCtxt`.
+- Their acceptance fixtures cannot all live in one lint crate. `tracing`'s
+  behaviour differs with its `log` feature, and Cargo unifies dev-dependency
+  features across a crate's fixtures, so a fixture needing the feature on and
+  one needing it off cannot coexist.
+
+Facade support is roadmap item 2.4.2, to be designed against a shipped
+baseline. When it is, it will need the identity proof this section declines,
+and the design should say why an allowlist gets acceptance fixtures rather than
+a proof: its correctness is a claim about other people's macro definitions,
+which change between their versions, so the guarantee has to come from the safe
+default — an uncertain contract produces neither a diagnostic nor a suggestion.
 
 ### Ordinary string expressions
 
 For a direct cooked `str` expression:
 
-1. Require a user-editable source span in root syntax context.
+1. Require wrapper depth zero and a span that is not from an expansion.
+   The original text required "a user-editable source span in root syntax
+   context"; §Wrapper depth explains why that is not sufficient.
 2. Require that the source snippet lexes as exactly one cooked string literal.
 3. Scan for interior join continuations.
 4. Ignore literals containing only leading or trailing layout trims.
 5. Build a whole-literal `concat!()` rewrite.
-
-Source literals that originated inside an unknown macro expansion are skipped
-because the source macro may have matched `$literal:literal`.
 
 ## Continuation scanner
 
@@ -348,24 +514,46 @@ body range that excludes the opening and closing quotes. An unescaped closing
 (`\"`) and an escaped backslash (`\\`) remain body source content. Raw, byte,
 and C literals never reach this scanner.
 
-A continuation begins at an unescaped backslash immediately followed by either
-`\n` or `\r\n`. Count the run of consecutive backslashes to distinguish a
-continuation from a literal escaped backslash. An odd run leaves one
-continuation backslash; an even run does not.
+A continuation begins at an unescaped backslash immediately followed by a line
+feed. Count the run of consecutive backslashes to distinguish a continuation
+from a literal escaped backslash. An odd run leaves one continuation backslash;
+an even run does not.
 
 For each continuation, find the start of its physical line by scanning
-backwards to the preceding LF byte or the start of the literal body. The
+backwards to the preceding line feed or the start of the literal body. The
 pre-continuation side has content when that slice contains a byte other than
 horizontal space or tab. Escaped quotes and escaped backslashes count as
 content because their complete escape spelling lies in that slice.
 
-After the newline, consume exactly the source whitespace rustc removes: spaces
-and tabs, plus complete LF or CRLF sequences. Continue across whitespace-only
-and blank physical lines until reaching the first non-whitespace body byte or
-the closing quote that bounds the body. A lone CR is not a supported source
-newline; if exact recovery encounters one, classify the span as unrecoverable
-and do not emit a lint. Escaped quotes and escaped backslashes encountered
-after the consumed whitespace count as post-continuation content.
+### The whitespace rule
+
+After the newline, Rust discards **every byte in
+`{space, tab, line feed, carriage return}`, in any order, until the first byte
+outside that set** — with the single exception of the formfeed character, which
+is not skipped (rust-lang/rust#136600). Consume exactly that.
+
+This corrects the original text, which said "spaces and tabs, plus complete LF
+or CRLF sequences" and directed the lint to treat a lone carriage return as
+making the span unrecoverable. Neither `rustc-literal-escaper` nor
+`rustc_lexer` gives carriage returns or CRLF pairs any special status; both
+implement the rule as a single "skip while the byte is in this set" scan. A
+scanner verified against the original wording would have been verified against
+the wrong language rule.
+
+Two consequences follow.
+
+Scanning continues across whitespace-only and blank physical lines until it
+reaches the first non-whitespace body byte or the closing quote that bounds the
+body. Escaped quotes and escaped backslashes encountered after the consumed
+whitespace count as post-continuation content.
+
+And carriage returns cannot in fact reach the scanner from the compiler, so the
+handling above is a completeness property of the scanner rather than a
+reachable path. rustc normalizes newlines when it loads a source file, so every
+literal symbol and every recovered snippet contains line feeds only. Keep the
+scanner's contract complete anyway — it is a pure, reusable component and the
+cost is negligible — but do not claim compiler-level coverage for it, and do
+not write a user-interface fixture that pretends to exercise it.
 
 The scanner records:
 
@@ -391,10 +579,10 @@ the closing quote without content, classify it as `TrailingLayoutTrim`. When
 both sides lack content, `LeadingLayoutTrim` takes precedence.
 
 Here, post-continuation "content" means any byte in the bounded cooked-literal
-body other than horizontal space, LF, or a complete CRLF sequence. The closing
-quote is outside the body and terminates the search. Scanning does not stop at
-a blank line: blank lines are part of `skipped_whitespace_range`, and a later
-escaped or ordinary byte can still make the continuation a `Join`.
+body outside `{space, tab, line feed, carriage return}`. The closing quote is
+outside the body and terminates the search. Scanning does not stop at a blank
+line: blank lines are part of `skipped_whitespace_range`, and a later escaped
+or ordinary byte can still make the continuation a `Join`.
 
 | Source shape after a line containing content           | Classification       | Reason                                    |
 | ------------------------------------------------------ | -------------------- | ----------------------------------------- |
@@ -454,20 +642,57 @@ Since a continuation contributes no evaluated character and split points never
 bisect another escape, separately decoding the copied fragments produces the
 same value as decoding the original literal.
 
+That is an argument, and arguments about byte offsets are exactly the kind that
+survive review and fail in the field. §Emission gate turns it into a check.
+
+### Layout of the replacement
+
+The replacement is inserted verbatim into the user's file, so its own layout
+matters.
+
+Prefer a single line — `concat!("alpha ", "beta")` — when it fits within the
+formatter's width. Otherwise emit the indented multi-line form, indented to the
+original literal's column. A replacement that ignores the column will fail
+`cargo fmt --check` after every fix run, which for an estate-wide rollout means
+every fixed repository needs a follow-up formatting commit.
+
+Emit the source file's dominant line ending, not an unconditional line feed.
+Writing line feeds into a checkout with carriage-return line endings produces
+mixed endings inside the hunk, which shows up as a whole-region diff and fights
+any `.gitattributes` policy.
+
 ### Applicability
 
-Use `Applicability::MachineApplicable` only when all of the following hold:
+Emit a suggestion only when all of the following hold:
 
 - the source span is exact and user-editable;
 - the snippet is exactly one cooked string literal;
 - every selected split is an interior join;
 - the context accepts a general expression;
 - a format string has no implicit captures;
-- the root macro contract is known safe;
-- the generated replacement re-lexes as one `concat!()` expression.
+- the macro position is provable (§Macro position);
+- the generated replacement re-lexes as one `concat!()` expression;
+- the emission gate below passes.
 
 Otherwise, suppress the lint rather than emit an unfixable style complaint.
 This rule should have near-zero false-positive tolerance.
+
+Whether a passing suggestion is labelled `MachineApplicable` or
+`MaybeIncorrect` is a configuration decision, not a property of the rewrite;
+see §Configuration.
+
+### Emission gate
+
+Before attaching any applicability above `MaybeIncorrect`, unescape the
+recovered original snippet and the generated replacement's fragments, and
+compare the resulting byte sequences. On mismatch, emit nothing.
+
+This is cheap — the check ordering in §Check ordering has already eliminated
+almost every literal before this point — and it is the difference between a
+span-arithmetic bug corrupting a user's source and the same bug producing
+silence. It catches failures no test anticipated, including ones in the
+offset-to-span conversion that the pure rewriter's own verification cannot
+reach.
 
 ## Diagnostic
 
@@ -506,67 +731,94 @@ labels on each continuation.
 
 ## Crate layout
 
-Add:
+Two crates, not one. The original text put everything in a single `cdylib`
+lint crate; splitting the pure logic out buys five things at once.
 
 ```plaintext
-crates/string_continuation_style/
+crates/whitaker_string_literals/     # plain rlib, no rustc dependency
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
-│   ├── classification.rs
-│   ├── continuation.rs
+│   ├── facts.rs
+│   ├── continuation/                # scanner, plus its Kani harness
+│   ├── classification/              # the policy
+│   └── rewrite/                     # fragments and the applicability gate
+└── tests/features/string_continuation.feature
+
+crates/string_continuation_style/    # thin cdylib adapter
+├── Cargo.toml
+├── src/
+│   ├── lib.rs
 │   ├── diagnostics.rs
-│   ├── driver.rs
-│   └── rewrite.rs
-├── tests/
-│   └── features/
-│       └── string_continuation_style.feature
-├── ui/
-│   ├── fail_plain_join.rs
-│   ├── fail_plain_join.stderr
-│   ├── fail_explicit_format_arguments.rs
-│   ├── fail_explicit_format_arguments.stderr
-│   ├── fail_multiple_joins.rs
-│   ├── fail_multiple_joins.stderr
-│   ├── fail_log_message.rs
-│   ├── fail_log_target.rs
-│   ├── fail_tracing_fields.rs
-│   ├── fail_tracing_controls.rs
-│   ├── pass_implicit_format_capture.rs
-│   ├── pass_implicit_width_capture.rs
-│   ├── pass_leading_layout_trim.rs
-│   ├── pass_byte_and_c_strings.rs
-│   ├── pass_unknown_literal_macro.rs
-│   ├── pass_local_macro_lookalikes.rs
-│   ├── pass_external_macro_lookalikes.rs
-│   ├── pass_log_implicit_capture.rs
-│   ├── pass_log_target_implicit_capture.rs
-│   ├── pass_tracing_implicit_capture.rs
-│   ├── pass_tracing_controls_implicit_capture.rs
-│   └── pass_generated_format_string.rs
-├── ui-cy/
-│   └── locale_smoke.rs
-└── ui-gd/
-    └── locale_smoke.rs
+│   └── driver/                      # pass, wrapper depth, facts, spans
+├── ui/    ui-cy/    ui-gd/    ui-fallback/
 ```
+
+The reasons, in order of weight:
+
+- **Bounded model checking works.** No Kani harness in this repository has ever
+  run inside a `cdylib` lint crate; `whitaker_clones_core` demonstrates that it
+  works in a plain one.
+- **Deductive proofs can bridge to production source.** The existing Verus
+  proofs include production modules by path, which requires a crate Verus can
+  read without `rustc_private` plumbing.
+- **The module-size ceiling becomes enforceable.** `make lint-whitaker` runs
+  the suite over ordinary library crates only, because `cargo dylint`'s check
+  build cannot supply `rustc_private` plumbing for a lint crate. A plain crate
+  can be added to that list, so the 400-line limit is gate-enforced for the
+  domain rather than merely asserted.
+- **Doctests run.** Lint crates are excluded from the doctest pass for the same
+  linking reason, so a runnable example on a pure function is only actually run
+  if it lives outside the `cdylib`.
+- **Domain purity is structural.** A crate with no rustc dependency cannot
+  acquire one by accident, which no `--all-features` gate would otherwise
+  notice.
 
 Keep each source module below Whitaker's 400-line limit.
 
 ### Dependencies
 
-The lint crate needs only:
+The domain crate needs only `rustc_lexer` — the crates.io mirror, already a
+workspace dependency, pure, and carrying the unescaper the emission gate needs
+and the lexer the applicability gate needs.
+
+The lint crate needs:
 
 - `dylint_linting`;
-- `rustc_ast`;
-- `rustc_lint`;
-- `rustc_session`;
-- `rustc_span`;
+- `rustc_ast`, `rustc_lint`, `rustc_session`, `rustc_span`;
 - `whitaker-common`;
 - `whitaker` for shared driver wiring;
-- `proptest`, `rstest`, `rstest-bdd`, `rstest-bdd-macros`, and
-  `dylint_testing` as development dependencies.
+- `whitaker_string_literals`.
 
-No configuration section is proposed. The proof predicate is the configuration.
+Development dependencies for the two crates between them: `proptest`, `rstest`,
+`rstest-bdd`, `rstest-bdd-macros`, `insta`, `googletest`, `pretty_assertions`,
+`serial_test`, and `dylint_testing`.
+
+## Configuration
+
+The original text said: "No configuration section is proposed. The proof
+predicate is the configuration." For a warn-level style lint that is a
+defensible position. For a lint that writes to source files it is the wrong
+instinct for a first release, and every lint in this suite that shipped without
+configuration has later grown it under pressure — which is the worst time to
+design it.
+
+A `[string_continuation_style]` table in `dylint.toml`:
+
+- `applicability = "manual" | "machine"`, defaulting to `"manual"`. Under
+  `"manual"` the diagnostic still prints the whole replacement; only the
+  unattended write is disarmed. Flipping one line arms the fixer estate-wide,
+  with no rebuild, once the apply-and-recompile evidence supports it.
+- `excluded_crates` and `excluded_paths`, mirroring `no_std_fs_operations`'s
+  shape exactly so the estate does not have to learn a second idiom.
+
+Independently of any setting, skip a literal whose source file lies outside the
+workspace root or beneath the target directory, returning
+`RequireContinuation(GeneratedSourceFile)`. The motivating case is a build
+script writing into `OUT_DIR` and a source file pulling it in with `include!`:
+the finding is correct by the lint's own rules, but the user cannot annotate a
+file they do not write, the warning recurs on every build, and a fix would
+rewrite a file the next build deletes.
 
 ## Suite integration
 
@@ -589,15 +841,26 @@ pub fn register_suite_lints(store: &mut LintStore) {
 Do not force an early lint into the combined late-pass macro merely for visual
 uniformity.
 
+Assert *which* pass was registered, not how many. A late pass omitted from the
+combined macro is a compile error; a missing `register_early_pass` line is not.
+Delete it and the suite still declares the lint, still passes the descriptor
+alignment tests, and still lists the lint — while never firing.
+
 Update:
 
 - `suite/Cargo.toml` feature and dependency lists;
 - `suite/src/lints.rs` descriptors and declarations;
-- suite count and name tests;
-- installer lint enumeration, if it is not derived from suite metadata;
-- `README.md` and `docs/users-guide.md`;
-- `docs/roadmap.md`, adding this as the next core lint item;
-- Fluent resources under `common/locales/{en-GB,cy,gd}`.
+- suite count and name tests, plus a new early-pass registration assertion;
+- installer lint enumeration, if it is not derived from suite metadata. It is
+  not: two separate lists must be kept in step, one in the installer and one in
+  the Makefile;
+- `README.md` and `docs/users-guide.md`, the latter documenting the
+  configuration table of §Configuration;
+- `docs/roadmap.md` §2.4 String continuation style;
+- Fluent resources under `common/locales/{en-GB,cy,gd}`, and the locale
+  completeness test, which today checks only the `help` attribute. A missing
+  label translation would otherwise render English, be captured into a
+  non-English expectation file, and be enforced from then on.
 
 ## Test plan
 
@@ -633,16 +896,43 @@ Update:
 
 4. **Multiple joins** produce one diagnostic and one replacement.
 5. **Join consuming blank source lines** preserves the exact evaluated value.
-6. **Known standard formatting facade** such as `println!` receives a valid
-   suggestion.
-7. **Supported `log` facade forms** cover both `info!(format, arguments...)`
-   and `warn!(target: target_expression, format, arguments...)`.
-8. **Supported `tracing` facade forms** cover message-only calls, structured
-   fields, and valid combinations of `target`, `parent`, and `name` controls.
-   Each fixture proves the format-string position before expecting a
-   machine-applicable suggestion.
+6. **Known standard formatting facades** such as `println!`, `write!`, and the
+   custom-message branch of `assert!` receive a valid suggestion.
+7. **A literal with both a leading layout trim and an interior join**, and
+   **a literal with two adjacent continuations**, both rewrite correctly and
+   converge.
+
+The `log` and `tracing` fixtures from the original text move to roadmap item
+2.4.2 along with the facade support itself.
+
+### Applying the fix is part of the test, not a separate exercise
+
+Every failing fixture carries a `// run-rustfix` header and a checked-in
+`.fixed` file. The harness then applies the suggestion, diffs the result
+against the `.fixed` file, **recompiles it**, and fails if it either does not
+compile or still produces diagnostics.
+
+Three obligations fall out of that at no extra cost. The suggestion is proved
+to apply. The result is proved to compile. And the rewrite is proved to be a
+fixed point, which matters because `cargo fix` re-runs the lint up to four
+rounds and reports an error blaming the user's code if it does not converge.
+
+Better still, because the fixed code is compiled, a compile-time assertion
+inside the `.fixed` file makes **the compiler itself** adjudicate value
+preservation:
+
+```rust
+const _: () = assert!(matches!(ORIGINAL.as_bytes(), REWRITTEN_BYTES));
+```
+
+That is a stronger oracle than any reference unescaper the implementation could
+carry, because it shares no lineage with the scanner under test.
 
 ### UI passes
+
+Each of these asserts silence, so each needs a paired control that inverts the
+one gate it exercises and confirms the fixture then fires. A silence fixture
+without a control passes against an unimplemented lint and proves nothing.
 
 1. **The exact PR #296 example with implicit `status_line` capture.**
 2. Captured width and precision parameters.
@@ -651,41 +941,66 @@ Update:
 5. Byte strings and C strings.
 6. Raw strings.
 7. A local macro declared with `$message:literal` and forwarding to
-   `format_args!`.
-8. Local short-name lookalikes for `format`, `println`, `info`, `warn`, and
-   `error`.
-9. Same-name macros from external crates other than the approved `log` and
-   `tracing` definitions.
-10. Supported `log` forms, with and without `target`, whose format strings use
-    implicit capture and must remain direct literals.
-11. Supported `tracing` forms whose format strings use implicit capture,
-    including structured fields and applicable `target`, `parent`, and `name`
-    controls.
-12. Unlisted `log` or `tracing` variants and any invocation whose macro
-    identity, format-string position, or complete argument grammar is uncertain.
-    Assert both that no diagnostic is emitted and that no suggestion is
-    produced.
-13. A format string generated by `concat!()` or `include_str!()`.
-14. Proc-macro-generated or unrecoverable spans.
-15. An ordinary literal containing a real newline rather than a continuation.
+   `format_args!`. This is the §Wrapper depth fixture, and its control —
+   disabling the depth counter — is the one that proves the whole silence class
+   is not vacuous.
+8. A literal inside an expanded item, an expanded statement, a derive-generated
+   implementation, and a two-level nested expansion.
+9. A crate that defines its own `println!`, which must disable the lint
+   entirely (§Macro position, condition 3).
+10. A format string generated by `concat!()` or `include_str!()`.
+11. Procedural-macro-generated or unrecoverable spans.
+12. An ordinary literal containing a real newline rather than a continuation.
+13. A literal in a generated file beneath the target directory.
+14. A literal in a pattern position, which the pass must not visit at all.
 
 ### Pure unit and property tests
 
-- Classify odd and even runs of backslashes before line feed (LF) and carriage
-  return plus line feed (CRLF).
+- Classify odd and even runs of backslashes before a line feed.
 - Classify leading, interior, and trailing continuations.
+- Exercise the full whitespace set — space, tab, line feed, carriage return, in
+  mixed order — against the rule in §The whitespace rule. Carriage returns
+  cannot arrive from the compiler, so this is the only place that path is
+  covered, and the test plan should say so rather than implying otherwise.
 - Assert that splitting and re-concatenating copied fragment source equals
   deleting the union of `escape_range` and `skipped_whitespace_range` for every
-  selected join.
+  selected join. This is also the subject of a deductive proof over sequences,
+  inducting on the *last* range rather than the first, so that no index-rebasing
+  lemma is needed.
 - Generate arbitrary safe fragment text and one to several continuation joins
   with `proptest`. Generate non-empty indentation after each newline and assert
   the union semantics explicitly, so retaining only that indentation while
   deleting `escape_range` fails the property.
-- Verify Unicode before and after split points.
+- Verify Unicode before and after split points, including scalars above the
+  basic multilingual plane, and classify generated cases so that a generator
+  which stopped producing them fails loudly.
 - Verify escaped quotes, escaped braces, and ordinary Rust escapes remain
   unchanged.
 - Verify one diagnostic is produced for any positive number of joins in one
   literal.
+- Exhaustively explore the scanner over short symbolic inputs with a bounded
+  model checker, using a fixed-capacity sink rather than a growable vector and
+  deriving the unwind bound from that capacity. State the alphabet the bound
+  excludes; "exhaustive over short inputs" is only true of the alphabet
+  actually explored.
+
+### Adapter tests
+
+The pure half is where the proofs live, and the adapter is where the byte
+offsets live. Do not let the first fact aim the testing effort away from the
+second.
+
+- In-process tests for the body-offset to source-span conversion, driven
+  directly rather than only through rendered diagnostics. A blessed expectation
+  cannot falsify the code that produced it.
+- In-process tests for wrapper-depth accounting across every enclosing node
+  kind the pass visits.
+- In-process tests feeding the emission gate a deliberately corrupted rewrite
+  and asserting silence.
+
+These also keep the adapter out of the zero-coverage trap: it compiles into the
+instrumented test binary but only ever executes inside a separate compiler
+subprocess, so without in-process tests it reports as entirely uncovered.
 
 ### Behaviour scenarios
 
@@ -712,21 +1027,26 @@ Feature: Context-sensitive string continuation style
 
 ## Acceptance fixtures
 
-### Macro identity and grammar fixtures
+### Macro position fixtures
 
-| Fixture                                     | Expected result                                                                            |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `fail_log_message.rs`                       | `log::info!` message join receives one machine-applicable suggestion                       |
-| `fail_log_target.rs`                        | `log::warn!(target: ..., ...)` message join receives one machine-applicable suggestion     |
-| `pass_log_implicit_capture.rs`              | Supported `log` message with capture receives no diagnostic or suggestion                  |
-| `pass_log_target_implicit_capture.rs`       | Supported targeted `log` message with capture receives no diagnostic or suggestion         |
-| `fail_tracing_fields.rs`                    | `tracing::info!` fields plus message receive one machine-applicable suggestion             |
-| `fail_tracing_controls.rs`                  | Valid controls preserve the message position and receive one machine-applicable suggestion |
-| `pass_tracing_implicit_capture.rs`          | Supported tracing message with capture receives no diagnostic or suggestion                |
-| `pass_tracing_controls_implicit_capture.rs` | Supported controlled tracing message with capture receives no diagnostic or suggestion     |
-| `pass_local_macro_lookalikes.rs`            | Local short-name macros receive no diagnostic or suggestion                                |
-| `pass_external_macro_lookalikes.rs`         | Unapproved same-name external macros receive no diagnostic or suggestion                   |
-| `pass_unknown_literal_macro.rs`             | Uncertain identity or grammar receives no diagnostic or suggestion                         |
+The original text listed eleven fixtures over `log` and `tracing` grammars.
+Those move to roadmap item 2.4.2 with the facade support. What replaces them
+is one fixture per way the position proof of §Macro position can fail —
+a shorter list, and one that does not decay when a third-party crate ships a
+new macro arm.
+
+| Fixture                           | Expected result                                                                        |
+| --------------------------------- | -------------------------------------------------------------------------------------- |
+| `pass_literal_macro_capture.rs`   | A `$l:literal` matcher substituting a joined literal receives no diagnostic            |
+| `pass_expanded_item.rs`           | A joined literal inside an expanded item receives no diagnostic                        |
+| `pass_expanded_stmt.rs`           | A joined literal inside an expanded statement receives no diagnostic                   |
+| `pass_derive_generated.rs`        | A joined literal in derive output receives no diagnostic                               |
+| `pass_nested_expansion.rs`        | A joined literal two expansions deep receives no diagnostic                            |
+| `pass_local_macro_lookalikes.rs`  | A crate defining its own `println!` disables the lint for that crate                   |
+| `pass_facade_macros.rs`           | `log::info!` and `tracing::info!` joins receive no diagnostic until roadmap item 2.4.2 |
+| `pass_generated_format_string.rs` | `concat!()` and `include_str!()` format strings receive no diagnostic                  |
+
+Each has a paired control that inverts its gate, per §UI passes.
 
 ### Must pass unchanged
 
@@ -740,7 +1060,7 @@ fn header(status_line: &str, length: usize) -> String {
 }
 ```
 
-### Must fail with a machine-applicable rewrite
+### Must fail with a rewrite
 
 ```rust
 fn header(status_line: &str, length: usize) -> String {
@@ -770,20 +1090,31 @@ fn header(status_line: &str, length: usize) -> String {
 
 ## Rollout
 
-1. Land the lint with its classifier, UI matrix, localization, suite
-   registration, and user documentation.
+1. Land the lint with its classifier, fixture matrix, localization, suite
+   registration, configuration table, and user documentation, with
+   `applicability` defaulting to `"manual"`.
 2. Dogfood it against Whitaker. The PR #296 fixture must remain clean because
    of its capture.
-3. Run it across df12 Rust repositories and apply machine fixes.
-4. Replace CodeRabbit's unconditional prose guidance with the context-sensitive
+3. Run it across df12 Rust repositories in reporting mode and read the
+   findings. This is the evidence-gathering step, not the fixing step.
+4. Build a dry-run harness before any estate-wide fix: per repository, record
+   the current commit, apply the fixes, build, run that repository's tests, and
+   **revert automatically** if either fails. Report a per-repository verdict.
+   Without this, an estate-wide fix run is dozens of unreviewed automated
+   commits and the first bad one is found by whoever's continuous integration
+   goes red first.
+5. Only then flip `applicability` to `"machine"`. This is roadmap item 2.4.3
+   and it is a separate decision with its own evidence, not a formality.
+6. Replace CodeRabbit's unconditional prose guidance with the context-sensitive
    rule:
 
    > Use `concat!()` for interior joins in cooked string expressions unless
    > direct-literal status is required, including implicit format capture or a
    > literal-only macro contract.
 
-5. Promote no later than the next normal Whitaker release. The rule is
-   deterministic and should not need an experimental incubation period.
+7. Promote the lint itself no later than the next normal Whitaker release. The
+   rule is deterministic and should not need an experimental incubation period;
+   it is the *fixer*, not the diagnostic, that earns its promotion by evidence.
 
 ## Alternatives considered
 
@@ -800,8 +1131,35 @@ rustc already performs.
 
 ### Late HIR lint
 
-Rejected. HIR no longer retains the exact source spelling that distinguishes an
-escaped newline from an equivalent evaluated string.
+Rejected, but not for the reason first given. The original text said HIR "no
+longer retains the exact source spelling"; in fact the HIR literal's span still
+points at the source, so the spelling is recoverable with a snippet lookup at
+any phase. The real disqualifier is that format arguments are lowered away, so
+a late pass cannot see `FormatArgs` and therefore cannot tell a captured
+argument from an explicitly named one.
+
+### Prove the macro's identity rather than the literal's position
+
+Rejected, after being the original design. Resolving a macro's defining crate
+and canonical path requires a `TyCtxt`, which a post-expansion early pass does
+not have. Three ways round that were considered:
+
+- Reach the `TyCtxt` through thread-local compiler state. It is present,
+  because early lints run inside a query, but it is a hidden global that
+  defeats the boundary the crate split exists to enforce.
+- Split into an early collector that records format arguments and a late
+  emitter that resolves identity, mirroring Clippy's format-argument storage.
+  Clippy needs that structure because its format lints reason about *types*;
+  this lint reasons about *bytes*. Adopting the structure without the
+  motivation buys one thing — a crate name — and costs a second literal-handling
+  path, shared mutable storage across two pass objects, two more compiler
+  dependencies, and a two-pass suite registration.
+- Restrict the allowlist to what `ExpnData` alone can distinguish, which cannot
+  satisfy the identity clause as written.
+
+All three answer "which macro is this?". §Macro position asks "is anything
+wrapping this literal?" instead, which is answerable locally, and which the
+identity check would not have answered — a `$l:literal` capture defeats it too.
 
 ### Always add explicit captured arguments and use `concat!()`
 
@@ -847,3 +1205,38 @@ A technically accurate response to the open review thread is:
 - Rust's own UI test verifies that `format!(concat!("{a}"))` fails with the
   diagnostic that `format_args!` cannot capture variables when its format
   string is expanded from a macro.
+
+Added in the 2026-08-21 revision, verified against the pinned
+`nightly-2026-05-28` compiler sources:
+
+- `FormatArgs::is_source_literal` is set from `rustc_parse_format`'s own
+  snippet-versus-input comparison, which is `false` when a procedural macro has
+  respanned the literal (rust-lang/rust#114865).
+- `FormatArgs::span` is assigned the fully-expanded format-string expression's
+  span, and `Span::from_inner` maps byte offsets within a token to source
+  spans.
+- The `println!` family appends its newline to the cooked symbol only, leaving
+  `uncooked_symbol` — the raw source body — untouched.
+- `rustc_expand`'s `maybe_use_metavar_location` preserves the call-site syntax
+  context for tokens substituted from a matcher, while `Marker::mark_span`
+  marks the transcribed structure around them. This is the basis of
+  §Wrapper depth.
+- `rustc-literal-escaper` and `rustc_lexer` both implement the continuation
+  whitespace rule as a single skip over `{space, tab, line feed, carriage
+  return}`, excluding formfeed (rust-lang/rust#136600). This is the basis of
+  §The whitespace rule.
+- `SourceFile` construction normalizes newlines, so literal symbols and
+  recovered snippets never contain carriage returns.
+- `LintStore::register_early_pass` takes a factory, and the only site that
+  instantiates it runs once per crate, inside the early-lint query — which also
+  means a `TyCtxt` exists on the thread even though `EarlyContext` does not
+  expose one.
+- `compiletest_rs`, which `dylint_testing` layers on, honours a `run-rustfix`
+  header: it applies the suggestion, diffs against a `.fixed` file, recompiles
+  the result, and fails on residual diagnostics. Note that `dylint_testing`
+  constructs its configuration with blessing disabled and exposes no override,
+  so expectation files are updated by copying the actual-output path the
+  report prints, not by an environment variable.
+- `log` 0.4.33's facade macros accept a `logger:` control absent from the
+  original allowlist, and separate key-value fields from the message with a
+  semicolon.
