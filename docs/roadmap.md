@@ -78,11 +78,6 @@
   suppressions narrowly scoped to the item they justify. See
   [ADR 002](adr-002-dylint-expect-attribute-macro.md) §Migration plan. Requires
   1.3.3.
-- [ ] 2.2.10. Implement `string_continuation_style` as a post-expansion early
-  lint, including source-preserving `concat!()` suggestions, format-capture and
-  literal-context exemptions, localized diagnostics, and suite integration. See
-  [RFC 0002](rfcs/0002-string-continuation-style.md).
-  Requires 2.1.1 and 2.3.4.
 
 ### 2.3. Localization enablement
 
@@ -95,6 +90,26 @@
 - [x] 2.3.4. Allow locale selection via `DYLINT_LOCALE` and `dylint.toml`, and
   add UI smoke tests that run under at least one non-English locale. Requires
   2.3.3.
+
+### 2.4. String continuation style
+
+- [ ] 2.4.1. Implement `string_continuation_style` as a post-expansion early
+  lint covering plain cooked string expressions and source-authored format
+  strings from compiler built-in macros, including source-preserving
+  `concat!()` suggestions, format-capture and literal-context exemptions,
+  localized diagnostics, and suite integration. Suggestions ship at manual
+  applicability. See [RFC 0002](rfcs/0002-string-continuation-style.md).
+  Requires 2.1.1 and 2.3.4.
+- [ ] 2.4.2. Extend `string_continuation_style` to the `log` and `tracing`
+  facade macros, proving macro identity, format-string position, and complete
+  argument grammar before suggesting a rewrite, with acceptance fixtures for
+  every supported variant and for same-named local and external lookalikes.
+  See [RFC 0002](rfcs/0002-string-continuation-style.md) §Detection
+  architecture. Requires 2.4.1.
+- [ ] 2.4.3. Promote the `string_continuation_style` suggestion from manual to
+  machine applicability once field evidence shows the rewrite is safe to apply
+  unattended, including an apply-and-recompile harness across the estate and a
+  documented rollback path. Requires 2.4.1.
 
 ## 3. Aggregated packaging, installer, and unified CLI
 

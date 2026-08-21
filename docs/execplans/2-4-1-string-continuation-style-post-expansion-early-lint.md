@@ -5,9 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT — awaiting approval. Three decisions need the approver's
-answer before implementation starts: `DEC-009` (scope), `DEC-013` (release
-applicability default), and `DEC-014` (one lint name or two).
+Status: DRAFT — awaiting approval of the plan as a whole. The three decisions
+that were open at first review have been answered and are now settled:
+`DEC-009` (scope) is approved, `DEC-013` (manual applicability for the first
+release) is approved, and `DEC-014` resolves to a single lint name.
 
 ## Purpose / big picture
 
@@ -222,13 +223,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-08-21) First draft written.
 - [x] (2026-08-21) Six-lens design review completed; fourteen further findings
       recorded in §Surprises & discoveries and eight decisions revised.
-- [ ] Plan approved, and `DEC-009`, `DEC-013`, `DEC-014` answered.
+- [x] (2026-08-21) `DEC-009`, `DEC-013`, and `DEC-014` answered by the
+      repository owner; the feature moved from roadmap item 2.2.10 to its own
+      step, §2.4 String continuation style, and the branch, this file, and the
+      pull request renamed to match.
+- [ ] Plan approved as a whole.
 - [ ] EP-M0a: expansion-shape probe.
 - [ ] EP-M1: pure domain crate.
 - [ ] EP-M2: plain cooked string literals.
 - [ ] EP-M3: source-authored format strings from compiler built-ins.
 - [ ] EP-M5: suite, installer, tooling, and documentation integration.
-- [ ] Roadmap item 2.2.10 marked done.
+- [ ] Roadmap item 2.4.1 marked done.
 
 ## Surprises & discoveries
 
@@ -513,8 +518,8 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   Add `googletest` and `pretty_assertions` to `[workspace.dependencies]`; the
   task brief authorizes both and neither is present. Promote `serial_test`
   from four identical per-crate `4.0.1` pins to a workspace pin and migrate
-  all four crates. Add `log` and `tracing` as dev-dependency edges only if
-  `DEC-009` is declined; both are already workspace-pinned.
+  all four crates. `log` and `tracing` dev-dependency edges are not needed:
+  `DEC-009` moved the facades to roadmap item 2.4.2.
   Date/Author: 2026-08-21, planning agent.
 
 - **DEC-007: WITHDRAWN.** The first draft proposed adding
@@ -529,28 +534,29 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
 - **DEC-008: SUPERSEDED by `DEC-009`.** The first draft proposed rejecting
   `log`'s `logger:` control. `DEC-009` removes the `log` allowlist entirely.
 
-- **DEC-009: Move `log` and `tracing` support out of this roadmap item.
-  REQUIRES APPROVAL.**
-  Recommendation: cut them, and cut them by construction (which `DEC-002`
-  already does), not by deferral.
-  For: `docs/roadmap.md:81` scopes 2.2.10 as "source-preserving `concat!()`
-  suggestions, format-capture and literal-context exemptions, localized
-  diagnostics, and suite integration" — it does not mention either crate. They
-  are the sole driver of the whole `TyCtxt` question. The allowlist is a policy
-  table over third-party macro grammars that change between versions, and
-  `SURP-010` shows RFC 0002's is already stale. `SURP-015` shows the fixtures
-  cannot all live in one crate anyway. They account for 14 of roughly 34
-  fixtures on a serialized test path.
-  Against: in service codebases long strings disproportionately live in log
-  messages, which is where the reviewers' hand-application that motivates this
-  work actually happens. RFC 0002 §Rollout step 3's payoff is estate-wide
-  machine fixes, and logging is where the volume is. Cutting requires amending
-  the RFC, not annotating it.
-  If approved: file roadmap item 2.2.11 for the facade allowlist, to be
-  designed against a shipped baseline. If declined: reinstate `EP-M4` from the
-  first draft, restore the `EP-M0` spike to its blocking position, and expect
-  the `Tolerances` scope and wall-clock figures to need roughly doubling.
-  Date/Author: 2026-08-21, planning agent. **Approver's call.**
+- **DEC-009: Move `log` and `tracing` support out of this item. APPROVED.**
+  The facades are cut by construction — `DEC-002`'s outermost-frame check
+  produces silence for them — rather than by deferral, so nobody ships half an
+  allowlist.
+  Rationale: the roadmap text for this work never mentioned either crate. They
+  were the sole driver of the whole `TyCtxt` question. The allowlist is a
+  policy table over third-party macro grammars that change between versions,
+  and `SURP-010` shows RFC 0002's was already stale roughly a year after it was
+  written. `SURP-015` shows their fixtures cannot all live in one crate anyway,
+  because Cargo unifies dev-dependency features. They accounted for 14 of
+  roughly 34 fixtures on a serialized test path.
+  Accepted cost: in service codebases long strings disproportionately live in
+  log messages, which is exactly where the hand-application this work replaces
+  actually happens. Coverage there is deferred, not abandoned.
+  Consequence: the approver directed that the whole feature move out of
+  §2.2 Core lint implementations into its own roadmap step rather than
+  overburdening that step. `docs/roadmap.md` now carries §2.4 String
+  continuation style with three tasks: 2.4.1 (this plan), 2.4.2 (the facade
+  allowlist, to be designed against a shipped baseline), and 2.4.3 (`DEC-013`'s
+  promotion to machine applicability). The branch, this file, and the pull
+  request were renamed to match.
+  Date/Author: 2026-08-21, planning agent; approved 2026-08-21 by the
+  repository owner.
 
 - **DEC-010: Put the pure domain in its own plain-library crate.**
   Create `crates/whitaker_string_literals/` as an ordinary `rlib` with no
@@ -601,11 +607,11 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   Date/Author: 2026-08-21, planning agent.
 
 - **DEC-013: Ship a configuration table, defaulting to manual applicability.
-  REQUIRES APPROVAL.**
+  APPROVED.**
   RFC 0002 says "No configuration section is proposed. The proof predicate is
   the configuration." For a warn-level style lint that is defensible; for a
   lint that writes to source files it is the wrong instinct for release one.
-  Proposal: a `[string_continuation_style]` table in `dylint.toml` with
+  Adopted: a `[string_continuation_style]` table in `dylint.toml` with
   `applicability = "manual" | "machine"` defaulting to `"manual"`, plus
   `excluded_crates` and `excluded_paths` mirroring `no_std_fs_operations`'s
   shape exactly. Under `"manual"` the diagnostic still prints the full
@@ -618,23 +624,31 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
   motivating case is a build script writing `$OUT_DIR/protocol.rs`, included
   with `include!`: the user cannot annotate a file they do not write, and a
   fix would rewrite a file the next build deletes.
-  Date/Author: 2026-08-21, planning agent. **Approver's call.**
+  Consequence: promoting the default from `"manual"` to `"machine"` is
+  deliberately *not* in this plan's scope. It is roadmap item 2.4.3, gated on
+  field evidence from an apply-and-recompile pass over the estate. This plan
+  builds the machinery that makes that evidence collectable — the
+  `// run-rustfix` fixtures of `SURP-014` and the run-time value gate of
+  `LEM-EMIT-1` — and stops there.
+  Date/Author: 2026-08-21, planning agent; approved 2026-08-21 by the
+  repository owner.
 
-- **DEC-014: One lint name or two. REQUIRES APPROVAL.**
-  The plan of record ships one lint, `string_continuation_style`, covering
-  both branches — this is what RFC 0002 and the roadmap describe.
-  The review's alternative: two lint names,
-  `string_continuation_style` (plain literals) and
-  `format_string_continuation_style` (format strings), declared and driven by
-  the same single `EarlyLintPass` in the same crate. Users get `#[allow]`
-  granularity between a high-confidence branch and a lower-confidence one; the
-  format branch can ship at `Allow` and be promoted independently; `EP-M3`'s
-  recovery becomes a change users can make themselves. Cost: one extra Fluent
-  file per locale, one extra `SUITE_LINTS`/`SUITE_LINT_DECLS` pair, one extra
-  users-guide subsection. Two *crates* would be the wrong cut and is not
-  proposed.
-  Default if unanswered: one name.
-  Date/Author: 2026-08-21, planning agent. **Approver's call.**
+- **DEC-014: One lint name. SETTLED.**
+  Ship a single lint, `string_continuation_style`, covering both the
+  plain-literal and format-string branches, as RFC 0002 and the roadmap
+  describe.
+  Rationale, from the approver: a user does not care about the internal split
+  between the two branches unless their semantics are fundamentally different,
+  and here they are not — both say "this source-line join could be a
+  `concat!()`". The review's alternative of a second
+  `format_string_continuation_style` name would have bought `#[allow]`
+  granularity between a high-confidence and a lower-confidence branch, at the
+  cost of exposing an implementation boundary in the user-facing lint list.
+  With `DEC-013`'s configuration table providing a kill switch and `DEC-002`
+  making the format branch no riskier than the plain one, that granularity has
+  no remaining user to serve.
+  Date/Author: 2026-08-21, planning agent; settled 2026-08-21 by the
+  repository owner.
 
 - **DEC-015: Order the adapter's checks cheapest-first, normatively.**
   RFC 0002 §Ordinary string expressions puts `span_to_snippet` and a re-lex at
@@ -913,26 +927,29 @@ Upstream artefacts, at the revisions current on this branch (based on
 
 - **RFC-0002** — `docs/rfcs/0002-string-continuation-style.md`, status
   *Proposed*. The design of record, with the defects recorded above.
-- **ROADMAP-2.2.10** — `docs/roadmap.md` line 81. Depends on ROADMAP-2.1.1
-  (lint crate template, done) and ROADMAP-2.3.4 (locale selection, done).
+- **ROADMAP-2.4.1** — `docs/roadmap.md` §2.4 String continuation style, first
+  task. Depends on ROADMAP-2.1.1 (lint crate template, done) and ROADMAP-2.3.4
+  (locale selection, done). Its sibling tasks 2.4.2 (the `log` and `tracing`
+  facade allowlist) and 2.4.3 (promotion to machine applicability) are
+  explicitly out of scope here and depend on this one.
 - **SUITE-DESIGN** — `docs/whitaker-dylint-suite-design.md`.
 - **AGENTS** — `AGENTS.md`.
 - **STYLE** — `docs/documentation-style-guide.md`.
 
-There is no Terms of Reference document; ROADMAP-2.2.10 plus RFC-0002 serve
+There is no Terms of Reference document; ROADMAP-2.4.1 plus RFC-0002 serve
 that role.
 
 Trace links:
 
 ```plaintext
-ROADMAP-2.2.10 -> RFC-0002 §Continuation scanner -> EP-M1 -> INV-SCAN-1 -> crates/whitaker_string_literals/src/continuation/tests.rs
-ROADMAP-2.2.10 -> RFC-0002 §Rewrite construction -> EP-M1 -> LEM-REWRITE-1 -> verus/string_continuation_rewrite.rs
-ROADMAP-2.2.10 -> SURP-012 -> EP-M2 -> LEM-DEPTH-1 -> crates/string_continuation_style/ui/pass_literal_macro_capture.rs
-ROADMAP-2.2.10 -> RFC-0002 §Ordinary string expressions -> EP-M2 -> crates/string_continuation_style/ui/fail_plain_join.rs
-ROADMAP-2.2.10 -> Constraints §evaluated-value -> EP-M2 -> LEM-EMIT-1 -> crates/string_continuation_style/ui/fail_value_preserved.fixed
-ROADMAP-2.2.10 -> RFC-0002 §Why the motivating example passes -> EP-M3 -> crates/string_continuation_style/ui/pass_implicit_format_capture.rs
-ROADMAP-2.2.10 -> RFC-0002 §Suite integration -> EP-M5 -> suite/tests/registration.rs::then_early_pass_registered
-ROADMAP-2.2.10 -> AGENTS §Documentation maintenance -> EP-M5 -> docs/users-guide.md §string_continuation_style
+ROADMAP-2.4.1 -> RFC-0002 §Continuation scanner -> EP-M1 -> INV-SCAN-1 -> crates/whitaker_string_literals/src/continuation/tests.rs
+ROADMAP-2.4.1 -> RFC-0002 §Rewrite construction -> EP-M1 -> LEM-REWRITE-1 -> verus/string_continuation_rewrite.rs
+ROADMAP-2.4.1 -> SURP-012 -> EP-M2 -> LEM-DEPTH-1 -> crates/string_continuation_style/ui/pass_literal_macro_capture.rs
+ROADMAP-2.4.1 -> RFC-0002 §Ordinary string expressions -> EP-M2 -> crates/string_continuation_style/ui/fail_plain_join.rs
+ROADMAP-2.4.1 -> Constraints §evaluated-value -> EP-M2 -> LEM-EMIT-1 -> crates/string_continuation_style/ui/fail_value_preserved.fixed
+ROADMAP-2.4.1 -> RFC-0002 §Why the motivating example passes -> EP-M3 -> crates/string_continuation_style/ui/pass_implicit_format_capture.rs
+ROADMAP-2.4.1 -> RFC-0002 §Suite integration -> EP-M5 -> suite/tests/registration.rs::then_early_pass_registered
+ROADMAP-2.4.1 -> AGENTS §Documentation maintenance -> EP-M5 -> docs/users-guide.md §string_continuation_style
 ```
 
 ## Verification plan
@@ -1229,17 +1246,21 @@ transcript in §Artefacts and notes, and revert it.
 ### Deliberately not verified formally
 
 Nothing in this plan's scope is a policy table over third-party macro
-grammars, because `DEC-002` removed the allowlist and `DEC-009` removes the
-facades. If `DEC-009` is declined, reinstate the first draft's note explaining
-why the allowlist gets fixtures rather than a proof.
+grammars: `DEC-002` removed the allowlist and `DEC-009` moved the facades to
+roadmap item 2.4.2. When 2.4.2 is planned it will need such a table, and it
+should record there — as the first draft of this plan did — why the allowlist
+gets acceptance fixtures rather than a proof: its correctness is a claim about
+third-party crates' macro definitions, which change between their versions,
+so the safe default of "an uncertain contract produces neither a diagnostic
+nor a suggestion" carries the guarantee instead.
 
 ## Plan of work
 
 ### Stage A — understand and propose (no code changes)
 
-Read RFC-0002 in full, then §Surprises & discoveries here. Confirm `DEC-009`,
-`DEC-013`, and `DEC-014` have been answered. Do not write code until this plan
-is approved.
+Read RFC-0002 in full, then §Surprises & discoveries here. `DEC-009`,
+`DEC-013`, and `DEC-014` are settled, so no decision blocks the work. Do not
+write code until this plan is approved as a whole.
 
 ### Stage B — red tests and the behaviour specification
 
@@ -1309,8 +1330,10 @@ lemma in the same commit as the code it constrains.
   depend on. No repository change except this plan's living sections.
 - **Method.** Three compiler flags, no code. On a scratch file outside the
   workspace containing `format!`, `println!`, `write!`, `assert!`, a
-  `macro_rules!` capturing `$l:literal`, a local `macro_rules! info`, and — if
-  `DEC-009` is declined — `log::info!` and `tracing::info!` with fields:
+  `macro_rules!` capturing `$l:literal`, and a local `macro_rules! info`.
+  Add `log::info!` and `tracing::info!` too: they are out of scope here, but
+  the probe is the cheapest place to gather the evidence roadmap item 2.4.2
+  will need, and recording it now costs one extra line per flag:
   - `cargo rustc -- -Zunpretty=expanded` — does each form reach the abstract
     syntax tree as a `format_args!` node?
   - `cargo rustc -- -Zunpretty=expanded,hygiene` — what syntax context does the
@@ -1437,7 +1460,7 @@ lemma in the same commit as the code it constrains.
   in continuous integration. Documentation is complete and the roadmap item is
   ticked.
 - **Requirements discharged.** RFC-0002 §Suite integration; AGENTS
-  §Documentation maintenance; ROADMAP-2.2.10; `DEC-011`, `DEC-012`.
+  §Documentation maintenance; ROADMAP-2.4.1; `DEC-011`, `DEC-012`.
 - **Acceptance evidence.** `EV-M5`: `suite/tests/registration.rs` passes,
   including a new `then_early_pass_registered` step that asserts *which* pass
   is registered, not merely how many — a count would also pass if the wrong
@@ -1459,7 +1482,7 @@ lemma in the same commit as the code it constrains.
 ## Concrete steps
 
 All commands run from the repository root on branch
-`2-2-10-string-continuation-style-post-expansion-early-lint.md`.
+`2-4-1-string-continuation-style-post-expansion-early-lint.md`.
 
 Log every gate run so truncated output can be reviewed:
 
@@ -1676,8 +1699,8 @@ Edit, in this order:
 18. `docs/repository-layout.md` — note the new pure-domain crate.
 19. `docs/rfcs/0002-string-continuation-style.md` — the substantive revision
     described in §Outcomes & retrospective; move status to *Accepted*.
-20. `docs/roadmap.md` — tick item 2.2.10, and add 2.2.11 if `DEC-009` is
-    approved.
+20. `docs/roadmap.md` — tick item 2.4.1. Items 2.4.2 and 2.4.3 already exist
+    and stay open.
 
 Then:
 
