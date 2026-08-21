@@ -227,6 +227,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
       repository owner; the feature moved from roadmap item 2.2.10 to its own
       step, §2.4 String continuation style, and the branch, this file, and the
       pull request renamed to match.
+- [x] (2026-08-21) RFC 0002 substantively revised: the two soundness defects
+      corrected, the superseded mechanics replaced, and the staging and
+      configuration decisions folded in. Status stays *Proposed* until this
+      plan is approved.
 - [ ] Plan approved as a whole.
 - [ ] EP-M0a: expansion-shape probe.
 - [ ] EP-M1: pure domain crate.
@@ -676,17 +680,27 @@ Note that this is the `rustc-src` component, not the `rust-src` component at
 
 ## Outcomes & retrospective
 
-Not started. To be completed at each milestone boundary and at plan closure.
+Implementation not started. To be completed at each milestone boundary and at
+plan closure.
 
-Before setting this plan to `COMPLETE`, reconcile every discovery against
-`docs/rfcs/0002-string-continuation-style.md`. `SURP-012` and `SURP-016` are
-defects in the RFC, not merely divergences: the first would ship a
-source-corrupting suggestion, the second specifies the wrong language rule.
-`SURP-001`, `SURP-002`, `SURP-003`, `SURP-007`, `SURP-010`, and `SURP-013`
-describe places where the RFC's prescribed mechanics differ from the pinned
-toolchain's behaviour. `DEC-001`'s rationale correction and `DEC-009`'s scope
-change also require RFC edits. The RFC must be substantively revised, not
-annotated, before it moves from *Proposed* to *Accepted*.
+One outcome is already recorded. `docs/rfcs/0002-string-continuation-style.md`
+was substantively revised on 2026-08-21, before implementation, because two of
+the discoveries below are defects in the design of record rather than
+divergences from it: `SURP-012` would have shipped a source-corrupting
+suggestion, and `SURP-016` specifies the wrong language rule. Annotating either
+would have left the RFC saying something false. The revision also folded in
+`SURP-001`, `SURP-002`, `SURP-003`, `SURP-007`, `SURP-010`, and `SURP-013`,
+`DEC-001`'s rationale correction, and the consequences of `DEC-002`, `DEC-009`,
+`DEC-010`, and `DEC-013`. It carries a §Revision history recording what changed
+and why.
+
+The RFC stays at *Proposed* until this plan is approved; the status change is
+the only RFC edit left, and it belongs at `EP-M5`.
+
+Before setting this plan to `COMPLETE`, re-check that no discovery made during
+implementation has left the RFC stale again. The verification obligations, the
+configuration table, and the fixture matrix are all now described in both
+documents, so a change to any of them has two homes.
 
 ## Context and orientation
 
@@ -1697,8 +1711,11 @@ Edit, in this order:
     decisions. Reference it from `docs/whitaker-dylint-suite-design.md`.
 17. `docs/contents.md` — index the new ADR; it lists all four existing ones.
 18. `docs/repository-layout.md` — note the new pure-domain crate.
-19. `docs/rfcs/0002-string-continuation-style.md` — the substantive revision
-    described in §Outcomes & retrospective; move status to *Accepted*.
+19. `docs/rfcs/0002-string-continuation-style.md` — move status from
+    *Proposed* to *Accepted*, and add the approval date to §Revision history.
+    The substantive revision landed on 2026-08-21, before implementation; only
+    the status transition is outstanding. Re-read it first and confirm nothing
+    discovered during implementation has made it stale.
 20. `docs/roadmap.md` — tick item 2.4.1. Items 2.4.2 and 2.4.3 already exist
     and stay open.
 
