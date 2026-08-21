@@ -285,6 +285,16 @@
   calls, including macro-span filtering. See
   [brain trust lints design](brain-trust-lints-design.md) §Cohesion analysis
   (LCOM4) and §Implementation approach. Requires 6.1.1.
+- [ ] 6.1.3. Record an architectural decision record (ADR) formalizing the
+  brain trust lint driver interfaces before any consumer is implemented: how a
+  `rustc_span::Span` and `TyCtxt` yield a repository-root-relative file
+  identifier and a `SourceSpan`; how HIR traversal populates
+  `TypeMetricsBuilder` and `TraitMetricsBuilder`; how `DecompositionSuggestion`
+  values reach diagnostic and SARIF rendering; the lint-pass lifecycle for
+  collecting and finalizing findings; and the boundary between English SARIF
+  text and localized diagnostics. See
+  [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  approach. Requires 6.1.2, 6.2.2, 6.3.2, and 6.4.2.
 
 ### 6.2. `brain_type` lint
 
@@ -299,6 +309,12 @@
 - [x] 6.2.3. Ensure macro-expanded spans are excluded or capped during CC
   calculation. See [brain trust lints design](brain-trust-lints-design.md)
   §Metric collection. Requires 6.2.1.
+- [ ] 6.2.4. Create the `brain_type` Dylint lint crate under
+  `crates/brain_type/`, walking HIR to populate `TypeMetricsBuilder`, applying
+  the shipped threshold evaluation, and emitting diagnostics carrying measured
+  values, notes, and decomposition advice. See
+  [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  approach. Requires 6.1.3, 6.2.3, and 6.4.2.
 
 ### 6.3. `brain_trait` lint
 
@@ -310,6 +326,12 @@
   values in diagnostics. See
   [brain trust lints design](brain-trust-lints-design.md) §`brain_trait` rule
   set (initial defaults). Requires 6.3.1.
+- [ ] 6.3.3. Create the `brain_trait` Dylint lint crate under
+  `crates/brain_trait/`, walking trait items to populate
+  `TraitMetricsBuilder`, applying the shipped threshold evaluation, and
+  emitting diagnostics carrying measured values and implementor-burden notes.
+  See [brain trust lints design](brain-trust-lints-design.md) §Implementation
+  approach. Requires 6.1.3, 6.3.2, and 6.4.2.
 
 ### 6.4. Decomposition advice
 
@@ -347,21 +369,21 @@
 - [ ] 6.5.1. Collect brain trust diagnostics into a SARIF 2.1.0 emitter that is
   opt-in and English-only for tool ingestion. See
   [brain trust lints design](brain-trust-lints-design.md) §SARIF output.
-  Requires 6.2.2 and 6.3.2.
+  Requires 6.1.3, 6.2.2, and 6.3.2.
 
 ### 6.6. Configuration, localization, and tests
 
 - [ ] 6.6.1. Add `brain_type` and `brain_trait` configuration sections to
   `whitaker.toml` with documented defaults. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
-  localization, and testing. Requires 3.6.3, 6.2.2, and 6.3.2.
+  localization, and testing. Requires 3.6.3, 6.2.4, and 6.3.3.
 - [ ] 6.6.2. Add Fluent localization entries for both lints. See [brain trust
   lints design](brain-trust-lints-design.md) §Configuration, localization, and
-  testing. Requires 2.3.3, 6.2.2, and 6.3.2.
+  testing. Requires 2.3.3, 6.2.4, and 6.3.3.
 - [ ] 6.6.3. Add UI tests for positive and negative cases under
   `crates/brain_type/ui/` and `crates/brain_trait/ui/`. See
   [brain trust lints design](brain-trust-lints-design.md) §Configuration,
-  localization, and testing. Requires 1.2.1, 6.2.2, and 6.3.2.
+  localization, and testing. Requires 1.2.1, 6.2.4, and 6.3.3.
 
 ### 6.7. Documentation
 
