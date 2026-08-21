@@ -668,7 +668,7 @@ gap. Two obligations are dischargeable here.
 - Domain: every dependency table in the mapping crate's manifest —
   `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, and any
   `[target.'cfg(...)'.dependencies]` — checking both the key and any
-  `package = ` rename.
+  `package` rename.
 - Artefact: a test under `common/tests/` or the hosting crate's `tests/`,
   named in Stage D once the ADR fixes the crate name.
 - Evidence: `cargo nextest run architecture_boundary`. Red first: assert
