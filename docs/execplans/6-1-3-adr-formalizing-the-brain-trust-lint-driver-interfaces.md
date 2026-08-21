@@ -390,7 +390,7 @@ list returns a `Result`.
   (`common/src/brain_type_metrics/diagnostic.rs:123-286`).
 
 The only callers of the two metrics builders today are behavioural tests under
-`common/tests/`, which feed hand-written strings and integers.
+`common/tests/`, which feed handwritten strings and integers.
 
 ### What already exists for SARIF
 
