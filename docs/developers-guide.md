@@ -1837,6 +1837,7 @@ Whitaker data directory keyed by toolchain and target:
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation
 - `--no-update` — Don't update existing repository clone
+- `--ref REF` — Pin the suite to a commit-ish (SHA, tag, or branch name)
 
 ### Using installed lints
 
@@ -1988,7 +1989,7 @@ struct FastPathContext<'a> {
 }
 ```
 
-A parameter-object struct that bundles the five immutable inputs consumed by
+A parameter-object struct that bundles the six immutable inputs consumed by
 `try_fast_path_installation`. This follows the same idiom used elsewhere in the
 codebase (`FinishInstallContext`, `PrebuiltInstallationContext`,
 `MetricsWriteContext`) to keep function argument counts within the project

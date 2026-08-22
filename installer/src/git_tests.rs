@@ -186,6 +186,28 @@ fn ensure_default_branch_is_noop_on_a_branch(git_fixture: GitFixture) {
 }
 
 #[rstest]
+fn default_branch_name_does_not_repair_missing_remote_head(git_fixture: GitFixture) {
+    git(
+        &git_fixture.clone,
+        &["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"],
+    );
+
+    assert_eq!(
+        default_branch_name(&git_fixture.clone).expect("query default branch"),
+        None
+    );
+    let remote_head = Command::new("git")
+        .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
+        .current_dir(git_fixture.clone.as_std_path())
+        .output()
+        .expect("query missing origin HEAD");
+    assert!(
+        !remote_head.status.success(),
+        "query must not repair origin/HEAD"
+    );
+}
+
+#[rstest]
 fn ensure_default_branch_repairs_missing_remote_head(git_fixture: GitFixture) {
     let commit = resolve_commit(&git_fixture.clone, "v1").expect("resolve tag");
     checkout_detached(&git_fixture.clone, &commit).expect("checkout detached");
@@ -206,6 +228,23 @@ fn ensure_default_branch_repairs_missing_remote_head(git_fixture: GitFixture) {
             &["symbolic-ref", "refs/remotes/origin/HEAD"]
         ),
         "refs/remotes/origin/main"
+    );
+}
+
+#[rstest]
+fn default_branch_validation_rejects_option_like_ref(git_fixture: GitFixture) {
+    let err = validate_default_branch(&git_fixture.clone, "--orphan=attacker")
+        .expect_err("option-like default branch must be rejected");
+
+    assert!(
+        matches!(
+            err,
+            InstallerError::Git {
+                operation: "check-ref-format",
+                ..
+            }
+        ),
+        "got {err:?}"
     );
 }
 

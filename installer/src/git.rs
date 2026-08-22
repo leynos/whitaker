@@ -178,36 +178,60 @@ pub fn ensure_default_branch(repo: &Utf8Path) -> Result<()> {
         attempt = "default_branch_recovery",
         "reattaching detached checkout"
     );
-    let branch = default_branch_name(repo)?;
+    let branch = match default_branch_name(repo)? {
+        Some(branch) => branch,
+        None => {
+            repair_default_branch_head(repo)?;
+            default_branch_name(repo)?.ok_or_else(|| InstallerError::Git {
+                operation: "rev-parse",
+                message: "could not determine default branch from origin/HEAD".to_owned(),
+            })?
+        }
+    };
     run_git_checked(&["checkout", &branch], Some(repo), "checkout")
 }
 
 /// Discovers the remote default branch name (without the `origin/` prefix).
-fn default_branch_name(repo: &Utf8Path) -> Result<String> {
-    if let Some(branch) = read_default_branch(repo)? {
-        return Ok(branch);
-    }
+fn default_branch_name(repo: &Utf8Path) -> Result<Option<String>> {
+    let Some(branch) = read_default_branch(repo)? else {
+        return Ok(None);
+    };
+    validate_default_branch(repo, &branch)?;
+    Ok(Some(branch))
+}
 
-    // An older clone may lack origin/HEAD; ask git to repopulate it, then retry.
+/// Restores a missing `origin/HEAD` symbolic reference from the remote.
+fn repair_default_branch_head(repo: &Utf8Path) -> Result<()> {
+    // An older clone may lack origin/HEAD; ask git to repopulate it before retrying.
     debug!(
         operation = "remote",
         attempt = "repair_origin_head",
         "repairing origin default branch reference"
     );
-    let _ = run_git_with_timeout(
+    run_git_checked(
         &["remote", "set-head", "origin", "--auto"],
         Some(repo),
         "remote",
-    )?;
+    )
+}
 
-    debug!(
-        operation = "rev-parse",
-        attempt = "retry_origin_head",
-        "retrying default branch discovery"
-    );
-    read_default_branch(repo)?.ok_or_else(|| InstallerError::Git {
-        operation: "rev-parse",
-        message: "could not determine default branch from origin/HEAD".to_owned(),
+/// Rejects a remote-head value that Git would parse as a checkout option.
+fn validate_default_branch(repo: &Utf8Path, branch: &str) -> Result<()> {
+    let output = run_git_with_timeout(
+        &["check-ref-format", "--branch", branch],
+        Some(repo),
+        "check-ref-format",
+    )?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    Err(InstallerError::Git {
+        operation: "check-ref-format",
+        message: format!(
+            "invalid default branch from origin/HEAD: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
     })
 }
 

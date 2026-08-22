@@ -56,10 +56,11 @@ when its manifest records the same full object ID as the resolved ref.
 - The installer must never mutate a user's own working tree: if the current
   directory is itself a Whitaker workspace, `--ref` must fail with a clear
   error rather than checking anything out.
-- No new runtime external dependencies. Test support may directly declare the
-  already-resolved `cap-std` crate solely for capability-scoped fixture writes.
-  Git operations continue to go through `installer/src/git.rs` with the
-  existing 5-minute timeout discipline.
+- Runtime diagnostics use the `tracing-subscriber` dependency with its
+  `env-filter` feature. Test support may directly declare the already-resolved
+  `cap-std` crate solely for capability-scoped fixture writes. Git operations
+  continue to go through `installer/src/git.rs` with the existing 5-minute
+  timeout discipline.
 - All work follows the repository gates: `make check-fmt`, `make lint`,
   `make test`, `make markdownlint` must pass before each commit.
 - Commit messages follow the file-based workflow (`git commit -F`), no AI
@@ -74,7 +75,7 @@ when its manifest records the same full object ID as the resolved ref.
 - Interface: if pinning turns out to require changing the signature of a
   public function other than those listed in `Interfaces and dependencies`,
   stop and escalate.
-- Dependencies: if a new crate dependency appears necessary, stop and
+- Dependencies: if an additional crate dependency appears necessary, stop and
   escalate.
 - Iterations: if a gate still fails after 3 fix attempts on the same failure,
   stop and escalate.
@@ -347,10 +348,11 @@ filename, and the detached-HEAD recovery end-to-end against tag `v0.2.4`.
 
 Scope stayed within tolerances: the implementation touched the CLI, git,
 workspace, prebuilt, install-flow, output, error, and main modules (well under
-the 12-file limit) with no new dependencies and only the one sanctioned public
-signature change (`ensure_workspace`). Rolling remains the default; only the
-explicit-pin part of issue #271 is implemented, and the version-matched default
-proposed there was deliberately not built (Decision Log).
+the 12-file limit), added the `tracing-subscriber` runtime dependency, and made
+only the one sanctioned public signature change (`ensure_workspace`). Rolling
+remains the default; only the explicit-pin part of issue #271 is implemented,
+and the version-matched default proposed there was deliberately not built
+(Decision Log).
 
 Superseded historical lesson: confirming the manifest SHA width in Stage A was
 load-bearing — the match was prefix-tolerant, and exact equality would have
@@ -718,9 +720,10 @@ Manual smoke test (Stage D), run against tag `v0.2.4`
 
 ## Interfaces and dependencies
 
-No new third-party package is introduced. The installer adds the workspace's
-existing `proptest` package as a development dependency. At completion the
-following must exist:
+The installer adds `tracing-subscriber` with its `env-filter` feature as a
+runtime dependency for CLI diagnostics. It also adds the workspace's existing
+`proptest` package as a development dependency. At completion the following
+must exist:
 
 In `installer/src/cli.rs`:
 
