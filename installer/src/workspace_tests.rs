@@ -410,3 +410,6 @@ fn find_workspace_root_errors_when_no_workspace_found(temp_workspace: TempWorksp
         InstallerError::WorkspaceNotFound { .. }
     ));
 }
+
+#[path = "workspace_lock_workflow_tests.rs"]
+mod workspace_lock_workflow_tests;
