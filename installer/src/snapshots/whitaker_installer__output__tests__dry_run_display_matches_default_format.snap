@@ -1,0 +1,17 @@
+---
+source: installer/src/output.rs
+expression: info.display_text()
+---
+Dry run - no files will be modified
+
+Workspace root: /home/user/whitaker
+Toolchain: nightly-2025-01-15
+Target directory: /home/user/.local/share/dylint/lib
+Verbosity level: 0
+Quiet: false
+Skip deps: false
+Skip wrapper: false
+No update: false
+
+Crates to build:
+  - whitaker_suite

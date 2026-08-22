@@ -1922,6 +1922,7 @@ Whitaker data directory keyed by toolchain and target:
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation
 - `--no-update` — Don't update existing repository clone
+- `--ref REF` — Pin the suite to a commit-ish (SHA, tag, or branch name)
 
 ### Using installed lints
 
@@ -1957,6 +1958,98 @@ This skips building entirely, providing faster lint runs during development.
 set of focused private helpers. Understanding them is useful when extending the
 installation pipeline.
 
+#### Private helper boundaries
+
+Installer helpers remain private to the module that owns their side effects.
+`git::run_git_checked` is only for Git commands whose successful output is
+discarded and whose non-zero exit status maps directly to `InstallerError::Git`;
+commands that inspect output or interpret a non-zero status must continue to use
+`run_git_with_timeout` directly. Real-Git regression fixtures and tests belong
+in `git_tests.rs`, keeping the production adapter focused. The helpers in
+`workspace_progress.rs` only render operator messages at the CLI edge and must
+not clone, update, pin, or rediscover the checkout themselves.
+`workspace::resolve_workspace_action` owns the environment-dependent action
+selection and is shared with dry-run validation. `ensure_workspace` performs
+that action and returns it in `WorkspaceCheckout`; `report_workspace_progress`
+must render from this recorded action instead of recomputing repository state.
+`workspace::finalize_workspace_checkout` is called only from
+`ensure_workspace` action arms after each arm's current-directory, clone, or
+update setup. It may combine optional pinning with `WorkspaceCheckout`
+construction and record the supplied action; it must not select an action or
+clone, update, or reattach a repository.
+
+`workspace::WorkspaceRepository` is a private seam for workspace orchestration.
+The production `GitWorkspaceRepository` implementation delegates clone, update,
+and default-branch operations to `crate::git`; `ensure_workspace` must compose
+through that implementation, keeping Git process ownership in the workspace
+boundary. Tests may inject a repository implementation only through the
+private preparation helper to exercise action re-evaluation and lock behaviour
+without network or process side effects. The seam must not become a public Git
+adapter or be used to bypass the `crate::git` APIs in production.
+
+Behaviour-test support follows the same ownership rule.
+`behaviour_cli::support::output_for_assertions` combines scenario-skip handling
+with borrowing the captured process output. Assertion-specific expectations
+remain in their step functions. Pinned-ref scenario setup and assertions stay
+in `support/pinned_ref.rs`; support for other behaviour suites should stay local
+unless multiple suites need exactly the same contract.
+
+#### Public Git operation APIs
+
+The `whitaker_installer::git` module exposes the following Git operations. They
+all accept a UTF-8 repository path and return the installer's `Result` type;
+each operation is bounded by the module's five-minute Git timeout. Use these
+functions for the managed clone workflow, not to mutate a user's current
+Whitaker checkout.
+
+*Table: Public Git operation APIs.*
+
+| API | Purpose | Usage constraints |
+| --- | --- | --- |
+| `clone_repository(target: &Utf8Path) -> Result<()>` | Clones the public Whitaker repository into `target`. | Creates missing parent directories and uses the five-minute Git timeout. Use only for the installer-managed clone. |
+| `update_repository(repo: &Utf8Path) -> Result<()>` | Pulls the latest changes into an existing Whitaker clone. | Call `ensure_default_branch` first when a prior pin may have detached `HEAD`; this function does not reattach a checkout. |
+| `resolve_commit(repo: &Utf8Path, refspec: &str) -> Result<CommitSha>` | Resolves a local commit-ish (SHA, tag, or branch) to a validated full object ID and peels annotated tags. | Does not fetch. Call it when the ref is expected to exist locally, or after `fetch_ref` has populated the clone. |
+| `fetch_ref(repo: &Utf8Path, refspec: &str) -> Result<CommitSha>` | Fetches the requested ref from `origin` into the private `refs/whitaker/pinned-ref` ref and returns its validated full object ID. | Use it to refresh a requested pin before checkout. It force-updates only the private pin ref; it does not move the current branch or check out the result. |
+| `checkout_detached(repo: &Utf8Path, commit: &CommitSha) -> Result<()>` | Checks out exactly `commit` with a detached `HEAD`. | Use only for the installer-managed clone after resolving the requested ref. The workspace layer must reject pinning in the user's current Whitaker workspace first. |
+| `detached_head_commit(repo: &Utf8Path) -> Result<Option<CommitSha>>` | Returns the full object ID when `HEAD` is detached, or `None` when `HEAD` names a branch. | Use to preserve provenance for an unpinned `--no-update` install that reuses a detached managed clone. |
+| `ensure_default_branch(repo: &Utf8Path) -> Result<()>` | Reattaches a detached clone to the branch named by `origin/HEAD`; repairs a missing `origin/HEAD` with `git remote set-head origin --auto`. | Call before `update_repository` when a previous pin may have detached the managed clone. It is a no-op when `HEAD` already names a branch and does not pull changes itself. |
+
+`CommitSha` is the Git adapter's validated full object-ID type. Keep commit
+provenance in this type across Git and workspace boundaries; convert to text
+only at output or external-format boundaries.
+
+#### Workspace API and provenance
+
+`workspace::ensure_workspace(dirs, update, git_ref)` returns a
+`WorkspaceCheckout` containing the prepared `root`, the selected
+`WorkspaceAction`, and commit provenance. `pinned_commit` is the resolved
+`CommitSha` when `git_ref` pins the managed clone. `detached_commit` records the
+existing detached `HEAD` reused by an unpinned `--no-update` install. These
+fields are mutually exclusive for a single checkout.
+
+`WorkspaceCheckout::expected_git_sha() -> Option<&CommitSha>` returns the pinned
+commit, or the inherited detached commit, as an optional full object ID. Pass
+that value to the prebuilt path so a pinned or detached checkout can reuse an
+artefact only when its manifest records the same full object ID. A rolling
+install with no commit provenance leaves it unset. `ensure_ref_allowed` must
+reject a pin when
+the selected action is `UseCurrentDir`, because checking out a ref there would
+mutate the user's working tree.
+
+`workspace::ensure_workspace` acquires the internal `ManagedCloneLock` while
+preparing the installer-managed clone. The exclusive advisory sidecar is
+stored beside the clone as `<clone-directory>.lock` and covers action
+selection, ref resolution, checkout, and update, so concurrent installers do
+not race on shared Git state. Current-directory workspaces do not need this
+lock; keep the lock scoped to workspace preparation and surface acquisition
+failures as `InstallerError::WorkspaceLock`.
+
+The installer binary initializes one stderr tracing subscriber at startup.
+`RUST_LOG` controls its `EnvFilter`; without it, the default level is `warn`.
+Use, for example, `RUST_LOG=whitaker_installer=debug` when diagnosing Git or
+workspace preparation. Library code must continue emitting events through
+`tracing` without installing a global subscriber.
+
 #### `resolve_additional_components`
 
 ```rust
@@ -1981,7 +2074,7 @@ struct FastPathContext<'a> {
 }
 ```
 
-A parameter-object struct that bundles the five immutable inputs consumed by
+A parameter-object struct that bundles the six immutable inputs consumed by
 `try_fast_path_installation`. This follows the same idiom used elsewhere in the
 codebase (`FinishInstallContext`, `PrebuiltInstallationContext`,
 `MetricsWriteContext`) to keep function argument counts within the project

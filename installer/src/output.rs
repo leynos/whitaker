@@ -104,6 +104,7 @@ pub fn success_message(count: usize, target_dir: &Utf8Path) -> String {
 ///     no_update: false,
 ///     jobs: None,
 ///     crates: &crates,
+///     git_ref: None,
 /// };
 ///
 /// let output = info.display_text();
@@ -132,6 +133,8 @@ pub struct DryRunInfo<'a> {
     pub jobs: Option<usize>,
     /// Crates to be built.
     pub crates: &'a [CrateName],
+    /// The commit-ish the suite is pinned to, if any.
+    pub git_ref: Option<&'a str>,
 }
 
 impl DryRunInfo<'_> {
@@ -150,6 +153,10 @@ impl DryRunInfo<'_> {
             format!("Skip wrapper: {}", self.skip_wrapper),
             format!("No update: {}", self.no_update),
         ];
+
+        if let Some(git_ref) = self.git_ref {
+            lines.push(format!("Pinned ref: {git_ref}"));
+        }
 
         if let Some(jobs) = self.jobs {
             lines.push(format!("Parallel jobs: {jobs}"));
@@ -209,6 +216,37 @@ mod tests {
         assert!(display.contains("bash/zsh"));
         assert!(display.contains("fish"));
         assert!(display.contains("PowerShell"));
+    }
+
+    fn dry_run_info<'a>(git_ref: Option<&'a str>, crates: &'a [CrateName]) -> DryRunInfo<'a> {
+        DryRunInfo {
+            workspace_root: Utf8Path::new("/home/user/whitaker"),
+            toolchain: "nightly-2025-01-15",
+            target_dir: Utf8Path::new("/home/user/.local/share/dylint/lib"),
+            verbosity: 0,
+            quiet: false,
+            skip_deps: false,
+            skip_wrapper: false,
+            no_update: false,
+            jobs: None,
+            crates,
+            git_ref,
+        }
+    }
+
+    #[rstest]
+    #[case::default(None, None, "dry_run_display_matches_default_format")]
+    #[case::pinned(Some("v0.2.5"), Some(4), "dry_run_display_matches_pinned_format")]
+    fn dry_run_display_matches_expected_format(
+        #[case] git_ref: Option<&str>,
+        #[case] jobs: Option<usize>,
+        #[case] snapshot_name: &str,
+    ) {
+        let crates = vec![CrateName::from("whitaker_suite")];
+        let mut info = dry_run_info(git_ref, &crates);
+        info.jobs = jobs;
+
+        insta::assert_snapshot!(snapshot_name, info.display_text());
     }
 
     #[rstest]

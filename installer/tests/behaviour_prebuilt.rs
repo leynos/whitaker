@@ -9,9 +9,13 @@ use std::sync::Mutex;
 use whitaker_installer::artefact::download::{ArtefactDownloader, DownloadError};
 use whitaker_installer::artefact::extraction::{ArtefactExtractor, ExtractionError};
 use whitaker_installer::cli::{Cli, InstallArgs};
+use whitaker_installer::git::CommitSha;
 use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt_with};
 use whitaker_installer::resolution::{CrateResolutionOptions, resolve_crates};
 use whitaker_installer::test_utils::{prebuilt_manifest_json, sha256_hex};
+
+#[path = "behaviour_prebuilt/pinned_ref.rs"]
+mod pinned_ref;
 
 const FAKE_ARCHIVE: &[u8] = b"fake archive content";
 const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
@@ -115,6 +119,7 @@ struct PrebuiltWorld {
     should_attempt_prebuilt: Option<bool>,
     force_destination_conflict: bool,
     attempted_destination: Option<Utf8PathBuf>,
+    expected_git_sha: Option<String>,
 }
 
 #[fixture]
@@ -224,11 +229,18 @@ fn when_prebuilt_attempted(world: &mut PrebuiltWorld) {
             .join("lib")
     };
     world.attempted_destination = Some(destination_dir.clone());
+    let expected_commit = world
+        .expected_git_sha
+        .as_deref()
+        .map(CommitSha::try_from)
+        .transpose()
+        .expect("full expected Git SHA");
     let config = PrebuiltConfig {
         target,
         toolchain,
         destination_dir: &destination_dir,
         quiet: true,
+        expected_git_sha: expected_commit.as_ref(),
     };
 
     let manifest_behaviour = world
