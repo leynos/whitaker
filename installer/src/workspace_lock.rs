@@ -5,8 +5,12 @@
 
 use crate::error::{InstallerError, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{
+    ambient_authority,
+    fs_utf8::{Dir, OpenOptions},
+};
 use fs2::FileExt;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 
 /// An exclusive advisory lock held while preparing the managed clone.
 pub(crate) struct ManagedCloneLock {
@@ -23,16 +27,28 @@ impl ManagedCloneLock {
             .ok_or_else(|| InstallerError::WorkspaceNotFound {
                 reason: format!("could not determine parent directory for workspace lock {path}"),
             })?;
-        std::fs::create_dir_all(parent).map_err(|source| InstallerError::WorkspaceLock {
-            path: path.clone(),
-            source,
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| InstallerError::WorkspaceNotFound {
+                reason: format!("could not determine file name for workspace lock {path}"),
+            })?;
+        Dir::create_ambient_dir_all(parent, ambient_authority()).map_err(|source| {
+            InstallerError::WorkspaceLock {
+                path: path.clone(),
+                source,
+            }
         })?;
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&path)
+        let directory = Dir::open_ambient_dir(parent, ambient_authority()).map_err(|source| {
+            InstallerError::WorkspaceLock {
+                path: path.clone(),
+                source,
+            }
+        })?;
+        let mut options = OpenOptions::new();
+        options.create(true).truncate(false).read(true).write(true);
+        let file = directory
+            .open_with(file_name, &options)
+            .map(|file| file.into_std())
             .map_err(|source| InstallerError::WorkspaceLock {
                 path: path.clone(),
                 source,
@@ -51,10 +67,15 @@ pub(crate) fn lock_path(clone_dir: &Utf8Path) -> Utf8PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{ManagedCloneLock, lock_path};
+    //! Validates capability-scoped managed-clone lock access and exclusion.
+
+    use super::ManagedCloneLock;
     use camino::Utf8PathBuf;
+    use cap_std::{
+        ambient_authority,
+        fs_utf8::{Dir, OpenOptions},
+    };
     use fs2::FileExt;
-    use std::fs::OpenOptions;
     use tempfile::TempDir;
 
     #[test]
@@ -63,12 +84,17 @@ mod tests {
         let clone_dir = Utf8PathBuf::try_from(temp.path().join("whitaker"))
             .expect("temporary lock path is UTF-8");
         let first = ManagedCloneLock::acquire(&clone_dir).expect("acquire first lock");
-        let path = lock_path(&clone_dir);
-        let second = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&path)
-            .expect("open second lock handle");
+        let parent = clone_dir
+            .parent()
+            .expect("temporary clone directory has a parent");
+        let directory = Dir::open_ambient_dir(parent, ambient_authority())
+            .expect("open temporary lock directory capability");
+        let mut options = OpenOptions::new();
+        options.read(true).write(true);
+        let second = directory
+            .open_with("whitaker.lock", &options)
+            .expect("open second lock handle through directory capability")
+            .into_std();
 
         let error = second
             .try_lock_exclusive()

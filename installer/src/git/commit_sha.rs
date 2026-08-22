@@ -55,6 +55,8 @@ impl fmt::Display for CommitSha {
 
 #[cfg(test)]
 mod tests {
+    //! Validates `CommitSha` parsing and rejection behaviour.
+
     use super::CommitSha;
     use rstest::rstest;
 
