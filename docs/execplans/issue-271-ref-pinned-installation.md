@@ -193,6 +193,11 @@ when its manifest records the same full object ID as the resolved ref.
   interfaces carry and compare that provenance exactly. Current tests cover
   clone/update, ref resolution and fetching, detached checkout and recovery,
   workspace provenance, and exact prebuilt match/mismatch behaviour.
+- [x] (2026-08-22) Managed-clone preparation is serialized by
+  `ManagedCloneLock` from action selection through checkout. The lock creates
+  its parent directory and sidecar through `cap_std::fs_utf8::Dir`, converting
+  the capability-bound file with `into_std()` only immediately before
+  `fs2::FileExt::lock_exclusive()`; waiters then re-evaluate workspace state.
 
 ## Surprises & discoveries
 
@@ -769,9 +774,10 @@ pub fn ensure_workspace(
 ) -> Result<WorkspaceCheckout>;
 ```
 
-`WorkspaceCheckout::expected_git_sha()` returns the pinned commit, or the
-inherited detached commit, for exact prebuilt provenance validation. It is
-unset for an ordinary rolling checkout.
+`WorkspaceCheckout::expected_git_sha()` returns the newly pinned commit, or an
+inherited detached commit when no new `--ref` is supplied (including an
+unpinned `--no-update` run), so the prebuilt SHA gate remains enabled for that
+managed checkout. It is unset only for an ordinary rolling checkout.
 
 In `installer/src/prebuilt.rs`:
 

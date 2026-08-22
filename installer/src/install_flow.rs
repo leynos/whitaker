@@ -102,7 +102,8 @@ pub(crate) struct PrebuiltInstallationContext<'a> {
     pub(crate) requested_crates: &'a [CrateName],
     /// Toolchain channel resolved for this install.
     pub(crate) toolchain_channel: &'a str,
-    /// Resolved pinned commit SHA, when installing at a specific `--ref`.
+    /// Full commit ID for a requested pin or inherited detached `--no-update`
+    /// checkout, used to keep the prebuilt SHA gate active in either case.
     pub(crate) expected_git_sha: Option<&'a CommitSha>,
 }
 

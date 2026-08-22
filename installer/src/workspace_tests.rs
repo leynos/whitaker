@@ -5,6 +5,13 @@ use crate::dirs::{MockBaseDirs, SystemBaseDirs};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
+use std::sync::{
+    Arc, Barrier, Mutex,
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
+};
+use std::thread;
+use std::time::Duration;
 use tempfile::TempDir;
 
 /// A temporary directory converted to a UTF-8 path for workspace tests.
@@ -197,6 +204,154 @@ fn clone_directory_returns_path_from_mock(temp_workspace: TempWorkspace) {
     let expected = temp_workspace.path.join("data").join("whitaker");
     let mock = mock_dirs_returning(Some(expected.clone().into_std_path_buf()));
     assert_eq!(clone_directory(&mock), Some(expected));
+}
+
+#[derive(Clone)]
+struct FixedBaseDirs {
+    data_dir: PathBuf,
+}
+
+impl BaseDirs for FixedBaseDirs {
+    fn home_dir(&self) -> Option<PathBuf> {
+        None
+    }
+
+    fn bin_dir(&self) -> Option<PathBuf> {
+        None
+    }
+
+    fn whitaker_data_dir(&self) -> Option<PathBuf> {
+        Some(self.data_dir.clone())
+    }
+}
+
+struct ConcurrentWorkspaceRepository {
+    clone_started: mpsc::Sender<()>,
+    release_clone: Mutex<mpsc::Receiver<()>>,
+    clone_calls: AtomicUsize,
+    update_calls: AtomicUsize,
+}
+
+impl WorkspaceRepository for ConcurrentWorkspaceRepository {
+    fn clone(&self, target: &Utf8Path) -> Result<()> {
+        self.clone_calls.fetch_add(1, Ordering::SeqCst);
+        self.clone_started
+            .send(())
+            .expect("report mock clone start");
+        self.release_clone
+            .lock()
+            .expect("lock mock clone release receiver")
+            .recv()
+            .expect("release mock clone");
+        let parent = target
+            .parent()
+            .ok_or_else(|| InstallerError::WorkspaceNotFound {
+                reason: format!("mock clone target has no parent: {target}"),
+            })?;
+        let name = target
+            .file_name()
+            .ok_or_else(|| InstallerError::WorkspaceNotFound {
+                reason: format!("mock clone target has no file name: {target}"),
+            })?;
+        let directory = Dir::open_ambient_dir(parent, ambient_authority())?;
+        directory.create_dir(name)?;
+        Ok(())
+    }
+
+    fn update(&self, _repo: &Utf8Path) -> Result<()> {
+        self.update_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn ensure_default_branch(&self, _repo: &Utf8Path) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[rstest]
+fn concurrent_workspace_preparation_waits_and_rechecks_action(temp_workspace: TempWorkspace) {
+    temp_workspace
+        .dir
+        .create_dir_all("caller/data")
+        .expect("create caller and data directories");
+    let cwd = temp_workspace.path.join("caller");
+    let clone_dir = temp_workspace.path.join("caller/data/whitaker");
+    let dirs = FixedBaseDirs {
+        data_dir: clone_dir.clone().into_std_path_buf(),
+    };
+    let (clone_started_sender, clone_started_receiver) = mpsc::channel();
+    let (release_clone_sender, release_clone_receiver) = mpsc::channel();
+    let repository = Arc::new(ConcurrentWorkspaceRepository {
+        clone_started: clone_started_sender,
+        release_clone: Mutex::new(release_clone_receiver),
+        clone_calls: AtomicUsize::new(0),
+        update_calls: AtomicUsize::new(0),
+    });
+
+    let first = {
+        let cwd = cwd.clone();
+        let dirs = dirs.clone();
+        let repository = Arc::clone(&repository);
+        thread::spawn(move || {
+            let preparation = WorkspacePreparation {
+                dirs: &dirs,
+                update: true,
+                git_ref: None,
+            };
+            ensure_workspace_from(&cwd, &preparation, &*repository)
+        })
+    };
+    clone_started_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("first preparation begins cloning while holding the lock");
+
+    let start_barrier = Arc::new(Barrier::new(2));
+    let (second_ready_sender, second_ready_receiver) = mpsc::channel();
+    let second = {
+        let cwd = cwd.clone();
+        let dirs = dirs.clone();
+        let repository = Arc::clone(&repository);
+        let start_barrier = Arc::clone(&start_barrier);
+        thread::spawn(move || {
+            second_ready_sender
+                .send(())
+                .expect("report second preparation ready");
+            start_barrier.wait();
+            let preparation = WorkspacePreparation {
+                dirs: &dirs,
+                update: true,
+                git_ref: None,
+            };
+            ensure_workspace_from(&cwd, &preparation, &*repository)
+        })
+    };
+    second_ready_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("second preparation is ready to contend");
+    start_barrier.wait();
+    assert!(
+        clone_started_receiver
+            .recv_timeout(Duration::from_millis(100))
+            .is_err(),
+        "second preparation must wait for the managed-clone lock"
+    );
+
+    release_clone_sender
+        .send(())
+        .expect("release first preparation clone");
+    let first = first
+        .join()
+        .expect("first preparation thread should not panic")
+        .expect("first preparation should succeed");
+    let second = second
+        .join()
+        .expect("second preparation thread should not panic")
+        .expect("second preparation should succeed");
+
+    assert_eq!(first.action, WorkspaceAction::CloneTo(clone_dir.clone()));
+    assert_eq!(second.action, WorkspaceAction::UpdateAt(clone_dir));
+    assert_eq!(repository.clone_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(repository.update_calls.load(Ordering::SeqCst), 1);
 }
 
 // Tests for find_workspace_root

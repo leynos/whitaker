@@ -135,6 +135,39 @@ pub struct WorkspaceCheckout {
     pub action: WorkspaceAction,
 }
 
+/// Git operations owned by managed-workspace preparation.
+///
+/// This private seam keeps production calls in this module while allowing the
+/// lock behaviour to be tested without a network clone.
+trait WorkspaceRepository {
+    fn clone(&self, target: &Utf8Path) -> Result<()>;
+    fn update(&self, repo: &Utf8Path) -> Result<()>;
+    fn ensure_default_branch(&self, repo: &Utf8Path) -> Result<()>;
+}
+
+/// Production Git operations for managed-workspace preparation.
+struct GitWorkspaceRepository;
+
+impl WorkspaceRepository for GitWorkspaceRepository {
+    fn clone(&self, target: &Utf8Path) -> Result<()> {
+        crate::git::clone_repository(target)
+    }
+
+    fn update(&self, repo: &Utf8Path) -> Result<()> {
+        crate::git::update_repository(repo)
+    }
+
+    fn ensure_default_branch(&self, repo: &Utf8Path) -> Result<()> {
+        crate::git::ensure_default_branch(repo)
+    }
+}
+/// Inputs shared by workspace preparation and its test boundary.
+struct WorkspacePreparation<'a> {
+    dirs: &'a dyn BaseDirs,
+    update: bool,
+    git_ref: Option<&'a str>,
+}
+
 /// Ensures a Whitaker workspace is available, cloning if necessary.
 ///
 /// If the current directory is already a Whitaker workspace, returns its path.
@@ -160,18 +193,33 @@ pub fn ensure_workspace(
     git_ref: Option<&str>,
 ) -> Result<WorkspaceCheckout> {
     let cwd = current_dir_utf8()?;
-    let clone_dir = clone_directory(dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
-        reason: "could not determine data directory for cloning".to_owned(),
-    })?;
-    if is_whitaker_workspace(&cwd) {
-        let action = WorkspaceAction::UseCurrentDir(cwd.clone());
-        ensure_ref_allowed(&action, git_ref)?;
-        return finalize_workspace_checkout(cwd, git_ref, action);
+    let preparation = WorkspacePreparation {
+        dirs,
+        update,
+        git_ref,
+    };
+    ensure_workspace_from(&cwd, &preparation, &GitWorkspaceRepository)
+}
+
+/// Prepares a workspace from an explicit current directory and Git boundary.
+fn ensure_workspace_from(
+    cwd: &Utf8Path,
+    preparation: &WorkspacePreparation<'_>,
+    repository: &impl WorkspaceRepository,
+) -> Result<WorkspaceCheckout> {
+    let clone_dir =
+        clone_directory(preparation.dirs).ok_or_else(|| InstallerError::WorkspaceNotFound {
+            reason: "could not determine data directory for cloning".to_owned(),
+        })?;
+    if is_whitaker_workspace(cwd) {
+        let action = WorkspaceAction::UseCurrentDir(cwd.to_owned());
+        ensure_ref_allowed(&action, preparation.git_ref)?;
+        return finalize_workspace_checkout(cwd.to_owned(), preparation.git_ref, action);
     }
 
     let _lock = ManagedCloneLock::acquire(&clone_dir)?;
-    let action = decide_workspace_action(&cwd, &clone_dir, update);
-    ensure_ref_allowed(&action, git_ref)?;
+    let action = decide_workspace_action(cwd, &clone_dir, preparation.update);
+    ensure_ref_allowed(&action, preparation.git_ref)?;
 
     let root = match &action {
         WorkspaceAction::UseCurrentDir(dir) | WorkspaceAction::UseExisting(dir) => {
@@ -180,18 +228,18 @@ pub fn ensure_workspace(
             dir.clone()
         }
         WorkspaceAction::CloneTo(dir) => {
-            crate::git::clone_repository(dir)?;
+            repository.clone(dir)?;
             dir.clone()
         }
         WorkspaceAction::UpdateAt(dir) => {
             // Reattach before pulling so a prior detached pin cannot break the
             // update, even when no new ref is requested.
-            crate::git::ensure_default_branch(dir)?;
-            crate::git::update_repository(dir)?;
+            repository.ensure_default_branch(dir)?;
+            repository.update(dir)?;
             dir.clone()
         }
     };
-    finalize_workspace_checkout(root, git_ref, action)
+    finalize_workspace_checkout(root, preparation.git_ref, action)
 }
 
 /// Applies an optional pin and constructs the resulting workspace checkout.

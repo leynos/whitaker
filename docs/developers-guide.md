@@ -1892,6 +1892,15 @@ update setup. It may combine optional pinning with `WorkspaceCheckout`
 construction and record the supplied action; it must not select an action or
 clone, update, or reattach a repository.
 
+`workspace::WorkspaceRepository` is a private seam for workspace orchestration.
+The production `GitWorkspaceRepository` implementation delegates clone, update,
+and default-branch operations to `crate::git`; `ensure_workspace` must compose
+through that implementation, keeping Git process ownership in the workspace
+boundary. Tests may inject a repository implementation only through the
+private preparation helper to exercise action re-evaluation and lock behaviour
+without network or process side effects. The seam must not become a public Git
+adapter or be used to bypass the `crate::git` APIs in production.
+
 Behaviour-test support follows the same ownership rule.
 `behaviour_cli::support::output_for_assertions` combines scenario-skip handling
 with borrowing the captured process output. Assertion-specific expectations
