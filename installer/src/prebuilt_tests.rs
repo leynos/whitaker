@@ -162,7 +162,7 @@ fn success_mocks_with_git_sha(git_sha: &str) -> (MockArtefactDownloader, MockArt
     let mut extractor = MockArtefactExtractor::new();
     extractor.expect_extract().returning(|_archive, dest| {
         let source_name = "libwhitaker_suite.so".to_owned();
-        write_test_file(&dest.join(&source_name), b"fake").expect("write extracted file");
+        write_test_file(&dest.join(&source_name), b"fake")?;
         Ok(vec![source_name])
     });
     (downloader, extractor)
@@ -386,3 +386,6 @@ fn destination_creation_failure_returns_fallback() {
         other => panic!("expected Fallback, got {other:?}"),
     }
 }
+
+#[path = "prebuilt_provenance_tests.rs"]
+mod prebuilt_provenance_tests;

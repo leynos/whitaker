@@ -1,15 +1,15 @@
 //! Real-Git workflow coverage for managed-clone lock serialization.
 
 use super::super::{
-    GitWorkspaceRepository, ManagedCloneLock, WorkspaceAction, WorkspacePreparation,
-    ensure_workspace_from,
+    WorkspaceAction, WorkspacePreparation, WorkspaceRepository, ensure_workspace_from,
 };
 use crate::dirs::BaseDirs;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -83,8 +83,43 @@ fn clone_repository(source: &Utf8Path, target: &Utf8Path) {
     );
 }
 
+struct BlockingGitWorkspaceRepository {
+    source: Utf8PathBuf,
+    clone_started: mpsc::Sender<()>,
+    release_clone: Mutex<mpsc::Receiver<()>>,
+    clone_calls: AtomicUsize,
+    update_calls: AtomicUsize,
+    branch_repair_calls: AtomicUsize,
+}
+
+impl WorkspaceRepository for BlockingGitWorkspaceRepository {
+    fn clone(&self, target: &Utf8Path) -> crate::error::Result<()> {
+        self.clone_calls.fetch_add(1, Ordering::SeqCst);
+        self.clone_started
+            .send(())
+            .expect("report clone after acquiring managed-clone lock");
+        self.release_clone
+            .lock()
+            .expect("lock clone-release receiver")
+            .recv()
+            .expect("release pinned clone");
+        clone_repository(&self.source, target);
+        Ok(())
+    }
+
+    fn update(&self, repo: &Utf8Path) -> crate::error::Result<()> {
+        self.update_calls.fetch_add(1, Ordering::SeqCst);
+        crate::git::update_repository(repo)
+    }
+
+    fn ensure_default_branch(&self, repo: &Utf8Path) -> crate::error::Result<()> {
+        self.branch_repair_calls.fetch_add(1, Ordering::SeqCst);
+        crate::git::ensure_default_branch(repo)
+    }
+}
+
 #[test]
-fn managed_clone_waiter_rechecks_state_and_updates_after_lock_release() {
+fn pinned_and_unpinned_preparations_serialize_and_recheck_state() {
     let temp = TempDir::new().expect("create temporary workflow directory");
     let root = Utf8PathBuf::try_from(temp.path().to_owned()).expect("temporary path is UTF-8");
     let directory = Dir::open_ambient_dir(&root, ambient_authority())
@@ -96,57 +131,112 @@ fn managed_clone_waiter_rechecks_state_and_updates_after_lock_release() {
     let caller = root.join("caller");
     let managed_clone = root.join("caller/data/whitaker");
     git(&source, &["init", "-b", "main"]);
-    commit_file(&source, "first", "initial commit");
+    let pinned_commit = commit_file(&source, "first", "initial commit");
+    git(&source, &["tag", "v1"]);
+    let updated_commit = commit_file(&source, "second", "remote update");
 
-    let lock = ManagedCloneLock::acquire(&managed_clone).expect("acquire managed-clone lock");
     let dirs = ManagedCloneDirs {
         clone_dir: managed_clone.clone().into_std_path_buf(),
     };
-    let (started_sender, started_receiver) = mpsc::channel();
-    let (result_sender, result_receiver) = mpsc::channel();
-    let waiter = thread::spawn(move || {
-        started_sender.send(()).expect("report waiter start");
-        let preparation = WorkspacePreparation {
-            dirs: &dirs,
-            update: true,
-            git_ref: None,
-        };
-        result_sender.send(ensure_workspace_from(
-            &caller,
-            &preparation,
-            &GitWorkspaceRepository,
-        ))
+    let (clone_started_sender, clone_started_receiver) = mpsc::channel();
+    let (release_clone_sender, release_clone_receiver) = mpsc::channel();
+    let repository = Arc::new(BlockingGitWorkspaceRepository {
+        source: source.clone(),
+        clone_started: clone_started_sender,
+        release_clone: Mutex::new(release_clone_receiver),
+        clone_calls: AtomicUsize::new(0),
+        update_calls: AtomicUsize::new(0),
+        branch_repair_calls: AtomicUsize::new(0),
     });
-    started_receiver
+
+    let pinned = {
+        let caller = caller.clone();
+        let dirs = dirs.clone();
+        let repository = Arc::clone(&repository);
+        thread::spawn(move || {
+            let preparation = WorkspacePreparation {
+                dirs: &dirs,
+                update: true,
+                git_ref: Some("v1"),
+            };
+            ensure_workspace_from(&caller, &preparation, &*repository)
+        })
+    };
+    clone_started_receiver
         .recv_timeout(Duration::from_secs(1))
-        .expect("waiter begins workspace preparation");
+        .expect("pinned preparation enters clone after acquiring the lock");
+
+    let (unpinned_started_sender, unpinned_started_receiver) = mpsc::channel();
+    let (unpinned_result_sender, unpinned_result_receiver) = mpsc::channel();
+    let unpinned = {
+        let caller = caller.clone();
+        let dirs = dirs.clone();
+        let repository = Arc::clone(&repository);
+        thread::spawn(move || {
+            unpinned_started_sender
+                .send(())
+                .expect("report unpinned preparation start");
+            let preparation = WorkspacePreparation {
+                dirs: &dirs,
+                update: true,
+                git_ref: None,
+            };
+            unpinned_result_sender.send(ensure_workspace_from(&caller, &preparation, &*repository))
+        })
+    };
+    unpinned_started_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("unpinned preparation begins while the pinned clone holds the lock");
     assert!(
-        result_receiver
+        unpinned_result_receiver
             .recv_timeout(Duration::from_millis(100))
             .is_err(),
-        "workspace preparation must wait for the managed-clone lock"
+        "unpinned preparation must wait for the managed-clone lock"
     );
+    assert_eq!(repository.clone_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(repository.update_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(repository.branch_repair_calls.load(Ordering::SeqCst), 0);
 
-    clone_repository(&source, &managed_clone);
-    let expected_commit = commit_file(&source, "second", "remote update");
-    drop(lock);
+    release_clone_sender.send(()).expect("release pinned clone");
 
-    let checkout = result_receiver
-        .recv_timeout(Duration::from_secs(5))
-        .expect("waiter completes after lock release")
-        .expect("waiter workspace preparation succeeds");
-    waiter
+    let pinned = pinned
         .join()
-        .expect("waiter thread should not panic")
-        .expect("waiter reports its workspace result");
+        .expect("pinned preparation thread should not panic")
+        .expect("pinned preparation should succeed");
+    let unpinned_checkout = unpinned_result_receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("unpinned preparation completes after lock release")
+        .expect("unpinned preparation should succeed");
+    unpinned
+        .join()
+        .expect("unpinned preparation thread should not panic")
+        .expect("unpinned preparation result should be delivered");
 
     assert_eq!(
-        checkout.action,
+        pinned.action,
+        WorkspaceAction::CloneTo(managed_clone.clone())
+    );
+    assert_eq!(
+        pinned.pinned_commit.as_ref().map(|commit| commit.as_str()),
+        Some(pinned_commit.as_str())
+    );
+    assert_eq!(
+        unpinned_checkout.action,
         WorkspaceAction::UpdateAt(managed_clone.clone())
+    );
+    assert_eq!(unpinned_checkout.pinned_commit, None);
+    assert_eq!(
+        crate::git::resolve_commit(&managed_clone, "refs/whitaker/pinned-ref")
+            .expect("fetch stores pinned ref")
+            .as_str(),
+        pinned_commit
     );
     assert_eq!(
         git(&managed_clone, &["symbolic-ref", "HEAD"]),
         "refs/heads/main"
     );
-    assert_eq!(git(&managed_clone, &["rev-parse", "HEAD"]), expected_commit);
+    assert_eq!(git(&managed_clone, &["rev-parse", "HEAD"]), updated_commit);
+    assert_eq!(repository.clone_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(repository.update_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(repository.branch_repair_calls.load(Ordering::SeqCst), 1);
 }
