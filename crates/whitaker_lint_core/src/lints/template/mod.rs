@@ -25,7 +25,7 @@ impl TemplateFiles {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::lints::LintCrateTemplate;
+    /// use whitaker_lint_core::lints::LintCrateTemplate;
     ///
     /// let files = LintCrateTemplate::new("demo_lint")
     ///     .expect("valid crate name")
@@ -43,7 +43,7 @@ impl TemplateFiles {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::lints::LintCrateTemplate;
+    /// use whitaker_lint_core::lints::LintCrateTemplate;
     ///
     /// let files = LintCrateTemplate::new("demo_lint")
     ///     .expect("valid crate name")
@@ -65,7 +65,7 @@ impl TemplateFiles {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::lints::LintCrateTemplate;
+    /// use whitaker_lint_core::lints::LintCrateTemplate;
     ///
     /// let files = LintCrateTemplate::new("demo_lint")
     ///     .expect("valid crate name")
@@ -284,7 +284,7 @@ mod tests {
         assert!(
             files
                 .lib_rs()
-                .contains("whitaker::declare_ui_tests!(\"ui\");")
+                .contains("whitaker_lint_core::declare_ui_tests!(\"ui\");")
         );
     }
 }

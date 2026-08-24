@@ -11,7 +11,7 @@ use rustc_hir::AmbigArg;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty;
 use rustc_span::{Span, sym};
-use whitaker::SharedConfig;
+use whitaker_lint_core::SharedConfig;
 use whitaker_common::SimplePath;
 use whitaker_common::i18n::Localizer;
 use whitaker_common::i18n::get_localizer_for_lint;

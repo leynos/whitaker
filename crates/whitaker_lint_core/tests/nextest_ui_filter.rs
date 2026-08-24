@@ -13,10 +13,13 @@
 //! clause needed to capture that pattern. It also protects the named nested
 //! Cargo UI harnesses that share compiler resources on constrained runners.
 
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use std::fs;
+
 use rstest::{fixture, rstest};
 use toml::Value;
 
+/// Nested Cargo UI harnesses that must share the serial group so their
+/// compiler resources are serialized on constrained runners.
 const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 5] = [
     "test(example_compiles_without_diagnostics)",
     "test(example_harness_collects_call_site_evidence)",
@@ -25,13 +28,15 @@ const NESTED_CARGO_UI_FILTER_CLAUSES: [&str; 5] = [
     "test(ui::aliased_test_crate_non_companion_does_not_exempt_parent_function)",
 ];
 
+mod workspace_support;
+
+use workspace_support::workspace_root;
+
 /// Parses `.config/nextest.toml` into a [`Value`].
 fn load_nextest_config() -> Value {
-    let repository_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
-        .unwrap_or_else(|err| panic!("failed to open repository root: {err}"));
-    let contents = repository_root
-        .read_to_string(".config/nextest.toml")
-        .unwrap_or_else(|err| panic!("failed to read .config/nextest.toml: {err}"));
+    let config_path = workspace_root().join(".config/nextest.toml");
+    let contents = fs::read_to_string(&config_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", config_path.display()));
     toml::from_str(&contents)
         .unwrap_or_else(|err| panic!(".config/nextest.toml should parse as TOML: {err}"))
 }
@@ -72,25 +77,23 @@ fn extract_filter(ui_override: &Value) -> &str {
 /// name of `ui`.  The substring match `test(ui::ui)` does **not** capture
 /// them because the reported test name is plain `ui`, not `ui::ui`.
 fn crates_with_integration_ui_test() -> Vec<String> {
-    let repository_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
-        .unwrap_or_else(|err| panic!("failed to open repository root: {err}"));
-    let crates_dir = repository_root
-        .open_dir("crates")
-        .unwrap_or_else(|err| panic!("failed to open crates directory: {err}"));
+    let crates_dir = workspace_root().join("crates");
 
-    let entries = crates_dir
-        .entries()
-        .unwrap_or_else(|err| panic!("failed to read crates directory: {err}"));
+    let entries = fs::read_dir(&crates_dir)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", crates_dir.display()));
 
     let mut crate_names: Vec<String> = entries
         .filter_map(|dir_entry| {
-            let entry =
-                dir_entry.unwrap_or_else(|err| panic!("directory entry should be readable: {err}"));
-            let crate_directory = entry.open_dir().ok()?;
-            if crate_directory.is_file("tests/ui.rs") {
-                Some(entry.file_name().unwrap_or_else(|err| {
-                    panic!("crate directory should have a UTF-8 name: {err}")
-                }))
+            let path = dir_entry
+                .unwrap_or_else(|err| panic!("directory entry should be readable: {err}"))
+                .path();
+            if path.is_dir() && path.join("tests/ui.rs").is_file() {
+                Some(
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or_else(|| panic!("crate directory should have a UTF-8 name"))
+                        .to_owned(),
+                )
             } else {
                 None
             }
@@ -125,9 +128,9 @@ fn serial_dylint_ui_filter_captures_integration_and_nested_cargo_ui_tests(
     // `test(ui::ui)` missed it because the test name is plain `ui`.
     assert!(
         filter.contains("(binary(ui) & test(=ui))"),
-        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` \
-         to capture integration test binaries named `ui` with a top-level \
-         `fn ui()` (e.g. {crates:?}); found filter: {filter}"
+        "the serial-dylint-ui filter must contain `(binary(ui) & test(=ui))` to capture \
+         integration test binaries named `ui` with a top-level `fn ui()` (e.g. {crates:?}); found \
+         filter: {filter}"
     );
 
     for filter_clause in NESTED_CARGO_UI_FILTER_CLAUSES {

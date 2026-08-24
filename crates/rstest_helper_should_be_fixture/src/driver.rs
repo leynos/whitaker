@@ -20,7 +20,7 @@ use rustc_span::Span;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::io::Write;
-use whitaker::SharedConfig;
+use whitaker_lint_core::SharedConfig;
 use whitaker_common::attributes::AttributePath;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
 use whitaker_common::rstest::{RstestDetectionOptions, is_rstest_test_with};
@@ -205,7 +205,7 @@ impl RstestHelperShouldBeFixture {
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         self.apply_loaded_crate_configuration(load_configuration(), load_shared_config());
-        self.rstest_collection_roots = whitaker::hir::collect_rstest_companion_test_functions(cx);
+        self.rstest_collection_roots = whitaker_lint_core::hir::collect_rstest_companion_test_functions(cx);
     }
 
     fn check_fn(

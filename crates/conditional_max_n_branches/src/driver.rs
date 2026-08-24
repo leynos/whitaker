@@ -14,7 +14,7 @@ use rustc_hir::{BinOpKind, ExprKind, LoopSource, UnOp};
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{DesugaringKind, Span};
 use serde::Deserialize;
-use whitaker::SharedConfig;
+use whitaker_lint_core::SharedConfig;
 use whitaker_common::i18n::{DiagnosticMessageSet, MessageKey};
 use whitaker_common::{
     Arguments, FALLBACK_LOCALE, Localizer, MessageResolution, branch_phrase,

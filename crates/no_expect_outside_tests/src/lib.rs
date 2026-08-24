@@ -25,7 +25,7 @@ mod lib_ui_tests;
 mod tests;
 #[cfg(all(feature = "dylint-driver", test))]
 mod ui {
-    whitaker::declare_ui_tests!("ui");
+    whitaker_lint_core::declare_ui_tests!("ui");
 }
 
 #[cfg(feature = "dylint-driver")]

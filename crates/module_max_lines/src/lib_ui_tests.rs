@@ -10,7 +10,7 @@ use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test
 
 #[test]
 fn ui() {
-    whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
+    whitaker_lint_core::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {

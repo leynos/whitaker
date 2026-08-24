@@ -11,7 +11,7 @@ use rustc_hir::attrs::AttributeKind;
 use rustc_lint::{DiagDecorator, LateContext, LateLintPass, LintContext};
 use rustc_span::Span;
 use std::borrow::Cow;
-use whitaker::{SharedConfig, recover_user_editable_hir_span};
+use whitaker_lint_core::{SharedConfig, recover_user_editable_hir_span};
 use whitaker_common::i18n::{
     Arguments, BundleLookup, DiagnosticMessageSet, FluentValue, Localizer, MessageKey,
     MessageResolution, get_localizer_for_lint, noop_reporter, safe_resolve_message_set,

@@ -28,6 +28,7 @@ use whitaker_common::test_support::with_locale;
 #[serial]
 fn ui_tests_across_locales(#[case] directory: &str, #[case] locale: Option<&str>) {
     with_locale(locale, || {
-        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+        whitaker_lint_core::run_ui_tests!(directory)
+            .expect("UI tests should execute without diffs");
     });
 }

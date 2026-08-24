@@ -10,11 +10,11 @@ use rustc_hir::Node;
 use rustc_hir::attrs::AttributeKind as HirAttributeKind;
 use rustc_lint::LateContext;
 use rustc_span::sym;
-use whitaker::hir::has_test_like_hir_attributes;
 use whitaker_common::{
     Attribute, AttributeKind, AttributePath, ContextEntry, ContextKind,
     PARSED_ATTRIBUTE_PLACEHOLDER, in_test_like_context_with,
 };
+use whitaker_lint_core::hir::has_test_like_hir_attributes;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContextSummary {

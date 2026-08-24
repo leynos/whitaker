@@ -12,7 +12,7 @@ use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Ident;
 use rustc_span::Span;
 use rustc_span::symbol::Symbol;
-use whitaker::SharedConfig;
+use whitaker_lint_core::SharedConfig;
 use whitaker_common::complexity_signal::{rasterize_signal, smooth_moving_average};
 use whitaker_common::i18n::MessageKey;
 use whitaker_common::{Localizer, get_localizer_for_lint};

@@ -20,15 +20,20 @@ CARGO_FLAGS ?= --workspace --all-targets --all-features
 # diagnostics, so exercise its parser tests separately without all features.
 TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
 	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
-	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker_lint_core \
 	--exclude function_attrs_follow_docs --exclude module_max_lines \
 	--exclude no_expect_outside_tests --exclude dylint_testing
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
+# The Dylint driver feature links compiler-private crates. Cargo unifies that
+# feature for the all-workspace pass, so exercise core's ordinary tests in a
+# dedicated feature-free invocation rather than excluding their coverage.
+CORE_TEST_CARGO_FLAGS ?= -p whitaker_lint_core --no-default-features
 # Doctests cannot run for a crate that links `rustc_private`. A doctest is
 # compiled as its own crate without `#![feature(rustc_private)]`, so every
-# lint crate, the `rustc_*` proxy shims, `clippy_utils`, the `whitaker` root,
-# and the suite fail at `E0658` before a single assertion runs. The remaining
-# four packages hold the documented public API and are the doctest lane.
+# lint crate, the `rustc_*` proxy shims, `clippy_utils`, the
+# `whitaker_lint_core` crate, and the suite fail at `E0658` before a single
+# assertion runs. The remaining packages hold the documented public API and
+# are the doctest lane.
 DOCTEST_EXCLUDES ?= --exclude bumpy_road_function --exclude clippy_utils \
 	--exclude conditional_max_n_branches --exclude function_attrs_follow_docs \
 	--exclude module_max_lines --exclude module_must_have_inner_docs \
@@ -37,7 +42,7 @@ DOCTEST_EXCLUDES ?= --exclude bumpy_road_function --exclude clippy_utils \
 	--exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir \
 	--exclude rustc_lint --exclude rustc_middle --exclude rustc_session \
 	--exclude rustc_span --exclude test_must_not_have_example \
-	--exclude whitaker --exclude whitaker_suite
+	--exclude whitaker_lint_core --exclude whitaker_suite
 DOCTEST_CARGO_FLAGS ?= --workspace --all-features $(DOCTEST_EXCLUDES)
 NEXTEST_PROFILE ?=
 # The cargo test driver. `test` runs `cargo nextest run`; `coverage`
@@ -225,6 +230,7 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) -p dylint_testing --lib --no-default-features $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \

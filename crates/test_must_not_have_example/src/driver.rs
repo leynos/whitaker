@@ -8,8 +8,8 @@ use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{Ident, Span, Symbol};
 use serde::Deserialize;
 use std::borrow::Cow;
-use whitaker::SharedConfig;
-use whitaker::hir::has_test_like_hir_attributes;
+use whitaker_lint_core::SharedConfig;
+use whitaker_lint_core::hir::has_test_like_hir_attributes;
 use whitaker_common::AttributePath;
 use whitaker_common::i18n::{
     Arguments, DiagnosticMessageSet, FluentValue, Localizer, MessageKey, MessageResolution,
