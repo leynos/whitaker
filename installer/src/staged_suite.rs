@@ -6,12 +6,15 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::resolution::SUITE_CRATE;
-use whitaker_installer::stager::Stager;
-use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
-use whitaker_installer::toolchain::Toolchain;
+
+use crate::{
+    crate_name::CrateName,
+    error::{InstallerError, Result},
+    resolution::SUITE_CRATE,
+    stager::Stager,
+    test_support::TEST_STAGE_SUITE_ENV,
+    toolchain::Toolchain,
+};
 
 pub(crate) fn try_test_staged_suite_installation(
     requested_crates: &[CrateName],
@@ -62,7 +65,8 @@ mod tests {
     use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
-    use whitaker_installer::test_support::{EnvTestGuard, env_test_guard};
+
+    use crate::test_support::{EnvTestGuard, env_test_guard};
 
     struct StagedSuiteSetup {
         _guard: EnvTestGuard,

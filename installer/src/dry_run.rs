@@ -1,24 +1,23 @@
 //! The dry run: report what an install would do, and change nothing.
 //!
-//! Separated from `main.rs` because it shares none of the install
+//! Separated from `orchestration.rs` because it shares none of the install
 //! pipeline's state and answers a different question, and because the
 //! entry point had reached the repository's file-size limit.
 
 use camino::Utf8PathBuf;
 use std::io::Write;
-use whitaker_installer::artefact::suite_ref::SuiteRef;
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::error::Result;
-use whitaker_installer::toolchain::Toolchain;
 
-use whitaker_installer::list::determine_target_dir;
-use whitaker_installer::output::{DryRunInfo, write_stderr_line};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-
+use crate::artefact::suite_ref::SuiteRef;
+use crate::cli::InstallArgs;
+use crate::crate_name::CrateName;
+use crate::dirs::BaseDirs;
+use crate::error::Result;
 use crate::install_flow::detect_host_target;
-use crate::{resolve_requested_crates, resolve_toolchain};
+use crate::list::determine_target_dir;
+use crate::orchestration::{resolve_requested_crates, resolve_toolchain};
+use crate::output::{DryRunInfo, write_stderr_line};
+use crate::prebuilt_path::prebuilt_library_dir;
+use crate::toolchain::Toolchain;
 
 /// Runs in dry-run mode, showing configuration without side effects.
 pub(crate) fn run_dry(
@@ -26,7 +25,7 @@ pub(crate) fn run_dry(
     dirs: &dyn BaseDirs,
     stderr: &mut dyn Write,
 ) -> Result<()> {
-    use whitaker_installer::workspace::resolve_workspace_path;
+    use crate::workspace::resolve_workspace_path;
 
     let workspace_root = resolve_workspace_path(dirs)?;
     let requested_crates = resolve_requested_crates(args)?;

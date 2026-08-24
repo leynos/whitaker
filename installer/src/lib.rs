@@ -44,19 +44,24 @@ pub mod crate_name;
 pub mod dependency_binaries;
 pub mod deps;
 pub mod dirs;
+pub(crate) mod dry_run;
 pub mod error;
 pub mod git;
 mod hex;
+pub mod install_flow;
 pub mod install_metrics;
 pub mod installer_packaging;
 pub mod list;
 pub mod list_output;
+/// Coordinates installer commands without parsing arguments or exiting.
+pub mod orchestration;
 pub mod output;
 pub mod pipeline;
 pub mod prebuilt;
 pub mod prebuilt_path;
 pub mod resolution;
 pub mod scanner;
+mod staged_suite;
 pub mod stager;
 /// Test-only hooks shared by installer behavioural and integration tests.
 ///

@@ -3,6 +3,19 @@
 //! This module keeps prebuilt-download fallback and metrics recording logic
 //! separate from CLI orchestration in `main.rs`.
 
+use crate::{
+    builder::{library_extension, library_prefix},
+    cli::InstallArgs,
+    crate_name::CrateName,
+    deps::{CommandExecutor, DylintToolStatus, SourcePolicy},
+    dirs::BaseDirs,
+    error::{InstallerError, Result},
+    install_metrics::{InstallMode, RecordOutcome, record_install},
+    output::write_stderr_line,
+    prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt},
+    prebuilt_path::prebuilt_library_dir,
+    resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE},
+};
 use camino::Utf8Path;
 use camino::Utf8PathBuf;
 use std::collections::HashSet;
@@ -10,21 +23,11 @@ use std::fs;
 use std::io;
 use std::io::Write;
 use std::time::Duration;
-use whitaker_installer::builder::{library_extension, library_prefix};
-use whitaker_installer::cli::InstallArgs;
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::deps::{CommandExecutor, DylintToolStatus, SourcePolicy};
-use whitaker_installer::dirs::BaseDirs;
-use whitaker_installer::error::{InstallerError, Result};
-use whitaker_installer::install_metrics::{InstallMode, RecordOutcome, record_install};
-use whitaker_installer::output::write_stderr_line;
-use whitaker_installer::prebuilt::{PrebuiltConfig, PrebuiltResult, attempt_prebuilt};
-use whitaker_installer::prebuilt_path::prebuilt_library_dir;
-use whitaker_installer::resolution::{EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE};
 
 mod dependency_check;
-#[cfg(all(test, unix))]
-pub(crate) use dependency_check::check_dylint_tools_for_command;
+/// PATH-scan query used by the legacy binary's tracing probe.
+#[cfg(unix)]
+pub use dependency_check::check_dylint_tools_for_command;
 
 pub(crate) fn ensure_dylint_tools_core(
     quiet: bool,
@@ -154,8 +157,11 @@ pub(crate) fn try_prebuilt_installation(
 }
 
 type DetectHostTargetFn = fn() -> Result<String>;
+
 type ResolveDestinationDirFn = fn(&dyn BaseDirs, &str, &str) -> Result<Utf8PathBuf>;
+
 type AttemptPrebuiltFn = fn(&PrebuiltConfig<'_>, &mut dyn Write) -> PrebuiltResult;
+
 type PruneLibrariesFn = fn(&Utf8Path, &str, &[CrateName]) -> Result<()>;
 
 struct PrebuiltInstallationHooks {
