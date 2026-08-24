@@ -130,9 +130,9 @@ impl std::error::Error for HarnessError {}
 ///
 /// ```no_run
 /// use camino::Utf8Path;
-/// use whitaker::testing::ui::run_with_runner;
+/// use whitaker_lint_core::testing::ui::run_with_runner;
 ///
-/// fn main() -> Result<(), whitaker::testing::ui::HarnessError> {
+/// fn main() -> Result<(), whitaker_lint_core::testing::ui::HarnessError> {
 ///     run_with_runner("my_lint", "ui", |crate_name, dir: &Utf8Path| {
 ///         ::dylint_testing::ui_test(crate_name, dir);
 ///         Ok(())
@@ -235,7 +235,7 @@ fn directory_is_rooted(path: &Utf8Path) -> bool {
 /// # Examples
 ///
 /// ```ignore
-/// whitaker::run_ui_tests!("ui").expect("UI tests should succeed");
+/// whitaker_lint_core::run_ui_tests!("ui").expect("UI tests should succeed");
 /// ```
 ///
 /// # Errors
@@ -266,7 +266,7 @@ macro_rules! run_ui_tests {
 /// # Examples
 ///
 /// ```ignore
-/// whitaker::declare_ui_tests!("ui");
+/// whitaker_lint_core::declare_ui_tests!("ui");
 /// ```
 #[macro_export]
 macro_rules! declare_ui_tests {
