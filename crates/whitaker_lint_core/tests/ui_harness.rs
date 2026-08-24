@@ -5,7 +5,7 @@ use std::{cell::RefCell, convert::Infallible};
 use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use whitaker::testing::ui::{HarnessError, run_with_runner};
+use whitaker_lint_core::testing::ui::{HarnessError, run_with_runner};
 
 #[derive(Debug)]
 struct StepString(String);

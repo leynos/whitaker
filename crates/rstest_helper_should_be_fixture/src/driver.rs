@@ -4,30 +4,26 @@
 //! configuration normalization stays in small helper methods so it can be
 //! tested without constructing rustc contexts.
 
-use std::{collections::HashSet, io::Write};
-
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{
-    ambient_authority,
-    fs_utf8::{Dir, OpenOptions},
+use crate::collector::CallSiteCollector;
+use crate::visitor::{
+    CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape,
 };
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::{Dir, OpenOptions};
 use log::debug;
 use rustc_hir as hir;
-use rustc_hir::{def_id::LocalDefId, intravisit::Visitor};
+use rustc_hir::def_id::LocalDefId;
+use rustc_hir::intravisit::Visitor;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::Span;
 use serde::Deserialize;
-use whitaker::SharedConfig;
-use whitaker_common::{
-    attributes::AttributePath,
-    i18n::{Localizer, get_localizer_for_lint},
-    rstest::{RstestDetectionOptions, is_rstest_test_with},
-};
-
-use crate::{
-    collector::CallSiteCollector,
-    visitor::{CallSiteVisitor, attribute_from_hir, fixture_local_ids, redacted_fingerprint_shape},
-};
+use std::collections::HashSet;
+use std::io::Write;
+use whitaker_lint_core::SharedConfig;
+use whitaker_common::attributes::AttributePath;
+use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
+use whitaker_common::rstest::{RstestDetectionOptions, is_rstest_test_with};
 
 const LINT_NAME: &str = "rstest_helper_should_be_fixture";
 /// Internal test-only hook used by the UI harness to assert passive collection.
@@ -229,7 +225,8 @@ impl RstestHelperShouldBeFixture {
 impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
     fn check_crate(&mut self, cx: &LateContext<'tcx>) {
         self.apply_loaded_crate_configuration(load_configuration(), &load_shared_config());
-        self.rstest_collection_roots = whitaker::hir::collect_rstest_companion_test_functions(cx);
+        self.rstest_collection_roots =
+            whitaker_lint_core::hir::collect_rstest_companion_test_functions(cx);
     }
 
     fn check_fn(

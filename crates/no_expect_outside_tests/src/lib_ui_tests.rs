@@ -83,7 +83,7 @@ struct DependencyRlib {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
+    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, _| {
         run_test_runner(spec.name, || {
             let _guard = env_test_guard();
             let mut test = Test::example(crate_name, spec.name);
@@ -134,7 +134,7 @@ fn run_fixture_under_test_harness(
 fn run_fixture_harness_test(spec: &FixtureHarnessRun<'_>) {
     let crate_name = spec.crate_name;
     let directory = spec.directory;
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
+    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |_, dir| {
         run_fixture_under_test_harness(spec, dir)
     })
     .unwrap_or_else(|error| {

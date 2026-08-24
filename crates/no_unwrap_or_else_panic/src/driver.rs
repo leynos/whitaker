@@ -1,22 +1,18 @@
 //! Lint wiring that flags panicking `unwrap_or_else` fallbacks.
 
-use std::collections::HashSet;
-
+use crate::LINT_NAME;
+use crate::context::ContextSummary;
+use crate::diagnostics::emit_diagnostic;
+use crate::panic_detector::{closure_panics, receiver_is_option_or_result};
+use crate::policy::{LintPolicy, should_flag};
 use log::debug;
 use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
-use whitaker::SharedConfig;
+use std::collections::HashSet;
+use whitaker_lint_core::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
-
-use crate::{
-    LINT_NAME,
-    context::ContextSummary,
-    diagnostics::emit_diagnostic,
-    panic_detector::{closure_panics, receiver_is_option_or_result},
-    policy::{LintPolicy, should_flag},
-};
 
 /// Dylint lint declaration and registration glue.
 ///
@@ -50,7 +46,9 @@ struct Config {
 }
 
 impl Config {
-    fn resolved_allow_in_main(&self) -> bool { self.allow_in_main.unwrap_or(false) }
+    fn resolved_allow_in_main(&self) -> bool {
+        self.allow_in_main.unwrap_or(false)
+    }
 }
 
 /// Lint pass that inspects `unwrap_or_else` fallbacks for panics.
@@ -83,8 +81,8 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
 
         self.is_test_harness = cx.tcx.sess.opts.test;
         self.harness_test_functions = if self.is_test_harness {
-            let mut marked = whitaker::hir::collect_harness_test_functions(cx);
-            marked.extend(whitaker::hir::collect_rstest_companion_test_functions(cx));
+            let mut marked = whitaker_lint_core::hir::collect_harness_test_functions(cx);
+            marked.extend(whitaker_lint_core::hir::collect_rstest_companion_test_functions(cx));
             marked
         } else {
             HashSet::new()

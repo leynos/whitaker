@@ -18,7 +18,7 @@ rustc_span = { workspace = true }
 whitaker-common = { path = "../../common" }
 
 [dev-dependencies]
-whitaker = { path = "../../" }
+whitaker_lint_core = { path = "../whitaker_lint_core" }
 "#;
 
 const LIB_RS_TEMPLATE: &str = r#"//! Lint crate for `{crate_name}`.
@@ -58,7 +58,7 @@ impl_late_lint! {
 
 #[cfg(test)]
 mod tests {
-    whitaker::declare_ui_tests!("{ui_tests_directory}");
+    whitaker_lint_core::declare_ui_tests!("{ui_tests_directory}");
 }
 "#;
 
@@ -150,7 +150,9 @@ mod tests {
     #[test]
     fn render_lib_rs_escapes_ui_directory() {
         let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", "ui/space \"quote\"");
-        assert!(rendered.contains(r#"whitaker::declare_ui_tests!("ui/space \"quote\"");"#));
+        assert!(
+            rendered.contains(r#"whitaker_lint_core::declare_ui_tests!("ui/space \"quote\"");"#)
+        );
     }
 
     #[test]
@@ -161,7 +163,10 @@ mod tests {
             "DemoLint",
             "ui/wave\\multiline\ncase",
         );
-        assert!(rendered.contains(r#"whitaker::declare_ui_tests!("ui/wave\\multiline\ncase");"#));
+        assert!(
+            rendered
+                .contains(r#"whitaker_lint_core::declare_ui_tests!("ui/wave\\multiline\ncase");"#)
+        );
     }
 
     #[test]
@@ -169,7 +174,7 @@ mod tests {
         let directory = "ui/\"outer 'inner'\"";
         let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", directory);
         let expected = format!(
-            "whitaker::declare_ui_tests!(\"{}\");",
+            "whitaker_lint_core::declare_ui_tests!(\"{}\");",
             escape_rust_string_literal(directory)
         );
         assert!(rendered.contains(expected.as_str()));
@@ -178,6 +183,6 @@ mod tests {
     #[test]
     fn render_lib_rs_handles_empty_ui_directory() {
         let rendered = render_lib_rs("demo_lint", "DEMO_LINT", "DemoLint", "");
-        assert!(rendered.contains(r#"whitaker::declare_ui_tests!("");"#));
+        assert!(rendered.contains(r#"whitaker_lint_core::declare_ui_tests!("");"#));
     }
 }

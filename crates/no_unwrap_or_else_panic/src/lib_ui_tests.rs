@@ -50,7 +50,9 @@ impl<'a> ExampleHarnessRun<'a> {
 }
 
 #[test]
-fn ui() { whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures); }
+fn ui() {
+    whitaker_lint_core::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_fixtures);
+}
 
 /// Runs an example-based regression under the dylint UI test harness.
 ///
@@ -60,7 +62,7 @@ fn ui() { whitaker::testing::ui::run_ui_test(env!("CARGO_PKG_NAME"), "ui", run_f
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
         run_test_runner_with_env_guard(spec.name, || {
             with_vars_unset(
                 ["SCCACHE_GHA_ENABLED", "SCCACHE_PATH", "SCCACHE_ERROR_LOG"],

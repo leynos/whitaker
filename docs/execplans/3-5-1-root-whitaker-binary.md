@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -87,8 +87,10 @@ stop at.
 
 ## Progress
 
-- [ ] `EP-M0` — extract the Dylint driver library; root package becomes a
-  publishable, testable CLI package.
+- [x] (2026-08-24T01:58Z) `EP-M0` — extracted the Dylint driver library and
+  made the root package publishable and testable. Evidence: package, format,
+  typecheck, lint, test, dynamic binary build, and root test-link gates all
+  passed; 1,664 workspace tests, 80 feature-free core tests, and doctests ran.
 - [ ] `EP-M1` — installer orchestration moved behind the library boundary.
 - [ ] `EP-M2` — the `whitaker` binary: `install`, `ls`, and `cargo dylint`
   forwarding.
@@ -1281,6 +1283,40 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
 
 ## Surprises & discoveries
 
+- Observation: the checked baseline reproduces the plan's packaging failure.
+  Evidence: `cargo package -p whitaker --no-verify --allow-dirty` exited
+  non-zero on 2026-08-24 with `no matching package named rustc_ast`; the
+  baseline normal dependency tree for `module_max_lines` has 342 entries.
+  Impact: confirms that `EP-M0` remains the required first milestone and gives
+  the before-measurement for its dependency-containment objective.
+
+- Observation: Cargo's workspace-wide `--all-features` unifies the core
+  crate's `dylint-driver` feature into its integration-test executables.
+  Evidence: `lint_template` links without the feature but fails with it,
+  reproducing the `rustc_driver` duplicate `std`/`core` diagnostics; the two
+  focused commands and logs are recorded in
+  `docs/debugging/debugging-plan-2026-08-24-m0-core-test-linkage.md`.
+  Impact: the all-feature workspace pass excludes only the compiler-private
+  core test target, then `make test` and `publish-check` run its tests and
+  doctests separately without that feature. All six formerly excluded test
+  targets remain covered.
+
+- Observation: the formerly excluded `build_config` test asserted dynamic
+  linker flags in `.cargo/config.toml`, although that file deliberately keeps
+  them out of workspace configuration and the Make recipes inject them only
+  for Dylint-aware commands.
+  Evidence: the current configuration comment states this policy and the test
+  failed because `build.rustflags` is absent.
+  Impact: the test now protects the actual scoped-flag contract; this is a
+  pre-existing assertion correction exposed by `EP-M0`, not a behaviour change.
+
+- Observation: the moved template behaviour tests still asserted the old root
+  `whitaker` dev-dependency and root-relative path.
+  Evidence: three scenarios failed after the extraction despite the template
+  correctly rendering `whitaker_lint_core = { path = "../whitaker_lint_core" }`.
+  Impact: expectations now validate the new internal boundary; no generated
+  template behaviour changed after the relocation.
+
 - Observation: the root `whitaker` package cannot be published at all.
   Evidence: `cargo package -p whitaker --no-verify --allow-dirty` fails with
   "no matching package named `rustc_ast`"; the four `rustc_*` shim crates are
@@ -1425,7 +1461,24 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   body, branch name, and required pull-request title all identify 3.5.1.
   Confirmed with the requester. Date/Author: 2026-08-21.
 
+- **D-10: Test the compiler-private core outside the workspace all-feature
+  invocation.** Cargo unifies `dylint-driver` through every lint crate, and
+  its compiler-private runtime cannot link into an ordinary integration-test
+  executable. A separate feature-free package invocation preserves each moved
+  test target and doctest without restoring the old `whitaker` exclusion or
+  weakening the Dylint driver pass. Date/Author: 2026-08-24, implementation
+  agent; supported by the H1 falsification experiment.
+
 ## Outcomes & retrospective
+
+- **EP-M0, 2026-08-24.** Complete. The compiler-private driver now resides in
+  the non-publishable `whitaker_lint_core` package. The root package has its
+  crates.io metadata and no compiler-private dependencies, and packages
+  successfully. All in-tree consumers were migrated to the core package. The
+  feature-unification discovery requires a dedicated feature-free core test
+  pass, preserving all newly activated coverage without weakening the driver
+  pass. The milestone is contained in the next commit and can be reverted as
+  one unit.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`
@@ -1435,6 +1488,10 @@ forwarding is a public behaviour carrying a compatibility commitment. Do not
 mark the plan `COMPLETE` while any upstream change or deviation is unrecorded.
 
 ## Revision note
+
+**Revision 3, 2026-08-24.** Implementation started after the requester
+approved this plan. The baseline packaging failure and dependency-tree count
+were reproduced before `EP-M0`; no scope or architectural decision changed.
 
 **Revision 2, 2026-08-21.** Rewritten after a six-perspective design review.
 

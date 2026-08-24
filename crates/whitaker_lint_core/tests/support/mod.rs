@@ -5,4 +5,5 @@
 //! into the configuration and resolution flow. Reach for these utilities
 //! whenever a test needs to normalize locale input before exercising the i18n
 //! layer or verifying translation behaviour.
+
 pub mod locale;
