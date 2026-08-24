@@ -3,14 +3,14 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use temp_env::with_var_unset;
-use whitaker_installer::{
+
+use super::*;
+use crate::{
     cli::ExecutionFlags,
     crate_name::CrateName,
     test_support::{TEST_STAGE_SUITE_ENV, env_test_guard},
     toolchain::Toolchain,
 };
-
-use super::*;
 
 struct FastPathFixture {
     args: InstallArgs,
@@ -98,7 +98,8 @@ fn try_fast_path_installation_returns_some_build_path_when_staged_suite_enabled(
     mut fast_path_fixture: FastPathFixture,
 ) {
     use temp_env::with_var;
-    use whitaker_installer::test_support::TEST_STAGE_SUITE_ENV;
+
+    use crate::test_support::TEST_STAGE_SUITE_ENV;
 
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     fast_path_fixture.target_dir =
