@@ -8,33 +8,23 @@
 //! snapshot comes from the release or from `--clippy-snapshot-bundle`, or
 //! installation stops.
 
-use std::{ffi::OsString, io::Write};
-
 use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(debug_assertions)]
-use whitaker_installer::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
-use whitaker_installer::{
-    bootstrap::{
-        BOOTSTRAP_SCHEMA,
-        BUILT_DRIVER_NOTICE,
-        BootstrapLayout,
-        BootstrapMetadata,
-        StoredPath,
-        is_present_dir,
-    },
-    cli::InstallArgs,
-    clippy_snapshot::{
-        BundleSource,
-        ClippySnapshotManifest,
-        embedded_manifest,
-        generation_path,
-        provision,
-    },
-    dirs::{BaseDirs, SystemBaseDirs},
-    error::{InstallerError, Result},
-    output::{ShellSnippet, write_stderr_line},
-    wrapper::{generate_wrapper_scripts, path_instructions},
+use std::ffi::OsString;
+use std::io::Write;
+use crate::bootstrap::{
+    BOOTSTRAP_SCHEMA, BUILT_DRIVER_NOTICE, BootstrapLayout, BootstrapMetadata, StoredPath,
+    is_present_dir,
 };
+use crate::cli::InstallArgs;
+use crate::clippy_snapshot::{
+    BundleSource, ClippySnapshotManifest, embedded_manifest, generation_path, provision,
+};
+use crate::dirs::{BaseDirs, SystemBaseDirs};
+use crate::error::{InstallerError, Result};
+use crate::output::{ShellSnippet, write_stderr_line};
+#[cfg(debug_assertions)]
+use crate::test_support::TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV;
+use crate::wrapper::{generate_wrapper_scripts, path_instructions};
 
 /// The snapshot generation this installation provisioned.
 #[derive(Debug, Clone)]
@@ -46,7 +36,9 @@ pub(crate) struct InstalledSnapshot {
 
 impl InstalledSnapshot {
     /// The generation exported as `DYLINT_CLIPPY_REPO`.
-    pub(crate) fn generation(&self) -> &Utf8Path { &self.generation }
+    pub(crate) fn generation(&self) -> &Utf8Path {
+        &self.generation
+    }
 
     /// The driver slot exported as `DYLINT_DRIVER_PATH`.
     pub(crate) fn driver_dir(&self) -> Utf8PathBuf {
@@ -64,7 +56,7 @@ fn snapshot_manifest() -> Result<&'static ClippySnapshotManifest> {
     #[cfg(debug_assertions)]
     if let Some(path) = std::env::var_os(TEST_CLIPPY_SNAPSHOT_MANIFEST_ENV) {
         let contents = std::fs::read_to_string(&path)?;
-        let manifest = whitaker_installer::clippy_snapshot::parse_manifest(&contents)?;
+        let manifest = crate::clippy_snapshot::parse_manifest(&contents)?;
         // One manifest per process, read once, like the embedded one.
         return Ok(Box::leak(Box::new(manifest)));
     }
@@ -168,7 +160,7 @@ pub(crate) fn run_bootstrap(args: &[OsString], stderr: &mut dyn Write) -> i32 {
         write_stderr_line(stderr, "whitaker: could not determine platform directories");
         return 1;
     };
-    match whitaker_installer::bootstrap::run(&dirs, args) {
+    match crate::bootstrap::run(&dirs, args) {
         Ok(outcome) => {
             // After the child's output, so it is the last thing a slow first
             // run shows and verification can count it.

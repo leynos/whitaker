@@ -11,6 +11,8 @@ use tracing_subscriber::{
     },
 };
 use whitaker_installer::cli::InstallArgs;
+#[cfg(all(test, unix))]
+use whitaker_installer::install_flow::check_dylint_tools_for_command;
 
 /// Describe a CLI tracing subscriber registration failure.
 #[derive(Debug, thiserror::Error)]
@@ -157,9 +159,7 @@ mod tests {
         let cli = Cli::try_parse_from(arguments).expect("probe arguments must match the CLI");
         configure_tracing(cli.install_args())
             .expect("child probe tracing subscriber must initialize");
-        let _ = crate::install_flow::check_dylint_tools_for_command(
-            &whitaker_installer::deps::SystemCommandExecutor,
-        );
+        let _ = check_dylint_tools_for_command(&whitaker_installer::deps::SystemCommandExecutor);
     }
 
     /// Verify CLI initialization sends diagnostics to stderr in its own process.

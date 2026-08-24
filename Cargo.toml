@@ -17,6 +17,7 @@ version = "0.2.11"
 [workspace.dependencies]
 whitaker-common = { path = "common", version = "0.2.11" }
 whitaker-installer = { path = "installer", version = "0.2.11" }
+whitaker = { path = ".", version = "0.2.11" }
 whitaker_lint_core = { path = "crates/whitaker_lint_core", version = "0.2.11" }
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }

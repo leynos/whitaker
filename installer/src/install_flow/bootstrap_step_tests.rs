@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use tempfile::TempDir;
-use whitaker_installer::bootstrap::BootstrapError;
+use crate::bootstrap::BootstrapError;
 
 use super::*;
 

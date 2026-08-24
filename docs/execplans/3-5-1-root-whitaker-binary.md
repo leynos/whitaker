@@ -91,7 +91,9 @@ stop at.
   made the root package publishable and testable. Evidence: package, format,
   typecheck, lint, test, dynamic binary build, and root test-link gates all
   passed; 1,664 workspace tests, 80 feature-free core tests, and doctests ran.
-- [ ] `EP-M1` — installer orchestration moved behind the library boundary.
+- [x] (2026-08-24T02:08Z) `EP-M1` — moved installer orchestration behind the
+  library boundary. Evidence: 1,665 tests, doctests, dynamic binary build, and
+  the `whitaker-installer --dry-run` snapshot all passed unchanged.
 - [ ] `EP-M2` — the `whitaker` binary: `install`, `ls`, and `cargo dylint`
   forwarding.
 - [ ] `EP-M3` — binstall metadata and crates.io name reservation.
@@ -1479,6 +1481,13 @@ for the port boundaries; `kani` for `EP-INV-DISPATCH`; `verus` for
   pass, preserving all newly activated coverage without weakening the driver
   pass. The milestone is contained in the next commit and can be reverted as
   one unit.
+
+- **EP-M1, 2026-08-24.** Complete. `whitaker_installer::orchestration` now
+  owns request routing and installation flow; `whitaker-installer` is a thin
+  parser, adapter constructor, and exit-code composition root. The existing
+  installer integration tests remain unmodified, and a normalized dry-run
+  snapshot protects its public output. The milestone is contained in the next
+  commit and can be reverted as one unit.
 
 To be completed at each milestone boundary and at completion. Before setting
 this plan to `COMPLETE`, reconcile every entry in `Surprises & discoveries`

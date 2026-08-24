@@ -1,0 +1,19 @@
+---
+source: installer/tests/dry_run_snapshot.rs
+assertion_line: 43
+expression: normalized_dry_run_output(&stderr)
+---
+Dry run - no files will be modified
+
+Workspace root: [workspace]
+Toolchain: nightly-2026-05-28
+Target directory: [staging directory]
+Verbosity level: 0
+Quiet: false
+Skip deps: false
+Skip wrapper: false
+No update: false
+Suite: default branch tip (unpinned)
+
+Crates to build:
+  - whitaker_suite
