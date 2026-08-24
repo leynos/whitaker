@@ -13,8 +13,8 @@ mod support;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
-use whitaker::SharedConfig;
 use whitaker_common::i18n::normalize_locale;
+use whitaker_lint_core::SharedConfig;
 
 #[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]

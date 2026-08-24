@@ -40,7 +40,7 @@ impl SharedConfig {
     /// ```
     /// # #[cfg(feature = "dylint-driver")]
     /// # {
-    /// use whitaker::SharedConfig;
+    /// use whitaker_lint_core::SharedConfig;
     ///
     /// let config = SharedConfig::load();
     /// assert_eq!(config.module_max_lines.max_lines, 400);
@@ -74,7 +74,7 @@ impl SharedConfig {
     /// # Examples
     ///
     /// ```
-    /// use whitaker::SharedConfig;
+    /// use whitaker_lint_core::SharedConfig;
     ///
     /// let config = SharedConfig::load_with("whitaker", |_| SharedConfig::default());
     /// assert_eq!(config.module_max_lines.max_lines, 400);

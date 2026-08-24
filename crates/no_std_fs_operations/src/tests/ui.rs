@@ -21,6 +21,7 @@ fn ui_runs_in_fallback_locale() { run_with_locale("ui-fallback", Some("zz")); }
 
 fn run_with_locale(directory: &str, locale: Option<&str>) {
     with_locale(locale, || {
-        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+        whitaker_lint_core::run_ui_tests!(directory)
+            .expect("UI tests should execute without diffs");
     });
 }

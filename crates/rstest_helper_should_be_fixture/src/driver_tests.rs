@@ -6,7 +6,7 @@
 
 use proptest::prelude::*;
 use rstest::rstest;
-use whitaker::SharedConfig;
+use whitaker_lint_core::SharedConfig;
 
 use super::*;
 

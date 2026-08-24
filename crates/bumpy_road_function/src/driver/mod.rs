@@ -9,13 +9,13 @@ use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_span::{Ident, Span, symbol::Symbol};
-use whitaker::SharedConfig;
 use whitaker_common::{
     Localizer,
     complexity_signal::{rasterize_signal, smooth_moving_average},
     get_localizer_for_lint,
     i18n::MessageKey,
 };
+use whitaker_lint_core::SharedConfig;
 
 use crate::analysis::{Settings, detect_bumps, normalize_settings};
 

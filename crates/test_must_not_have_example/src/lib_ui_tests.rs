@@ -10,14 +10,13 @@ use whitaker_common::test_support::{prepare_fixture, run_fixtures_with, run_test
 fn ui() {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "ui";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, run_fixtures).unwrap_or_else(
-        |error| {
+    whitaker_lint_core::testing::ui::run_with_runner(crate_name, directory, run_fixtures)
+        .unwrap_or_else(|error| {
             panic!(
                 "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
                  \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
             )
-        },
-    );
+        });
 }
 
 fn run_fixtures(crate_name: &str, directory: &Utf8Path) -> Result<(), String> {

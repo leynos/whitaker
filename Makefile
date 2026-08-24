@@ -20,8 +20,12 @@ CARGO_FLAGS ?= --workspace --all-targets --all-features
 # Lint every other target rather than `--all-targets`; `typecheck` still builds
 # the fixtures, and the suite still lints them through the UI harness.
 CLIPPY_FLAGS ?= --workspace --lib --bins --tests --benches --all-features
-TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
+TEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures --exclude rustc_hir --exclude rustc_lint --exclude rustc_middle --exclude rustc_session --exclude rustc_span --exclude whitaker_lint_core --exclude function_attrs_follow_docs --exclude module_max_lines --exclude no_expect_outside_tests
 TEST_CARGO_FLAGS ?= $(CARGO_FLAGS) $(TEST_EXCLUDES)
+# The Dylint driver feature links compiler-private crates. Cargo unifies that
+# feature for the all-workspace pass, so exercise core's ordinary tests in a
+# dedicated feature-free invocation rather than excluding their coverage.
+CORE_TEST_CARGO_FLAGS ?= -p whitaker_lint_core --no-default-features
 NEXTEST_PROFILE ?=
 # The cargo test driver. `test` runs `cargo nextest run`; `coverage`
 # overrides this with `cargo llvm-cov nextest ...` so instrumentation runs
@@ -56,14 +60,12 @@ SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(SPELLING_PY_ENV) \
 	--with pytest-cov==7.0.0 python -m pytest
 WORKFLOW_TEST_VENV ?= .venv
 LINT_CRATES ?= bumpy_road_function conditional_max_n_branches function_attrs_follow_docs module_max_lines module_must_have_inner_docs no_expect_outside_tests test_must_not_have_example no_std_fs_operations no_unwrap_or_else_panic whitaker_suite
-# Doctests compile as their own crate and do not inherit the lib's
-# `#![cfg_attr(feature = "dylint-driver", feature(rustc_private))]`, so the
-# Dylint driver crates cannot link `rustc_driver` from a doctest and fail with
-# "use of unstable library feature `rustc_private`". Their examples are covered
-# by the unit and UI suites instead, so exclude them from the doctest run.
+# Doctests for the Dylint driver crates cannot link `rustc_driver`, because
+# doctest crates do not inherit the `rustc_private` feature configuration.
+# Their examples are covered by the unit and UI suites instead.
 DOCTEST_EXCLUDES ?= --exclude rustc_ast --exclude rustc_attr_data_structures \
 	--exclude rustc_hir --exclude rustc_lint --exclude rustc_middle \
-	--exclude rustc_session --exclude rustc_span --exclude whitaker \
+	--exclude rustc_session --exclude rustc_span --exclude whitaker_lint_core \
 	--exclude rstest_helper_should_be_fixture \
 	$(foreach crate,$(LINT_CRATES),--exclude $(crate))
 CARGO_DYLINT_VERSION ?= 6.0.1
@@ -73,12 +75,11 @@ DYLINT_LINK_VERSION ?= 6.0.1
 DYLINT_TOOLS_TOOLCHAIN ?= stable
 WHITAKER_SCRIPT ?= $(HOME)/.local/bin/whitaker
 WHITAKER ?= whitaker
-# Crates linted by the Whitaker suite. The rustc_* proxy shims, the lint
-# crates, the aggregated suite, and the whitaker root crate all require
-# rustc_private plumbing (dylint-driver feature, prefer-dynamic RUSTFLAGS)
-# that `cargo dylint`'s plain check build cannot provide, so the suite runs
-# over the support crates that build as ordinary libraries.
-WHITAKER_PACKAGES ?= -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
+# Crates linted by the Whitaker suite. The rustc_* proxy shims, lint crates,
+# aggregated suite, and `whitaker_lint_core` require `rustc_private` plumbing
+# that `cargo dylint`'s plain check build cannot provide. The root CLI does
+# not, so the suite covers it with the ordinary support crates.
+WHITAKER_PACKAGES ?= -p whitaker -p whitaker-common -p whitaker-installer -p whitaker_clones_core -p whitaker_sarif
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -133,7 +134,9 @@ test: ## Run tests with warnings treated as errors
 		WHITAKER_BACKUP=""; \
 	fi; \
 	RUSTFLAGS="-C prefer-dynamic -Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) $(TEST_RUNNER) $(CARGO_LOCKED) $(TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) nextest run $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS) $(if $(NEXTEST_PROFILE),--profile $(NEXTEST_PROFILE)); \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test --workspace --doc --all-features $(DOCTEST_EXCLUDES) $(BUILD_JOBS); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(CARGO_LOCKED) $(CORE_TEST_CARGO_FLAGS) --doc $(BUILD_JOBS); \
 	if [ "$${ACT_WORKFLOW_TESTS:-0}" = "1" ]; then \
 		$(MAKE) workflow-test; \
 	fi
@@ -323,6 +326,7 @@ publish-check: ## Build, test, and validate packages before publishing
 	rustup component add --toolchain "$$TOOLCHAIN" rust-src rustc-dev llvm-tools-preview; \
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) build $(CARGO_LOCKED) --workspace --all-features $(BUILD_JOBS); \
 	RUSTFLAGS="-Z force-unstable-if-unmarked $(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(CARGO_LOCKED) --profile ci $(TEST_CARGO_FLAGS) $(BUILD_JOBS); \
+	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) +$$TOOLCHAIN nextest run $(CARGO_LOCKED) --profile ci $(CORE_TEST_CARGO_FLAGS) $(BUILD_JOBS); \
 	TMP_DIR=$$(mktemp -d); \
 	trap 'rm -rf "$$TMP_DIR"' 0 INT TERM HUP; \
 	DYLINT_TOOLS_DIR="$$TMP_DIR/dylint-tools"; \

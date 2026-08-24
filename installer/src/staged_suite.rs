@@ -7,7 +7,8 @@
 use std::fs;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use whitaker_installer::{
+
+use crate::{
     crate_name::CrateName,
     error::{InstallerError, Result},
     resolution::SUITE_CRATE,
@@ -64,9 +65,9 @@ mod tests {
     use rstest::{fixture, rstest};
     use temp_env::{with_var, with_var_unset};
     use tempfile::TempDir;
-    use whitaker_installer::test_support::env_test_guard;
 
     use super::*;
+    use crate::test_support::env_test_guard;
 
     struct StagedSuiteSetup {
         _guard: std::sync::MutexGuard<'static, ()>,
