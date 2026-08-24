@@ -22,7 +22,7 @@ mod lib_ui_tests;
 mod tests;
 #[cfg(all(feature = "dylint-driver", test))]
 mod ui {
-    whitaker::declare_ui_tests!("ui");
+    whitaker_lint_core::declare_ui_tests!("ui");
 }
 
 // Re-export only the documented lint surface. `impl_late_lint!` also expands

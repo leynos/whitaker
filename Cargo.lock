@@ -208,8 +208,8 @@ dependencies = [
  "serde",
  "tempfile",
  "toml 1.1.4+spec-1.1.0",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -460,8 +460,8 @@ dependencies = [
  "serde",
  "serial_test",
  "tempfile",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1037,8 +1037,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serial_test",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1711,8 +1711,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "tempfile",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1733,8 +1733,8 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "serial_test",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1764,8 +1764,8 @@ dependencies = [
  "serde",
  "temp-env",
  "tokio",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1794,8 +1794,8 @@ dependencies = [
  "serial_test",
  "tempfile",
  "toml 1.1.4+spec-1.1.0",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -1818,8 +1818,8 @@ dependencies = [
  "rustc_span",
  "serde",
  "temp-env",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -2383,8 +2383,8 @@ dependencies = [
  "serde",
  "toml 1.1.4+spec-1.1.0",
  "trybuild",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
 ]
 
 [[package]]
@@ -2910,8 +2910,8 @@ dependencies = [
  "rustc_lint",
  "rustc_span",
  "serde",
- "whitaker",
  "whitaker-common",
+ "whitaker_lint_core",
  "whitaker_test_macros",
 ]
 
@@ -3439,26 +3439,6 @@ dependencies = [
 [[package]]
 name = "whitaker"
 version = "0.2.7"
-dependencies = [
- "camino",
- "cargo_metadata",
- "clap",
- "dylint_linting",
- "dylint_testing",
- "rstest",
- "rstest-bdd",
- "rstest-bdd-macros",
- "rustc_ast",
- "rustc_hir",
- "rustc_lint",
- "rustc_span",
- "serde",
- "thiserror 2.0.20",
- "toml 1.1.4+spec-1.1.0",
- "whitaker-common",
- "whitaker-installer",
- "whitaker_test_macros",
-]
 
 [[package]]
 name = "whitaker-common"
@@ -3537,6 +3517,29 @@ dependencies = [
  "toml 1.1.4+spec-1.1.0",
  "tracing",
  "whitaker_sarif",
+ "whitaker_test_macros",
+]
+
+[[package]]
+name = "whitaker_lint_core"
+version = "0.2.7"
+dependencies = [
+ "camino",
+ "cargo_metadata",
+ "clap",
+ "dylint_linting",
+ "dylint_testing",
+ "rstest",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "rustc_ast",
+ "rustc_hir",
+ "rustc_lint",
+ "rustc_span",
+ "serde",
+ "thiserror 2.0.20",
+ "toml 1.1.4+spec-1.1.0",
+ "whitaker-common",
  "whitaker_test_macros",
 ]
 

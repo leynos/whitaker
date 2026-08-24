@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use toml::Value;
-use whitaker::lints::{LintCrateTemplate, TemplateError, TemplateFiles};
+use whitaker_lint_core::lints::{LintCrateTemplate, TemplateError, TemplateFiles};
 
 #[derive(Debug, Default)]
 struct TemplateWorld {
@@ -167,23 +167,23 @@ fn then_manifest_reuses_shared_dependencies(world: &TemplateWorld) {
         panic!("dev-dependencies table should exist");
     };
 
-    let Some(whitaker) = dev_dependencies.get("whitaker").and_then(Value::as_table) else {
-        panic!("whitaker dev-dependency should exist");
+    let Some(core) = dev_dependencies
+        .get("whitaker_lint_core")
+        .and_then(Value::as_table)
+    else {
+        panic!("whitaker_lint_core dev-dependency should exist");
     };
 
-    let dev_path = whitaker
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let dev_path = core.get("path").and_then(Value::as_str).unwrap_or_default();
 
-    assert_eq!(dev_path, "../../");
+    assert_eq!(dev_path, "../whitaker_lint_core");
 }
 
 #[then("the library includes UI test harness boilerplate for directory {directory}")]
 fn then_library_includes_harness(world: &TemplateWorld, directory: StepString) {
     let files = world.files();
     let directory_value = directory.into_inner();
-    let expected = format!("whitaker::declare_ui_tests!(\"{directory_value}\");");
+    let expected = format!("whitaker_lint_core::declare_ui_tests!(\"{directory_value}\");");
     assert!(files.lib_rs().contains(expected.as_str()));
 }
 

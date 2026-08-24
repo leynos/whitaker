@@ -18,6 +18,7 @@ fn ui_runs_in_welsh_locale() { run_ui_with_locale("ui-cy", Some("cy")); }
 
 fn run_ui_with_locale(directory: &str, locale: Option<&str>) {
     with_locale(locale, || {
-        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+        whitaker_lint_core::run_ui_tests!(directory)
+            .expect("UI tests should execute without diffs");
     });
 }

@@ -8,7 +8,6 @@ use rustc_hir::Node;
 use rustc_lint::{LateContext, LateLintPass, LintContext};
 use rustc_span::{Ident, Span, Symbol};
 use serde::Deserialize;
-use whitaker::{SharedConfig, hir::has_test_like_hir_attributes};
 use whitaker_common::{
     AttributePath,
     i18n::{
@@ -23,6 +22,7 @@ use whitaker_common::{
         safe_resolve_message_set,
     },
 };
+use whitaker_lint_core::{SharedConfig, hir::has_test_like_hir_attributes};
 
 use crate::heuristics::{DocExampleViolation, detect_example_violation};
 

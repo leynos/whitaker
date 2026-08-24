@@ -12,7 +12,7 @@ version = "0.2.7"
 [workspace.dependencies]
 whitaker-common = { path = "common", version = "0.2.7" }
 whitaker-installer = { path = "installer", version = "0.2.7" }
-whitaker = { path = ".", version = "0.2.7" }
+whitaker_lint_core = { path = "crates/whitaker_lint_core", version = "0.2.7" }
 camino = "1.2.1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 cargo_metadata = "0.23.0"
@@ -69,41 +69,13 @@ rustc_span = { path = "crates/rustc_span", version = "0.2.7" }
 name = "whitaker"
 version = "0.2.7"
 edition = "2024"
-
-[features]
-default = []
-dylint-driver = [
-    "dep:dylint_linting",
-    "dep:rustc_ast",
-    "dep:rustc_hir",
-    "dep:rustc_lint",
-    "dep:rustc_span",
-]
+description = "Whitaker command-line interface"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 
 [dependencies]
-
-camino = { workspace = true }
-cargo_metadata = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-serde = { workspace = true }
-toml = { workspace = true }
-thiserror = { workspace = true }
-whitaker-common = { workspace = true }
-whitaker-installer = { workspace = true }
-
-rustc_ast = { workspace = true, optional = true }
-rustc_hir = { workspace = true, optional = true }
-rustc_lint = { workspace = true, optional = true }
-rustc_span = { workspace = true, optional = true }
-dylint_linting = { workspace = true, optional = true }
-
-[dev-dependencies]
-whitaker_test_macros = { workspace = true }
-whitaker-common = { workspace = true }
-rstest = { workspace = true }
-rstest-bdd = { workspace = true }
-rstest-bdd-macros = { workspace = true }
-dylint_testing = { workspace = true }
 
 [lints]
 workspace = true

@@ -12,14 +12,18 @@
 //! `ui`, **not** `ui::ui`) and asserts that the nextest filter contains the
 //! clause needed to capture that pattern.
 
-use std::{fs, path::Path};
+use std::fs;
 
 use rstest::{fixture, rstest};
 use toml::Value;
 
+mod workspace_support;
+
+use workspace_support::workspace_root;
+
 /// Parses `.config/nextest.toml` into a [`Value`].
 fn load_nextest_config() -> Value {
-    let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".config/nextest.toml");
+    let config_path = workspace_root().join(".config/nextest.toml");
     let contents = fs::read_to_string(&config_path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", config_path.display()));
     toml::from_str(&contents)
@@ -62,7 +66,7 @@ fn extract_filter(ui_override: &Value) -> &str {
 /// name of `ui`.  The substring match `test(ui::ui)` does **not** capture
 /// them because the reported test name is plain `ui`, not `ui::ui`.
 fn crates_with_integration_ui_test() -> Vec<String> {
-    let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates");
+    let crates_dir = workspace_root().join("crates");
 
     let entries = fs::read_dir(&crates_dir)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", crates_dir.display()));

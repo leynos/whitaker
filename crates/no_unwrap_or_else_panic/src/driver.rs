@@ -7,8 +7,8 @@ use rustc_hir as hir;
 use rustc_hir::ExprKind;
 use rustc_lint::{LateContext, LateLintPass};
 use serde::Deserialize;
-use whitaker::SharedConfig;
 use whitaker_common::i18n::{Localizer, get_localizer_for_lint};
+use whitaker_lint_core::SharedConfig;
 
 use crate::{
     LINT_NAME,
@@ -83,8 +83,8 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
 
         self.is_test_harness = cx.tcx.sess.opts.test;
         self.harness_test_functions = if self.is_test_harness {
-            let mut marked = whitaker::hir::collect_harness_test_functions(cx);
-            marked.extend(whitaker::hir::collect_rstest_companion_test_functions(cx));
+            let mut marked = whitaker_lint_core::hir::collect_harness_test_functions(cx);
+            marked.extend(whitaker_lint_core::hir::collect_rstest_companion_test_functions(cx));
             marked
         } else {
             HashSet::new()

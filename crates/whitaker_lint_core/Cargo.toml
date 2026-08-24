@@ -1,45 +1,40 @@
 [package]
-name = "module_must_have_inner_docs"
+name = "whitaker_lint_core"
 version = "0.2.7"
 edition = "2024"
-
-[lib]
-crate-type = ["cdylib", "rlib"]
+publish = false
 
 [features]
 default = []
 dylint-driver = [
-    "dep:whitaker-common",
     "dep:dylint_linting",
-    "dep:log",
     "dep:rustc_ast",
     "dep:rustc_hir",
     "dep:rustc_lint",
-    "dep:rustc_session",
     "dep:rustc_span",
-    "dep:whitaker_lint_core",
 ]
-constituent = ["dylint-driver", "dylint_linting/constituent"]
 
 [dependencies]
+camino = { workspace = true }
+cargo_metadata = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 dylint_linting = { workspace = true, optional = true }
 rustc_ast = { workspace = true, optional = true }
 rustc_hir = { workspace = true, optional = true }
 rustc_lint = { workspace = true, optional = true }
-rustc_session = { workspace = true, optional = true }
 rustc_span = { workspace = true, optional = true }
-whitaker-common = { workspace = true, optional = true }
-log = { workspace = true, optional = true }
-whitaker_lint_core = { workspace = true, features = ["dylint-driver"], optional = true }
-newt-hype = "0.2"
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+whitaker-common = { workspace = true }
 
 [dev-dependencies]
-whitaker_test_macros = { workspace = true }
+dylint_testing = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
-dylint_testing = { workspace = true }
-serial_test = "4.0.1"
+whitaker-common = { workspace = true }
+whitaker_test_macros = { workspace = true }
 
 [lints]
 workspace = true
