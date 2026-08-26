@@ -45,7 +45,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@57a33fa65e329db7edc81ece661f1a2e1d39868f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -143,7 +143,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@57a33fa65e329db7edc81ece661f1a2e1d39868f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
 
       - name: Add target
         run: rustup target add "${{ matrix.target }}"
@@ -233,7 +233,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@57a33fa65e329db7edc81ece661f1a2e1d39868f
+        uses: leynos/shared-actions/.github/actions/setup-rust@f4764bea8d813b1a8f7ebc37a44907d3c3b1e0e4
 
       - name: Build dependency packaging tool
         run: cargo build --release -p whitaker-installer --bin whitaker-package-dependency-binary
