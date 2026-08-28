@@ -1,9 +1,11 @@
 //! Behaviour-driven coverage for predicate branch evaluation logic.
 
-use super::{ConditionDisposition, evaluate_condition};
+use std::cell::Cell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::Cell;
+
+use super::{ConditionDisposition, evaluate_condition};
 
 #[derive(Default)]
 struct PredicateWorld {
@@ -33,6 +35,7 @@ impl PredicateWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> PredicateWorld {
     PredicateWorld::default()

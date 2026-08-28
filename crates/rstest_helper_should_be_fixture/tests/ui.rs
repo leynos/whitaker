@@ -11,13 +11,15 @@
 #[cfg(feature = "dylint-driver")]
 extern crate rustc_driver;
 
-use dylint_testing::ui::Test;
-use rstest::rstest;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use whitaker_common::test_support::{EnvVarGuard, run_test_runner};
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
+use dylint_testing::ui::Test;
 use harness_lock::ExampleHarnessLock;
+use rstest::rstest;
+use whitaker_common::test_support::{run_test_runner, with_env_var};
 
 // Internal test-only hook mirrored in the lint driver. It asks
 // `check_crate_post` to append redacted, shape-only passive collection
@@ -41,7 +43,11 @@ fn example_harness_collects_call_site_evidence() {
     for expected in [
         "callee_count=3",
         "record_count=9",
-        "callee=Builder::<'_>::build;records=2\nfingerprint=unsupported,fixture-local\nfingerprint=unsupported,fixture-local",
+        concat!(
+            "callee=Builder::<'_>::build;records=2\n",
+            "fingerprint=unsupported,fixture-local\n",
+            "fingerprint=unsupported,fixture-local",
+        ),
         "callee=helper;records=2",
         "callee=nested_helper;records=5",
         "fingerprint=unsupported,fixture-local",
@@ -72,29 +78,34 @@ fn trybuild_fixtures_compile_without_diagnostics() {
 /// releasing the lock mid-assertion, which would let a concurrent run append to
 /// the same summary path.
 struct ExampleHarness {
-    _lock: ExampleHarnessLock,
+    lock: ExampleHarnessLock,
 }
 
 impl ExampleHarness {
     fn acquire() -> Self {
-        let lock = ExampleHarnessLock::acquire().expect("example harness lock should be acquired");
-        Self { _lock: lock }
+        match ExampleHarnessLock::acquire() {
+            Ok(lock) => Self { lock },
+            Err(error) => panic!("example harness lock should be acquired: {error}"),
+        }
     }
 
     /// Compiles and runs one example while the lock is held.
     fn run_example(&self, example: &str) {
         let crate_name = env!("CARGO_PKG_NAME");
         let directory = "examples";
-        whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+        let lock_path = self.lock.path().display();
+        whitaker::testing::ui::run_with_runner(crate_name, directory, |runner_crate, _| {
             run_test_runner(example, || {
-                let mut test = Test::example(crate_name, example);
+                let mut test = Test::example(runner_crate, example);
                 test.rustc_flags(["--test"]);
                 test.run();
             })
         })
         .unwrap_or_else(|error| {
             panic!(
-                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
+                 \"{crate_name}\", directory: \"{directory}\", lock: \"{lock_path}\", message: \
+                 {error} }}"
             )
         });
     }
@@ -102,17 +113,20 @@ impl ExampleHarness {
     /// Runs `example` with the collection-summary env var pointed at a fresh
     /// path, returning the appended summary text.
     ///
-    /// The env-var guard and the harness lock are both held across the run and
-    /// the read, and the summary file is removed before returning, so no
-    /// concurrently scheduled run can append to the same path mid-read.
+    /// The scoped env override and the harness lock are both held across the
+    /// run and the read, and the summary file is removed before returning, so
+    /// no concurrently scheduled run can append to the same path mid-read.
     fn collect_summary(&self, example: &str) -> String {
         let summary_path = unique_summary_path();
-        let _guard = EnvVarGuard::set(COLLECTION_SUMMARY_ENV, summary_path.as_os_str());
-        self.run_example(example);
-        let summary =
-            std::fs::read_to_string(&summary_path).expect("collection summary should be written");
-        let _ = std::fs::remove_file(&summary_path);
-        summary
+        with_env_var(COLLECTION_SUMMARY_ENV, summary_path.as_os_str(), || {
+            self.run_example(example);
+            let summary = match std::fs::read_to_string(&summary_path) {
+                Ok(summary) => summary,
+                Err(error) => panic!("collection summary should be written: {error}"),
+            };
+            let _cleanup_result = std::fs::remove_file(&summary_path);
+            summary
+        })
     }
 }
 
