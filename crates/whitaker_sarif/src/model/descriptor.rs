@@ -61,6 +61,7 @@ pub struct MultiformatMessageString {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
     #[test]
     fn descriptor_round_trip() {
@@ -72,13 +73,7 @@ mod tests {
             }),
             help_uri: Some("https://example.com".into()),
         };
-        match serde_json::to_string(&desc) {
-            Ok(json) => match serde_json::from_str::<ReportingDescriptor>(&json) {
-                Ok(parsed) => assert_eq!(desc, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&desc);
     }
 
     #[test]
@@ -89,14 +84,17 @@ mod tests {
             short_description: None,
             help_uri: None,
         };
-        match serde_json::to_string(&desc) {
-            Ok(json) => {
-                assert!(!json.contains("\"name\""));
-                assert!(!json.contains("\"shortDescription\""));
-                assert!(!json.contains("\"helpUri\""));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&desc, |json| {
+            assert!(!json.contains("\"name\""), "unset name present: {json}");
+            assert!(
+                !json.contains("\"shortDescription\""),
+                "unset shortDescription present: {json}"
+            );
+            assert!(
+                !json.contains("\"helpUri\""),
+                "unset helpUri present: {json}"
+            );
+        });
     }
 
     #[test]
@@ -109,12 +107,15 @@ mod tests {
             }),
             help_uri: Some("https://example.com".into()),
         };
-        match serde_json::to_string(&desc) {
-            Ok(json) => {
-                assert!(json.contains("\"shortDescription\""));
-                assert!(json.contains("\"helpUri\""));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&desc, |json| {
+            assert!(
+                json.contains("\"shortDescription\""),
+                "camelCase shortDescription missing: {json}"
+            );
+            assert!(
+                json.contains("\"helpUri\""),
+                "camelCase helpUri missing: {json}"
+            );
+        });
     }
 }

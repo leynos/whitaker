@@ -1,7 +1,7 @@
 //! Shared fixtures and command helpers for CLI behaviour tests.
 
 use std::{
-    cell::{Cell, Ref, RefCell},
+    cell::{Cell, RefCell},
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -214,16 +214,6 @@ pub(super) fn run_installer_cli(cli_world: &CliWorld) {
         panic!("whitaker-installer should run");
     };
     cli_world.output.replace(Some(output));
-}
-
-pub(super) fn get_output(cli_world: &CliWorld) -> Ref<'_, Output> {
-    let output_slot = cli_world.output.borrow();
-    Ref::map(output_slot, |opt| {
-        let Some(output) = opt.as_ref() else {
-            panic!("output not set");
-        };
-        output
-    })
 }
 
 #[path = "support_assertions.rs"]

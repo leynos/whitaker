@@ -31,10 +31,12 @@ fn assert_single_accepted(
     assert_eq!(accepted[0].score(), expected_score);
 }
 
-fn assert_region(id: &str, source: &str, range: std::ops::Range<usize>, expected: Region) {
-    let region = region_for_range(id, source, range)
-        .unwrap_or_else(|error| panic!("unexpected region error: {error}"));
-    assert_eq!(region, expected);
+/// Resolves the region for `range`, panicking with context on failure.
+fn resolved_region(id: &str, source: &str, range: std::ops::Range<usize>) -> Region {
+    match region_for_range(id, source, range) {
+        Ok(region) => region,
+        Err(error) => panic!("unexpected region error for fragment '{id}': {error}"),
+    }
 }
 
 #[test]
@@ -115,10 +117,9 @@ fn just_below_threshold_is_rejected() {
 
 #[test]
 fn single_line_region_uses_one_based_columns() {
-    assert_region(
-        "alpha",
-        "fn a() {}\n",
-        0..8,
+    let region = resolved_region("alpha", "fn a() {}\n", 0..8);
+    assert_eq!(
+        region,
         Region {
             start_line: 1,
             start_column: Some(1),
@@ -132,10 +133,9 @@ fn single_line_region_uses_one_based_columns() {
 
 #[test]
 fn multi_line_region_tracks_trailing_newline() {
-    assert_region(
-        "alpha",
-        "fn alpha() {\n    value();\n}\n",
-        13..27,
+    let region = resolved_region("alpha", "fn alpha() {\n    value();\n}\n", 13..27);
+    assert_eq!(
+        region,
         Region {
             start_line: 2,
             start_column: Some(1),
