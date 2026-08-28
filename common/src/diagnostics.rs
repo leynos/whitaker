@@ -1,5 +1,4 @@
 //! Ergonomic builders for lint diagnostics and suggestions.
-#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use crate::span::SourceSpan;
 

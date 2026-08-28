@@ -1,5 +1,4 @@
 //! Utilities for working with source locations and spans.
-#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use std::ops::RangeInclusive;
 
@@ -47,7 +46,7 @@ impl SourceLocation {
 
     /// Returns true when this location is positioned after other.
     #[must_use]
-    pub const fn is_after(self, other: SourceLocation) -> bool {
+    pub const fn is_after(self, other: Self) -> bool {
         self.line > other.line || (self.line == other.line && self.column > other.column)
     }
 }
@@ -62,6 +61,10 @@ pub struct SourceSpan {
 impl SourceSpan {
     /// Constructs a new span from two locations.
     ///
+    /// # Errors
+    ///
+    /// Returns [`SpanError::StartAfterEnd`] when `start` is positioned after `end`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -71,7 +74,7 @@ impl SourceSpan {
     /// assert_eq!(span.start().line(), 1);
     /// ```
     #[must_use = "Inspect the span creation result to handle invalid ranges"]
-    pub fn new(start: SourceLocation, end: SourceLocation) -> Result<Self, SpanError> {
+    pub const fn new(start: SourceLocation, end: SourceLocation) -> Result<Self, SpanError> {
         if start.is_after(end) {
             Err(SpanError::StartAfterEnd)
         } else {
@@ -103,7 +106,7 @@ impl SourceSpan {
 /// assert_eq!(span_to_lines(span), 4..=6);
 /// ```
 #[must_use]
-pub fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
+pub const fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
     span.start.line()..=span.end.line()
 }
 
@@ -118,7 +121,7 @@ pub fn span_to_lines(span: SourceSpan) -> RangeInclusive<usize> {
 /// assert_eq!(span_line_count(span), 4);
 /// ```
 #[must_use]
-pub fn span_line_count(span: SourceSpan) -> usize {
+pub const fn span_line_count(span: SourceSpan) -> usize {
     span.end.line() - span.start.line() + 1
 }
 

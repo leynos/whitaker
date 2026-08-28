@@ -126,8 +126,8 @@ fn is_std_fs_path(path: &SimplePath) -> bool {
     segments.len() >= 2 && segments[0] == "std" && segments[1] == "fs"
 }
 
-/// Returns true if the character should be rejected in a valid std::fs label.
-fn is_invalid_label_char(ch: char) -> bool {
+/// Returns true if the character should be rejected in a valid `std::fs` label.
+const fn is_invalid_label_char(ch: char) -> bool {
     ch.is_whitespace() || matches!(ch, '(' | ')')
 }
 

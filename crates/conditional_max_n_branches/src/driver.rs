@@ -25,6 +25,7 @@ mod numeric;
 use self::numeric::diagnostic_integer_argument;
 
 const LINT_NAME: &str = "conditional_max_n_branches";
+
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -300,7 +301,7 @@ fn normalize_isolation_marks(text: &str) -> String {
             })
             .collect()
     } else {
-        text.to_string()
+        text.to_owned()
     }
 }
 

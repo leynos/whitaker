@@ -1,4 +1,4 @@
-//! Deterministic MinHash sketch generation for token-pass clone candidates.
+//! Deterministic `MinHash` sketch generation for token-pass clone candidates.
 //!
 //! This module turns retained token [`Fingerprint`] values into fixed-width
 //! [`MinHashSignature`] values for the clone-detector index API. [`MinHasher`]
@@ -7,7 +7,7 @@
 //! deduplicated hash values so sketching has set semantics rather than multiset
 //! semantics.
 //!
-//! Internally, [`Seed`] keeps MinHash seed values distinct from raw fingerprint
+//! Internally, [`Seed`] keeps `MinHash` seed values distinct from raw fingerprint
 //! hashes at the type level. The hashing core still accepts raw `u64` hash
 //! values because fingerprints and signature lanes are represented as hash
 //! words throughout the index API.
@@ -15,7 +15,7 @@
 //! The `#[cfg(kani)]` constructors and the unrolled `sketch_values`
 //! implementation are proof seams for bounded model checking. They keep Kani
 //! harnesses focused on [`MinHasher::sketch`] invariants without changing the
-//! production API or the production [`array::from_fn`] implementation.
+//! production API or the production array `map` implementation.
 //!
 //! [`LshIndex`](super::LshIndex) in `lsh.rs` consumes the signatures produced
 //! here by partitioning them into configured bands and emitting candidate
@@ -33,14 +33,14 @@ const SEED_STREAM_START: u64 = 0x243F_6A88_85A3_08D3;
 const SEED_STREAM_STEP: u64 = 0x9E37_79B9_7F4A_7C15;
 const HASH_MIX: u64 = 0x94D0_49BB_1331_11EB;
 
-/// A typed MinHash seed value.
+/// A typed `MinHash` seed value.
 ///
 /// Keeps seed values distinct from raw hash values at the type level,
 /// preventing accidental argument transposition inside the hashing core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Seed(u64);
 
-/// Deterministic MinHash sketcher for retained token fingerprints.
+/// Deterministic `MinHash` sketcher for retained token fingerprints.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinHasher {
     seeds: [Seed; MINHASH_SIZE],
@@ -53,7 +53,7 @@ impl Default for MinHasher {
 }
 
 impl MinHasher {
-    /// Creates the fixed 128-seed MinHash family used by roadmap item 7.2.2.
+    /// Creates the fixed 128-seed `MinHash` family used by roadmap item 7.2.2.
     ///
     /// # Examples
     ///
@@ -72,10 +72,10 @@ impl MinHasher {
         Self { seeds }
     }
 
-    /// Builds a MinHash sketch from retained fingerprint hashes.
+    /// Builds a `MinHash` sketch from retained fingerprint hashes.
     ///
     /// Duplicate fingerprint hash values are collapsed first so the sketch uses
-    /// MinHash set semantics rather than multiset semantics.
+    /// `MinHash` set semantics rather than multiset semantics.
     ///
     /// # Errors
     ///
@@ -84,7 +84,7 @@ impl MinHasher {
     pub fn sketch(&self, fingerprints: &[Fingerprint]) -> IndexResult<MinHashSignature> {
         let unique_hashes = unique_hashes(fingerprints)?;
         let values = sketch_values(&self.seeds, &unique_hashes);
-        Ok(MinHashSignature::new(values))
+        Ok(MinHashSignature::new(&values))
     }
 
     /// Creates a deterministic proof-only fixture for Kani harnesses.
@@ -127,17 +127,17 @@ impl MinHasher {
     }
 }
 
-/// Computes the 128-lane MinHash signature in production builds.
+/// Computes the 128-lane `MinHash` signature in production builds.
 ///
 /// Two `cfg`-specific implementations exist to balance production idiom
 /// against proof tractability. This production variant uses idiomatic
-/// [`array::from_fn`] iteration. It is mechanically equivalent to the
+/// array `map` iteration. It is mechanically equivalent to the
 /// `#[cfg(kani)]` proof-seam variant: both call [`minimum_mixed_hash`] once per
-/// lane to produce the same 128-lane MinHash signature from the seeds and
+/// lane to produce the same 128-lane `MinHash` signature from the seeds and
 /// unique hashes.
 #[cfg(not(kani))]
 fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; MINHASH_SIZE] {
-    array::from_fn(|index| minimum_mixed_hash(seeds[index], unique_hashes))
+    seeds.map(|seed| minimum_mixed_hash(seed, unique_hashes))
 }
 
 /// Computes the 128-lane MinHash signature with explicit unrolling for Kani.
@@ -146,7 +146,7 @@ fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; M
 /// against proof tractability. This `#[cfg(kani)]` proof seam manually unrolls
 /// every [`minimum_mixed_hash`] call so Kani's bounded model checker does not
 /// spend proof budget on iterator or loop state expansion. The explicit array
-/// literal is mechanically equivalent to the production [`array::from_fn`]
+/// literal is mechanically equivalent to the production array `map`
 /// implementation: both compute the same 128-lane MinHash signature from the
 /// seeds and unique hashes.
 // `@codescene/suppress` Large Method proof-seam: keep manual unrolling for Kani tractability
@@ -284,7 +284,7 @@ fn sketch_values(seeds: &[Seed; MINHASH_SIZE], unique_hashes: &[u64]) -> [u64; M
     ]
 }
 
-/// Extracts sorted, deduplicated fingerprint hashes for MinHash set semantics.
+/// Extracts sorted, deduplicated fingerprint hashes for `MinHash` set semantics.
 ///
 /// This `pub(super)` helper is restricted to the parent module and converts
 /// retained [`Fingerprint`] values into the Vec-backed set representation used
@@ -312,7 +312,7 @@ fn minimum_mixed_hash(seed: Seed, hashes: &[u64]) -> u64 {
     })
 }
 
-fn mix_hash(seed: u64, hash: u64) -> u64 {
+const fn mix_hash(seed: u64, hash: u64) -> u64 {
     splitmix64(seed ^ hash.wrapping_mul(HASH_MIX))
 }
 
@@ -321,16 +321,16 @@ fn mix_hash(seed: u64, hash: u64) -> u64 {
 /// Both `next_seed` and `splitmix64` intentionally add `SEED_STREAM_STEP` to
 /// create a non-overlapping, deterministic seed sequence compatible with the
 /// seed-streaming approach. This double-increment is deliberate, not a bug.
-fn next_seed(state: &mut u64) -> Seed {
+const fn next_seed(state: &mut u64) -> Seed {
     *state = state.wrapping_add(SEED_STREAM_STEP);
     Seed(splitmix64(*state))
 }
 
-/// SplitMix64 generator with deliberate `SEED_STREAM_STEP` addition.
+/// `SplitMix64` generator with deliberate `SEED_STREAM_STEP` addition.
 ///
 /// This function applies `SEED_STREAM_STEP` in addition to the increment in
 /// `next_seed` to ensure deterministic, non-overlapping seed values.
-fn splitmix64(value: u64) -> u64 {
+const fn splitmix64(value: u64) -> u64 {
     let mut mixed = value.wrapping_add(SEED_STREAM_STEP);
     mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);

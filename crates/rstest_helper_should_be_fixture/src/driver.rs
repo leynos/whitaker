@@ -185,8 +185,7 @@ impl RstestHelperShouldBeFixture {
         {
             debug!(
                 target: LINT_NAME,
-                "skipping helper call-site collection for non-rstest function: def_id={:?}",
-                def_id,
+                "skipping helper call-site collection for non-rstest function: def_id={def_id:?}",
             );
             return;
         }
@@ -241,8 +240,7 @@ impl<'tcx> LateLintPass<'tcx> for RstestHelperShouldBeFixture {
         if let Err(error) = self.write_collection_summary() {
             debug!(
                 target: LINT_NAME,
-                "failed to write rstest helper call-site collection summary: {}",
-                error,
+                "failed to write rstest helper call-site collection summary: {error}",
             );
         }
         debug!(

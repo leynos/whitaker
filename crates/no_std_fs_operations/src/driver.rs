@@ -157,7 +157,7 @@ struct LintSite {
 impl NoStdFsOperations {
     /// Centralizes exclusion logic for all lint pass methods.
     #[inline]
-    fn should_skip(&self) -> bool {
+    const fn should_skip(&self) -> bool {
         self.excluded
     }
 

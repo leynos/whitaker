@@ -67,7 +67,7 @@ impl DecompositionContext {
 
     /// Returns the analysed subject kind.
     #[must_use]
-    pub fn subject_kind(&self) -> SubjectKind {
+    pub const fn subject_kind(&self) -> SubjectKind {
         self.subject_kind
     }
 }
@@ -112,25 +112,25 @@ impl MethodProfile {
 
     /// Returns accessed fields.
     #[must_use]
-    pub fn accessed_fields(&self) -> &BTreeSet<String> {
+    pub const fn accessed_fields(&self) -> &BTreeSet<String> {
         &self.accessed_fields
     }
 
     /// Returns types used in the method signature.
     #[must_use]
-    pub fn signature_types(&self) -> &BTreeSet<String> {
+    pub const fn signature_types(&self) -> &BTreeSet<String> {
         &self.signature_types
     }
 
     /// Returns types used in local variables.
     #[must_use]
-    pub fn local_types(&self) -> &BTreeSet<String> {
+    pub const fn local_types(&self) -> &BTreeSet<String> {
         &self.local_types
     }
 
     /// Returns external domains used by the method.
     #[must_use]
-    pub fn external_domains(&self) -> &BTreeSet<String> {
+    pub const fn external_domains(&self) -> &BTreeSet<String> {
         &self.external_domains
     }
 }

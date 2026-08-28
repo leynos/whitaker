@@ -42,7 +42,7 @@ impl LintPolicy {
 /// assert!(should_flag(&policy, &summary, &info, false));
 /// ```
 #[must_use]
-pub(crate) fn should_flag(
+pub(crate) const fn should_flag(
     policy: &LintPolicy,
     summary: &ContextSummary,
     panic_info: &PanicInfo,

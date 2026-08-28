@@ -216,7 +216,7 @@ fn count_node_kinds(node: &NormalizedNode, depth: Depth, counts: &mut KindCounts
     }
 }
 
-fn next_depth(depth: Depth) -> Depth {
+const fn next_depth(depth: Depth) -> Depth {
     Depth::new(depth.get().saturating_add(1))
 }
 
@@ -272,10 +272,10 @@ mod tests {
     proptest! {
         #[test]
         fn each_representable_count_increases_its_weight(
-            depth in 0_u16..64,
+            raw_depth in 0_u16..64,
             count in 0_u32..u32::MAX
         ) {
-            let depth = Depth::new(depth);
+            let depth = Depth::new(raw_depth);
             let current_weight = weighted_contribution(depth, count);
             let increased_weight = weighted_contribution(depth, count + 1);
 

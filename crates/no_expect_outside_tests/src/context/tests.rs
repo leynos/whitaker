@@ -69,22 +69,31 @@ struct HasTestAncestryCase {
 // Common path constants
 #[cfg(feature = "dylint-driver")]
 const PATH_CFG: PathSegments = PathSegments::new(&["cfg"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_TEST: PathSegments = PathSegments::new(&["test"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_ANY: PathSegments = PathSegments::new(&["any"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_ALL: PathSegments = PathSegments::new(&["all"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_NOT: PathSegments = PathSegments::new(&["not"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_CFG_ATTR: PathSegments = PathSegments::new(&["cfg_attr"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_ALLOW: PathSegments = PathSegments::new(&["allow"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_DOCTEST: PathSegments = PathSegments::new(&["doctest"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_UNIX: PathSegments = PathSegments::new(&["unix"]);
+
 #[cfg(feature = "dylint-driver")]
 const PATH_DEAD_CODE: PathSegments = PathSegments::new(&["dead_code"]);
 
@@ -459,7 +468,7 @@ fn convert_attribute_handles_parsed_must_use() {
     // Should return a placeholder "parsed" path instead of panicking.
     assert_eq!(
         attribute.path().segments(),
-        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_string()]
+        &[PARSED_ATTRIBUTE_PLACEHOLDER.to_owned()]
     );
     assert_eq!(attribute.kind(), AttributeKind::Outer);
 }

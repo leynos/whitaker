@@ -44,7 +44,7 @@ use crate::{AttributeBody, MetaList, ParseInput};
 /// assert_eq!(offset, 5); // 2 bytes + 3 bytes.
 /// assert_eq!(rest.as_str(), "hello");
 /// ```
-pub(super) fn skip_leading_whitespace<'a>(snippet: ParseInput<'a>) -> (usize, ParseInput<'a>) {
+pub(super) fn skip_leading_whitespace(snippet: ParseInput<'_>) -> (usize, ParseInput<'_>) {
     let snippet_str = snippet.as_str();
     let trimmed = snippet_str.trim_start_matches(char::is_whitespace);
     let byte_offset = snippet_str.len().saturating_sub(trimmed.len());
@@ -110,7 +110,7 @@ fn is_doc_attr(attr_body: AttributeBody<'_>) -> bool {
 ///
 /// assert!(take_ident(ParseInput::from("  123")).is_none());
 /// ```
-pub(super) fn take_ident<'a>(input: ParseInput<'a>) -> Option<(ParseInput<'a>, ParseInput<'a>)> {
+pub(super) fn take_ident(input: ParseInput<'_>) -> Option<(ParseInput<'_>, ParseInput<'_>)> {
     let (_, trimmed) = skip_leading_whitespace(input);
     let trimmed_str = trimmed.as_str();
     let mut iter = trimmed_str.char_indices();
@@ -149,13 +149,13 @@ fn is_doc_ident(input: ParseInput<'_>) -> bool {
     false
 }
 
-fn is_ident_start(ch: char) -> bool {
+const fn is_ident_start(ch: char) -> bool {
     // Ident parsing is intentionally ASCII-only; we only need to recognize
     // built-in attribute names such as `doc` and `cfg_attr`.
     ch == '_' || ch.is_ascii_alphabetic()
 }
 
-fn is_ident_continue(ch: char) -> bool {
+const fn is_ident_continue(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
@@ -179,7 +179,7 @@ struct ParserStateAfterFirst {
 }
 
 impl ParserStateAfterFirst {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             depth: 0,
             start: 0,

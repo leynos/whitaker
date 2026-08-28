@@ -98,7 +98,7 @@ pub fn normalize_settings(settings: Settings) -> Settings {
         }
     }
 
-    fn is_valid_window(window: usize) -> bool {
+    const fn is_valid_window(window: usize) -> bool {
         window != 0 && (window & 1) == 1
     }
 
@@ -260,7 +260,7 @@ fn process_sample_value(value: f64, index: usize, context: &mut BumpDetectionCon
     context.area = 0.0;
 }
 
-fn finalize_bump(
+const fn finalize_bump(
     start: usize,
     end: usize,
     area: f64,

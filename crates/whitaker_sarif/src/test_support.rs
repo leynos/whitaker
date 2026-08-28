@@ -47,11 +47,15 @@ pub fn assert_serialized_json(value: &impl Serialize, check: impl FnOnce(&str)) 
     }
 }
 
-/// Build a [`SarifResult`] with a fingerprint, location, and region.
+/// Builds a [`SarifResult`] with a fingerprint, location, and region.
 ///
-/// Computes the end line as `line + 5`; integer overflow follows the active
-/// Rust overflow-check configuration. Panics if a region or result builder
-/// rejects its input; intended only for test code.
+/// Intended only for test code.
+///
+/// # Panics
+///
+/// Panics if the region or result builder rejects its inputs, which indicates
+/// a defect in the test fixture rather than a recoverable condition.
+#[must_use]
 pub fn make_keyed_result(rule: &str, file: &str, line: usize, fp: &str) -> SarifResult {
     let region = match RegionBuilder::new(line).with_end_line(line + 5).build() {
         Ok(r) => r,

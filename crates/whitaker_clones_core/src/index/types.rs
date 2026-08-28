@@ -1,10 +1,10 @@
-//! Shared MinHash and LSH index types.
+//! Shared `MinHash` and LSH index types.
 
 use std::{num::NonZeroUsize, slice::ChunksExact};
 
 use super::{FragmentId, IndexError, IndexResult};
 
-/// The fixed MinHash sketch width for roadmap item 7.2.2.
+/// The fixed `MinHash` sketch width for roadmap item 7.2.2.
 pub const MINHASH_SIZE: usize = 128;
 
 /// A canonical fragment pair emitted by the LSH candidate filter.
@@ -58,7 +58,7 @@ impl CandidatePair {
     }
 }
 
-/// Validated LSH settings for the fixed-width MinHash sketch.
+/// Validated LSH settings for the fixed-width `MinHash` sketch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LshConfig {
     bands: NonZeroUsize,
@@ -88,14 +88,17 @@ impl LshConfig {
     /// # Ok::<(), whitaker_clones_core::IndexError>(())
     /// ```
     pub fn new(bands: usize, rows: usize) -> IndexResult<Self> {
-        let Some(bands) = NonZeroUsize::new(bands) else {
+        let Some(band_count) = NonZeroUsize::new(bands) else {
             return Err(IndexError::ZeroBands);
         };
-        let Some(rows) = NonZeroUsize::new(rows) else {
+        let Some(row_count) = NonZeroUsize::new(rows) else {
             return Err(IndexError::ZeroRows);
         };
-        validate_product(bands, rows)?;
-        Ok(Self { bands, rows })
+        validate_product(band_count, row_count)?;
+        Ok(Self {
+            bands: band_count,
+            rows: row_count,
+        })
     }
 
     /// Returns the number of LSH bands.
@@ -111,7 +114,7 @@ impl LshConfig {
     }
 }
 
-fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> {
+const fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> {
     match bands.get().checked_mul(rows.get()) {
         Some(MINHASH_SIZE) => Ok(()),
         Some(_) | None => Err(IndexError::invalid_band_row_product(
@@ -121,14 +124,14 @@ fn validate_product(bands: NonZeroUsize, rows: NonZeroUsize) -> IndexResult<()> 
     }
 }
 
-/// A fixed-width MinHash sketch over retained fingerprint hashes.
+/// A fixed-width `MinHash` sketch over retained fingerprint hashes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinHashSignature([u64; MINHASH_SIZE]);
 
 impl MinHashSignature {
     #[must_use]
-    pub(crate) const fn new(values: [u64; MINHASH_SIZE]) -> Self {
-        Self(values)
+    pub(crate) const fn new(values: &[u64; MINHASH_SIZE]) -> Self {
+        Self(*values)
     }
 
     /// Returns the sketch values in order.

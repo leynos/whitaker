@@ -31,10 +31,7 @@ use rustc_span::sym;
 
 /// Summarize the context for a given HIR node.
 #[cfg(feature = "dylint-driver")]
-pub(crate) fn summarize_context<'tcx>(
-    cx: &LateContext<'tcx>,
-    hir_id: hir::HirId,
-) -> ContextSummary {
+pub(crate) fn summarize_context(cx: &LateContext<'_>, hir_id: hir::HirId) -> ContextSummary {
     let mut entries = Vec::new();
     let mut has_cfg_test = false;
 
@@ -69,7 +66,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
                 ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
             }),
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
-                "impl".to_string(),
+                "impl".to_owned(),
                 ContextKind::Impl,
                 convert_attributes(attrs),
             )),
@@ -90,7 +87,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
             _ => None,
         },
         Node::Block(_) => Some(ContextEntry::new(
-            "block".to_string(),
+            "block".to_owned(),
             ContextKind::Block,
             convert_attributes(attrs),
         )),
@@ -159,17 +156,14 @@ fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     if path[0] == sym::cfg {
         return attr
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
     if path[0] != sym::cfg_attr {
         return false;
     }
 
-    attr.meta_item_list()
-        .map(check_cfg_attr_for_test)
-        .unwrap_or(false)
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
 }
 
 #[cfg(feature = "dylint-driver")]
@@ -212,27 +206,22 @@ fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool 
     }
 
     if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .map(|items| {
-                items
-                    .iter()
-                    .cloned()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            })
-            .unwrap_or(false);
+        return meta.meta_item_list().is_some_and(|items| {
+            items
+                .iter()
+                .cloned()
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
     }
 
     meta.meta_item_list()
-        .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-        .unwrap_or(false)
+        .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test))
 }
 
 #[cfg(feature = "dylint-driver")]
 fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     meta.meta_item_list()
-        .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-        .unwrap_or(false)
+        .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test))
 }
 
 #[cfg(feature = "dylint-driver")]

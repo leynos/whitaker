@@ -18,11 +18,15 @@ use whitaker_common::i18n::MessageKey;
 use whitaker_common::{Localizer, get_localizer_for_lint};
 
 const LINT_NAME: &str = "bumpy_road_function";
+
 const MESSAGE_KEY: MessageKey<'static> = MessageKey::new(LINT_NAME);
 
 mod config;
+
 mod diagnostic;
+
 mod numeric;
+
 mod segment_builder;
 
 use self::config::load_configuration;
@@ -109,7 +113,7 @@ impl BumpyRoadFunction {
     }
 }
 
-fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
+const fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
     let hir::ItemKind::Fn { ident, body, .. } = item.kind else {
         return None;
     };
@@ -117,7 +121,7 @@ fn extract_item_target(item: &hir::Item<'_>) -> Option<AnalysisTarget> {
     Some(make_ident_target(ident, body))
 }
 
-fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> {
+const fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> {
     if let hir::ImplItemKind::Fn(_, body_id) = item.kind {
         return Some(make_analysis_target(
             item.ident.name,
@@ -129,7 +133,7 @@ fn extract_impl_item_target(item: &hir::ImplItem<'_>) -> Option<AnalysisTarget> 
     None
 }
 
-fn extract_trait_item_target(item: &hir::TraitItem<'_>) -> Option<AnalysisTarget> {
+const fn extract_trait_item_target(item: &hir::TraitItem<'_>) -> Option<AnalysisTarget> {
     let hir::TraitItemKind::Fn(_, trait_fn) = item.kind else {
         return None;
     };
@@ -157,7 +161,11 @@ fn extract_expr_target(expr: &hir::Expr<'_>) -> Option<AnalysisTarget> {
     ))
 }
 
-fn make_analysis_target(name: Symbol, primary_span: Span, body_id: hir::BodyId) -> AnalysisTarget {
+const fn make_analysis_target(
+    name: Symbol,
+    primary_span: Span,
+    body_id: hir::BodyId,
+) -> AnalysisTarget {
     AnalysisTarget {
         name,
         primary_span,
@@ -165,7 +173,7 @@ fn make_analysis_target(name: Symbol, primary_span: Span, body_id: hir::BodyId) 
     }
 }
 
-fn make_ident_target(ident: Ident, body_id: hir::BodyId) -> AnalysisTarget {
+const fn make_ident_target(ident: Ident, body_id: hir::BodyId) -> AnalysisTarget {
     make_analysis_target(ident.name, ident.span, body_id)
 }
 
