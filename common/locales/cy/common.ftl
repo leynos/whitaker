@@ -6,7 +6,7 @@
 -term-branch = cangen
 -term-test-coverage = cwmpas profion
 
-# Borrowed English nouns typically pluralise with -iau (Modern Welsh, Gareth
+# Borrowed English nouns typically pluralize with -iau (Modern Welsh, Gareth
 # King §2.8), so we render "lint" as "lintiau" in aggregated messaging.
 common-lint-count =
     { $lint ->

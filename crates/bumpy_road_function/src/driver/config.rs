@@ -1,7 +1,7 @@
 //! Configuration parsing and loading for the bumpy road lint.
 //!
 //! The lint reads optional configuration from `dylint.toml`, applies defaults,
-//! and relies on `analysis::normalise_settings` to clamp invalid values.
+//! and relies on `analysis::normalize_settings` to clamp invalid values.
 
 use crate::analysis::{Settings, Weights};
 use log::debug;

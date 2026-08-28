@@ -98,7 +98,7 @@ impl<'tcx> LateLintPass<'tcx> for NoUnwrapOrElsePanic {
             return;
         };
 
-        let summary = summarise_context_with_harness(
+        let summary = summarize_context_with_harness(
             cx,
             expr.hir_id,
             self.is_test_harness,
@@ -134,13 +134,13 @@ fn is_inside_harness_test_function<'tcx>(
 
 /// Summarizes the lint context for an expression, merging attribute-based and
 /// harness-based test detection into a single immutable result.
-fn summarise_context_with_harness<'tcx>(
+fn summarize_context_with_harness<'tcx>(
     cx: &LateContext<'tcx>,
     hir_id: hir::HirId,
     is_test_harness: bool,
     harness_test_functions: &HashSet<hir::HirId>,
 ) -> ContextSummary {
-    let mut summary = crate::context::summarise_context(cx, hir_id);
+    let mut summary = crate::context::summarize_context(cx, hir_id);
     if !summary.is_test && is_test_harness {
         summary.is_test = is_inside_harness_test_function(cx, hir_id, harness_test_functions);
     }

@@ -77,7 +77,7 @@ escalation, not a workaround.
   bare `ra_ap_syntax::`/`rowan::` path appears outside comments, with the
   forbidden-crate list as a `const`.
 - **No persisted `KindId` from 7.3.1.** Only `AstHash` (which is seeded with
-  `PARSER_SCHEMA_VERSION`) is hashable/serialisable in this item. `KindId` is
+  `PARSER_SCHEMA_VERSION`) is hashable/serializable in this item. `KindId` is
   an in-memory opaque token and must not be persisted, so a future cache
   (7.6.x) cannot accidentally compare raw discriminants across parser pins.
 - **Bounded per-candidate cost.** Lowering touches one candidate subtree; the
@@ -617,7 +617,7 @@ Decisions already taken while drafting this plan:
   corruption, no crash). Seeding makes every hash change on a bump, so any
   cross-pin cache compare fails closed. An `insta` snapshot of
   `PARSER_SCHEMA_VERSION` forces any bump to be reviewed. `KindId` itself is
-  **not** persisted by 7.3.1 (only `AstHash` is hashable/serialisable here);
+  **not** persisted by 7.3.1 (only `AstHash` is hashable/serializable here);
   this is stated as a Constraint so 7.6.x inherits the rule. Date/Author:
   2026-06-09, Doggylump (review panel).
 - Decision: **Promote the FNV-1a constants and byte-mixing step from

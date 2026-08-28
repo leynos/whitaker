@@ -31,7 +31,7 @@ use rustc_span::sym;
 
 /// Summarize the context for a given HIR node.
 #[cfg(feature = "dylint-driver")]
-pub(crate) fn summarise_context<'tcx>(
+pub(crate) fn summarize_context<'tcx>(
     cx: &LateContext<'tcx>,
     hir_id: hir::HirId,
 ) -> ContextSummary {

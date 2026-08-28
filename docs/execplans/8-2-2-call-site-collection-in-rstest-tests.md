@@ -892,13 +892,13 @@ If validation fails, inspect the matching
 changing code. Record persistent failures under "Surprises & discoveries" or
 "Decision log" with the command and log path.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Wyvern repository-pattern findings (summary):
 
 ```plaintext
 - No existing Whitaker lint uses check_crate_post. The current lints
-  initialise per-crate config in check_crate and emit diagnostics
+  initialize per-crate config in check_crate and emit diagnostics
   expression-locally through check_expr / check_fn / check_item /
   check_impl_item.
 - Callee resolution is consistently done via cx.qpath_res for Call and

@@ -97,7 +97,7 @@ impl LocaleSelection {
 
 /// Attempt to resolve a locale candidate from the given source.
 fn try_resolve_candidate(source: LocaleSource, raw: Option<&str>) -> Option<LocaleSelection> {
-    let candidate = normalise_locale(raw)?;
+    let candidate = normalize_locale(raw)?;
 
     if supports_locale(candidate) {
         return Some(LocaleSelection::new(
@@ -143,7 +143,7 @@ pub fn resolve_localizer(
 
 /// Trim whitespace and discard empty locale candidates.
 #[must_use]
-pub fn normalise_locale(input: Option<&str>) -> Option<&str> {
+pub fn normalize_locale(input: Option<&str>) -> Option<&str> {
     input.map(str::trim).filter(|value| !value.is_empty())
 }
 
@@ -223,7 +223,7 @@ mod tests {
     #[case(Some("  "), None)]
     #[case(Some("cy"), Some("cy"))]
     #[case(Some(" cy "), Some("cy"))]
-    fn normalises_candidates(#[case] input: Option<&str>, #[case] expected: Option<&str>) {
-        assert_eq!(normalise_locale(input), expected);
+    fn normalizes_candidates(#[case] input: Option<&str>, #[case] expected: Option<&str>) {
+        assert_eq!(normalize_locale(input), expected);
     }
 }

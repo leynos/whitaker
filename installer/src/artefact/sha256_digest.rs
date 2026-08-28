@@ -129,6 +129,7 @@ mod tests {
     use super::*;
     use rstest::{fixture, rstest};
 
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
     fn valid_digest() -> String {
         "a".repeat(64)

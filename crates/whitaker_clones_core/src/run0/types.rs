@@ -71,7 +71,7 @@ impl TokenFragment {
         self.profile
     }
 
-    /// Returns the source artifact URI used in SARIF output.
+    /// Returns the source artefact URI used in SARIF output.
     #[must_use]
     pub fn file_uri(&self) -> &str {
         self.file_uri.as_str()

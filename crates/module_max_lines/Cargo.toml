@@ -34,6 +34,7 @@ whitaker = { workspace = true, features = ["dylint-driver"], optional = true }
 fluent-templates = { workspace = true, optional = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 camino = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
