@@ -6,7 +6,10 @@ use std::cell::RefCell;
 
 use camino::Utf8PathBuf;
 use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
+use rstest_bdd_macros::{given, then, when};
+
+#[path = "sarif_behaviour/scenarios.rs"]
+mod scenarios;
 use whitaker_sarif::{
     Level, LocationBuilder, RegionBuilder, ResultBuilder, RunBuilder, SarifLog, SarifLogBuilder,
     SarifResult, WhitakerProperties, WhitakerPropertiesBuilder, all_rules, merge_runs,
@@ -373,46 +376,4 @@ fn then_path_ends_with(world: &SarifWorld, suffix: String) {
             "expected path to end with '{suffix}', got '{path}'"
         );
     });
-}
-
-// -- Scenario bindings (indices match feature file order) --
-
-#[scenario(path = "tests/features/sarif.feature", index = 0)]
-fn scenario_minimal_log(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 1)]
-fn scenario_result_with_rule(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 2)]
-fn scenario_whitaker_properties(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 3)]
-fn scenario_merge_deduplicates(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 4)]
-fn scenario_round_trip(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 5)]
-fn scenario_empty_log(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 6)]
-fn scenario_all_rules(world: SarifWorld) {
-    let _ = world;
-}
-
-#[scenario(path = "tests/features/sarif.feature", index = 7)]
-fn scenario_path_helpers(world: SarifWorld) {
-    let _ = world;
 }

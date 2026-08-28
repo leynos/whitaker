@@ -18,6 +18,7 @@ fluent-templates = { workspace = true }
 glob = "0.3.3"
 log = { workspace = true }
 once_cell = { workspace = true }
+parking_lot = { workspace = true }
 temp-env = { workspace = true }
 tempfile = "3.14.0"
 thiserror = { workspace = true }
