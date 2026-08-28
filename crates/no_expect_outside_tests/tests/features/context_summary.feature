@@ -1,4 +1,4 @@
-Feature: Summarise traversal context for `.expect(..)` linting
+Feature: Summarize traversal context for `.expect(..)` linting
 
   Scenario: Plain function without test attributes
     Given a non-test function named handler
@@ -18,7 +18,7 @@ Feature: Summarise traversal context for `.expect(..)` linting
     Then the context is marked as test
     And no function name is recorded
 
-  Scenario: Function recognised via configured attribute
+  Scenario: Function recognized via configured attribute
     Given an additional test attribute custom::test is configured
     And a function annotated with the additional attribute custom::test
     When I summarise the context

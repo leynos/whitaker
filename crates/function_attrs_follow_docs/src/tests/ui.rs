@@ -6,7 +6,7 @@
 //! fixtures.
 
 use serial_test::serial;
-use whitaker_common::test_support::LocaleOverride;
+use whitaker_common::test_support::with_locale;
 
 #[test]
 #[serial]
@@ -21,6 +21,7 @@ fn ui_runs_in_welsh_locale() {
 }
 
 fn run_ui_with_locale(directory: &str, locale: Option<&str>) {
-    let _guard = locale.map(LocaleOverride::set);
-    whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    with_locale(locale, || {
+        whitaker::run_ui_tests!(directory).expect("UI tests should execute without diffs");
+    });
 }
