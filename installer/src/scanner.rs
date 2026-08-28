@@ -134,15 +134,15 @@ fn scan_toolchain_release(
 }
 
 /// Parse a library filename to extract crate name and toolchain.
-///
-/// Format: `{prefix}{crate_name}@{toolchain}{extension}`
-///
-/// # Examples
-///
 /// ```
-/// use whitaker_installer::scanner::parse_library_filename;
-///
-/// let result = parse_library_filename("libmodule_max_lines@nightly-2026-05-28.so");
+/// use whitaker_installer::{
+///     builder::{library_extension, library_prefix},
+///     scanner::parse_library_filename,
+/// };
+/// let prefix = library_prefix();
+/// let extension = library_extension();
+/// let filename = format!("{prefix}module_max_lines@nightly-2026-05-28{extension}");
+/// let result = parse_library_filename(&filename);
 /// assert!(result.is_some());
 /// let (crate_name, toolchain) = result.expect("valid library filename");
 /// assert_eq!(crate_name.as_str(), "module_max_lines");
