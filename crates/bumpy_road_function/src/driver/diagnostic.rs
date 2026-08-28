@@ -36,7 +36,7 @@ pub(super) fn emit_diagnostic(
     args.insert(Cow::Borrowed("name"), FluentValue::from(input.name));
     args.insert(
         Cow::Borrowed("count"),
-        FluentValue::from(input.bumps.len() as i64),
+        FluentValue::from(i64::try_from(input.bumps.len()).unwrap_or(i64::MAX)),
     );
     args.insert(
         Cow::Borrowed("threshold"),
@@ -66,8 +66,11 @@ pub(super) fn emit_diagnostic(
                 let Some(span) = bump_spans.get(ordinal).copied().flatten() else {
                     continue;
                 };
-                let label =
-                    resolve_bump_label(localizer, (ordinal + 1) as i64, interval.len() as i64);
+                let label = resolve_bump_label(
+                    localizer,
+                    i64::try_from(ordinal + 1).unwrap_or(i64::MAX),
+                    i64::try_from(interval.len()).unwrap_or(i64::MAX),
+                );
                 lint.span_label(span, label);
             }
 
@@ -150,10 +153,10 @@ impl LineSpanMapper {
             .unwrap_or(self.snippet_len);
 
         let base = self.base_span.shrink_to_lo();
-        // `BytePos` is `u32`-backed; the snippet length is expected to fit in
-        // 4 GiB for any reasonable Rust source file.
-        let lo = base.lo() + BytePos(start_offset as u32);
-        let mut hi = base.lo() + BytePos(end_offset as u32);
+        // `BytePos` is `u32`-backed; offsets beyond 4 GiB cannot be represented
+        // as spans, so such (pathological) snippets yield no span.
+        let lo = base.lo() + BytePos(u32::try_from(start_offset).ok()?);
+        let mut hi = base.lo() + BytePos(u32::try_from(end_offset).ok()?);
         if hi <= lo {
             hi = lo + BytePos(1);
         }

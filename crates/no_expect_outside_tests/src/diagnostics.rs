@@ -195,7 +195,7 @@ const MESSAGE_KEY: MessageKey<'static> = MessageKey::new("no_expect_outside_test
 type NoExpectMessages = DiagnosticMessageSet;
 
 #[cfg(test)]
-fn localised_messages(
+fn localized_messages(
     lookup: &impl BundleLookup,
     receiver: &ReceiverLabel,
     context: &ContextLabel,
@@ -224,7 +224,7 @@ fn fallback_messages(
     category: ReceiverCategory,
 ) -> NoExpectMessages {
     let primary = format!("Avoid calling expect on {receiver} outside test-only code.");
-    let note = format!("The call originates within {context} which is not recognised as a test.",);
+    let note = format!("The call originates within {context} which is not recognized as a test.",);
     let help = category.fallback_help(receiver);
 
     NoExpectMessages::new(primary, note, help)

@@ -61,7 +61,7 @@ passes. Use `runs[0]` for the token pass and `runs[1]` for the AST pass. Each
 
 - `serde` models of SARIF 2.1.0 (subset plus extensions) with `From` and `Into`
   helpers.
-- Helpers to build rules, results, locations, artifacts, and invocations.
+- Helpers to build rules, results, locations, artefacts, and invocations.
 - Stable file layout: `target/whitaker/clones.{pass}.sarif` and
   `target/whitaker/clones.refined.sarif`.
 - Merge logic: combine runs and deduplicate results by

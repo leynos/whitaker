@@ -50,7 +50,7 @@ pub use expr::{Expr, def_id_of_expr_callee, is_path_to, recv_is_option_or_result
 pub use i18n::{
     Arguments, FALLBACK_LOCALE, I18nError, LocaleSelection, LocaleSource, Localizer,
     MessageResolution, available_locales, branch_phrase, get_localizer_for_lint, noop_reporter,
-    normalise_locale, resolve_localizer, safe_resolve_message_set, supports_locale,
+    normalize_locale, resolve_localizer, safe_resolve_message_set, supports_locale,
 };
 pub use lcom4::{MethodInfo, MethodInfoBuilder, cohesion_components, collect_method_infos};
 pub use path::SimplePath;

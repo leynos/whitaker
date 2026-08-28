@@ -27,7 +27,7 @@ pub use error::{Result, SarifError};
 
 // Model types
 pub use model::{
-    Artifact, ArtifactLocation, Invocation, Level, Location, Message, MultiformatMessageString,
+    Artefact, ArtefactLocation, Invocation, Level, Location, Message, MultiformatMessageString,
     PhysicalLocation, Region, RelatedLocation, ReportingDescriptor, Run, SarifLog, SarifResult,
     Tool, ToolComponent,
 };
