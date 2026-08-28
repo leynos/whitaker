@@ -3372,6 +3372,7 @@ dependencies = [
  "log",
  "logtest",
  "once_cell",
+ "parking_lot",
  "proptest",
  "regex",
  "rstest",
