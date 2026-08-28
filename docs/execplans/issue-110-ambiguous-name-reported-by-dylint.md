@@ -216,7 +216,7 @@ Edits are safe to re-run. If a step fails, revert file changes with Git and
 re-apply. Validation commands are safe to repeat. If validation fails twice,
 stop and escalate with the captured logs.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Keep the validation logs from `/tmp/whitaker-*.log` as evidence for each
 quality gate. Record any output from `cargo dylint list` that shows the updated

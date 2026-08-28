@@ -139,7 +139,7 @@ impl<'a, 'tcx> SegmentBuilder<'a, 'tcx> {
             return;
         }
 
-        let branches = count_branches(expr) as f64;
+        let branches = f64::from(u32::try_from(count_branches(expr)).unwrap_or(u32::MAX));
         let value = branches * self.settings.weights.predicate;
         self.push_segment(expr.span, value);
     }
@@ -211,12 +211,8 @@ fn count_branches(expr: &hir::Expr<'_>) -> usize {
         ExprKind::Binary(op, lhs, rhs) if matches!(op.node, BinOpKind::And | BinOpKind::Or) => {
             count_branches(lhs) + count_branches(rhs)
         }
-        ExprKind::Unary(UnOp::Not, inner) => count_branches(inner),
-        ExprKind::DropTemps(inner) => count_branches(inner),
-        ExprKind::Block(block, _) => match block.expr {
-            Some(inner) => count_branches(inner),
-            None => 1,
-        },
+        ExprKind::Unary(UnOp::Not, inner) | ExprKind::DropTemps(inner) => count_branches(inner),
+        ExprKind::Block(block, _) => block.expr.map_or(1, count_branches),
         ExprKind::If(cond, ..) => count_branches(cond),
         _ => 1,
     }
@@ -229,8 +225,9 @@ pub(super) fn span_line_range(source_map: &SourceMap, span: Span) -> Option<Rang
 
     let contiguous = info
         .lines
-        .windows(2)
-        .all(|pair| pair[1].line_index == pair[0].line_index + 1);
+        .iter()
+        .zip(info.lines.iter().skip(1))
+        .all(|(previous, next)| next.line_index == previous.line_index + 1);
     if !contiguous {
         return None;
     }

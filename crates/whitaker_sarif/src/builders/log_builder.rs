@@ -111,7 +111,7 @@ mod tests {
             },
             invocations: Vec::new(),
             results: Vec::new(),
-            artifacts: Vec::new(),
+            artefacts: Vec::new(),
         };
         let log = SarifLogBuilder::new().with_run(run).build();
         assert_eq!(log.runs.len(), 1);

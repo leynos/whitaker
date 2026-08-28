@@ -26,6 +26,7 @@ impl DocumentationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DocumentationWorld {
     DocumentationWorld::default()
