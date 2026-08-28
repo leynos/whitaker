@@ -1,11 +1,11 @@
 //! UI harness for `no_unwrap_or_else_panic` fixtures.
 
+use std::{fs, io, path::Path};
+
 use camino::Utf8Path;
 use dylint_testing::ui::Test;
 #[cfg(not(windows))]
 use rstest::rstest;
-use std::path::Path;
-use std::{fs, io};
 #[cfg(not(windows))]
 use temp_env::with_vars_unset;
 #[cfg(not(windows))]
@@ -30,7 +30,7 @@ struct ExampleHarnessRun<'a> {
 #[cfg(not(windows))]
 impl<'a> ExampleHarnessRun<'a> {
     /// Creates a run spec using the default `--test` harness flag.
-    fn new(name: &'a str, label: &'a str) -> Self {
+    const fn new(name: &'a str, label: &'a str) -> Self {
         Self {
             name,
             label,
@@ -40,7 +40,7 @@ impl<'a> ExampleHarnessRun<'a> {
 
     /// Creates a run spec with caller-supplied rustc flags (no defaults
     /// applied).
-    fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
+    const fn with_flags(name: &'a str, label: &'a str, rustc_flags: &'a [&'a str]) -> Self {
         Self {
             name,
             label,
@@ -53,14 +53,14 @@ impl<'a> ExampleHarnessRun<'a> {
 fn ui() {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "ui";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, dir| {
-        run_fixtures(crate_name, dir)
-    })
-    .unwrap_or_else(|error| {
-        panic!(
-            "UI tests should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
-        )
-    });
+    whitaker::testing::ui::run_with_runner(crate_name, directory, run_fixtures).unwrap_or_else(
+        |error| {
+            panic!(
+                "UI tests should execute without diffs: RunnerFailure {{ crate_name: \
+                 \"{crate_name}\", directory: \"{directory}\", message: {error} }}"
+            )
+        },
+    );
 }
 
 /// Runs an example-based regression under the dylint UI test harness.
@@ -71,7 +71,7 @@ fn ui() {
 fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     let crate_name = env!("CARGO_PKG_NAME");
     let directory = "examples";
-    whitaker::testing::ui::run_with_runner(crate_name, directory, |crate_name, _| {
+    whitaker::testing::ui::run_with_runner(crate_name, directory, |_, _| {
         run_test_runner(spec.name, || {
             let _guard = env_test_guard();
             with_vars_unset(
@@ -93,7 +93,8 @@ fn run_example_under_test_harness(spec: &ExampleHarnessRun<'_>) {
     })
     .unwrap_or_else(|error| {
         panic!(
-            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
+            "{} example regression should execute without diffs: RunnerFailure {{ crate_name: \
+             \"{crate_name}\", directory: \"{directory}\", message: {error:?} }}",
             spec.label
         )
     });

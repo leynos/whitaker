@@ -9,8 +9,9 @@ mod scenarios;
 #[path = "behaviour_cli/support.rs"]
 mod support;
 
-use rstest_bdd_macros::{given, then, when};
 use std::process::Command;
+
+use rstest_bdd_macros::{given, then, when};
 pub(crate) use support::{CliWorld, cli_world};
 use support::{
     assert_cli_exits_successfully, assert_cli_exits_with_error, assert_dry_run_output_is_shown,

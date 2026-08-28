@@ -1,7 +1,8 @@
 //! Unit tests for [`super::CognitiveComplexityBuilder`].
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 // ---------------------------------------------------------------------------
 // Individual increment types — non-expansion
@@ -151,10 +152,10 @@ fn mixed_expansion_nesting() {
 /// Parameterized composite scenarios. Each case simulates a code
 /// pattern and asserts the expected CC score.
 ///
-/// Parameters: `(label, expected_score)`
+/// Parameters: `(expected_score)`
 #[rstest]
-#[case("simple_if", 1)]
-fn composite_simple_if(#[case] _label: &str, #[case] expected: usize) {
+#[case(1)]
+fn composite_simple_if(#[case] expected: usize) {
     // if cond {}  => structural +1, nesting +0 (depth 0)
     let mut cc = CognitiveComplexityBuilder::new();
     cc.record_structural_increment(false);
@@ -165,8 +166,8 @@ fn composite_simple_if(#[case] _label: &str, #[case] expected: usize) {
 }
 
 #[rstest]
-#[case("nested_if_in_if", 3)]
-fn composite_nested_if(#[case] _label: &str, #[case] expected: usize) {
+#[case(3)]
+fn composite_nested_if(#[case] expected: usize) {
     // if { if {} }
     // outer: struct +1, nest +0 (depth 0)
     // inner: struct +1, nest +1 (depth 1)
@@ -183,8 +184,8 @@ fn composite_nested_if(#[case] _label: &str, #[case] expected: usize) {
 }
 
 #[rstest]
-#[case("if_with_boolean_ops", 3)]
-fn composite_if_with_boolean_ops(#[case] _label: &str, #[case] expected: usize) {
+#[case(3)]
+fn composite_if_with_boolean_ops(#[case] expected: usize) {
     // if a && b || c {}
     // structural +1, fundamental +1 (&&), fundamental +1 (||)
     let mut cc = CognitiveComplexityBuilder::new();
@@ -197,8 +198,8 @@ fn composite_if_with_boolean_ops(#[case] _label: &str, #[case] expected: usize) 
 }
 
 #[rstest]
-#[case("triple_nested_loop", 6)]
-fn composite_triple_nested_loop(#[case] _label: &str, #[case] expected: usize) {
+#[case(6)]
+fn composite_triple_nested_loop(#[case] expected: usize) {
     // for { for { for {} } }
     // L1: struct +1, nest +0 (depth 0), push => depth 1
     // L2: struct +1, nest +1 (depth 1), push => depth 2
@@ -220,8 +221,8 @@ fn composite_triple_nested_loop(#[case] _label: &str, #[case] expected: usize) {
 }
 
 #[rstest]
-#[case("macro_if_inside_real_for", 1)]
-fn composite_macro_if_inside_real_for(#[case] _label: &str, #[case] expected: usize) {
+#[case(1)]
+fn composite_macro_if_inside_real_for(#[case] expected: usize) {
     // for { MACRO_IF }
     // for: struct +1, nest +0, push(false) => depth 1
     // macro if: struct(true) skipped, nest(true) skipped
@@ -238,8 +239,8 @@ fn composite_macro_if_inside_real_for(#[case] _label: &str, #[case] expected: us
 }
 
 #[rstest]
-#[case("real_if_inside_macro_for", 1)]
-fn composite_real_if_inside_macro_for(#[case] _label: &str, #[case] expected: usize) {
+#[case(1)]
+fn composite_real_if_inside_macro_for(#[case] expected: usize) {
     // MACRO_FOR { if {} }
     // macro for: struct(true) skipped, push(true) => eff depth 0
     // real if: struct(false) +1, nest(false) +0 (eff depth is 0)
@@ -285,7 +286,8 @@ fn default_matches_new() {
 fn build_panics_on_unbalanced_stack() {
     let mut cc = CognitiveComplexityBuilder::new();
     cc.push_nesting(false);
-    let _ = cc.build();
+    // The build call should panic before yielding a score.
+    let _score = cc.build();
 }
 
 #[rstest]

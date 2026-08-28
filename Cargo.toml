@@ -52,6 +52,10 @@ rustc_lexer = "0.1.0"
 ra_ap_syntax = "=0.0.334"
 whitaker_clones_core = { path = "crates/whitaker_clones_core", version = "0.2.7" }
 whitaker_sarif = { path = "crates/whitaker_sarif", version = "0.2.7" }
+# Path-only (no `version`): the crate is `publish = false`, and Cargo strips
+# versionless dev-dependencies when packaging, so the published crates do not
+# gain an unresolvable requirement.
+whitaker_test_macros = { path = "crates/whitaker_test_macros" }
 temp-env = "0.3.6"
 tempfile = "3.19.1"
 wait-timeout = "0.2.1"

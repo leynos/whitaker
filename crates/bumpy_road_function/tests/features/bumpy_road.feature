@@ -24,12 +24,12 @@ Feature: Detect bumpy road intervals
   Scenario: Even smoothing windows fall back to defaults
     Given default settings
     When the smoothing window is set to 2
-    And I normalise the settings
+    And I normalize the settings
     Then the window becomes 3
 
   Scenario: Negative thresholds fall back to defaults
     Given default settings
     When the threshold is set to -1.0
-    And I normalise the settings
+    And I normalize the settings
     Then the threshold becomes 2.5
 
