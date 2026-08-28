@@ -100,7 +100,7 @@ impl DecompositionSuggestion {
 
     /// Returns the suggested extraction kind.
     #[must_use]
-    pub fn extraction_kind(&self) -> SuggestedExtractionKind {
+    pub const fn extraction_kind(&self) -> SuggestedExtractionKind {
         self.extraction_kind
     }
 
@@ -197,9 +197,12 @@ fn build_suggestion(
     Some(DecompositionSuggestion {
         label: label_feature.display.clone(),
         extraction_kind: infer_extraction_kind(context.subject_kind(), label_feature.category),
+        // Community indices always come from `0..vectors.len()`, so the
+        // filter never drops a method; it only keeps the lookup panic free.
         methods: community
             .iter()
-            .map(|index| vectors[*index].method_name().to_owned())
+            .filter_map(|&index| vectors.get(index))
+            .map(|vector| vector.method_name().to_owned())
             .collect(),
         rationale,
     })
@@ -211,9 +214,16 @@ fn aggregate_features(
 ) -> Vec<AggregatedFeature> {
     let mut aggregated: BTreeMap<String, AggregatedFeature> = BTreeMap::new();
 
-    for method_index in community {
-        for (feature_key, weight) in vectors[*method_index].weights() {
-            let metadata = &vectors[*method_index].metadata()[feature_key];
+    for &method_index in community {
+        let Some(vector) = vectors.get(method_index) else {
+            continue;
+        };
+        for (feature_key, weight) in vector.weights() {
+            // Weights and metadata are built together, so the metadata entry
+            // always exists for a weighted feature key.
+            let Some(metadata) = vector.metadata().get(feature_key) else {
+                continue;
+            };
             let entry =
                 aggregated
                     .entry(feature_key.clone())
@@ -238,26 +248,17 @@ fn choose_label_feature(features: &[AggregatedFeature]) -> Option<&AggregatedFea
         FeatureCategory::LocalType,
     ];
 
-    for category in LABEL_PRIORITIES {
-        let mut matches: Vec<_> = features
+    LABEL_PRIORITIES.iter().find_map(|category| {
+        features
             .iter()
             .filter(|feature| feature.category == *category)
-            .collect();
-
-        if matches.is_empty() {
-            continue;
-        }
-
-        matches.sort_by(|left, right| {
-            right
-                .score
-                .cmp(&left.score)
-                .then_with(|| left.display.cmp(&right.display))
-        });
-        return Some(matches[0]);
-    }
-
-    None
+            .min_by(|left, right| {
+                right
+                    .score
+                    .cmp(&left.score)
+                    .then_with(|| left.display.cmp(&right.display))
+            })
+    })
 }
 
 fn choose_rationale(features: &[AggregatedFeature]) -> Vec<String> {

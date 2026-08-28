@@ -4,11 +4,20 @@
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ArgAtom {
     /// An argument supplied by an `rstest` fixture-local parameter.
-    FixtureLocal { name: String },
+    FixtureLocal {
+        /// The fixture-local parameter name as written in the test signature.
+        name: String,
+    },
     /// A stable literal argument, stored as canonical source text.
-    ConstLit { text: String },
+    ConstLit {
+        /// Canonical source text of the literal.
+        text: String,
+    },
     /// A stable constant path, stored as a canonical definition path.
-    ConstPath { def_path: String },
+    ConstPath {
+        /// Canonical definition path of the referenced constant.
+        def_path: String,
+    },
     /// A present argument shape that later lowering does not support.
     Unsupported,
 }

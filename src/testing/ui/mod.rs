@@ -6,14 +6,14 @@
 //! This module centralizes input validation so lint crates can depend on a
 //! small helper rather than repeat the same checks.
 
-use std::{env, fmt};
+use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod toolchain;
 
 use self::toolchain::{CrateName, ensure_toolchain_library};
-use whitaker_common::test_support::env_test_guard;
+use whitaker_common::test_support::with_env_var_removed;
 
 /// Errors produced when preparing or executing Dylint UI tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -161,20 +161,21 @@ pub fn run_with_runner(
     let crate_name_owned =
         CrateName::try_from(crate_name).map_err(|_| HarnessError::EmptyCrateName)?;
     let crate_name_str = crate_name_owned.as_str();
-    let _runner_env_guard = runner_env_guard();
-    ensure_toolchain_library(&crate_name_owned)?;
+    with_runner_env(|| {
+        ensure_toolchain_library(&crate_name_owned)?;
 
-    match runner(crate_name_str, directory.as_ref()) {
-        Ok(()) => Ok(()),
-        Err(message) => Err(HarnessError::RunnerFailure {
-            crate_name: crate_name_owned.into_inner(),
-            directory,
-            message,
-        }),
-    }
+        match runner(crate_name_str, directory.as_ref()) {
+            Ok(()) => Ok(()),
+            Err(message) => Err(HarnessError::RunnerFailure {
+                crate_name: crate_name_owned.clone().into_inner(),
+                directory: directory.clone(),
+                message,
+            }),
+        }
+    })
 }
 
-/// Serializes environment mutations required by `run_with_runner`.
+/// Runs `callback` with the environment `run_with_runner` requires.
 ///
 /// `RUSTC_WRAPPER` must be cleared on every platform when set (for example to
 /// `sccache`), because `dylint_testing::Test::example` scans
@@ -187,85 +188,29 @@ pub fn run_with_runner(
 /// - `VCPKG_ROOT`: must be set to `C:\vcpkg` when that directory exists and the
 ///   variable is otherwise absent, so downstream `cargo` invocations resolve vcpkg.
 ///
-/// Each mutation and restoration step acquires `env_test_guard()` only for the
-/// environment write itself. The guard deliberately does not hold that mutex
-/// across the UI runner callback, because runner closures can perform their
-/// own environment-guarded setup.
-struct RunnerEnvGuard {
-    #[cfg(windows)]
-    vcpkg_root_was_absent: bool,
-    rustc_wrapper_previous: Option<std::ffi::OsString>,
+/// The scoped mutations are serialized by `temp_env`'s re-entrant global lock,
+/// so runner closures that perform their own scoped environment setup nest
+/// without deadlocking, and every prior value is restored when the callback
+/// returns or panics.
+fn with_runner_env<R>(callback: impl FnOnce() -> R) -> R {
+    with_vcpkg_root(|| with_env_var_removed("RUSTC_WRAPPER", callback))
 }
 
-impl Drop for RunnerEnvGuard {
-    fn drop(&mut self) {
-        let _env_guard = env_test_guard();
+#[cfg(windows)]
+fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
+    use whitaker_common::test_support::with_env_var;
 
-        // SAFETY: `env_test_guard` serializes the restoration writes below.
-        #[cfg(windows)]
-        {
-            if self.vcpkg_root_was_absent {
-                unsafe {
-                    env::remove_var("VCPKG_ROOT");
-                }
-            }
-        }
-        if let Some(prev) = &self.rustc_wrapper_previous {
-            unsafe {
-                env::set_var("RUSTC_WRAPPER", prev);
-            }
-        }
-    }
-}
-
-fn runner_env_guard() -> Option<RunnerEnvGuard> {
-    #[cfg(windows)]
-    let vcpkg_candidate = Utf8Path::new(r"C:\vcpkg");
-    #[cfg(windows)]
-    let vcpkg_applicable = vcpkg_candidate.is_dir();
-
-    let _env_guard = env_test_guard();
-    let has_rustc_wrapper = env::var_os("RUSTC_WRAPPER").is_some();
-
-    #[cfg(windows)]
-    if !vcpkg_applicable && !has_rustc_wrapper {
-        return None;
-    }
-    #[cfg(not(windows))]
-    if !has_rustc_wrapper {
-        return None;
-    }
-
-    // All environment reads and writes below are serialized by `_env_guard`.
-    #[cfg(windows)]
-    let vcpkg_root_was_absent = if vcpkg_applicable && env::var_os("VCPKG_ROOT").is_none() {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
-        unsafe {
-            env::set_var("VCPKG_ROOT", vcpkg_candidate.as_std_path());
-        }
-        true
+    let candidate = Utf8Path::new(r"C:\vcpkg");
+    if candidate.is_dir() && std::env::var_os("VCPKG_ROOT").is_none() {
+        with_env_var("VCPKG_ROOT", candidate.as_std_path(), callback)
     } else {
-        false
-    };
-
-    let rustc_wrapper_previous = env::var_os("RUSTC_WRAPPER").inspect(|_| {
-        // SAFETY: `_env_guard` serializes concurrent environment mutations.
-        unsafe {
-            env::remove_var("RUSTC_WRAPPER");
-        }
-    });
-
-    #[cfg(windows)]
-    if !vcpkg_root_was_absent && rustc_wrapper_previous.is_none() {
-        // Nothing was mutated; release the guard early.
-        return None;
+        callback()
     }
+}
 
-    Some(RunnerEnvGuard {
-        #[cfg(windows)]
-        vcpkg_root_was_absent,
-        rustc_wrapper_previous,
-    })
+#[cfg(not(windows))]
+fn with_vcpkg_root<R>(callback: impl FnOnce() -> R) -> R {
+    callback()
 }
 
 fn directory_is_rooted(path: &Utf8Path) -> bool {

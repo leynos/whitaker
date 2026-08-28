@@ -47,8 +47,8 @@ pub(crate) struct ContextSummary {
 ///     collect_context(cx, expr.hir_id, additional_test_attributes);
 /// assert!(!entries.is_empty() || !has_test_context_ancestry);
 /// ```
-pub(crate) fn collect_context<'tcx>(
-    cx: &LateContext<'tcx>,
+pub(crate) fn collect_context(
+    cx: &LateContext<'_>,
     hir_id: hir::HirId,
     additional_test_attributes: &[AttributePath],
 ) -> (Vec<ContextEntry>, bool) {
@@ -129,7 +129,7 @@ pub(crate) fn summarize_context(
         entry
             .kind()
             .matches_function()
-            .then(|| entry.name().to_string())
+            .then(|| entry.name().to_owned())
     });
 
     ContextSummary {
@@ -148,7 +148,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
                 ContextEntry::new(name, ContextKind::Module, convert_attributes(attrs))
             }),
             hir::ItemKind::Impl(..) => Some(ContextEntry::new(
-                "impl".to_string(),
+                "impl".to_owned(),
                 ContextKind::Impl,
                 convert_attributes(attrs),
             )),
@@ -169,7 +169,7 @@ fn context_entry_for(node: Node<'_>, attrs: &[hir::Attribute]) -> Option<Context
             _ => None,
         },
         Node::Block(_) => Some(ContextEntry::new(
-            "block".to_string(),
+            "block".to_owned(),
             ContextKind::Block,
             convert_attributes(attrs),
         )),
@@ -204,7 +204,7 @@ fn convert_attribute(attr: &hir::Attribute) -> Attribute {
     Attribute::new(path, kind)
 }
 
-/// Check if a cfg_attr has a test condition and contains nested cfg(test).
+/// Check if a `cfg_attr` has a test condition and contains nested cfg(test).
 fn check_cfg_attr_for_test<I>(items: I) -> bool
 where
     I: IntoIterator<Item = MetaItemInner>,
@@ -260,17 +260,14 @@ pub(crate) fn is_cfg_test_attribute(attr: &hir::Attribute) -> bool {
     if path[0] == sym::cfg {
         return attr
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
     if path[0] != sym::cfg_attr {
         return false;
     }
 
-    attr.meta_item_list()
-        .map(check_cfg_attr_for_test)
-        .unwrap_or(false)
+    attr.meta_item_list().is_some_and(check_cfg_attr_for_test)
 }
 
 fn meta_item_inner_contains_test(item: MetaItemInner) -> bool {
@@ -290,33 +287,27 @@ fn meta_contains_test_with_polarity(meta: &MetaItem, is_positive: bool) -> bool 
     }
 
     if path_is_ident(&meta.path, sym::not) {
-        return meta
-            .meta_item_list()
-            .map(|items| {
-                items
-                    .iter()
-                    .cloned()
-                    .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
-            })
-            .unwrap_or(false);
-    }
-
-    meta.meta_item_list()
-        .map(|items| {
+        return meta.meta_item_list().is_some_and(|items| {
             items
                 .iter()
                 .cloned()
-                .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
-        })
-        .unwrap_or(false)
+                .any(|item| meta_item_inner_contains_test_with_polarity(item, !is_positive))
+        });
+    }
+
+    meta.meta_item_list().is_some_and(|items| {
+        items
+            .iter()
+            .cloned()
+            .any(|item| meta_item_inner_contains_test_with_polarity(item, is_positive))
+    })
 }
 
 fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     if path_is_ident(&meta.path, sym::cfg) {
         return meta
             .meta_item_list()
-            .map(|items| items.iter().cloned().any(meta_item_inner_contains_test))
-            .unwrap_or(false);
+            .is_some_and(|items| items.iter().cloned().any(meta_item_inner_contains_test));
     }
 
     if !path_is_ident(&meta.path, sym::cfg_attr) {
@@ -324,8 +315,7 @@ fn meta_contains_test_cfg(meta: &MetaItem) -> bool {
     }
 
     meta.meta_item_list()
-        .map(|items| check_cfg_attr_for_test(items.iter().cloned()))
-        .unwrap_or(false)
+        .is_some_and(|items| check_cfg_attr_for_test(items.iter().cloned()))
 }
 
 fn item_name(item: &hir::Item<'_>) -> Option<String> {

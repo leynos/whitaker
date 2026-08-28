@@ -32,7 +32,7 @@ pub struct RegionBuilder {
 impl RegionBuilder {
     /// Creates a builder with the given 1-based start line.
     #[must_use]
-    pub fn new(start_line: usize) -> Self {
+    pub const fn new(start_line: usize) -> Self {
         Self {
             start_line,
             start_column: None,
@@ -45,35 +45,35 @@ impl RegionBuilder {
 
     /// Sets the 1-based start column.
     #[must_use]
-    pub fn with_start_column(mut self, col: usize) -> Self {
+    pub const fn with_start_column(mut self, col: usize) -> Self {
         self.start_column = Some(col);
         self
     }
 
     /// Sets the 1-based end line.
     #[must_use]
-    pub fn with_end_line(mut self, line: usize) -> Self {
+    pub const fn with_end_line(mut self, line: usize) -> Self {
         self.end_line = Some(line);
         self
     }
 
     /// Sets the 1-based end column.
     #[must_use]
-    pub fn with_end_column(mut self, col: usize) -> Self {
+    pub const fn with_end_column(mut self, col: usize) -> Self {
         self.end_column = Some(col);
         self
     }
 
     /// Sets the byte offset from the start of the artefact.
     #[must_use]
-    pub fn with_byte_offset(mut self, offset: usize) -> Self {
+    pub const fn with_byte_offset(mut self, offset: usize) -> Self {
         self.byte_offset = Some(offset);
         self
     }
 
     /// Sets the byte length.
     #[must_use]
-    pub fn with_byte_length(mut self, length: usize) -> Self {
+    pub const fn with_byte_length(mut self, length: usize) -> Self {
         self.byte_length = Some(length);
         self
     }
@@ -192,7 +192,7 @@ impl LocationBuilder {
 
     /// Sets the region within the artefact.
     #[must_use]
-    pub fn with_region(mut self, region: Region) -> Self {
+    pub const fn with_region(mut self, region: Region) -> Self {
         self.region = Some(region);
         self
     }
@@ -269,7 +269,7 @@ mod tests {
             .with_region(region)
             .build();
         match loc.physical_location.region.as_ref() {
-            Some(region) => assert_eq!(region.start_line, 42),
+            Some(attached) => assert_eq!(attached.start_line, 42),
             None => panic!("expected region to be present"),
         }
     }

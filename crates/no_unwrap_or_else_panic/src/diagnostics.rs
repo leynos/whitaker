@@ -48,9 +48,9 @@ pub(crate) fn emit_diagnostic(
         NO_UNWRAP_OR_ELSE_PANIC,
         expr.span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
-            lint.span_note(receiver.span, messages.note().to_string());
-            lint.help(messages.help().to_string());
+            lint.primary_message(messages.primary().to_owned());
+            lint.span_note(receiver.span, messages.note().to_owned());
+            lint.help(messages.help().to_owned());
         }),
     );
 }

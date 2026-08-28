@@ -67,7 +67,9 @@ fn t2_canonicalizes_identifiers_literals_and_lifetimes() {
 fn byte_ranges_point_to_original_source() {
     let source = "fn demo() { value + 1 }";
     let tokens = normalize(source, NormProfile::T1).expect("normalization should succeed");
-    let value = &tokens[5];
+    let value = tokens
+        .get(5)
+        .expect("token stream should contain the `value` identifier");
 
     assert_eq!(value.range, 12..17);
     assert_eq!(source.get(value.range.clone()), Some("value"));
@@ -102,7 +104,8 @@ fn exact_k_tokens_yields_one_hash() {
     );
 
     assert_eq!(hashes.len(), 1);
-    assert_eq!(hashes[0].range, 0..12);
+    let only = hashes.first().expect("exactly one hash should be present");
+    assert_eq!(only.range, 0..12);
 }
 
 #[test]
@@ -232,7 +235,11 @@ fn shebang_is_stripped_equivalently_to_shebang_free_source() {
         "shebang should not affect the normalized token kinds"
     );
     assert_eq!(
-        with_shebang[0].range.start,
+        with_shebang
+            .first()
+            .expect("normalized stream should not be empty")
+            .range
+            .start,
         source_with_shebang.find("fn").expect("fn present")
     );
 }
@@ -300,7 +307,13 @@ fn literal_variants_are_terminated_and_canonicalized(
         literal_syms.len() >= 2,
         "expected at least two literal tokens for the repeated literal pair"
     );
-    assert_eq!(literal_syms[0], literal_syms[1], "{assertion_message}");
+    let first = literal_syms
+        .first()
+        .expect("first literal symbol should be present");
+    let second = literal_syms
+        .get(1)
+        .expect("second literal symbol should be present");
+    assert_eq!(first, second, "{assertion_message}");
 }
 
 #[test]

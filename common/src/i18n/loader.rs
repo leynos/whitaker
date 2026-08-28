@@ -14,7 +14,7 @@ use thiserror::Error;
 use super::locales::supports_locale;
 use super::{FALLBACK_LANGUAGE, FALLBACK_LITERAL, LOADER, LanguageIdentifier};
 
-/// HashMap wrapper used when passing Fluent arguments to lookups.
+/// `HashMap` wrapper used when passing Fluent arguments to lookups.
 pub type Arguments<'a> = HashMap<Cow<'a, str>, FluentValue<'a>>;
 
 /// Error raised when localization data cannot satisfy a caller request.
@@ -22,7 +22,12 @@ pub type Arguments<'a> = HashMap<Cow<'a, str>, FluentValue<'a>>;
 pub enum I18nError {
     /// Raised when the requested message slug is missing for the resolved locale.
     #[error("message `{key}` missing for locale `{locale}`")]
-    MissingMessage { key: String, locale: String },
+    MissingMessage {
+        /// The Fluent message key (including any attribute suffix) that was requested.
+        key: String,
+        /// The locale tag the lookup was resolved against.
+        locale: String,
+    },
 }
 
 /// Resolve localization messages for a specific locale.
@@ -55,25 +60,26 @@ impl Localizer {
     #[must_use]
     pub fn new(locale: Option<&str>) -> Self {
         match locale {
-            Some(value) if supports_locale(value) => match LanguageIdentifier::from_str(value) {
-                Ok(identifier) => {
-                    let language_tag = identifier.to_string();
+            Some(value) if supports_locale(value) => LanguageIdentifier::from_str(value)
+                .map_or_else(
+                    |_| Self::fallback(),
+                    |identifier| {
+                        let language_tag = identifier.to_string();
 
-                    Self {
-                        language: identifier,
-                        language_tag,
-                        fallback_used: false,
-                    }
-                }
-                Err(_) => Self::fallback(),
-            },
+                        Self {
+                            language: identifier,
+                            language_tag,
+                            fallback_used: false,
+                        }
+                    },
+                ),
             _ => Self::fallback(),
         }
     }
 
     /// Return the resolved locale identifier.
     #[must_use]
-    pub fn language(&self) -> &LanguageIdentifier {
+    pub const fn language(&self) -> &LanguageIdentifier {
         &self.language
     }
 
@@ -85,26 +91,46 @@ impl Localizer {
 
     /// Whether the fallback locale was used.
     #[must_use]
-    pub fn used_fallback(&self) -> bool {
+    pub const fn used_fallback(&self) -> bool {
         self.fallback_used
     }
 
     /// Fetch the translated message for `key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`I18nError::MissingMessage`] when `key` is not defined for the
+    /// resolved locale.
     pub fn message(&self, key: &str) -> Result<String, I18nError> {
         self.lookup(key, None, None)
     }
 
     /// Fetch the translated message with Fluent arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`I18nError::MissingMessage`] when `key` is not defined for the
+    /// resolved locale.
     pub fn message_with_args(&self, key: &str, args: &Arguments<'_>) -> Result<String, I18nError> {
         self.lookup(key, None, Some(args))
     }
 
     /// Fetch a translated attribute, e.g. `function.primary`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`I18nError::MissingMessage`] when `key.attribute` is not
+    /// defined for the resolved locale.
     pub fn attribute(&self, key: &str, attribute: &str) -> Result<String, I18nError> {
         self.lookup(key, Some(attribute), None)
     }
 
     /// Fetch a translated attribute with Fluent arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`I18nError::MissingMessage`] when `key.attribute` is not
+    /// defined for the resolved locale.
     pub fn attribute_with_args(
         &self,
         key: &str,
@@ -120,17 +146,15 @@ impl Localizer {
         attribute: Option<&str>,
         args: Option<&Arguments<'_>>,
     ) -> Result<String, I18nError> {
-        let lookup_key = attribute
-            .map(|attr| format!("{key}.{attr}"))
-            .unwrap_or_else(|| key.to_string());
+        let lookup_key = attribute.map_or_else(|| key.to_owned(), |attr| format!("{key}.{attr}"));
 
-        let maybe_value = match args {
-            Some(arguments) => {
+        let maybe_value = args.map_or_else(
+            || LOADER.try_lookup(&self.language, lookup_key.as_str()),
+            |arguments| {
                 let owned_arguments = promote_arguments(arguments);
                 LOADER.try_lookup_with_args(&self.language, lookup_key.as_str(), &owned_arguments)
-            }
-            None => LOADER.try_lookup(&self.language, lookup_key.as_str()),
-        };
+            },
+        );
 
         maybe_value.ok_or_else(|| I18nError::MissingMessage {
             key: lookup_key,
@@ -141,7 +165,7 @@ impl Localizer {
     fn fallback() -> Self {
         Self {
             language: FALLBACK_LANGUAGE.clone(),
-            language_tag: FALLBACK_LITERAL.to_string(),
+            language_tag: FALLBACK_LITERAL.to_owned(),
             fallback_used: true,
         }
     }
@@ -152,13 +176,13 @@ fn promote_arguments(
 ) -> HashMap<Cow<'static, str>, FluentValue<'static>> {
     arguments
         .iter()
-        .map(|(key, value)| (Cow::Owned(key.as_ref().to_string()), promote_value(value)))
+        .map(|(key, value)| (Cow::Owned(key.as_ref().to_owned()), promote_value(value)))
         .collect()
 }
 
 fn promote_value(value: &FluentValue<'_>) -> FluentValue<'static> {
     match value {
-        FluentValue::String(text) => FluentValue::String(Cow::Owned(text.as_ref().to_string())),
+        FluentValue::String(text) => FluentValue::String(Cow::Owned(text.as_ref().to_owned())),
         FluentValue::Number(number) => FluentValue::Number(number.clone()),
         FluentValue::Custom(custom) => FluentValue::Custom(custom.duplicate()),
         FluentValue::None => FluentValue::None,

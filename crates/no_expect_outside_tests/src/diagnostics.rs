@@ -81,7 +81,7 @@ impl ReceiverCategory {
         }
     }
 
-    fn as_key(self) -> &'static str {
+    const fn as_key(self) -> &'static str {
         match self {
             Self::Option => "option",
             Self::Result => "result",
@@ -132,7 +132,7 @@ pub(crate) struct DiagnosticContext<'a> {
 }
 
 impl<'a> DiagnosticContext<'a> {
-    pub(crate) fn new(summary: &'a ContextSummary, localizer: &'a Localizer) -> Self {
+    pub(crate) const fn new(summary: &'a ContextSummary, localizer: &'a Localizer) -> Self {
         Self { summary, localizer }
     }
 }
@@ -144,7 +144,7 @@ pub(crate) fn emit_diagnostic(
     context: &DiagnosticContext<'_>,
 ) {
     let receiver_ty = cx.typeck_results().expr_ty(receiver).peel_refs();
-    let receiver_label = ReceiverLabel::new(format!("`{}`", receiver_ty));
+    let receiver_label = ReceiverLabel::new(format!("`{receiver_ty}`"));
     let call_context = context_label(context.summary);
 
     let category = ReceiverCategory::classify_ty(cx, receiver_ty);
@@ -152,15 +152,15 @@ pub(crate) fn emit_diagnostic(
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("receiver"),
-        FluentValue::from(receiver_label.as_ref().to_string()),
+        FluentValue::from(receiver_label.as_ref().to_owned()),
     );
     args.insert(
         Cow::Borrowed("context"),
-        FluentValue::from(call_context.as_ref().to_string()),
+        FluentValue::from(call_context.as_ref().to_owned()),
     );
     args.insert(
         Cow::Borrowed("handling"),
-        FluentValue::from(category.as_key().to_string()),
+        FluentValue::from(category.as_key().to_owned()),
     );
 
     let fallback_receiver = receiver_label.clone();
@@ -175,9 +175,9 @@ pub(crate) fn emit_diagnostic(
             fallback_messages(&fallback_receiver, &fallback_context, category)
         });
 
-    let primary = messages.primary().to_string();
-    let note = messages.note().to_string();
-    let help = messages.help().to_string();
+    let primary = messages.primary().to_owned();
+    let note = messages.note().to_owned();
+    let help = messages.help().to_owned();
 
     cx.emit_span_lint(
         NO_EXPECT_OUTSIDE_TESTS,
@@ -204,15 +204,15 @@ fn localized_messages(
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("receiver"),
-        FluentValue::from(receiver.as_ref().to_string()),
+        FluentValue::from(receiver.as_ref().to_owned()),
     );
     args.insert(
         Cow::Borrowed("context"),
-        FluentValue::from(context.as_ref().to_string()),
+        FluentValue::from(context.as_ref().to_owned()),
     );
     args.insert(
         Cow::Borrowed("handling"),
-        FluentValue::from(category.as_key().to_string()),
+        FluentValue::from(category.as_key().to_owned()),
     );
 
     resolve_message_set(lookup, MESSAGE_KEY, &args)
@@ -224,18 +224,17 @@ fn fallback_messages(
     category: ReceiverCategory,
 ) -> NoExpectMessages {
     let primary = format!("Avoid calling expect on {receiver} outside test-only code.");
-    let note = format!("The call originates within {context} which is not recognized as a test.",);
+    let note = format!("The call originates within {context} which is not recognized as a test.");
     let help = category.fallback_help(receiver);
 
     NoExpectMessages::new(primary, note, help)
 }
 
 fn context_label(summary: &ContextSummary) -> ContextLabel {
-    let label = summary
-        .function_name
-        .as_ref()
-        .map(|name| format!("function `{name}`"))
-        .unwrap_or_else(|| "the surrounding scope".to_string());
+    let label = summary.function_name.as_ref().map_or_else(
+        || "the surrounding scope".to_owned(),
+        |name| format!("function `{name}`"),
+    );
 
     ContextLabel::new(label)
 }

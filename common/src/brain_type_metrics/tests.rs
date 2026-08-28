@@ -99,7 +99,10 @@ fn brain_methods_one_qualifying_method() {
     ];
     let result = brain_methods(&methods, 25, 80);
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0].name(), "parse");
+    let first = result
+        .first()
+        .expect("expected exactly one qualifying brain method");
+    assert_eq!(first.name(), "parse");
 }
 
 #[rstest]
@@ -110,9 +113,8 @@ fn brain_methods_multiple_qualifying_in_order() {
         MethodMetrics::new("gamma", 40, 200),
     ];
     let result = brain_methods(&methods, 25, 80);
-    assert_eq!(result.len(), 2);
-    assert_eq!(result[0].name(), "alpha");
-    assert_eq!(result[1].name(), "gamma");
+    let names: Vec<&str> = result.iter().map(|method| method.name()).collect();
+    assert_eq!(names, ["alpha", "gamma"]);
 }
 
 #[rstest]

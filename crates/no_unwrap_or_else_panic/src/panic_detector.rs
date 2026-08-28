@@ -50,7 +50,7 @@ impl PanicInfo {
     /// Returns `true` when the closure has at least one interpolated panic
     /// and no plain (non-interpolating) panic.
     #[must_use]
-    pub(crate) fn is_interpolated_only(&self) -> bool {
+    pub(crate) const fn is_interpolated_only(&self) -> bool {
         self.has_interpolated_panic && !self.has_plain_panic
     }
 }
@@ -58,7 +58,7 @@ impl PanicInfo {
 /// Analyses the closure referenced by `body_id` and returns a [`PanicInfo`]
 /// describing whether it panics and distinguishing plain vs interpolated panics.
 #[must_use]
-pub(crate) fn closure_panics<'tcx>(cx: &LateContext<'tcx>, body_id: hir::BodyId) -> PanicInfo {
+pub(crate) fn closure_panics(cx: &LateContext<'_>, body_id: hir::BodyId) -> PanicInfo {
     let mut detector = PanicDetector {
         cx,
         panics: false,
@@ -105,7 +105,7 @@ struct PanicDetector<'a, 'tcx> {
     has_interpolated_panic: bool,
 }
 
-impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'a, 'tcx> {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for PanicDetector<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if is_panic_call(self.cx, expr) {
             self.panics = true;
@@ -157,11 +157,11 @@ fn is_panic_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
 /// entry point) for `Arguments::new_v1` or `Arguments::new_v1_formatted`,
 /// which are only used when format arguments are present.
 ///
-/// The check examines the message argument's call tree for fmt::Arguments
+/// The check examines the message argument's call tree for `fmt::Arguments`
 /// constructors, but only considers calls that are part of the compiler-
-/// generated format_args expansion. This avoids false positives from unrelated
+/// generated `format_args` expansion. This avoids false positives from unrelated
 /// user code like `panic_any(MyType::new_v1())` where `MyType::new_v1()` is
-/// the payload, not a format_args constructor.
+/// the payload, not a `format_args` constructor.
 fn panic_args_use_interpolation<'tcx>(cx: &LateContext<'tcx>, expr: &Expr<'tcx>) -> bool {
     // Extract the panic message argument (first argument to the panic call).
     let ExprKind::Call(_, args) = expr.kind else {
@@ -187,7 +187,7 @@ struct RuntimeArgsFinder<'a, 'tcx> {
     found: bool,
 }
 
-impl<'a, 'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'a, 'tcx> {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for RuntimeArgsFinder<'_, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
         if self.found {
             return;
