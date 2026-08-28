@@ -25,8 +25,10 @@ pub mod ui;
 
 use std::{
     ffi::{OsStr, OsString},
-    sync::{Mutex, MutexGuard, OnceLock, PoisonError},
+    sync::OnceLock,
 };
+
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 
 pub use fixtures::{copy_directory, copy_fixture};
 pub use ui::{
@@ -34,21 +36,26 @@ pub use ui::{
     read_fixture_config, resolve_fixture_config, run_fixtures_with, run_test_runner,
 };
 
+/// Held while serializing process-wide environment mutations in tests.
+///
+/// This alias keeps callers coupled to the shared test-support contract rather
+/// than its lock implementation.
+pub type EnvTestGuard = ReentrantMutexGuard<'static, ()>;
+
 /// Serializes tests that mutate process-wide environment variables.
 ///
 /// Use this guard around helpers such as `temp_env::with_var` or
 /// `temp_env::with_vars_unset` when the test would otherwise race with other
 /// cases changing the same global process state.
 ///
-/// The mutex guards `()`, so a poisoned lock carries no corrupted state: it
-/// only records that some earlier test panicked while holding the
-/// serialization token. Recovering the guard is therefore sound, and keeps one
-/// failing test from cascading into every later one.
-pub fn env_test_guard() -> MutexGuard<'static, ()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+/// The lock is reentrant so a callback that already holds the shared
+/// serialization token can safely call another shared environment helper.
+/// This permits scoped overrides to wrap UI runners, which guard their own
+/// setup and restoration. The guarded value is `()`, so no mutable state can
+/// be accessed through the guard.
+pub fn env_test_guard() -> EnvTestGuard {
+    static LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| ReentrantMutex::new(())).lock()
 }
 
 /// Guard that sets one environment variable and restores its prior state.
@@ -137,9 +144,9 @@ impl Drop for EnvVarGuard {
 /// Runs `callback` with one environment variable temporarily set.
 ///
 /// The mutation is scoped to the callback and the prior value is restored
-/// afterwards, even on panic. Serialization is provided by `temp_env`'s
-/// re-entrant global lock, so nested scoped mutations from the same thread
-/// do not deadlock.
+/// afterwards, even on panic. The callback holds [`env_test_guard`] as well as
+/// `temp_env`'s re-entrant global lock, so it cannot interleave with
+/// [`EnvVarGuard`] or manually guarded environment mutations.
 ///
 /// # Examples
 ///
@@ -154,13 +161,15 @@ impl Drop for EnvVarGuard {
 /// });
 /// ```
 pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnce() -> R) -> R {
+    let _env_guard = env_test_guard();
     temp_env::with_var(key, Some(value.as_ref()), callback)
 }
 
 /// Runs `callback` with one environment variable temporarily removed.
 ///
 /// The prior value (if any) is restored after the callback completes or
-/// panics.
+/// panics. The callback holds [`env_test_guard`] so its mutation and
+/// restoration cannot interleave with other shared environment helpers.
 ///
 /// # Examples
 ///
@@ -172,6 +181,7 @@ pub fn with_env_var<R>(key: &str, value: impl AsRef<OsStr>, callback: impl FnOnc
 /// });
 /// ```
 pub fn with_env_var_removed<R>(key: &str, callback: impl FnOnce() -> R) -> R {
+    let _env_guard = env_test_guard();
     temp_env::with_var_unset(key, callback)
 }
 
@@ -197,5 +207,82 @@ pub fn with_locale<R>(locale: Option<&str>, callback: impl FnOnce() -> R) -> R {
     match locale {
         Some(locale_value) => with_env_var("DYLINT_LOCALE", locale_value, callback),
         None => with_env_var_removed("DYLINT_LOCALE", callback),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression tests for process-wide environment synchronization.
+
+    use std::{sync::mpsc, thread, time::Duration};
+
+    use super::{EnvVarGuard, env_test_guard, with_env_var};
+
+    const ENVIRONMENT_KEY: &str = "WHITAKER_TEST_SUPPORT_SHARED_GUARD_TEST";
+
+    #[test]
+    fn scoped_mutation_blocks_env_var_guard_until_callback_finishes() {
+        let (scoped_entered_sender, scoped_entered_receiver) = mpsc::channel();
+        let (release_scoped_sender, release_scoped_receiver) = mpsc::channel();
+        let scoped_thread = thread::spawn(move || {
+            with_env_var(ENVIRONMENT_KEY, "scoped", || {
+                scoped_entered_sender
+                    .send(())
+                    .expect("scoped callback entry must be reported");
+                release_scoped_receiver
+                    .recv()
+                    .expect("scoped callback release must be received");
+            });
+        });
+        scoped_entered_receiver
+            .recv()
+            .expect("scoped callback must enter before competing mutation");
+
+        let (guard_started_sender, guard_started_receiver) = mpsc::channel();
+        let (guard_created_sender, guard_created_receiver) = mpsc::channel();
+        let guard_thread = thread::spawn(move || {
+            guard_started_sender
+                .send(())
+                .expect("competing guard attempt must be reported");
+            let _guard = EnvVarGuard::set(ENVIRONMENT_KEY, "guarded");
+            guard_created_sender
+                .send(())
+                .expect("competing guard creation must be reported");
+        });
+        guard_started_receiver
+            .recv()
+            .expect("competing guard attempt must start");
+
+        assert!(
+            guard_created_receiver
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "shared guard mutation must wait for the scoped callback"
+        );
+
+        release_scoped_sender
+            .send(())
+            .expect("scoped callback must be released");
+        scoped_thread
+            .join()
+            .expect("scoped callback thread must complete");
+        guard_created_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("competing guard must proceed after the scoped callback");
+        guard_thread
+            .join()
+            .expect("competing guard thread must complete");
+    }
+
+    #[test]
+    fn scoped_mutation_allows_nested_shared_environment_setup() {
+        with_env_var(ENVIRONMENT_KEY, "scoped", || {
+            let _nested_guard = env_test_guard();
+            assert_eq!(
+                std::env::var(ENVIRONMENT_KEY)
+                    .expect("scoped environment variable must remain available"),
+                "scoped"
+            );
+        });
     }
 }
