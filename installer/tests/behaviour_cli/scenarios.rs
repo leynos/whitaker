@@ -1,7 +1,8 @@
 //! Scenario bindings for CLI behaviour tests.
 
-use super::{CliWorld, cli_world};
 use rstest_bdd_macros::scenario;
+
+use super::{CliWorld, cli_world};
 
 // Do not reorder scenarios in tests/features/installer.feature — bindings are
 // index-based.
