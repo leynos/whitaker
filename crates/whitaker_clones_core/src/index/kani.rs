@@ -67,7 +67,7 @@ fn fragment(id: &str) -> FragmentId {
 }
 
 fn repeated_signature(value: u64) -> MinHashSignature {
-    MinHashSignature::new([value; MINHASH_SIZE])
+    MinHashSignature::new(&[value; MINHASH_SIZE])
 }
 
 fn two_band_config() -> LshConfig {

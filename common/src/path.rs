@@ -70,9 +70,11 @@ impl SimplePath {
         let mut candidate_iter = candidate.into_iter();
 
         for expected in &self.segments {
-            match candidate_iter.next() {
-                Some(candidate_segment) if expected == candidate_segment.as_ref() => continue,
-                _ => return false,
+            let Some(candidate_segment) = candidate_iter.next() else {
+                return false;
+            };
+            if expected != candidate_segment.as_ref() {
+                return false;
             }
         }
 

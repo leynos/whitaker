@@ -12,11 +12,17 @@ pub(crate) fn region_for_range(
     validate_range(fragment_id, source_text, &range)?;
     let starts = line_starts(source_text);
     let (start_line, start_column) = line_and_column(source_text, &starts, range.start);
-    let end_position = source_text[..range.end]
+    // `validate_range` has already proved `range.end` is an in-bounds char
+    // boundary, so the fallible slice only fails defensively.
+    let Some(prefix) = source_text.get(..range.end) else {
+        return Err(Run0Error::InvalidUtf8Boundary {
+            fragment_id: fragment_id.to_owned(),
+        });
+    };
+    let end_position = prefix
         .char_indices()
         .next_back()
-        .map(|(i, _)| i)
-        .unwrap_or(range.start);
+        .map_or(range.start, |(i, _)| i);
     let (end_line, end_column) = line_and_column(source_text, &starts, end_position);
 
     RegionBuilder::new(start_line)
@@ -64,9 +70,11 @@ fn line_and_column(source_text: &str, starts: &[usize], offset: usize) -> (usize
     let line_index = starts
         .partition_point(|start| *start <= offset)
         .saturating_sub(1);
-    let line_start = starts[line_index];
+    // `starts` always begins with 0, so both fallbacks preserve the
+    // start-of-text behaviour if the partition point ever degenerated.
+    let line_start = starts.get(line_index).copied().unwrap_or(0);
     let clamped_offset = offset.min(source_text.len());
-    let line_slice = &source_text[line_start..clamped_offset];
+    let line_slice = source_text.get(line_start..clamped_offset).unwrap_or("");
     let utf16_count = line_slice.encode_utf16().count();
     (line_index.saturating_add(1), utf16_count.saturating_add(1))
 }

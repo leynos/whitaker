@@ -80,19 +80,14 @@ pub fn register_suite_lints(store: &mut LintStore) {
 /// assert!(names.contains(&"no_unwrap_or_else_panic".to_string()));
 /// ```
 #[must_use]
-pub fn suite_lint_decls() -> &'static [&'static Lint] {
+pub const fn suite_lint_decls() -> &'static [&'static Lint] {
     SUITE_LINT_DECLS
 }
 
-/// Dylint entrypoint that initializes configuration and registers lints.
-///
-/// # Safety
-///
-/// Callers must pass non-null, correctly initialized `Session` and
-/// `LintStore` references from the host compiler context that remain valid on
-/// this thread for the duration of the call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn register_lints(sess: &Session, store: &mut LintStore) {
+/// Initializes Dylint configuration then registers the suite lints.
+fn register_suite_entry(sess: &Session, store: &mut LintStore) {
     dylint_linting::init_config(sess);
     register_suite_lints(store);
 }
+
+whitaker_common::declare_dylint_register_entry!(register_suite_entry);

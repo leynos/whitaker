@@ -3354,14 +3354,12 @@ must coordinate through `installer/src/test_support.rs`.
 For a single variable or locale override, prefer
 `whitaker_common::test_support::{with_env_var, with_env_var_removed,
 with_locale}`.
-Each helper holds the shared guard for its complete callback, including
-restoration, so it also coordinates with `EnvVarGuard`. Do not acquire a
-separate mutex around those helpers. `env_test_guard()` is the sole shared
-synchronization mechanism and is reentrant: a callback may safely call a UI
-runner or another helper that acquires it for nested setup. The common
-test-support module owns this lock; callers must reuse it rather than adding
-crate-local environment locks. `EnvTestGuard` is the corresponding façade type
-when a test fixture must retain the guard beyond local scope.
+Each helper delegates to `temp_env`'s re-entrant global lock, scopes restoration
+to its callback, and permits nested overrides from the same thread.
+`env_test_guard()` remains available for tests that need to serialize a larger
+sequence of operations that use the same explicit guard; it is re-entrant so a
+callback may safely acquire it again. `EnvTestGuard` is the corresponding
+façade type when a test fixture must retain that guard beyond local scope.
 
 For example:
 
@@ -3377,31 +3375,30 @@ the regression suite: `temp-env` provides scoped environment overrides,
 `tempfile` provides isolated target directories, and `rstest` powers the
 fixture-based test setup used by the staged-suite coverage.
 
-#### Shared UI harness environment guards
+#### Shared UI harness environment overrides
 
-Workspace-level UI harness tests that mutate process-wide environment variables
-must use `whitaker_common::test_support::EnvVarGuard`. Use `EnvVarGuard::set`
-to install a temporary value and `EnvVarGuard::remove` to make a variable
-absent for the duration of a test. The guard retains `env_test_guard()` from
-construction through restoration in `Drop`, preventing another thread from
-interleaving a mutation or restoring stale state. Because this guard is
-re-entrant, code on the same thread may still use nested helpers that acquire
-the shared protocol.
+Workspace-level UI harness tests that mutate process-wide environment
+variables must use the scoped helpers in `whitaker_common::test_support`:
+`with_env_var` installs a temporary value, `with_env_var_removed` makes a
+variable absent, and `with_locale` overrides or clears `DYLINT_LOCALE` for the
+duration of a callback. The helpers delegate to `temp_env`, whose re-entrant
+global lock serializes scoped mutations while permitting nesting from the same
+thread. Each prior value is restored when the callback returns or panics. The
+workspace forbids `unsafe` code, so tests must not call
+`std::env::set_var` or `std::env::remove_var` directly.
 
-`whitaker::testing::ui::run_with_runner` applies a specialized guard before
-invoking the Dylint UI runner. It preserves `RUSTC_WRAPPER` so nested Cargo
-builds retain compiler admission; the workspace's patched `dylint_testing`
-recognizes wrapped `rustc` commands when recovering example flags. The vendored
-crate is a workspace member so Clippy checks its parser, but its
-`deny_warnings` feature changes UI fixture diagnostics and must not be enabled
-for the ordinary all-features test run. `make test` therefore excludes it from
-Nextest and runs its command-decoding unit tests separately with default
-features disabled. The decoder parses Cargo's quoted command line and selects
-the compiler arguments after any wrapper chain; do not clear the configured
-wrappers. On Windows the guard also sets `VCPKG_ROOT` to `C:\vcpkg` when that
-directory exists and the variable is otherwise absent. Restoration uses the
-same shared environment mutex, but the runner callback itself executes without
-holding that mutex to avoid nested-lock deadlocks.
+`whitaker::testing::ui::run_with_runner` preserves `RUSTC_WRAPPER` so nested
+Cargo builds retain compiler admission; the workspace's patched
+`dylint_testing` recognizes wrapped `rustc` commands when recovering example
+flags. The vendored crate is a workspace member so Clippy checks its parser,
+but its `deny_warnings` feature changes UI fixture diagnostics and must not be
+enabled for the ordinary all-features test run. `make test` therefore excludes
+it from Nextest and runs its command-decoding unit tests separately with
+default features disabled. The decoder parses Cargo's quoted command line and
+selects the compiler arguments after any wrapper chain; do not clear the
+configured wrappers. On Windows the UI runner sets `VCPKG_ROOT` to `C:\vcpkg`
+when that directory exists and the variable is otherwise absent, then restores
+the previous value after the runner completes.
 
 Any UI test that holds `env_test_guard()` while invoking Dylint must use
 `run_test_runner_with_env_guard()`. It catches a runner panic before releasing
@@ -3835,6 +3832,16 @@ It can be promoted to standard by:
 2. Adding the lint dependency to the suite `dylint-driver` feature in
    `suite/Cargo.toml`
 3. Updating documentation to reflect the change
+
+### Suite entry point
+
+Dylint resolves a library's lints through an exported `register_lints`
+symbol, which requires `#[unsafe(no_mangle)]`. The workspace forbids in-crate
+`unsafe` code, so the suite declares its entry point through
+`whitaker_common::declare_dylint_register_entry!`, which expands the unsafe
+attribute from an external macro, just as `dylint_linting::impl_late_lint!`
+does for single-lint crates. Reserve this macro for Dylint driver crates; do
+not use it for other symbol exports.
 
 ## Creating a New Lint
 

@@ -61,14 +61,14 @@ enum ItemKindInfo<'a> {
 }
 
 impl<'a> ItemKindInfo<'a> {
-    fn ident(&self) -> &Ident {
+    const fn ident(&self) -> &Ident {
         match self {
             ItemKindInfo::Item { ident, .. } => ident,
             ItemKindInfo::ImplItem { ident, .. } | ItemKindInfo::TraitItem { ident, .. } => ident,
         }
     }
 
-    fn attrs(&self) -> &'a [hir::Attribute] {
+    const fn attrs(&self) -> &'a [hir::Attribute] {
         match self {
             ItemKindInfo::Item { attrs, .. }
             | ItemKindInfo::ImplItem { attrs, .. }
@@ -113,8 +113,7 @@ impl<'tcx> LateLintPass<'tcx> for TestMustNotHaveExample {
             Err(error) => {
                 debug!(
                     target: LINT_NAME,
-                    "failed to parse `{}` configuration: {error}; using defaults",
-                    LINT_NAME
+                    "failed to parse `{LINT_NAME}` configuration: {error}; using defaults"
                 );
                 Config::default()
             }
@@ -179,9 +178,9 @@ impl TestMustNotHaveExample {
         violation: DocExampleViolation,
     ) {
         let messages = localized_messages(&self.localizer, function.name, violation);
-        let primary = messages.primary().to_string();
-        let note = messages.note().to_string();
-        let help = messages.help().to_string();
+        let primary = messages.primary().to_owned();
+        let note = messages.note().to_owned();
+        let help = messages.help().to_owned();
 
         cx.emit_span_lint(
             TEST_MUST_NOT_HAVE_EXAMPLE,
@@ -319,13 +318,13 @@ fn localized_messages(
     let mut args: Arguments<'static> = Arguments::default();
     args.insert(
         Cow::Borrowed("test"),
-        FluentValue::from(function_name.to_string()),
+        FluentValue::from(function_name.to_owned()),
     );
 
     let reason = violation.note_detail();
     args.insert(
         Cow::Borrowed("reason"),
-        FluentValue::from(reason.to_string()),
+        FluentValue::from(reason.to_owned()),
     );
     let resolution = MessageResolution {
         lint_name: LINT_NAME,

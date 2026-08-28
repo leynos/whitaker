@@ -43,7 +43,7 @@ struct RegionKey {
 }
 
 impl RegionKey {
-    fn from_region(region: &Region) -> Self {
+    const fn from_region(region: &Region) -> Self {
         Self {
             start_line: region.start_line,
             start_column: region.start_column,

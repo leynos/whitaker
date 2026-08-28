@@ -33,7 +33,7 @@ fn hir_attribute_from_segments(segments: &[&str]) -> hir::Attribute {
     hir::Attribute::Unparsed(Box::new(attr_item))
 }
 
-fn parsed_must_use_attribute() -> hir::Attribute {
+const fn parsed_must_use_attribute() -> hir::Attribute {
     hir::Attribute::Parsed(HirAttributeKind::MustUse {
         span: DUMMY_SP,
         reason: None,

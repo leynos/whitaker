@@ -31,7 +31,7 @@ pub(crate) struct CallSiteVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> CallSiteVisitor<'a, 'tcx> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         cx: &'a LateContext<'tcx>,
         collector: &'a mut CallSiteCollector,
         test_source_def_id: DefId,
@@ -94,7 +94,7 @@ impl<'tcx> Visitor<'tcx> for CallSiteVisitor<'_, 'tcx> {
         match expr.kind {
             hir::ExprKind::Call(_, args) => self.collect_call(expr, args),
             hir::ExprKind::MethodCall(_, receiver, args, _) => {
-                self.collect_call(expr, std::iter::once(receiver).chain(args))
+                self.collect_call(expr, std::iter::once(receiver).chain(args));
             }
             hir::ExprKind::Closure(hir::Closure { .. }) => {
                 self.closure_span_fallbacks.push(expr.span);
@@ -208,7 +208,7 @@ pub(crate) fn redacted_fingerprint_shape(fingerprint: &ArgFingerprint) -> String
         .join(",")
 }
 
-fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
+const fn redacted_atom_shape(atom: &ArgAtom) -> &'static str {
     match atom {
         ArgAtom::FixtureLocal { .. } => "fixture-local",
         ArgAtom::ConstLit { .. } => "const-lit",

@@ -67,7 +67,7 @@ impl PathExclusions {
     ///
     /// The driver consults this before resolving an item's path so the common
     /// case pays no lookup cost.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.prefixes.is_empty()
     }
 

@@ -4,7 +4,9 @@ use super::{HarnessError, run_ui_test, run_with_runner};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::env;
-use whitaker_common::test_support::{EnvTestGuard, EnvVarGuard, env_test_guard};
+use whitaker_common::test_support::{EnvTestGuard, env_test_guard, with_env_var};
+#[cfg(windows)]
+use whitaker_common::test_support::with_env_var_removed;
 
 #[rstest]
 #[case(
@@ -115,31 +117,32 @@ fn run_ui_test_panics_with_context_from_runner_failure() {
 #[test]
 fn runner_env_guard_preserves_rustc_wrapper() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _guard = EnvVarGuard::set("RUSTC_WRAPPER", "sccache");
+    with_env_var("RUSTC_WRAPPER", "sccache", || {
+        run_with_runner("lint", "ui", |_, _| {
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+            Ok(())
+        })
+        .expect("runner should execute with RUSTC_WRAPPER preserved");
 
-    run_with_runner("lint", "ui", |_, _| {
         assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
-        Ok(())
-    })
-    .expect("runner should execute with RUSTC_WRAPPER preserved");
-
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), Some("sccache".into()));
+    });
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_env_guard_leaves_absent_rustc_wrapper_untouched() {
     let _serial_guard = runner_env_guard_test_lock();
-    let _vcpkg_root = EnvVarGuard::set("VCPKG_ROOT", r"C:\vcpkg");
-    let _rustc_wrapper = EnvVarGuard::remove("RUSTC_WRAPPER");
+    with_env_var("VCPKG_ROOT", r"C:\vcpkg", || {
+        with_env_var_removed("RUSTC_WRAPPER", || {
+            run_with_runner("lint", "ui", |_, _| {
+                assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+                Ok(())
+            })
+            .expect("runner should execute without installing RUSTC_WRAPPER");
 
-    run_with_runner("lint", "ui", |_, _| {
-        assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
-        Ok(())
-    })
-    .expect("runner should execute without installing RUSTC_WRAPPER");
-
-    assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+            assert_eq!(env::var_os("RUSTC_WRAPPER"), None);
+        });
+    });
 }
 
 #[test]

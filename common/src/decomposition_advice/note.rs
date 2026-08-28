@@ -63,13 +63,17 @@ pub fn format_diagnostic_note(
         return None;
     }
 
-    let visible_suggestions = &suggestions[..suggestions.len().min(MAX_SUGGESTIONS)];
     let mut lines = vec![format!(
         "Potential decomposition for `{}`:",
         context.subject_name()
     )];
 
-    lines.extend(visible_suggestions.iter().map(render_suggestion_line));
+    lines.extend(
+        suggestions
+            .iter()
+            .take(MAX_SUGGESTIONS)
+            .map(render_suggestion_line),
+    );
 
     let omitted_suggestions = suggestions.len().saturating_sub(MAX_SUGGESTIONS);
     if omitted_suggestions > 0 {
@@ -99,17 +103,17 @@ fn render_suggestion_line(suggestion: &DecompositionSuggestion) -> String {
 }
 
 fn render_method_list(methods: &[String]) -> String {
-    let visible_methods = &methods[..methods.len().min(MAX_METHODS_PER_SUGGESTION)];
-    let mut rendered = visible_methods
+    let rendered = methods
         .iter()
+        .take(MAX_METHODS_PER_SUGGESTION)
         .map(|method| format!("`{method}`"))
         .collect::<Vec<_>>()
         .join(", ");
 
     let omitted_methods = methods.len().saturating_sub(MAX_METHODS_PER_SUGGESTION);
     if omitted_methods > 0 {
-        rendered.push_str(&format!(", +{omitted_methods} more methods"));
+        format!("{rendered}, +{omitted_methods} more methods")
+    } else {
+        rendered
     }
-
-    rendered
 }

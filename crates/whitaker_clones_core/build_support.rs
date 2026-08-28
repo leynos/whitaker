@@ -76,8 +76,8 @@ fn read_manifest_text(candidate: &Utf8Path) -> Result<Option<String>, Box<dyn Er
     let Some(filename) = candidate.file_name() else {
         return Ok(None);
     };
-    let directory = Dir::open_ambient_dir(directory, ambient_authority())?;
-    match directory.read_to_string(filename) {
+    let directory_handle = Dir::open_ambient_dir(directory, ambient_authority())?;
+    match directory_handle.read_to_string(filename) {
         Ok(manifest) => Ok(Some(manifest)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
@@ -118,8 +118,7 @@ fn workspace_manifest_not_found(manifest_dir: &Utf8Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::NotFound,
         format!(
-            "could not find a parent Cargo.toml with a [workspace] table from `{}`",
-            manifest_dir
+            "could not find a parent Cargo.toml with a [workspace] table from `{manifest_dir}`"
         ),
     )
 }

@@ -97,7 +97,7 @@ pub enum LeafClass {
 pub struct NormalizedNode {
     kind: KindId,
     leaf: Option<LeafClass>,
-    children: Vec<NormalizedNode>,
+    children: Vec<Self>,
 }
 
 impl NormalizedNode {
@@ -111,7 +111,7 @@ impl NormalizedNode {
     /// leaf-erasure feature extraction rely on that invariant to stay
     /// unambiguous.
     #[must_use]
-    pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<NormalizedNode>) -> Self {
+    pub fn new(kind: KindId, leaf: Option<LeafClass>, children: Vec<Self>) -> Self {
         debug_assert!(
             leaf.is_none() || children.is_empty(),
             "a leaf-tagged NormalizedNode must have no children"
@@ -137,7 +137,7 @@ impl NormalizedNode {
 
     /// Returns the ordered child nodes.
     #[must_use]
-    pub fn children(&self) -> &[NormalizedNode] {
+    pub fn children(&self) -> &[Self] {
         &self.children
     }
 }
@@ -199,7 +199,15 @@ pub struct ByteSpan {
 
 impl ByteSpan {
     /// Validates and creates a half-open byte span.
-    pub fn new(source_text: &str, start: u32, end: u32) -> AstResult<Self> {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AstError::InvalidSpan`] when `end` precedes `start`,
+    /// [`AstError::EmptySpan`] when the span is zero width,
+    /// [`AstError::SpanOutOfBounds`] when the span exceeds `source_text`, and
+    /// [`AstError::NonCharBoundary`] when either offset splits a UTF-8
+    /// character.
+    pub const fn new(source_text: &str, start: u32, end: u32) -> AstResult<Self> {
         if end < start {
             return Err(AstError::InvalidSpan { start, end });
         }
