@@ -129,6 +129,7 @@ pub struct RelatedLocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{assert_json_round_trip, assert_serialized_json};
 
     #[test]
     fn region_round_trip() {
@@ -140,13 +141,7 @@ mod tests {
             byte_offset: None,
             byte_length: None,
         };
-        match serde_json::to_string(&region) {
-            Ok(json) => match serde_json::from_str::<Region>(&json) {
-                Ok(parsed) => assert_eq!(region, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&region);
     }
 
     #[test]
@@ -159,13 +154,13 @@ mod tests {
             byte_offset: None,
             byte_length: None,
         };
-        match serde_json::to_string(&region) {
-            Ok(json) => {
-                assert!(!json.contains("startColumn"));
-                assert!(!json.contains("endLine"));
-            }
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_serialized_json(&region, |json| {
+            assert!(
+                !json.contains("startColumn"),
+                "unset startColumn present: {json}"
+            );
+            assert!(!json.contains("endLine"), "unset endLine present: {json}");
+        });
     }
 
     #[test]
@@ -186,13 +181,7 @@ mod tests {
                 }),
             },
         };
-        match serde_json::to_string(&loc) {
-            Ok(json) => match serde_json::from_str::<Location>(&json) {
-                Ok(parsed) => assert_eq!(loc, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&loc);
     }
 
     #[test]
@@ -210,12 +199,6 @@ mod tests {
                 region: None,
             },
         };
-        match serde_json::to_string(&rl) {
-            Ok(json) => match serde_json::from_str::<RelatedLocation>(&json) {
-                Ok(parsed) => assert_eq!(rl, parsed),
-                Err(e) => panic!("failed to deserialize: {e}"),
-            },
-            Err(e) => panic!("failed to serialize: {e}"),
-        }
+        assert_json_round_trip(&rl);
     }
 }
