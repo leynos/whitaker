@@ -82,7 +82,7 @@ struct ItemInfo {
 }
 
 impl ItemInfo {
-    fn new(hir_id: hir::HirId, span: Span, kind: FunctionKind) -> Self {
+    const fn new(hir_id: hir::HirId, span: Span, kind: FunctionKind) -> Self {
         Self { hir_id, span, kind }
     }
 }
@@ -195,7 +195,7 @@ impl AttrInfo {
         (span.lo(), span.hi())
     }
 
-    fn user_editable_span(&self) -> Option<Span> {
+    const fn user_editable_span(&self) -> Option<Span> {
         self.user_editable_span
     }
 }
@@ -238,7 +238,7 @@ fn check_function_attributes(check: FunctionAttributeCheck<'_, '_>) {
         )
     });
     // Attribute macros can reorder attributes in HIR; rely on source order instead.
-    infos.sort_by_key(|info| info.source_order_key());
+    infos.sort_by_key(AttrInfo::source_order_key);
 
     let Some((doc_index, offending_index)) = detect_misordered_doc(infos.as_slice()) else {
         return;
@@ -312,9 +312,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: DiagnosticContext, localizer: 
         let kind = context.kind;
         move || fallback_messages(kind, attribute.as_str())
     });
-    let primary = messages.primary().to_string();
-    let note = messages.note().to_string();
-    let help = messages.help().to_string();
+    let primary = messages.primary().to_owned();
+    let note = messages.note().to_owned();
+    let help = messages.help().to_owned();
 
     cx.emit_span_lint(
         FUNCTION_ATTRS_FOLLOW_DOCS,
@@ -341,7 +341,7 @@ fn localized_messages(
     args.insert(Cow::Borrowed("subject"), FluentValue::from(kind.subject()));
     args.insert(
         Cow::Borrowed("attribute"),
-        FluentValue::from(attribute.to_string()),
+        FluentValue::from(attribute.to_owned()),
     );
 
     resolve_message_set(lookup, MESSAGE_KEY, &args)
@@ -352,15 +352,15 @@ fn fallback_messages(kind: FunctionKind, attribute: &str) -> FunctionAttrsMessag
         "Doc comments on {} must precede other outer attributes.",
         kind.subject()
     );
-    let note = format!("The outer attribute {attribute} appears before the doc comment.",);
-    let help = format!("Move the doc comment so it appears before {attribute} on the item.",);
+    let note = format!("The outer attribute {attribute} appears before the doc comment.");
+    let help = format!("Move the doc comment so it appears before {attribute} on the item.");
 
     FunctionAttrsMessages::new(primary, note, help)
 }
 
 fn attribute_label(cx: &LateContext<'_>, span: Span, localizer: &Localizer) -> String {
     match cx.sess().source_map().span_to_snippet(span) {
-        Ok(snippet) => snippet.trim().to_string(),
+        Ok(snippet) => snippet.trim().to_owned(),
         Err(_) => attribute_fallback(localizer),
     }
 }
@@ -370,7 +370,7 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
 
     lookup
         .message(MessageKey::new("common-attribute-fallback"), &args)
-        .unwrap_or_else(|_| "the preceding attribute".to_string())
+        .unwrap_or_else(|_| "the preceding attribute".to_owned())
 }
 
 /// Recover the source span of a parsed attribute kind.
@@ -385,7 +385,7 @@ fn attribute_fallback(lookup: &impl BundleLookup) -> String {
 /// deliberately not recovered until the ordering check needs them. Only
 /// variants whose shape is identical on the currently supported nightlies
 /// are matched; further kinds can be added as the pin advances.
-fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
+const fn parsed_attribute_span(kind: &AttributeKind) -> Option<Span> {
     match kind {
         AttributeKind::DocComment { span, .. }
         | AttributeKind::Ignore { span, .. }

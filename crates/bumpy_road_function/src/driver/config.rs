@@ -52,7 +52,7 @@ impl Default for Config {
 }
 
 impl Config {
-    pub(super) fn into_settings(self) -> Settings {
+    pub(super) const fn into_settings(self) -> Settings {
         Settings {
             threshold: self.threshold,
             window: self.window,

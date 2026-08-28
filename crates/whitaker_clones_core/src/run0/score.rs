@@ -128,7 +128,7 @@ impl SimilarityThreshold {
     }
 
     /// Returns `true` if the threshold represents a ratio within `(0, 1]`.
-    fn is_valid(self) -> bool {
+    const fn is_valid(self) -> bool {
         self.numerator != 0 && self.denominator != 0 && self.numerator <= self.denominator
     }
 
@@ -142,7 +142,7 @@ impl SimilarityThreshold {
     }
 }
 
-pub(crate) fn select_rule_profile(
+pub(crate) const fn select_rule_profile(
     profile: NormProfile,
     score: SimilarityRatio,
     type1_threshold: SimilarityThreshold,
@@ -184,7 +184,7 @@ fn unique_hashes(fingerprints: &[Fingerprint]) -> BTreeSet<u64> {
 /// to avoid panics on pathological inputs; clamped results only occur in
 /// extreme/unrealistic cases. Callers should validate counts if they may
 /// approach `usize::MAX`.
-fn meets_threshold(score: SimilarityRatio, threshold: SimilarityThreshold) -> bool {
+const fn meets_threshold(score: SimilarityRatio, threshold: SimilarityThreshold) -> bool {
     score.intersection.saturating_mul(threshold.denominator)
         >= score.union.saturating_mul(threshold.numerator)
 }
@@ -195,8 +195,10 @@ fn repeated_division(numerator: usize, denominator: usize) -> Option<(usize, usi
         return None;
     }
 
-    let quotient = numerator / denominator;
-    let remainder = numerator % denominator;
+    // For unsigned integers Euclidean division matches truncating division
+    // exactly, so the quotient and remainder are unchanged.
+    let quotient = numerator.div_euclid(denominator);
+    let remainder = numerator.rem_euclid(denominator);
 
     Some((quotient, remainder))
 }

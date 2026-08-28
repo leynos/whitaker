@@ -43,6 +43,7 @@ impl<'a> ParseInput<'a> {
     /// let input = ParseInput::from("example");
     /// assert_eq!(input.as_str(), "example");
     /// ```
+    #[must_use]
     pub fn as_str(&self) -> &'a str {
         **self
     }
@@ -194,8 +195,7 @@ fn has_inner_doc(rest: ParseInput<'_>) -> bool {
     while line_start < snippet.len() {
         let line_end = snippet[line_start..]
             .find('\n')
-            .map(|idx| line_start + idx)
-            .unwrap_or(snippet.len());
+            .map_or(snippet.len(), |idx| line_start + idx);
         let line = &snippet[line_start..line_end];
         if check_line_for_inner_doc(snippet, line, line_start) {
             return true;
@@ -305,9 +305,9 @@ fn emit_diagnostic(cx: &LateContext<'_>, context: &ModuleDiagnosticContext, loca
         MODULE_MUST_HAVE_INNER_DOCS,
         context.primary_span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
-            lint.span_note(context.header_span, messages.note().to_string());
-            lint.help(messages.help().to_string());
+            lint.primary_message(messages.primary().to_owned());
+            lint.span_note(context.header_span, messages.note().to_owned());
+            lint.help(messages.help().to_owned());
         }),
     );
 }

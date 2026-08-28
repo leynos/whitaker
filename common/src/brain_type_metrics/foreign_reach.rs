@@ -121,7 +121,7 @@ impl ForeignReferenceSet {
     /// assert!(refs.references().contains("std::io"));
     /// ```
     #[must_use]
-    pub fn references(&self) -> &BTreeSet<String> {
+    pub const fn references(&self) -> &BTreeSet<String> {
         &self.references
     }
 }

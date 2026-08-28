@@ -50,7 +50,7 @@ impl ResultBuilder {
 
     /// Sets the severity level.
     #[must_use]
-    pub fn with_level(mut self, level: Level) -> Self {
+    pub const fn with_level(mut self, level: Level) -> Self {
         self.level = level;
         self
     }

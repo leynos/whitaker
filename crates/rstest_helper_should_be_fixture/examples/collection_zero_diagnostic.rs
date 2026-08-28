@@ -67,7 +67,7 @@ fn rstest_helper_call_collection_stays_silent(fixture: &str) {
     assert_eq!(built, "fixture-suffix");
 }
 
-fn nested_helper(fixture: &str) -> &str {
+const fn nested_helper(fixture: &str) -> &str {
     fixture
 }
 

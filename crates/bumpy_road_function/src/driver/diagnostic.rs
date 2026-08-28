@@ -59,8 +59,8 @@ pub(super) fn emit_diagnostic(
         BUMPY_ROAD_FUNCTION,
         input.primary_span,
         rustc_lint::errors::DiagDecorator(|lint| {
-            lint.primary_message(messages.primary().to_string());
-            lint.span_note(input.primary_span, messages.note().to_string());
+            lint.primary_message(messages.primary().to_owned());
+            lint.span_note(input.primary_span, messages.note().to_owned());
 
             for (ordinal, interval) in highlighted.iter().enumerate() {
                 let Some(span) = bump_spans.get(ordinal).copied().flatten() else {
@@ -74,7 +74,7 @@ pub(super) fn emit_diagnostic(
                 lint.span_label(span, label);
             }
 
-            lint.help(messages.help().to_string());
+            lint.help(messages.help().to_owned());
         }),
     );
 }
@@ -128,7 +128,12 @@ struct LineSpanMapper {
 }
 
 impl LineSpanMapper {
-    fn new(base_span: Span, snippet_len: usize, base_line: usize, line_starts: Vec<usize>) -> Self {
+    const fn new(
+        base_span: Span,
+        snippet_len: usize,
+        base_line: usize,
+        line_starts: Vec<usize>,
+    ) -> Self {
         Self {
             base_span,
             snippet_len,

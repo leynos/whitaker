@@ -273,7 +273,7 @@ fn normalize_isolation_marks(text: &str) -> String {
             })
             .collect()
     } else {
-        text.to_string()
+        text.to_owned()
     }
 }
 

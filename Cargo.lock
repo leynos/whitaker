@@ -3761,6 +3761,7 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "test_must_not_have_example",
+ "whitaker-common",
  "whitaker_test_macros",
 ]
 

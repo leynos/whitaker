@@ -1,6 +1,7 @@
 //! Locale resolver wiring explicit overrides, environment variables, and
 //! configuration before falling back to the bundled localizer.
 
+use std::borrow::Cow;
 use std::fmt;
 
 use log::{debug, warn};
@@ -68,13 +69,13 @@ impl LocaleSelection {
 
     /// Whether the fallback locale was used.
     #[must_use]
-    pub fn used_fallback(&self) -> bool {
+    pub const fn used_fallback(&self) -> bool {
         self.localizer.used_fallback()
     }
 
     /// Returns the resolved [`Localizer`].
     #[must_use]
-    pub fn localizer(&self) -> &Localizer {
+    pub const fn localizer(&self) -> &Localizer {
         &self.localizer
     }
 
@@ -130,14 +131,20 @@ pub fn resolve_localizer(
     configuration: Option<&str>,
 ) -> LocaleSelection {
     let candidates = [
-        (LocaleSource::ExplicitArgument, explicit),
-        (LocaleSource::EnvironmentVariable, environment.as_deref()),
-        (LocaleSource::Configuration, configuration),
+        (LocaleSource::ExplicitArgument, explicit.map(Cow::Borrowed)),
+        (
+            LocaleSource::EnvironmentVariable,
+            environment.map(Cow::Owned),
+        ),
+        (
+            LocaleSource::Configuration,
+            configuration.map(Cow::Borrowed),
+        ),
     ];
 
     candidates
         .into_iter()
-        .find_map(|(source, raw)| try_resolve_candidate(source, raw))
+        .find_map(|(source, raw)| try_resolve_candidate(source, raw.as_deref()))
         .unwrap_or_else(|| LocaleSelection::new(Localizer::new(None), LocaleSource::Fallback, None))
 }
 
