@@ -71,6 +71,33 @@ make test
 This executes unit, behaviour, and UI harness tests. The shared target enables
 `rstest` fixtures and `rstest-bdd` scenarios.
 
+
+### Fixture expansion lint macro
+
+The workspace-owned `whitaker_test_macros` crate provides
+`allow_fixture_expansion_lints` for one narrow test-support case: an
+`#[rstest::fixture]` declaration whose macro expansion triggers the
+`unused_braces` lint. Apply the attribute only to that fixture declaration. It
+must not be used on test functions, production code, or as a general mechanism
+for suppressing unrelated lints.
+
+Reuse the shared macro rather than adding crate-local equivalents. Compose it
+with `#[fixture]` by placing it immediately before that attribute:
+
+```rust
+use rstest::fixture;
+use whitaker_test_macros::allow_fixture_expansion_lints;
+
+#[allow_fixture_expansion_lints]
+#[fixture]
+fn world() -> World {
+    World::default()
+}
+```
+
+The macro owns only the narrowly scoped expansion-lint allowance; fixture
+definition and expansion remain the responsibility of `rstest`.
+
 ### Integration tests for lint exclusion behaviour
 
 The `no_std_fs_operations` crate includes end-to-end behavioural coverage for
@@ -2286,6 +2313,17 @@ must coordinate through `installer/src/test_support.rs`.
 - `installer/src/staged_suite.rs` shows the intended pattern: acquire the
   guard, create the temporary target directory, then run the env-mutating test
   body.
+
+For a single variable or locale override, prefer
+`whitaker_common::test_support::{with_env_var, with_env_var_removed,
+with_locale}`. Each helper holds the shared guard for its complete callback,
+including restoration, so it also coordinates with `EnvVarGuard`. Do not
+acquire a separate mutex around those helpers. `env_test_guard()` is the sole
+shared synchronization mechanism and is reentrant: a callback may safely call
+a UI runner or another helper that acquires it for nested setup. The common
+test-support module owns this lock; callers must reuse it rather than adding
+crate-local environment locks. `EnvTestGuard` is the corresponding façade type
+when a test fixture must retain the guard beyond local scope.
 
 For example:
 

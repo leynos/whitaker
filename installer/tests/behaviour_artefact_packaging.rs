@@ -7,7 +7,13 @@
 use std::{fs, path::PathBuf};
 
 use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
+use rstest_bdd_macros::{given, then, when};
+
+#[path = "behaviour_artefact_packaging/archive_assertions.rs"]
+mod archive_assertions;
+#[path = "behaviour_artefact_packaging/scenarios.rs"]
+mod scenarios;
+use archive_assertions::list_archive_entries;
 use tempfile::TempDir;
 use whitaker_installer::artefact::{
     git_sha::GitSha,
@@ -372,94 +378,4 @@ fn then_filename_matches_artefact_name(world: &mut PackagingWorld) -> Result<(),
         ));
     }
     Ok(())
-}
-
-/// Extract entry names from a `.tar.zst` archive.
-fn list_archive_entries(world: &PackagingWorld) -> Result<Vec<String>, String> {
-    let output = output_ref(world)?;
-    let file = fs::File::open(&output.archive_path).map_err(|e| format!("open archive: {e}"))?;
-    let decoder = zstd::Decoder::new(file).map_err(|e| format!("decode archive: {e}"))?;
-    let mut archive = tar::Archive::new(decoder);
-    let mut names = Vec::new();
-    for entry in archive
-        .entries()
-        .map_err(|e| format!("list archive entries: {e}"))?
-    {
-        let archive_entry = entry.map_err(|e| format!("read archive entry: {e}"))?;
-        let path = archive_entry
-            .path()
-            .map_err(|e| format!("read entry path: {e}"))?
-            .to_string_lossy()
-            .into_owned();
-        names.push(path);
-    }
-    Ok(names)
-}
-
-// ---------------------------------------------------------------------------
-// Scenario bindings
-// ---------------------------------------------------------------------------
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Package a single library file into a tar.zst archive"
-)]
-fn scenario_package_single_library(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Manifest JSON contains all required fields"
-)]
-fn scenario_manifest_fields(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Manifest sha256 matches the archive digest"
-)]
-fn scenario_manifest_digest_self_consistency(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Archive SHA-256 is a valid digest"
-)]
-fn scenario_archive_sha256(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Packaging rejects an empty file list"
-)]
-fn scenario_reject_empty_files(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Archive filename matches ArtefactName convention"
-)]
-fn scenario_filename_matches(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Archive contains multiple library files"
-)]
-fn scenario_multi_library(world: PackagingWorld) {
-    let _ = world;
-}
-
-#[scenario(
-    path = "tests/features/artefact_packaging.feature",
-    name = "Manifest files field lists all library basenames"
-)]
-fn scenario_manifest_files_field(world: PackagingWorld) {
-    let _ = world;
 }

@@ -24,6 +24,7 @@ libc = "0.2"
 fluent-templates = "^0.15.0"
 insta = { version = "1", features = ["json"] }
 once_cell = "^1.21.3"
+parking_lot = "0.12.5"
 unic-langid = "^0.9.4"
 serde = { version = "1.0.228", features = ["derive"] }
 flate2 = "1.1"
