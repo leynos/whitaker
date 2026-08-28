@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 rustc_lexer = { workspace = true }
 ra_ap_syntax = { workspace = true, optional = true }
 sha2 = { workspace = true }
+metrics = { workspace = true }
 tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
 
@@ -24,6 +25,7 @@ whitaker_sarif = { workspace = true }
 camino = { workspace = true }
 cap-std = { workspace = true }
 insta = { workspace = true }
+metrics-util = { workspace = true }
 proptest = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
