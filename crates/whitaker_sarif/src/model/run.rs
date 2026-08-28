@@ -197,7 +197,7 @@ mod tests {
             );
             assert!(
                 !json.contains("\"artifacts\""),
-                "empty artifacts present: {json}"
+                "empty artefacts present: {json}"
             );
             assert!(!json.contains("\"rules\""), "empty rules present: {json}");
         });
@@ -205,13 +205,13 @@ mod tests {
 
     #[test]
     fn artifact_round_trip() {
-        let artifact = Artifact {
+        let artefact = Artifact {
             location: ArtifactLocation {
                 uri: "src/lib.rs".into(),
                 uri_base_id: Some("%SRCROOT%".into()),
             },
             mime_type: Some("text/x-rust".into()),
         };
-        assert_json_round_trip(&artifact);
+        assert_json_round_trip(&artefact);
     }
 }
