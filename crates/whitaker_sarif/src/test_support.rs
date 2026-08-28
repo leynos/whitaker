@@ -4,9 +4,48 @@
 //! It exists solely to avoid duplicating test helper logic between the
 //! `merge::tests` unit tests and the `tests/` integration tests.
 
+use core::fmt::Debug;
+
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
 use crate::builders::{LocationBuilder, RegionBuilder, ResultBuilder};
 use crate::merge::WHITAKER_FRAGMENT_KEY;
 use crate::model::result::{Level, SarifResult};
+
+/// Asserts that `value` survives a JSON serialize/deserialize round trip
+/// unchanged.
+///
+/// Panics with the type name and underlying serde error on failure; intended
+/// only for test code.
+pub fn assert_json_round_trip<T>(value: &T)
+where
+    T: Serialize + DeserializeOwned + PartialEq + Debug,
+{
+    let type_name = core::any::type_name::<T>();
+    let json = match serde_json::to_string(value) {
+        Ok(json) => json,
+        Err(e) => panic!("failed to serialize {type_name}: {e}"),
+    };
+    match serde_json::from_str::<T>(&json) {
+        Ok(parsed) => assert_eq!(
+            *value, parsed,
+            "JSON round trip changed {type_name} (json: {json})"
+        ),
+        Err(e) => panic!("failed to deserialize {type_name} from {json}: {e}"),
+    }
+}
+
+/// Serializes `value` to JSON and passes the resulting string to `check`.
+///
+/// Panics with the underlying serde error if serialization fails; intended
+/// only for test code.
+pub fn assert_serialized_json(value: &impl Serialize, check: impl FnOnce(&str)) {
+    match serde_json::to_string(value) {
+        Ok(json) => check(&json),
+        Err(e) => panic!("failed to serialize value to JSON: {e}"),
+    }
+}
 
 /// Builds a [`SarifResult`] with a fingerprint, location, and region.
 ///

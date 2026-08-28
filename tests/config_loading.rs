@@ -136,13 +136,41 @@ fn load_config(
         .replace(outcome.map_err(panic_message));
 }
 
+/// Clones the successfully loaded configuration from the step state.
+///
+/// Returns an error when loading has not run yet or reported a failure.
+fn loaded_config(
+    load_result: &RefCell<Option<Result<SharedConfig, String>>>,
+) -> Result<SharedConfig, String> {
+    match load_result.borrow().as_ref() {
+        Some(Ok(config)) => Ok(config.clone()),
+        Some(Err(error)) => Err(format!(
+            "expected configuration loading to succeed: {error}"
+        )),
+        None => Err("configuration should be loaded".to_owned()),
+    }
+}
+
+/// Clones the loading error from the step state.
+///
+/// Returns an error when loading has not run yet or unexpectedly succeeded.
+fn load_error(
+    load_result: &RefCell<Option<Result<SharedConfig, String>>>,
+) -> Result<String, String> {
+    match load_result.borrow().as_ref() {
+        Some(Err(error)) => Ok(error.clone()),
+        Some(Ok(config)) => Err(format!(
+            "expected configuration loading to fail but succeeded with {config:?}"
+        )),
+        None => Err("configuration should be loaded".to_owned()),
+    }
+}
+
 #[then("the module max line limit is {expected}")]
 fn assert_max_lines(load_result: &RefCell<Option<Result<SharedConfig, String>>>, expected: usize) {
-    let borrow = load_result.borrow();
-    let config = match borrow.as_ref() {
-        Some(Ok(config)) => config,
-        Some(Err(error)) => panic!("expected configuration loading to succeed: {error}"),
-        None => panic!("configuration should be loaded"),
+    let config = match loaded_config(load_result) {
+        Ok(config) => config,
+        Err(message) => panic!("{message}"),
     };
 
     assert_eq!(config.module_max_lines.max_lines, expected);
@@ -154,13 +182,12 @@ fn assert_locale(
     expected: StepLocale,
 ) {
     let raw = expected.into_inner();
-    let expected_value = normalise_locale(Some(raw.as_str()))
-        .unwrap_or_else(|| panic!("expected the step to provide a locale value"));
-    let borrow = load_result.borrow();
-    let config = match borrow.as_ref() {
-        Some(Ok(config)) => config,
-        Some(Err(error)) => panic!("expected configuration loading to succeed: {error}"),
-        None => panic!("configuration should be loaded"),
+    let Some(expected_value) = normalise_locale(Some(raw.as_str())) else {
+        panic!("expected the step to provide a locale value");
+    };
+    let config = match loaded_config(load_result) {
+        Ok(config) => config,
+        Err(message) => panic!("{message}"),
     };
 
     assert_eq!(config.locale(), Some(expected_value));
@@ -168,11 +195,9 @@ fn assert_locale(
 
 #[then("no locale override is configured")]
 fn assert_no_locale(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
-    let borrow = load_result.borrow();
-    let config = match borrow.as_ref() {
-        Some(Ok(config)) => config,
-        Some(Err(error)) => panic!("expected configuration loading to succeed: {error}"),
-        None => panic!("configuration should be loaded"),
+    let config = match loaded_config(load_result) {
+        Ok(config) => config,
+        Err(message) => panic!("{message}"),
     };
 
     assert!(
@@ -184,13 +209,8 @@ fn assert_no_locale(load_result: &RefCell<Option<Result<SharedConfig, String>>>)
 
 #[then("a configuration error is reported")]
 fn assert_error(load_result: &RefCell<Option<Result<SharedConfig, String>>>) {
-    let borrow = load_result.borrow();
-    match borrow.as_ref() {
-        Some(Err(_)) => {}
-        Some(Ok(config)) => {
-            panic!("expected configuration loading to fail but succeeded with {config:?}")
-        }
-        None => panic!("configuration should be loaded"),
+    if let Err(message) = load_error(load_result) {
+        panic!("{message}");
     }
 }
 
@@ -200,19 +220,15 @@ fn assert_error_with_snippet(
     snippet: ErrorSnippet,
 ) {
     let snippet_value = snippet.into_inner();
-    let borrow = load_result.borrow();
-    match borrow.as_ref() {
-        Some(Err(error)) => {
-            assert!(
-                error.contains(snippet_value.as_str()),
-                "expected error '{error}' to mention '{snippet_value}'",
-            );
-        }
-        Some(Ok(config)) => {
-            panic!("expected configuration loading to fail but succeeded with {config:?}")
-        }
-        None => panic!("configuration should be loaded"),
-    }
+    let error = match load_error(load_result) {
+        Ok(error) => error,
+        Err(message) => panic!("{message}"),
+    };
+
+    assert!(
+        error.contains(snippet_value.as_str()),
+        "expected error '{error}' to mention '{snippet_value}'",
+    );
 }
 
 #[scenario("tests/features/config_loading.feature", index = 0)]
