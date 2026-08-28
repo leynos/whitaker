@@ -12,7 +12,7 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
 use support::locale::StepLocale;
 use whitaker::SharedConfig;
-use whitaker_common::i18n::normalise_locale;
+use whitaker_common::i18n::normalize_locale;
 
 #[fixture]
 fn config_source() -> RefCell<Option<String>> {
@@ -182,7 +182,7 @@ fn assert_locale(
     expected: StepLocale,
 ) {
     let raw = expected.into_inner();
-    let Some(expected_value) = normalise_locale(Some(raw.as_str())) else {
+    let Some(expected_value) = normalize_locale(Some(raw.as_str())) else {
         panic!("expected the step to provide a locale value");
     };
     let config = match loaded_config(load_result) {

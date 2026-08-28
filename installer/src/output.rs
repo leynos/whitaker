@@ -178,6 +178,7 @@ mod tests {
     }
 
     /// Shared fixture providing a shell snippet for the test path.
+    #[whitaker_test_macros::allow_fixture_expansion_lints]
     #[fixture]
     fn test_snippet(test_path: Utf8PathBuf) -> ShellSnippet {
         ShellSnippet::new(&test_path)
@@ -214,7 +215,7 @@ mod tests {
     #[rstest]
     #[case::singular(1, "1 lint library")]
     #[case::plural(5, "5 lint libraries")]
-    fn success_message_pluralises_correctly(#[case] count: usize, #[case] expected: &str) {
+    fn success_message_pluralizes_correctly(#[case] count: usize, #[case] expected: &str) {
         let path = Utf8PathBuf::from("/tmp");
         let msg = success_message(count, &path);
         assert!(msg.contains(expected));

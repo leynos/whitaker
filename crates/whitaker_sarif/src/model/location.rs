@@ -2,21 +2,21 @@
 //!
 //! These types describe where a result was found in source code. A
 //! [`Location`] wraps a [`PhysicalLocation`] which combines an
-//! [`ArtifactLocation`] (file URI) with an optional [`Region`] (line and
+//! [`ArtefactLocation`] (file URI) with an optional [`Region`] (line and
 //! column spans).
 
 use serde::{Deserialize, Serialize};
 
-/// A location within an artifact (source file).
+/// A location within an artefact (source file).
 ///
 /// # Examples
 ///
 /// ```
-/// use whitaker_sarif::{Location, PhysicalLocation, ArtifactLocation, Region};
+/// use whitaker_sarif::{Location, PhysicalLocation, ArtefactLocation, Region};
 ///
 /// let loc = Location {
 ///     physical_location: PhysicalLocation {
-///         artifact_location: ArtifactLocation {
+///         artefact_location: ArtefactLocation {
 ///             uri: "src/main.rs".into(),
 ///             uri_base_id: None,
 ///         },
@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 ///         }),
 ///     },
 /// };
-/// assert_eq!(loc.physical_location.artifact_location.uri, "src/main.rs");
+/// assert_eq!(loc.physical_location.artefact_location.uri, "src/main.rs");
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,19 +43,23 @@ pub struct Location {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhysicalLocation {
-    /// Identifies the artifact (file).
-    pub artifact_location: ArtifactLocation,
+    /// Identifies the artefact (file).
+    ///
+    /// The SARIF 2.1.0 schema spells this property `artifactLocation`, so the
+    /// wire name is pinned here rather than derived from the field name.
+    #[serde(rename = "artifactLocation")]
+    pub artefact_location: ArtefactLocation,
 
-    /// Optional region within the artifact.
+    /// Optional region within the artefact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<Region>,
 }
 
-/// A reference to an artifact by URI.
+/// A reference to an artefact by URI.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ArtifactLocation {
-    /// Relative or absolute URI of the artifact.
+pub struct ArtefactLocation {
+    /// Relative or absolute URI of the artefact.
     pub uri: String,
 
     /// Base identifier for resolving relative URIs.
@@ -63,7 +67,7 @@ pub struct ArtifactLocation {
     pub uri_base_id: Option<String>,
 }
 
-/// A region within an artifact, identified by line and column numbers.
+/// A region within an artefact, identified by line and column numbers.
 ///
 /// `start_line` is always required (1-based). All other fields are optional.
 ///
@@ -100,7 +104,7 @@ pub struct Region {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_column: Option<usize>,
 
-    /// Optional byte offset from the start of the artifact.
+    /// Optional byte offset from the start of the artefact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub byte_offset: Option<usize>,
 
@@ -167,7 +171,7 @@ mod tests {
     fn location_round_trip() {
         let loc = Location {
             physical_location: PhysicalLocation {
-                artifact_location: ArtifactLocation {
+                artefact_location: ArtefactLocation {
                     uri: "src/lib.rs".into(),
                     uri_base_id: Some("%SRCROOT%".into()),
                 },
@@ -192,7 +196,7 @@ mod tests {
                 text: "peer fragment".into(),
             }),
             physical_location: PhysicalLocation {
-                artifact_location: ArtifactLocation {
+                artefact_location: ArtefactLocation {
                     uri: "src/other.rs".into(),
                     uri_base_id: None,
                 },

@@ -109,7 +109,7 @@ fn has_test_ancestry(
 /// # Examples
 ///
 /// ```ignore
-/// let summary = summarise_context(
+/// let summary = summarize_context(
 ///     &entries,
 ///     has_test_context_ancestry,
 ///     additional_test_attributes,
@@ -118,7 +118,7 @@ fn has_test_ancestry(
 ///     // `.expect()` is allowed in this context.
 /// }
 /// ```
-pub(crate) fn summarise_context(
+pub(crate) fn summarize_context(
     entries: &[ContextEntry],
     has_test_context_ancestry: bool,
     additional_test_attributes: &[AttributePath],

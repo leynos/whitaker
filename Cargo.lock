@@ -1836,6 +1836,7 @@ dependencies = [
  "tempfile",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1918,6 +1919,7 @@ dependencies = [
  "toml 1.1.3+spec-1.1.0",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3077,6 +3079,7 @@ dependencies = [
  "serde",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3638,6 +3641,7 @@ dependencies = [
  "toml 1.1.3+spec-1.1.0",
  "whitaker-common",
  "whitaker-installer",
+ "whitaker_test_macros",
 ]
 
 [[package]]

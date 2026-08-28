@@ -104,6 +104,7 @@ rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }
 dylint_testing = { workspace = true }
+whitaker_test_macros = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

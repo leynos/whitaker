@@ -61,9 +61,11 @@ impl LocalServer {
         let requested = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let handle = {
-            let requested = Arc::clone(&requested);
-            let stop = Arc::clone(&stop);
-            thread::spawn(move || run_server(&listener, &routes, &requested, &stop))
+            let requested_for_thread = Arc::clone(&requested);
+            let stop_for_thread = Arc::clone(&stop);
+            thread::spawn(move || {
+                run_server(&listener, &routes, &requested_for_thread, &stop_for_thread);
+            })
         };
         Self {
             base_url: format!("http://127.0.0.1:{port}"),
@@ -85,8 +87,11 @@ impl LocalServer {
 impl Drop for LocalServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+        if let Some(handle) = self.handle.take()
+            && handle.join().is_err()
+        {
+            // The server thread panicked; tests observe failures through the
+            // requests they make, so nothing further can be reported here.
         }
     }
 }
@@ -120,9 +125,17 @@ fn serve_connection(
     // Restore blocking mode and bound reads/writes on the accepted connection
     // (the listener is non-blocking only so the accept loop can poll for
     // shutdown). `try_clone` shares the socket, so `peer` inherits these.
-    let _ = stream.set_nonblocking(false);
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+    // Drop the connection if the socket cannot be configured.
+    if stream.set_nonblocking(false).is_err()
+        || stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .is_err()
+        || stream
+            .set_write_timeout(Some(Duration::from_secs(5)))
+            .is_err()
+    {
+        return;
+    }
     let Ok(peer) = stream.try_clone() else {
         return;
     };
@@ -139,19 +152,24 @@ fn serve_connection(
     // Drain the remaining request headers up to the blank line.
     loop {
         let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
-            Ok(_) if line == "\r\n" || line == "\n" => break,
-            Ok(_) => {}
-            Err(_) => break,
+        let bytes_read = reader.read_line(&mut line).unwrap_or(0);
+        if bytes_read == 0 || line == "\r\n" || line == "\n" {
+            break;
         }
     }
     // Resolve the route first — the returned references borrow `routes`, not
     // `path` — so the owned `path` can then move into the request log.
-    let (status_line, body, declared_len): (&str, &[u8], usize) = match routes.get(&path) {
-        Some(response) => (response.status_line, &response.body, response.declared_len),
-        None => ("404 Not Found", b"not found", b"not found".len()),
-    };
+    let not_found: &[u8] = b"not found";
+    let (status_line, body, declared_len) = routes.get(&path).map_or_else(
+        || ("404 Not Found", not_found, not_found.len()),
+        |response| {
+            (
+                response.status_line,
+                response.body.as_slice(),
+                response.declared_len,
+            )
+        },
+    );
     requested.lock().expect("lock requested paths").push(path);
     let header = format!(
         concat!(
@@ -162,7 +180,11 @@ fn serve_connection(
         ),
         status_line, declared_len,
     );
-    let _ = stream.write_all(header.as_bytes());
-    let _ = stream.write_all(body);
-    let _ = stream.flush();
+    let write_result = stream
+        .write_all(header.as_bytes())
+        .and_then(|()| stream.write_all(body))
+        .and_then(|()| stream.flush());
+    if write_result.is_err() {
+        // The client disconnected early; there is nothing further to serve.
+    }
 }
