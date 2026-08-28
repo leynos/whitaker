@@ -25,18 +25,29 @@ fn build_script_accepts_an_exact_workspace_parser_pin(
     let fixture = build_fixture?;
     let output = cargo_check(&fixture.manifest_path)?;
 
-    assert!(
-        output.status.success(),
-        "exact parser pin should pass the build script:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    if !output.status.success() {
+        return Err(format!(
+            "exact parser pin must pass the build script:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
     let run_output = cargo_run(&fixture.manifest_path)?;
-    assert!(
-        run_output.status.success(),
-        "parser-version fixture should run:\n{}",
-        String::from_utf8_lossy(&run_output.stderr)
-    );
-    assert_eq!(String::from_utf8(run_output.stdout)?.trim(), "0.0.334");
+    if !run_output.status.success() {
+        return Err(format!(
+            "parser-version fixture must run:\n{}",
+            String::from_utf8_lossy(&run_output.stderr)
+        )
+        .into());
+    }
+    let stdout = String::from_utf8(run_output.stdout)?;
+    if stdout.trim() != "0.0.334" {
+        return Err(format!(
+            "parser-version fixture must print 0.0.334, printed `{}`",
+            stdout.trim()
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -48,14 +59,14 @@ fn build_script_rejects_a_loose_workspace_parser_pin(
     let output = cargo_check(&fixture.manifest_path)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    assert!(
-        !output.status.success(),
-        "loose parser pin should fail the build script"
-    );
-    assert!(
-        stderr.contains("must be exact-pinned"),
-        "build-script failure should explain the parser-pin rule:\n{stderr}"
-    );
+    if output.status.success() {
+        return Err("loose parser pin must fail the build script".into());
+    }
+    if !stderr.contains("must be exact-pinned") {
+        return Err(
+            format!("build-script failure must explain the parser-pin rule:\n{stderr}").into(),
+        );
+    }
     Ok(())
 }
 
@@ -67,14 +78,14 @@ fn build_script_rejects_a_missing_workspace_parser_pin(
     let output = cargo_check(&fixture.manifest_path)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    assert!(
-        !output.status.success(),
-        "missing parser pin should fail the build script"
-    );
-    assert!(
-        stderr.contains("workspace dependency `ra_ap_syntax` is missing"),
-        "build-script failure should explain the missing parser pin:\n{stderr}"
-    );
+    if output.status.success() {
+        return Err("missing parser pin must fail the build script".into());
+    }
+    if !stderr.contains("workspace dependency `ra_ap_syntax` is missing") {
+        return Err(
+            format!("build-script failure must explain the missing parser pin:\n{stderr}").into(),
+        );
+    }
     Ok(())
 }
 

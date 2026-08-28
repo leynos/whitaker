@@ -3,15 +3,16 @@
 //! Exercises locale selection, attribute fallback, and missing-message paths via
 //! `rstest-bdd` scenarios and a custom failing lookup to validate fallbacks.
 
+use std::cell::{Cell, Ref, RefCell};
+
+use rstest::fixture;
+use rstest_bdd_macros::{given, scenario, then, when};
+use whitaker_common::i18n::{I18nError, testing::FailingLookup};
+
 use super::{
     FunctionAttrsMessages, FunctionKind, Localizer, MESSAGE_KEY, attribute_fallback,
     localised_messages,
 };
-use rstest::fixture;
-use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, Ref, RefCell};
-use whitaker_common::i18n::I18nError;
-use whitaker_common::i18n::testing::FailingLookup;
 
 #[derive(Default)]
 struct LocalizationWorld {
@@ -53,6 +54,7 @@ impl LocalizationWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> LocalizationWorld {
     LocalizationWorld::default()
@@ -88,7 +90,7 @@ fn given_failure(world: &LocalizationWorld) {
     world.failing.set(true);
 }
 
-#[when("I localise the diagnostic")]
+#[when("I localize the diagnostic")]
 fn when_localize(world: &LocalizationWorld) {
     let kind = *world.subject.borrow();
     let failing = world.failing.get();

@@ -210,6 +210,7 @@ dependencies = [
  "toml 1.1.3+spec-1.1.0",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -461,6 +462,7 @@ dependencies = [
  "tempfile",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1043,6 +1045,7 @@ dependencies = [
  "serial_test",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1854,6 +1857,7 @@ dependencies = [
  "serial_test",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1884,6 +1888,7 @@ dependencies = [
  "tokio",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -1936,6 +1941,7 @@ dependencies = [
  "temp-env",
  "whitaker",
  "whitaker-common",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3649,9 +3655,11 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.20",
  "unic-langid",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3684,6 +3692,7 @@ dependencies = [
  "wait-timeout",
  "whitaker-common",
  "whitaker-installer",
+ "whitaker_test_macros",
  "zip",
  "zstd",
 ]
@@ -3708,6 +3717,7 @@ dependencies = [
  "toml 1.1.3+spec-1.1.0",
  "tracing",
  "whitaker_sarif",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3722,6 +3732,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
+ "whitaker_test_macros",
 ]
 
 [[package]]
@@ -3746,6 +3757,16 @@ dependencies = [
  "rustc_session",
  "rustc_span",
  "test_must_not_have_example",
+ "whitaker_test_macros",
+]
+
+[[package]]
+name = "whitaker_test_macros"
+version = "0.2.7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

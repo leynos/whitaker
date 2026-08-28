@@ -12,11 +12,13 @@
 //! These tests are marked `#[ignore]` by default because they require external
 //! dependencies. Run with `--ignored` to execute.
 
-use std::env;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::{
+    env,
+    io::Cursor,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 
 use anyhow::Context as _;
 use cargo_metadata::{Message, Metadata, MetadataCommand};
@@ -124,8 +126,8 @@ fn find_cdylib_in_artefacts(
     stdout: &[u8],
     package_id: &cargo_metadata::PackageId,
 ) -> anyhow::Result<PathBuf> {
-    for message in Message::parse_stream(Cursor::new(stdout)) {
-        let message = message.context("failed to parse cargo build JSON output")?;
+    for parsed in Message::parse_stream(Cursor::new(stdout)) {
+        let message = parsed.context("failed to parse cargo build JSON output")?;
         let Message::CompilerArtifact(artefact) = message else {
             continue;
         };
@@ -198,7 +200,7 @@ fn diagnostic_count(output: &[u8]) -> Result<usize, anyhow::Error> {
     Ok(messages
         .into_iter()
         .filter_map(|message| match message {
-            Message::CompilerMessage(message) => Some(message.message),
+            Message::CompilerMessage(compiler_message) => Some(compiler_message.message),
             _ => None,
         })
         .filter(|diagnostic| {
@@ -219,12 +221,12 @@ fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Val
         }
         serde_json::Value::Array(arr) => serde_json::Value::Array(
             arr.into_iter()
-                .map(|value| redact_path_prefix(value, prefix))
+                .map(|element| redact_path_prefix(element, prefix))
                 .collect(),
         ),
         serde_json::Value::Object(map) => serde_json::Value::Object(
             map.into_iter()
-                .map(|(key, value)| (key, redact_path_prefix(value, prefix)))
+                .map(|(key, entry)| (key, redact_path_prefix(entry, prefix)))
                 .collect(),
         ),
         other => other,
@@ -234,7 +236,8 @@ fn redact_path_prefix(value: serde_json::Value, prefix: &str) -> serde_json::Val
 #[expect(
     clippy::useless_asref,
     clippy::redundant_closure,
-    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert &Result<PathBuf, Error> into Result<PathBuf, Error>"
+    reason = "anyhow::Error is not Clone, so .as_ref().map(Clone::clone) is necessary to convert \
+              &Result<PathBuf, Error> into Result<PathBuf, Error>"
 )]
 fn lint_library_path() -> anyhow::Result<PathBuf> {
     static LINT_LIBRARY_PATH: OnceLock<anyhow::Result<PathBuf>> = OnceLock::new();
@@ -246,6 +249,7 @@ fn lint_library_path() -> anyhow::Result<PathBuf> {
         .map_err(|e| anyhow::anyhow!("{e:#}"))
 }
 
+#[derive(Clone, Copy)]
 struct Expectation {
     should_emit_diagnostics: bool,
     should_succeed: bool,
@@ -355,19 +359,19 @@ fn assert_fixture_behaviour(
 ) -> anyhow::Result<()> {
     let (is_success, count) = evaluate_fixture(fixture_dir, lint_library_path, crate_name)?;
 
-    assert!(
+    anyhow::ensure!(
         is_success == expectation.should_succeed,
         "crate `{crate_name}` should return success={}",
         expectation.should_succeed
     );
 
     if expectation.should_emit_diagnostics {
-        assert!(
+        anyhow::ensure!(
             count > 0,
             "crate `{crate_name}` should emit `no_std_fs_operations` diagnostics"
         );
     } else {
-        assert!(
+        anyhow::ensure!(
             count == 0,
             "crate `{crate_name}` should emit zero `no_std_fs_operations` diagnostics"
         );
@@ -400,7 +404,8 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .with_context(|| {
             format!(
-                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo output\nstderr:\n{}",
+                "non_excluded_crate_diagnostics_match_snapshot produced malformed cargo \
+                 output\nstderr:\n{}",
                 result.stderr
             )
         })?;
@@ -408,16 +413,16 @@ fn non_excluded_crate_diagnostics_match_snapshot() -> anyhow::Result<()> {
     let diagnostics: Vec<serde_json::Value> = messages
         .into_iter()
         .filter_map(|message| match message {
-            Message::CompilerMessage(message)
-                if message
+            Message::CompilerMessage(compiler_message)
+                if compiler_message
                     .message
                     .code
                     .as_ref()
                     .is_some_and(|code| code.code == LINT_CRATE_NAME) =>
             {
                 Some(
-                    serde_json::to_value(message.message)
-                        .context("failed to serialise diagnostic for snapshot"),
+                    serde_json::to_value(compiler_message.message)
+                        .context("failed to serialize diagnostic for snapshot"),
                 )
             }
             _ => None,

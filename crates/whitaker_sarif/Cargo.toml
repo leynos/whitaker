@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 camino = { workspace = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 rstest = { workspace = true }
 rstest-bdd = { workspace = true }
 rstest-bdd-macros = { workspace = true }

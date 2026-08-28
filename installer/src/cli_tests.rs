@@ -1,24 +1,54 @@
 //! Tests for installer CLI parsing and default behaviours.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
 
 #[test]
 fn cli_parses_defaults() {
     let cli = Cli::parse_from(["whitaker-installer"]);
     assert!(cli.command.is_none());
-    assert!(cli.install.target_dir.is_none());
-    assert!(cli.install.lint.is_empty());
-    assert!(!cli.install.individual_lints);
-    assert!(!cli.install.experimental);
-    assert!(!cli.install.cranelift);
-    assert!(!cli.install.dry_run);
-    assert_eq!(cli.install.verbosity, 0);
-    assert!(!cli.install.quiet);
-    assert!(!cli.install.skip_deps);
-    assert!(!cli.install.skip_wrapper);
-    assert!(!cli.install.no_update);
-    assert!(!cli.install.is_build_only);
+    assert_default_lint_selection(&cli);
+    assert_default_execution_options(&cli);
+    assert_default_skip_flags(&cli);
+}
+
+/// Assert each named condition holds, reporting the first field that differs
+/// from its documented default.
+fn assert_default_conditions(conditions: &[(&str, bool)]) {
+    for &(name, condition) in conditions {
+        assert!(condition, "{name} must have its default value");
+    }
+}
+
+/// Assert that no target directory or lint selection is present by default.
+fn assert_default_lint_selection(cli: &Cli) {
+    assert_default_conditions(&[
+        ("target_dir", cli.install.target_dir.is_none()),
+        ("lint", cli.install.lint.is_empty()),
+        ("individual_lints", !cli.install.individual_lints),
+        ("experimental", !cli.install.experimental),
+    ]);
+}
+
+/// Assert that execution options default to a full, non-quiet build.
+fn assert_default_execution_options(cli: &Cli) {
+    assert_default_conditions(&[
+        ("cranelift", !cli.install.cranelift),
+        ("dry_run", !cli.install.dry_run),
+        ("verbosity", cli.install.verbosity == 0),
+        ("quiet", !cli.install.quiet),
+    ]);
+}
+
+/// Assert that no pipeline steps are skipped by default.
+fn assert_default_skip_flags(cli: &Cli) {
+    assert_default_conditions(&[
+        ("skip_deps", !cli.install.skip_deps),
+        ("skip_wrapper", !cli.install.skip_wrapper),
+        ("no_update", !cli.install.no_update),
+        ("is_build_only", !cli.install.is_build_only),
+    ]);
 }
 
 #[test]
@@ -165,10 +195,12 @@ fn cli_rejects_conflicting_flags(#[case] args: &[&str]) {
 #[test]
 fn install_args_default_is_valid() {
     let args = InstallArgs::default();
-    assert!(!args.individual_lints);
-    assert!(!args.experimental);
-    assert!(!args.cranelift);
-    assert!(!args.skip_deps);
+    assert_default_conditions(&[
+        ("individual_lints", !args.individual_lints),
+        ("experimental", !args.experimental),
+        ("cranelift", !args.cranelift),
+        ("skip_deps", !args.skip_deps),
+    ]);
 }
 
 #[test]

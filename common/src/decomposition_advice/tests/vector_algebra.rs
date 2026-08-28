@@ -1,7 +1,8 @@
 //! Validates the runtime vector algebra used by decomposition advice.
 
-use crate::decomposition_advice::vector::{dot_product, test_feature_vector};
 use rstest::rstest;
+
+use crate::decomposition_advice::vector::{dot_product, test_feature_vector};
 
 #[rstest]
 #[case::left_smaller(

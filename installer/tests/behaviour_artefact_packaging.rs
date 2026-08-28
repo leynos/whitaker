@@ -2,22 +2,24 @@
 //!
 //! These scenarios validate the packaging pipeline defined in the
 //! `artefact::packaging` module against ADR-001 rules. Tests use the
-//! rstest-bdd v0.5.0 mutable world pattern.
+//! rstest-bdd v0.5.0 mutable world pattern with fallible steps.
+
+use std::{fs, path::PathBuf};
 
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
-use whitaker_installer::artefact::git_sha::GitSha;
-use whitaker_installer::artefact::manifest::GeneratedAt;
-use whitaker_installer::artefact::naming::ArtefactName;
-use whitaker_installer::artefact::packaging::{
-    PackageOutput, PackageParams, compute_sha256, generate_manifest_json, package_artefact,
+use whitaker_installer::artefact::{
+    git_sha::GitSha,
+    manifest::GeneratedAt,
+    naming::ArtefactName,
+    packaging::{
+        PackageOutput, PackageParams, compute_sha256, generate_manifest_json, package_artefact,
+    },
+    packaging_error::PackagingError,
+    target::TargetTriple,
+    toolchain_channel::ToolchainChannel,
 };
-use whitaker_installer::artefact::packaging_error::PackagingError;
-use whitaker_installer::artefact::target::TargetTriple;
-use whitaker_installer::artefact::toolchain_channel::ToolchainChannel;
 
 // ---------------------------------------------------------------------------
 // World types
@@ -36,33 +38,51 @@ struct PackagingWorld {
     archive_sha256: Option<String>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> PackagingWorld {
-    PackagingWorld {
-        temp_dir: Some(TempDir::new().expect("temp dir")),
-        ..PackagingWorld::default()
-    }
+    PackagingWorld::default()
 }
 
-/// Return the temp directory path, creating one if needed.
-fn temp_path(world: &PackagingWorld) -> PathBuf {
+/// Return the temp directory path, creating the directory if needed.
+fn temp_path(world: &mut PackagingWorld) -> Result<PathBuf, String> {
+    if world.temp_dir.is_none() {
+        let dir = TempDir::new().map_err(|e| format!("create temp dir: {e}"))?;
+        world.temp_dir = Some(dir);
+    }
     world
         .temp_dir
         .as_ref()
-        .expect("temp_dir set")
-        .path()
-        .to_path_buf()
+        .map(|dir| dir.path().to_path_buf())
+        .ok_or_else(|| String::from("temp_dir set"))
+}
+
+/// Fetch the packaging output, failing if packaging has not run successfully.
+fn output_ref(world: &PackagingWorld) -> Result<&PackageOutput, String> {
+    world
+        .output
+        .as_ref()
+        .ok_or_else(|| String::from("packaging output must be set"))
 }
 
 /// Run the packaging pipeline and store the result in the world.
-fn run_packaging(world: &mut PackagingWorld) {
-    let output_dir = temp_path(world).join("dist");
-    fs::create_dir_all(&output_dir).expect("mkdir dist");
+fn run_packaging(world: &mut PackagingWorld) -> Result<(), String> {
+    let output_dir = temp_path(world)?.join("dist");
+    fs::create_dir_all(&output_dir).map_err(|e| format!("mkdir dist: {e}"))?;
 
     let params = PackageParams {
-        git_sha: world.git_sha.clone().expect("git_sha set"),
-        toolchain: world.toolchain.clone().expect("toolchain set"),
-        target: world.target.clone().expect("target set"),
+        git_sha: world
+            .git_sha
+            .clone()
+            .ok_or_else(|| String::from("git_sha set"))?,
+        toolchain: world
+            .toolchain
+            .clone()
+            .ok_or_else(|| String::from("toolchain set"))?,
+        target: world
+            .target
+            .clone()
+            .ok_or_else(|| String::from("target set"))?,
         library_files: world.library_files.clone(),
         output_dir,
         generated_at: GeneratedAt::new("2026-02-11T00:00:00Z"),
@@ -72,6 +92,29 @@ fn run_packaging(world: &mut PackagingWorld) {
         Ok(output) => world.output = Some(output),
         Err(e) => world.packaging_error = Some(e),
     }
+    Ok(())
+}
+
+/// Write a fixture library file into the temp directory and register it.
+fn add_library_file(world: &mut PackagingWorld, name: &str, content: &[u8]) -> Result<(), String> {
+    let path = temp_path(world)?.join(name);
+    fs::write(&path, content).map_err(|e| format!("write {name}: {e}"))?;
+    world.library_files.push(path);
+    Ok(())
+}
+
+/// Populate the world with valid known packaging components.
+fn set_known_components(world: &mut PackagingWorld) -> Result<(), String> {
+    world.git_sha = Some(GitSha::try_from("abc1234").map_err(|e| format!("valid sha: {e}"))?);
+    world.toolchain = Some(
+        ToolchainChannel::try_from("nightly-2026-05-28")
+            .map_err(|e| format!("valid channel: {e}"))?,
+    );
+    world.target = Some(
+        TargetTriple::try_from("x86_64-unknown-linux-gnu")
+            .map_err(|e| format!("valid target: {e}"))?,
+    );
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -79,54 +122,57 @@ fn run_packaging(world: &mut PackagingWorld) {
 // ---------------------------------------------------------------------------
 
 #[given("a library file \"{name}\"")]
-fn given_library_file(world: &mut PackagingWorld, name: String) {
-    let path = temp_path(world).join(&name);
-    fs::write(&path, b"fake library content").expect("write lib");
-    world.library_files.push(path);
+fn given_library_file(world: &mut PackagingWorld, name: String) -> Result<(), String> {
+    add_library_file(world, &name, b"fake library content")
 }
 
 #[given("a git SHA \"{sha}\"")]
-fn given_git_sha(world: &mut PackagingWorld, sha: String) {
-    world.git_sha = Some(GitSha::try_from(sha).expect("valid SHA"));
+fn given_git_sha(world: &mut PackagingWorld, sha: String) -> Result<(), String> {
+    world.git_sha = Some(GitSha::try_from(sha).map_err(|e| format!("valid SHA: {e}"))?);
+    Ok(())
 }
 
 #[given("a toolchain channel \"{channel}\"")]
-fn given_toolchain(world: &mut PackagingWorld, channel: String) {
-    world.toolchain = Some(ToolchainChannel::try_from(channel).expect("valid channel"));
+fn given_toolchain(world: &mut PackagingWorld, channel: String) -> Result<(), String> {
+    world.toolchain =
+        Some(ToolchainChannel::try_from(channel).map_err(|e| format!("valid channel: {e}"))?);
+    Ok(())
 }
 
 #[given("a target triple \"{triple}\"")]
-fn given_target(world: &mut PackagingWorld, triple: String) {
-    world.target = Some(TargetTriple::try_from(triple).expect("valid target"));
+fn given_target(world: &mut PackagingWorld, triple: String) -> Result<(), String> {
+    world.target = Some(TargetTriple::try_from(triple).map_err(|e| format!("valid target: {e}"))?);
+    Ok(())
 }
 
 #[when("the artefact is packaged")]
-fn when_packaged(world: &mut PackagingWorld) {
-    run_packaging(world);
+fn when_packaged(world: &mut PackagingWorld) -> Result<(), String> {
+    run_packaging(world)
 }
 
 #[then("the archive exists with the expected ADR-001 filename")]
-fn then_archive_exists(world: &mut PackagingWorld) {
-    let output = world.output.as_ref().expect("output set");
-    assert!(output.archive_path.exists(), "archive file must exist");
+fn then_archive_exists(world: &mut PackagingWorld) -> Result<(), String> {
+    let output = output_ref(world)?;
+    if !output.archive_path.exists() {
+        return Err(String::from("archive file must exist"));
+    }
     let filename = output
         .archive_path
         .file_name()
-        .expect("filename")
+        .ok_or_else(|| String::from("archive path must have a filename"))?
         .to_string_lossy();
-    assert!(
-        filename.starts_with("whitaker-lints-"),
-        "filename must start with 'whitaker-lints-'"
-    );
-    assert!(
-        filename.ends_with(".tar.zst"),
-        "filename must end with '.tar.zst'"
-    );
+    if !filename.starts_with("whitaker-lints-") {
+        return Err(String::from("filename must start with 'whitaker-lints-'"));
+    }
+    if !filename.ends_with(".tar.zst") {
+        return Err(String::from("filename must end with '.tar.zst'"));
+    }
+    Ok(())
 }
 
 #[then("the archive contains the library file")]
-fn then_archive_has_library(world: &mut PackagingWorld) {
-    let entries = list_archive_entries(world);
+fn then_archive_has_library(world: &mut PackagingWorld) -> Result<(), String> {
+    let entries = list_archive_entries(world)?;
     let expected: Vec<String> = world
         .library_files
         .iter()
@@ -134,184 +180,220 @@ fn then_archive_has_library(world: &mut PackagingWorld) {
         .map(|n| n.to_string_lossy().into_owned())
         .collect();
     for name in &expected {
-        assert!(
-            entries.contains(name),
-            "archive must contain {name}, got {entries:?}"
-        );
+        if !entries.contains(name) {
+            return Err(format!("archive must contain {name}, got {entries:?}"));
+        }
     }
+    Ok(())
 }
 
 #[then("the archive does not contain a manifest")]
-fn then_archive_has_no_manifest(world: &mut PackagingWorld) {
-    let entries = list_archive_entries(world);
-    assert!(
-        !entries.contains(&"manifest.json".to_owned()),
-        "archive must not contain manifest.json"
-    );
+fn then_archive_has_no_manifest(world: &mut PackagingWorld) -> Result<(), String> {
+    let entries = list_archive_entries(world)?;
+    if entries.contains(&"manifest.json".to_owned()) {
+        return Err(String::from("archive must not contain manifest.json"));
+    }
+    Ok(())
 }
 
 #[given("a packaged artefact")]
-fn given_packaged_artefact(world: &mut PackagingWorld) {
-    let path = temp_path(world).join("libwhitaker_suite.so");
-    fs::write(&path, b"fake library").expect("write");
-    world.library_files.push(path);
-    world.git_sha = Some(GitSha::try_from("abc1234").expect("valid"));
-    world.toolchain = Some(ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"));
-    world.target = Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"));
-    run_packaging(world);
+fn given_packaged_artefact(world: &mut PackagingWorld) -> Result<(), String> {
+    add_library_file(world, "libwhitaker_suite.so", b"fake library")?;
+    set_known_components(world)?;
+    run_packaging(world)
 }
 
 #[when("the manifest JSON is generated")]
-fn when_manifest_json_generated(world: &mut PackagingWorld) {
-    let output = world.output.as_ref().expect("output set");
-    let json = generate_manifest_json(&output.manifest).expect("serialization");
-    world.manifest_json = Some(serde_json::from_str(&json).expect("parse JSON"));
+fn when_manifest_json_generated(world: &mut PackagingWorld) -> Result<(), String> {
+    let output = output_ref(world)?;
+    let json =
+        generate_manifest_json(&output.manifest).map_err(|e| format!("serialization: {e}"))?;
+    world.manifest_json =
+        Some(serde_json::from_str(&json).map_err(|e| format!("parse JSON: {e}"))?);
+    Ok(())
 }
 
 #[then("the manifest contains field \"{field}\"")]
-fn then_manifest_has_field(world: &mut PackagingWorld, field: String) {
-    let json = world.manifest_json.as_ref().expect("manifest_json set");
-    let obj = json.as_object().expect("top-level object");
-    assert!(obj.contains_key(&field), "missing field: {field}");
+fn then_manifest_has_field(world: &mut PackagingWorld, field: String) -> Result<(), String> {
+    let json = world
+        .manifest_json
+        .as_ref()
+        .ok_or_else(|| String::from("manifest_json set"))?;
+    let obj = json
+        .as_object()
+        .ok_or_else(|| String::from("manifest JSON must be a top-level object"))?;
+    if !obj.contains_key(&field) {
+        return Err(format!("missing field: {field}"));
+    }
+    Ok(())
 }
 
 #[when("the archive SHA-256 is computed")]
-fn when_sha256_computed(world: &mut PackagingWorld) {
-    let output = world.output.as_ref().expect("output set");
-    let digest = compute_sha256(&output.archive_path).expect("sha256");
+fn when_sha256_computed(world: &mut PackagingWorld) -> Result<(), String> {
+    let output = output_ref(world)?;
+    let digest = compute_sha256(&output.archive_path).map_err(|e| format!("sha256: {e}"))?;
     world.archive_sha256 = Some(digest.as_str().to_owned());
+    Ok(())
 }
 
 #[then("it matches the manifest sha256")]
-fn then_digest_matches_manifest(world: &mut PackagingWorld) {
-    let archive_hex = world.archive_sha256.as_ref().expect("sha256 set");
-    let manifest_hex = world
-        .output
+fn then_digest_matches_manifest(world: &mut PackagingWorld) -> Result<(), String> {
+    let archive_hex = world
+        .archive_sha256
         .as_ref()
-        .expect("output set")
-        .manifest
-        .sha256()
-        .as_str();
-    assert_eq!(
-        archive_hex, manifest_hex,
-        "archive digest must match manifest sha256"
-    );
+        .ok_or_else(|| String::from("sha256 set"))?;
+    let manifest_hex = output_ref(world)?.manifest.sha256().as_str();
+    if archive_hex != manifest_hex {
+        return Err(format!(
+            "archive digest {archive_hex} must match manifest sha256 {manifest_hex}"
+        ));
+    }
+    Ok(())
 }
 
 #[then("it is a valid 64-character hex string")]
-fn then_valid_hex(world: &mut PackagingWorld) {
-    let hex = world.archive_sha256.as_ref().expect("sha256 set");
-    assert_eq!(hex.len(), 64, "digest must be 64 characters");
-    assert!(
-        hex.chars().all(|c| c.is_ascii_hexdigit()),
-        "digest must be hex"
-    );
+fn then_valid_hex(world: &mut PackagingWorld) -> Result<(), String> {
+    let hex = world
+        .archive_sha256
+        .as_ref()
+        .ok_or_else(|| String::from("sha256 set"))?;
+    if hex.len() != 64 {
+        return Err(format!("digest must be 64 characters, got {}", hex.len()));
+    }
+    if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("digest must be hex: {hex}"));
+    }
+    Ok(())
 }
 
 #[given("no library files")]
-fn given_no_files(world: &mut PackagingWorld) {
+fn given_no_files(world: &mut PackagingWorld) -> Result<(), String> {
     world.library_files.clear();
-    world.git_sha = Some(GitSha::try_from("abc1234").expect("valid"));
-    world.toolchain = Some(ToolchainChannel::try_from("nightly-2026-05-28").expect("valid"));
-    world.target = Some(TargetTriple::try_from("x86_64-unknown-linux-gnu").expect("valid"));
+    set_known_components(world)
 }
 
 #[when("packaging is attempted")]
-fn when_packaging_attempted(world: &mut PackagingWorld) {
-    run_packaging(world);
+fn when_packaging_attempted(world: &mut PackagingWorld) -> Result<(), String> {
+    run_packaging(world)
 }
 
 #[then("a packaging error is returned")]
-fn then_packaging_error(world: &mut PackagingWorld) {
-    assert!(
-        world.packaging_error.is_some(),
-        "expected a packaging error"
-    );
-    assert!(
-        matches!(
-            world.packaging_error.as_ref().expect("checked above"),
-            PackagingError::EmptyFileList
-        ),
-        "expected EmptyFileList error"
-    );
+fn then_packaging_error(world: &mut PackagingWorld) -> Result<(), String> {
+    let error = world
+        .packaging_error
+        .as_ref()
+        .ok_or_else(|| String::from("expected a packaging error"))?;
+    if matches!(error, PackagingError::EmptyFileList) {
+        Ok(())
+    } else {
+        Err(format!("expected EmptyFileList error, got {error:?}"))
+    }
 }
 
 #[given("library files \"{a}\" and \"{b}\" and \"{c}\"")]
-fn given_three_library_files(world: &mut PackagingWorld, a: String, b: String, c: String) {
+fn given_three_library_files(
+    world: &mut PackagingWorld,
+    a: String,
+    b: String,
+    c: String,
+) -> Result<(), String> {
     for name in [a, b, c] {
-        let path = temp_path(world).join(&name);
-        fs::write(&path, format!("content of {name}")).expect("write");
-        world.library_files.push(path);
+        add_library_file(world, &name, format!("content of {name}").as_bytes())?;
     }
+    Ok(())
 }
 
 #[given("library files \"{a}\" and \"{b}\"")]
-fn given_two_library_files(world: &mut PackagingWorld, a: String, b: String) {
+fn given_two_library_files(world: &mut PackagingWorld, a: String, b: String) -> Result<(), String> {
     for name in [a, b] {
-        let path = temp_path(world).join(&name);
-        fs::write(&path, format!("content of {name}")).expect("write");
-        world.library_files.push(path);
+        add_library_file(world, &name, format!("content of {name}").as_bytes())?;
     }
+    Ok(())
 }
 
 #[then("the archive contains {count} library files")]
-fn then_archive_has_n_libraries(world: &mut PackagingWorld, count: usize) {
-    let entries = list_archive_entries(world);
+fn then_archive_has_n_libraries(world: &mut PackagingWorld, count: usize) -> Result<(), String> {
+    let entries = list_archive_entries(world)?;
     let lib_count = entries.iter().filter(|e| *e != "manifest.json").count();
-    assert_eq!(
-        lib_count, count,
-        "expected {count} library files, got {lib_count}"
-    );
+    if lib_count != count {
+        return Err(format!("expected {count} library files, got {lib_count}"));
+    }
+    Ok(())
 }
 
 #[then("the manifest files field contains \"{name}\"")]
-fn then_manifest_files_contains(world: &mut PackagingWorld, name: String) {
-    let json = world.manifest_json.as_ref().expect("manifest_json set");
-    let files = json["files"].as_array().expect("files is an array");
+fn then_manifest_files_contains(world: &mut PackagingWorld, name: String) -> Result<(), String> {
+    let json = world
+        .manifest_json
+        .as_ref()
+        .ok_or_else(|| String::from("manifest_json set"))?;
+    let files = json
+        .get("files")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| String::from("files must be an array"))?;
     let names: Vec<&str> = files.iter().filter_map(|v| v.as_str()).collect();
-    assert!(
-        names.contains(&name.as_str()),
-        "files field missing {name}: {names:?}"
-    );
+    if !names.contains(&name.as_str()) {
+        return Err(format!("files field missing {name}: {names:?}"));
+    }
+    Ok(())
 }
 
 #[given("a packaged artefact with known components")]
-fn given_packaged_with_known(world: &mut PackagingWorld) {
-    given_packaged_artefact(world);
+fn given_packaged_with_known(world: &mut PackagingWorld) -> Result<(), String> {
+    given_packaged_artefact(world)
 }
 
 #[then("it matches the ArtefactName string representation")]
-fn then_filename_matches_artefact_name(world: &mut PackagingWorld) {
-    let output = world.output.as_ref().expect("output set");
+fn then_filename_matches_artefact_name(world: &mut PackagingWorld) -> Result<(), String> {
     let expected = ArtefactName::new(
-        world.git_sha.clone().expect("sha"),
-        world.toolchain.clone().expect("toolchain"),
-        world.target.clone().expect("target"),
+        world
+            .git_sha
+            .clone()
+            .ok_or_else(|| String::from("sha set"))?,
+        world
+            .toolchain
+            .clone()
+            .ok_or_else(|| String::from("toolchain set"))?,
+        world
+            .target
+            .clone()
+            .ok_or_else(|| String::from("target set"))?,
     );
-    assert_eq!(
-        output
-            .archive_path
-            .file_name()
-            .expect("filename")
-            .to_string_lossy(),
-        expected.filename()
-    );
+    let output = output_ref(world)?;
+    let filename = output
+        .archive_path
+        .file_name()
+        .ok_or_else(|| String::from("archive path must have a filename"))?
+        .to_string_lossy();
+    if filename != expected.filename() {
+        return Err(format!(
+            "filename {filename} must match ArtefactName {}",
+            expected.filename()
+        ));
+    }
+    Ok(())
 }
 
 /// Extract entry names from a `.tar.zst` archive.
-fn list_archive_entries(world: &PackagingWorld) -> Vec<String> {
-    let output = world.output.as_ref().expect("output set");
-    let file = fs::File::open(&output.archive_path).expect("open");
-    let decoder = zstd::Decoder::new(file).expect("decode");
+fn list_archive_entries(world: &PackagingWorld) -> Result<Vec<String>, String> {
+    let output = output_ref(world)?;
+    let file = fs::File::open(&output.archive_path).map_err(|e| format!("open archive: {e}"))?;
+    let decoder = zstd::Decoder::new(file).map_err(|e| format!("decode archive: {e}"))?;
     let mut archive = tar::Archive::new(decoder);
-    archive
+    let mut names = Vec::new();
+    for entry in archive
         .entries()
-        .expect("entries")
-        .map(|e| {
-            let entry = e.expect("entry");
-            entry.path().expect("path").to_string_lossy().into_owned()
-        })
-        .collect()
+        .map_err(|e| format!("list archive entries: {e}"))?
+    {
+        let archive_entry = entry.map_err(|e| format!("read archive entry: {e}"))?;
+        let path = archive_entry
+            .path()
+            .map_err(|e| format!("read entry path: {e}"))?
+            .to_string_lossy()
+            .into_owned();
+        names.push(path);
+    }
+    Ok(names)
 }
 
 // ---------------------------------------------------------------------------
