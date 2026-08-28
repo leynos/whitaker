@@ -3,17 +3,20 @@
 //! These scenarios validate crate resolution, crate name validation, toolchain
 //! parsing, and shell snippet generation using rstest-bdd.
 
+use std::cell::{Cell, RefCell};
+
 use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::{Cell, RefCell};
-use whitaker_installer::crate_name::CrateName;
-use whitaker_installer::output::ShellSnippet;
-use whitaker_installer::resolution::{
-    CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
-    validate_crate_names,
+use whitaker_installer::{
+    crate_name::CrateName,
+    output::ShellSnippet,
+    resolution::{
+        CrateResolutionOptions, EXPERIMENTAL_LINT_CRATES, LINT_CRATES, SUITE_CRATE, resolve_crates,
+        validate_crate_names,
+    },
+    toolchain::parse_toolchain_channel,
 };
-use whitaker_installer::toolchain::parse_toolchain_channel;
 
 // ---------------------------------------------------------------------------
 // Crate resolution world
@@ -27,6 +30,7 @@ struct CrateResolutionWorld {
     resolved: RefCell<Vec<CrateName>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn crate_world() -> CrateResolutionWorld {
     CrateResolutionWorld::default()
@@ -134,6 +138,7 @@ struct ValidationWorld {
     error_message: RefCell<Option<String>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn validation_world() -> ValidationWorld {
     ValidationWorld::default()
@@ -197,8 +202,10 @@ fn then_validation_fails(validation_world: &ValidationWorld) {
 #[then("validation fails with an experimental opt-in error")]
 fn then_validation_fails_experimental_opt_in(validation_world: &ValidationWorld) {
     assert_eq!(validation_world.result.get(), Some(false));
-    let error_message = validation_world.error_message.borrow();
-    let error_message = error_message.as_ref().expect("error message should be set");
+    let error_slot = validation_world.error_message.borrow();
+    let Some(error_message) = error_slot.as_ref() else {
+        panic!("error message should be set");
+    };
     assert!(
         error_message.contains(
             "experimental lint crate rstest_helper_should_be_fixture requires --experimental"
@@ -218,6 +225,7 @@ struct ToolchainWorld {
     error: Cell<bool>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn toolchain_world() -> ToolchainWorld {
     ToolchainWorld::default()
@@ -286,6 +294,7 @@ struct SnippetWorld {
     snippet: RefCell<Option<ShellSnippet>>,
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn snippet_world() -> SnippetWorld {
     SnippetWorld::default()
@@ -306,25 +315,39 @@ fn when_snippets_generated(snippet_world: &SnippetWorld) {
     snippet_world.snippet.replace(Some(snippet));
 }
 
-#[then("bash snippet uses export syntax")]
-fn then_bash_export(snippet_world: &SnippetWorld) {
+/// Check a shell snippet field against an expected prefix.
+fn ensure_snippet_prefix(
+    snippet_world: &SnippetWorld,
+    field: impl FnOnce(&ShellSnippet) -> &str,
+    prefix: &str,
+) -> Result<(), String> {
     let snippet = snippet_world.snippet.borrow();
-    let s = snippet.as_ref().expect("snippet should exist");
-    assert!(s.bash.starts_with("export "));
+    let s = snippet
+        .as_ref()
+        .ok_or_else(|| String::from("snippet should exist"))?;
+    let value = field(s);
+    if value.starts_with(prefix) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected snippet to start with '{prefix}': {value}"
+        ))
+    }
+}
+
+#[then("bash snippet uses export syntax")]
+fn then_bash_export(snippet_world: &SnippetWorld) -> Result<(), String> {
+    ensure_snippet_prefix(snippet_world, |s| &s.bash, "export ")
 }
 
 #[then("fish snippet uses set -gx syntax")]
-fn then_fish_set(snippet_world: &SnippetWorld) {
-    let snippet = snippet_world.snippet.borrow();
-    let s = snippet.as_ref().expect("snippet should exist");
-    assert!(s.fish.starts_with("set -gx "));
+fn then_fish_set(snippet_world: &SnippetWorld) -> Result<(), String> {
+    ensure_snippet_prefix(snippet_world, |s| &s.fish, "set -gx ")
 }
 
 #[then("PowerShell snippet uses $env syntax")]
-fn then_powershell_env(snippet_world: &SnippetWorld) {
-    let snippet = snippet_world.snippet.borrow();
-    let s = snippet.as_ref().expect("snippet should exist");
-    assert!(s.powershell.starts_with("$env:"));
+fn then_powershell_env(snippet_world: &SnippetWorld) -> Result<(), String> {
+    ensure_snippet_prefix(snippet_world, |s| &s.powershell, "$env:")
 }
 
 // ---------------------------------------------------------------------------

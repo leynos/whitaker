@@ -51,23 +51,24 @@ fn crate_builds_without_dylint_driver_feature() -> anyhow::Result<()> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        output.status.success(),
-        "`cargo check --no-default-features --lib` for `{CRATE}` failed \
-         (it must compile without the `dylint-driver` feature now that the \
-         no-driver stub is gone):\n{stderr}"
-    );
+    if !output.status.success() {
+        anyhow::bail!(
+            "`cargo check --no-default-features --lib` for `{CRATE}` failed (it must compile \
+             without the `dylint-driver` feature now that the no-driver stub is gone):\n{stderr}"
+        );
+    }
 
     let diagnostics = stdout
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .filter(|message| message["reason"] == "compiler-message")
         .collect::<Vec<_>>();
-    assert!(
-        diagnostics.is_empty(),
-        "`cargo check --no-default-features --lib` for `{CRATE}` emitted \
-         compiler diagnostics under `-D warnings`: {diagnostics:#?}"
-    );
+    if !diagnostics.is_empty() {
+        anyhow::bail!(
+            "`cargo check --no-default-features --lib` for `{CRATE}` emitted compiler diagnostics \
+             under `-D warnings`: {diagnostics:#?}"
+        );
+    }
 
     Ok(())
 }

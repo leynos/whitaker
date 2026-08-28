@@ -21,6 +21,7 @@ tracing = { workspace = true }
 whitaker_sarif = { workspace = true }
 
 [dev-dependencies]
+whitaker_test_macros = { workspace = true }
 camino = { workspace = true }
 cap-std = { workspace = true }
 insta = { workspace = true }

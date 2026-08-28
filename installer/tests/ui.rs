@@ -3,11 +3,10 @@
 //! `sha2` 0.11 made two source-breaking changes that the installer had to work
 //! around:
 //!
-//! - `Sha256::finalize()` / `Sha256::digest()` now return
-//!   `hybrid_array::Array<u8, _>`, which does not implement
-//!   [`core::fmt::LowerHex`], so `format!("{:x}", digest)` no longer compiles.
-//! - `Sha256` no longer implements [`std::io::Write`], so
-//!   `io::copy(reader, &mut hasher)` no longer compiles.
+//! - `Sha256::finalize()` / `Sha256::digest()` now return `hybrid_array::Array<u8, _>`, which does
+//!   not implement [`core::fmt::LowerHex`], so `format!("{:x}", digest)` no longer compiles.
+//! - `Sha256` no longer implements [`std::io::Write`], so `io::copy(reader, &mut hasher)` no longer
+//!   compiles.
 //!
 //! These `trybuild` cases pin those breaks: if a future change reintroduces the
 //! pre-0.11 pattern — for example by downgrading `sha2` back to 0.10 — the

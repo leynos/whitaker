@@ -120,6 +120,20 @@ pub fn path_binary_location(directory: &Path, binary_name: &str) -> PathBuf {
     }
 }
 
+/// Expected outcome of repository-install verification in a test scenario.
+///
+/// Collapses the "should verification run" and "does verification fail"
+/// questions into a single three-state value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RepositoryVerification {
+    /// Repository verification is not expected to run.
+    Skip,
+    /// Repository verification runs and succeeds.
+    Succeeds,
+    /// Repository verification runs and fails.
+    Fails,
+}
+
 /// Configuration for generating expected calls in dependency binary tests.
 pub struct ExpectedCallConfig<'a> {
     /// Whether cargo-binstall is available.
@@ -128,10 +142,8 @@ pub struct ExpectedCallConfig<'a> {
     pub has_repository_context: bool,
     /// Whether the repository failure is a missing asset.
     pub is_repository_asset_missing: bool,
-    /// Whether to verify repository installation.
-    pub should_verify_repository_install: bool,
-    /// Whether repository verification should fail.
-    pub is_repository_verification_failing: bool,
+    /// Expected repository-install verification outcome.
+    pub repository_verification: RepositoryVerification,
     /// Error message for cargo binstall failure (None if succeeds).
     pub cargo_binstall_failure: Option<&'a str>,
     /// Error message for cargo install failure (None if succeeds).
@@ -139,6 +151,7 @@ pub struct ExpectedCallConfig<'a> {
 }
 
 /// Creates an expected call for checking cargo-binstall availability.
+#[must_use]
 pub fn binstall_version_check(is_binstall_available: bool) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -152,6 +165,7 @@ pub fn binstall_version_check(is_binstall_available: bool) -> ExpectedCall {
 }
 
 /// Creates an expected call for checking cargo-binstall with a fixed result.
+#[must_use]
 pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -161,6 +175,7 @@ pub fn binstall_version_check_with_result(result: Result<Output>) -> ExpectedCal
 }
 
 /// Creates an expected call for installing a tool with cargo-binstall.
+#[must_use]
 pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
     let version = dependency_version(tool);
     ExpectedCall {
@@ -171,6 +186,7 @@ pub fn binstall_install(tool: &'static str, result: Result<Output>) -> ExpectedC
 }
 
 /// Creates an expected call for installing a tool with cargo install.
+#[must_use]
 pub fn cargo_install(tool: &'static str, result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -196,14 +212,17 @@ fn cargo_source_install(
 /// # Panics
 ///
 /// Panics when the manifest cannot be parsed or the tool is unknown.
+#[must_use]
 pub fn dependency_version(tool: &str) -> &'static str {
-    find_dependency_binary(tool)
-        .expect("dependency manifest should parse")
-        .map(|dependency| dependency.version())
-        .unwrap_or_else(|| panic!("unexpected tool: {tool}"))
+    match find_dependency_binary(tool) {
+        Ok(Some(dependency)) => dependency.version(),
+        Ok(None) => panic!("unexpected tool: {tool}"),
+        Err(error) => panic!("dependency manifest should parse: {error}"),
+    }
 }
 
 /// Successful `cargo dylint --version` output reporting the manifest version.
+#[must_use]
 pub fn cargo_dylint_version_output() -> Output {
     stdout_output(format!(
         "cargo-dylint {}\n",
@@ -213,12 +232,14 @@ pub fn cargo_dylint_version_output() -> Output {
 
 /// Expected `cargo install --list` call reporting the manifest-pinned
 /// `dylint-link` version.
+#[must_use]
 pub fn dylint_link_install_list_check() -> ExpectedCall {
     dylint_link_install_list_check_with_version(dependency_version("dylint-link"))
 }
 
 /// Expected `cargo install --list` call reporting the given `dylint-link`
 /// version.
+#[must_use]
 pub fn dylint_link_install_list_check_with_version(version: &str) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -230,6 +251,7 @@ pub fn dylint_link_install_list_check_with_version(version: &str) -> ExpectedCal
 }
 
 /// Creates an expected call for verifying repository installation.
+#[must_use]
 pub fn repository_verification_call(tool: &str, verification_fails: bool) -> Option<ExpectedCall> {
     match tool {
         "cargo-dylint" => Some(ExpectedCall {
@@ -313,16 +335,15 @@ fn post_primary_calls(cfg: &PostPrimaryConfig) -> Vec<ExpectedCall> {
         return calls;
     }
     // binstall failed and cargo install also fails
-    if let Some(message) = cfg.cargo_install_failure.as_deref() {
-        let cargo_call = repo_aware_cargo_install(
-            cfg.tool_static,
-            cfg.has_repository_context,
-            Ok(failure_output(message)),
-        );
-        vec![cargo_call]
-    } else {
-        vec![]
-    }
+    cfg.cargo_install_failure
+        .as_deref()
+        .map_or_else(Vec::new, |message| {
+            vec![repo_aware_cargo_install(
+                cfg.tool_static,
+                cfg.has_repository_context,
+                Ok(failure_output(message)),
+            )]
+        })
 }
 
 fn source_install_fallback_calls(
@@ -383,10 +404,7 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
     let install_call = ExpectedCall {
         cmd: "cargo",
         args,
-        result: Ok(match failure_message {
-            Some(message) => failure_output(message),
-            None => success_output(),
-        }),
+        result: Ok(failure_message.map_or_else(success_output, failure_output)),
     };
 
     let mut calls = vec![install_call];
@@ -403,24 +421,27 @@ pub fn cargo_fallback_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<
 }
 
 /// Builds the complete list of expected calls for a dependency binary test scenario.
-pub fn expected_calls(tool: &str, config: ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
+#[must_use]
+pub fn expected_calls(tool: &str, config: &ExpectedCallConfig<'_>) -> Vec<ExpectedCall> {
     let mut calls = vec![binstall_version_check(config.is_binstall_available)];
 
-    if config.should_verify_repository_install {
-        calls.extend(repository_verification_call(
-            tool,
-            config.is_repository_verification_failing,
-        ));
-        if !config.is_repository_verification_failing {
+    match config.repository_verification {
+        RepositoryVerification::Skip => {}
+        RepositoryVerification::Succeeds => {
+            calls.extend(repository_verification_call(tool, false));
             return calls;
+        }
+        RepositoryVerification::Fails => {
+            calls.extend(repository_verification_call(tool, true));
         }
     }
 
-    calls.extend(cargo_fallback_calls(tool, &config));
+    calls.extend(cargo_fallback_calls(tool, config));
     calls
 }
 
 /// Creates an expected call for verifying cargo-dylint installation.
+#[must_use]
 pub fn cargo_dylint_check() -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",
@@ -430,6 +451,7 @@ pub fn cargo_dylint_check() -> ExpectedCall {
 }
 
 /// Creates an expected call for verifying cargo-dylint with a fixed result.
+#[must_use]
 pub fn cargo_dylint_check_with_result(result: Result<Output>) -> ExpectedCall {
     ExpectedCall {
         cmd: "cargo",

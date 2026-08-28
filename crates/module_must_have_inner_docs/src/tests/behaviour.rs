@@ -3,10 +3,12 @@
 //! These scenarios exercise the snippet classifier to ensure modules only pass
 //! when they begin with an inner doc comment.
 
-use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
+
+use super::{ModuleDocDisposition, detect_module_docs_from_snippet};
 
 #[derive(Default)]
 struct ModuleWorld {
@@ -34,6 +36,7 @@ impl ModuleWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> ModuleWorld {
     ModuleWorld::default()

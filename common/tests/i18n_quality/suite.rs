@@ -133,7 +133,7 @@ fn validate_entry_placeables(
     validate_attribute_placeables(&context, message_id, en_entry, locale_entry);
 }
 
-fn validate_pluralisation_coverage(locale: &str, max_branches: i64) {
+fn validate_pluralization_coverage(locale: &str, max_branches: i64) {
     let localizer = Localizer::new(Some(locale));
     let mut args = HashMap::new();
 
@@ -196,7 +196,7 @@ fn ftl_bundles_parse_successfully() {
 }
 
 #[test]
-fn localised_help_attributes_are_complete() {
+fn localized_help_attributes_are_complete() {
     for (locale, en_path, locale_path) in file_pairs() {
         let locale_code = LocaleCode::from(locale.as_str());
         let en_entries = parse_ftl(&en_path);
@@ -231,8 +231,8 @@ fn localised_help_attributes_are_complete() {
 #[case("en-GB", 12)]
 #[case("cy", 12)]
 #[case("gd", 25)]
-fn pluralisation_covers_sample_range(#[case] locale: &str, #[case] max_branches: i64) {
-    validate_pluralisation_coverage(locale, max_branches);
+fn pluralization_covers_sample_range(#[case] locale: &str, #[case] max_branches: i64) {
+    validate_pluralization_coverage(locale, max_branches);
 }
 
 #[rstest]

@@ -62,7 +62,7 @@ fn setup_toolchain_install_failure_mocks(
     expect_toolchain_install(
         runner,
         seq,
-        ToolchainInstallExpectation {
+        &ToolchainInstallExpectation {
             channel,
             exit_code: 1,
             stderr: Some(TOOLCHAIN_INSTALL_FAILURE_MESSAGE),
@@ -97,7 +97,7 @@ fn setup_toolchain_unusable_failure_mocks(
     expect_toolchain_install(
         runner,
         seq,
-        ToolchainInstallExpectation {
+        &ToolchainInstallExpectation {
             channel,
             exit_code: 0,
             stderr: None,
@@ -122,8 +122,7 @@ fn setup_toolchain_unusable_failure_mocks(
 ///
 /// # Arguments
 ///
-/// - `runner` - Mock command runner that receives the expected `rustup` and
-///   `rustc` calls.
+/// - `runner` - Mock command runner that receives the expected `rustup` and `rustc` calls.
 /// - `seq` - Mockall sequence enforcing the order of expected commands.
 /// - `channel` - Toolchain channel being installed or checked.
 /// - `setup` - Failure mode and additional components to model.
@@ -133,16 +132,16 @@ pub(super) fn setup_failure_mocks(
     channel: ToolchainChannel<'_>,
     setup: FailureSetup<'_>,
 ) {
-    let channel = channel.as_str();
+    let channel_name = channel.as_str();
     match setup.failure {
         InstallFailure::ToolchainInstall => {
-            setup_toolchain_install_failure_mocks(runner, seq, channel);
+            setup_toolchain_install_failure_mocks(runner, seq, channel_name);
         }
         InstallFailure::ComponentAdd => {
             setup_component_add_failure_mocks_inner(
                 runner,
                 seq,
-                channel,
+                channel_name,
                 setup.additional_components,
             );
         }
@@ -150,7 +149,7 @@ pub(super) fn setup_failure_mocks(
             setup_toolchain_unusable_failure_mocks(
                 runner,
                 seq,
-                channel,
+                channel_name,
                 setup.additional_components,
             );
         }
@@ -215,47 +214,50 @@ fn is_component_install_failed(
 ///
 /// - `err` - Installer error returned by the code under test.
 /// - `channel` - Toolchain channel expected in the error payload.
-/// - `setup` - Failure mode and additional components that define the expected
-///   error shape.
+/// - `setup` - Failure mode and additional components that define the expected error shape.
 ///
 /// # Panics
 ///
 /// Panics with a descriptive message if the error variant or its fields do not
 /// match expectations.
 pub(super) fn assert_failure_error(
-    err: InstallerError,
+    err: &InstallerError,
     channel: ToolchainChannel<'_>,
     setup: FailureSetup<'_>,
 ) {
-    let channel = channel.as_str();
+    let channel_name = channel.as_str();
     let failure = failure_summary(setup);
     match setup.failure {
         InstallFailure::ToolchainInstall => assert_error_matches(
-            &err,
-            &format!("ToolchainInstallFailed for channel {channel} while exercising {failure}"),
+            err,
+            &format!(
+                "ToolchainInstallFailed for channel {channel_name} while exercising {failure}"
+            ),
             |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainInstallFailed { toolchain, message }
-                        if toolchain == channel && message == TOOLCHAIN_INSTALL_FAILURE_MESSAGE
+                        if toolchain == channel_name
+                            && message == TOOLCHAIN_INSTALL_FAILURE_MESSAGE
                 )
             },
         ),
         InstallFailure::ComponentAdd => assert_error_matches(
-            &err,
+            err,
             &format!(
-                "ToolchainComponentInstallFailed for channel {channel} while exercising {failure}"
+                "ToolchainComponentInstallFailed for channel {channel_name} while exercising \
+                 {failure}"
             ),
-            |e| is_component_install_failed(e, channel, setup.additional_components),
+            |e| is_component_install_failed(e, channel_name, setup.additional_components),
         ),
         InstallFailure::ToolchainUnusableAfterInstall => assert_error_matches(
-            &err,
-            &format!("ToolchainNotInstalled for channel {channel} while exercising {failure}"),
+            err,
+            &format!("ToolchainNotInstalled for channel {channel_name} while exercising {failure}"),
             |e| {
                 matches!(
                     e,
                     InstallerError::ToolchainNotInstalled { toolchain }
-                        if toolchain == channel
+                        if toolchain == channel_name
                 )
             },
         ),

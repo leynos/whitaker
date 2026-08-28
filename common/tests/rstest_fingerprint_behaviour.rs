@@ -1,12 +1,14 @@
 //! Behaviour-driven tests for shared `rstest` fingerprint models.
 
+use std::cell::RefCell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::RefCell;
 use whitaker_common::rstest::{
     ArgAtom, ArgFingerprint, CalleeShape, ExprShape, LocalSlot, ParagraphFingerprint,
     ParagraphNormalizer, StmtShape,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Default)]
 struct FingerprintWorld {
@@ -48,6 +50,7 @@ impl FingerprintWorld {
     }
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> FingerprintWorld {
     FingerprintWorld::default()

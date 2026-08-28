@@ -3,17 +3,18 @@
 //! These scenarios exercise `detect_misordered_doc` to ensure doc comments
 //! continue to precede other outer attributes across common layouts.
 
+use std::cell::RefCell;
+
+use rstest::{fixture, rstest};
+use rstest_bdd_macros::{given, scenario, then, when};
+use rustc_attr_data_structures::thin_vec::ThinVec;
+use rustc_hir::attrs::{AttributeKind as HirAttributeKind, InlineAttr, OptimizeAttr};
+use rustc_span::{BytePos, DUMMY_SP, Span};
+use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
+
 use super::{
     AttrInfo, OrderedAttribute, attribute_within_item, detect_misordered_doc, parsed_attribute_span,
 };
-use rstest::fixture;
-use rstest::rstest;
-use rstest_bdd_macros::{given, scenario, then, when};
-use rustc_hir::attrs::AttributeKind as HirAttributeKind;
-use rustc_hir::attrs::{InlineAttr, OptimizeAttr};
-use rustc_span::{BytePos, DUMMY_SP, Span};
-use std::cell::RefCell;
-use whitaker_common::attributes::{Attribute, AttributeKind, AttributePath};
 
 impl OrderedAttribute for Attribute {
     fn is_outer(&self) -> bool {
@@ -46,11 +47,13 @@ impl AttributeWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> AttributeWorld {
     AttributeWorld::default()
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn result() -> Option<(usize, usize)> {
     None
@@ -239,7 +242,7 @@ fn parsed_attribute_span_recovers_whitelisted_kinds() {
         (
             "target_feature",
             HirAttributeKind::TargetFeature {
-                features: Default::default(),
+                features: ThinVec::default(),
                 attr_span: span,
                 was_forced: false,
             },
