@@ -3,16 +3,20 @@
 mod fingerprint;
 mod fingerprint_props;
 
+use std::collections::BTreeSet;
+
+use rstest::rstest;
+
 use super::{
     ExpansionTrace, ParameterBinding, RstestDetectionOptions, RstestParameter, RstestParameterKind,
     SpanRecoveryFrame, UserEditableSpan, classify_rstest_parameter, fixture_local_names,
     is_rstest_fixture, is_rstest_fixture_with, is_rstest_test, is_rstest_test_with,
     recover_user_editable_span,
 };
-use crate::attributes::{Attribute, AttributeKind, AttributePath};
-use crate::span::{SourceLocation, SourceSpan};
-use rstest::rstest;
-use std::collections::BTreeSet;
+use crate::{
+    attributes::{Attribute, AttributeKind, AttributePath},
+    span::{SourceLocation, SourceSpan},
+};
 
 fn outer(path: &str) -> Attribute {
     Attribute::new(AttributePath::from(path), AttributeKind::Outer)
@@ -20,7 +24,7 @@ fn outer(path: &str) -> Attribute {
 
 fn provider_parameter(path: &str) -> RstestParameter {
     RstestParameter::new(
-        ParameterBinding::Ident("value".to_string()),
+        ParameterBinding::Ident("value".to_owned()),
         vec![outer(path)],
     )
 }
@@ -74,7 +78,7 @@ fn classifies_identifier_parameters_as_fixture_locals() {
     assert_eq!(
         classify_rstest_parameter(&parameter, &RstestDetectionOptions::default()),
         RstestParameterKind::FixtureLocal {
-            name: "db".to_string()
+            name: "db".to_owned()
         }
     );
 }
@@ -125,7 +129,7 @@ fn rejects_unknown_custom_provider_parameters() {
     assert_eq!(
         classify_rstest_parameter(&parameter, &options),
         RstestParameterKind::FixtureLocal {
-            name: "value".to_string()
+            name: "value".to_owned()
         }
     );
 }
@@ -197,55 +201,62 @@ fn collects_supported_fixture_local_names_in_order() {
 
     assert_eq!(
         fixture_local_names(&parameters, &RstestDetectionOptions::default()),
-        BTreeSet::from(["clock".to_string(), "db".to_string()])
+        BTreeSet::from(["clock".to_owned(), "db".to_owned()])
     );
 }
 
-fn source_span(line: usize, start: usize, end: usize) -> SourceSpan {
-    SourceSpan::new(
-        SourceLocation::new(line, start),
-        SourceLocation::new(line, end),
-    )
-    .expect("test spans should always be valid")
+/// Builds a single-line [`SourceSpan`] for test data.
+///
+/// This is a macro rather than a helper function so the fallible construction
+/// is inlined into the calling `#[rstest]` body, where a failure is the test
+/// verdict, and so it can be used inside `#[case(...)]` attributes.
+macro_rules! source_span {
+    ($line:expr, $start:expr, $end:expr) => {
+        SourceSpan::new(
+            SourceLocation::new($line, $start),
+            SourceLocation::new($line, $end),
+        )
+        .expect("test spans should always be valid")
+    };
 }
 
 fn assert_span_recovery(
     frame_specs: impl IntoIterator<Item = (SourceSpan, bool)>,
-    expected: UserEditableSpan<SourceSpan>,
+    expected: &UserEditableSpan<SourceSpan>,
 ) {
     let frames: Vec<SpanRecoveryFrame<SourceSpan>> = frame_specs
         .into_iter()
         .map(|(span, is_macro)| SpanRecoveryFrame::new(span, is_macro))
         .collect();
-    assert_eq!(recover_user_editable_span(&frames), expected);
+    assert_eq!(&recover_user_editable_span(&frames), expected);
 }
 
 #[rstest]
 #[case::keeps_direct_user_editable_span(
-    vec![(source_span(1, 1, 8), false)],
-    UserEditableSpan::Direct(source_span(1, 1, 8)),
+    vec![(source_span!(1, 1, 8), false)],
+    UserEditableSpan::Direct(source_span!(1, 1, 8)),
 )]
 #[case::recovers_macro_frame_to_first_user_span(
-    vec![(source_span(2, 1, 8), true), (source_span(10, 1, 12), false)],
-    UserEditableSpan::Recovered(source_span(10, 1, 12)),
+    vec![(source_span!(2, 1, 8), true), (source_span!(10, 1, 12), false)],
+    UserEditableSpan::Recovered(source_span!(10, 1, 12)),
 )]
 #[case::recovers_first_user_span_from_nested_macro_chain(
     vec![
-        (source_span(2, 1, 4), true),
-        (source_span(3, 1, 5), true),
-        (source_span(14, 1, 6), false),
-        (source_span(20, 1, 9), false),
+        (source_span!(2, 1, 4), true),
+        (source_span!(3, 1, 5), true),
+        (source_span!(14, 1, 6), false),
+        (source_span!(20, 1, 9), false),
     ],
-    UserEditableSpan::Recovered(source_span(14, 1, 6)),
+    UserEditableSpan::Recovered(source_span!(14, 1, 6)),
 )]
 #[case::treats_empty_frame_list_as_macro_only(vec![], UserEditableSpan::MacroOnly)]
 #[case::treats_all_expansion_frames_as_macro_only(
-    vec![(source_span(4, 1, 4), true), (source_span(5, 1, 6), true)],
+    vec![(source_span!(4, 1, 4), true), (source_span!(5, 1, 6), true)],
     UserEditableSpan::MacroOnly,
 )]
 fn recovers_user_editable_span_from_frame_sequences(
     #[case] frames: Vec<(SourceSpan, bool)>,
     #[case] expected: UserEditableSpan<SourceSpan>,
 ) {
-    assert_span_recovery(frames, expected);
+    assert_span_recovery(frames, &expected);
 }

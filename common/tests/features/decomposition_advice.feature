@@ -2,7 +2,7 @@ Feature: Decomposition advice analysis
   Community detection groups related methods into reusable decomposition
   suggestions for brain type and brain trait diagnostics.
 
-  Scenario: Type methods split into parsing, serialisation, and filesystem groups
+  Scenario: Type methods split into parsing, serialization, and filesystem groups
     Given decomposition analysis for a type named Foo
     And a method named parse_tokens
     And method parse_tokens accesses fields grammar,tokens

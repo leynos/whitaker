@@ -1,4 +1,4 @@
-//! Behaviour-driven coverage for MinHash and LSH candidate generation.
+//! Behaviour-driven coverage for `MinHash` and LSH candidate generation.
 //!
 //! Keep this harness in sync with `tests/features/min_hash_lsh.feature`.
 
@@ -9,6 +9,7 @@ use rstest_bdd_macros::{given, scenario, then, when};
 use whitaker_clones_core::{
     CandidatePair, Fingerprint, FragmentId, IndexError, LshConfig, LshIndex, MinHasher,
 };
+use whitaker_test_macros::allow_fixture_expansion_lints;
 
 #[derive(Debug, Default)]
 struct MinHashLshWorld {
@@ -19,6 +20,7 @@ struct MinHashLshWorld {
     candidate_error: RefCell<Option<IndexError>>,
 }
 
+#[allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> MinHashLshWorld {
     MinHashLshWorld::default()
@@ -52,15 +54,15 @@ fn expected_error(name: &str) -> Result<IndexError, String> {
                 "invalid InvalidBandRowProduct arguments `{arguments}`"
             ));
         };
-        let bands = bands
+        let band_count = bands
             .trim()
             .parse::<usize>()
             .map_err(|error| format!("invalid bands value `{bands}`: {error}"))?;
-        let rows = rows
+        let row_count = rows
             .trim()
             .parse::<usize>()
             .map_err(|error| format!("invalid rows value `{rows}`: {error}"))?;
-        return Ok(IndexError::invalid_band_row_product(bands, rows));
+        return Ok(IndexError::invalid_band_row_product(band_count, row_count));
     }
 
     match name {
@@ -104,7 +106,7 @@ fn given_fragment_without_hashes(world: &MinHashLshWorld, id: String) {
 #[when("candidate pairs are generated")]
 fn when_candidate_pairs_are_generated(world: &MinHashLshWorld) {
     let Some(config) = *world.config.borrow() else {
-        *world.candidate_error.borrow_mut() = world.config_error.borrow().clone();
+        (*world.candidate_error.borrow_mut()).clone_from(&world.config_error.borrow());
         world.candidates.borrow_mut().clear();
         return;
     };
@@ -129,7 +131,11 @@ fn when_candidate_pairs_are_generated(world: &MinHashLshWorld) {
 #[then("candidate pair count is {count}")]
 fn then_candidate_pair_count_is(world: &MinHashLshWorld, count: usize) {
     with_candidates(world, |candidates| {
-        assert_eq!(candidates.len(), count);
+        assert_eq!(
+            candidates.len(),
+            count,
+            "candidate pair count must match the scenario expectation"
+        );
     });
 }
 
@@ -142,27 +148,42 @@ fn then_only_candidate_pair_is(world: &MinHashLshWorld, left: String, right: Str
                 candidates.len()
             );
         };
-        let expected = CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
-            .expect("distinct fragment IDs should form a canonical pair");
-        assert_eq!(candidate, &expected);
+        let Some(expected) = CandidatePair::new(FragmentId::from(left), FragmentId::from(right))
+        else {
+            panic!("distinct fragment IDs must form a canonical pair");
+        };
+        assert_eq!(
+            candidate, &expected,
+            "candidate pair must match the scenario expectation"
+        );
     });
 }
 
 #[then("no candidate pairs are returned")]
 fn then_no_candidate_pairs_are_returned(world: &MinHashLshWorld) {
-    with_candidates(world, |candidates| assert!(candidates.is_empty()));
+    with_candidates(world, |candidates| {
+        assert!(
+            candidates.is_empty(),
+            "no candidate pairs must be returned for this scenario"
+        );
+    });
 }
 
 #[then("the candidate generation error is {name}")]
 fn then_candidate_generation_error_is(world: &MinHashLshWorld, name: String) -> Result<(), String> {
     let expected = expected_error(&name)?;
-    match world.candidate_error.borrow().clone() {
-        Some(actual) => {
-            assert_eq!(actual, expected);
-            Ok(())
-        }
-        None => Err("candidate generation error must be present".to_owned()),
-    }
+    world.candidate_error.borrow().as_ref().map_or_else(
+        || Err("candidate generation error must be present".to_owned()),
+        |actual| {
+            if *actual == expected {
+                Ok(())
+            } else {
+                Err(format!(
+                    "expected candidate generation error `{expected:?}`, found `{actual:?}`"
+                ))
+            }
+        },
+    )
 }
 
 #[scenario(path = "tests/features/min_hash_lsh.feature", index = 0)]

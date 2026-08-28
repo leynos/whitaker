@@ -1,11 +1,15 @@
 //! Behaviour-driven coverage for lint decision logic.
 
-use crate::context::ContextSummary;
-use crate::panic_detector::PanicInfo;
-use crate::policy::{LintPolicy, should_flag};
+use std::cell::Cell;
+
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when};
-use std::cell::Cell;
+
+use crate::{
+    context::ContextSummary,
+    panic_detector::PanicInfo,
+    policy::{LintPolicy, should_flag},
+};
 
 #[derive(Default)]
 struct DecisionWorld {
@@ -28,6 +32,7 @@ impl DecisionWorld {
     }
 }
 
+#[whitaker_test_macros::allow_fixture_expansion_lints]
 #[fixture]
 fn world() -> DecisionWorld {
     DecisionWorld::default()

@@ -12,15 +12,16 @@ const DOC_PATHS: &[&str] = &["docs/users-guide.md", "docs/developers-guide.md"];
 /// Extracted TOML code blocks from documentation, loaded once at test startup.
 pub static DOC_TOML_BLOCKS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let workspace_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .expect("installer crate should be in workspace");
+    let Some(workspace_root) = std::path::Path::new(manifest_dir).parent() else {
+        panic!("installer crate should be in workspace");
+    };
 
     let mut all_blocks = Vec::new();
     for path in DOC_PATHS {
         let guide_path = workspace_root.join(path);
-        let content = std::fs::read_to_string(&guide_path)
-            .unwrap_or_else(|_| panic!("failed to read {path}"));
+        let Ok(content) = std::fs::read_to_string(&guide_path) else {
+            panic!("documentation file {path} should be readable");
+        };
         all_blocks.extend(extract_toml_blocks(&content));
     }
     all_blocks
@@ -52,8 +53,8 @@ fn accumulate_toml_line(line: &str, current_block: &mut String) {
 /// key = "value"
 /// ```
 /// "#;
-/// let blocks = extract_toml_blocks(markdown);
-/// assert_eq!(blocks.len(), 1);
+/// let blocks = `extract_toml_blocks(markdown)`;
+/// `assert_eq!(blocks.len()`, 1);
 /// assert!(!blocks[0].contains("# A comment"));
 /// ```
 pub fn extract_toml_blocks(markdown: &str) -> Vec<String> {
@@ -86,15 +87,16 @@ pub fn extract_toml_blocks(markdown: &str) -> Vec<String> {
 
 /// Find a TOML block containing the specified marker text.
 pub fn find_block_containing(marker: &str) -> String {
-    DOC_TOML_BLOCKS
-        .iter()
-        .find(|block| block.contains(marker))
-        .unwrap_or_else(|| panic!("no TOML block containing '{marker}' found in documentation"))
-        .clone()
+    let Some(block) = DOC_TOML_BLOCKS.iter().find(|block| block.contains(marker)) else {
+        panic!("no TOML block containing '{marker}' found in documentation");
+    };
+    block.clone()
 }
 
 #[cfg(test)]
 mod tests {
+    //! Tests for extracting TOML blocks from documentation.
+
     use super::*;
 
     #[test]
@@ -116,8 +118,10 @@ other = true
 
         let blocks = extract_toml_blocks(markdown);
         assert_eq!(blocks.len(), 2);
-        assert!(blocks[0].contains("key = \"value\""));
-        assert!(blocks[1].contains("other = true"));
+        let first = blocks.first().expect("first TOML block should be present");
+        let second = blocks.get(1).expect("second TOML block should be present");
+        assert!(first.contains("key = \"value\""));
+        assert!(second.contains("other = true"));
     }
 
     #[test]
@@ -132,11 +136,12 @@ key = "value"
 
         let blocks = extract_toml_blocks(markdown);
         assert_eq!(blocks.len(), 1);
+        let block = blocks.first().expect("TOML block should be present");
         assert!(
-            !blocks[0].contains("# This is a comment"),
+            !block.contains("# This is a comment"),
             "expected comment to be skipped"
         );
-        assert!(blocks[0].contains("key = \"value\""));
+        assert!(block.contains("key = \"value\""));
     }
 
     #[test]

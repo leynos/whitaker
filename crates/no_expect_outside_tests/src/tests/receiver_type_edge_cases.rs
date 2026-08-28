@@ -1,9 +1,10 @@
 //! Edge-case localization tests covering unusual receiver labels.
 
+use rstest::rstest;
+
 use super::{
     ContextLabel, Localizer, NoExpectMessages, ReceiverCategory, ReceiverLabel, localised_messages,
 };
-use rstest::rstest;
 
 #[rstest]
 #[case("", "the surrounding scope", |messages: &NoExpectMessages| !messages.primary().is_empty())]
